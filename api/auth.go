@@ -11,6 +11,7 @@ import (
 func Register(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
+			Name     string `json:"name"`
 			Email    string `json:"email"`
 			Password string `json:"password"`
 		}
@@ -29,7 +30,7 @@ func Register(database *db.Database) http.HandlerFunc {
 			return
 		}
 
-		user, err := database.CreateUser(body.Email, body.Password)
+		user, err := database.CreateUser(body.Name, body.Email, body.Password)
 		if err != nil {
 			http.Error(w, "failed to create user", http.StatusInternalServerError)
 			return
@@ -63,6 +64,10 @@ func Login(database *db.Database) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"user_id": user.ID})
+		json.NewEncoder(w).Encode(map[string]string{
+			"user_id": user.ID,
+			"name":    user.Name,
+			"email":   user.Email,
+		})
 	}
 }

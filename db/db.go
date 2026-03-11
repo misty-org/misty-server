@@ -24,9 +24,14 @@ func (db *Database) GetDSN() string {
 		port = "5432"
 	}
 
+	sslmode := os.Getenv("DB_SSLMODE")
+	if sslmode == "" {
+		sslmode = "require"
+	}
+
 	return fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=require",
-		host, port, user, password, name,
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		host, port, user, password, name, sslmode,
 	)
 }
 

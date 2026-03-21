@@ -9,8 +9,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// ValidateLicense is called by the local proxy at startup and periodically.
-// It authenticates the user and returns a signed license JWT if valid.
+// ValidateLicense is called by the local proxy to perform the one-time
+// entitlement verification for perpetual pro access.
 func ValidateLicense(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

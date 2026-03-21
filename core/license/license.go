@@ -9,12 +9,10 @@ import (
 	"github.com/kannachi323/misty/server/db"
 )
 
-const LicenseDuration = 24 * time.Hour * 7 // proxy can work offline for 7 days
-
 type Claims struct {
-	UserID string   `json:"user_id"`
-	Email  string   `json:"email"`
-	Tier   db.Tier  `json:"tier"`
+	UserID string  `json:"user_id"`
+	Email  string  `json:"email"`
+	Tier   db.Tier `json:"tier"`
 	jwt.RegisteredClaims
 }
 
@@ -29,8 +27,7 @@ func Issue(user *db.User, sub *db.Subscription) (string, error) {
 		Email:  user.Email,
 		Tier:   sub.Tier,
 		RegisteredClaims: jwt.RegisteredClaims{
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(LicenseDuration)),
+			IssuedAt: jwt.NewNumericDate(now),
 		},
 	}
 

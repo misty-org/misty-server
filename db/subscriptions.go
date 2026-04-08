@@ -12,6 +12,7 @@ type Tier string
 const (
 	TierFree Tier = "free"
 	TierPro  Tier = "pro"
+	TierMax  Tier = "max"
 )
 
 type Subscription struct {

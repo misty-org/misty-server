@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/kannachi323/misty/server/db"
@@ -55,8 +56,15 @@ func StripeWebhook(database *db.Database) http.HandlerFunc {
 			handleSubscriptionDeleted(database, &sub)
 		}
 
-		w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusOK)
 	}
+}
+
+func tierFromCheckoutSession(session *stripe.CheckoutSession) db.Tier {
+	if strings.EqualFold(session.Metadata["tier"], string(db.TierMax)) {
+		return db.TierMax
+	}
+	return db.TierPro
 }
 
 func handleCheckoutCompleted(database *db.Database, session *stripe.CheckoutSession) {
@@ -78,12 +86,13 @@ func handleCheckoutCompleted(database *db.Database, session *stripe.CheckoutSess
 		expiresAt = &t
 	}
 
-	if err := database.UpsertSubscription(user.ID, db.TierPro, "active", expiresAt); err != nil {
-		log.Printf("Failed to provision pro for user %s: %v", user.ID, err)
+	tier := tierFromCheckoutSession(session)
+	if err := database.UpsertSubscription(user.ID, tier, "active", expiresAt); err != nil {
+		log.Printf("Failed to provision %s for user %s: %v", tier, user.ID, err)
 		return
 	}
 
-	log.Printf("Provisioned pro for user %s (%s)", user.ID, email)
+	log.Printf("Provisioned %s for user %s (%s)", tier, user.ID, email)
 }
 
 func handleSubscriptionUpdated(database *db.Database, sub *stripe.Subscription) {

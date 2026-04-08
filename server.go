@@ -35,6 +35,7 @@ func (s *Server) MountHandlers() {
 
 	// License validation — called by the local proxy
 	s.Router.Post("/license/validate", api.ValidateLicense(s.Database))
+	s.Router.Get("/subscription", api.GetSubscription(s.Database))
 
 	// Stripe webhook — called by Stripe on payment events
 	s.Router.Post("/stripe/webhook", api.StripeWebhook(s.Database))

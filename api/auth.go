@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/kannachi323/misty/server/db"
 	"golang.org/x/crypto/bcrypt"
@@ -16,6 +17,11 @@ func Register(database *db.Database) http.HandlerFunc {
 			Password string `json:"password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Email == "" || body.Password == "" {
+			http.Error(w, "email and password required", http.StatusBadRequest)
+			return
+		}
+		body.Email = strings.TrimSpace(body.Email)
+		if body.Email == "" {
 			http.Error(w, "email and password required", http.StatusBadRequest)
 			return
 		}
@@ -49,6 +55,11 @@ func Login(database *db.Database) http.HandlerFunc {
 			Password string `json:"password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		body.Email = strings.TrimSpace(body.Email)
+		if body.Email == "" || body.Password == "" {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}

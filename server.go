@@ -1,26 +1,53 @@
 package main
 
 import (
+	"fmt"
+	"net/url"
+	"os"
+	"strings"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/kannachi323/misty/server/api"
 	"github.com/kannachi323/misty/server/db"
+	"github.com/kannachi323/misty/server/email"
 )
 
 type Server struct {
-	Router   *chi.Mux
-	Database *db.Database
+	Router                   *chi.Mux
+	Database                 *db.Database
+	PasswordResetSender      email.PasswordResetSender
+	PasswordResetStartURL    string
+	PasswordResetRedirectURL string
 }
 
 func CreateServer() (*Server, error) {
-	s := &Server{
-		Router:   chi.NewRouter(),
-		Database: &db.Database{},
+	passwordResetRedirectURL, err := passwordResetRedirectURLFromEnv()
+	if err != nil {
+		return nil, err
 	}
+	passwordResetStartURL, err := passwordResetStartURLFromEnv()
+	if err != nil {
+		return nil, err
+	}
+
+	s := &Server{
+		Router:                   chi.NewRouter(),
+		Database:                 &db.Database{},
+		PasswordResetStartURL:    passwordResetStartURL,
+		PasswordResetRedirectURL: passwordResetRedirectURL,
+	}
+
+	passwordResetSender, err := email.NewPasswordResetSenderFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	s.PasswordResetSender = passwordResetSender
+
 	return s, nil
 }
 
-func (s *Server) MountHandlers() {
+func (s *Server) MountHandlers() error {
 	s.Router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"https://*", "http://*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -29,9 +56,33 @@ func (s *Server) MountHandlers() {
 		MaxAge:           300,
 	}))
 
+	passwordResetService, err := api.NewPasswordResetService(s.Database, s.PasswordResetSender, s.PasswordResetStartURL, s.PasswordResetRedirectURL)
+	if err != nil {
+		return err
+	}
+
+	registerHandler := api.Register(s.Database)
+	loginHandler := api.Login(s.Database)
+	forgotPasswordHandler := passwordResetService.Forgot()
+	startResetHandler := passwordResetService.Start()
+	validateResetTokenHandler := passwordResetService.Validate()
+	resetPasswordHandler := passwordResetService.Reset()
+
 	// Account management
-	s.Router.Post("/register", api.Register(s.Database))
-	s.Router.Post("/login", api.Login(s.Database))
+	s.Router.Post("/register", registerHandler)
+	s.Router.Post("/login", loginHandler)
+	s.Router.Post("/auth/forgot", forgotPasswordHandler)
+	s.Router.Get("/auth/reset/start", startResetHandler)
+	s.Router.Get("/auth/reset/validate", validateResetTokenHandler)
+	s.Router.Post("/auth/reset", resetPasswordHandler)
+
+	// Compatibility routes for clients configured with the /api prefix.
+	s.Router.Post("/api/register", registerHandler)
+	s.Router.Post("/api/login", loginHandler)
+	s.Router.Post("/api/auth/forgot", forgotPasswordHandler)
+	s.Router.Get("/api/auth/reset/start", startResetHandler)
+	s.Router.Get("/api/auth/reset/validate", validateResetTokenHandler)
+	s.Router.Post("/api/auth/reset", resetPasswordHandler)
 
 	// License validation — called by the local proxy
 	s.Router.Post("/license/validate", api.ValidateLicense(s.Database))
@@ -39,4 +90,61 @@ func (s *Server) MountHandlers() {
 
 	// Stripe webhook — called by Stripe on payment events
 	s.Router.Post("/stripe/webhook", api.StripeWebhook(s.Database))
+
+	return nil
+}
+
+func passwordResetRedirectURLFromEnv() (string, error) {
+	rawURL := os.Getenv("PASSWORD_RESET_URL")
+	if rawURL == "" {
+		rawURL = "http://localhost:5173/#/reset"
+	}
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid PASSWORD_RESET_URL: %w", err)
+	}
+	if parsedURL.Host == "" {
+		return "", fmt.Errorf("PASSWORD_RESET_URL must include a host")
+	}
+	if parsedURL.Scheme == "https" {
+		return parsedURL.String(), nil
+	}
+	if parsedURL.Scheme == "http" && isLocalhostHostname(parsedURL.Hostname()) {
+		return parsedURL.String(), nil
+	}
+
+	return "", fmt.Errorf("PASSWORD_RESET_URL must use https unless it targets localhost")
+}
+
+func passwordResetStartURLFromEnv() (string, error) {
+	rawURL := os.Getenv("PASSWORD_RESET_START_URL")
+	if rawURL == "" {
+		rawURL = "http://localhost:8080/auth/reset/start"
+	}
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid PASSWORD_RESET_START_URL: %w", err)
+	}
+	if parsedURL.Host == "" {
+		return "", fmt.Errorf("PASSWORD_RESET_START_URL must include a host")
+	}
+	if parsedURL.Scheme == "https" {
+		return parsedURL.String(), nil
+	}
+	if parsedURL.Scheme == "http" && isLocalhostHostname(parsedURL.Hostname()) {
+		return parsedURL.String(), nil
+	}
+
+	return "", fmt.Errorf("PASSWORD_RESET_START_URL must use https unless it targets localhost")
+}
+
+func isLocalhostHostname(host string) bool {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
 }

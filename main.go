@@ -23,7 +23,9 @@ func main() {
 	}
 	defer server.Database.Stop()
 
-	server.MountHandlers()
+	if err := server.MountHandlers(); err != nil {
+		panic(err)
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {

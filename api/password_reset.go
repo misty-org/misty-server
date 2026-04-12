@@ -68,7 +68,7 @@ func (s *PasswordResetService) Forgot() http.HandlerFunc {
 			return
 		}
 
-		if !s.forgotLimiter.Allow(forgotPasswordRateLimitKey(r, emailAddress), s.now()) {
+		if allowed, _ := s.forgotLimiter.Allow(forgotPasswordRateLimitKey(r, emailAddress), s.now()); !allowed {
 			http.Error(w, "too many reset requests", http.StatusTooManyRequests)
 			return
 		}

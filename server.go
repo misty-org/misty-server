@@ -14,11 +14,12 @@ import (
 )
 
 type Server struct {
-	Router                   *chi.Mux
-	Database                 *db.Database
-	PasswordResetSender      email.PasswordResetSender
-	PasswordResetStartURL    string
-	PasswordResetRedirectURL string
+	Router                    *chi.Mux
+	Database                  *db.Database
+	EmailSender               email.Sender
+	PasswordResetStartURL     string
+	PasswordResetRedirectURL  string
+	WaitlistNotificationEmail string
 }
 
 func CreateServer() (*Server, error) {
@@ -32,17 +33,18 @@ func CreateServer() (*Server, error) {
 	}
 
 	s := &Server{
-		Router:                   chi.NewRouter(),
-		Database:                 &db.Database{},
-		PasswordResetStartURL:    passwordResetStartURL,
-		PasswordResetRedirectURL: passwordResetRedirectURL,
+		Router:                    chi.NewRouter(),
+		Database:                  &db.Database{},
+		PasswordResetStartURL:     passwordResetStartURL,
+		PasswordResetRedirectURL:  passwordResetRedirectURL,
+		WaitlistNotificationEmail: strings.TrimSpace(os.Getenv("WAITLIST_NOTIFY_EMAIL")),
 	}
 
-	passwordResetSender, err := email.NewPasswordResetSenderFromEnv()
+	emailSender, err := email.NewSenderFromEnv()
 	if err != nil {
 		return nil, err
 	}
-	s.PasswordResetSender = passwordResetSender
+	s.EmailSender = emailSender
 
 	return s, nil
 }
@@ -55,8 +57,13 @@ func (s *Server) MountHandlers() error {
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+	s.Router.Use(api.NewAPIRateLimiter().Middleware)
 
-	passwordResetService, err := api.NewPasswordResetService(s.Database, s.PasswordResetSender, s.PasswordResetStartURL, s.PasswordResetRedirectURL)
+	passwordResetService, err := api.NewPasswordResetService(s.Database, s.EmailSender, s.PasswordResetStartURL, s.PasswordResetRedirectURL)
+	if err != nil {
+		return err
+	}
+	waitlistService, err := api.NewWaitlistService(s.Database, s.EmailSender, s.WaitlistNotificationEmail)
 	if err != nil {
 		return err
 	}
@@ -67,6 +74,7 @@ func (s *Server) MountHandlers() error {
 	startResetHandler := passwordResetService.Start()
 	validateResetTokenHandler := passwordResetService.Validate()
 	resetPasswordHandler := passwordResetService.Reset()
+	waitlistJoinHandler := waitlistService.Join()
 
 	// Account management
 	s.Router.Post("/register", registerHandler)
@@ -75,6 +83,7 @@ func (s *Server) MountHandlers() error {
 	s.Router.Get("/auth/reset/start", startResetHandler)
 	s.Router.Get("/auth/reset/validate", validateResetTokenHandler)
 	s.Router.Post("/auth/reset", resetPasswordHandler)
+	s.Router.Post("/waitlist", waitlistJoinHandler)
 
 	// Compatibility routes for clients configured with the /api prefix.
 	s.Router.Post("/api/register", registerHandler)
@@ -83,6 +92,7 @@ func (s *Server) MountHandlers() error {
 	s.Router.Get("/api/auth/reset/start", startResetHandler)
 	s.Router.Get("/api/auth/reset/validate", validateResetTokenHandler)
 	s.Router.Post("/api/auth/reset", resetPasswordHandler)
+	s.Router.Post("/api/waitlist", waitlistJoinHandler)
 
 	// License validation — called by the local proxy
 	s.Router.Post("/license/validate", api.ValidateLicense(s.Database))

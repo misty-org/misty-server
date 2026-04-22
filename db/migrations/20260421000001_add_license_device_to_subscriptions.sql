@@ -1,0 +1,1 @@
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS license_device TEXT NOT NULL DEFAULT '';

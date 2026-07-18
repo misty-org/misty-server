@@ -1,0 +1,7 @@
+.demo
+.env
+.env.*
+.git
+.github
+tmp
+**/*_test.go

@@ -1,6 +1,14 @@
 .demo
 .env
 .env.*
+**/.env
+**/.env.*
+**/.dev.vars
+**/.secrets
+**/.secrets/**
+**/.wrangler
+**/node_modules
+**/dist
 .git
 .github
 tmp

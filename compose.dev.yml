@@ -1,0 +1,223 @@
+name: misty-server
+
+x-api-image: &api-image
+  image: ${MISTY_API_IMAGE:-misty-server:local}
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+x-cloudflare-image: &cloudflare-image
+  image: misty-journal-collab-dev:local
+  build:
+    context: cloudflare/journal-collab
+    dockerfile_inline: |
+      FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd
+
+      WORKDIR /app
+
+      COPY package.json package-lock.json ./
+      RUN npm ci
+
+      COPY tsconfig.json vitest.config.ts wrangler.jsonc ./
+      COPY src ./src
+      COPY test ./test
+      COPY --chmod=0555 docker/cloudflare-init.sh /usr/local/bin/misty-cloudflare-init
+      COPY --chmod=0555 docker/cloudflare-deploy.sh /usr/local/bin/misty-cloudflare-deploy
+
+      CMD ["npm", "run", "build"]
+
+services:
+  dev-init:
+    <<: *cloudflare-image
+    restart: "no"
+    entrypoint: ["/bin/sh", "/usr/local/bin/misty-cloudflare-init"]
+    volumes:
+      - ./cloudflare/journal-collab:/workspace
+      - dev_runtime:/run/misty
+    networks: [edge]
+
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_MIGRATION_USER:-misty}
+      POSTGRES_PASSWORD: ${DB_MIGRATION_PASSWORD:-misty}
+      POSTGRES_DB: ${DB_NAME:-misty_server}
+      MISTY_APP_DB_USER: ${DB_USER:-misty_app}
+      MISTY_APP_DB_PASSWORD: ${DB_PASSWORD:-misty}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5435}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/docker/postgres-init-app-role.sh:/docker-entrypoint-initdb.d/10-misty-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    networks: [database, edge]
+
+  migrate:
+    <<: *api-image
+    restart: "no"
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: >-
+        host=postgres port=5432
+        user=${DB_MIGRATION_USER:-misty}
+        password=${DB_MIGRATION_PASSWORD:-misty}
+        dbname=${DB_NAME:-misty_server}
+        sslmode=disable
+      GOOSE_MIGRATION_DIR: /app/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/usr/local/bin/goose"]
+    command: ["up"]
+    networks: [database]
+
+  database-permissions:
+    image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${DB_NAME:-misty_server}
+      PGUSER: ${DB_MIGRATION_USER:-misty}
+      PGPASSWORD: ${DB_MIGRATION_PASSWORD:-misty}
+      MISTY_APP_DB_USER: ${DB_USER:-misty_app}
+    volumes:
+      - ./scripts/docker/postgres-grant-app-role.sh:/usr/local/bin/misty-grant-app-role:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "/usr/local/bin/misty-grant-app-role"]
+    networks: [database]
+
+  stripe:
+    image: stripe/stripe-cli:v1.44.0@sha256:f46433445867b7f47526b7588d49c79a336d74a22ee548c18513e3b9c8d40f31
+    restart: unless-stopped
+    environment:
+      STRIPE_API_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_FORWARD_TO: http://api:8080${STRIPE_WEBHOOK_PATH:-/stripe/webhook}
+    volumes:
+      - ./scripts/docker/stripe-listen.sh:/usr/local/bin/misty-stripe-listen:ro
+      - dev_runtime:/run/misty
+    depends_on:
+      dev-init:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "/usr/local/bin/misty-stripe-listen"]
+    healthcheck:
+      test: ["CMD-SHELL", "test -s /run/misty/stripe-webhook-secret"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks: [edge]
+
+  api:
+    <<: *api-image
+    restart: unless-stopped
+    env_file:
+      - path: .env.dev
+        required: false
+    environment:
+      PORT: "8080"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-misty_app}
+      DB_PASSWORD: ${DB_PASSWORD:-misty}
+      DB_NAME: ${DB_NAME:-misty_server}
+      MISTY_OPERATOR_USER_ID: ${MISTY_OPERATOR_USER_ID:-8e66b16c-f644-49a7-9730-d62eeae46021}
+      DB_MIGRATION_USER: ""
+      DB_MIGRATION_PASSWORD: ""
+      CLOUDFLARE_API_TOKEN: ""
+      PARTYKIT_HOST: ${MISTY_CLOUDFLARE_WORKER_HOST:-misty-journal-collab-dev.mistysys.workers.dev}
+      MISTY_JOURNAL_SERVER_ENV_FILE: /run/misty/journal-server.env
+      STRIPE_WEBHOOK_SECRET_FILE: /run/misty/stripe-webhook-secret
+    ports:
+      - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"
+    volumes:
+      - dev_runtime:/run/misty:ro
+    depends_on:
+      database-permissions:
+        condition: service_completed_successfully
+      dev-init:
+        condition: service_completed_successfully
+      stripe:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    entrypoint: ["/bin/sh", "/usr/local/bin/misty-dev-api-entrypoint"]
+    networks: [edge, database]
+  
+  tunnel:
+    image: misty-cloudflared-dev:local
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf AS cloudflared
+
+        FROM alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
+
+        RUN apk add --no-cache ca-certificates
+
+        COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+
+        ENTRYPOINT ["/usr/local/bin/cloudflared"]
+
+    restart: unless-stopped
+
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --metrics
+      - 0.0.0.0:20241
+      - run
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1:20241/metrics | grep -Eq '^cloudflared_tunnel_ha_connections [1-9][0-9]*(\\.[0-9]+)?$'"
+        ]
+      interval: 15s
+      timeout: 7s
+      retries: 3
+      start_period: 10s
+
+    networks:
+      - edge
+
+  cloudflare-deploy:
+    <<: *cloudflare-image
+    restart: "no"
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      MISTY_CLOUDFLARE_WORKER_NAME: ${MISTY_CLOUDFLARE_WORKER_NAME:-misty-journal-collab-dev}
+    volumes:
+      - ./cloudflare/journal-collab:/workspace:ro
+      - dev_runtime:/run/misty:ro
+    depends_on:
+      tunnel:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/usr/local/bin/misty-cloudflare-deploy"]
+    networks: [edge]
+
+volumes:
+  pgdata:
+  dev_runtime:
+
+networks:
+  edge:
+  database:
+    internal: true

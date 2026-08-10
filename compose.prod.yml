@@ -1,0 +1,97 @@
+name: misty-server-production
+
+x-api-image: &api-image
+  image: ${MISTY_API_IMAGE:?set immutable MISTY_API_IMAGE}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_MIGRATION_USER:?set DB_MIGRATION_USER}
+      POSTGRES_PASSWORD: ${DB_MIGRATION_PASSWORD:?set DB_MIGRATION_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:?set DB_NAME}
+      MISTY_APP_DB_USER: ${DB_USER:?set DB_USER}
+      MISTY_APP_DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/docker/postgres-init-app-role.sh:/docker-entrypoint-initdb.d/10-misty-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    networks: [database]
+
+  migrate:
+    <<: *api-image
+    restart: "no"
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: >-
+        host=postgres port=5432
+        user=${DB_MIGRATION_USER:?set DB_MIGRATION_USER}
+        password=${DB_MIGRATION_PASSWORD:?set DB_MIGRATION_PASSWORD}
+        dbname=${DB_NAME:?set DB_NAME}
+        sslmode=disable
+      GOOSE_MIGRATION_DIR: /app/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/usr/local/bin/goose"]
+    command: ["up"]
+    networks: [database]
+
+  database-permissions:
+    image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${DB_NAME:?set DB_NAME}
+      PGUSER: ${DB_MIGRATION_USER:?set DB_MIGRATION_USER}
+      PGPASSWORD: ${DB_MIGRATION_PASSWORD:?set DB_MIGRATION_PASSWORD}
+      MISTY_APP_DB_USER: ${DB_USER:?set DB_USER}
+    volumes:
+      - ./scripts/docker/postgres-grant-app-role.sh:/usr/local/bin/misty-grant-app-role:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "/usr/local/bin/misty-grant-app-role"]
+    networks: [database]
+
+  api:
+    <<: *api-image
+    restart: unless-stopped
+    env_file:
+      - path: ${MISTY_ENV_FILE:-.env.prod}
+        required: true
+    environment:
+      PORT: "8080"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:?set DB_NAME}
+      DB_USER: ${DB_USER:?set DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      DB_MIGRATION_USER: ""
+      DB_MIGRATION_PASSWORD: ""
+      CLOUDFLARE_API_TOKEN: ""
+    ports:
+      - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"
+    depends_on:
+      database-permissions:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    networks: [edge, database]
+
+volumes:
+  pgdata:
+
+networks:
+  edge:
+  database:
+    internal: true

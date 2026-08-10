@@ -28,6 +28,7 @@ func TestingValidateProductionEnvironment() error {
 		"DB_PASSWORD",
 		"DB_NAME",
 		"MISTY_PUBLIC_API_URL",
+		"MISTY_OPERATOR_USER_ID",
 		"SPACE_LINK_ENCRYPTION_KEY",
 		"STRIPE_SECRET_KEY",
 		"STRIPE_WEBHOOK_SECRET",

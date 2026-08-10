@@ -120,8 +120,10 @@ func (s *RealtimeService) handleClientMessage(client *TestingRealtimeClient, pay
 // space's real members.
 func (s *RealtimeService) TestingSetViewing(client *TestingRealtimeClient, spaceID string, active bool) {
 	if spaceID != "" {
-		isMember, err := s.database.IsSpaceMember(context.Background(), client.TestingUserID, spaceID)
-		if err != nil || !isMember {
+		space, err := s.database.SpaceByID(context.Background(), client.TestingUserID, spaceID)
+		// Presence is Space-wide, so it must stay disabled in the canonical
+		// Misty container where customers are isolated by private conversation.
+		if err != nil || space.Kind == "misty" {
 			spaceID = ""
 		}
 	}

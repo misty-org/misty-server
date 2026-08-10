@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -154,28 +155,43 @@ func TestingValidProviderReturnPath(value string) bool {
 func (s *SpacesService) ProviderAuthorizationCallback() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		provider, code, state := chi.URLParam(r, "provider"), r.URL.Query().Get("code"), r.URL.Query().Get("state")
+		// Providers report a refused or cancelled consent as `error` rather than
+		// by omitting the code, and that is an ordinary outcome rather than a
+		// fault, so it is named separately from a malformed redirect.
+		if refusal := r.URL.Query().Get("error"); refusal != "" {
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthDeniedByProvider, errors.New(TestingProviderRefusalDetail(r)))
+			return
+		}
 		definition, exists := TestingProviderOAuthCatalog[provider]
 		if !exists || code == "" || state == "" {
-			writeSpaceError(w, db.ErrSpaceInvalid)
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthMalformedRedirect, fmt.Errorf(
+				"known_provider=%t code_present=%t state_present=%t", exists, code != "", state != "",
+			))
 			return
 		}
 		stored, err := s.database.ConsumeProviderOAuthState(r.Context(), hashProviderValue(state))
-		if err != nil || stored.Provider != provider {
-			writeSpaceError(w, db.ErrSpaceInvalid)
+		if err != nil {
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthStaleState, err)
+			return
+		}
+		if stored.Provider != provider {
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthStaleState, fmt.Errorf(
+				"state belongs to provider %q", stored.Provider,
+			))
 			return
 		}
 		verifier, err := s.decryptProviderSecret(provider, stored.VerifierCiphertext, stored.VerifierNonce)
 		if err != nil {
-			writeSpaceError(w, err)
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthStaleState, err)
 			return
 		}
 		token, raw, err := exchangeProviderCode(r.Context(), definition, code, string(verifier), TestingProviderCallbackURL(r, provider))
 		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "provider_exchange_failed"})
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthExchangeFailed, err)
 			return
 		}
 		if token.AccessToken == "" {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "provider_token_missing"})
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthTokenUnusable, nil)
 			return
 		}
 		accountID, accountName := providerAccountIdentity(provider, token, raw)
@@ -190,7 +206,7 @@ func (s *SpacesService) ProviderAuthorizationCallback() http.HandlerFunc {
 		}
 		ciphertext, nonce, err := s.encryptProviderSecret(provider, raw)
 		if err != nil {
-			writeSpaceError(w, err)
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthNotSaved, err)
 			return
 		}
 		var expiresAt *time.Time
@@ -205,7 +221,7 @@ func (s *SpacesService) ProviderAuthorizationCallback() http.HandlerFunc {
 		_, err = s.database.SaveProviderCredential(r.Context(), db.ProviderCredential{SpaceID: stored.SpaceID, UserID: stored.UserID, Provider: provider, Ciphertext: ciphertext, Nonce: nonce, KeyVersion: s.keyVer, AccountID: accountID, AccountDisplay: accountName, ExpiresAt: expiresAt}, accountName, scopes)
 		if err != nil {
 			logProviderCallbackDatabaseFailure(provider, err)
-			writeSpaceError(w, err)
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthNotSaved, err)
 			return
 		}
 		// Setup intent is optional. A provider connected later from Settings may

@@ -52,7 +52,7 @@ func (db *Database) InviteToSpaceWithToken(
 		ExpiresAt: time.Now().UTC().Add(7 * 24 * time.Hour),
 	}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:owner:"+ownerID); err != nil {
@@ -150,7 +150,7 @@ func (db *Database) PendingSpaceInvitations(
 ) ([]SpaceInvitation, error) {
 	items := []SpaceInvitation{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.space_id,s.name,
@@ -188,7 +188,7 @@ func (db *Database) RefreshSpaceInvitation(
 	out := &SpaceInvitation{}
 	expiresAt := time.Now().UTC().Add(7 * 24 * time.Hour)
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
 		err := tx.QueryRowContext(ctx, `UPDATE space_invitations i
@@ -216,7 +216,7 @@ func (db *Database) RevokeSpaceInvitation(
 	ownerID, spaceID, inviteID string,
 ) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE space_invitations SET revoked_at=NOW()

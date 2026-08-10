@@ -31,7 +31,7 @@ func TestOwnedSpacesShareOneStoragePool(t *testing.T) {
 		t.Fatalf("cross-Space overflow = %v, want ErrLibraryQuota", err)
 	}
 	ownerUsage, err := database.OwnerStorageUsage(ctx, owner.ID)
-	if err != nil || ownerUsage.ReservedBytes != FreeStorageBytes || len(ownerUsage.Spaces) != 3 {
+	if err != nil || ownerUsage.ReservedBytes != FreeStorageBytes || len(ownerUsage.Spaces) != 2 {
 		t.Fatalf("owner pool = %#v, %v", ownerUsage, err)
 	}
 	releaseQuota(t, database, ctx, first)

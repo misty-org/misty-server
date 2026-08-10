@@ -12,8 +12,19 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:owner:"+memberID); err != nil {
 			return err
 		}
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
+		}
+		if misty, err := isMistySpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		} else if misty {
+			operator, operatorErr := isMistyOperatorTx(ctx, tx, memberID)
+			if operatorErr != nil {
+				return operatorErr
+			}
+			if !operator {
+				return ErrSpaceForbidden
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `SELECT 1 FROM spaces WHERE id=$1 FOR UPDATE`, spaceID); err != nil {
 			return err

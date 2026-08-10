@@ -198,6 +198,7 @@ func TestValidateProductionEnvironmentAcceptsCoreConfiguration(t *testing.T) {
 		"DB_PASSWORD":                 "password",
 		"DB_NAME":                     "misty",
 		"MISTY_PUBLIC_API_URL":        "https://api.example.com/api",
+		"MISTY_OPERATOR_USER_ID":      "operator-user-id",
 		"SPACE_LINK_ENCRYPTION_KEY":   "01234567890123456789012345678901",
 		"STRIPE_SECRET_KEY":           "sk_live_test",
 		"STRIPE_WEBHOOK_SECRET":       "whsec_01234567890123456789",

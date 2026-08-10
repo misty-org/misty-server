@@ -29,15 +29,65 @@ func openPresenceTestDatabase(t *testing.T) *db.Database {
 	if err := database.Start(); err != nil {
 		t.Fatalf("database.Start() error = %v", err)
 	}
-	if _, err := database.Conn.Exec(`SELECT pg_advisory_lock($1)`, testDatabaseLockID); err != nil {
+	lockConnection, err := database.Conn.Conn(t.Context())
+	if err != nil {
+		database.Stop()
+		t.Fatalf("reserve test database lock connection: %v", err)
+	}
+	if _, err := lockConnection.ExecContext(t.Context(), `SELECT pg_advisory_lock($1)`, testDatabaseLockID); err != nil {
+		_ = lockConnection.Close()
 		database.Stop()
 		t.Fatalf("acquire test database lock: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = database.Conn.Exec(`SELECT pg_advisory_unlock($1)`, testDatabaseLockID)
+		_, _ = lockConnection.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, testDatabaseLockID)
+		_ = lockConnection.Close()
 		database.Stop()
 	})
 	return database
+}
+
+func TestRealtimePresenceIsDisabledForCanonicalMisty(t *testing.T) {
+	database := openPresenceTestDatabase(t)
+	operator, err := database.CreateUser("Presence Operator", uniqueTestEmail("operator"), "password123")
+	if err != nil {
+		t.Fatalf("CreateUser(operator) error = %v", err)
+	}
+	member, err := database.CreateUser("Presence Customer", uniqueTestEmail("customer"), "password123")
+	if err != nil {
+		t.Fatalf("CreateUser(member) error = %v", err)
+	}
+	if err := database.ConfigureCanonicalMistySpace(t.Context(), operator.ID); err != nil {
+		t.Fatalf("ConfigureCanonicalMistySpace() error = %v", err)
+	}
+	spaces, err := database.ListSpaces(t.Context(), member.ID)
+	if err != nil {
+		t.Fatalf("ListSpaces(member) error = %v", err)
+	}
+	var mistySpaceID string
+	for _, space := range spaces {
+		if space.Kind == "misty" {
+			mistySpaceID = space.ID
+			break
+		}
+	}
+	if mistySpaceID == "" {
+		t.Fatal("member did not receive canonical Misty Space")
+	}
+
+	service := NewRealtimeService(database, "")
+	operatorClient := newTestRealtimeClient(operator.ID)
+	memberClient := newTestRealtimeClient(member.ID)
+	service.TestingSetViewing(operatorClient, mistySpaceID, true)
+	service.TestingSetViewing(memberClient, mistySpaceID, true)
+	assertNoMessage(t, operatorClient, "operator in canonical Misty")
+	assertNoMessage(t, memberClient, "customer in canonical Misty")
+	service.TestingMu.RLock()
+	viewerCount := len(service.TestingViewers[mistySpaceID])
+	service.TestingMu.RUnlock()
+	if viewerCount != 0 {
+		t.Fatalf("canonical Misty tracked %d Space-wide viewers, want none", viewerCount)
+	}
 }
 
 // uniqueTestEmail avoids colliding with rows left behind by a previous run of

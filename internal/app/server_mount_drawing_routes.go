@@ -234,3 +234,11 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Get(prefix+"/status", aiService.Status())
 	s.Router.Post(prefix+"/complete", aiService.Complete())
 }
+
+func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {
+	s.Router.MethodFunc(http.MethodGet, prefix+"/misty/conversations", aiService.MistyConversations())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/conversations", aiService.MistyConversations())
+	s.Router.MethodFunc(http.MethodDelete, prefix+"/misty/conversations/{conversationID}", aiService.MistyConversation())
+	s.Router.MethodFunc(http.MethodPatch, prefix+"/misty/conversations/{conversationID}", aiService.MistyConversation())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/conversations/{conversationID}/turns", aiService.MistyConversationTurn())
+}

@@ -62,8 +62,9 @@ func TestingWebsiteURLFromEnv() (string, error) {
 }
 
 // TestingAuthHandoffStartURLFromEnv is the API-origin URL the desktop app opens.
-// It must be same-origin with the website for the session cookie to be visible
-// to the SPA that the handoff redirects into.
+// The handoff writes the host-only HttpOnly session cookie on that API origin,
+// then redirects to the website. The browser sends it on credentialed API
+// requests even when the website is hosted on a separate allowed origin.
 func TestingAuthHandoffStartURLFromEnv() (string, error) {
 	return validatedURLFromEnv("AUTH_HANDOFF_START_URL", "http://localhost:8080/auth/handoff/start")
 }

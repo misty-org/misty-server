@@ -2,14 +2,13 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func TestDefaultMistySpaceIsOrdinaryAndPrivatePerAccount(t *testing.T) {
+func TestCanonicalMistySpaceUsesPrivateSupportConversations(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
 	first, err := database.CreateUser("First User", "default-first@example.com", "password123")
@@ -28,64 +27,85 @@ func TestDefaultMistySpaceIsOrdinaryAndPrivatePerAccount(t *testing.T) {
 	}
 	firstSpace := requireDefaultMistySpace(t, database, ctx, first.ID)
 	secondSpace := requireDefaultMistySpace(t, database, ctx, second.ID)
-	if firstSpace.ID == secondSpace.ID {
-		t.Fatalf("default Spaces share identity %q", firstSpace.ID)
+	if firstSpace.ID != secondSpace.ID || firstSpace.Kind != "misty" || secondSpace.Kind != "misty" {
+		t.Fatalf("accounts did not receive the canonical Misty Space: %#v / %#v", firstSpace, secondSpace)
 	}
 	for _, space := range []Space{firstSpace, secondSpace} {
-		if space.Kind != "standard" || space.Role != "owner" || space.IsShared {
-			t.Fatalf("default Space is not ordinary and private: %#v", space)
+		if space.Role != "member" || space.IsShared {
+			t.Fatalf("canonical Space projection is not private: %#v", space)
 		}
 		for _, permission := range []string{
 			PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload,
-			PermissionLibraryView, PermissionTasksView, PermissionTasksManage,
-			PermissionAgentsRun, PermissionAgentsManage,
 		} {
 			if !space.Permissions[permission] {
-				t.Fatalf("default Space lacks %s: %#v", permission, space.Permissions)
+				t.Fatalf("canonical Space lacks %s: %#v", permission, space.Permissions)
+			}
+		}
+		for _, permission := range []string{
+			PermissionLibraryView, PermissionTasksView, PermissionAgentsRun,
+			PermissionSpaceInvite, PermissionSpaceRename, PermissionSpaceTransfer,
+			PermissionSpaceDelete, PermissionSpaceLeave,
+		} {
+			if space.Permissions[permission] {
+				t.Fatalf("ordinary member unexpectedly has %s: %#v", permission, space.Permissions)
 			}
 		}
 	}
-	renamed, err := database.RenameSpace(ctx, first.ID, firstSpace.ID, "Personal home")
+	if _, err := database.RenameSpace(ctx, first.ID, firstSpace.ID, "Personal home"); !errors.Is(err, ErrSpaceForbidden) {
+		t.Fatalf("RenameSpace(canonical Misty) = %v, want ErrSpaceForbidden", err)
+	}
+	if _, err := database.InviteToSpace(ctx, first.ID, firstSpace.ID, second.Email); !errors.Is(err, ErrSpaceForbidden) {
+		t.Fatalf("InviteToSpace(canonical Misty) = %v, want ErrSpaceForbidden", err)
+	}
+	if _, _, err := database.CreateSpaceMessage(ctx, first.ID, firstSpace.ID, []MessageSpan{{Type: "text", Text: "not private"}}, nil); !errors.Is(err, ErrSpaceForbidden) {
+		t.Fatalf("CreateSpaceMessage(canonical Everyone) = %v, want ErrSpaceForbidden", err)
+	}
+
+	firstConversations, err := database.SpaceConversations(ctx, first.ID, firstSpace.ID)
+	if err != nil || len(firstConversations) != 1 || firstConversations[0].Kind != "misty_support" {
+		t.Fatalf("first support conversations = %#v, %v", firstConversations, err)
+	}
+	secondConversations, err := database.SpaceConversations(ctx, second.ID, secondSpace.ID)
+	if err != nil || len(secondConversations) != 1 || secondConversations[0].Kind != "misty_support" {
+		t.Fatalf("second support conversations = %#v, %v", secondConversations, err)
+	}
+	if firstConversations[0].ID == secondConversations[0].ID {
+		t.Fatal("different accounts received the same support conversation")
+	}
+	if _, err := database.SpaceConversationMessages(ctx, first.ID, firstSpace.ID, secondConversations[0].ID, 0, 20); !errors.Is(err, ErrSpaceForbidden) {
+		t.Fatalf("cross-user support read = %v, want ErrSpaceForbidden", err)
+	}
+	members, err := database.SpaceMembers(ctx, first.ID, firstSpace.ID)
 	if err != nil {
-		t.Fatalf("default Space should support normal lifecycle operations: %v", err)
+		t.Fatal(err)
 	}
-	if err := database.EnsureDefaultSpace(ctx, first.ID); err != nil {
-		t.Fatalf("EnsureDefaultSpace() after rename = %v, want idempotent success", err)
-	}
-	spacesAfterRename, err := database.ListSpaces(ctx, first.ID)
-	if err != nil || len(spacesAfterRename) != 1 || spacesAfterRename[0].ID != renamed.ID {
-		t.Fatalf("Spaces after rename and ensure = %#v, %v, want the same single Space", spacesAfterRename, err)
-	}
-	if spacesAfterRename[0].Permissions[PermissionSpaceDelete] {
-		t.Fatalf("ordinary account can delete default Misty Space: %#v", spacesAfterRename[0].Permissions)
-	}
-	if err := database.DeleteSpace(ctx, first.ID, renamed.ID, renamed.Name); !errors.Is(err, ErrSpaceForbidden) {
-		t.Fatalf("DeleteSpace(default Misty) = %v, want ErrSpaceForbidden", err)
+	for _, member := range members {
+		if member.UserID == second.ID {
+			t.Fatalf("member directory exposed another customer: %#v", members)
+		}
 	}
 }
 
-func TestOperatorCanDeleteDefaultMistySpace(t *testing.T) {
+func TestOperatorCanManageCanonicalMistySpace(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	operator, err := database.CreateUser("Misty Operator", "misty-operator@example.com", "password123")
+	operator, _, err := database.GetUserByEmail("test-misty-operator@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO misty_space_operators(user_id) VALUES($1)`, operator.ID)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
 	space := requireDefaultMistySpace(t, database, ctx, operator.ID)
-	if !space.Permissions[PermissionSpaceDelete] {
-		t.Fatalf("operator lacks default Misty deletion permission: %#v", space.Permissions)
+	for _, permission := range []string{
+		PermissionSpaceInvite, PermissionSpaceRename, PermissionSpaceTransfer, PermissionSpaceDelete,
+	} {
+		if !space.Permissions[permission] {
+			t.Fatalf("operator lacks %s: %#v", permission, space.Permissions)
+		}
 	}
-	if err := database.DeleteSpace(ctx, operator.ID, space.ID, space.Name); err != nil {
-		t.Fatalf("DeleteSpace(operator default Misty) = %v", err)
+	if _, err := database.RenameSpace(ctx, operator.ID, space.ID, "Misty Support"); err != nil {
+		t.Fatalf("RenameSpace(operator canonical Misty) = %v", err)
 	}
-	if err := database.EnsureDefaultSpace(ctx, operator.ID); err != nil {
-		t.Fatalf("EnsureDefaultSpace() after operator deletion = %v, want idempotent success", err)
+	if _, err := database.RenameSpace(ctx, operator.ID, space.ID, "Misty"); err != nil {
+		t.Fatalf("restore canonical Misty name = %v", err)
 	}
 }
 
@@ -98,7 +118,7 @@ func requireDefaultMistySpace(
 		t.Fatal(err)
 	}
 	for _, space := range spaces {
-		if space.Name == "Misty" && space.OwnerUserID == userID {
+		if space.Kind == "misty" {
 			return space
 		}
 	}

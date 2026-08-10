@@ -98,6 +98,9 @@ func (db *Database) MarkSpaceRead(ctx context.Context, userID, spaceID string, s
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
 			return err
 		}
+		if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE space_members SET read_message_seq=GREATEST(read_message_seq,$1) WHERE space_id=$2 AND user_id=$3`, seq, spaceID, userID); err != nil {
 			return err
 		}

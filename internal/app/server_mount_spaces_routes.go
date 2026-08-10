@@ -15,6 +15,7 @@ import (
 )
 
 func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, realtime *api.RealtimeService) {
+	s.Router.Get(prefix+"/search/global", spaces.GlobalSearch())
 	s.Router.Get(prefix+"/cloud/connections", spaces.CloudConnections())
 	s.Router.Post(prefix+"/cloud/connections/{provider}/authorize", spaces.BeginCloudAuthorization())
 	s.Router.Get(prefix+"/oauth/cloud/{provider}/callback", spaces.CloudAuthorizationCallback())
@@ -58,6 +59,11 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/agents/{agentID}", spaces.SpaceAgentMembership())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/agents/{agentID}", spaces.SpaceAgentMembership())
 	s.Router.Get(prefix+"/spaces/{spaceID}/agents/{agentID}/toolbox", spaces.SpaceAgentToolbox())
+	s.Router.Get(prefix+"/agents/catalog", spaces.AgentCatalog())
+	s.Router.Get(prefix+"/agents/discovery", spaces.AgentDiscovery())
+	s.Router.Post(prefix+"/agents/delegate", spaces.AgentDelegation())
+	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/agents/{agentID}/runs", spaces.DirectAgentRun())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/agents/{agentID}/runs", spaces.DirectAgentRun())
 	s.Router.Post(prefix+"/spaces/{spaceID}/agents/{agentID}/approve-version", spaces.ApproveSpaceAgentVersion())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/agents/{agentID}/device-grants", spaces.SpaceAgentDeviceGrants())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/agents/{agentID}/device-grants", spaces.SpaceAgentDeviceGrants())

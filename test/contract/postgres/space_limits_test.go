@@ -20,6 +20,9 @@ func TestSpaceMembershipLimitCountsOwnedAndJoinedButNotPendingInvitations(t *tes
 	if _, err := database.CreateSpace(ctx, member.ID, "Owned one"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := database.CreateSpace(ctx, member.ID, "Owned two"); err != nil {
+		t.Fatal(err)
+	}
 	paidOwner, err := database.CreateUser("Max Owner", "max-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +86,7 @@ func TestSpaceMembershipDowngradePreservesExistingAndBlocksGrowth(t *testing.T) 
 	}
 	spaces, err := database.ListSpaces(ctx, user.ID)
 	spaces = standardSpaces(spaces)
-	if err != nil || len(spaces) != BasicSpaceLimit+1 {
+	if err != nil || len(spaces) != BasicSpaceLimit {
 		t.Fatalf("memberships after downgrade = %d, %v", len(spaces), err)
 	}
 	if _, err := database.CreateSpace(ctx, user.ID, "Blocked after downgrade"); !errors.Is(err, ErrSpaceLimit) {
@@ -98,7 +101,7 @@ func TestConcurrentSpaceMembershipOperationsCannotExceedLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index := 0; index < BasicSpaceLimit-2; index++ {
+	for index := 0; index < BasicSpaceLimit-1; index++ {
 		if _, err := database.CreateSpace(ctx, user.ID, fmt.Sprintf("Existing %d", index+1)); err != nil {
 			t.Fatal(err)
 		}

@@ -18,37 +18,53 @@ import (
 func (s *SpacesService) CloudAuthorizationCallback() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		provider, code, state := chi.URLParam(r, "provider"), r.URL.Query().Get("code"), r.URL.Query().Get("state")
+		if refusal := r.URL.Query().Get("error"); refusal != "" {
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthDeniedByProvider, errors.New(TestingProviderRefusalDetail(r)))
+			return
+		}
 		definition, exists := TestingCloudOAuthCatalog[provider]
 		if !exists || code == "" || state == "" {
-			writeSpaceError(w, db.ErrSpaceInvalid)
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthMalformedRedirect, fmt.Errorf(
+				"known_provider=%t code_present=%t state_present=%t", exists, code != "", state != "",
+			))
 			return
 		}
 		stored, err := s.database.ConsumeCloudOAuthState(r.Context(), hashProviderValue(state))
-		if err != nil || stored.Provider != provider {
-			writeSpaceError(w, db.ErrSpaceInvalid)
+		if err != nil {
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthStaleState, err)
+			return
+		}
+		if stored.Provider != provider {
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthStaleState, fmt.Errorf(
+				"state belongs to provider %q", stored.Provider,
+			))
 			return
 		}
 		plaintext, err := s.decryptProviderSecret(provider, stored.SecretCiphertext, stored.SecretNonce)
 		var secret cloudOAuthSecret
 		if err != nil || json.Unmarshal(plaintext, &secret) != nil {
-			writeSpaceError(w, errors.New("cloud authorization state is invalid"))
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthStaleState, err)
 			return
 		}
 		token, err := exchangeCloudCode(r.Context(), definition, secret, code, TestingCloudCallbackURL(r, provider))
-		if err != nil || token.AccessToken == "" {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "cloud_exchange_failed"})
+		if err != nil {
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthExchangeFailed, err)
+			return
+		}
+		if token.AccessToken == "" {
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthTokenUnusable, nil)
 			return
 		}
 		accountID, accountName := fetchCloudIdentity(r.Context(), provider, token)
 		if accountID == "" {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "cloud_identity_failed"})
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthTokenUnusable, errors.New("provider identity lookup returned no account"))
 			return
 		}
 		secret.Verifier, secret.Token = "", token
 		encoded, _ := json.Marshal(secret)
 		ciphertext, nonce, err := s.encryptProviderSecret(provider, encoded)
 		if err != nil {
-			writeSpaceError(w, err)
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthNotSaved, err)
 			return
 		}
 		var expiresAt *time.Time
@@ -58,7 +74,7 @@ func (s *SpacesService) CloudAuthorizationCallback() http.HandlerFunc {
 		}
 		entitlements, err := s.database.EntitlementsForUser(r.Context(), stored.UserID)
 		if err != nil {
-			writeSpaceError(w, errors.New("account license is unavailable"))
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthNotSaved, err)
 			return
 		}
 		maximum := 1
@@ -72,11 +88,11 @@ func (s *SpacesService) CloudAuthorizationCallback() http.HandlerFunc {
 			UsesCustomOAuthClient: secret.Custom, ExpiresAt: expiresAt,
 		}, maximum)
 		if errors.Is(err, db.ErrCloudConnectionLimit) {
-			writeJSON(w, http.StatusForbidden, map[string]string{"code": "cloud_connection_limit", "message": "Basic accounts can connect one cloud account."})
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthCloudConnectionLimit, err)
 			return
 		}
 		if err != nil {
-			writeSpaceError(w, err)
+			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthNotSaved, err)
 			return
 		}
 		TestingWriteProviderCompletionPage(w, definition.Name, item.AccountDisplay)
@@ -229,15 +245,7 @@ func fetchCloudIdentity(ctx context.Context, provider string, token providerToke
 }
 
 func TestingCloudCallbackURL(r *http.Request, provider string) string {
-	base := configuredPublicAPIBase()
-	if base == "" {
-		scheme := "https"
-		if r.TLS == nil && (strings.HasPrefix(r.Host, "localhost") || strings.HasPrefix(r.Host, "127.0.0.1")) {
-			scheme = "http"
-		}
-		base = scheme + "://" + r.Host + requestAPIPathPrefix(r.URL.Path)
-	}
-	return base + "/oauth/cloud/" + url.PathEscape(provider) + "/callback"
+	return requestPublicAPIBase(r) + "/oauth/cloud/" + url.PathEscape(provider) + "/callback"
 }
 
 func TestingCloudAPIBase(provider string) string {

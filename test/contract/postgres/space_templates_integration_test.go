@@ -39,7 +39,7 @@ func TestTemplateCreationIsTransactionalAndIdempotent(t *testing.T) {
 	); !errors.Is(err, ErrSpaceInvalid) {
 		t.Fatalf("invalid provider error = %v, want ErrSpaceInvalid", err)
 	}
-	if spaces, err := database.ListSpaces(ctx, owner.ID); err != nil || len(standardSpaces(spaces)) != 1 {
+	if spaces, err := database.ListSpaces(ctx, owner.ID); err != nil || len(standardSpaces(spaces)) != 0 {
 		t.Fatalf("invalid creation left Spaces = %#v, %v", spaces, err)
 	}
 

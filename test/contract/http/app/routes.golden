@@ -8,6 +8,7 @@ DELETE /api/ai/media-search/devices/{deviceID}
 DELETE /api/ai/smart-library/folders/{folderID}
 DELETE /api/cloud/connections/{connectionID}
 DELETE /api/integrations/{integrationID}
+DELETE /api/misty/conversations/{conversationID}
 DELETE /api/spaces/{spaceID}
 DELETE /api/spaces/{spaceID}/agents/{agentID}
 DELETE /api/spaces/{spaceID}/agents/{agentID}/device-grants/{grantID}
@@ -49,6 +50,7 @@ DELETE /api/spaces/{spaceID}/studio/workflows/{resourceID}
 DELETE /api/spaces/{spaceID}/tasks/{taskID}
 DELETE /cloud/connections/{connectionID}
 DELETE /integrations/{integrationID}
+DELETE /misty/conversations/{conversationID}
 DELETE /spaces/{spaceID}
 DELETE /spaces/{spaceID}/agents/{agentID}
 DELETE /spaces/{spaceID}/agents/{agentID}/device-grants/{grantID}
@@ -90,6 +92,8 @@ DELETE /spaces/{spaceID}/studio/workflows/{resourceID}
 DELETE /spaces/{spaceID}/tasks/{taskID}
 GET /activity/inbox
 GET /agents
+GET /agents/catalog
+GET /agents/discovery
 GET /agents/toolbox
 GET /agents/{agentID}
 GET /agents/{agentID}/avatar
@@ -103,6 +107,8 @@ GET /ai/smart-library/index-status
 GET /ai/status
 GET /api/activity/inbox
 GET /api/agents
+GET /api/agents/catalog
+GET /api/agents/discovery
 GET /api/agents/toolbox
 GET /api/agents/{agentID}
 GET /api/agents/{agentID}/avatar
@@ -123,10 +129,12 @@ GET /api/health
 GET /api/me
 GET /api/me/avatar
 GET /api/me/settings
+GET /api/misty/conversations
 GET /api/oauth/cloud/{provider}/callback
 GET /api/oauth/providers/{provider}/callback
 GET /api/realtime
 GET /api/runs/{runID}
+GET /api/search/global
 GET /api/search/spaces
 GET /api/space-invitations/{token}
 GET /api/space-templates
@@ -139,6 +147,7 @@ GET /api/spaces/{spaceID}/action-suggestions/{batchID}/review
 GET /api/spaces/{spaceID}/agenda
 GET /api/spaces/{spaceID}/agents
 GET /api/spaces/{spaceID}/agents/{agentID}/device-grants
+GET /api/spaces/{spaceID}/agents/{agentID}/runs
 GET /api/spaces/{spaceID}/agents/{agentID}/toolbox
 GET /api/spaces/{spaceID}/attachments/{attachmentID}/download
 GET /api/spaces/{spaceID}/calendar/events
@@ -214,10 +223,12 @@ GET /health
 GET /me
 GET /me/avatar
 GET /me/settings
+GET /misty/conversations
 GET /oauth/cloud/{provider}/callback
 GET /oauth/providers/{provider}/callback
 GET /realtime
 GET /runs/{runID}
+GET /search/global
 GET /search/spaces
 GET /space-invitations/{token}
 GET /space-templates
@@ -230,6 +241,7 @@ GET /spaces/{spaceID}/action-suggestions/{batchID}/review
 GET /spaces/{spaceID}/agenda
 GET /spaces/{spaceID}/agents
 GET /spaces/{spaceID}/agents/{agentID}/device-grants
+GET /spaces/{spaceID}/agents/{agentID}/runs
 GET /spaces/{spaceID}/agents/{agentID}/toolbox
 GET /spaces/{spaceID}/attachments/{attachmentID}/download
 GET /spaces/{spaceID}/calendar/events
@@ -298,6 +310,7 @@ GET /spaces/{spaceID}/tasks
 GET /spaces/{spaceID}/tasks/{taskID}/activity
 PATCH /agents/{agentID}
 PATCH /api/agents/{agentID}
+PATCH /api/misty/conversations/{conversationID}
 PATCH /api/spaces/{spaceID}
 PATCH /api/spaces/{spaceID}/agents/{agentID}
 PATCH /api/spaces/{spaceID}/calendar/events/{eventID}
@@ -325,6 +338,7 @@ PATCH /api/spaces/{spaceID}/roadmaps/{roadmapID}/milestones/{milestoneID}
 PATCH /api/spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}
 PATCH /api/spaces/{spaceID}/setup
 PATCH /api/spaces/{spaceID}/tasks/{taskID}
+PATCH /misty/conversations/{conversationID}
 PATCH /spaces/{spaceID}
 PATCH /spaces/{spaceID}/agents/{agentID}
 PATCH /spaces/{spaceID}/calendar/events/{eventID}
@@ -356,6 +370,7 @@ POST /account/deletion/status
 POST /activity/inbox/clear
 POST /activity/inbox/seen
 POST /agents
+POST /agents/delegate
 POST /ai/complete
 POST /ai/media-search/chunks
 POST /ai/media-search/devices/{deviceID}/adopt-legacy
@@ -374,6 +389,7 @@ POST /api/account/deletion/status
 POST /api/activity/inbox/clear
 POST /api/activity/inbox/seen
 POST /api/agents
+POST /api/agents/delegate
 POST /api/ai/complete
 POST /api/ai/media-search/chunks
 POST /api/ai/media-search/devices/{deviceID}/adopt-legacy
@@ -401,6 +417,8 @@ POST /api/login
 POST /api/logout
 POST /api/me/deletion
 POST /api/me/export
+POST /api/misty/conversations
+POST /api/misty/conversations/{conversationID}/turns
 POST /api/provider-callbacks/google/calendar
 POST /api/provider-callbacks/notion-events
 POST /api/provider-callbacks/slack-events
@@ -418,6 +436,7 @@ POST /api/spaces/{spaceID}/action-suggestions/{batchID}/dismiss
 POST /api/spaces/{spaceID}/agents
 POST /api/spaces/{spaceID}/agents/{agentID}/approve-version
 POST /api/spaces/{spaceID}/agents/{agentID}/device-grants
+POST /api/spaces/{spaceID}/agents/{agentID}/runs
 POST /api/spaces/{spaceID}/attachments/{attachmentID}/promote
 POST /api/spaces/{spaceID}/calendar/events
 POST /api/spaces/{spaceID}/calendar/sources
@@ -503,6 +522,8 @@ POST /login
 POST /logout
 POST /me/deletion
 POST /me/export
+POST /misty/conversations
+POST /misty/conversations/{conversationID}/turns
 POST /provider-callbacks/google/calendar
 POST /provider-callbacks/notion-events
 POST /provider-callbacks/slack-events
@@ -520,6 +541,7 @@ POST /spaces/{spaceID}/action-suggestions/{batchID}/dismiss
 POST /spaces/{spaceID}/agents
 POST /spaces/{spaceID}/agents/{agentID}/approve-version
 POST /spaces/{spaceID}/agents/{agentID}/device-grants
+POST /spaces/{spaceID}/agents/{agentID}/runs
 POST /spaces/{spaceID}/attachments/{attachmentID}/promote
 POST /spaces/{spaceID}/calendar/events
 POST /spaces/{spaceID}/calendar/sources

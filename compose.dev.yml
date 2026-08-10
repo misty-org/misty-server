@@ -152,7 +152,7 @@ services:
       retries: 30
     entrypoint: ["/bin/sh", "/usr/local/bin/misty-dev-api-entrypoint"]
     networks: [edge, database]
-
+  
   tunnel:
     image: misty-cloudflared-dev:local
     build:
@@ -165,24 +165,38 @@ services:
         RUN apk add --no-cache ca-certificates
 
         COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
-        COPY --chmod=0555 scripts/docker/cloudflare-tunnel.sh /usr/local/bin/misty-cloudflare-tunnel
 
-        ENTRYPOINT ["/usr/local/bin/misty-cloudflare-tunnel"]
+        ENTRYPOINT ["/usr/local/bin/cloudflared"]
+
     restart: unless-stopped
+
     environment:
-      MISTY_TUNNEL_ORIGIN: http://api:8080
-    volumes:
-      - dev_runtime:/run/misty
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --metrics
+      - 0.0.0.0:20241
+      - run
+
     depends_on:
       api:
         condition: service_healthy
+
     healthcheck:
-      test: ["CMD-SHELL", "test -s /run/misty/tunnel-url && wget -q -O - http://127.0.0.1:20241/metrics | grep -Eq '^cloudflared_tunnel_ha_connections [1-9][0-9]*(\\.[0-9]+)?$'"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1:20241/metrics | grep -Eq '^cloudflared_tunnel_ha_connections [1-9][0-9]*(\\.[0-9]+)?$'"
+        ]
       interval: 15s
       timeout: 7s
       retries: 3
       start_period: 10s
-    networks: [edge]
+
+    networks:
+      - edge
 
   cloudflare-deploy:
     <<: *cloudflare-image

@@ -140,6 +140,47 @@ func TestProviderURLsKeepOriginOnlyConfigurationCompatible(t *testing.T) {
 	}
 }
 
+// A development tunnel terminates TLS and forwards the original hostname, so
+// an unconfigured server must follow the tunnel rather than assume its own
+// listening address. This is what lets a rotating tunnel URL work without
+// touching server configuration.
+func TestProviderCallbackFollowsForwardedHostWhenUnconfigured(t *testing.T) {
+	t.Setenv("MISTY_PUBLIC_API_URL", "")
+	request := httptest.NewRequest("POST", "http://127.0.0.1:8080/api/spaces/space-1/integrations/notion/authorize", nil)
+	request.Host = "house-gotten-extended-richmond.trycloudflare.com"
+	request.Header.Set("X-Forwarded-Host", "house-gotten-extended-richmond.trycloudflare.com")
+	request.Header.Set("X-Forwarded-Proto", "https")
+
+	want := "https://house-gotten-extended-richmond.trycloudflare.com/api/oauth/providers/notion/callback"
+	if got := TestingProviderCallbackURL(request, "notion"); got != want {
+		t.Fatalf("providerCallbackURL() = %q, want %q", got, want)
+	}
+}
+
+// Explicit configuration stays authoritative, so a forged forwarding header
+// cannot move a production redirect target.
+func TestConfiguredBaseOutranksForwardedHost(t *testing.T) {
+	t.Setenv("MISTY_PUBLIC_API_URL", "https://mistysys.com/api")
+	request := httptest.NewRequest("POST", "https://mistysys.com/api/spaces/space-1/integrations/notion/authorize", nil)
+	request.Header.Set("X-Forwarded-Host", "attacker.example")
+
+	want := "https://mistysys.com/api/oauth/providers/notion/callback"
+	if got := TestingProviderCallbackURL(request, "notion"); got != want {
+		t.Fatalf("providerCallbackURL() = %q, want %q", got, want)
+	}
+}
+
+// A plain local run with no proxy in front still gets an http:// callback.
+func TestProviderCallbackStaysHTTPForPlainLocalhost(t *testing.T) {
+	t.Setenv("MISTY_PUBLIC_API_URL", "")
+	request := httptest.NewRequest("POST", "http://localhost:8080/api/spaces/space-1/integrations/notion/authorize", nil)
+
+	want := "http://localhost:8080/api/oauth/providers/notion/callback"
+	if got := TestingProviderCallbackURL(request, "notion"); got != want {
+		t.Fatalf("providerCallbackURL() = %q, want %q", got, want)
+	}
+}
+
 func TestProviderCallbackFallbackPreservesRequestAPIPrefix(t *testing.T) {
 	t.Setenv("MISTY_PUBLIC_API_URL", "")
 	for _, item := range []struct{ path, want string }{

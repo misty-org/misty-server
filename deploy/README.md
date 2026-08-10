@@ -57,6 +57,29 @@ Production does not run the Stripe CLI, temporary tunnel, or development
 Worker deployment. The API is available only at `127.0.0.1:8081`; Nginx
 publishes it as `https://mistysys.com/api`.
 
+## Browser app
+
+The browser app is a separate static build. Build it from the Misty desktop
+repository with the public API base baked in:
+
+```sh
+MISTY_PUBLIC_API_URL=https://mistysys.com/api npm run build:web
+```
+
+Serve that repository's `dist/` directory from the existing frontend server
+with an SPA fallback to `index.html`, then route `app.mistysys.com` to that
+server through a **named** Cloudflare Tunnel. A Tunnel maps the hostname to the
+frontend origin; it does not perform Misty user-session routing. Do not expose
+a Vite development server as the production origin.
+
+The server environment must keep `MISTY_PUBLIC_API_URL` on the API host and
+include both `https://mistysys.com` and `https://app.mistysys.com` in
+`MISTY_ALLOWED_ORIGINS`. `MISTY_WEBSITE_URL`, password-reset URLs, and the
+desktop-to-browser handoff redirect should point at `https://app.mistysys.com`;
+the handoff start URL remains at `https://mistysys.com/api/auth/handoff/start`.
+The API's Secure HttpOnly cookie remains on `mistysys.com` and is sent with the
+browser's credentialed requests to `https://mistysys.com/api`.
+
 The production Stripe Dashboard webhook must be:
 
 ```text

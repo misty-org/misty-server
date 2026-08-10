@@ -154,7 +154,11 @@ func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, 
 		if err != nil {
 			return err
 		}
-		if kind != "direct" && (kind != "standard" || (creator != userID && role != "owner")) {
+		if kind == "misty_support" {
+			if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, userID); err != nil {
+				return err
+			}
+		} else if kind != "direct" && (kind != "standard" || (creator != userID && role != "owner")) {
 			return ErrSpaceForbidden
 		}
 		if origin == "discord" && integrationStatus != "disconnected" {
@@ -191,6 +195,9 @@ func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, 
 
 func (db *Database) ClearEveryoneConversation(ctx context.Context, userID, spaceID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
 		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}

@@ -3,6 +3,7 @@
 package testkit
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"path/filepath"
@@ -49,15 +50,41 @@ func OpenDatabase(t testing.TB) *db.Database {
 	}
 
 	database := &db.Database{Conn: connection}
-	if _, err := database.Conn.Exec(`SELECT pg_advisory_lock($1)`, databaseLockID); err != nil {
+	lockConnection, err := database.Conn.Conn(t.Context())
+	if err != nil {
+		t.Fatalf("failed to reserve test database lock connection: %v", err)
+	}
+	if _, err := lockConnection.ExecContext(t.Context(), `SELECT pg_advisory_lock($1)`, databaseLockID); err != nil {
+		_ = lockConnection.Close()
 		t.Fatalf("failed to acquire test database lock: %v", err)
 	}
 	resetDatabase(t, database)
+	operator, _, err := database.GetUserByEmail("test-misty-operator@example.com")
+	if err != nil {
+		t.Fatalf("find canonical Misty test operator: %v", err)
+	}
+	if operator == nil {
+		operator, err = database.CreateUserWithUsername(
+			"Test Misty Operator",
+			"test_misty_operator",
+			"test-misty-operator@example.com",
+			"password123",
+		)
+		if err != nil {
+			t.Fatalf("create canonical Misty test operator: %v", err)
+		}
+	}
+	if err := database.ConfigureCanonicalMistySpace(t.Context(), operator.ID); err != nil {
+		t.Fatalf("configure canonical Misty test Space: %v", err)
+	}
 
 	t.Cleanup(func() {
 		resetDatabase(t, database)
-		if _, err := database.Conn.Exec(`SELECT pg_advisory_unlock($1)`, databaseLockID); err != nil {
+		if _, err := lockConnection.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, databaseLockID); err != nil {
 			t.Fatalf("failed to release test database lock: %v", err)
+		}
+		if err := lockConnection.Close(); err != nil {
+			t.Fatalf("failed to close test database lock connection: %v", err)
 		}
 		database.Stop()
 	})

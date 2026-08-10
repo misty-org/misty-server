@@ -199,6 +199,13 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
+		if misty, err := isMistySpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		} else if misty {
+			if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, userID); err != nil {
+				return err
+			}
+		}
 		if err := validateSpaceActorRefsTx(ctx, tx, userID, spaceID, participants); err != nil {
 			return err
 		}
@@ -267,6 +274,9 @@ func (db *Database) DirectAgentConversation(ctx context.Context, userID, spaceID
 	out := &SpaceConversation{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
+			return err
+		}
+		if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		membership, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID)

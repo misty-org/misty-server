@@ -108,7 +108,7 @@ func (db *Database) SetSpaceInvitationDelivery(
 
 func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, memberID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
 		if ownerID == memberID {
@@ -147,6 +147,11 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 
 func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		if misty, err := isMistySpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		} else if misty {
+			return ErrSpaceForbidden
+		}
 		role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
 		if err != nil {
 			return err

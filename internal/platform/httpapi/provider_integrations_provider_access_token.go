@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"net/http"
 	"net/url"
@@ -92,43 +91,6 @@ func exchangeProviderCode(ctx context.Context, definition providerOAuthDefinitio
 		return token, raw, err
 	}
 	return token, raw, nil
-}
-
-var providerCompletionPage = template.Must(template.New("provider-completion").Parse(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Provider}} connected</title>
-  <style>
-    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #090b0f; color: #f4f7fb; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 50% 0%, #1b2635 0, #090b0f 42rem); }
-    main { width: min(30rem, calc(100vw - 2rem)); padding: 2rem; border: 1px solid rgba(255,255,255,.12); border-radius: 1rem; background: rgba(15,18,24,.88); box-shadow: 0 24px 80px rgba(0,0,0,.36); text-align: center; }
-    .mark { width: 3rem; height: 3rem; margin: 0 auto 1rem; display: grid; place-items: center; border-radius: 999px; background: #16a34a; color: white; font-size: 1.75rem; font-weight: 700; }
-    h1 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
-    p { margin: .75rem 0 0; color: #aab4c3; line-height: 1.55; }
-    strong { color: #f4f7fb; font-weight: 650; }
-  </style>
-</head>
-<body>
-  <main>
-    <div class="mark">&check;</div>
-    <h1>{{.Provider}} is connected</h1>
-    <p>Misty saved <strong>{{.Account}}</strong>. Return to the Misty app to continue.</p>
-    <p>You can close this browser tab.</p>
-  </main>
-</body>
-</html>`))
-
-func TestingWriteProviderCompletionPage(w http.ResponseWriter, providerName, accountName string) {
-	if strings.TrimSpace(accountName) == "" {
-		accountName = providerName + " account"
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Frame-Options", "DENY")
-	w.WriteHeader(http.StatusOK)
-	_ = providerCompletionPage.Execute(w, map[string]string{"Provider": providerName, "Account": accountName})
 }
 
 func refreshProviderToken(ctx context.Context, definition providerOAuthDefinition, refreshToken string) (providerTokenEnvelope, []byte, error) {
@@ -225,15 +187,7 @@ func providerAccountIdentity(provider string, token providerTokenEnvelope, raw [
 }
 
 func TestingProviderCallbackURL(r *http.Request, provider string) string {
-	base := configuredPublicAPIBase()
-	if base == "" {
-		scheme := "https"
-		if r.TLS == nil && (strings.HasPrefix(r.Host, "localhost") || strings.HasPrefix(r.Host, "127.0.0.1")) {
-			scheme = "http"
-		}
-		base = scheme + "://" + r.Host + requestAPIPathPrefix(r.URL.Path)
-	}
-	return base + "/oauth/providers/" + url.PathEscape(provider) + "/callback"
+	return requestPublicAPIBase(r) + "/oauth/providers/" + url.PathEscape(provider) + "/callback"
 }
 
 func configuredPublicAPIBase() string {

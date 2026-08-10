@@ -26,8 +26,8 @@ func TestAccountsStartWithMistyAndStandardSpacesBecomeSharedOnlyByInvite(t *test
 	if err != nil {
 		t.Fatalf("ListSpaces(owner) error = %v", err)
 	}
-	if len(ownerSpaces) != 1 || ownerSpaces[0].Kind != "standard" || ownerSpaces[0].Name != "Misty" {
-		t.Fatalf("initial owner Spaces = %#v, want ordinary default Misty Space", ownerSpaces)
+	if len(ownerSpaces) != 1 || ownerSpaces[0].Kind != "misty" || ownerSpaces[0].Name != "Misty" {
+		t.Fatalf("initial owner Spaces = %#v, want canonical Misty Space", ownerSpaces)
 	}
 	project, err := database.CreateSpace(ctx, owner.ID, "Project")
 	if err != nil {
@@ -41,8 +41,12 @@ func TestAccountsStartWithMistyAndStandardSpacesBecomeSharedOnlyByInvite(t *test
 	if err != nil {
 		t.Fatalf("CreateSpace(second additional) = %#v, %v, want success", secondAdditional, err)
 	}
-	if _, err := database.CreateSpace(ctx, owner.ID, "Fourth total"); !errors.Is(err, ErrSpaceLimit) {
-		t.Fatalf("CreateSpace(fourth total) error = %v, want ErrSpaceLimit because the default Misty Space counts toward the Basic limit", err)
+	thirdAdditional, err := database.CreateSpace(ctx, owner.ID, "Third additional")
+	if err != nil {
+		t.Fatalf("CreateSpace(third additional) = %#v, %v, want success", thirdAdditional, err)
+	}
+	if _, err := database.CreateSpace(ctx, owner.ID, "Fourth collaborative Space"); !errors.Is(err, ErrSpaceLimit) {
+		t.Fatalf("CreateSpace(fourth collaborative) error = %v, want ErrSpaceLimit", err)
 	}
 	if err := database.DeleteSpace(ctx, owner.ID, secondAdditional.ID, secondAdditional.Name); err != nil {
 		t.Fatalf("DeleteSpace(second additional) error = %v", err)
@@ -52,8 +56,8 @@ func TestAccountsStartWithMistyAndStandardSpacesBecomeSharedOnlyByInvite(t *test
 	}
 
 	memberSpaces, err := database.ListSpaces(ctx, member.ID)
-	if err != nil || len(memberSpaces) != 1 || memberSpaces[0].Kind != "standard" || memberSpaces[0].Name != "Misty" {
-		t.Fatalf("ListSpaces(member) = %#v, %v, want ordinary default Misty Space", memberSpaces, err)
+	if err != nil || len(memberSpaces) != 1 || memberSpaces[0].Kind != "misty" || memberSpaces[0].Name != "Misty" {
+		t.Fatalf("ListSpaces(member) = %#v, %v, want canonical Misty Space", memberSpaces, err)
 	}
 
 	invite, err := database.InviteToSpace(ctx, owner.ID, project.ID, member.Email)

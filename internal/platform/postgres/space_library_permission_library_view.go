@@ -28,7 +28,11 @@ const (
 	PermissionTasksView          = "tasks.view"
 	PermissionTasksManage        = "tasks.manage"
 	PermissionIntegrationsManage = "integrations.manage"
+	PermissionSpaceInvite        = "space.invite"
+	PermissionSpaceRename        = "space.rename"
+	PermissionSpaceTransfer      = "space.transfer"
 	PermissionSpaceDelete        = "space.delete"
+	PermissionSpaceLeave         = "space.leave"
 	LibraryRecoveryWindow        = 30 * 24 * time.Hour
 )
 

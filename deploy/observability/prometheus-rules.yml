@@ -1,0 +1,78 @@
+groups:
+  - name: misty-public-beta
+    rules:
+      - alert: MistyAPIHighErrorRate
+        expr: |
+          (
+            sum(rate(misty_http_requests_total{status="5xx"}[5m]))
+            /
+            clamp_min(sum(rate(misty_http_requests_total[5m])), 0.01)
+          ) > 0.03
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: Misty API 5xx rate is above 3%
+          runbook: docs/operations/public-beta-operations.md#api-deployment-and-rollback
+      - alert: MistyAPIHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(misty_http_request_duration_seconds_bucket[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Misty API p95 latency is above two seconds
+      - alert: MistyDatabasePoolNearExhaustion
+        expr: |
+          misty_db_connections_max > 0
+          and
+          misty_db_connections_in_use / misty_db_connections_max > 0.85
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Misty API database pool is over 85% utilized
+      - alert: MistyMetricsSamplingStale
+        expr: misty_metrics_sample_age_seconds > 60
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Misty domain metrics have stopped refreshing
+      - alert: MistyJournalControlBacklog
+        expr: misty_note_control_backlog > 0
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: Journal permission and deletion controls are not draining
+          runbook: docs/operations/public-beta-operations.md#journal-worker-deployment-and-rollback
+      - alert: MistyLibraryJobBacklog
+        expr: |
+          (
+            misty_library_jobs_pending_ai
+            + misty_library_jobs_pending_rendition
+            + misty_library_jobs_pending_people
+          ) > 100
+        for: 20m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Misty Library processing backlog is elevated
+      - alert: MistyAbandonedUploadGrowth
+        expr: delta(misty_upload_reservations_active[30m]) > 50
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Active upload reservations are growing faster than cleanup
+      - alert: MistyProcessRestarting
+        expr: changes(process_start_time_seconds[15m]) > 2
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: Misty API is repeatedly restarting

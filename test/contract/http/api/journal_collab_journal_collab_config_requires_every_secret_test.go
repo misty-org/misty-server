@@ -184,3 +184,32 @@ func TestNoteControlDeliveryUsesOpaqueRoomAndSignedEnvelope(t *testing.T) {
 		t.Fatalf("received envelope = %#v", received)
 	}
 }
+
+func TestSelfHostedLoopbackCollaborationUsesLocalProtocols(t *testing.T) {
+	config := testCollabConfig(t)
+	config.PublicOrigin = "http://127.0.0.1:1999"
+	ticket, err := config.MintNoteTicket("user_1", "space_1", "note_1", "editor", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(ticket.URL, "ws://127.0.0.1:1999/parties/note-room/") {
+		t.Fatalf("ticket URL = %q", ticket.URL)
+	}
+
+	t.Setenv("MISTY_DEPLOYMENT_MODE", "self_hosted")
+	originalClient := TestingNoteControlHTTPClient
+	t.Cleanup(func() { TestingNoteControlHTTPClient = originalClient })
+	TestingNoteControlHTTPClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Scheme != "http" || request.URL.Host != "127.0.0.1:1999" {
+			t.Fatalf("control URL = %s", request.URL)
+		}
+		if request.Header.Get("X-Misty-Resource-ID") != "note_1" {
+			t.Fatalf("resource header = %q", request.Header.Get("X-Misty-Resource-ID"))
+		}
+		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	})}
+	service := &SpacesService{TestingJournalCollab: config}
+	if err := service.TestingDeliverNoteControlCommand(context.Background(), "note_1", "status", []byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+}

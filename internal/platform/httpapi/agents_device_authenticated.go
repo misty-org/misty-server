@@ -72,16 +72,19 @@ func (s *AgentsService) RegisterDevice() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Name         string          `json:"name"`
-			PublicKey    string          `json:"publicKey"`
-			KeyAlgorithm string          `json:"keyAlgorithm"`
-			Capabilities json.RawMessage `json:"capabilities"`
+			Name             string          `json:"name"`
+			PublicKey        string          `json:"publicKey"`
+			KeyAlgorithm     string          `json:"keyAlgorithm"`
+			Capabilities     json.RawMessage `json:"capabilities"`
+			Platform         string          `json:"platform"`
+			P2PEndpointID    string          `json:"p2pEndpointId"`
+			ProtocolVersions json.RawMessage `json:"protocolVersions"`
 		}
-		if decodeAIJSON(w, r, &body) != nil || !TestingValidDeviceRegistration(body.Name, body.PublicKey, body.KeyAlgorithm, body.Capabilities) {
+		if decodeAIJSON(w, r, &body) != nil || !TestingValidDeviceRegistrationV2(body.Name, body.PublicKey, body.KeyAlgorithm, body.Platform, body.P2PEndpointID, body.ProtocolVersions, body.Capabilities) {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		device, err := s.database.RegisterTrustedDevice(userID, strings.TrimSpace(body.Name), strings.TrimSpace(body.PublicKey), body.Capabilities)
+		device, err := s.database.RegisterTrustedDevice(userID, strings.TrimSpace(body.Name), strings.TrimSpace(body.PublicKey), normalizedDevicePlatform(body.Platform), strings.TrimSpace(body.P2PEndpointID), normalizedProtocolVersions(body.ProtocolVersions), body.Capabilities)
 		writeAgentResult(w, device, err, http.StatusCreated)
 	}
 }
@@ -166,6 +169,14 @@ func writeAgentError(w http.ResponseWriter, err error) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 	case errors.Is(err, db.ErrDeviceNotFound), errors.Is(err, db.ErrAgentJobNotFound), errors.Is(err, db.ErrAgentNotFound), errors.Is(err, db.ErrPersonalAgentNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
+	case errors.Is(err, db.ErrPairingNotFound), errors.Is(err, db.ErrDevicePair):
+		writeJSON(w, http.StatusNotFound, map[string]string{"code": "pairing_not_found"})
+	case errors.Is(err, db.ErrPairingExpired):
+		writeJSON(w, http.StatusGone, map[string]string{"code": "pairing_expired"})
+	case errors.Is(err, db.ErrPairingLocked):
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"code": "pairing_locked"})
+	case errors.Is(err, db.ErrPairingState):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "invalid_pairing_state"})
 	case errors.Is(err, db.ErrPersonalAgentConflict):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict"})
 	case errors.Is(err, db.ErrSpaceInvalid):
@@ -194,8 +205,51 @@ func validJSONObject(raw json.RawMessage) bool {
 }
 
 func TestingValidDeviceRegistration(name, key, algorithm string, capabilities json.RawMessage) bool {
+	return TestingValidDeviceRegistrationV2(name, key, algorithm, "", "", nil, capabilities)
+}
+
+func TestingValidDeviceRegistrationV2(name, key, algorithm, platform, endpointID string, protocolVersions, capabilities json.RawMessage) bool {
 	decodedKey, err := decodeDeviceBase64(key)
-	return validText(name, 1, 100) && err == nil && len(decodedKey) == ed25519.PublicKeySize && (algorithm == "" || algorithm == "ed25519") && validJSONObject(capabilities) && !containsLocalPath(capabilities)
+	if !validText(name, 1, 100) || err != nil || len(decodedKey) != ed25519.PublicKeySize || (algorithm != "" && algorithm != "ed25519") || !validJSONObject(capabilities) || containsLocalPath(capabilities) || containsClipboardValue(capabilities) {
+		return false
+	}
+	platform = normalizedDevicePlatform(platform)
+	if platform == "" || (endpointID != "" && !p2pEndpointIDPattern.MatchString(endpointID)) {
+		return false
+	}
+	if len(protocolVersions) == 0 {
+		return endpointID == ""
+	}
+	var versions []string
+	if json.Unmarshal(protocolVersions, &versions) != nil || len(versions) > 8 {
+		return false
+	}
+	for _, version := range versions {
+		if version != "misty-device/1" {
+			return false
+		}
+	}
+	return (endpointID == "") == (len(versions) == 0)
+}
+
+func normalizedDevicePlatform(platform string) string {
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	if platform == "" {
+		return "unknown"
+	}
+	for _, allowed := range []string{"macos", "windows", "linux", "ios", "android", "unknown"} {
+		if platform == allowed {
+			return platform
+		}
+	}
+	return ""
+}
+
+func normalizedProtocolVersions(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage(`[]`)
+	}
+	return raw
 }
 
 func decodeDeviceBase64(value string) ([]byte, error) {

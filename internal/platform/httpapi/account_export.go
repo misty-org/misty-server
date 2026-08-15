@@ -58,7 +58,7 @@ func (s *SpacesService) AccountExportManifest() http.HandlerFunc {
 				writeSpaceError(w, ticketErr)
 				return
 			}
-			downloadURL := strings.Replace(ticket.URL, "wss://", "https://", 1) +
+			downloadURL := strings.Replace(strings.Replace(ticket.URL, "wss://", "https://", 1), "ws://", "http://", 1) +
 				"?export=1&ticket=" + url.QueryEscape(ticket.Ticket)
 			documents = append(documents, accountExportDocument{
 				AccountExportJournal: resource,

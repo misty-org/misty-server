@@ -53,7 +53,7 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 		Ticket: signingInput + "." + base64.RawURLEncoding.EncodeToString(signature),
 		Room:   room,
 		// The party segment is the kebab-cased Durable Object binding name.
-		URL:       fmt.Sprintf("wss://%s/parties/%s/%s", c.Host, resource.Party, room),
+		URL:       fmt.Sprintf("%s/parties/%s/%s", c.websocketOrigin(), resource.Party, room),
 		Role:      role,
 		ExpiresAt: expiresAt,
 	}, nil

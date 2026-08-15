@@ -94,9 +94,8 @@ type MemoryLibraryObjectStore struct {
 
 func (s *MemoryLibraryObjectStore) Health(_ context.Context) error { return nil }
 
-// LocalLibraryObjectStore is a persistent development backend. Production
-// rejects it so deployed Library data must use the separately configured R2/S3
-// bucket, while desktop development survives server restarts.
+// LocalLibraryObjectStore is a persistent filesystem backend. Production
+// configuration permits it only for explicitly self-hosted deployments.
 type LocalLibraryObjectStore struct{ root string }
 
 func (s *LocalLibraryObjectStore) Health(_ context.Context) error {
@@ -137,7 +136,13 @@ func (s *LocalLibraryObjectStore) Put(_ context.Context, key string, body io.Rea
 	if err := validateLibraryObject(key, metadata); err != nil {
 		return err
 	}
+	if err := ensureLocalLibraryCapacity(s.root, metadata.ByteSize); err != nil {
+		return err
+	}
 	objectPath, metadataPath, _ := s.paths(key)
+	if err := os.MkdirAll(filepath.Dir(objectPath), 0o700); err != nil {
+		return err
+	}
 	temporary, err := os.CreateTemp(s.root, ".upload-*")
 	if err != nil {
 		return err
@@ -161,11 +166,36 @@ func (s *LocalLibraryObjectStore) Put(_ context.Context, key string, body io.Rea
 	if err := os.Chmod(temporaryPath, 0o600); err != nil {
 		return err
 	}
-	if err := os.Rename(temporaryPath, objectPath); err != nil {
+	if err := replaceLocalLibraryFile(temporaryPath, objectPath); err != nil {
 		return err
 	}
 	raw, _ := json.Marshal(metadata)
-	if err := os.WriteFile(metadataPath, raw, 0o600); err != nil {
+	metadataTemporary, err := os.CreateTemp(filepath.Dir(metadataPath), ".metadata-*")
+	if err != nil {
+		_ = os.Remove(objectPath)
+		return err
+	}
+	metadataTemporaryPath := metadataTemporary.Name()
+	defer os.Remove(metadataTemporaryPath)
+	if _, err := metadataTemporary.Write(raw); err != nil {
+		_ = metadataTemporary.Close()
+		_ = os.Remove(objectPath)
+		return err
+	}
+	if err := metadataTemporary.Sync(); err != nil {
+		_ = metadataTemporary.Close()
+		_ = os.Remove(objectPath)
+		return err
+	}
+	if err := metadataTemporary.Close(); err != nil {
+		_ = os.Remove(objectPath)
+		return err
+	}
+	if err := os.Chmod(metadataTemporaryPath, 0o600); err != nil {
+		_ = os.Remove(objectPath)
+		return err
+	}
+	if err := replaceLocalLibraryFile(metadataTemporaryPath, metadataPath); err != nil {
 		_ = os.Remove(objectPath)
 		return err
 	}

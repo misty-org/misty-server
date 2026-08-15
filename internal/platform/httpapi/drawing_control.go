@@ -24,6 +24,7 @@ func (s *SpacesService) ProcessDrawingControlCommands(
 			ctx,
 			"drawing-room",
 			s.TestingJournalCollab.DrawingRoomID(command.DrawingID),
+			command.DrawingID,
 			command.Command,
 			command.Payload,
 		)

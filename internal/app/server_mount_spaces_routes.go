@@ -269,6 +269,7 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 		s.Router.Post(prefix+"/devices/{deviceID}/pairing/redeem", service.DeviceAuthenticated(service.RedeemDevicePairing()))
 		s.Router.Post(prefix+"/devices/{deviceID}/presence", service.DeviceAuthenticated(service.UpdateConnectedDevicePresence()))
 		s.Router.Get(prefix+"/devices/{deviceID}/peers", service.DeviceAuthenticated(service.ListConnectedDevicePeers()))
+		s.Router.Put(prefix+"/devices/{deviceID}/pairs/{pairID}/name", service.DeviceAuthenticated(service.RenameConnectedDevicePeer()))
 		s.Router.Put(prefix+"/devices/{deviceID}/pairs/{pairID}/clipboard-consent", service.DeviceAuthenticated(service.ConnectedDeviceClipboardConsent()))
 		s.Router.Post(prefix+"/devices/{deviceID}/pairs/{pairID}/revoke", service.DeviceAuthenticated(service.RevokeConnectedDevicePair()))
 		s.Router.Post(prefix+"/devices/{deviceID}/peer-tickets", service.DeviceAuthenticated(service.IssueConnectedDeviceTicket()))

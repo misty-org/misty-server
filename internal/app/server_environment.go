@@ -130,6 +130,9 @@ func TestingStripeWebhookPathFromEnv() (string, error) {
 // regardless; this exists so the operator learns before real Stripe events are
 // silently rejected too.
 func warnOnInsecureBillingConfiguration() {
+	if strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_DEPLOYMENT_MODE")), "self_hosted") {
+		return
+	}
 	if len(strings.TrimSpace(envconfig.Getenv("STRIPE_WEBHOOK_SECRET"))) < 16 {
 		log.Println("SECURITY: STRIPE_WEBHOOK_SECRET is unset or too short; Stripe webhooks will be refused")
 	}

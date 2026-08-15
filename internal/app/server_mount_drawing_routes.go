@@ -100,29 +100,49 @@ func serverFeatureEnabled(name string) bool {
 	return strings.EqualFold(strings.TrimSpace(envconfig.Getenv(name)), "true")
 }
 
-type r2Config struct {
-	endpoint, bucket, accessKey, secretKey string
+type libraryS3Config struct {
+	endpoint, bucket, region, accessKey, secretKey string
+	forcePathStyle                                 bool
 }
 
-func r2ConfigFromEnv() r2Config {
-	return r2Config{
-		endpoint:  strings.TrimSpace(envconfig.Getenv("R2_ENDPOINT")),
-		bucket:    strings.TrimSpace(envconfig.Getenv("R2_BUCKET")),
-		accessKey: strings.TrimSpace(envconfig.Getenv("R2_ACCESS_KEY")),
-		secretKey: strings.TrimSpace(envconfig.Getenv("R2_SECRET_KEY")),
+func libraryS3ConfigFromEnv() libraryS3Config {
+	config := libraryS3Config{
+		endpoint:       firstConfigured("MISTY_S3_ENDPOINT", "R2_ENDPOINT"),
+		bucket:         firstConfigured("MISTY_S3_BUCKET", "R2_BUCKET"),
+		region:         firstConfigured("MISTY_S3_REGION", "R2_REGION"),
+		accessKey:      firstConfigured("MISTY_S3_ACCESS_KEY_ID", "R2_ACCESS_KEY"),
+		secretKey:      firstConfigured("MISTY_S3_SECRET_ACCESS_KEY", "R2_SECRET_KEY"),
+		forcePathStyle: true,
 	}
+	if config.region == "" {
+		config.region = "auto"
+	}
+	if value := strings.TrimSpace(envconfig.Getenv("MISTY_S3_FORCE_PATH_STYLE")); value != "" {
+		config.forcePathStyle = strings.EqualFold(value, "true") || value == "1"
+	}
+	return config
 }
 
-func (config r2Config) empty() bool {
+func (config libraryS3Config) empty() bool {
 	return config.endpoint == "" && config.bucket == "" && config.accessKey == "" && config.secretKey == ""
 }
 
 func TestingLibraryStoreFromEnv() (api.LibraryObjectStore, error) {
-	config := r2ConfigFromEnv()
+	config := libraryS3ConfigFromEnv()
 	environment := strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT"))
-	if localRoot := strings.TrimSpace(envconfig.Getenv("MISTY_LIBRARY_LOCAL_DIR")); localRoot != "" {
-		if strings.EqualFold(environment, "production") {
-			return nil, fmt.Errorf("MISTY_LIBRARY_LOCAL_DIR cannot be used in production")
+	deployment := strings.ToLower(strings.TrimSpace(envconfig.Getenv("MISTY_DEPLOYMENT_MODE")))
+	backend := strings.ToLower(strings.TrimSpace(envconfig.Getenv("MISTY_LIBRARY_BACKEND")))
+	localRoot := firstConfigured("MISTY_LIBRARY_FILESYSTEM_DIR", "MISTY_LIBRARY_LOCAL_DIR")
+	if backend == "" {
+		if localRoot != "" {
+			backend = "filesystem"
+		} else if !config.empty() {
+			backend = "s3"
+		}
+	}
+	if backend == "filesystem" {
+		if strings.EqualFold(environment, "production") && deployment != "self_hosted" {
+			return nil, fmt.Errorf("filesystem Library storage is allowed in production only for self-hosted deployments")
 		}
 		store, err := api.NewLocalLibraryObjectStore(localRoot)
 		if err != nil {
@@ -130,21 +150,34 @@ func TestingLibraryStoreFromEnv() (api.LibraryObjectStore, error) {
 		}
 		return store, nil
 	}
-	if config.empty() && !strings.EqualFold(environment, "production") {
+	if backend == "" && !strings.EqualFold(environment, "production") {
 		return api.NewMemoryLibraryObjectStore(), nil
 	}
+	if backend != "s3" {
+		return nil, fmt.Errorf("MISTY_LIBRARY_BACKEND must be filesystem or s3")
+	}
 	if config.endpoint == "" {
-		return nil, fmt.Errorf("R2_ENDPOINT is required for the Space Library")
+		return nil, fmt.Errorf("MISTY_S3_ENDPOINT (or R2_ENDPOINT) is required for the Space Library")
 	}
 	store, err := api.NewS3LibraryObjectStore(api.S3LibraryObjectStoreConfig{
-		Endpoint: config.endpoint, Region: "auto", Bucket: config.bucket,
+		Endpoint: config.endpoint, Region: config.region, Bucket: config.bucket,
 		AccessKeyID: config.accessKey, SecretAccessKey: config.secretKey,
-		ForcePathStyle: true, BucketPrivate: true, PermanentObjects: true,
+		ForcePathStyle: config.forcePathStyle, BucketPrivate: true, PermanentObjects: true,
+		AllowInsecureLocal: deployment == "self_hosted",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure R2 Library store: %w", err)
 	}
 	return store, nil
+}
+
+func firstConfigured(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(envconfig.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Server) mountMediaSearchRoutes(prefix string, service *api.MediaSearchService) {
@@ -214,6 +247,7 @@ var allowedCORSRequestHeaders = []string{
 	"X-Misty-Attachment-Upload-Token",
 	"X-Misty-Library-Upload-Token",
 	"X-Misty-Library-Reauthentication",
+	"X-Misty-Self-Hosted-Entitlement",
 }
 
 func TestingIsAllowedCORSOrigin(origin string) bool {

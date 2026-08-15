@@ -41,6 +41,8 @@ func (s *Server) MountHandlers() error {
 	s.Metrics = metrics.New()
 	s.registerDomainGauges(s.Metrics)
 	s.Router.Use(s.Metrics.Middleware)
+	s.Router.Use(api.SelfHostedFeatureGate)
+	s.Router.Use(api.SelfHostedEntitlementMiddleware(s.Database))
 
 	passwordResetService, err := api.NewPasswordResetService(s.Database, s.EmailSender, s.PasswordResetStartURL, s.PasswordResetRedirectURL)
 	if err != nil {
@@ -73,6 +75,9 @@ func (s *Server) MountHandlers() error {
 		agentsService.SetConnectedDevices(connectedDevicesConfig)
 	}
 	registerHandler := api.RegisterWithTelemetry(s.Database, s.Telemetry)
+	if api.InstanceConfigFromEnv().Deployment == "self_hosted" {
+		registerHandler = api.ClosedSelfHostRegistration()
+	}
 	loginHandler := api.Login(s.Database)
 	logoutHandler := api.Logout(s.Database)
 	forgotPasswordHandler := passwordResetService.Forgot()
@@ -83,16 +88,28 @@ func (s *Server) MountHandlers() error {
 	startHandoffHandler := authHandoffService.Start()
 	waitlistJoinHandler := waitlistService.Join()
 	healthHandler := s.HealthMonitor.Handler()
+	instanceHandler := api.Instance(s.Database)
+	entitlementHandler := api.MintSelfHostedEntitlement(s.Database)
 	s.Router.Get("/health", healthHandler)
+	s.Router.Get("/instance", instanceHandler)
 	// Unmounted entirely when no token is configured: the output names every
 	// route, its traffic volume, and its error rate.
 	if token := metricsToken(); token != "" {
 		s.Router.Get("/metrics", s.Metrics.Handler(token))
 	}
 	s.Router.Get("/api/health", healthHandler)
+	s.Router.Get("/api/instance", instanceHandler)
+	s.Router.MethodFunc(http.MethodGet, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
+	s.Router.MethodFunc(http.MethodPut, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
+	s.Router.MethodFunc(http.MethodDelete, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
 
 	// Account management
 	s.Router.Post("/register", registerHandler)
+	s.Router.Post("/self-host/bootstrap", api.SelfHostBootstrap(s.Database))
+	s.Router.Post("/self-host/enroll", api.SelfHostEnroll(s.Database))
+	s.Router.Post("/self-host/invitations", api.SelfHostInvitation(s.Database))
+	s.Router.Delete("/self-host/invitations/{invitationID}", api.SelfHostInvitation(s.Database))
+	s.Router.Post("/self-host/entitlement", api.RenewSelfHostEntitlement(s.Database))
 	s.Router.Post("/login", loginHandler)
 	s.Router.Post("/logout", logoutHandler)
 	s.Router.Post("/auth/forgot", forgotPasswordHandler)
@@ -116,6 +133,7 @@ func (s *Server) MountHandlers() error {
 	s.Router.Put("/me/settings", api.UpdateSettings(s.Database))
 	s.Router.Put("/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
 	s.Router.Post("/billing/trial/start", api.StartPersonalTrial(s.Database))
+	s.Router.Post("/billing/self-host-entitlement", entitlementHandler)
 	s.Router.Post("/billing/checkout-session", api.CreateCheckoutSession(s.Database))
 	s.Router.Post("/billing/credit-checkout-session", api.CreateCreditCheckoutSession(s.Database))
 	s.Router.Post("/billing/portal-session", api.CreatePortalSession(s.Database))
@@ -132,6 +150,11 @@ func (s *Server) MountHandlers() error {
 
 	// Compatibility routes for clients configured with the /api prefix.
 	s.Router.Post("/api/register", registerHandler)
+	s.Router.Post("/api/self-host/bootstrap", api.SelfHostBootstrap(s.Database))
+	s.Router.Post("/api/self-host/enroll", api.SelfHostEnroll(s.Database))
+	s.Router.Post("/api/self-host/invitations", api.SelfHostInvitation(s.Database))
+	s.Router.Delete("/api/self-host/invitations/{invitationID}", api.SelfHostInvitation(s.Database))
+	s.Router.Post("/api/self-host/entitlement", api.RenewSelfHostEntitlement(s.Database))
 	s.Router.Post("/api/login", loginHandler)
 	s.Router.Post("/api/logout", logoutHandler)
 	s.Router.Post("/api/auth/forgot", forgotPasswordHandler)
@@ -153,6 +176,7 @@ func (s *Server) MountHandlers() error {
 	s.Router.Put("/api/me/settings", api.UpdateSettings(s.Database))
 	s.Router.Put("/api/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
 	s.Router.Post("/api/billing/trial/start", api.StartPersonalTrial(s.Database))
+	s.Router.Post("/api/billing/self-host-entitlement", entitlementHandler)
 	s.Router.Post("/api/billing/checkout-session", api.CreateCheckoutSession(s.Database))
 	s.Router.Post("/api/billing/credit-checkout-session", api.CreateCreditCheckoutSession(s.Database))
 	s.Router.Post("/api/billing/portal-session", api.CreatePortalSession(s.Database))
@@ -168,8 +192,10 @@ func (s *Server) MountHandlers() error {
 	}
 
 	// Stripe webhook — called by Stripe on payment events
-	s.Router.Post(s.StripeWebhookPath, api.StripeWebhookWithService(envconfig.Getenv("STRIPE_WEBHOOK_SECRET"), appbilling.NewStripeService(s.Database, appbilling.WithTelemetry(s.Telemetry))))
-	s.Spaces.StartProviderWorkers(context.Background())
+	if api.InstanceConfigFromEnv().Deployment == "hosted" {
+		s.Router.Post(s.StripeWebhookPath, api.StripeWebhookWithService(envconfig.Getenv("STRIPE_WEBHOOK_SECRET"), appbilling.NewStripeService(s.Database, appbilling.WithTelemetry(s.Telemetry))))
+		s.Spaces.StartProviderWorkers(context.Background())
+	}
 
 	return nil
 }

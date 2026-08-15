@@ -45,6 +45,8 @@ CREATE TABLE device_pairs (
     state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active', 'revoked')),
     clipboard_first_to_second BOOLEAN NOT NULL DEFAULT FALSE,
     clipboard_second_to_first BOOLEAN NOT NULL DEFAULT FALSE,
+    first_peer_name TEXT CHECK (first_peer_name IS NULL OR length(first_peer_name) BETWEEN 1 AND 80),
+    second_peer_name TEXT CHECK (second_peer_name IS NULL OR length(second_peer_name) BETWEEN 1 AND 80),
     confirmed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     revoked_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

@@ -67,6 +67,7 @@ type PeerTicketSubject struct {
 	TargetDeviceID          string
 	TargetEndpointID        string
 	ClipboardSourceToTarget bool
+	ClipboardTargetToSource bool
 }
 
 func (db *Database) CreateDevicePairingSession(userID, creatorDeviceID, qrHash, codeHash string, expiresAt time.Time) (*DevicePairingSession, error) {
@@ -225,7 +226,7 @@ func (db *Database) UpdateDevicePresence(userID, deviceID, endpointID, protocolV
 func (db *Database) ConnectedPeers(userID, deviceID string) ([]ConnectedPeer, error) {
 	peers := []ConnectedPeer{}
 	err := db.agentTx(userID, func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT p.id,d.id,d.name,d.platform,COALESCE(d.p2p_endpoint_id,''),d.device_protocol_versions,
+		rows, err := tx.Query(`SELECT p.id,d.id,COALESCE(CASE WHEN p.first_device_id=$2 THEN p.first_peer_name ELSE p.second_peer_name END,d.name),d.platform,COALESCE(d.p2p_endpoint_id,''),d.device_protocol_versions,
 			COALESCE(pr.addressing,'{}'::jsonb),COALESCE(pr.protocol_version,''),COALESCE(pr.connection_hint,'unknown'),pr.last_heartbeat_at,
 			CASE WHEN p.first_device_id=$2 THEN p.clipboard_first_to_second ELSE p.clipboard_second_to_first END,
 			CASE WHEN p.first_device_id=$2 THEN p.clipboard_second_to_first ELSE p.clipboard_first_to_second END
@@ -248,6 +249,23 @@ func (db *Database) ConnectedPeers(userID, deviceID string) ([]ConnectedPeer, er
 		return rows.Err()
 	})
 	return peers, err
+}
+
+func (db *Database) SetDevicePairPeerName(userID, deviceID, pairID, name string) error {
+	return db.agentTx(userID, func(tx *sql.Tx) error {
+		result, err := tx.Exec(`UPDATE device_pairs SET
+			first_peer_name=CASE WHEN first_device_id=$3 THEN $4 ELSE first_peer_name END,
+			second_peer_name=CASE WHEN second_device_id=$3 THEN $4 ELSE second_peer_name END,
+			updated_at=NOW()
+			WHERE id=$1 AND owner_user_id=$2 AND state='active' AND (first_device_id=$3 OR second_device_id=$3)`, pairID, userID, deviceID, name)
+		if err != nil {
+			return err
+		}
+		if count, _ := result.RowsAffected(); count == 0 {
+			return ErrDevicePair
+		}
+		return nil
+	})
 }
 
 func (db *Database) SetDevicePairClipboardConsent(userID, deviceID, pairID string, enabled bool) error {
@@ -285,14 +303,15 @@ func (db *Database) PeerTicketSubject(userID, sourceDeviceID, targetDeviceID str
 	result := &PeerTicketSubject{}
 	err := db.agentTx(userID, func(tx *sql.Tx) error {
 		return tx.QueryRow(`SELECT p.id,source.id,source.p2p_endpoint_id,target.id,target.p2p_endpoint_id,
-			CASE WHEN p.first_device_id=source.id THEN p.clipboard_first_to_second ELSE p.clipboard_second_to_first END
+			CASE WHEN p.first_device_id=source.id THEN p.clipboard_first_to_second ELSE p.clipboard_second_to_first END,
+			CASE WHEN p.first_device_id=source.id THEN p.clipboard_second_to_first ELSE p.clipboard_first_to_second END
 			FROM device_pairs p
 			JOIN trusted_devices source ON source.id=$2 AND source.user_id=$1 AND source.revoked_at IS NULL
 			JOIN trusted_devices target ON target.id=$3 AND target.user_id=$1 AND target.revoked_at IS NULL
 			WHERE p.owner_user_id=$1 AND p.state='active'
 			AND ((p.first_device_id=$2 AND p.second_device_id=$3) OR (p.first_device_id=$3 AND p.second_device_id=$2))
 			AND source.p2p_endpoint_id IS NOT NULL AND target.p2p_endpoint_id IS NOT NULL`, userID, sourceDeviceID, targetDeviceID).
-			Scan(&result.PairID, &result.SourceDeviceID, &result.SourceEndpointID, &result.TargetDeviceID, &result.TargetEndpointID, &result.ClipboardSourceToTarget)
+			Scan(&result.PairID, &result.SourceDeviceID, &result.SourceEndpointID, &result.TargetDeviceID, &result.TargetEndpointID, &result.ClipboardSourceToTarget, &result.ClipboardTargetToSource)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrDevicePair

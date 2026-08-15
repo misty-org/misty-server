@@ -12,25 +12,29 @@ import (
 func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	values := map[string]string{
-		"R2_ENDPOINT":                 "https://account.r2.cloudflarestorage.com",
-		"R2_BUCKET":                   "misty-production",
-		"R2_ACCESS_KEY":               "access",
-		"R2_SECRET_KEY":               "secret",
-		"DB_HOST":                     "database.internal",
-		"DB_USER":                     "misty",
-		"DB_PASSWORD":                 "password",
-		"DB_NAME":                     "misty",
-		"MISTY_PUBLIC_API_URL":        "http://api.example.com/api",
-		"SPACE_LINK_ENCRYPTION_KEY":   "01234567890123456789012345678901",
-		"STRIPE_SECRET_KEY":           "sk_live_test",
-		"STRIPE_WEBHOOK_SECRET":       "whsec_01234567890123456789",
-		"STRIPE_PRICE_PRO_MONTHLY":    "price_pro_month",
-		"STRIPE_PRICE_PRO_YEARLY":     "price_pro_year",
-		"STRIPE_PRICE_MAX_MONTHLY":    "price_max_month",
-		"STRIPE_PRICE_MAX_YEARLY":     "price_max_year",
-		"STRIPE_CHECKOUT_SUCCESS_URL": "https://app.example.com/billing/success",
-		"STRIPE_CHECKOUT_CANCEL_URL":  "https://app.example.com/billing/cancel",
-		"STRIPE_PORTAL_RETURN_URL":    "https://app.example.com/account",
+		"R2_ENDPOINT":            "https://account.r2.cloudflarestorage.com",
+		"R2_BUCKET":              "misty-production",
+		"R2_ACCESS_KEY":          "access",
+		"R2_SECRET_KEY":          "secret",
+		"DB_HOST":                "database.internal",
+		"DB_USER":                "misty",
+		"DB_PASSWORD":            "password",
+		"DB_NAME":                "misty",
+		"MISTY_PUBLIC_API_URL":   "http://api.example.com/api",
+		"MISTY_OPERATOR_USER_ID": "operator-user-id",
+		"MISTY_SELF_HOST_ENTITLEMENT_PRIVATE_KEY":    "private-key",
+		"MISTY_SELF_HOST_ENTITLEMENT_KEY_ID":         "misty-2026-01",
+		"MISTY_SELF_HOST_ENTITLEMENT_SUBJECT_SECRET": "subject-secret",
+		"SPACE_LINK_ENCRYPTION_KEY":                  "01234567890123456789012345678901",
+		"STRIPE_SECRET_KEY":                          "sk_live_test",
+		"STRIPE_WEBHOOK_SECRET":                      "whsec_01234567890123456789",
+		"STRIPE_PRICE_PRO_MONTHLY":                   "price_pro_month",
+		"STRIPE_PRICE_PRO_YEARLY":                    "price_pro_year",
+		"STRIPE_PRICE_MAX_MONTHLY":                   "price_max_month",
+		"STRIPE_PRICE_MAX_YEARLY":                    "price_max_year",
+		"STRIPE_CHECKOUT_SUCCESS_URL":                "https://app.example.com/billing/success",
+		"STRIPE_CHECKOUT_CANCEL_URL":                 "https://app.example.com/billing/cancel",
+		"STRIPE_PORTAL_RETURN_URL":                   "https://app.example.com/account",
 	}
 	for key, value := range values {
 		t.Setenv(key, value)
@@ -81,6 +85,27 @@ func TestCreateServerConfiguresIndependentDevelopmentLibrary(t *testing.T) {
 	}
 	if server.Library == nil || server.LibraryStore == nil {
 		t.Fatal("CreateServer() did not configure the Space Library")
+	}
+}
+
+func TestValidateProductionEnvironmentAcceptsSelfHostedFilesystemWithoutHostedBilling(t *testing.T) {
+	t.Setenv("MISTY_ENVIRONMENT", "production")
+	t.Setenv("MISTY_DEPLOYMENT_MODE", "self_hosted")
+	values := map[string]string{
+		"DB_HOST": "postgres", "DB_USER": "misty_app", "DB_PASSWORD": "password", "DB_NAME": "misty",
+		"MISTY_PUBLIC_API_URL": "https://misty.example.com/api", "MISTY_INSTANCE_NAME": "Studio",
+		"MISTY_COLLAB_PUBLIC_URL": "https://misty.example.com",
+		"MISTY_LIBRARY_BACKEND":   "filesystem", "MISTY_LIBRARY_FILESYSTEM_DIR": "/var/lib/misty/library",
+		"SPACE_LINK_ENCRYPTION_KEY": "01234567890123456789012345678901",
+		"PARTYKIT_HOST":             "misty.example.com", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY": "private-key",
+		"JOURNAL_COLLAB_CONTROL_SECRET": "control-secret", "JOURNAL_COLLAB_PROJECTION_SECRET": "projection-secret",
+		"JOURNAL_COLLAB_ROOM_SALT": "room-salt", "MISTY_COLLAB_INTERNAL_SECRET": "01234567890123456789012345678901",
+	}
+	for key, value := range values {
+		t.Setenv(key, value)
+	}
+	if err := TestingValidateProductionEnvironment(); err != nil {
+		t.Fatalf("self-hosted production configuration error = %v", err)
 	}
 }
 

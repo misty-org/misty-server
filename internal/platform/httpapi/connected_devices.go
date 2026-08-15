@@ -195,6 +195,32 @@ func (s *AgentsService) ConnectedDeviceClipboardConsent() http.HandlerFunc {
 	}
 }
 
+func (s *AgentsService) RenameConnectedDevicePeer() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := s.requireUser(w, r)
+		if !ok || !s.requireConnectedDevices(w) {
+			return
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		if decodeAIJSON(w, r, &body) != nil {
+			return
+		}
+		body.Name = strings.TrimSpace(body.Name)
+		if body.Name == "" || len(body.Name) > 80 || strings.ContainsFunc(body.Name, func(value rune) bool { return value < 0x20 || value == 0x7f }) {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		err := s.database.SetDevicePairPeerName(userID, chi.URLParam(r, "deviceID"), chi.URLParam(r, "pairID"), body.Name)
+		if err != nil {
+			writeAgentError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"name": body.Name})
+	}
+}
+
 func (s *AgentsService) RevokeConnectedDevicePair() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
@@ -231,6 +257,9 @@ func (s *AgentsService) IssueConnectedDeviceTicket() http.HandlerFunc {
 		permissions := []string{"roots:read", "files:read", "directories:subscribe"}
 		if subject.ClipboardSourceToTarget {
 			permissions = append(permissions, "clipboard:send")
+		}
+		if subject.ClipboardTargetToSource {
+			permissions = append(permissions, "clipboard:receive")
 		}
 		now := time.Now().UTC()
 		claims := connectedDeviceTicketClaims{
@@ -346,7 +375,7 @@ func TestingVerifyConnectedDeviceTicket(ticket string, publicKey ed25519.PublicK
 		return errors.New("malformed ticket")
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || !ed25519.Verify(publicKey, []byte(parts[0]+"."+parts[1]), signature) {
+	if err != nil || base64.RawURLEncoding.EncodeToString(signature) != parts[2] || !ed25519.Verify(publicKey, []byte(parts[0]+"."+parts[1]), signature) {
 		return errors.New("invalid ticket signature")
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])

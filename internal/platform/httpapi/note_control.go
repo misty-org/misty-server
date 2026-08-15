@@ -58,6 +58,7 @@ func (s *SpacesService) TestingDeliverNoteControlCommand(
 		ctx,
 		"note-room",
 		s.TestingJournalCollab.RoomID(noteID),
+		noteID,
 		command,
 		payload,
 	)
@@ -65,7 +66,7 @@ func (s *SpacesService) TestingDeliverNoteControlCommand(
 
 func (s *SpacesService) deliverCollaborationControlCommand(
 	ctx context.Context,
-	party, room, command string,
+	party, room, resourceID, command string,
 	payload []byte,
 ) error {
 	if !json.Valid(payload) {
@@ -77,8 +78,8 @@ func (s *SpacesService) deliverCollaborationControlCommand(
 	}
 	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	endpoint := fmt.Sprintf(
-		"https://%s/parties/%s/%s",
-		s.TestingJournalCollab.Host,
+		"%s/parties/%s/%s",
+		s.TestingJournalCollab.httpOrigin(),
 		party,
 		room,
 	)
@@ -89,6 +90,12 @@ func (s *SpacesService) deliverCollaborationControlCommand(
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Misty-Timestamp", timestamp)
 	request.Header.Set("X-Misty-Signature", s.TestingJournalCollab.SignControlRequest(timestamp, body))
+	// The Hosted worker deliberately sees only opaque room IDs. A self-hosted
+	// service persists through the local API, so it also needs the local
+	// resource ID to address that storage row.
+	if InstanceConfigFromEnv().Deployment == "self_hosted" {
+		request.Header.Set("X-Misty-Resource-ID", resourceID)
+	}
 
 	response, err := TestingNoteControlHTTPClient.Do(request)
 	if err != nil {

@@ -31,11 +31,13 @@ func Run() {
 		panic(err)
 	}
 	defer server.Database.Stop()
-	if err := server.Database.ConfigureCanonicalMistySpace(
-		context.Background(),
-		strings.TrimSpace(envconfig.Getenv("MISTY_OPERATOR_USER_ID")),
-	); err != nil {
-		panic(err)
+	if !strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_DEPLOYMENT_MODE")), "self_hosted") {
+		if err := server.Database.ConfigureCanonicalMistySpace(
+			context.Background(),
+			strings.TrimSpace(envconfig.Getenv("MISTY_OPERATOR_USER_ID")),
+		); err != nil {
+			panic(err)
+		}
 	}
 	if err := server.MountHandlers(); err != nil {
 		panic(err)

@@ -9,6 +9,7 @@ DELETE /api/ai/smart-library/folders/{folderID}
 DELETE /api/cloud/connections/{connectionID}
 DELETE /api/integrations/{integrationID}
 DELETE /api/misty/conversations/{conversationID}
+DELETE /api/self-host/invitations/{invitationID}
 DELETE /api/spaces/{spaceID}
 DELETE /api/spaces/{spaceID}/agents/{agentID}
 DELETE /api/spaces/{spaceID}/agents/{agentID}/device-grants/{grantID}
@@ -50,7 +51,9 @@ DELETE /api/spaces/{spaceID}/studio/workflows/{resourceID}
 DELETE /api/spaces/{spaceID}/tasks/{taskID}
 DELETE /cloud/connections/{connectionID}
 DELETE /integrations/{integrationID}
+DELETE /internal/self-host/collaboration/{resourceType}/{resourceID}
 DELETE /misty/conversations/{conversationID}
+DELETE /self-host/invitations/{invitationID}
 DELETE /spaces/{spaceID}
 DELETE /spaces/{spaceID}/agents/{agentID}
 DELETE /spaces/{spaceID}/agents/{agentID}/device-grants/{grantID}
@@ -126,6 +129,7 @@ GET /api/auth/reset/validate
 GET /api/billing/usage
 GET /api/cloud/connections
 GET /api/health
+GET /api/instance
 GET /api/me
 GET /api/me/avatar
 GET /api/me/settings
@@ -220,6 +224,8 @@ GET /auth/reset/validate
 GET /billing/usage
 GET /cloud/connections
 GET /health
+GET /instance
+GET /internal/self-host/collaboration/{resourceType}/{resourceID}
 GET /me
 GET /me/avatar
 GET /me/settings
@@ -410,6 +416,7 @@ POST /api/auth/reset
 POST /api/billing/checkout-session
 POST /api/billing/credit-checkout-session
 POST /api/billing/portal-session
+POST /api/billing/self-host-entitlement
 POST /api/billing/trial/start
 POST /api/cloud/connections/{connectionID}/token
 POST /api/cloud/connections/{provider}/authorize
@@ -427,6 +434,10 @@ POST /api/register
 POST /api/runs/{runID}/approval
 POST /api/runs/{runID}/cancel
 POST /api/runs/{runID}/retry
+POST /api/self-host/bootstrap
+POST /api/self-host/enroll
+POST /api/self-host/entitlement
+POST /api/self-host/invitations
 POST /api/space-invitations/{token}
 POST /api/spaces
 POST /api/spaces/invitations/{inviteID}/accept
@@ -515,6 +526,7 @@ POST /auth/reset
 POST /billing/checkout-session
 POST /billing/credit-checkout-session
 POST /billing/portal-session
+POST /billing/self-host-entitlement
 POST /billing/trial/start
 POST /cloud/connections/{connectionID}/token
 POST /cloud/connections/{provider}/authorize
@@ -532,6 +544,10 @@ POST /register
 POST /runs/{runID}/approval
 POST /runs/{runID}/cancel
 POST /runs/{runID}/retry
+POST /self-host/bootstrap
+POST /self-host/enroll
+POST /self-host/entitlement
+POST /self-host/invitations
 POST /space-invitations/{token}
 POST /spaces
 POST /spaces/invitations/{inviteID}/accept
@@ -640,6 +656,7 @@ PUT /api/spaces/{spaceID}/messages/{messageID}
 PUT /api/spaces/{spaceID}/messages/{messageID}/reactions/{emoji}
 PUT /api/spaces/{spaceID}/nodes/{nodeID}
 PUT /api/spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}/tasks
+PUT /internal/self-host/collaboration/{resourceType}/{resourceID}
 PUT /me/avatar
 PUT /me/device
 PUT /me/profile

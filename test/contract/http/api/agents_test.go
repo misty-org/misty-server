@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,7 +109,11 @@ func TestConnectedDeviceTicketSignatureAndExpiry(t *testing.T) {
 	if err := TestingVerifyConnectedDeviceTicket(ticket, publicKey, now.Add(6*time.Minute)); err == nil {
 		t.Fatal("expired ticket accepted")
 	}
-	tampered := ticket[:len(ticket)-1] + "A"
+	replacement := "A"
+	if strings.HasSuffix(ticket, replacement) {
+		replacement = "B"
+	}
+	tampered := ticket[:len(ticket)-1] + replacement
 	if err := TestingVerifyConnectedDeviceTicket(tampered, publicKey, now); err == nil {
 		t.Fatal("tampered ticket accepted")
 	}

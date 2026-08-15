@@ -252,13 +252,30 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 	s.Router.MethodFunc(http.MethodGet, prefix+"/agents/{agentID}/space-grants", service.PersonalAgentGrants())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/agents/{agentID}/space-grants", service.PersonalAgentGrants())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/ai/models", service.Models())
-	if !serverFeatureEnabled("MISTY_DEVICE_JOBS_ENABLED") {
+	deviceJobsEnabled := serverFeatureEnabled("MISTY_DEVICE_JOBS_ENABLED")
+	connectedDevicesEnabled := serverFeatureEnabled("MISTY_CONNECTED_DEVICES_ENABLED")
+	if !deviceJobsEnabled && !connectedDevicesEnabled {
 		return
 	}
 	s.Router.Post(prefix+"/devices", service.RegisterDevice())
 	s.Router.Get(prefix+"/devices", service.ListDevices())
 	s.Router.Post(prefix+"/devices/{deviceID}/heartbeat", service.DeviceAuthenticated(service.HeartbeatDevice()))
 	s.Router.Post(prefix+"/devices/{deviceID}/revoke", service.RevokeDevice())
+	if connectedDevicesEnabled {
+		s.Router.Get(prefix+"/devices/peer-ticket-keys", service.ConnectedDeviceTicketKeys())
+		s.Router.Post(prefix+"/devices/{deviceID}/pairing-sessions", service.DeviceAuthenticated(service.CreateDevicePairing()))
+		s.Router.Get(prefix+"/devices/{deviceID}/pairing-sessions/{sessionID}", service.DeviceAuthenticated(service.DevicePairingStatus()))
+		s.Router.Post(prefix+"/devices/{deviceID}/pairing-sessions/{sessionID}/confirm", service.DeviceAuthenticated(service.ConfirmDevicePairing()))
+		s.Router.Post(prefix+"/devices/{deviceID}/pairing/redeem", service.DeviceAuthenticated(service.RedeemDevicePairing()))
+		s.Router.Post(prefix+"/devices/{deviceID}/presence", service.DeviceAuthenticated(service.UpdateConnectedDevicePresence()))
+		s.Router.Get(prefix+"/devices/{deviceID}/peers", service.DeviceAuthenticated(service.ListConnectedDevicePeers()))
+		s.Router.Put(prefix+"/devices/{deviceID}/pairs/{pairID}/clipboard-consent", service.DeviceAuthenticated(service.ConnectedDeviceClipboardConsent()))
+		s.Router.Post(prefix+"/devices/{deviceID}/pairs/{pairID}/revoke", service.DeviceAuthenticated(service.RevokeConnectedDevicePair()))
+		s.Router.Post(prefix+"/devices/{deviceID}/peer-tickets", service.DeviceAuthenticated(service.IssueConnectedDeviceTicket()))
+	}
+	if !deviceJobsEnabled {
+		return
+	}
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/claim", service.DeviceAuthenticated(service.ClaimWorkflowNodeJob()))
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/lease", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("renew")))
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/complete", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("complete")))

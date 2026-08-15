@@ -11,7 +11,7 @@ rm -f "$runtime_dir/journal-server.env"
 
 if [ ! -s "$dev_vars" ] || [ ! -s "$server_env" ]; then
   echo "Journal collaboration secrets are missing or only partially configured." >&2
-  echo "Run: misty-cli server worker generate-secrets" >&2
+  echo "Run: misty server worker generate-secrets" >&2
   exit 1
 fi
 

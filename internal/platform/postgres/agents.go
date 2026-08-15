@@ -24,32 +24,35 @@ var (
 )
 
 type TrustedDevice struct {
-	ID           string          `json:"id"`
-	UserID       string          `json:"userId"`
-	Name         string          `json:"name"`
-	PublicKey    string          `json:"publicKey"`
-	KeyAlgorithm string          `json:"keyAlgorithm"`
-	Capabilities json.RawMessage `json:"capabilities"`
-	LastSeenAt   time.Time       `json:"lastSeenAt"`
-	CreatedAt    time.Time       `json:"createdAt"`
-	UpdatedAt    time.Time       `json:"updatedAt"`
-	RevokedAt    *time.Time      `json:"revokedAt,omitempty"`
+	ID               string          `json:"id"`
+	UserID           string          `json:"userId"`
+	Name             string          `json:"name"`
+	PublicKey        string          `json:"publicKey"`
+	KeyAlgorithm     string          `json:"keyAlgorithm"`
+	Capabilities     json.RawMessage `json:"capabilities"`
+	Platform         string          `json:"platform"`
+	P2PEndpointID    string          `json:"p2pEndpointId,omitempty"`
+	ProtocolVersions json.RawMessage `json:"protocolVersions"`
+	LastSeenAt       time.Time       `json:"lastSeenAt"`
+	CreatedAt        time.Time       `json:"createdAt"`
+	UpdatedAt        time.Time       `json:"updatedAt"`
+	RevokedAt        *time.Time      `json:"revokedAt,omitempty"`
 }
 
 func (db *Database) agentTx(userID string, fn func(*sql.Tx) error) error {
 	return db.TestingWithRLSContext(context.Background(), userRLSSettings(userID), fn)
 }
 
-func (db *Database) RegisterTrustedDevice(userID, name, publicKey string, capabilities json.RawMessage) (*TrustedDevice, error) {
+func (db *Database) RegisterTrustedDevice(userID, name, publicKey, platform, endpointID string, protocolVersions, capabilities json.RawMessage) (*TrustedDevice, error) {
 	if len(capabilities) == 0 {
 		capabilities = json.RawMessage(`{}`)
 	}
 	device := &TrustedDevice{}
 	err := db.agentTx(userID, func(tx *sql.Tx) error {
-		return scanDevice(tx.QueryRow(`INSERT INTO trusted_devices(id,user_id,name,public_key,capabilities) VALUES($1,$2,$3,$4,$5)
-			ON CONFLICT(user_id,public_key) DO UPDATE SET name=EXCLUDED.name,capabilities=EXCLUDED.capabilities,last_seen_at=NOW(),updated_at=NOW(),revoked_at=NULL
-			RETURNING id,user_id,name,public_key,key_algorithm,capabilities,last_seen_at,revoked_at,created_at,updated_at`,
-			"device_"+uuid.NewString(), userID, name, publicKey, capabilities), device)
+		return scanDevice(tx.QueryRow(`INSERT INTO trusted_devices(id,user_id,name,public_key,platform,p2p_endpoint_id,device_protocol_versions,capabilities) VALUES($1,$2,$3,$4,$5,NULLIF($6,''),$7,$8)
+			ON CONFLICT(user_id,public_key) DO UPDATE SET name=EXCLUDED.name,platform=EXCLUDED.platform,p2p_endpoint_id=EXCLUDED.p2p_endpoint_id,device_protocol_versions=EXCLUDED.device_protocol_versions,capabilities=EXCLUDED.capabilities,last_seen_at=NOW(),updated_at=NOW(),revoked_at=NULL
+			RETURNING id,user_id,name,public_key,key_algorithm,capabilities,platform,COALESCE(p2p_endpoint_id,''),device_protocol_versions,last_seen_at,revoked_at,created_at,updated_at`,
+			"device_"+uuid.NewString(), userID, name, publicKey, platform, endpointID, protocolVersions, capabilities), device)
 	})
 	return device, err
 }
@@ -57,7 +60,7 @@ func (db *Database) RegisterTrustedDevice(userID, name, publicKey string, capabi
 func (db *Database) TrustedDevices(userID string) ([]TrustedDevice, error) {
 	devices := []TrustedDevice{}
 	err := db.agentTx(userID, func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT id,user_id,name,public_key,key_algorithm,capabilities,last_seen_at,revoked_at,created_at,updated_at FROM trusted_devices WHERE user_id=$1 ORDER BY created_at`, userID)
+		rows, err := tx.Query(`SELECT id,user_id,name,public_key,key_algorithm,capabilities,platform,COALESCE(p2p_endpoint_id,''),device_protocol_versions,last_seen_at,revoked_at,created_at,updated_at FROM trusted_devices WHERE user_id=$1 ORDER BY created_at`, userID)
 		if err != nil {
 			return err
 		}
@@ -80,7 +83,7 @@ func (db *Database) HeartbeatTrustedDevice(userID, deviceID string, capabilities
 	}
 	device := &TrustedDevice{}
 	err := db.agentTx(userID, func(tx *sql.Tx) error {
-		err := scanDevice(tx.QueryRow(`UPDATE trusted_devices SET capabilities=$1,last_seen_at=NOW(),updated_at=NOW() WHERE id=$2 AND user_id=$3 AND revoked_at IS NULL RETURNING id,user_id,name,public_key,key_algorithm,capabilities,last_seen_at,revoked_at,created_at,updated_at`, capabilities, deviceID, userID), device)
+		err := scanDevice(tx.QueryRow(`UPDATE trusted_devices SET capabilities=$1,last_seen_at=NOW(),updated_at=NOW() WHERE id=$2 AND user_id=$3 AND revoked_at IS NULL RETURNING id,user_id,name,public_key,key_algorithm,capabilities,platform,COALESCE(p2p_endpoint_id,''),device_protocol_versions,last_seen_at,revoked_at,created_at,updated_at`, capabilities, deviceID, userID), device)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrDeviceNotFound
 		}
@@ -146,7 +149,7 @@ func (db *Database) ConsumeTrustedDeviceNonce(userID, deviceID, nonce string, ex
 type scanner interface{ Scan(...any) error }
 
 func scanDevice(row scanner, device *TrustedDevice) error {
-	return row.Scan(&device.ID, &device.UserID, &device.Name, &device.PublicKey, &device.KeyAlgorithm, &device.Capabilities, &device.LastSeenAt, &device.RevokedAt, &device.CreatedAt, &device.UpdatedAt)
+	return row.Scan(&device.ID, &device.UserID, &device.Name, &device.PublicKey, &device.KeyAlgorithm, &device.Capabilities, &device.Platform, &device.P2PEndpointID, &device.ProtocolVersions, &device.LastSeenAt, &device.RevokedAt, &device.CreatedAt, &device.UpdatedAt)
 }
 
 func TestingSecureToken() (string, error) {

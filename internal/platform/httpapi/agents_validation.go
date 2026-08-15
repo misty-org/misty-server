@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	deviceIDPattern    = regexp.MustCompile(`^device_[0-9a-f-]{36}$`)
-	deviceJobIDPattern = regexp.MustCompile(`^devicejob_[0-9a-f-]{36}$`)
-	deviceNoncePattern = regexp.MustCompile(`^[A-Za-z0-9+/=_-]{16,200}$`)
+	deviceIDPattern         = regexp.MustCompile(`^device_[0-9a-f-]{36}$`)
+	deviceJobIDPattern      = regexp.MustCompile(`^devicejob_[0-9a-f-]{36}$`)
+	deviceNoncePattern      = regexp.MustCompile(`^[A-Za-z0-9+/=_-]{16,200}$`)
+	p2pEndpointIDPattern    = regexp.MustCompile(`^[A-Za-z0-9_-]{32,128}$`)
+	pairingSessionIDPattern = regexp.MustCompile(`^pairing_[0-9a-f-]{36}$`)
 )
 
 const (
@@ -29,8 +31,9 @@ const (
 // AgentsService now exposes trusted-device identity and exact v2 workflow
 // node leases only. Shared Agent definitions and runs live in SpacesService.
 type AgentsService struct {
-	database    *db.Database
-	avatarStore LibraryObjectStore
+	database         *db.Database
+	avatarStore      LibraryObjectStore
+	connectedDevices ConnectedDevicesConfig
 }
 
 func NewAgentsService(database *db.Database) *AgentsService {

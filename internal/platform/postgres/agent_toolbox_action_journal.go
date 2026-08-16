@@ -21,6 +21,7 @@ type AgentToolboxActionAudit struct {
 }
 
 var ErrAgentToolboxActionInProgress = errors.New("Agent Toolbox action is already in progress")
+var ErrAgentToolboxActionTerminal = errors.New("Agent Toolbox action already attempted")
 
 type AgentToolboxAction struct {
 	IdempotencyKey  string
@@ -35,6 +36,7 @@ type AgentToolboxAction struct {
 	Risk            string
 	Source          string
 	Request         json.RawMessage
+	RedactPayload   bool
 }
 
 func (db *Database) JournalAgentToolboxAction(ctx context.Context, action AgentToolboxAction, execute func() (json.RawMessage, error)) (json.RawMessage, error) {
@@ -51,12 +53,16 @@ func (db *Database) JournalAgentToolboxAction(ctx context.Context, action AgentT
 	var existingState string
 	var existingResult json.RawMessage
 	var existingUserID string
+	persistedRequest := action.Request
+	if action.RedactPayload {
+		persistedRequest = json.RawMessage(`{}`)
+	}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		result, insertErr := tx.ExecContext(ctx, `INSERT INTO agent_toolbox_action_journal(
 			idempotency_key,user_id,space_id,agent_id,agent_instance_id,run_id,session_id,tool_name,audit_event,risk,source,request,state
 		) VALUES($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),$8,$9,$10,$11,$12,'started') ON CONFLICT DO NOTHING`,
 			action.IdempotencyKey, action.UserID, action.SpaceID, action.AgentID, action.AgentInstanceID, action.RunID, action.SessionID,
-			action.ToolName, action.AuditEvent, action.Risk, action.Source, action.Request)
+			action.ToolName, action.AuditEvent, action.Risk, action.Source, persistedRequest)
 		if insertErr != nil {
 			return insertErr
 		}
@@ -72,8 +78,8 @@ func (db *Database) JournalAgentToolboxAction(ctx context.Context, action AgentT
 		if existingUserID != action.UserID {
 			return ErrSpaceForbidden
 		}
-		if existingState == "failed" {
-			update, updateErr := tx.ExecContext(ctx, `UPDATE agent_toolbox_action_journal SET state='started',request=$1,result='{}'::jsonb,error_code=NULL,updated_at=NOW() WHERE idempotency_key=$2 AND user_id=$3 AND state='failed'`, action.Request, action.IdempotencyKey, action.UserID)
+		if existingState == "failed" && !action.RedactPayload {
+			update, updateErr := tx.ExecContext(ctx, `UPDATE agent_toolbox_action_journal SET state='started',request=$1,result='{}'::jsonb,error_code=NULL,updated_at=NOW() WHERE idempotency_key=$2 AND user_id=$3 AND state='failed'`, persistedRequest, action.IdempotencyKey, action.UserID)
 			if updateErr != nil {
 				return updateErr
 			}
@@ -89,6 +95,9 @@ func (db *Database) JournalAgentToolboxAction(ctx context.Context, action AgentT
 		if existingState == "completed" {
 			return existingResult, nil
 		}
+		if existingState == "failed" && action.RedactPayload {
+			return nil, ErrAgentToolboxActionTerminal
+		}
 		return nil, ErrAgentToolboxActionInProgress
 	}
 
@@ -100,8 +109,12 @@ func (db *Database) JournalAgentToolboxAction(ctx context.Context, action AgentT
 	if executeErr != nil {
 		state, errorCode = "failed", "tool_execution_failed"
 	}
+	persistedResult := result
+	if action.RedactPayload {
+		persistedResult = json.RawMessage(`{}`)
+	}
 	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, updateErr := tx.ExecContext(ctx, `UPDATE agent_toolbox_action_journal SET state=$1,result=$2,error_code=NULLIF($3,''),updated_at=NOW() WHERE idempotency_key=$4 AND user_id=$5`, state, result, errorCode, action.IdempotencyKey, action.UserID)
+		_, updateErr := tx.ExecContext(ctx, `UPDATE agent_toolbox_action_journal SET state=$1,result=$2,error_code=NULLIF($3,''),updated_at=NOW() WHERE idempotency_key=$4 AND user_id=$5`, state, persistedResult, errorCode, action.IdempotencyKey, action.UserID)
 		return updateErr
 	})
 	if err != nil {

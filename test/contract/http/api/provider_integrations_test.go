@@ -16,10 +16,14 @@ func TestProviderOAuthAvailabilityCatalogReportsServerConfiguration(t *testing.T
 	}
 	t.Setenv("GOOGLE_CLIENT_ID", "google-client")
 	t.Setenv("GOOGLE_CLIENT_SECRET", "google-secret")
+	t.Setenv("GITHUB_APP_ID", "")
+	t.Setenv("GITHUB_APP_SLUG", "")
+	t.Setenv("GITHUB_APP_PRIVATE_KEY", "")
+	t.Setenv("GITHUB_WEBHOOK_SECRET", "")
 
 	providers := TestingProviderOAuthAvailabilityCatalog()
-	if len(providers) != 3 {
-		t.Fatalf("beta provider availability count = %d, want 3", len(providers))
+	if len(providers) != 5 {
+		t.Fatalf("provider availability count = %d, want 5", len(providers))
 	}
 	for index, provider := range providers {
 		if index > 0 && providers[index-1].Provider > provider.Provider {
@@ -28,8 +32,8 @@ func TestProviderOAuthAvailabilityCatalogReportsServerConfiguration(t *testing.T
 		if provider.Configured != (provider.Provider == "google") {
 			t.Fatalf("provider %q configured = %v", provider.Provider, provider.Configured)
 		}
-		if provider.Provider != "google" && provider.Provider != "discord" && provider.Provider != "notion" {
-			t.Fatalf("non-beta provider %q was advertised", provider.Provider)
+		if provider.Provider != "google" && provider.Provider != "slack" && provider.Provider != "discord" && provider.Provider != "notion" && provider.Provider != "github" {
+			t.Fatalf("unexpected provider %q was advertised", provider.Provider)
 		}
 	}
 }
@@ -66,6 +70,18 @@ func TestGoogleProviderOAuthUsesOnlyCanonicalServerEnvironmentNames(t *testing.T
 	}
 }
 
+func TestLegacyGoogleCalendarConnectionCanReadAndWriteEvents(t *testing.T) {
+	joined := strings.Join(TestingProviderOAuthCatalog["google"].Scopes, " ")
+	for _, required := range []string{"calendar.readonly", "calendar.events"} {
+		if !strings.Contains(joined, required) {
+			t.Fatalf("legacy Google Calendar consent missing %q: %s", required, joined)
+		}
+	}
+	if strings.Contains(joined, "gmail") {
+		t.Fatalf("Calendar consent unexpectedly requested Gmail: %s", joined)
+	}
+}
+
 func TestProviderOAuthCatalogMatchesLaunchContract(t *testing.T) {
 	want := []string{"google", "slack", "discord", "notion"}
 	for _, provider := range want {
@@ -81,6 +97,12 @@ func TestProviderOAuthCatalogMatchesLaunchContract(t *testing.T) {
 		if _, exists := TestingProviderOAuthCatalog[forbidden]; exists {
 			t.Fatalf("forbidden provider %q is registered", forbidden)
 		}
+	}
+}
+
+func TestGoogleCalendarPreconditionFailureMapsToConflict(t *testing.T) {
+	if got := TestingProviderErrorCodeForStatus(http.StatusPreconditionFailed); got != "conflict" {
+		t.Fatalf("Google precondition failure code = %q, want conflict", got)
 	}
 }
 

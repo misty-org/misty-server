@@ -9,6 +9,9 @@ import (
 )
 
 func companionToolImpact(name string) string {
+	if strings.HasPrefix(name, "mcp.") {
+		return "dangerous"
+	}
 	if strings.HasSuffix(name, ".query") || strings.HasSuffix(name, ".search") || strings.HasSuffix(name, ".read") || name == "browser.inspect" || name == "browser.downloads.list" {
 		return "observe"
 	}

@@ -54,13 +54,17 @@ func (s *SpacesService) resolveAssignedTaskToolbox(ctx context.Context, run *db.
 			requested = append(requested, descriptor.Name)
 		}
 	}
+	mcpHandler := func(toolCtx context.Context, _ agenttools.Invocation, tool serveragent.ToolRequest) (json.RawMessage, error) {
+		return s.executeMCPAgentTool(toolCtx, run, tool, false, "task_assignment")
+	}
+	registrations, requested = s.appendPersonalAgentMCPTools(ctx, run.RequestingMemberID, run.AgentID, registrations, requested, mcpHandler)
 	toolbox, err := agenttools.New(registrations...)
 	if err != nil {
 		return nil, agenttools.Invocation{}, serveragent.ToolManifest{}, err
 	}
 	invocation := agenttools.Invocation{
 		UserID: run.RequestingMemberID, SpaceID: run.SpaceID, AgentID: run.AgentID, RunID: run.ID,
-		Source: "task_assignment", Trigger: "task_assignment",
+		Source: "task_assignment", Trigger: "task_assignment", DelegatedApproval: true,
 	}
 	manifest, err := toolbox.Resolve(ctx, invocation, requested, authorizePersonalAgentTaskTool(s.database))
 	return toolbox, invocation, manifest, err
@@ -104,6 +108,9 @@ func assignedTaskActivityToolDescriptor() agenttools.Descriptor {
 
 func authorizePersonalAgentTaskTool(database *db.Database) agenttools.Authorizer {
 	return func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor) (bool, error) {
+		if strings.HasPrefix(descriptor.Name, "mcp.") {
+			return authorizeMCPAgentTool(ctx, database, invocation, descriptor)
+		}
 		policy, err := database.EffectivePersonalAgentToolPermissions(ctx, invocation.UserID, invocation.SpaceID, invocation.AgentID)
 		if err != nil || !personalAgentToolPolicyAllows(policy, descriptor) {
 			return false, err

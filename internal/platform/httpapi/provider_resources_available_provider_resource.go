@@ -243,6 +243,11 @@ func (s *SpacesService) backfillProviderResource(ctx context.Context, resource d
 			if err := s.fetchAndStoreNotionEntity(ctx, resource, event, TestingMustAPIRawJSON(event)); err != nil {
 				return err
 			}
+			if event.Entity.Type == "data_source" || event.Entity.Type == "database" {
+				if err := s.backfillNotionCollectionRows(ctx, resource, 100); err != nil {
+					return err
+				}
+			}
 			break
 		}
 		return db.ErrSpaceInvalid

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -59,8 +60,26 @@ func (s *SpacesService) PublishSpaceDiscordMessage() http.HandlerFunc {
 			writeSpaceError(w, db.ErrSpaceForbidden)
 			return
 		}
+		if TestingAlreadyPublishedToDiscord(message, link.ChannelID) {
+			writeJSON(w, http.StatusOK, map[string]any{"message": message})
+			return
+		}
 		if !TestingPublishableToDiscord(message, userID) {
 			writeSpaceError(w, db.ErrSpaceForbidden)
+			return
+		}
+		claimed, claimErr := s.database.ClaimSpaceMessageDiscordPublish(r.Context(), userID, spaceID, message.ID, link.ChannelID)
+		if claimErr != nil {
+			writeSpaceError(w, claimErr)
+			return
+		}
+		if !claimed {
+			current, currentErr := s.database.SpaceMessageForPublish(r.Context(), userID, spaceID, message.ID)
+			if currentErr == nil && TestingAlreadyPublishedToDiscord(current, link.ChannelID) {
+				writeJSON(w, http.StatusOK, map[string]any{"message": current})
+				return
+			}
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "publish_in_progress"})
 			return
 		}
 		origin := db.MessageOrigin{System: "misty", PublishState: "published", ExternalChannelID: link.ChannelID}
@@ -90,11 +109,27 @@ func TestingPublishableToDiscord(message *db.SpaceMessage, userID string) bool {
 	}
 	if len(message.Origin) > 0 {
 		var origin db.MessageOrigin
-		if json.Unmarshal(message.Origin, &origin) == nil && origin.System != "" && origin.System != "misty" {
+		if json.Unmarshal(message.Origin, &origin) != nil {
+			return false
+		}
+		if origin.System != "" && origin.System != "misty" {
+			return false
+		}
+		if origin.PublishState == "published" || origin.PublishedExternal != "" {
 			return false
 		}
 	}
 	return strings.TrimSpace(TestingSpansToPlainText(message.Content)) != ""
+}
+
+func TestingAlreadyPublishedToDiscord(message *db.SpaceMessage, channelID string) bool {
+	if message == nil || len(message.Origin) == 0 {
+		return false
+	}
+	var origin db.MessageOrigin
+	return json.Unmarshal(message.Origin, &origin) == nil && origin.System == "misty" &&
+		origin.PublishState == "published" && origin.PublishedExternal != "" &&
+		origin.ExternalChannelID == channelID
 }
 
 func TestingSpansToPlainText(spans []db.MessageSpan) string {
@@ -124,6 +159,11 @@ func (s *SpacesService) postDiscordMessage(ctx context.Context, link *db.SpaceDi
 	// An empty parse list means a mirrored "@everyone" cannot ping a Discord
 	// server. Mirroring must never escalate reach on a user's behalf.
 	payload := map[string]any{"allowed_mentions": map[string]any{"parse": []string{}}}
+	if message.ReplyToMessageID != "" {
+		if externalReplyID, err := s.database.DiscordExternalReplyID(ctx, message.SpaceID, message.ReplyToMessageID, link.ChannelID); err == nil && externalReplyID != "" {
+			payload["message_reference"] = map[string]any{"message_id": externalReplyID, "fail_if_not_exists": false}
+		}
+	}
 
 	if link.WebhookID != "" && len(link.WebhookCiphertext) > 0 {
 		token, err := s.decryptProviderSecret("discord", link.WebhookCiphertext, link.WebhookNonce)
@@ -195,20 +235,26 @@ func (s *SpacesService) syncDiscordLink(ctx context.Context, link *db.SpaceDisco
 	if json.Unmarshal(raw, &messages) != nil {
 		return 0, errors.New("discord message history was invalid")
 	}
-	// Discord returns newest first; mirror oldest first so the Space transcript
-	// reads in the order the conversation actually happened.
+	// Discord changes result ordering depending on whether `after` is present.
+	// Snowflake ordering is stable in both cases, so normalize explicitly.
+	sort.Slice(messages, func(i, j int) bool {
+		return TestingSnowflakeAfter(messages[j].ID, messages[i].ID)
+	})
 	imported, cursor := 0, link.LastMessageID
-	for index := len(messages) - 1; index >= 0; index-- {
-		message := messages[index]
-		if TestingSnowflakeAfter(message.ID, cursor) {
-			cursor = message.ID
-		}
-		if !TestingShouldMirrorDiscordMessage(message, link) {
+	for _, message := range messages {
+		if !TestingSnowflakeAfter(message.ID, cursor) {
 			continue
 		}
-		if _, mirrorErr := s.mirrorDiscordMessage(ctx, *link, message); mirrorErr == nil {
-			imported++
+		if TestingShouldMirrorDiscordMessage(message, link) {
+			if _, mirrorErr := s.mirrorDiscordMessage(ctx, *link, message); mirrorErr != nil {
+				if !errors.Is(mirrorErr, db.ErrSpaceConflict) {
+					return imported, mirrorErr
+				}
+			} else {
+				imported++
+			}
 		}
+		cursor = message.ID
 	}
 	now := time.Now().UTC()
 	return imported, s.database.SetSpaceDiscordLinkSync(ctx, link.ID, cursor, "active", "", &now)

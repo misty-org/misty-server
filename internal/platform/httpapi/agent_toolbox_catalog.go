@@ -8,7 +8,7 @@ import (
 )
 
 var agentToolboxSpaceSources = []string{"canonical_run", "space_conversation"}
-var canonicalAgentToolboxProviders = []string{"discord", "google", "notion", "slack"}
+var canonicalAgentToolboxProviders = []string{"discord", "figma", "github", "google", "notion", "slack"}
 
 func agentToolObjectOutputSchema() json.RawMessage {
 	return json.RawMessage(`{"type":"object"}`)

@@ -292,7 +292,11 @@ func (s *SpacesService) AgentRuntimeTool() http.HandlerFunc {
 			providerHandler := func(ctx context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
 				return s.executeCompanionProviderTool(ctx, run, request)
 			}
-			toolbox := spaceAgentToolboxWithBrowserAndProviders(s.database, browserTabs, browserCapabilities, providers, providerHandler, delegationHandler)
+			mcpHandler := func(toolCtx context.Context, _ agenttools.Invocation, tool serveragent.ToolRequest) (json.RawMessage, error) {
+				return s.executeMCPAgentTool(toolCtx, run, tool, false, "space_conversation")
+			}
+			mcpRegistrations, _ := s.appendPersonalAgentMCPTools(r.Context(), run.OwnerUserID, run.AgentID, nil, nil, mcpHandler)
+			toolbox := spaceAgentToolboxWithBrowserProvidersAndExtra(s.database, browserTabs, browserCapabilities, providers, providerHandler, mcpRegistrations, delegationHandler)
 			names := make([]string, 0, len(toolbox.Descriptors()))
 			explicit := map[string]bool{}
 			for _, descriptor := range toolbox.Descriptors() {

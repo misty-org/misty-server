@@ -41,6 +41,7 @@ func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMid
 			UserID:         invocation.UserID, SpaceID: spaceID, AgentID: invocation.AgentID,
 			AgentInstanceID: invocation.AgentInstanceID, RunID: invocation.RunID, SessionID: invocation.SessionID, ToolName: descriptor.Name,
 			AuditEvent: descriptor.AuditEvent, Risk: descriptor.Risk, Source: invocation.Source, Request: request.Arguments,
+			RedactPayload: strings.HasPrefix(descriptor.Name, "mcp."),
 		}, func() (json.RawMessage, error) {
 			return next(ctx, invocation, request)
 		})

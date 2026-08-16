@@ -90,12 +90,22 @@ func (s *SpacesService) CloudConnections() http.HandlerFunc {
 }
 
 func cloudConnectionJSON(item db.CloudConnection) map[string]any {
+	source := "legacy_cloud"
+	if item.ConnectedAccountID != "" {
+		source = "connected_account"
+	}
 	return map[string]any{
 		"id": item.ID, "provider": item.Provider, "name": item.Name,
 		"account_id": item.AccountID, "account_display": item.AccountDisplay,
 		"uses_custom_oauth_client": item.UsesCustomOAuthClient,
-		"expires_at":               item.ExpiresAt, "created_at": item.CreatedAt, "updated_at": item.UpdatedAt,
+		"connected_account_id":     item.ConnectedAccountID, "connection_source": source,
+		"status": item.Status, "last_error_code": item.LastErrorCode,
+		"expires_at": item.ExpiresAt, "created_at": item.CreatedAt, "updated_at": item.UpdatedAt,
 	}
+}
+
+func TestingCloudConnectionJSON(item db.CloudConnection) map[string]any {
+	return cloudConnectionJSON(item)
 }
 
 func (s *SpacesService) BeginCloudAuthorization() http.HandlerFunc {

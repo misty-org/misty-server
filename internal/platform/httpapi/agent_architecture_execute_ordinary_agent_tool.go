@@ -14,6 +14,9 @@ import (
 )
 
 func (s *SpacesService) executeOrdinaryAgentTool(ctx context.Context, run *db.SpaceRun, tool serveragent.ToolRequest) (json.RawMessage, error) {
+	if strings.HasPrefix(tool.Name, "mcp.") {
+		return s.executeMCPAgentTool(ctx, run, tool, true, canonicalAgentToolSource)
+	}
 	if tool.Name == toolboxContextGet || tool.Name == toolboxMembersList || tool.Name == toolboxMembersResolve || tool.Name == toolboxAgentsList || tool.Name == toolboxAgentsStatus || strings.HasPrefix(tool.Name, "notes.") || strings.HasPrefix(tool.Name, "roadmaps.") || tool.Name == toolboxLibraryRead || tool.Name == toolboxLibraryUpdate || tool.Name == toolboxLibraryPromoteAttachment || tool.Name == toolboxCalendarCreate || tool.Name == toolboxCalendarUpdate {
 		return executeSpaceConversationTool(ctx, s.database, spaceConversationToolActor{
 			userID: run.RequestingMemberID, spaceID: run.SpaceID, agentID: run.AgentID, runID: run.ID,
@@ -169,19 +172,31 @@ func (s *SpacesService) executeOrdinaryAgentTool(ctx context.Context, run *db.Sp
 	}
 }
 
-func providerAgentToolSchema(write bool) json.RawMessage {
+func providerAgentToolSchema(provider string, write bool) json.RawMessage {
 	properties := map[string]any{"query": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer"}, "resource": map[string]any{"type": "string"}}
 	if write {
 		properties["destination"] = map[string]any{"type": "string"}
 		properties["payload"] = map[string]any{"type": "object"}
 		properties["mode"] = map[string]any{"type": "string", "enum": []string{"draft", "send"}}
+		if provider == "github" {
+			properties["workspace_id"] = map[string]any{"type": "string"}
+			properties["action"] = map[string]any{"type": "string", "enum": []string{"create_issue", "comment_issue", "create_branch", "create_pull_request"}}
+			return TestingMustAPIRawJSON(map[string]any{"type": "object", "required": []string{"workspace_id", "action", "payload"}, "properties": properties})
+		}
+		if provider == "figma" {
+			properties["binding_id"] = map[string]any{"type": "string"}
+			properties["file_key"] = map[string]any{"type": "string"}
+			properties["message"] = map[string]any{"type": "string", "maxLength": 5000}
+			properties["node_id"] = map[string]any{"type": "string"}
+			return TestingMustAPIRawJSON(map[string]any{"type": "object", "required": []string{"binding_id", "message"}, "properties": properties})
+		}
 	}
 	return TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": properties})
 }
 
 func providerSupportsWrite(provider string) bool {
 	switch provider {
-	case "slack", "discord":
+	case "slack", "discord", "github", "figma":
 		return true
 	}
 	return false

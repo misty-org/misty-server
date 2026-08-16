@@ -53,6 +53,7 @@ func (s *SpacesService) resolveCanonicalAgentToolbox(ctx context.Context, run *d
 		registrations = append(registrations, canonicalProviderToolRegistration("google", false, handler))
 		requested = append(requested, "provider.google.query")
 	}
+	registrations, requested = s.appendPersonalAgentMCPTools(ctx, run.RequestingMemberID, run.AgentID, registrations, requested, handler)
 	toolbox, err := agenttools.New(registrations...)
 	if err != nil {
 		return nil, agenttools.Invocation{}, serveragent.ToolManifest{}, err
@@ -152,16 +153,28 @@ func canonicalProviderToolDescriptor(provider string, write bool) agenttools.Des
 	if write {
 		operation, operationLabel, risk, approval, audit = "write", "Write to", serveragent.RiskWrite, agenttools.ApprovalInteractive, "provider.write"
 	}
-	return agenttools.Descriptor{
+	descriptor := agenttools.Descriptor{
 		Name: "provider." + provider + "." + operation, Version: 1,
 		Description: operationLabel + " the " + provider + " provider shared with this Space.",
-		Risk:        risk, InputSchema: providerAgentToolSchema(write), OutputSchema: agentToolObjectOutputSchema(), Approval: approval,
+		Risk:        risk, InputSchema: providerAgentToolSchema(provider, write), OutputSchema: agentToolObjectOutputSchema(), Approval: approval,
 		Locality: agenttools.LocalityProvider, Idempotent: !write, AuditEvent: audit, Sources: []string{canonicalAgentToolSource},
 	}
+	if provider == "github" && write {
+		descriptor.RequiredPermission = db.PermissionIntegrationsManage
+		descriptor.AgentPermission = db.PermissionIntegrationsManage
+	}
+	if provider == "figma" && write {
+		descriptor.RequiredPermission = db.PermissionIntegrationsManage
+		descriptor.AgentPermission = db.PermissionIntegrationsManage
+	}
+	return descriptor
 }
 
 func authorizeCanonicalAgentTool(database *db.Database) agenttools.Authorizer {
 	return func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor) (bool, error) {
+		if strings.HasPrefix(descriptor.Name, "mcp.") {
+			return authorizeMCPAgentTool(ctx, database, invocation, descriptor)
+		}
 		if invocation.ConversationScopeKind == db.ConversationScopePrivate && descriptor.Locality == agenttools.LocalityProvider && descriptor.Risk != serveragent.RiskRead {
 			return false, nil
 		}

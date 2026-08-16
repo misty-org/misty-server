@@ -92,11 +92,56 @@ func (s *SpacesService) processSlackEvent(ctx context.Context, envelope slackEve
 		if err := s.storeSlackEvent(ctx, resource, envelope, raw); err != nil {
 			state = "failed"
 		} else {
-			_, _ = s.ProcessProviderEvent(ctx, resource, envelope.EventID, providerPayloadFingerprint(raw), json.RawMessage(raw))
+			if link, linkErr := s.database.SpaceSlackLinkForResource(ctx, resource.ID); linkErr == nil {
+				if _, mirrorErr := s.mirrorSlackMessage(ctx, *link, slackChatMessageFromEvent(envelope)); mirrorErr != nil {
+					state = "failed"
+				}
+			}
+			if state == "processed" {
+				_, _ = s.ProcessProviderEvent(ctx, resource, envelope.EventID, providerPayloadFingerprint(raw), json.RawMessage(raw))
+			}
 		}
 		_ = s.database.FinishProviderEvent(ctx, resource.IntegrationID, envelope.EventID, state)
 	}
 	return nil
+}
+
+func slackChatMessageFromEvent(envelope slackEventEnvelope) SlackChatMessage {
+	event := envelope.Event
+	result := SlackChatMessage{Type: event.Type, Subtype: event.Subtype, UserID: event.User,
+		BotID: event.BotID, Text: event.Text, Timestamp: event.Timestamp,
+		ThreadTimestamp: event.ThreadTS}
+	if event.Subtype == "message_changed" && len(event.Message) > 0 {
+		var changed struct {
+			Type     string `json:"type"`
+			Subtype  string `json:"subtype"`
+			User     string `json:"user"`
+			BotID    string `json:"bot_id"`
+			Text     string `json:"text"`
+			TS       string `json:"ts"`
+			ThreadTS string `json:"thread_ts"`
+			Files    []struct {
+				Name       string `json:"name"`
+				URLPrivate string `json:"url_private"`
+				Permalink  string `json:"permalink"`
+			} `json:"files"`
+		}
+		if json.Unmarshal(event.Message, &changed) == nil && changed.TS != "" {
+			result.Type, result.Subtype = firstNonempty(changed.Type, "message"), changed.Subtype
+			result.UserID, result.BotID, result.Text = changed.User, changed.BotID, changed.Text
+			result.Timestamp, result.ThreadTimestamp = changed.TS, changed.ThreadTS
+			for _, file := range changed.Files {
+				result.Files = append(result.Files, SlackChatFile{Name: file.Name,
+					URL: firstNonempty(file.Permalink, file.URLPrivate)})
+			}
+		}
+	}
+	if event.DeletedTS != "" || event.Subtype == "message_deleted" {
+		result.Type, result.Subtype = "message", ""
+		result.Timestamp, result.Text, result.Deleted = firstNonempty(event.DeletedTS, result.Timestamp),
+			"Message deleted in Slack", true
+	}
+	return result
 }
 
 func (s *SpacesService) storeSlackEvent(ctx context.Context, resource db.ProviderSharedResource, envelope slackEventEnvelope, raw []byte) error {

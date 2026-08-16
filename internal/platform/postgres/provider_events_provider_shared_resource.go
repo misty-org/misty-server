@@ -59,16 +59,8 @@ func validateSharedResource(item *ProviderSharedResource) error {
 	if item.SpaceID == "" || item.IntegrationID == "" || item.ExternalResourceID == "" || len([]rune(item.DisplayName)) < 1 || len([]rune(item.DisplayName)) > 240 {
 		return ErrSpaceInvalid
 	}
-	switch item.Provider {
-	case "slack", "discord":
-		if item.ResourceType != "channel" {
-			return ErrSpaceInvalid
-		}
-	case "notion":
-		if item.ResourceType != "page" && item.ResourceType != "database" && item.ResourceType != "data_source" {
-			return ErrSpaceInvalid
-		}
-	default:
+	resourceKinds, supported := providerResourceKinds[item.Provider]
+	if !supported || !resourceKinds[item.ResourceType] {
 		return ErrSpaceInvalid
 	}
 	if len(item.Configuration) == 0 {
@@ -80,6 +72,16 @@ func validateSharedResource(item *ProviderSharedResource) error {
 	}
 	item.PermissionScope = item.Provider + ":" + item.ResourceType + ":" + item.ExternalResourceID
 	return nil
+}
+
+// Provider kinds live in one registry so adding a vertical slice does not
+// require another database constraint migration.
+var providerResourceKinds = map[string]map[string]bool{
+	"slack":   {"channel": true},
+	"discord": {"channel": true},
+	"notion":  {"page": true, "database": true, "data_source": true},
+	"github":  {"repository": true},
+	"figma":   {"file": true, "project": true},
 }
 
 func (db *Database) ProviderSharedResources(ctx context.Context, userID, spaceID string) ([]ProviderSharedResource, error) {

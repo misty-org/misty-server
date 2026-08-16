@@ -23,10 +23,18 @@ func (s *SpacesService) mirrorDiscordMessage(ctx context.Context, link db.SpaceD
 		labels[mention.ID] = name
 	}
 	content := TestingDiscordContentToSpans(message, labels)
+	origin := TestingDiscordMessageOrigin(message)
+	return s.database.CreateMirroredSpaceMessage(ctx, link, content, origin)
+}
+
+func TestingDiscordMessageOrigin(message TestingDiscordMessage) db.MessageOrigin {
 	origin := db.MessageOrigin{
 		System: "discord", ExternalID: message.ID, ExternalChannelID: message.ChannelID,
 		AuthorName: TestingDiscordDisplayName(message), AuthorHandle: message.Author.Username,
 		AuthoredAt: message.Timestamp,
+	}
+	if message.ReferencedMessage != nil {
+		origin.ReplyToExternalID = message.ReferencedMessage.ID
 	}
 	if message.Author.Avatar != "" {
 		origin.AuthorAvatarURL = "https://cdn.discordapp.com/avatars/" + message.Author.ID + "/" + message.Author.Avatar + ".png"
@@ -34,7 +42,7 @@ func (s *SpacesService) mirrorDiscordMessage(ctx context.Context, link db.SpaceD
 	for _, attachment := range message.Attachments {
 		origin.AttachmentURLs = append(origin.AttachmentURLs, attachment.URL)
 	}
-	return s.database.CreateMirroredSpaceMessage(ctx, link, content, origin)
+	return origin
 }
 
 // discordContentToSpans rewrites Discord's id-based mention tokens into text a
@@ -141,6 +149,25 @@ func (s *SpacesService) discordBotIdentity(ctx context.Context) (string, error) 
 	return identity.ID, nil
 }
 
+func (s *SpacesService) discordGuildName(ctx context.Context, guildID string) (string, error) {
+	if strings.TrimSpace(guildID) == "" {
+		return "", db.ErrSpaceInvalid
+	}
+	raw, err := providerJSONRequest(ctx, discordBotToken(), "Bot", http.MethodGet,
+		"https://discord.com/api/v10/guilds/"+url.PathEscape(guildID), nil, nil)
+	if err != nil {
+		return "", err
+	}
+	var guild struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(raw, &guild) != nil || guild.ID != guildID || strings.TrimSpace(guild.Name) == "" {
+		return "", errors.New("discord guild response was invalid")
+	}
+	return strings.TrimSpace(guild.Name), nil
+}
+
 func (s *SpacesService) createDiscordWebhook(ctx context.Context, channelID string) (string, string, error) {
 	raw, err := providerJSONRequest(ctx, discordBotToken(), "Bot", http.MethodPost,
 		"https://discord.com/api/v10/channels/"+url.PathEscape(channelID)+"/webhooks",
@@ -156,6 +183,19 @@ func (s *SpacesService) createDiscordWebhook(ctx context.Context, channelID stri
 		return "", "", errors.New("discord webhook response was invalid")
 	}
 	return webhook.ID, webhook.Token, nil
+}
+
+func (s *SpacesService) deleteDiscordWebhook(ctx context.Context, link *db.SpaceDiscordLink) error {
+	if link == nil || link.WebhookID == "" || len(link.WebhookCiphertext) == 0 {
+		return nil
+	}
+	token, err := s.decryptProviderSecret("discord", link.WebhookCiphertext, link.WebhookNonce)
+	if err != nil {
+		return err
+	}
+	endpoint := "https://discord.com/api/v10/webhooks/" + url.PathEscape(link.WebhookID) + "/" + url.PathEscape(string(token))
+	_, err = providerJSONRequest(ctx, "", "", http.MethodDelete, endpoint, nil, nil)
+	return err
 }
 
 // discordFailureMessage turns a provider error code into user-facing copy.

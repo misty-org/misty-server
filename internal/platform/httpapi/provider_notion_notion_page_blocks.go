@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
@@ -170,8 +171,12 @@ func (s *SpacesService) NotionDatabase() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		s.proxyNotion(w, r, *resource, http.MethodGet,
-			"https://api.notion.com/v1/databases/"+url.PathEscape(databaseID), nil)
+		endpoint, err := notionCollectionEndpoint(resource.ResourceType, databaseID, false)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		s.proxyNotion(w, r, *resource, http.MethodGet, endpoint, nil)
 	}
 }
 
@@ -192,8 +197,12 @@ func (s *SpacesService) NotionDatabaseQuery() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		raw, err := s.notionRequest(r.Context(), *resource, http.MethodPost,
-			"https://api.notion.com/v1/databases/"+url.PathEscape(databaseID)+"/query",
+		endpoint, err := notionCollectionEndpoint(resource.ResourceType, databaseID, true)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		raw, err := s.notionRequest(r.Context(), *resource, http.MethodPost, endpoint,
 			map[string]any{"page_size": 100})
 		if err != nil {
 			writeProviderFailure(w, err)
@@ -226,4 +235,32 @@ func (s *SpacesService) NotionDatabaseQuery() http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"pages": page.Results})
 	}
+}
+
+// notionCollectionEndpoint keeps the public Misty route stable while honoring
+// Notion's post-2025 split between legacy databases and current data sources.
+// Discovery returns data_source IDs, which cannot be sent to /v1/databases.
+func notionCollectionEndpoint(resourceType, externalID string, query bool) (string, error) {
+	externalID = strings.TrimSpace(externalID)
+	if externalID == "" {
+		return "", db.ErrSpaceInvalid
+	}
+	collection := ""
+	switch strings.ToLower(strings.TrimSpace(resourceType)) {
+	case "database":
+		collection = "databases"
+	case "data_source":
+		collection = "data_sources"
+	default:
+		return "", db.ErrSpaceInvalid
+	}
+	endpoint := "https://api.notion.com/v1/" + collection + "/" + url.PathEscape(externalID)
+	if query {
+		endpoint += "/query"
+	}
+	return endpoint, nil
+}
+
+func TestingNotionCollectionEndpoint(resourceType, externalID string, query bool) (string, error) {
+	return notionCollectionEndpoint(resourceType, externalID, query)
 }

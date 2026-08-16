@@ -33,6 +33,10 @@ func spaceAgentToolboxWithBrowser(database *db.Database, browserTabs []string, b
 }
 
 func spaceAgentToolboxWithBrowserAndProviders(database *db.Database, browserTabs []string, browserCapabilities map[string]bool, providers []string, providerHandler agenttools.Handler, delegationHandlers ...agenttools.Handler) *agenttools.Registry {
+	return spaceAgentToolboxWithBrowserProvidersAndExtra(database, browserTabs, browserCapabilities, providers, providerHandler, nil, delegationHandlers...)
+}
+
+func spaceAgentToolboxWithBrowserProvidersAndExtra(database *db.Database, browserTabs []string, browserCapabilities map[string]bool, providers []string, providerHandler agenttools.Handler, extra []agenttools.Registration, delegationHandlers ...agenttools.Handler) *agenttools.Registry {
 	delegationHandler := agenttools.Handler(func(context.Context, agenttools.Invocation, serveragent.ToolRequest) (json.RawMessage, error) {
 		return nil, workflowv2.ErrCapabilityDenied
 	})
@@ -100,6 +104,7 @@ func spaceAgentToolboxWithBrowserAndProviders(database *db.Database, browserTabs
 			}
 		}
 	}
+	registrations = append(registrations, extra...)
 	return agenttools.MustNew(registrations...)
 }
 
@@ -195,6 +200,9 @@ func authorizeSpaceAgentTool(database *db.Database) agenttools.Authorizer {
 	return func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor) (bool, error) {
 		if invocation.ConversationScopeKind == db.ConversationScopePrivate && descriptor.Locality == agenttools.LocalityProvider && descriptor.Risk != serveragent.RiskRead {
 			return false, nil
+		}
+		if strings.HasPrefix(descriptor.Name, "mcp.") {
+			return authorizeMCPAgentTool(ctx, database, invocation, descriptor)
 		}
 		if invocation.AgentID != "" && !descriptor.AllowCustomAgent {
 			return false, nil

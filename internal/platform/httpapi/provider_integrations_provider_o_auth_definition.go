@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,7 +33,9 @@ var TestingProviderOAuthCatalog = map[string]providerOAuthDefinition{
 	// Google is one account-level OAuth connection. Product capabilities such as
 	// Calendar, Gmail, and Drive remain separate adapters and add scopes through
 	// incremental consent instead of creating separate credentials.
-	"google":  googleProvider("google", "Google", "https://www.googleapis.com/auth/calendar.readonly"),
+	"google": googleProvider("google", "Google",
+		"https://www.googleapis.com/auth/calendar.readonly",
+		"https://www.googleapis.com/auth/calendar.events"),
 	"slack":   {ID: "slack", Name: "Slack", AuthorizeURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access", ClientIDEnv: "SLACK_CLIENT_ID", ClientSecretEnv: "SLACK_CLIENT_SECRET", Scopes: []string{"app_mentions:read", "channels:history", "channels:read", "chat:write", "files:read", "groups:history", "groups:read", "reactions:read", "users:read"}},
 	"discord": {ID: "discord", Name: "Discord", AuthorizeURL: "https://discord.com/oauth2/authorize", TokenURL: "https://discord.com/api/oauth2/token", ClientIDEnv: "DISCORD_CLIENT_ID", ClientSecretEnv: "DISCORD_CLIENT_SECRET", Scopes: []string{"bot", "applications.commands", "identify"}},
 	"notion":  {ID: "notion", Name: "Notion", AuthorizeURL: "https://api.notion.com/v1/oauth/authorize", TokenURL: "https://api.notion.com/v1/oauth/token", ClientIDEnv: "NOTION_CLIENT_ID", ClientSecretEnv: "NOTION_CLIENT_SECRET"},
@@ -44,9 +47,9 @@ type providerOAuthAvailability struct {
 }
 
 func TestingProviderOAuthAvailabilityCatalog() []providerOAuthAvailability {
-	providers := make([]providerOAuthAvailability, 0, len(TestingProviderOAuthCatalog))
+	providers := make([]providerOAuthAvailability, 0, len(TestingProviderOAuthCatalog)+1)
 	for provider, definition := range TestingProviderOAuthCatalog {
-		if provider != "google" && provider != "discord" && provider != "notion" {
+		if provider != "google" && provider != "slack" && provider != "discord" && provider != "notion" {
 			continue
 		}
 		providers = append(providers, providerOAuthAvailability{
@@ -54,6 +57,7 @@ func TestingProviderOAuthAvailabilityCatalog() []providerOAuthAvailability {
 			Configured: TestingProviderOAuthClientID(definition) != "" && TestingProviderOAuthClientSecret(definition) != "",
 		})
 	}
+	providers = append(providers, providerOAuthAvailability{Provider: "github", Configured: strings.TrimSpace(envconfig.Getenv("GITHUB_APP_ID")) != "" && strings.TrimSpace(envconfig.Getenv("GITHUB_APP_SLUG")) != "" && strings.TrimSpace(envconfig.Getenv("GITHUB_APP_PRIVATE_KEY")) != "" && strings.TrimSpace(envconfig.Getenv("GITHUB_WEBHOOK_SECRET")) != ""})
 	sort.Slice(providers, func(i, j int) bool { return providers[i].Provider < providers[j].Provider })
 	return providers
 }
@@ -273,4 +277,12 @@ func (s *SpacesService) decryptProviderSecret(provider string, ciphertext, nonce
 	// identifier. The migration changes only metadata, so retain a read path until
 	// each credential is refreshed and sealed under the shared Google identity.
 	return s.aead.Open(nil, nonce, ciphertext, []byte("misty-provider-v2:google_calendar"))
+}
+
+func (s *SpacesService) TestingEncryptProviderAccessToken(provider, accessToken string) ([]byte, []byte, error) {
+	raw, err := json.Marshal(providerTokenEnvelope{AccessToken: accessToken, TokenType: "Bearer"})
+	if err != nil {
+		return nil, nil, err
+	}
+	return s.encryptProviderSecret(provider, raw)
 }

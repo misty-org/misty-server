@@ -38,7 +38,7 @@ func decodeProviderNodeConfig(raw json.RawMessage) providerNodeConfig {
 
 func (s *SpacesService) providerQueryNode(ctx context.Context, run *db.SpaceRun, invocation workflowv2.Invocation) (json.RawMessage, error) {
 	config := decodeProviderNodeConfig(invocation.Config)
-	if _, exists := TestingProviderOAuthCatalog[config.Provider]; !exists {
+	if _, exists := TestingProviderOAuthCatalog[config.Provider]; !exists && config.Provider != "github" && config.Provider != "figma" {
 		return nil, workflowv2.ErrProviderMissing
 	}
 	if config.Limit < 1 || config.Limit > 100 {
@@ -78,6 +78,12 @@ func (s *SpacesService) providerWriteNode(ctx context.Context, run *db.SpaceRun,
 	config := decodeProviderNodeConfig(invocation.Config)
 	if config.Mode == "draft" {
 		return TestingMustAPIRawJSON(map[string]any{"executed": false, "draft": json.RawMessage(invocation.Input), "provider": config.Provider}), nil
+	}
+	if config.Provider == "github" {
+		return s.githubProviderWriteNode(ctx, run, invocation)
+	}
+	if config.Provider == "figma" {
+		return s.figmaProviderWriteNode(ctx, run, invocation)
 	}
 	if config.Provider != "slack" && config.Provider != "discord" {
 		return nil, workflowv2.ErrCapabilityDenied
@@ -184,7 +190,7 @@ func revalidateProviderDestination(ctx context.Context, provider, token, tokenTy
 }
 
 func (s *SpacesService) providerReadContent(ctx context.Context, run *db.SpaceRun, invocation workflowv2.Invocation, provider, resourceID string, ref map[string]any) (workflowv2.Invocation, error) {
-	if provider != "slack" && provider != "discord" && provider != "notion" {
+	if provider != "slack" && provider != "discord" && provider != "notion" && provider != "github" && provider != "figma" {
 		return invocation, workflowv2.ErrUnsupportedContent
 	}
 	record, err := s.database.ProviderContentRecord(ctx, run.RequestingMemberID, run.SpaceID, provider, resourceID)

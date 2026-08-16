@@ -100,6 +100,65 @@ func fetchNotionBlocks(ctx context.Context, token, tokenType, blockID string, ma
 	return items, nil
 }
 
+// backfillNotionCollectionRows indexes a bounded first page of an explicitly
+// selected collection. This makes Journal search useful immediately without
+// crawling an entire workspace or waiting for the first webhook mutation.
+func (s *SpacesService) backfillNotionCollectionRows(ctx context.Context, resource db.ProviderSharedResource, maximum int) error {
+	if maximum <= 0 {
+		return nil
+	}
+	endpoint, err := notionCollectionEndpoint(resource.ResourceType, resource.ExternalResourceID, true)
+	if err != nil {
+		return err
+	}
+	token, tokenType, err := s.providerTokenForSharedResource(ctx, resource)
+	if err != nil {
+		return err
+	}
+	pageSize := maximum
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	payload, err := providerJSONRequest(ctx, token, tokenType, http.MethodPost, endpoint,
+		map[string]any{"page_size": pageSize}, map[string]string{"Notion-Version": "2026-03-11"})
+	if err != nil {
+		return err
+	}
+	var page struct {
+		Results []json.RawMessage `json:"results"`
+	}
+	if json.Unmarshal(payload, &page) != nil {
+		return errors.New("notion collection response was invalid")
+	}
+	for index, row := range page.Results {
+		if index >= maximum {
+			break
+		}
+		var object map[string]any
+		if json.Unmarshal(row, &object) != nil {
+			continue
+		}
+		externalID, _ := object["id"].(string)
+		if strings.TrimSpace(externalID) == "" {
+			continue
+		}
+		content, _ := json.Marshal(map[string]any{
+			"object": row, "event_type": "page.initial_sync",
+			"source_external_id": resource.ExternalResourceID,
+		})
+		if err := s.database.UpsertProviderContentRecord(ctx, db.ProviderContentRecord{
+			SpaceID: resource.SpaceID, SharedResourceID: resource.ID, Provider: "notion",
+			ExternalRecordID: externalID, ParentExternalID: resource.ExternalResourceID,
+			RecordType: "page", Fingerprint: providerPayloadFingerprint(content),
+			DisplayName: notionObjectTitle(object), MIMEType: "application/vnd.notion+json",
+			Content: content,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // appendNotionBlockChildren preserves the parent-before-child citation order while
 // bounding both total blocks and nesting depth. Notion currently limits block
 // nesting, but the local depth guard prevents malformed provider data from turning

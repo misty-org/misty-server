@@ -19,22 +19,38 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	mcpintegration "github.com/kannachi323/misty/server/internal/integrations/mcp"
 	mistyemail "github.com/kannachi323/misty/server/internal/platform/email"
 )
 
 type SpacesService struct {
-	TestingJournalCollab JournalCollabConfig
-	database             *db.Database
-	agent                *serveragent.Service
-	library              *SpaceLibraryService
-	avatarStore          LibraryObjectStore
-	aead                 cipher.AEAD
-	keyVer               int16
-	workers              sync.Once
-	invitationSender     mistyemail.SpaceInvitationSender
-	invitationBaseURL    string
-	agentRuntime         AgentRuntimeConfig
-	usageMeter           serveragent.UsageMeter
+	TestingJournalCollab     JournalCollabConfig
+	database                 *db.Database
+	agent                    *serveragent.Service
+	library                  *SpaceLibraryService
+	avatarStore              LibraryObjectStore
+	aead                     cipher.AEAD
+	keyVer                   int16
+	workers                  sync.Once
+	invitationSender         mistyemail.SpaceInvitationSender
+	invitationBaseURL        string
+	agentRuntime             AgentRuntimeConfig
+	usageMeter               serveragent.UsageMeter
+	mailProviderFactory      MailProviderFactory
+	slackChatProviderFactory SlackChatProviderFactory
+	githubAppProviderFactory GitHubAppProviderFactory
+	figmaProviderFactory     FigmaProviderFactory
+	mcpConnectorClient       mcpintegration.ConnectorClient
+}
+
+func (s *SpacesService) TestingSetFigmaProviderFactory(factory FigmaProviderFactory) {
+	s.figmaProviderFactory = factory
+}
+func (s *SpacesService) figmaProvider(token string) FigmaProvider {
+	if s.figmaProviderFactory != nil {
+		return s.figmaProviderFactory(token)
+	}
+	return newFigmaClient(token)
 }
 
 func (s *SpacesService) SetAgentRuntime(config AgentRuntimeConfig) {
@@ -66,7 +82,28 @@ func NewSpacesService(database *db.Database, agent *serveragent.Service, encrypt
 	if err != nil {
 		return nil, err
 	}
-	return &SpacesService{database: database, agent: agent, aead: aead, keyVer: 1}, nil
+	return &SpacesService{database: database, agent: agent, aead: aead, keyVer: 1,
+		mailProviderFactory: defaultMailProviderFactory, slackChatProviderFactory: defaultSlackChatProviderFactory,
+		mcpConnectorClient: mcpintegration.NewClient(mcpintegration.DefaultLimits())}, nil
+}
+
+func (s *SpacesService) TestingSetMCPConnectorClient(client mcpintegration.ConnectorClient) {
+	s.mcpConnectorClient = client
+}
+
+func (s *SpacesService) TestingSetGitHubAppProviderFactory(factory GitHubAppProviderFactory) {
+	s.githubAppProviderFactory = factory
+}
+
+func (s *SpacesService) githubAppProvider(installationID int64) (GitHubAppProvider, error) {
+	if s.githubAppProviderFactory != nil {
+		provider := s.githubAppProviderFactory(installationID)
+		if provider == nil {
+			return nil, errors.New("github_app_not_configured")
+		}
+		return provider, nil
+	}
+	return newGitHubAppClient(installationID)
 }
 
 // SetLibraryProvider installs the server-side Library provider used by Agent
@@ -168,6 +205,8 @@ func writeSpaceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, db.ErrSpaceNotFound), errors.Is(err, db.ErrSpaceInviteNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
+	case errors.Is(err, db.ErrPersonalAgentNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"code": "agent_not_found"})
 	case errors.Is(err, db.ErrSpaceInviteeNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "invitee_not_found"})
 	case errors.Is(err, db.ErrSpaceForbidden), errors.Is(err, db.ErrLibraryForbidden):

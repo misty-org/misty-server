@@ -88,6 +88,7 @@ type MessageSpan struct {
 type SpaceMessage struct {
 	Seq                 int64                  `json:"seq"`
 	ID                  string                 `json:"id"`
+	ClientNonce         string                 `json:"client_nonce,omitempty"`
 	SpaceID             string                 `json:"space_id"`
 	ConversationID      string                 `json:"conversation_id,omitempty"`
 	SenderUserID        string                 `json:"sender_user_id"`

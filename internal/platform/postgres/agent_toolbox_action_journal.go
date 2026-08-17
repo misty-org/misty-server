@@ -43,7 +43,7 @@ func (db *Database) JournalAgentToolboxAction(ctx context.Context, action AgentT
 	action.ToolName = strings.TrimSpace(action.ToolName)
 	action.AuditEvent = strings.TrimSpace(action.AuditEvent)
 	action.Source = strings.TrimSpace(action.Source)
-	if action.IdempotencyKey == "" || action.UserID == "" || action.ToolName == "" || action.AuditEvent == "" || action.Risk != "write" && action.Risk != "dangerous" || execute == nil || !validJSONObject(action.Request) {
+	if action.IdempotencyKey == "" || action.UserID == "" || action.ToolName == "" || action.AuditEvent == "" || action.Risk != "read" && action.Risk != "write" && action.Risk != "dangerous" || execute == nil || !validJSONObject(action.Request) {
 		return nil, ErrSpaceInvalid
 	}
 

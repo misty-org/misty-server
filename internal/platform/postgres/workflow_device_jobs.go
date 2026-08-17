@@ -53,6 +53,7 @@ func (db *Database) QueueWorkflowDeviceNodeJob(ctx context.Context, userID, runI
 			JOIN agent_device_grants g ON g.user_id=$1 AND g.space_id=r.space_id AND g.agent_id=r.agent_id
 				AND g.scope_id=$3 AND g.revoked_at IS NULL AND g.expires_at>NOW() AND g.capabilities ? $4
 			JOIN trusted_devices d ON d.id=g.device_id AND d.user_id=$1 AND d.revoked_at IS NULL AND d.last_seen_at>NOW()-INTERVAL '90 seconds'
+				AND (COALESCE(g.metadata->>'kind','')<>'browser_tab' OR g.metadata->>'sessionId'=d.capabilities->>'browser_session_id')
 			WHERE r.id=$2 AND r.requesting_member_id=$1 ORDER BY g.updated_at DESC LIMIT 1`, userID, runID, scopeID, capability).Scan(&grantID, &deviceID); errors.Is(err, sql.ErrNoRows) {
 			return ErrDeviceNotFound
 		} else if err != nil {
@@ -82,6 +83,7 @@ func (db *Database) ClaimWorkflowDeviceNodeJob(userID, deviceID string, lease ti
 		return scanWorkflowDeviceJob(tx.QueryRow(`WITH candidate AS (
 			SELECT j.id FROM workflow_device_node_jobs j JOIN trusted_devices d ON d.id=$1 AND d.user_id=$2 AND d.revoked_at IS NULL AND d.last_seen_at>NOW()-INTERVAL '90 seconds'
 			JOIN agent_device_grants g ON g.id=j.device_grant_id AND g.device_id=$1 AND g.user_id=$2 AND g.revoked_at IS NULL AND g.expires_at>NOW()
+				AND (COALESCE(g.metadata->>'kind','')<>'browser_tab' OR g.metadata->>'sessionId'=d.capabilities->>'browser_session_id')
 			WHERE j.user_id=$2 AND j.assigned_device_id=$1 AND j.state='queued' ORDER BY j.created_at FOR UPDATE OF j SKIP LOCKED LIMIT 1)
 			UPDATE workflow_device_node_jobs j SET state='leased',leased_device_id=$1,lease_token_hash=$3,lease_expires_at=NOW()+INTERVAL '60 seconds',last_heartbeat_at=NOW()
 			FROM candidate c WHERE j.id=c.id RETURNING `+workflowDeviceJobColumns, deviceID, userID, TestingHashToken(token)), item)

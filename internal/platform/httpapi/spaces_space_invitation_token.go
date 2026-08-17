@@ -158,11 +158,12 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 			AttachmentIDs    []string         `json:"attachment_ids"`
 			LibraryItemIDs   []string         `json:"library_item_ids"`
 			ReplyToMessageID string           `json:"reply_to_message_id"`
+			ClientNonce      string           `json:"client_nonce"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		message, agentIDs, err := s.database.CreateSpaceMessageWithReferences(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID)
+		message, agentIDs, err := s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
 		if err != nil {
 			writeSpaceError(w, err)
 			return

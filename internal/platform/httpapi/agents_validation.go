@@ -170,7 +170,7 @@ func (s *AgentsService) PersonalAgentToolboxCatalog() http.HandlerFunc {
 		if _, ok := s.requireUser(w, r); !ok {
 			return
 		}
-		defaults := json.RawMessage(`{"read":true,"write":false,"integrations":[]}`)
+		defaults := json.RawMessage(`{"mode":"inherit_invoker","disabled_surfaces":[],"read":true,"write":true,"integrations":[]}`)
 		writeJSON(w, http.StatusOK, map[string]any{"actions": personalAgentToolboxItems(defaults), "recent_activity": []db.AgentToolboxActionAudit{}})
 	}
 }

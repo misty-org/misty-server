@@ -91,11 +91,71 @@ func calendarQueryToolDescriptor() agenttools.Descriptor {
 	}
 }
 
+func browserToolDescriptors() []agenttools.Descriptor {
+	definitions := []struct {
+		name, description, risk, audit string
+		schema                         json.RawMessage
+		idempotent                     bool
+	}{
+		{
+			name: "browser.inspect", description: "Inspect the current untrusted page text and actionable elements in an explicitly granted browser tab.",
+			risk: serveragent.RiskRead, audit: "browser.page.inspected", idempotent: true,
+			schema: browserAgentToolSchema("inspect"),
+		},
+		{
+			name: "browser.navigate", description: "Navigate an explicitly granted browser tab to an http or https URL.",
+			risk: serveragent.RiskWrite, audit: "browser.page.navigated", idempotent: false,
+			schema: browserAgentToolSchema("navigate"),
+		},
+		{
+			name: "browser.click", description: "Click an element reference returned by the latest inspection of an explicitly granted browser tab.",
+			risk: serveragent.RiskWrite, audit: "browser.element.clicked", idempotent: false,
+			schema: browserAgentToolSchema("click"),
+		},
+		{
+			name: "browser.downloads.list", description: "List recent downloads for an explicitly granted browser tab.",
+			risk: serveragent.RiskRead, audit: "browser.downloads.inspected", idempotent: true,
+			schema: browserAgentToolSchema("downloads"),
+		},
+	}
+	descriptors := make([]agenttools.Descriptor, 0, len(definitions))
+	for _, definition := range definitions {
+		descriptors = append(descriptors, agenttools.Descriptor{
+			Name: definition.name, Version: 1, Description: definition.description,
+			Risk: definition.risk, InputSchema: definition.schema, OutputSchema: agentToolObjectOutputSchema(),
+			AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityDevice,
+			Idempotent: definition.idempotent, AuditEvent: definition.audit,
+			Sources: []string{canonicalAgentToolSource, "space_conversation", "task_assignment"},
+		})
+	}
+	return descriptors
+}
+
+func browserAgentToolSchema(kind string) json.RawMessage {
+	properties := map[string]any{
+		"scopeId": map[string]any{"type": "string", "minLength": 8, "maxLength": 256},
+	}
+	required := []string{"scopeId"}
+	switch kind {
+	case "navigate":
+		properties["url"] = map[string]any{"type": "string", "maxLength": 4096}
+		required = append(required, "url")
+	case "click":
+		properties["elementRef"] = map[string]any{"type": "string", "maxLength": 128}
+		properties["expectDownload"] = map[string]any{"type": "boolean"}
+		required = append(required, "elementRef")
+	}
+	return TestingMustAPIRawJSON(map[string]any{
+		"type": "object", "properties": properties, "required": required, "additionalProperties": false,
+	})
+}
+
 func canonicalAgentToolboxCatalogDescriptors() []agenttools.Descriptor {
 	descriptors := []agenttools.Descriptor{
 		messagesSearchToolDescriptor(), messagesSendToolDescriptor(), librarySearchToolDescriptor(), tasksQueryToolDescriptor(),
 		calendarQueryToolDescriptor(), tasksCreateToolDescriptor(), tasksUpdateToolDescriptor(),
 	}
+	descriptors = append(descriptors, browserToolDescriptors()...)
 	for _, provider := range canonicalAgentToolboxProviders {
 		descriptors = append(descriptors, canonicalProviderToolDescriptor(provider, false))
 		if providerSupportsWrite(provider) {

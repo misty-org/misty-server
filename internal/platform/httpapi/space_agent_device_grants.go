@@ -28,12 +28,13 @@ func (s *SpacesService) SpaceAgentDeviceGrants() http.HandlerFunc {
 			DeviceID     string          `json:"device_id"`
 			ScopeID      string          `json:"scope_id"`
 			Capabilities json.RawMessage `json:"capabilities"`
+			Metadata     json.RawMessage `json:"metadata"`
 			ExpiresAt    time.Time       `json:"expires_at"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		item, err := s.database.GrantAgentDeviceAccess(r.Context(), userID, spaceID, agentID, body.DeviceID, body.ScopeID, body.Capabilities, body.ExpiresAt)
+		item, err := s.database.GrantAgentDeviceAccess(r.Context(), userID, spaceID, agentID, body.DeviceID, body.ScopeID, body.Capabilities, body.Metadata, body.ExpiresAt)
 		if err != nil {
 			writeSpaceError(w, err)
 			return

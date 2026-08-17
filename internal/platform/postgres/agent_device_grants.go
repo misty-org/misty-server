@@ -19,6 +19,7 @@ type AgentDeviceGrant struct {
 	DeviceID     string          `json:"device_id"`
 	ScopeID      string          `json:"scope_id"`
 	Capabilities json.RawMessage `json:"capabilities"`
+	Metadata     json.RawMessage `json:"metadata"`
 	ExpiresAt    time.Time       `json:"expires_at"`
 	RevokedAt    *time.Time      `json:"revoked_at,omitempty"`
 	CreatedAt    time.Time       `json:"created_at"`
@@ -32,6 +33,8 @@ var deviceAgentCapabilities = map[string]bool{
 	"files.rename": true, "files.delete": true,
 	"transfers.inspect": true, "transfers.create": true, "transfers.pause": true,
 	"transfers.resume": true, "transfers.retry": true, "transfers.cancel": true,
+	"browser.inspect": true, "browser.navigate": true, "browser.click": true,
+	"browser.downloads.list": true,
 }
 
 func normalizeDeviceAgentCapabilities(raw json.RawMessage) (json.RawMessage, error) {
@@ -54,10 +57,10 @@ func normalizeDeviceAgentCapabilities(raw json.RawMessage) (json.RawMessage, err
 	return json.Marshal(normalized)
 }
 
-const agentDeviceGrantColumns = `id,user_id,agent_id,space_id,device_id,scope_id,capabilities,expires_at,revoked_at,created_at,updated_at`
+const agentDeviceGrantColumns = `id,user_id,agent_id,space_id,device_id,scope_id,capabilities,metadata,expires_at,revoked_at,created_at,updated_at`
 
 func scanAgentDeviceGrant(row scanner, item *AgentDeviceGrant) error {
-	return row.Scan(&item.ID, &item.UserID, &item.AgentID, &item.SpaceID, &item.DeviceID, &item.ScopeID, &item.Capabilities, &item.ExpiresAt, &item.RevokedAt, &item.CreatedAt, &item.UpdatedAt)
+	return row.Scan(&item.ID, &item.UserID, &item.AgentID, &item.SpaceID, &item.DeviceID, &item.ScopeID, &item.Capabilities, &item.Metadata, &item.ExpiresAt, &item.RevokedAt, &item.CreatedAt, &item.UpdatedAt)
 }
 
 func (db *Database) AgentDeviceGrants(ctx context.Context, userID, spaceID, agentID string) ([]AgentDeviceGrant, error) {
@@ -66,7 +69,11 @@ func (db *Database) AgentDeviceGrants(ctx context.Context, userID, spaceID, agen
 		if _, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID); err != nil {
 			return err
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT `+agentDeviceGrantColumns+` FROM agent_device_grants WHERE user_id=$1 AND space_id=$2 AND agent_id=$3 ORDER BY created_at DESC`, userID, spaceID, agentID)
+		rows, err := tx.QueryContext(ctx, `SELECT `+qualifiedAgentDeviceGrantColumns("g")+` FROM agent_device_grants g
+			JOIN trusted_devices d ON d.id=g.device_id AND d.user_id=g.user_id
+			WHERE g.user_id=$1 AND g.space_id=$2 AND g.agent_id=$3
+			AND (COALESCE(g.metadata->>'kind','')<>'browser_tab' OR g.metadata->>'sessionId'=d.capabilities->>'browser_session_id')
+			ORDER BY g.created_at DESC`, userID, spaceID, agentID)
 		if err != nil {
 			return err
 		}
@@ -83,10 +90,17 @@ func (db *Database) AgentDeviceGrants(ctx context.Context, userID, spaceID, agen
 	return items, err
 }
 
-func (db *Database) GrantAgentDeviceAccess(ctx context.Context, userID, spaceID, agentID, deviceID, scopeID string, capabilities json.RawMessage, expiresAt time.Time) (*AgentDeviceGrant, error) {
+func (db *Database) GrantAgentDeviceAccess(ctx context.Context, userID, spaceID, agentID, deviceID, scopeID string, capabilities, metadata json.RawMessage, expiresAt time.Time) (*AgentDeviceGrant, error) {
 	scopeID = strings.TrimSpace(scopeID)
 	capabilities, err := normalizeDeviceAgentCapabilities(capabilities)
 	if err != nil || scopeID == "" || len(scopeID) > 256 || !expiresAt.After(time.Now()) || expiresAt.After(time.Now().Add(31*24*time.Hour)) {
+		return nil, ErrSpaceInvalid
+	}
+	if len(metadata) == 0 {
+		metadata = json.RawMessage(`{}`)
+	}
+	var metadataValue map[string]any
+	if json.Unmarshal(metadata, &metadataValue) != nil {
 		return nil, ErrSpaceInvalid
 	}
 	item := &AgentDeviceGrant{}
@@ -98,12 +112,26 @@ func (db *Database) GrantAgentDeviceAccess(ctx context.Context, userID, spaceID,
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND last_seen_at>NOW()-INTERVAL '90 seconds')`, deviceID, userID).Scan(&online); err != nil || !online {
 			return ErrDeviceNotFound
 		}
-		return scanAgentDeviceGrant(tx.QueryRowContext(ctx, `INSERT INTO agent_device_grants(id,user_id,agent_id,space_id,device_id,scope_id,capabilities,expires_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-			ON CONFLICT(user_id,agent_id,space_id,device_id,scope_id) DO UPDATE SET capabilities=EXCLUDED.capabilities,expires_at=EXCLUDED.expires_at,revoked_at=NULL,updated_at=NOW()
-			RETURNING `+agentDeviceGrantColumns, "devicegrant_"+uuid.NewString(), userID, agentID, spaceID, deviceID, scopeID, capabilities, expiresAt), item)
+		if metadataValue["kind"] == "browser_tab" {
+			var activeSession string
+			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(capabilities->>'browser_session_id','') FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`, deviceID, userID).Scan(&activeSession); err != nil || activeSession == "" || metadataValue["sessionId"] != activeSession {
+				return ErrSpaceInvalid
+			}
+		}
+		return scanAgentDeviceGrant(tx.QueryRowContext(ctx, `INSERT INTO agent_device_grants(id,user_id,agent_id,space_id,device_id,scope_id,capabilities,metadata,expires_at)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			ON CONFLICT(user_id,agent_id,space_id,device_id,scope_id) DO UPDATE SET capabilities=EXCLUDED.capabilities,metadata=EXCLUDED.metadata,expires_at=EXCLUDED.expires_at,revoked_at=NULL,updated_at=NOW()
+			RETURNING `+agentDeviceGrantColumns, "devicegrant_"+uuid.NewString(), userID, agentID, spaceID, deviceID, scopeID, capabilities, metadata, expiresAt), item)
 	})
 	return item, err
+}
+
+func qualifiedAgentDeviceGrantColumns(alias string) string {
+	parts := strings.Split(agentDeviceGrantColumns, ",")
+	for index := range parts {
+		parts[index] = alias + "." + parts[index]
+	}
+	return strings.Join(parts, ",")
 }
 
 func (db *Database) RevokeAgentDeviceAccess(ctx context.Context, userID, spaceID, agentID, grantID string) error {

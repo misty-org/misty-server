@@ -14,6 +14,9 @@ import (
 )
 
 func (s *SpacesService) executeOrdinaryAgentTool(ctx context.Context, run *db.SpaceRun, tool serveragent.ToolRequest) (json.RawMessage, error) {
+	if strings.HasPrefix(tool.Name, "browser.") {
+		return s.executeBrowserAgentTool(ctx, run, tool)
+	}
 	if tool.Name == toolboxMessagesSend {
 		var input struct {
 			Message string `json:"message"`

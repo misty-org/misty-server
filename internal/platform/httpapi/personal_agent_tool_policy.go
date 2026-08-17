@@ -12,6 +12,8 @@ import (
 
 func personalAgentToolPolicyAllows(raw json.RawMessage, descriptor agenttools.Descriptor) bool {
 	var policy struct {
+		Mode         string                     `json:"mode"`
+		Disabled     []string                   `json:"disabled_surfaces"`
 		Read         bool                       `json:"read"`
 		Write        bool                       `json:"write"`
 		Integrations []string                   `json:"integrations"`
@@ -19,6 +21,10 @@ func personalAgentToolPolicyAllows(raw json.RawMessage, descriptor agenttools.De
 	}
 	if json.Unmarshal(raw, &policy) != nil {
 		return false
+	}
+	if policy.Mode == "inherit_invoker" {
+		surface := personalAgentToolSurface(descriptor)
+		return surface != "" && !containsString(policy.Disabled, surface)
 	}
 	if descriptor.Locality == agenttools.LocalityProvider {
 		provider := ""
@@ -45,6 +51,29 @@ func personalAgentToolPolicyAllows(raw json.RawMessage, descriptor agenttools.De
 		return policy.Read && policy.Write
 	default:
 		return false
+	}
+}
+
+func personalAgentToolSurface(descriptor agenttools.Descriptor) string {
+	if descriptor.Locality == agenttools.LocalityProvider || strings.HasPrefix(descriptor.Name, "provider.") {
+		return "connections"
+	}
+	name := strings.ToLower(descriptor.Name)
+	switch {
+	case strings.HasPrefix(name, "browser."):
+		return "browser"
+	case strings.HasPrefix(name, "files.") || strings.HasPrefix(name, "library."):
+		return "files"
+	case strings.HasPrefix(name, "terminal."):
+		return "terminal"
+	case strings.HasPrefix(name, "code.") || strings.HasPrefix(name, "editor."):
+		return "code_editor"
+	case strings.HasPrefix(name, "agents."):
+		return "agents"
+	case strings.HasPrefix(name, "extensions."):
+		return "extensions"
+	default:
+		return "spaces"
 	}
 }
 

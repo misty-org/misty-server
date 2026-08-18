@@ -75,6 +75,7 @@ func CreateServer() (*Server, error) {
 		WaitlistNotificationEmail: strings.TrimSpace(envconfig.Getenv("WAITLIST_NOTIFY_EMAIL")),
 		Telemetry:                 telemetry.NewFromEnv(),
 	}
+	usageMeter := appbilling.NewCreditMeter(s.Database)
 	s.AIAgent = serveragent.NewService(
 		// Agent execution state is attached to durable Space runs. The generic
 		// completion service must never recreate the retired private chat store.
@@ -85,7 +86,7 @@ func CreateServer() (*Server, error) {
 			serveragent.NewAgentProviderFromEnv(),
 			serveragent.ProviderBudgetFromEnv(),
 		),
-		serveragent.WithUsageMeter(appbilling.NewCreditMeter(s.Database)),
+		serveragent.WithUsageMeter(usageMeter),
 	)
 	s.LibraryStore, err = TestingLibraryStoreFromEnv()
 	if err != nil {
@@ -134,6 +135,12 @@ func CreateServer() (*Server, error) {
 		return nil, fmt.Errorf("configure journal collaboration: %w", err)
 	}
 	s.Spaces.SetJournalCollab(journalCollab)
+	agentRuntime, err := api.AgentRuntimeConfigFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("configure Agent runtime: %w", err)
+	}
+	s.Spaces.SetAgentRuntime(agentRuntime)
+	s.Spaces.SetUsageMeter(usageMeter)
 	s.Spaces.SetLibraryProvider(s.Library)
 	s.Spaces.SetAvatarStore(s.LibraryStore)
 	s.Realtime = api.NewRealtimeService(s.Database, s.Database.GetDSN())

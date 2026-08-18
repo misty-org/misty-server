@@ -102,6 +102,11 @@ func (s *Server) MountHandlers() error {
 	s.Router.MethodFunc(http.MethodGet, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
 	s.Router.MethodFunc(http.MethodPut, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
 	s.Router.MethodFunc(http.MethodDelete, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
+	s.Router.Post("/internal/agent-runtime/runs/{runID}/activate", s.Spaces.AgentRuntimeActivate())
+	s.Router.Post("/internal/agent-runtime/runs/{runID}/context", s.Spaces.AgentRuntimeContext())
+	s.Router.Post("/internal/agent-runtime/runs/{runID}/tools", s.Spaces.AgentRuntimeTool())
+	s.Router.Post("/internal/agent-runtime/runs/{runID}/events", s.Spaces.AgentRuntimeEvent())
+	s.Router.Post("/internal/agent-runtime/runs/{runID}/complete", s.Spaces.AgentRuntimeComplete())
 
 	// Account management
 	s.Router.Post("/register", registerHandler)

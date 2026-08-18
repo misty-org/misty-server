@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
+	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
@@ -179,15 +180,24 @@ func writeAgentError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "invalid_pairing_state"})
 	case errors.Is(err, db.ErrPersonalAgentConflict):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict"})
+	case errors.Is(err, db.ErrSpaceConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "run_conflict"})
 	case errors.Is(err, db.ErrSpaceInvalid):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_request"})
 	case errors.Is(err, db.ErrPersonalAgentModel):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_unavailable"})
+	case isHostedAILimitReached(err):
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"code": "hosted_ai_limit_reached"})
 	case errors.Is(err, db.ErrInvalidLease), errors.Is(err, db.ErrInvalidJobState):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "invalid_or_expired_lease"})
 	default:
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
+}
+
+func isHostedAILimitReached(err error) bool {
+	var exhausted serveragent.HostedAILimitReachedError
+	return errors.As(err, &exhausted)
 }
 
 func validText(value string, min, max int) bool {

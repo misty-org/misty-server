@@ -227,6 +227,10 @@ type SpaceRun struct {
 	NextRetryAt           *time.Time      `json:"next_retry_at,omitempty"`
 	SourceTaskID          string          `json:"source_task_id,omitempty"`
 	ActionEnvelope        json.RawMessage `json:"action_envelope,omitempty"`
+	RuntimeKind           string          `json:"runtime_kind,omitempty"`
+	RuntimeRunID          string          `json:"runtime_run_id,omitempty"`
+	RuntimePhase          string          `json:"runtime_phase,omitempty"`
+	RuntimeHeartbeatAt    *time.Time      `json:"runtime_heartbeat_at,omitempty"`
 }
 
 func (db *Database) TestingSpaceTx(ctx context.Context, fn func(*sql.Tx) error) error {

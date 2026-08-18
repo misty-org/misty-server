@@ -15,6 +15,10 @@ import (
 )
 
 func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, realtime *api.RealtimeService) {
+	s.Router.Get(prefix+"/agents/{agentID}/activity", spaces.PersonalAgentActivity())
+	s.Router.Get(prefix+"/agent-runs/{runID}", spaces.PersonalAgentRunDetail())
+	s.Router.Post(prefix+"/agent-runs/{runID}/cancel", spaces.CancelPersonalAgentRun())
+	s.Router.Post(prefix+"/agent-runs/{runID}/retry", spaces.RetryPersonalAgentRun())
 	s.Router.Get(prefix+"/search/global", spaces.GlobalSearch())
 	s.Router.Get(prefix+"/cloud/connections", spaces.CloudConnections())
 	s.Router.Post(prefix+"/cloud/connections/{provider}/authorize", spaces.BeginCloudAuthorization())

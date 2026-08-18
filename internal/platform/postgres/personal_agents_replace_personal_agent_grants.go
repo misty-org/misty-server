@@ -63,6 +63,12 @@ func (db *Database) ReplacePersonalAgentGrants(ctx context.Context, userID, agen
 		}
 		_, err := tx.ExecContext(ctx, `UPDATE personal_agent_space_grants SET enabled=FALSE,removed_at=NOW(),managed_by_user_id=$2,
 			version=version+1,updated_at=NOW() WHERE agent_id=$1 AND removed_at IS NULL AND NOT (space_id = ANY($3::text[]))`, agentID, userID, pqStringArray(mapKeys(seen)))
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE space_runs r SET state='canceled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
+			WHERE r.agent_id=$1 AND r.state IN ('queued','running','cooldown','awaiting_approval')
+			  AND NOT EXISTS(SELECT 1 FROM personal_agent_space_grants g WHERE g.agent_id=r.agent_id AND g.space_id=r.space_id AND g.enabled AND g.removed_at IS NULL)`, agentID)
 		return err
 	})
 	if err != nil {

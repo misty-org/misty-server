@@ -33,6 +33,16 @@ type SpacesService struct {
 	workers              sync.Once
 	invitationSender     mistyemail.SpaceInvitationSender
 	invitationBaseURL    string
+	agentRuntime         AgentRuntimeConfig
+	usageMeter           serveragent.UsageMeter
+}
+
+func (s *SpacesService) SetAgentRuntime(config AgentRuntimeConfig) {
+	s.agentRuntime = config
+}
+
+func (s *SpacesService) SetUsageMeter(meter serveragent.UsageMeter) {
+	s.usageMeter = meter
 }
 
 func (s *SpacesService) SetInvitationSender(

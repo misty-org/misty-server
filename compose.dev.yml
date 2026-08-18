@@ -57,6 +57,61 @@ services:
       retries: 20
     networks: [database, edge]
 
+  agent-runtime-postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: workflow
+      POSTGRES_PASSWORD: ${AGENT_RUNTIME_DB_PASSWORD:-workflow}
+      POSTGRES_DB: workflow
+    volumes:
+      - agent_runtime_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workflow -d workflow"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    networks: [agent-runtime-database]
+
+  agent-runtime-setup:
+    build:
+      context: ..
+      dockerfile: agent-runtime/Dockerfile
+      target: setup
+    restart: "no"
+    environment:
+      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
+      WORKFLOW_POSTGRES_URL: postgres://workflow:${AGENT_RUNTIME_DB_PASSWORD:-workflow}@agent-runtime-postgres:5432/workflow
+    depends_on:
+      agent-runtime-postgres:
+        condition: service_healthy
+    networks: [agent-runtime-database]
+
+  agent-runtime:
+    image: misty-agent-runtime-dev:local
+    build:
+      context: ..
+      dockerfile: agent-runtime/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
+      WORKFLOW_POSTGRES_URL: postgres://workflow:${AGENT_RUNTIME_DB_PASSWORD:-workflow}@agent-runtime-postgres:5432/workflow
+      MISTY_INTERNAL_API_BASE: http://api:8080
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+    depends_on:
+      agent-runtime-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/health >/dev/null"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    networks: [edge, agent-runtime-database]
+
   migrate:
     <<: *api-image
     restart: "no"
@@ -134,6 +189,13 @@ services:
       PARTYKIT_HOST: ${MISTY_CLOUDFLARE_WORKER_HOST:-misty-journal-collab-dev.mistysys.workers.dev}
       MISTY_JOURNAL_SERVER_ENV_FILE: /run/misty/journal-server.env
       STRIPE_WEBHOOK_SECRET_FILE: /run/misty/stripe-webhook-secret
+      MISTY_AGENT_RUNTIME_MODE: ${MISTY_AGENT_RUNTIME_MODE:-workflow}
+      MISTY_AGENT_RUNTIME_URL: http://agent-runtime:3000
+      MISTY_AGENT_RUNTIME_INTERNAL_API_URL: http://api:8080
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
+      MISTY_AGENT_RUNTIME_OWNER_IDS: ${MISTY_AGENT_RUNTIME_OWNER_IDS:-}
+      MISTY_AGENT_RUNTIME_AGENT_IDS: ${MISTY_AGENT_RUNTIME_AGENT_IDS:-}
     ports:
       - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"
     volumes:
@@ -144,6 +206,8 @@ services:
       dev-init:
         condition: service_completed_successfully
       stripe:
+        condition: service_healthy
+      agent-runtime:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
@@ -215,9 +279,12 @@ services:
 
 volumes:
   pgdata:
+  agent_runtime_pgdata:
   dev_runtime:
 
 networks:
   edge:
   database:
+    internal: true
+  agent-runtime-database:
     internal: true

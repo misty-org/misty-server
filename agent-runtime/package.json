@@ -1,0 +1,33 @@
+{
+  "name": "@misty/agent-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nitro dev",
+    "build": "nitro build",
+    "start": "node .output/server/index.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "world:setup": "bootstrap"
+  },
+  "dependencies": {
+    "@ai-sdk/workflow": "1.0.67",
+    "@opentelemetry/api": "1.9.1",
+    "@workflow/world-local": "4.2.4",
+    "@workflow/world-postgres": "4.3.3",
+    "@workflow/world-vercel": "4.6.2",
+    "ai": "7.0.66",
+    "express": "5.2.1",
+    "nitro": "3.0.260610-beta",
+    "workflow": "4.8.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.3",
+    "@types/node": "26.1.1",
+    "rollup": "4.62.4",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

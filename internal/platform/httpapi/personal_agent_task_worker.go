@@ -10,6 +10,11 @@ import (
 )
 
 func (s *SpacesService) ProcessAssignedPersonalAgentRuns(ctx context.Context, workerID string, limit int) (int, error) {
+	if s.agentRuntime.Enabled() {
+		if _, err := s.database.ReconcileStalePersonalAgentTaskRuns(ctx, time.Now().UTC().Add(-12*time.Minute), 20); err != nil {
+			return 0, err
+		}
+	}
 	jobs, err := s.database.ClaimPersonalAgentTaskRunJobs(ctx, workerID, limit, 90*time.Second)
 	if err != nil {
 		return 0, err
@@ -18,6 +23,42 @@ func (s *SpacesService) ProcessAssignedPersonalAgentRuns(ctx context.Context, wo
 	var firstErr error
 	for index := range jobs {
 		job := &jobs[index]
+		if s.agentRuntime.EnabledFor(job.Run.BillingUserID, job.Run.AgentID) {
+			runtimeRunID, dispatchErr := s.agentRuntime.Start(ctx, job.Run.ID)
+			if dispatchErr == nil {
+				_, dispatchErr = s.database.MarkPersonalAgentTaskRunDispatched(ctx, job.Run.ID, workerID, s.agentRuntime.Kind, runtimeRunID)
+			}
+			if dispatchErr == nil {
+				processed++
+				continue
+			}
+			message := strings.TrimSpace(dispatchErr.Error())
+			requeued, jobErr := s.database.FailPersonalAgentTaskRunJob(ctx, job.Run.ID, workerID, "agent_runtime_dispatch_failed", message, true)
+			if errors.Is(jobErr, db.ErrSpaceConflict) {
+				state, _, stateErr := s.database.PersonalAgentTaskRunJobState(ctx, job.Run.ID)
+				if stateErr == nil && state == "dispatched" {
+					processed++
+					continue
+				}
+				if stateErr != nil && firstErr == nil {
+					firstErr = stateErr
+				}
+				continue
+			}
+			if jobErr != nil && !errors.Is(jobErr, db.ErrSpaceConflict) {
+				if firstErr == nil {
+					firstErr = jobErr
+				}
+				continue
+			}
+			if requeued {
+				_, _ = s.database.AddSpaceTaskAgentActivity(ctx, job.Task.ID, job.Run.AgentID, job.Run.ID, "status", "Agent runtime was unavailable and will retry", TestingMustAPIRawJSON(map[string]any{"attempt": job.Attempt}))
+				continue
+			}
+			s.finishPersonalAgentTaskRun(ctx, &job.Run, &job.Task, "", dispatchErr)
+			processed++
+			continue
+		}
 		runCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 		leaseDone := make(chan struct{})
 		go s.renewAssignedAgentRunLease(runCtx, cancel, leaseDone, job.Run.ID, workerID)

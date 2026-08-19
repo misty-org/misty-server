@@ -59,10 +59,21 @@ func (db *Database) CreateSpaceConversationAgentMessageWithSourceLink(ctx contex
 }
 
 func (db *Database) createSpaceAgentMessageWithMembership(ctx context.Context, billingUserID, spaceID, conversationID, agentID string, content []MessageSpan, enforceMembership bool) (*SpaceMessage, error) {
+	return db.createSpaceAgentMessageWithProvenance(ctx, billingUserID, spaceID, conversationID, agentID, content, enforceMembership, "", nil)
+}
+
+func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, billingUserID, spaceID, conversationID, agentID string, content []MessageSpan, enforceMembership bool, replyToMessageID string, origin json.RawMessage) (*SpaceMessage, error) {
 	if err := TestingValidateMessage(content, nil); err != nil {
 		return nil, err
 	}
-	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), SpaceID: spaceID, ConversationID: conversationID, SenderUserID: billingUserID, SenderKind: "agent", SenderAgentID: agentID, Content: content, FileNodeIDs: []string{}, LibraryItemIDs: []string{}, Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}}
+	replyToMessageID = strings.TrimSpace(replyToMessageID)
+	if len(origin) == 0 {
+		origin = json.RawMessage(`{}`)
+	}
+	if !validJSONObject(origin) {
+		return nil, ErrSpaceInvalid
+	}
+	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), SpaceID: spaceID, ConversationID: conversationID, SenderUserID: billingUserID, SenderKind: "agent", SenderAgentID: agentID, Content: content, FileNodeIDs: []string{}, LibraryItemIDs: []string{}, Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID, Origin: origin}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceMessageWriteTx(ctx, tx, billingUserID, spaceID); err != nil {
 			return err
@@ -73,12 +84,8 @@ func (db *Database) createSpaceAgentMessageWithMembership(ctx context.Context, b
 			}
 		}
 		if enforceMembership {
-			membership, err := activePersonalAgentMembershipTx(ctx, tx, billingUserID, spaceID, agentID)
-			if err != nil {
+			if _, err := activePersonalAgentMembershipTx(ctx, tx, billingUserID, spaceID, agentID); err != nil {
 				return err
-			}
-			if !agentRolePermission(membership, PermissionMessagesRead) || !agentRolePermission(membership, PermissionMessagesWrite) {
-				return ErrSpaceForbidden
 			}
 		}
 		if conversationID != "" {
@@ -86,12 +93,18 @@ func (db *Database) createSpaceAgentMessageWithMembership(ctx context.Context, b
 				return err
 			}
 		}
+		if replyToMessageID != "" {
+			var exists bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3)`, replyToMessageID, spaceID, conversationID).Scan(&exists); err != nil || !exists {
+				return ErrSpaceInvalid
+			}
+		}
 		raw, _ := json.Marshal(content)
-		if err := tx.QueryRowContext(ctx, `INSERT INTO space_messages(id,space_id,conversation_id,sender_user_id,sender_kind,sender_agent_id,content)
-			VALUES($1,$2,NULLIF($3,''),$4,'agent',$5,$6) RETURNING seq,created_at`, out.ID, spaceID, conversationID, billingUserID, agentID, raw).Scan(&out.Seq, &out.CreatedAt); err != nil {
+		if err := tx.QueryRowContext(ctx, `INSERT INTO space_messages(id,space_id,conversation_id,sender_user_id,sender_kind,sender_agent_id,content,reply_to_message_id,origin)
+			VALUES($1,$2,NULLIF($3,''),$4,'agent',$5,$6,NULLIF($7,''),$8) RETURNING seq,created_at`, out.ID, spaceID, conversationID, billingUserID, agentID, raw, replyToMessageID, origin).Scan(&out.Seq, &out.CreatedAt); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT v.name FROM personal_agent_space_grants g JOIN personal_agent_versions v ON v.id=g.approved_version_id WHERE g.agent_id=$1 AND g.space_id=$2 LIMIT 1),'Former agent')`, agentID, spaceID).Scan(&out.SenderName); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT name FROM personal_agents WHERE id=$1),'Former agent')`, agentID).Scan(&out.SenderName); err != nil {
 			return err
 		}
 		out.Sender = SpaceMessageSender{Kind: "agent", AgentID: agentID, DisplayName: out.SenderName}

@@ -261,6 +261,24 @@ async function handleControl(response, room, command, payload) {
     }
     return writeJSON(response, 200, { ok: true, initialized });
   }
+  if (command === "replace_markdown") {
+    const title = typeof payload.title === "string" ? payload.title.trim() : "";
+    const markdown = typeof payload.markdown === "string" ? payload.markdown.trim() : "";
+    if (room.resourceType !== "note" || !title || title.length > 500 || markdown.length > 100_000) {
+      return writeJSON(response, 400, { code: "invalid_note_content" });
+    }
+    room.doc.transact(() => {
+      const metadata = room.doc.getMap("misty:bootstrap");
+      metadata.set("title", title);
+      metadata.set("markdown", markdown);
+      metadata.set("format", "markdown");
+      const text = room.doc.getText("markdown");
+      text.delete(0, text.length);
+      if (markdown) text.insert(0, markdown);
+    });
+    await persist(room);
+    return writeJSON(response, 200, { ok: true });
+  }
   if (command === "acl") {
     const version = Number(payload.acl_version);
     if (!Number.isInteger(version) || version < 1) return writeJSON(response, 400, { code: "invalid_acl_version" });

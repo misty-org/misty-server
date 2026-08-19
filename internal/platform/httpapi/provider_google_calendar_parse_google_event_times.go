@@ -108,6 +108,10 @@ func (s *SpacesService) ReconcileGoogleCalendars(ctx context.Context, limit int)
 }
 
 func googleCalendarRequest(ctx context.Context, token, tokenType, method, endpoint string, body any) ([]byte, error) {
+	return googleCalendarRequestWithHeaders(ctx, token, tokenType, method, endpoint, body, nil)
+}
+
+func googleCalendarRequestWithHeaders(ctx context.Context, token, tokenType, method, endpoint string, body any, headers http.Header) ([]byte, error) {
 	var reader io.Reader
 	if body != nil {
 		encoded, _ := json.Marshal(body)
@@ -125,7 +129,18 @@ func googleCalendarRequest(ctx context.Context, token, tokenType, method, endpoi
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
+	for key, values := range headers {
+		for _, value := range values {
+			request.Header.Add(key, value)
+		}
+	}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -159,17 +174,32 @@ func TestingProviderInfrastructureURL(parts ...string) string {
 
 func providerErrorCode(err error) string {
 	var apiErr *googleAPIError
+	status := 0
 	if errors.As(err, &apiErr) {
-		switch apiErr.Status {
+		status = apiErr.Status
+	}
+	var providerErr *providerAPIError
+	if errors.As(err, &providerErr) {
+		status = providerErr.Status
+	}
+	if status != 0 {
+		switch status {
 		case http.StatusUnauthorized:
 			return "connection_revoked"
 		case http.StatusForbidden:
 			return "permission_missing"
 		case http.StatusTooManyRequests:
 			return "rate_limited"
+		case http.StatusNotFound:
+			return "not_found"
 		case http.StatusGone:
 			return "cursor_expired"
+		case http.StatusPreconditionFailed:
+			return "conflict"
 		}
+	}
+	if errors.Is(err, db.ErrSpaceConflict) {
+		return "conflict"
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "provider_timeout"
@@ -177,12 +207,25 @@ func providerErrorCode(err error) string {
 	return "provider_unavailable"
 }
 
+func TestingProviderErrorCodeForStatus(status int) string {
+	return providerErrorCode(&providerAPIError{Status: status})
+}
+
 func writeProviderFailure(w http.ResponseWriter, err error) {
 	var apiErr *googleAPIError
-	if errors.As(err, &apiErr) {
+	var providerErr *providerAPIError
+	if errors.As(err, &apiErr) || errors.As(err, &providerErr) {
 		status := http.StatusBadGateway
-		if apiErr.Status == http.StatusUnauthorized || apiErr.Status == http.StatusForbidden {
+		providerStatus := 0
+		if apiErr != nil {
+			providerStatus = apiErr.Status
+		} else if providerErr != nil {
+			providerStatus = providerErr.Status
+		}
+		if providerStatus == http.StatusUnauthorized || providerStatus == http.StatusForbidden {
 			status = http.StatusFailedDependency
+		} else if providerStatus == http.StatusPreconditionFailed {
+			status = http.StatusConflict
 		}
 		writeJSON(w, status, map[string]string{"code": providerErrorCode(err)})
 		return

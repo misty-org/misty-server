@@ -124,6 +124,9 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 		if n, _ := result.RowsAffected(); n == 0 {
 			return ErrSpaceNotFound
 		}
+		if err := cancelCreatorSpaceRunsTx(ctx, tx, memberID, spaceID, "space_membership_revoked"); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE space_agents SET schedules_enabled=FALSE WHERE space_id=$1 AND creator_user_id=$2`, spaceID, memberID); err != nil {
 			return err
 		}
@@ -163,6 +166,9 @@ func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) erro
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`, spaceID, userID); err != nil {
+			return err
+		}
+		if err := cancelCreatorSpaceRunsTx(ctx, tx, userID, spaceID, "space_membership_revoked"); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE space_agents SET schedules_enabled=FALSE WHERE space_id=$1 AND creator_user_id=$2`, spaceID, userID); err != nil {

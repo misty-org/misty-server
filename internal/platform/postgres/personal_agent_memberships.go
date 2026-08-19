@@ -5,41 +5,40 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
-
-var defaultAgentSpacePermissions = json.RawMessage(`{"messages.read":true,"messages.write":true,"tasks.view":true,"tasks.manage":true,"attached_files.read":true}`)
 
 type SpaceAgentMembership struct {
 	ID                string          `json:"id"`
 	SpaceID           string          `json:"space_id"`
 	AgentID           string          `json:"agent_id"`
 	OwnerUserID       string          `json:"owner_user_id"`
+	CanControl        bool            `json:"can_control"`
 	Name              string          `json:"name"`
-	Role              string          `json:"role"`
+	Role              string          `json:"-"`
 	Description       string          `json:"description"`
 	Icon              string          `json:"icon"`
 	Avatar            json.RawMessage `json:"avatar"`
 	Instructions      string          `json:"instructions,omitempty"`
 	ModelID           string          `json:"model_id,omitempty"`
 	ReasoningEffort   string          `json:"reasoning_effort,omitempty"`
+	DefaultRunMode    string          `json:"default_run_mode"`
 	Enabled           bool            `json:"enabled"`
-	RoleID            string          `json:"role_id"`
-	CapabilityGrants  json.RawMessage `json:"capability_grants"`
+	RoleID            string          `json:"-"`
+	CapabilityGrants  json.RawMessage `json:"-"`
 	RolePermissions   json.RawMessage `json:"-"`
-	ApprovedVersionID string          `json:"approved_version_id"`
-	ApprovedVersion   int64           `json:"approved_version"`
-	LatestVersionID   string          `json:"latest_version_id"`
-	LatestVersion     int64           `json:"latest_version"`
-	UpdateAvailable   bool            `json:"update_available"`
-	SpaceRole         string          `json:"space_role"`
-	SpaceInstructions string          `json:"space_instructions,omitempty"`
-	Permissions       json.RawMessage `json:"permissions"`
-	ManagedByUserID   string          `json:"managed_by_user_id,omitempty"`
-	MembershipVersion int64           `json:"membership_version"`
+	ApprovedVersionID string          `json:"-"`
+	ApprovedVersion   int64           `json:"version"`
+	LatestVersionID   string          `json:"-"`
+	LatestVersion     int64           `json:"-"`
+	UpdateAvailable   bool            `json:"-"`
+	SpaceRole         string          `json:"-"`
+	SpaceInstructions string          `json:"-"`
+	Permissions       json.RawMessage `json:"-"`
+	ManagedByUserID   string          `json:"-"`
+	MembershipVersion int64           `json:"-"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
 	WorkState         string          `json:"work_state"`
@@ -48,24 +47,13 @@ type SpaceAgentMembership struct {
 	CurrentTaskID     string          `json:"current_task_id,omitempty"`
 }
 
-type SpaceAgentMembershipInput struct {
-	AgentID           string          `json:"agent_id"`
-	Enabled           *bool           `json:"enabled,omitempty"`
-	RoleID            *string         `json:"role_id,omitempty"`
-	CapabilityGrants  json.RawMessage `json:"capability_grants,omitempty"`
-	SpaceRole         *string         `json:"space_role,omitempty"`
-	SpaceInstructions string          `json:"space_instructions,omitempty"`
-	Permissions       json.RawMessage `json:"permissions,omitempty"`
-	MembershipVersion int64           `json:"membership_version,omitempty"`
-}
-
-const spaceAgentMembershipColumns = `g.id,g.space_id,g.agent_id,a.owner_user_id,v.name,v.role,v.description,v.icon,v.avatar,v.instructions,v.model_id,v.reasoning_effort,g.enabled,
-	COALESCE(g.role_id,''),g.capability_grants,COALESCE(agent_role.permissions,'[]'::jsonb),
-	g.approved_version_id,v.version,latest.id,latest.version,(g.approved_version_id<>latest.id),g.space_role,g.space_instructions,
-	g.permissions,COALESCE(g.managed_by_user_id,''),g.version,g.created_at,g.updated_at,
-	CASE WHEN NOT g.enabled OR NOT a.enabled THEN 'disabled'
-		WHEN g.approved_version_id<>latest.id THEN 'update_available'
-		WHEN COALESCE(run_summary.awaiting_count,0)>0 THEN 'needs_approval'
+const spaceAgentMembershipColumns = `'companion:'||$1||':'||a.id,$1,a.id,a.owner_user_id,v.name,v.role,v.description,v.icon,v.avatar,v.instructions,v.model_id,v.reasoning_effort,v.default_run_mode,a.enabled,
+	'', '[]'::jsonb, '[]'::jsonb,
+	v.id,v.version,v.id,v.version,FALSE,v.role,'',
+	'{}'::jsonb,a.owner_user_id,a.version,a.created_at,a.updated_at,
+	CASE WHEN NOT a.enabled THEN 'disabled'
+		WHEN COALESCE(run_summary.awaiting_count,0)>0 THEN 'awaiting_approval'
+		WHEN COALESCE(run_summary.device_count,0)>0 THEN 'awaiting_device'
 		WHEN COALESCE(run_summary.working_count,0)>0 THEN 'working'
 		WHEN run_summary.latest_state IN ('failed','completed_with_errors') THEN 'failed'
 		ELSE 'ready' END,
@@ -74,18 +62,16 @@ const spaceAgentMembershipColumns = `g.id,g.space_id,g.agent_id,a.owner_user_id,
 
 func scanSpaceAgentMembership(row scanner, out *SpaceAgentMembership) error {
 	return row.Scan(&out.ID, &out.SpaceID, &out.AgentID, &out.OwnerUserID, &out.Name, &out.Role, &out.Description, &out.Icon, &out.Avatar, &out.Instructions, &out.ModelID, &out.ReasoningEffort,
-		&out.Enabled, &out.RoleID, &out.CapabilityGrants, &out.RolePermissions, &out.ApprovedVersionID, &out.ApprovedVersion, &out.LatestVersionID, &out.LatestVersion,
+		&out.DefaultRunMode, &out.Enabled, &out.RoleID, &out.CapabilityGrants, &out.RolePermissions, &out.ApprovedVersionID, &out.ApprovedVersion, &out.LatestVersionID, &out.LatestVersion,
 		&out.UpdateAvailable, &out.SpaceRole, &out.SpaceInstructions, &out.Permissions, &out.ManagedByUserID, &out.MembershipVersion,
 		&out.CreatedAt, &out.UpdatedAt, &out.WorkState, &out.AttentionCount, &out.LastActivityAt, &out.CurrentTaskID)
 }
 
-const spaceAgentMembershipJoins = ` FROM personal_agent_space_grants g
-	JOIN personal_agents a ON a.id=g.agent_id AND a.deleted_at IS NULL
-	JOIN personal_agent_versions v ON v.id=g.approved_version_id AND v.agent_id=g.agent_id
-	JOIN personal_agent_versions latest ON latest.agent_id=a.id AND latest.version=a.version
-	LEFT JOIN space_roles agent_role ON agent_role.id=g.role_id AND agent_role.space_id=g.space_id
+const spaceAgentMembershipJoins = ` FROM personal_agents a
+	JOIN personal_agent_versions v ON v.agent_id=a.id AND v.version=a.version
 	LEFT JOIN LATERAL (
 		SELECT COUNT(*) FILTER (WHERE r.state='awaiting_approval') AS awaiting_count,
+			COUNT(*) FILTER (WHERE r.state='awaiting_device') AS device_count,
 			COUNT(*) FILTER (WHERE r.state IN ('queued','running','cooldown')) AS working_count,
 			(ARRAY_AGG(r.state ORDER BY r.updated_at DESC))[1] AS latest_state,
 			MAX(r.updated_at) AS last_activity_at,
@@ -93,8 +79,7 @@ const spaceAgentMembershipJoins = ` FROM personal_agent_space_grants g
 				WHERE r.source_task_id IS NOT NULL AND r.state IN ('queued','running','cooldown','awaiting_approval','failed','completed_with_errors')
 			))[1] AS current_task_id
 		FROM space_runs r
-		WHERE r.space_id=g.space_id AND r.agent_id=g.agent_id
-			AND r.source_type IN ('task','schedule','group_mention')
+		WHERE r.space_id=$1 AND r.agent_id=a.id
 	) run_summary ON TRUE `
 
 func (db *Database) SpaceAgentMemberships(ctx context.Context, userID, spaceID string) ([]SpaceAgentMembership, error) {
@@ -103,12 +88,11 @@ func (db *Database) SpaceAgentMemberships(ctx context.Context, userID, spaceID s
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
-		canManage, err := hasSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAgentsManage)
-		if err != nil {
-			return err
-		}
 		rows, err := tx.QueryContext(ctx, `SELECT `+spaceAgentMembershipColumns+spaceAgentMembershipJoins+`
-			WHERE g.space_id=$1 AND g.removed_at IS NULL ORDER BY lower(v.name),g.id`, spaceID)
+			WHERE a.deleted_at IS NULL AND ((a.owner_user_id=$2 AND a.enabled) OR EXISTS(
+				SELECT 1 FROM space_tasks t WHERE t.space_id=$1 AND t.assignee_agent_id=a.id
+			) OR EXISTS(SELECT 1 FROM space_messages m WHERE m.space_id=$1 AND m.sender_agent_id=a.id))
+			ORDER BY lower(v.name),a.id`, spaceID, userID)
 		if err != nil {
 			return err
 		}
@@ -118,9 +102,10 @@ func (db *Database) SpaceAgentMemberships(ctx context.Context, userID, spaceID s
 			if err := scanSpaceAgentMembership(rows, &item); err != nil {
 				return err
 			}
-			if !canManage {
+			if item.OwnerUserID != userID {
 				item.Instructions, item.SpaceInstructions, item.ModelID, item.ReasoningEffort = "", "", "", ""
 			}
+			item.CanControl = item.OwnerUserID == userID && item.Enabled
 			items = append(items, item)
 		}
 		return rows.Err()
@@ -135,204 +120,33 @@ func (db *Database) SpaceAgentMembership(ctx context.Context, userID, spaceID, a
 			return err
 		}
 		return scanSpaceAgentMembership(tx.QueryRowContext(ctx, `SELECT `+spaceAgentMembershipColumns+spaceAgentMembershipJoins+`
-			WHERE g.space_id=$1 AND g.agent_id=$2 AND g.removed_at IS NULL`, spaceID, agentID), out)
+			WHERE a.id=$2 AND a.deleted_at IS NULL AND ((a.owner_user_id=$3 AND a.enabled) OR EXISTS(
+				SELECT 1 FROM space_tasks t WHERE t.space_id=$1 AND t.assignee_agent_id=a.id
+			) OR EXISTS(SELECT 1 FROM space_messages m WHERE m.space_id=$1 AND m.sender_agent_id=a.id))`, spaceID, agentID, userID), out)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrPersonalAgentNotFound
 	}
+	out.CanControl = out.OwnerUserID == userID && out.Enabled
 	return out, err
 }
 
-func (db *Database) AddSpaceAgentMembership(ctx context.Context, userID, spaceID string, input SpaceAgentMembershipInput) (*SpaceAgentMembership, error) {
-	input.AgentID = strings.TrimSpace(input.AgentID)
-	spaceRole := ""
-	if input.SpaceRole != nil {
-		spaceRole = strings.TrimSpace(*input.SpaceRole)
-	}
-	input.SpaceInstructions = strings.TrimSpace(input.SpaceInstructions)
-	permissions, err := normalizeAgentSpacePermissions(input.Permissions)
-	if err != nil || input.AgentID == "" || len([]rune(spaceRole)) > 80 || len([]rune(input.SpaceInstructions)) > 16_000 {
-		return nil, ErrSpaceInvalid
-	}
-	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAgentsManage); err != nil {
-			return err
-		}
-		var owner string
-		var latestVersionID string
-		var latestRole string
-		var requestedCapabilities json.RawMessage
-		if err := tx.QueryRowContext(ctx, `SELECT a.owner_user_id,v.id,v.role,v.tool_permissions FROM personal_agents a JOIN personal_agent_versions v ON v.agent_id=a.id AND v.version=a.version
-			WHERE a.id=$1 AND a.enabled AND a.deleted_at IS NULL`, input.AgentID).Scan(&owner, &latestVersionID, &latestRole, &requestedCapabilities); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrPersonalAgentNotFound
-			}
-			return err
-		}
-		if owner != userID {
-			return ErrSpaceForbidden
-		}
-		if input.SpaceRole == nil {
-			spaceRole = latestRole
-		}
-		roleID := ""
-		if input.RoleID != nil {
-			roleID = strings.TrimSpace(*input.RoleID)
-		}
-		if roleID == "" {
-			roleID, err = ensureAgentMemberRoleTx(ctx, tx, spaceID)
-			if err != nil {
-				return err
-			}
-		}
-		if err := validateAgentMemberRoleTx(ctx, tx, spaceID, roleID); err != nil {
-			return err
-		}
-		capabilityGrants, err := normalizeMembershipCapabilityGrants(input.CapabilityGrants, requestedCapabilities)
-		if err != nil {
-			return err
-		}
-		id := "agentgrant_" + uuid.NewString()
-		_, err = tx.ExecContext(ctx, `INSERT INTO personal_agent_space_grants(
-			id,agent_id,space_id,all_members,created_by_user_id,enabled,approved_version_id,space_role,space_instructions,permissions,managed_by_user_id,role_id,capability_grants,removed_at
-		) VALUES($1,$2,$3,TRUE,$4,TRUE,$5,$6,$7,$8,$4,$9,$10,NULL)
-		ON CONFLICT(agent_id,space_id) DO UPDATE SET all_members=TRUE,enabled=TRUE,approved_version_id=$5,
-			space_role=$6,space_instructions=$7,permissions=$8,managed_by_user_id=$4,role_id=$9,capability_grants=$10,removed_at=NULL,version=personal_agent_space_grants.version+1,updated_at=NOW()`,
-			id, input.AgentID, spaceID, userID, latestVersionID, spaceRole, input.SpaceInstructions, permissions, roleID, capabilityGrants)
-		if err != nil {
-			return err
-		}
-		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "agent.membership.added", input.AgentID, map[string]any{"agent_id": input.AgentID})
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return db.SpaceAgentMembership(ctx, userID, spaceID, input.AgentID)
-}
-
-func (db *Database) UpdateSpaceAgentMembership(ctx context.Context, userID, spaceID, agentID string, input SpaceAgentMembershipInput) (*SpaceAgentMembership, error) {
-	var spaceRole any
-	if input.SpaceRole != nil {
-		normalized := strings.TrimSpace(*input.SpaceRole)
-		if len([]rune(normalized)) > 80 {
-			return nil, ErrSpaceInvalid
-		}
-		spaceRole = normalized
-	}
-	input.SpaceInstructions = strings.TrimSpace(input.SpaceInstructions)
-	permissions, err := normalizeAgentSpacePermissions(input.Permissions)
-	if err != nil || input.MembershipVersion < 1 || len([]rune(input.SpaceInstructions)) > 16_000 {
-		return nil, ErrSpaceInvalid
-	}
-	enabled := true
-	if input.Enabled != nil {
-		enabled = *input.Enabled
-	}
-	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAgentsManage); err != nil {
-			return err
-		}
-		var roleID any
-		if input.RoleID != nil {
-			normalized := strings.TrimSpace(*input.RoleID)
-			if err := validateAgentMemberRoleTx(ctx, tx, spaceID, normalized); err != nil {
-				return err
-			}
-			roleID = normalized
-		}
-		var capabilityGrants any
-		if len(input.CapabilityGrants) > 0 {
-			var requested json.RawMessage
-			if err := tx.QueryRowContext(ctx, `SELECT v.tool_permissions FROM personal_agent_space_grants g JOIN personal_agent_versions v ON v.id=g.approved_version_id WHERE g.space_id=$1 AND g.agent_id=$2 AND g.removed_at IS NULL`, spaceID, agentID).Scan(&requested); err != nil {
-				return err
-			}
-			capabilityGrants, err = normalizeMembershipCapabilityGrants(input.CapabilityGrants, requested)
-			if err != nil {
-				return err
-			}
-		}
-		result, err := tx.ExecContext(ctx, `UPDATE personal_agent_space_grants SET enabled=$1,space_role=COALESCE($2,space_role),space_instructions=$3,permissions=$4,
-			managed_by_user_id=$5,role_id=COALESCE($9,role_id),capability_grants=COALESCE($10,capability_grants),version=version+1,updated_at=NOW() WHERE space_id=$6 AND agent_id=$7 AND removed_at IS NULL AND version=$8`,
-			enabled, spaceRole, input.SpaceInstructions, permissions, userID, spaceID, agentID, input.MembershipVersion, roleID, capabilityGrants)
-		if err != nil {
-			return err
-		}
-		if changed, _ := result.RowsAffected(); changed != 1 {
-			return ErrSpaceConflict
-		}
-		if !enabled {
-			_, _ = tx.ExecContext(ctx, `UPDATE space_runs SET state='canceled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
-				WHERE space_id=$1 AND agent_id=$2 AND state IN ('queued','running','cooldown','awaiting_approval')`, spaceID, agentID)
-		}
-		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "agent.membership.updated", agentID, map[string]any{"enabled": enabled})
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return db.SpaceAgentMembership(ctx, userID, spaceID, agentID)
-}
-
-func (db *Database) ApproveSpaceAgentVersion(ctx context.Context, userID, spaceID, agentID string) (*SpaceAgentMembership, error) {
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAgentsManage); err != nil {
-			return err
-		}
-		result, err := tx.ExecContext(ctx, `UPDATE personal_agent_space_grants g SET approved_version_id=v.id,managed_by_user_id=$1,
-			capability_grants=COALESCE((SELECT jsonb_agg(existing.value)
-				FROM jsonb_array_elements(g.capability_grants) existing(value)
-				WHERE EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(v.tool_permissions->'grants','[]'::jsonb)) requested
-					WHERE requested->>'capability'=existing.value->>'capability' AND requested->>'risk'=existing.value->>'risk')),'[]'::jsonb),
-			version=g.version+1,updated_at=NOW() FROM personal_agents a JOIN personal_agent_versions v ON v.agent_id=a.id AND v.version=a.version
-			WHERE g.space_id=$2 AND g.agent_id=$3 AND g.agent_id=a.id AND g.removed_at IS NULL`, userID, spaceID, agentID)
-		if err != nil {
-			return err
-		}
-		if changed, _ := result.RowsAffected(); changed != 1 {
-			return ErrPersonalAgentNotFound
-		}
-		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "agent.membership.version_approved", agentID, map[string]any{})
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return db.SpaceAgentMembership(ctx, userID, spaceID, agentID)
-}
-
-func (db *Database) RemoveSpaceAgentMembership(ctx context.Context, userID, spaceID, agentID string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAgentsManage); err != nil {
-			return err
-		}
-		result, err := tx.ExecContext(ctx, `UPDATE personal_agent_space_grants SET enabled=FALSE,removed_at=NOW(),managed_by_user_id=$1,
-			version=version+1,updated_at=NOW() WHERE space_id=$2 AND agent_id=$3 AND removed_at IS NULL`, userID, spaceID, agentID)
-		if err != nil {
-			return err
-		}
-		if changed, _ := result.RowsAffected(); changed != 1 {
-			return ErrPersonalAgentNotFound
-		}
-		_, _ = tx.ExecContext(ctx, `UPDATE space_runs SET state='canceled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
-			WHERE space_id=$1 AND agent_id=$2 AND state IN ('queued','running','cooldown','awaiting_approval')`, spaceID, agentID)
-		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "agent.membership.removed", agentID, map[string]any{})
-		return err
-	})
-}
-
 func activePersonalAgentMembershipTx(ctx context.Context, tx *sql.Tx, userID, spaceID, agentID string) (*SpaceAgentMembership, error) {
-	if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAgentsRun); err != nil {
+	if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 		return nil, err
 	}
 	out := &SpaceAgentMembership{}
 	err := scanSpaceAgentMembership(tx.QueryRowContext(ctx, `SELECT `+spaceAgentMembershipColumns+spaceAgentMembershipJoins+`
-		WHERE g.space_id=$1 AND g.agent_id=$2 AND g.removed_at IS NULL AND g.enabled AND a.enabled AND
-			(g.all_members OR a.owner_user_id=$3 OR EXISTS(SELECT 1 FROM personal_agent_member_grants mg WHERE mg.grant_id=g.id AND mg.user_id=$3))`, spaceID, agentID, userID), out)
+		WHERE a.id=$2 AND a.owner_user_id=$3 AND a.deleted_at IS NULL AND a.enabled
+		AND EXISTS(SELECT 1 FROM space_members owner_membership WHERE owner_membership.space_id=$1 AND owner_membership.user_id=a.owner_user_id)`, spaceID, agentID, userID), out)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrPersonalAgentNotFound
 	}
 	return out, err
+}
+
+func personalAgentAllowedTx(ctx context.Context, tx *sql.Tx, userID, spaceID, agentID string) (*SpaceAgentMembership, error) {
+	return activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID)
 }
 
 func (db *Database) EffectiveAgentSpacePermission(ctx context.Context, userID, spaceID, agentID, permission string) (bool, error) {
@@ -342,11 +156,10 @@ func (db *Database) EffectiveAgentSpacePermission(ctx context.Context, userID, s
 		if err != nil || !memberAllowed {
 			return err
 		}
-		membership, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID)
-		if err != nil {
+		if _, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID); err != nil {
 			return err
 		}
-		allowed = agentRolePermission(membership, permission)
+		allowed = memberAllowed
 		return nil
 	})
 	return allowed, err
@@ -355,88 +168,40 @@ func (db *Database) EffectiveAgentSpacePermission(ctx context.Context, userID, s
 func (db *Database) EffectivePersonalAgentToolPermissions(ctx context.Context, userID, spaceID, agentID string) (json.RawMessage, error) {
 	var raw json.RawMessage
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		membership, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID)
-		if err != nil {
+		if _, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID); err != nil {
 			return err
 		}
-		var requested json.RawMessage
-		if err := tx.QueryRowContext(ctx, `SELECT v.tool_permissions FROM personal_agent_versions v WHERE v.id=$1 AND v.agent_id=$2`, membership.ApprovedVersionID, agentID).Scan(&requested); err != nil {
-			return err
-		}
-		var policy struct {
-			Read         bool                   `json:"read"`
-			Write        bool                   `json:"write"`
-			Integrations []string               `json:"integrations"`
-			Grants       []AgentCapabilityGrant `json:"grants"`
-		}
-		var approved []AgentCapabilityGrant
-		if json.Unmarshal(requested, &policy) != nil || json.Unmarshal(membership.CapabilityGrants, &approved) != nil {
-			return ErrSpaceInvalid
-		}
-		allowed := map[string]bool{}
-		for _, grant := range approved {
-			allowed[grant.Capability+"\x00"+grant.Risk] = true
-		}
-		filtered := make([]AgentCapabilityGrant, 0, len(policy.Grants))
-		for _, grant := range policy.Grants {
-			if allowed[grant.Capability+"\x00"+grant.Risk] {
-				filtered = append(filtered, grant)
-			}
-		}
-		policy.Grants = filtered
-		raw, err = json.Marshal(policy)
-		return err
+		raw = json.RawMessage(`{"mode":"inherit_creator","read":true,"write":true,"integrations":["discord","google","notion","slack"]}`)
+		return nil
 	})
 	return raw, err
 }
 
-// PersonalAgentToolPermissionsForSpace returns the owner-authored action policy
-// to the server after proving the requester can see the Agent in this Space.
-// Callers use it to build a public capability manual; the raw policy is never
-// returned to Space members.
+// PersonalAgentToolPermissionsForSpace returns the creator-inherited action
+// policy after proving the creator can currently use the Agent in this Space.
 func (db *Database) PersonalAgentToolPermissionsForSpace(ctx context.Context, userID, spaceID, agentID string) (json.RawMessage, error) {
 	var raw json.RawMessage
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if _, err := personalAgentAllowedTx(ctx, tx, userID, spaceID, agentID); err != nil {
+		if _, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID); err != nil {
 			return err
 		}
-		err := tx.QueryRowContext(ctx, `SELECT a.tool_permissions FROM personal_agents a
-			JOIN personal_agent_space_grants g ON g.agent_id=a.id
-			WHERE a.id=$1 AND g.space_id=$2 AND g.removed_at IS NULL`, agentID, spaceID).Scan(&raw)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrPersonalAgentNotFound
-		}
-		return err
+		raw = json.RawMessage(`{"mode":"inherit_creator","read":true,"write":true,"integrations":["discord","google","notion","slack"]}`)
+		return nil
 	})
 	return raw, err
 }
 
-// EffectivePersonalAgentContextPermissions returns the owner-configured
-// readable-context policy only after rechecking that both the member and Agent
-// still have an active grant to the Space. Context is authorization too: a
-// revoked or disabled Agent must lose it on the very next turn.
+// EffectivePersonalAgentContextPermissions returns the companion's fixed Space
+// context after rechecking creator membership and enabled state. Membership
+// revocation or disabling the Agent takes effect on the next operation.
 func (db *Database) EffectivePersonalAgentContextPermissions(ctx context.Context, userID, spaceID, agentID string) (json.RawMessage, error) {
 	var raw json.RawMessage
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		membership, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID)
-		if err != nil {
+		if _, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT context_permissions FROM personal_agents WHERE id=$1 AND enabled AND deleted_at IS NULL`, agentID).Scan(&raw); err != nil {
-			return err
-		}
-		var allowed map[string]bool
-		if json.Unmarshal(raw, &allowed) != nil || allowed == nil {
-			return ErrSpaceInvalid
-		}
-		if !agentMembershipPermission(membership.Permissions, PermissionMessagesRead) {
-			allowed["space_chat"] = false
-		}
-		if !agentMembershipPermission(membership.Permissions, PermissionTasksView) {
-			allowed["tasks"], allowed["task_notes"], allowed["notes"] = false, false, false
-		}
-		raw, err = json.Marshal(allowed)
-		return err
+		raw = json.RawMessage(`{"space_chat":true,"library":true,"task_notes":true,"tasks":true,"members":true}`)
+		return nil
 	})
 	return raw, err
 }

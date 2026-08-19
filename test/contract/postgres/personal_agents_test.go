@@ -73,24 +73,19 @@ func TestPersonalAgentOwnershipSpaceMembershipAndConversationIsolation(t *testin
 		t.Fatalf("private Agent visible to member: %#v, %v", agents, err)
 	}
 
-	grants, err := database.ReplacePersonalAgentGrants(ctx, owner.ID, created.ID, []PersonalAgentGrantInput{{
-		SpaceID: space.ID, MemberUserIDs: []string{member.ID},
-	}})
-	if err != nil || len(grants) != 1 || !grants[0].AllMembers || len(grants[0].MemberUserIDs) != 0 {
-		t.Fatalf("grants = %#v, %v", grants, err)
+	ownerAgents, err := database.AccessiblePersonalAgents(ctx, owner.ID, space.ID)
+	if err != nil || len(ownerAgents) != 1 || ownerAgents[0].DefaultRunMode != "auto" {
+		t.Fatalf("creator Agents = %#v, %v", ownerAgents, err)
 	}
 	memberAgents, err := database.AccessiblePersonalAgents(ctx, member.ID, space.ID)
-	if err != nil || len(memberAgents) != 1 {
-		t.Fatalf("shared Agents = %#v, %v", memberAgents, err)
-	}
-	if memberAgents[0].Instructions != "" || len(memberAgents[0].ContextPermissions) != 0 || len(memberAgents[0].ToolPermissions) != 0 {
-		t.Fatalf("shared Agent exposed private configuration: %#v", memberAgents[0])
+	if err != nil || len(memberAgents) != 0 {
+		t.Fatalf("another member discovered an unused Agent: %#v, %v", memberAgents, err)
 	}
 	privateMemberAgents, err := database.AccessiblePersonalAgents(ctx, privateMember.ID, space.ID)
-	if err != nil || len(privateMemberAgents) != 1 {
-		t.Fatalf("Space member could not see first-class Agent membership: %#v, %v", privateMemberAgents, err)
+	if err != nil || len(privateMemberAgents) != 0 {
+		t.Fatalf("another member discovered an unused Agent: %#v, %v", privateMemberAgents, err)
 	}
-	effectiveContext, err := database.EffectivePersonalAgentContextPermissions(ctx, member.ID, space.ID, created.ID)
+	effectiveContext, err := database.EffectivePersonalAgentContextPermissions(ctx, owner.ID, space.ID, created.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,26 +93,10 @@ func TestPersonalAgentOwnershipSpaceMembershipAndConversationIsolation(t *testin
 	if json.Unmarshal(effectiveContext, &effective) != nil || !effective["members"] || !effective["library"] || !effective["tasks"] {
 		t.Fatalf("effective Agent context did not preserve configured readable sections: %s", effectiveContext)
 	}
-	snapshot, err := database.PersonalAgentSpaceContext(ctx, member.ID, space.ID, effectiveContext)
+	snapshot, err := database.PersonalAgentSpaceContext(ctx, owner.ID, space.ID, effectiveContext)
 	if err != nil || !strings.Contains(snapshot, "Members:") || !strings.Contains(snapshot, "Agent Owner (owner)") {
 		t.Fatalf("Agent context omitted permitted Space members: %q, %v", snapshot, err)
 	}
-	membership, err := database.SpaceAgentMembership(ctx, owner.ID, space.ID, created.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	enabled := true
-	if _, err := database.UpdateSpaceAgentMembership(ctx, owner.ID, space.ID, created.ID, SpaceAgentMembershipInput{
-		Enabled: &enabled, MembershipVersion: membership.MembershipVersion,
-		Permissions: json.RawMessage(`{"messages.read":true,"messages.write":true,"tasks.view":false,"tasks.manage":false,"attached_files.read":true}`),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	effectiveContext, err = database.EffectivePersonalAgentContextPermissions(ctx, member.ID, space.ID, created.ID)
-	if err != nil || json.Unmarshal(effectiveContext, &effective) != nil || effective["tasks"] || effective["task_notes"] || effective["notes"] {
-		t.Fatalf("Agent membership did not remove Task context: %s, %v", effectiveContext, err)
-	}
-
 	updated := *created
 	updated.Name = "Research Guide"
 	updatedAgent, err := database.UpdatePersonalAgent(ctx, owner.ID, updated)
@@ -128,11 +107,8 @@ func TestPersonalAgentOwnershipSpaceMembershipAndConversationIsolation(t *testin
 		t.Fatalf("stale update = %v, want ErrPersonalAgentConflict", err)
 	}
 
-	if _, err := database.ReplacePersonalAgentGrants(ctx, owner.ID, created.ID, nil); err != nil {
-		t.Fatal(err)
-	}
 	if agents, err := database.AccessiblePersonalAgents(ctx, member.ID, space.ID); err != nil || len(agents) != 0 {
-		t.Fatalf("removed Space Agent membership remained visible: %#v, %v", agents, err)
+		t.Fatalf("creator-only Agent became visible: %#v, %v", agents, err)
 	}
 	if err := database.DeletePersonalAgent(ctx, owner.ID, created.ID); err != nil {
 		t.Fatal(err)

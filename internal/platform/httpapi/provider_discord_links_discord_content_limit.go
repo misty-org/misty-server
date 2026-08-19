@@ -87,6 +87,16 @@ func (s *SpacesService) SpaceDiscordLink() http.HandlerFunc {
 			if decodeJSON(w, r, &body) != nil {
 				return
 			}
+			allowed, permissionErr := s.database.HasSpacePermission(r.Context(), userID, spaceID, db.PermissionIntegrationsManage)
+			if permissionErr != nil || !allowed {
+				writeSpaceError(w, db.ErrSpaceForbidden)
+				return
+			}
+			credential, credentialErr := s.database.ProviderCredential(r.Context(), userID, spaceID, body.IntegrationID)
+			if credentialErr != nil || credential.Provider != "discord" {
+				writeSpaceError(w, db.ErrSpaceInvalid)
+				return
+			}
 			if discordBotToken() == "" {
 				writeJSON(w, http.StatusFailedDependency, map[string]string{"code": "provider_not_configured"})
 				return
@@ -98,12 +108,18 @@ func (s *SpacesService) SpaceDiscordLink() http.HandlerFunc {
 				writeProviderFailure(w, err)
 				return
 			}
-			if body.GuildID == "" {
-				body.GuildID = channel.GuildID
+			if body.GuildID != "" && body.GuildID != channel.GuildID {
+				writeSpaceError(w, db.ErrSpaceInvalid)
+				return
 			}
-			if strings.TrimSpace(body.ChannelName) == "" {
-				body.ChannelName = channel.Name
+			body.GuildID = channel.GuildID
+			body.ChannelName = channel.Name
+			guildName, guildErr := s.discordGuildName(r.Context(), channel.GuildID)
+			if guildErr != nil {
+				writeProviderFailure(w, guildErr)
+				return
 			}
+			body.GuildName = guildName
 			item := db.SpaceDiscordLink{
 				SpaceID: spaceID, IntegrationID: body.IntegrationID,
 				GuildID: body.GuildID, GuildName: body.GuildName, ChannelID: body.ChannelID,
@@ -165,6 +181,14 @@ func (s *SpacesService) SpaceDiscordLinkItem() http.HandlerFunc {
 			}
 			writeJSON(w, http.StatusOK, link)
 		case http.MethodDelete:
+			allowed, permissionErr := s.database.HasSpacePermission(r.Context(), userID, spaceID, db.PermissionIntegrationsManage)
+			if permissionErr != nil || !allowed {
+				writeSpaceError(w, db.ErrSpaceForbidden)
+				return
+			}
+			if link, linkErr := s.database.SpaceDiscordLinkByID(r.Context(), spaceID, linkID); linkErr == nil {
+				_ = s.deleteDiscordWebhook(r.Context(), link)
+			}
 			if err := s.database.DeleteSpaceDiscordLink(r.Context(), userID, spaceID, linkID); err != nil {
 				writeSpaceError(w, err)
 				return

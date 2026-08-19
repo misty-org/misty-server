@@ -118,6 +118,7 @@ type googleEventTime struct {
 
 type googleCalendarEvent struct {
 	ID          string          `json:"id"`
+	ETag        string          `json:"etag"`
 	Status      string          `json:"status"`
 	Summary     string          `json:"summary"`
 	Description string          `json:"description"`

@@ -36,6 +36,14 @@ const (
 	LibraryRecoveryWindow        = 30 * 24 * time.Hour
 )
 
+// RequireSpacePermission exposes the database's canonical permission check to
+// HTTP adapters that must authorize before making an external provider call.
+func (db *Database) RequireSpacePermission(ctx context.Context, userID, spaceID, permission string) error {
+	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		return requireSpacePermissionTx(ctx, tx, userID, spaceID, permission)
+	})
+}
+
 // Upload purposes decide which Space permission an upload needs and which
 // maximum file size applies. The database enforces the maximum independently of
 // the API service so a misconfigured service cannot widen the limit.

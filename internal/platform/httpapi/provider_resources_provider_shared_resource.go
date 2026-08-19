@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,6 +19,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+type providerAPIError struct {
+	Status     int
+	BodyDigest string
+}
+
+func (e *providerAPIError) Error() string {
+	return fmt.Sprintf("provider request returned %d (body %s)", e.Status, e.BodyDigest)
+}
 
 func (s *SpacesService) ProviderSharedResource() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -128,11 +138,25 @@ func discoverDiscordChannels(ctx context.Context) ([]availableProviderResource, 
 			if channel.Type != 0 && channel.Type != 5 && channel.Type != 15 {
 				continue
 			}
-			config, _ := json.Marshal(map[string]string{"guildId": guild.ID, "guildName": guild.Name})
+			config := TestingDiscordResourceConfiguration(guild.ID, guild.Name)
 			items = append(items, availableProviderResource{Provider: "discord", ResourceType: "channel", ExternalResourceID: channel.ID, DisplayName: guild.Name + " / #" + channel.Name, Configuration: config})
 		}
 	}
 	return items, nil
+}
+
+// discordResourceConfiguration is the canonical public DTO carried inside an
+// available channel's `configuration` object. Keep this snake_case contract at
+// the server boundary; Discord's own payload names and Go field names must not
+// leak a second casing convention to clients.
+type discordResourceConfiguration struct {
+	GuildID   string `json:"guild_id"`
+	GuildName string `json:"guild_name"`
+}
+
+func TestingDiscordResourceConfiguration(guildID, guildName string) json.RawMessage {
+	encoded, _ := json.Marshal(discordResourceConfiguration{GuildID: guildID, GuildName: guildName})
+	return encoded
 }
 
 func discoverNotionResources(ctx context.Context, token, tokenType string) ([]availableProviderResource, error) {
@@ -209,7 +233,9 @@ func providerJSONRequest(ctx context.Context, token, tokenType, method, endpoint
 	if tokenType == "" {
 		tokenType = "Bearer"
 	}
-	request.Header.Set("Authorization", tokenType+" "+token)
+	if strings.TrimSpace(token) != "" {
+		request.Header.Set("Authorization", tokenType+" "+token)
+	}
 	request.Header.Set("Accept", "application/json")
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
@@ -217,7 +243,10 @@ func providerJSONRequest(ctx context.Context, token, tokenType, method, endpoint
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}
-	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
+	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	response, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +260,7 @@ func providerJSONRequest(ctx context.Context, token, tokenType, method, endpoint
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		digest := sha256.Sum256(payload)
-		return payload, errors.New("provider request failed with " + response.Status + " (body " + hex.EncodeToString(digest[:6]) + ")")
+		return payload, &providerAPIError{Status: response.StatusCode, BodyDigest: hex.EncodeToString(digest[:6])}
 	}
 	return payload, nil
 }

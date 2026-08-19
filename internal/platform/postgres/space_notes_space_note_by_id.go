@@ -5,9 +5,42 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 )
+
+// UpdateSpaceNoteContent is the server-owned Agent write boundary for native
+// Notes. The projection and collaboration command are committed together; the
+// retryable outbox makes delivery idempotent across runtime restarts.
+func (db *Database) UpdateSpaceNoteContent(ctx context.Context, userID, noteID, title, markdown string) (*SpaceNote, error) {
+	title = strings.TrimSpace(title)
+	markdown = strings.TrimSpace(markdown)
+	if title == "" || len([]rune(title)) > 500 || len([]rune(markdown)) > 100_000 {
+		return nil, ErrSpaceInvalid
+	}
+	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		access, err := noteAccessForTx(ctx, tx, userID, noteID)
+		if err != nil {
+			return err
+		}
+		if !access.CanEdit {
+			return ErrSpaceNotFound
+		}
+		var spaceID string
+		if err := tx.QueryRowContext(ctx, `UPDATE space_notes SET title_projection=$1,plain_text_projection=$2,updated_at=NOW() WHERE id=$3 AND lifecycle_state='active' RETURNING space_id`, title, markdown, noteID).Scan(&spaceID); err != nil {
+			return err
+		}
+		if err := enqueueNoteControlTx(ctx, tx, noteID, "replace_markdown", map[string]any{"title": title, "markdown": markdown}); err != nil {
+			return err
+		}
+		return recordNoteEventTx(ctx, tx, spaceID, userID, "note.projection.updated", noteID, nil)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return db.SpaceNoteByID(ctx, userID, noteID)
+}
 
 // SpaceNoteByID returns one note the caller may view, with the caller's own
 // effective role attached. Any caller who cannot view it gets ErrSpaceNotFound.

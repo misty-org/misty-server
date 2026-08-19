@@ -207,6 +207,38 @@ func (db *Database) UpdateLibraryItem(ctx context.Context, userID, spaceID, item
 	return db.LibraryItem(ctx, userID, spaceID, itemID)
 }
 
+// SetLibraryImportProvenance records the external source of an item imported
+// through a device-local provider. It is separate from ordinary metadata edits
+// so members need library.import (and must own the freshly uploaded item), not
+// the broader library.edit permission.
+func (db *Database) SetLibraryImportProvenance(ctx context.Context, userID, spaceID, itemID string, provenance map[string]any) (*SpaceLibraryItem, error) {
+	encoded, err := json.Marshal(map[string]any{"import_source": provenance})
+	if err != nil || len(encoded) > 8192 {
+		return nil, ErrLibraryInvalid
+	}
+	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryImport); err != nil {
+			return err
+		}
+		result, err := tx.ExecContext(ctx, `UPDATE space_library_items
+			SET contributor_information=$1,version=version+1,updated_at=NOW()
+			WHERE id=$2 AND space_id=$3 AND contributing_user_id=$4 AND lifecycle_state='ready'`,
+			encoded, itemID, spaceID, userID)
+		if err != nil {
+			return err
+		}
+		if changed, _ := result.RowsAffected(); changed != 1 {
+			return ErrLibraryNotFound
+		}
+		return insertLibraryAuditTx(ctx, tx, spaceID, "", userID, "library.item.imported_from_provider",
+			"library_item", itemID, "success", provenance)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return db.LibraryItem(ctx, userID, spaceID, itemID)
+}
+
 func (db *Database) LibraryItem(ctx context.Context, userID, spaceID, itemID string) (*SpaceLibraryItem, error) {
 	out := &SpaceLibraryItem{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {

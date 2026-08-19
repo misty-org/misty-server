@@ -15,7 +15,7 @@ import (
 
 func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMiddleware {
 	return func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor, request serveragent.ToolRequest, next agenttools.Handler) (json.RawMessage, error) {
-		if descriptor.Risk == serveragent.RiskRead {
+		if descriptor.Risk == serveragent.RiskRead && !strings.HasPrefix(descriptor.Name, "browser.") {
 			return next(ctx, invocation, request)
 		}
 		if database == nil || strings.TrimSpace(invocation.UserID) == "" || strings.TrimSpace(descriptor.AuditEvent) == "" || strings.TrimSpace(invocation.RunID) == "" && strings.TrimSpace(invocation.SessionID) == "" {
@@ -41,6 +41,7 @@ func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMid
 			UserID:         invocation.UserID, SpaceID: spaceID, AgentID: invocation.AgentID,
 			AgentInstanceID: invocation.AgentInstanceID, RunID: invocation.RunID, SessionID: invocation.SessionID, ToolName: descriptor.Name,
 			AuditEvent: descriptor.AuditEvent, Risk: descriptor.Risk, Source: invocation.Source, Request: request.Arguments,
+			RedactPayload: strings.HasPrefix(descriptor.Name, "mcp."),
 		}, func() (json.RawMessage, error) {
 			return next(ctx, invocation, request)
 		})

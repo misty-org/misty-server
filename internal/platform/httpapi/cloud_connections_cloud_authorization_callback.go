@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -95,56 +94,65 @@ func (s *SpacesService) CloudAuthorizationCallback() http.HandlerFunc {
 			TestingWriteOAuthCallbackFailure(w, provider, TestingOAuthNotSaved, err)
 			return
 		}
+		// Compatibility bridge: when the legacy cloud OAuth client is the same
+		// account-level client, adopt the token into the reusable vault and bind
+		// this remote without asking the user to authorize Google twice.
+		_ = s.adoptCloudConnectionIntoConnectedAccount(r.Context(), stored.UserID, item, secret, token, expiresAt)
 		TestingWriteProviderCompletionPage(w, definition.Name, item.AccountDisplay)
 	}
 }
 
+func (s *SpacesService) adoptCloudConnectionIntoConnectedAccount(ctx context.Context, userID string, cloud *db.CloudConnection, secret cloudOAuthSecret, token providerTokenEnvelope, expiresAt *time.Time) error {
+	if cloud == nil || secret.Custom {
+		return nil
+	}
+	accountProvider := ""
+	switch cloud.Provider {
+	case "drive":
+		accountProvider = "google"
+	case "onedrive":
+		accountProvider = "microsoft"
+	case "dropbox":
+		accountProvider = "dropbox"
+	}
+	definition, exists := TestingConnectedAccountOAuthCatalog[accountProvider]
+	if !exists || secret.ClientID != connectedAccountClientID(definition) || secret.ClientSecret != connectedAccountClientSecret(definition) {
+		return nil
+	}
+	capabilities := []string{"files"}
+	scopes := definition.CapabilityScopes["files"]
+	if previous, err := s.database.ConnectedAccountByIdentity(ctx, userID, accountProvider, cloud.AccountID); err == nil {
+		capabilities = mergeConnectedAccountValues(previous.Capabilities, capabilities)
+		scopes = mergeConnectedAccountValues(previous.GrantedScopes, scopes)
+	}
+	if token.Scope != "" {
+		scopes = mergeConnectedAccountValues(scopes, strings.Fields(strings.ReplaceAll(token.Scope, ",", " ")))
+	}
+	encoded, _ := json.Marshal(token)
+	ciphertext, nonce, err := s.encryptConnectedAccountSecret(accountProvider, encoded)
+	if err != nil {
+		return err
+	}
+	account, err := s.database.SaveConnectedAccount(ctx, db.ConnectedAccount{
+		UserID: userID, Provider: accountProvider, AccountID: cloud.AccountID,
+		AccountDisplay: cloud.AccountDisplay, CredentialCiphertext: ciphertext,
+		CredentialNonce: nonce, KeyVersion: s.keyVer, Capabilities: capabilities,
+		GrantedScopes: scopes, ExpiresAt: expiresAt,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = s.database.BindConnectedAccountCloudConnection(ctx, userID, *account, cloud.Provider, cloud.Name, 0)
+	return err
+}
+
 func (s *SpacesService) CloudConnectionToken() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		item, err := s.database.CloudConnection(r.Context(), userID, chi.URLParam(r, "connectionID"))
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		plaintext, err := s.decryptProviderSecret(item.Provider, item.CredentialCiphertext, item.CredentialNonce)
-		var secret cloudOAuthSecret
-		if err != nil || json.Unmarshal(plaintext, &secret) != nil || secret.Token.AccessToken == "" {
-			writeSpaceError(w, errors.New("cloud credential is invalid"))
-			return
-		}
-		if item.ExpiresAt != nil && item.ExpiresAt.Before(time.Now().UTC().Add(5*time.Minute)) {
-			definition := TestingCloudOAuthCatalog[item.Provider]
-			token, err := refreshCloudToken(r.Context(), definition, secret)
-			if err != nil {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "cloud_reauthorization_required"})
-				return
-			}
-			secret.Token = token
-			encoded, _ := json.Marshal(secret)
-			item.CredentialCiphertext, item.CredentialNonce, err = s.encryptProviderSecret(item.Provider, encoded)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			item.KeyVersion = s.keyVer
-			if token.ExpiresIn > 0 {
-				value := time.Now().UTC().Add(time.Duration(token.ExpiresIn) * time.Second)
-				item.ExpiresAt = &value
-			}
-			if err := s.database.UpdateCloudConnectionCredential(r.Context(), *item); err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-		}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		// Provider access tokens are never returned to authenticated renderer
+		// sessions. Current desktop builds use the one-time native handoff flow.
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, map[string]any{
-			"connection_id": item.ID, "provider": item.Provider,
-			"access_token": secret.Token.AccessToken, "token_type": firstNonempty(secret.Token.TokenType, "Bearer"),
-			"expires_at": item.ExpiresAt, "api_base": TestingCloudAPIBase(item.Provider),
+		writeJSON(w, http.StatusGone, map[string]string{
+			"code": "cloud_token_route_deprecated",
 		})
 	}
 }
@@ -161,7 +169,11 @@ func (s *SpacesService) DeleteCloudConnection() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		status, revokeErr := s.revokeCloudConnection(r.Context(), *item)
+		status := "binding_removed_account_preserved"
+		var revokeErr error
+		if item.ConnectedAccountID == "" {
+			status, revokeErr = s.revokeCloudConnection(r.Context(), *item)
+		}
 		if err := s.database.DeleteCloudConnection(r.Context(), userID, connectionID); err != nil {
 			writeSpaceError(w, err)
 			return
@@ -194,16 +206,22 @@ func refreshCloudToken(ctx context.Context, definition cloudOAuthDefinition, sec
 }
 
 func requestCloudToken(ctx context.Context, endpoint string, values url.Values) (providerTokenEnvelope, error) {
-	request, _ := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
+	if err != nil {
+		return providerTokenEnvelope{}, err
+	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Accept", "application/json")
-	response, err := (&http.Client{Timeout: 20 * time.Second}).Do(request)
+	response, err := connectedAccountHTTPClient(20 * time.Second).Do(request)
 	if err != nil {
 		return providerTokenEnvelope{}, err
 	}
 	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
+	raw, err := readConnectedAccountResponse(response.Body)
+	if err != nil {
+		return providerTokenEnvelope{}, err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return providerTokenEnvelope{}, fmt.Errorf("cloud token endpoint returned %s", response.Status)
 	}
 	var token providerTokenEnvelope
@@ -223,12 +241,15 @@ func fetchCloudIdentity(ctx context.Context, provider string, token providerToke
 	case "onedrive":
 		endpoint = "https://graph.microsoft.com/v1.0/me?$select=id,displayName,userPrincipalName"
 	}
-	request, _ := http.NewRequestWithContext(ctx, method, endpoint, nil)
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
+	if err != nil {
+		return "", ""
+	}
 	request.Header.Set("Authorization", firstNonempty(token.TokenType, "Bearer")+" "+token.AccessToken)
 	if method == http.MethodPost {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	response, err := (&http.Client{Timeout: 15 * time.Second}).Do(request)
+	response, err := connectedAccountHTTPClient(15 * time.Second).Do(request)
 	if err != nil {
 		return "", ""
 	}
@@ -236,9 +257,14 @@ func fetchCloudIdentity(ctx context.Context, provider string, token providerToke
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return "", ""
 	}
-	raw, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	raw, err := readConnectedAccountResponse(response.Body)
+	if err != nil {
+		return "", ""
+	}
 	var value map[string]any
-	_ = json.Unmarshal(raw, &value)
+	if json.Unmarshal(raw, &value) != nil {
+		return "", ""
+	}
 	id := firstProviderString(value, "account_id", "id", "sub")
 	name := firstProviderString(value, "name", "display_name", "displayName", "email", "userPrincipalName")
 	return id, name

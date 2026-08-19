@@ -21,24 +21,24 @@ var (
 )
 
 type PersonalAgent struct {
-	ID                 string          `json:"id"`
-	OwnerUserID        string          `json:"owner_user_id"`
-	Name               string          `json:"name"`
-	Role               string          `json:"role"`
-	Description        string          `json:"description"`
-	Icon               string          `json:"icon"`
-	Avatar             json.RawMessage `json:"avatar"`
-	Instructions       string          `json:"instructions,omitempty"`
-	ModelMode          string          `json:"model_mode"`
-	ModelID            string          `json:"model_id,omitempty"`
-	ReasoningEffort    string          `json:"reasoning_effort,omitempty"`
-	ContextPermissions json.RawMessage `json:"context_permissions"`
-	ToolPermissions    json.RawMessage `json:"tool_permissions"`
-	Enabled            bool            `json:"enabled"`
-	Version            int64           `json:"version"`
-	LatestVersionID    string          `json:"latest_version_id,omitempty"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
+	ID              string          `json:"id"`
+	OwnerUserID     string          `json:"owner_user_id"`
+	Name            string          `json:"name"`
+	Role            string          `json:"role"`
+	Description     string          `json:"description"`
+	Icon            string          `json:"icon"`
+	Avatar          json.RawMessage `json:"avatar"`
+	Instructions    string          `json:"instructions,omitempty"`
+	ModelMode       string          `json:"model_mode"`
+	ModelID         string          `json:"model_id,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	DefaultRunMode  string          `json:"default_run_mode"`
+	VoiceID         string          `json:"voice_id"`
+	Enabled         bool            `json:"enabled"`
+	Version         int64           `json:"version"`
+	LatestVersionID string          `json:"latest_version_id,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 type PersonalAgentVersion struct {
@@ -54,42 +54,18 @@ type PersonalAgentVersion struct {
 	ModelMode       string          `json:"model_mode"`
 	ModelID         string          `json:"model_id,omitempty"`
 	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	DefaultRunMode  string          `json:"default_run_mode"`
+	VoiceID         string          `json:"voice_id"`
 	ChecksumSHA256  string          `json:"checksum_sha256"`
 	CreatedByUserID string          `json:"created_by_user_id"`
 	CreatedAt       time.Time       `json:"created_at"`
 }
 
-type PersonalAgentSpaceGrant struct {
-	ID                string          `json:"id"`
-	AgentID           string          `json:"agent_id"`
-	SpaceID           string          `json:"space_id"`
-	SpaceName         string          `json:"space_name"`
-	AllMembers        bool            `json:"all_members"`
-	MemberUserIDs     []string        `json:"member_user_ids"`
-	Enabled           bool            `json:"enabled"`
-	ApprovedVersionID string          `json:"approved_version_id"`
-	LatestVersionID   string          `json:"latest_version_id"`
-	UpdateAvailable   bool            `json:"update_available"`
-	SpaceInstructions string          `json:"space_instructions"`
-	SpaceRole         string          `json:"space_role"`
-	Permissions       json.RawMessage `json:"permissions"`
-	ManagedByUserID   string          `json:"managed_by_user_id,omitempty"`
-	Version           int64           `json:"version"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
-}
-
-type PersonalAgentGrantInput struct {
-	SpaceID       string   `json:"space_id"`
-	AllMembers    bool     `json:"all_members"`
-	MemberUserIDs []string `json:"member_user_ids"`
-}
-
-const personalAgentColumns = `id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,context_permissions,tool_permissions,enabled,version,created_at,updated_at`
+const personalAgentColumns = `id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,enabled,version,created_at,updated_at`
 
 func scanPersonalAgent(row scanner, out *PersonalAgent) error {
 	err := row.Scan(&out.ID, &out.OwnerUserID, &out.Name, &out.Role, &out.Description, &out.Icon, &out.Avatar, &out.Instructions,
-		&out.ModelMode, &out.ModelID, &out.ReasoningEffort, &out.ContextPermissions, &out.ToolPermissions, &out.Enabled,
+		&out.ModelMode, &out.ModelID, &out.ReasoningEffort, &out.DefaultRunMode, &out.VoiceID, &out.Enabled,
 		&out.Version, &out.CreatedAt, &out.UpdatedAt)
 	if err == nil {
 		out.LatestVersionID = personalAgentVersionID(out.ID, out.Version)
@@ -103,9 +79,9 @@ func personalAgentVersionID(agentID string, version int64) string {
 
 func insertPersonalAgentVersionTx(ctx context.Context, tx *sql.Tx, agent PersonalAgent, userID string) (string, error) {
 	id := personalAgentVersionID(agent.ID, agent.Version)
-	checksum := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s", agent.ID, agent.Version, agent.Name, agent.Role, agent.Description, agent.Instructions, agent.ModelID, agent.ReasoningEffort, agent.Icon, string(agent.Avatar), string(agent.ContextPermissions), string(agent.ToolPermissions)))))
-	_, err := tx.ExecContext(ctx, `INSERT INTO personal_agent_versions(id,agent_id,version,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,context_permissions,tool_permissions,checksum_sha256,created_by_user_id)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT(agent_id,version) DO NOTHING`, id, agent.ID, agent.Version, agent.Name, agent.Role, agent.Description, agent.Icon, agent.Avatar, agent.Instructions, agent.ModelMode, agent.ModelID, agent.ReasoningEffort, agent.ContextPermissions, agent.ToolPermissions, checksum, userID)
+	checksum := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s", agent.ID, agent.Version, agent.Name, agent.Role, agent.Description, agent.Instructions, agent.ModelID, agent.ReasoningEffort, agent.Icon, string(agent.Avatar), agent.DefaultRunMode, agent.VoiceID))))
+	_, err := tx.ExecContext(ctx, `INSERT INTO personal_agent_versions(id,agent_id,version,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,checksum_sha256,created_by_user_id)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT(agent_id,version) DO NOTHING`, id, agent.ID, agent.Version, agent.Name, agent.Role, agent.Description, agent.Icon, agent.Avatar, agent.Instructions, agent.ModelMode, agent.ModelID, agent.ReasoningEffort, agent.DefaultRunMode, agent.VoiceID, checksum, userID)
 	return id, err
 }
 
@@ -118,6 +94,8 @@ func TestingNormalizePersonalAgent(agent *PersonalAgent) error {
 	agent.ModelMode = strings.ToLower(strings.TrimSpace(agent.ModelMode))
 	agent.ModelID = strings.TrimSpace(agent.ModelID)
 	agent.ReasoningEffort = strings.ToLower(strings.TrimSpace(agent.ReasoningEffort))
+	agent.DefaultRunMode = strings.ToLower(strings.TrimSpace(agent.DefaultRunMode))
+	agent.VoiceID = strings.ToLower(strings.TrimSpace(agent.VoiceID))
 	switch agent.ReasoningEffort {
 	case "", "low", "medium", "high":
 	default:
@@ -125,6 +103,20 @@ func TestingNormalizePersonalAgent(agent *PersonalAgent) error {
 	}
 	if agent.ModelMode == "" {
 		agent.ModelMode = "pinned"
+	}
+	if agent.DefaultRunMode == "" {
+		agent.DefaultRunMode = "auto"
+	}
+	if agent.VoiceID == "" {
+		agent.VoiceID = "alloy"
+	}
+	switch agent.VoiceID {
+	case "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse":
+	default:
+		return ErrSpaceInvalid
+	}
+	if agent.DefaultRunMode != "ask" && agent.DefaultRunMode != "auto" && agent.DefaultRunMode != "full" {
+		return ErrSpaceInvalid
 	}
 	if len([]rune(agent.Name)) < 1 || len([]rune(agent.Name)) > 80 || len([]rune(agent.Role)) > 80 || len([]rune(agent.Description)) > 400 || len([]rune(agent.Instructions)) > 16_000 {
 		return ErrSpaceInvalid
@@ -136,15 +128,6 @@ func TestingNormalizePersonalAgent(agent *PersonalAgent) error {
 	agent.Avatar = avatar
 	if agent.ModelMode != "pinned" || agent.ModelID == "" {
 		return ErrSpaceInvalid
-	}
-	if !validPersonalJSONObject(agent.ContextPermissions) {
-		// "task_notes" is the current name for the notes column on a task. Rows
-		// stored under the old "notes" key still work; see the alias in
-		// PersonalAgentSpaceContextForConversation.
-		agent.ContextPermissions = json.RawMessage(`{"space_chat":true,"library":true,"task_notes":true,"tasks":true,"members":true}`)
-	}
-	if !validPersonalJSONObject(agent.ToolPermissions) {
-		agent.ToolPermissions = json.RawMessage(`{"read":true,"write":false,"integrations":[]}`)
 	}
 	return nil
 }
@@ -241,9 +224,9 @@ func (db *Database) CreatePersonalAgent(ctx context.Context, userID string, item
 		item.Enabled = true
 	}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := scanPersonalAgent(tx.QueryRowContext(ctx, `INSERT INTO personal_agents(id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,context_permissions,tool_permissions,enabled)
+		if err := scanPersonalAgent(tx.QueryRowContext(ctx, `INSERT INTO personal_agents(id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,enabled)
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING `+personalAgentColumns,
-			item.ID, userID, item.Name, item.Role, item.Description, item.Icon, item.Avatar, item.Instructions, item.ModelMode, item.ModelID, item.ReasoningEffort, item.ContextPermissions, item.ToolPermissions, item.Enabled), &item); err != nil {
+			item.ID, userID, item.Name, item.Role, item.Description, item.Icon, item.Avatar, item.Instructions, item.ModelMode, item.ModelID, item.ReasoningEffort, item.DefaultRunMode, item.VoiceID, item.Enabled), &item); err != nil {
 			return err
 		}
 		_, err := insertPersonalAgentVersionTx(ctx, tx, item, userID)
@@ -260,13 +243,14 @@ func (db *Database) UpdatePersonalAgent(ctx context.Context, userID string, item
 		return nil, err
 	}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		err := scanPersonalAgent(tx.QueryRowContext(ctx, `UPDATE personal_agents SET name=$1,role=$2,description=$3,icon=$4,avatar=$5,instructions=$6,model_mode=$7,model_id=$8,reasoning_effort=$9,context_permissions=$10,tool_permissions=$11,enabled=$12,version=version+1,updated_at=NOW()
+		err := scanPersonalAgent(tx.QueryRowContext(ctx, `UPDATE personal_agents SET name=$1,role=$2,description=$3,icon=$4,avatar=$5,instructions=$6,model_mode=$7,model_id=$8,reasoning_effort=$9,default_run_mode=$10,voice_id=$11,enabled=$12,version=version+1,updated_at=NOW()
 			WHERE id=$13 AND owner_user_id=$14 AND version=$15 AND deleted_at IS NULL RETURNING `+personalAgentColumns,
-			item.Name, item.Role, item.Description, item.Icon, item.Avatar, item.Instructions, item.ModelMode, item.ModelID, item.ReasoningEffort, item.ContextPermissions, item.ToolPermissions, item.Enabled, item.ID, userID, item.Version), &item)
+			item.Name, item.Role, item.Description, item.Icon, item.Avatar, item.Instructions, item.ModelMode, item.ModelID, item.ReasoningEffort, item.DefaultRunMode, item.VoiceID, item.Enabled, item.ID, userID, item.Version), &item)
 		if err == nil {
 			if !item.Enabled {
-				_, _ = tx.ExecContext(ctx, `UPDATE space_runs SET state='canceled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
-					WHERE agent_id=$1 AND state IN ('queued','running','cooldown','awaiting_approval')`, item.ID)
+				if err := cancelPersonalAgentRunsTx(ctx, tx, item.ID, "agent_disabled"); err != nil {
+					return err
+				}
 			}
 			_, err = insertPersonalAgentVersionTx(ctx, tx, item, userID)
 			return err
@@ -299,62 +283,40 @@ func (db *Database) DeletePersonalAgent(ctx context.Context, userID, agentID str
 		if count == 0 {
 			return ErrPersonalAgentNotFound
 		}
-		_, _ = tx.ExecContext(ctx, `UPDATE space_runs SET state='canceled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
-			WHERE agent_id=$1 AND state IN ('queued','running','cooldown','awaiting_approval')`, agentID)
-		return nil
+		return cancelPersonalAgentRunsTx(ctx, tx, agentID, "agent_deleted")
 	})
 }
 
-func (db *Database) PersonalAgentGrants(ctx context.Context, userID, agentID string) ([]PersonalAgentSpaceGrant, error) {
-	items := []PersonalAgentSpaceGrant{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var owner string
-		if err := tx.QueryRowContext(ctx, `SELECT owner_user_id FROM personal_agents WHERE id=$1 AND deleted_at IS NULL`, agentID).Scan(&owner); errors.Is(err, sql.ErrNoRows) {
-			return ErrPersonalAgentNotFound
-		} else if err != nil {
-			return err
-		}
-		if owner != userID {
-			return ErrSpaceForbidden
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT g.id,g.agent_id,g.space_id,s.name,g.all_members,g.space_role,g.created_at,g.updated_at FROM personal_agent_space_grants g JOIN spaces s ON s.id=g.space_id WHERE g.agent_id=$1 AND g.removed_at IS NULL ORDER BY lower(s.name),g.id`, agentID)
-		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			var item PersonalAgentSpaceGrant
-			if err := rows.Scan(&item.ID, &item.AgentID, &item.SpaceID, &item.SpaceName, &item.AllMembers, &item.SpaceRole, &item.CreatedAt, &item.UpdatedAt); err != nil {
-				rows.Close()
-				return err
-			}
-			items = append(items, item)
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return err
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		for index := range items {
-			item := &items[index]
-			memberRows, err := tx.QueryContext(ctx, `SELECT user_id FROM personal_agent_member_grants WHERE grant_id=$1 ORDER BY user_id`, item.ID)
-			if err != nil {
-				return err
-			}
-			for memberRows.Next() {
-				var id string
-				if err := memberRows.Scan(&id); err != nil {
-					memberRows.Close()
-					return err
-				}
-				item.MemberUserIDs = append(item.MemberUserIDs, id)
-			}
-			if err := memberRows.Close(); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	return items, err
+func cancelPersonalAgentRunsTx(ctx context.Context, tx *sql.Tx, agentID, code string) error {
+	if _, err := tx.ExecContext(ctx, `WITH canceled AS (
+		UPDATE space_runs SET state='canceled',runtime_phase='canceled',error_code=$2,canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
+		WHERE agent_id=$1 AND state IN ('queued','running','cooldown','awaiting_approval','awaiting_device') RETURNING id
+	) UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW()
+	WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, agentID, code); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE agent_run_tool_approvals SET state='denied',decided_at=NOW()
+		WHERE run_id IN (SELECT id FROM space_runs WHERE agent_id=$1 AND state='canceled' AND error_code=$2) AND state='pending'`, agentID, code); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW()
+		WHERE run_id IN (SELECT id FROM space_runs WHERE agent_id=$1 AND state='canceled' AND error_code=$2) AND state='attached'`, agentID, code)
+	return err
+}
+
+func cancelCreatorSpaceRunsTx(ctx context.Context, tx *sql.Tx, ownerUserID, spaceID, code string) error {
+	if _, err := tx.ExecContext(ctx, `WITH canceled AS (
+		UPDATE space_runs SET state='canceled',runtime_phase='canceled',error_code=$3,canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
+		WHERE owner_user_id=$1 AND space_id=$2 AND state IN ('queued','running','cooldown','awaiting_approval','awaiting_device') RETURNING id
+	) UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW()
+	WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, ownerUserID, spaceID, code); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE agent_run_tool_approvals SET state='denied',decided_at=NOW()
+		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND space_id=$2 AND state='canceled' AND error_code=$3) AND state='pending'`, ownerUserID, spaceID, code); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW()
+		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND space_id=$2 AND state='canceled' AND error_code=$3) AND state='attached'`, ownerUserID, spaceID, code)
+	return err
 }

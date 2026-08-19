@@ -15,11 +15,18 @@ import (
 )
 
 type WorkflowRunStep struct {
-	ID, RunID, NodeID, State, ErrorCode, ErrorMessage string
-	Attempt                                           int
-	Input, Output                                     json.RawMessage
-	StartedAt, CompletedAt                            *time.Time
-	UpdatedAt                                         time.Time
+	ID           string          `json:"id"`
+	RunID        string          `json:"run_id"`
+	NodeID       string          `json:"node_id"`
+	State        string          `json:"state"`
+	ErrorCode    string          `json:"error_code,omitempty"`
+	ErrorMessage string          `json:"error_message,omitempty"`
+	Attempt      int             `json:"attempt"`
+	Input        json.RawMessage `json:"input"`
+	Output       json.RawMessage `json:"output"`
+	StartedAt    *time.Time      `json:"started_at,omitempty"`
+	CompletedAt  *time.Time      `json:"completed_at,omitempty"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 func (db *Database) WorkflowWritePreauthorized(ctx context.Context, userID, instanceID, workflowVersionID, nodeID, provider, connectionID, destination string) (bool, error) {

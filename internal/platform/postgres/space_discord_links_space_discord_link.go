@@ -44,15 +44,18 @@ type MessageOrigin struct {
 	System            string   `json:"system"`
 	ExternalID        string   `json:"external_id,omitempty"`
 	ExternalChannelID string   `json:"external_channel_id,omitempty"`
+	ExternalThreadID  string   `json:"external_thread_id,omitempty"`
 	AuthorName        string   `json:"author_name,omitempty"`
 	AuthorHandle      string   `json:"author_handle,omitempty"`
 	AuthorAvatarURL   string   `json:"author_avatar_url,omitempty"`
 	AuthoredAt        string   `json:"authored_at,omitempty"`
+	ReplyToExternalID string   `json:"reply_to_external_id,omitempty"`
 	PublishState      string   `json:"publish_state,omitempty"`
 	PublishedAt       string   `json:"published_at,omitempty"`
 	PublishedExternal string   `json:"published_external_id,omitempty"`
 	PublishError      string   `json:"publish_error,omitempty"`
 	AttachmentURLs    []string `json:"attachment_urls,omitempty"`
+	Deleted           bool     `json:"deleted,omitempty"`
 }
 
 const spaceDiscordLinkColumns = `id,space_id,integration_id,COALESCE(conversation_id,''),connected_by_user_id,guild_id,guild_name,channel_id,channel_name,direction,status,last_message_id,last_synced_at,last_error_code,bot_user_id,webhook_id,webhook_token_ciphertext,webhook_token_nonce,disabled_at,created_at,updated_at`

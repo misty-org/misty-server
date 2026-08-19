@@ -13,14 +13,20 @@ func disableAccountAgentsTx(ctx context.Context, tx *sql.Tx, userID string) erro
 		WHERE owner_user_id=$1 AND deleted_at IS NULL`, userID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE personal_agent_space_grants g
-		SET enabled=FALSE,removed_at=COALESCE(removed_at,NOW()),updated_at=NOW()
-		FROM personal_agents a WHERE g.agent_id=a.id AND a.owner_user_id=$1`, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `WITH canceled AS (
+		UPDATE space_runs SET state='canceled',runtime_phase='canceled',error_code='account_disabled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
+		WHERE state IN ('queued','running','cooldown','awaiting_approval','awaiting_device') AND
+		(agent_id IN (SELECT id FROM personal_agents WHERE owner_user_id=$1) OR requesting_member_id=$1) RETURNING id
+	) UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW()
+	WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, userID); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='canceled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
-		WHERE state IN ('queued','running','cooldown','awaiting_approval') AND
-		(agent_id IN (SELECT id FROM personal_agents WHERE owner_user_id=$1) OR requesting_member_id=$1)`, userID)
+	if _, err := tx.ExecContext(ctx, `UPDATE agent_run_tool_approvals SET state='denied',decided_at=NOW()
+		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND state='canceled' AND error_code='account_disabled') AND state='pending'`, userID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW()
+		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND state='canceled' AND error_code='account_disabled') AND state='attached'`, userID)
 	return err
 }
 
@@ -34,13 +40,6 @@ func purgeAccountAgentsTx(ctx context.Context, tx *sql.Tx, userID string) error 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM agent_conversations WHERE user_id=$1`, userID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM personal_agent_instances
-		WHERE invoker_user_id=$1 OR agent_id IN (SELECT id FROM personal_agents WHERE owner_user_id=$1)`, userID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM personal_agent_member_grants WHERE user_id=$1`, userID); err != nil {
-		return err
-	}
 	if _, err := tx.ExecContext(ctx, `UPDATE personal_agent_versions SET
 		name='Deleted Agent',role='',description='',icon='',avatar='{"kind":"preset","preset_id":"bot","accent":"neutral"}'::jsonb,instructions='',model_mode='pinned',model_id='deleted',reasoning_effort='',
 		checksum_sha256=md5(id || ':deleted') || md5(agent_id || ':deleted')
@@ -49,7 +48,7 @@ func purgeAccountAgentsTx(ctx context.Context, tx *sql.Tx, userID string) error 
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE personal_agents SET
 		name='Deleted Agent',role='',description='',icon='',avatar='{"kind":"preset","preset_id":"bot","accent":"neutral"}'::jsonb,instructions='',model_mode='pinned',model_id='deleted',reasoning_effort='',
-		context_permissions='{}'::jsonb,tool_permissions='{}'::jsonb,enabled=FALSE,
+		default_run_mode='auto',enabled=FALSE,
 		deleted_at=COALESCE(deleted_at,NOW()),updated_at=NOW()
 		WHERE owner_user_id=$1`, userID); err != nil {
 		return err

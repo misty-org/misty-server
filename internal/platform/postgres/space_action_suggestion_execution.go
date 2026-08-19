@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -54,28 +53,12 @@ func (db *Database) SpaceSuggestionParticipatingAgentIDs(ctx context.Context, us
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
-		query := `SELECT agent_id FROM personal_agent_space_grants WHERE space_id=$1 AND enabled AND removed_at IS NULL AND approved_version_id IS NOT NULL`
-		args := []any{spaceID}
 		if scope.Kind == ConversationScopePrivate {
 			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, scope.ConversationID); err != nil {
 				return err
 			}
-			query = `SELECT cm.agent_id FROM space_conversation_members cm JOIN personal_agent_space_grants g ON g.space_id=$1 AND g.agent_id=cm.agent_id AND g.enabled AND g.removed_at IS NULL AND g.approved_version_id IS NOT NULL WHERE cm.conversation_id=$2 AND cm.actor_kind='agent'`
-			args = append(args, scope.ConversationID)
 		}
-		rows, err := tx.QueryContext(ctx, query, args...)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				return err
-			}
-			out[id] = true
-		}
-		return rows.Err()
+		return nil
 	})
 	return out, err
 }
@@ -94,39 +77,7 @@ func suggestionPermissionForCapability(capability string) string {
 // AuthorizeSuggestionAction recomputes the complete member/agent/version/
 // participation/capability intersection immediately before acceptance.
 func (db *Database) AuthorizeSuggestionAction(ctx context.Context, userID, spaceID, agentID, capability string, scope SpaceConversationScopeRef) error {
-	permission := suggestionPermissionForCapability(capability)
-	if permission == "" {
-		return ErrSpaceInvalid
-	}
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAgentsRun); err != nil {
-			return err
-		}
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, permission); err != nil {
-			return err
-		}
-		if scope.Kind == ConversationScopePrivate {
-			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, scope.ConversationID); err != nil {
-				return err
-			}
-		}
-		var grants json.RawMessage
-		var enabled, participates bool
-		err := tx.QueryRowContext(ctx, `SELECT g.capability_grants,g.enabled AND g.removed_at IS NULL AND g.approved_version_id IS NOT NULL,
-			CASE WHEN $3='everyone' THEN TRUE ELSE EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=$4 AND cm.actor_kind='agent' AND cm.agent_id=g.agent_id) END
-			FROM personal_agent_space_grants g WHERE g.space_id=$1 AND g.agent_id=$2`, spaceID, agentID, scope.Kind, scope.ConversationID).
-			Scan(&grants, &enabled, &participates)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrSpaceNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if !enabled || !participates || !AgentCapabilityGranted(grants, capability, "write") {
-			return ErrSpaceForbidden
-		}
-		return nil
-	})
+	return ErrSpaceForbidden
 }
 
 func (db *Database) AcceptSpaceActionSuggestion(ctx context.Context, userID, spaceID, batchID string, review SpaceActionSuggestionAcceptance) (*SpaceActionSuggestionBatch, []SpaceActionSuggestionItem, error) {

@@ -166,6 +166,10 @@ func (s *SpacesService) RunDecision() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
+		if existing, existingErr := s.database.SpaceRun(r.Context(), userID, chi.URLParam(r, "runID")); existingErr == nil && existing.OwnerUserID != "" {
+			writeSpaceError(w, db.ErrSpaceInvalid)
+			return
+		}
 		run, err := s.database.DecideRunApproval(r.Context(), userID, chi.URLParam(r, "runID"), body.Approved)
 		if err != nil {
 			writeSpaceError(w, err)
@@ -201,6 +205,18 @@ func (s *SpacesService) RunCancel() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		if existing, existingErr := s.database.SpaceRun(r.Context(), userID, chi.URLParam(r, "runID")); existingErr == nil && existing.OwnerUserID != "" {
+			run, err := s.database.CancelPersonalAgentTaskRunForOwner(r.Context(), userID, existing.ID)
+			if err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+			if s.agentRuntime.Enabled() && run.RuntimeRunID != "" {
+				_ = s.agentRuntime.Cancel(r.Context(), run.RuntimeRunID, run.ID)
+			}
+			writeJSON(w, http.StatusOK, run)
+			return
+		}
 		run, err := s.database.CancelSpaceRun(r.Context(), userID, chi.URLParam(r, "runID"))
 		if err != nil {
 			writeSpaceError(w, err)
@@ -224,6 +240,15 @@ func (s *SpacesService) RunRetry() http.HandlerFunc {
 		previous, previousErr := s.database.SpaceRun(r.Context(), userID, chi.URLParam(r, "runID"))
 		if previousErr != nil {
 			writeSpaceError(w, previousErr)
+			return
+		}
+		if previous.OwnerUserID != "" {
+			retried, retryErr := s.database.RetryPersonalAgentTaskRunForOwner(r.Context(), userID, previous.ID)
+			if retryErr != nil {
+				writeSpaceError(w, retryErr)
+				return
+			}
+			writeJSON(w, http.StatusCreated, retried)
 			return
 		}
 		if payload, ok := personalAgentChatRetryPayload(previous); ok {

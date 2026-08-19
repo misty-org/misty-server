@@ -123,47 +123,20 @@ func (s *SpacesService) DirectAgentRun() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"runs": items})
 			return
 		}
-		var body struct {
-			Prompt               string          `json:"prompt"`
-			CapabilityID         string          `json:"capability_id"`
-			SourceConversationID string          `json:"source_conversation_id"`
-			Input                json.RawMessage `json:"input"`
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
+		var body db.CreatorAgentRunInput
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		body.Prompt = strings.TrimSpace(body.Prompt)
-		if body.Prompt == "" {
-			writeSpaceError(w, db.ErrSpaceInvalid)
-			return
-		}
-		decision, err := s.database.RouteAgentRequest(r.Context(), userID, body.Prompt, spaceID, agentID, body.CapabilityID)
+		run, err := s.database.CreateCreatorAgentRun(r.Context(), userID, spaceID, agentID, body)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		if decision.NeedsClarification || decision.Selected == nil {
-			writeJSON(w, http.StatusOK, map[string]any{"status": "needs_clarification", "routing": decision})
-			return
-		}
-		if len(body.Input) == 0 {
-			body.Input = TestingMustAPIRawJSON(map[string]string{"prompt": body.Prompt})
-		}
-		run, err := s.database.CreateAgentRun(r.Context(), db.AgentRunRequest{RequestingMemberID: userID, SpaceID: spaceID, AgentID: agentID, SourceConversationID: body.SourceConversationID, SourceType: "direct", CapabilityID: decision.Selected.CapabilityID, Input: body.Input, TriggerKind: "manual"})
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if run.State == "awaiting_approval" {
-			writeJSON(w, http.StatusAccepted, run)
-			return
-		}
-		finished, err := s.executeCanonicalAgentRun(r, run, body.Prompt)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, finished)
+		writeJSON(w, http.StatusAccepted, run)
 	}
 }
 

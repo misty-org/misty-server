@@ -4,12 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
-	"time"
-
-	"github.com/google/uuid"
 )
 
 // PersonalAgentSpaceContextForConversation builds the same bounded Space
@@ -21,9 +17,8 @@ func (db *Database) PersonalAgentSpaceContextForConversation(ctx context.Context
 	_ = json.Unmarshal(permissions, &allowed)
 	// "notes" here has always meant the free-text notes column on a task, not
 	// the Notes surface, which is device-local and unreadable by the server. The
-	// key is now "task_notes"; the old name is still honoured because this value
-	// is a stored user setting in personal_agents.context_permissions and a hard
-	// break would silently flip someone's toggle.
+	// key is now "task_notes"; the old name remains accepted for bounded internal
+	// callers while all creator-scoped runs use the fixed current context.
 	if allowed["notes"] && !allowed["task_notes"] {
 		allowed["task_notes"] = true
 	}
@@ -186,57 +181,20 @@ func (db *Database) PersonalAgentSpaceContextForConversation(ctx context.Context
 }
 
 func (db *Database) AppendPersonalAgentMemory(ctx context.Context, userID, spaceID, agentID, prompt, response string) error {
-	prompt, response = strings.TrimSpace(prompt), strings.TrimSpace(response)
-	if prompt == "" || response == "" {
-		return nil
-	}
-	event, _ := json.Marshal(map[string]any{"prompt": prompt, "response": response, "created_at": time.Now().UTC()})
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if _, err := personalAgentAllowedTx(ctx, tx, userID, spaceID, agentID); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO personal_agent_instances(id,agent_id,invoker_user_id,space_id,scope_key,memory)
-			VALUES($1,$2,$3,$4,$4,jsonb_build_array($5::jsonb))
-			ON CONFLICT(agent_id,invoker_user_id,scope_key) DO UPDATE SET memory=(CASE WHEN jsonb_array_length(personal_agent_instances.memory)>=20 THEN personal_agent_instances.memory-(0) ELSE personal_agent_instances.memory END)||$5::jsonb,updated_at=NOW()`,
-			"agentinstance_"+uuid.NewString(), agentID, userID, spaceID, event)
-		return err
-	})
+	return nil
 }
 
-// PersonalAgentMemoryContext returns only the memory isolated to one invoker,
-// agent, and Space. Authorization is checked on every read so revoking a grant
-// or removing a member immediately prevents future use of that memory.
+// PersonalAgentMemoryContext retains the old empty-memory contract while
+// rechecking creator ownership and current Space membership on every read.
 func (db *Database) PersonalAgentMemoryContext(ctx context.Context, userID, spaceID, agentID string) (string, error) {
-	type memoryEvent struct {
-		Prompt   string    `json:"prompt"`
-		Response string    `json:"response"`
-		Created  time.Time `json:"created_at"`
-	}
-	events := []memoryEvent{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := personalAgentAllowedTx(ctx, tx, userID, spaceID, agentID); err != nil {
 			return err
 		}
-		var raw []byte
-		err := tx.QueryRowContext(ctx, `SELECT memory FROM personal_agent_instances
-			WHERE agent_id=$1 AND invoker_user_id=$2 AND scope_key=$3`, agentID, userID, spaceID).Scan(&raw)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(raw, &events)
+		return nil
 	})
 	if err != nil {
 		return "", err
 	}
-	parts := make([]string, 0, len(events))
-	for _, event := range events {
-		prompt, response := strings.TrimSpace(event.Prompt), strings.TrimSpace(event.Response)
-		if prompt != "" && response != "" {
-			parts = append(parts, "User: "+prompt+"\nAgent: "+response)
-		}
-	}
-	return strings.Join(parts, "\n\n"), nil
+	return "", nil
 }

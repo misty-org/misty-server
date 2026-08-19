@@ -88,6 +88,7 @@ type MessageSpan struct {
 type SpaceMessage struct {
 	Seq                 int64                  `json:"seq"`
 	ID                  string                 `json:"id"`
+	ClientNonce         string                 `json:"client_nonce,omitempty"`
 	SpaceID             string                 `json:"space_id"`
 	ConversationID      string                 `json:"conversation_id,omitempty"`
 	SenderUserID        string                 `json:"sender_user_id"`
@@ -226,6 +227,20 @@ type SpaceRun struct {
 	NextRetryAt           *time.Time      `json:"next_retry_at,omitempty"`
 	SourceTaskID          string          `json:"source_task_id,omitempty"`
 	ActionEnvelope        json.RawMessage `json:"action_envelope,omitempty"`
+	RuntimeKind           string          `json:"runtime_kind,omitempty"`
+	RuntimeRunID          string          `json:"runtime_run_id,omitempty"`
+	RuntimePhase          string          `json:"runtime_phase,omitempty"`
+	RuntimeHeartbeatAt    *time.Time      `json:"runtime_heartbeat_at,omitempty"`
+	OwnerUserID           string          `json:"owner_user_id"`
+	InitialRunMode        string          `json:"initial_run_mode"`
+	EffectiveRunMode      string          `json:"effective_run_mode"`
+	AgentVersionSnapshot  json.RawMessage `json:"agent_version_snapshot"`
+	ApprovalState         string          `json:"approval_state"`
+	ParentRunID           string          `json:"parent_run_id,omitempty"`
+	DelegationDepth       int             `json:"delegation_depth"`
+	ContextBindings       json.RawMessage `json:"context_bindings"`
+	DeviceWaitHookToken   string          `json:"-"`
+	DeviceWaitExpiresAt   *time.Time      `json:"device_wait_expires_at,omitempty"`
 }
 
 func (db *Database) TestingSpaceTx(ctx context.Context, fn func(*sql.Tx) error) error {

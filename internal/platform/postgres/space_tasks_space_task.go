@@ -13,35 +13,41 @@ import (
 )
 
 type SpaceTask struct {
-	ID                     string          `json:"id"`
-	SpaceID                string          `json:"space_id"`
-	TaskNumber             int64           `json:"task_number"`
-	TaskKey                string          `json:"task_key"`
-	Title                  string          `json:"title"`
-	Notes                  string          `json:"notes"`
-	Status                 string          `json:"status"`
-	Priority               string          `json:"priority"`
-	Rank                   int64           `json:"rank"`
-	AssigneeUserID         string          `json:"assignee_user_id,omitempty"`
-	AssigneeAgentID        string          `json:"assignee_agent_id,omitempty"`
-	DueAt                  *time.Time      `json:"due_at,omitempty"`
-	DueTimezone            string          `json:"due_timezone"`
-	SourceRefs             json.RawMessage `json:"source_refs"`
-	CreatedByUserID        string          `json:"created_by_user_id,omitempty"`
-	CreatedByAgentID       string          `json:"created_by_agent_id,omitempty"`
-	SourceRunID            string          `json:"source_run_id,omitempty"`
-	AudienceKind           string          `json:"audience_kind"`
-	AudienceConversationID string          `json:"audience_conversation_id,omitempty"`
-	AudienceCreatorUserID  string          `json:"audience_creator_user_id,omitempty"`
-	Version                int64           `json:"version"`
-	CompletedAt            *time.Time      `json:"completed_at,omitempty"`
-	ArchivedAt             *time.Time      `json:"archived_at,omitempty"`
+	ID                     string                  `json:"id"`
+	SpaceID                string                  `json:"space_id"`
+	TaskNumber             int64                   `json:"task_number"`
+	TaskKey                string                  `json:"task_key"`
+	Title                  string                  `json:"title"`
+	Notes                  string                  `json:"notes"`
+	Status                 string                  `json:"status"`
+	Priority               string                  `json:"priority"`
+	Rank                   int64                   `json:"rank"`
+	AssigneeUserID         string                  `json:"assignee_user_id,omitempty"`
+	AssigneeAgentID        string                  `json:"assignee_agent_id,omitempty"`
+	AgentRun               *SpaceTaskAgentRunInput `json:"agent_run,omitempty"`
+	DueAt                  *time.Time              `json:"due_at,omitempty"`
+	DueTimezone            string                  `json:"due_timezone"`
+	SourceRefs             json.RawMessage         `json:"source_refs"`
+	CreatedByUserID        string                  `json:"created_by_user_id,omitempty"`
+	CreatedByAgentID       string                  `json:"created_by_agent_id,omitempty"`
+	SourceRunID            string                  `json:"source_run_id,omitempty"`
+	AudienceKind           string                  `json:"audience_kind"`
+	AudienceConversationID string                  `json:"audience_conversation_id,omitempty"`
+	AudienceCreatorUserID  string                  `json:"audience_creator_user_id,omitempty"`
+	Version                int64                   `json:"version"`
+	CompletedAt            *time.Time              `json:"completed_at,omitempty"`
+	ArchivedAt             *time.Time              `json:"archived_at,omitempty"`
 	// Google Calendar state. All three stay empty for Misty-only tasks.
 	Schedule         json.RawMessage `json:"schedule,omitempty"`
 	Calendar         json.RawMessage `json:"calendar,omitempty"`
 	ConflictedFields []string        `json:"conflicted_fields,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`
+}
+
+type SpaceTaskAgentRunInput struct {
+	Mode              string                         `json:"mode,omitempty"`
+	ContextReferences []CreatorAgentContextReference `json:"context_references,omitempty"`
 }
 
 type SpaceTaskQuery struct {

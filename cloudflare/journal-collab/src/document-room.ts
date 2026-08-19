@@ -325,6 +325,27 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
         await this.ctx.storage.put(BOOTSTRAP_APPLIED_KEY, true);
         return jsonResponse({ ok: true, initialized });
       }
+      case "replace_markdown": {
+        if (!this.supportsMarkdownBootstrap) {
+          return jsonResponse({ code: "unknown_command" }, 400);
+        }
+        const title = typeof payload.title === "string" ? payload.title.trim() : "";
+        const markdown = typeof payload.markdown === "string" ? payload.markdown.trim() : "";
+        if (!title || title.length > 500 || markdown.length > 100_000) {
+          return jsonResponse({ code: "invalid_note_content" }, 400);
+        }
+        this.document.transact(() => {
+          const metadata = this.document.getMap<string>("misty:bootstrap");
+          metadata.set("title", title);
+          metadata.set("markdown", markdown);
+          metadata.set("format", "markdown");
+          const text = this.document.getText("markdown");
+          text.delete(0, text.length);
+          if (markdown) text.insert(0, markdown);
+        });
+        await this.onSave();
+        return jsonResponse({ ok: true });
+      }
       case "acl": {
         const version = Number(payload.acl_version);
         if (!Number.isInteger(version) || version < 1) {

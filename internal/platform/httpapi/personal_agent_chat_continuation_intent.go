@@ -9,7 +9,7 @@ import "strings"
 // just asked for a title and due date.
 func TestingCompileAgentIntentWithContinuation(prompt, previousUserPrompt, previousAgentReply string) []string {
 	current := TestingCompileAgentIntent(prompt)
-	if !agentReplyIsClarification(previousAgentReply) || continuationCancelsAction(prompt) {
+	if continuationCancelsAction(prompt) || (!agentReplyIsClarification(previousAgentReply) && !agentRequestIsAdditiveFollowup(prompt)) {
 		return current
 	}
 	prior := TestingCompileAgentIntent(previousUserPrompt)
@@ -27,6 +27,16 @@ func TestingCompileAgentIntentWithContinuation(prompt, previousUserPrompt, previ
 		}
 	}
 	return current
+}
+
+func agentRequestIsAdditiveFollowup(value string) bool {
+	lower := " " + strings.ToLower(strings.TrimSpace(value)) + " "
+	for _, marker := range []string{" also ", " too ", " as well ", " another ", " one more ", " same for ", " do that for "} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func agentReplyIsClarification(value string) bool {

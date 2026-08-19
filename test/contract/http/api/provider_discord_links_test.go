@@ -118,6 +118,44 @@ func TestDiscordDisplayNameFallsBackToUsername(t *testing.T) {
 	}
 }
 
+func TestDiscordResourceConfigurationUsesCanonicalSnakeCase(t *testing.T) {
+	raw := TestingDiscordResourceConfiguration("guild-1", "Misty Guild")
+	var configuration map[string]any
+	if err := json.Unmarshal(raw, &configuration); err != nil {
+		t.Fatal(err)
+	}
+	if configuration["guild_id"] != "guild-1" || configuration["guild_name"] != "Misty Guild" {
+		t.Fatalf("configuration = %#v", configuration)
+	}
+	if _, leaked := configuration["guildId"]; leaked || len(configuration) != 2 {
+		t.Fatalf("configuration leaked a non-canonical key: %#v", configuration)
+	}
+}
+
+func TestDiscordMessageOriginPreservesSourceAndReply(t *testing.T) {
+	message := testDiscordMessage()
+	message.Timestamp = "2026-08-19T12:00:00Z"
+	message.Author.Avatar = "avatar-hash"
+	message.ReferencedMessage = &struct {
+		ID string `json:"id"`
+	}{ID: "1200000000000000001"}
+	message.Attachments = append(message.Attachments, struct {
+		ID       string `json:"id"`
+		Filename string `json:"filename"`
+		URL      string `json:"url"`
+	}{ID: "a1", Filename: "spec.pdf", URL: "https://cdn.discord/spec.pdf"})
+
+	origin := TestingDiscordMessageOrigin(message)
+	if origin.System != "discord" || origin.ExternalID != message.ID || origin.ExternalChannelID != "channel-1" ||
+		origin.AuthorName != "Rey" || origin.AuthorHandle != "rey" || origin.AuthoredAt != message.Timestamp ||
+		origin.ReplyToExternalID != "1200000000000000001" || len(origin.AttachmentURLs) != 1 {
+		t.Fatalf("origin = %#v", origin)
+	}
+	if !strings.Contains(origin.AuthorAvatarURL, message.Author.ID+"/avatar-hash") {
+		t.Fatalf("avatar provenance = %q", origin.AuthorAvatarURL)
+	}
+}
+
 func TestPublishableToDiscord(t *testing.T) {
 	own := &db.SpaceMessage{SenderKind: "person", SenderUserID: "user-1",
 		Content: []db.MessageSpan{{Type: "text", Text: "hello"}}}
@@ -148,6 +186,33 @@ func TestPublishableToDiscord(t *testing.T) {
 	blank.Content = []db.MessageSpan{{Type: "text", Text: "   "}}
 	if TestingPublishableToDiscord(&blank, "user-1") {
 		t.Fatal("a whitespace-only message has nothing to publish")
+	}
+
+	malformed := *own
+	malformed.Origin = json.RawMessage(`{"system":`)
+	if TestingPublishableToDiscord(&malformed, "user-1") {
+		t.Fatal("a message with untrusted malformed provenance must not publish")
+	}
+
+	published := *own
+	published.Origin, _ = json.Marshal(db.MessageOrigin{System: "misty", PublishState: "published", PublishedExternal: "discord-1", ExternalChannelID: "channel-1"})
+	if TestingPublishableToDiscord(&published, "user-1") {
+		t.Fatal("an already-published message must not be posted twice")
+	}
+	if !TestingAlreadyPublishedToDiscord(&published, "channel-1") || TestingAlreadyPublishedToDiscord(&published, "other-channel") {
+		t.Fatal("idempotency must be scoped to the linked Discord channel")
+	}
+}
+
+func TestDiscordPermissionFailureClassification(t *testing.T) {
+	if got := TestingProviderErrorCodeForStatus(403); got != "permission_missing" {
+		t.Fatalf("403 provider code = %q", got)
+	}
+	if got := TestingProviderErrorCodeForStatus(401); got != "connection_revoked" {
+		t.Fatalf("401 provider code = %q", got)
+	}
+	if got := TestingProviderErrorCodeForStatus(404); got != "not_found" {
+		t.Fatalf("404 provider code = %q", got)
 	}
 }
 

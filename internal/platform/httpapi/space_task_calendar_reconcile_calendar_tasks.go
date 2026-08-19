@@ -81,11 +81,26 @@ func (s *SpacesService) publishTaskToGoogle(ctx context.Context, userID, spaceID
 	payload := TestingGoogleEventPayload(*schedule)
 	endpoint := "https://www.googleapis.com/calendar/v3/calendars/" + url.PathEscape(source.ExternalCalendarID) + "/events"
 	method := http.MethodPost
+	requestHeaders := http.Header{}
 	if link.GoogleEventID != "" {
 		endpoint += "/" + url.PathEscape(link.GoogleEventID)
 		method = http.MethodPatch
+		currentRaw, getErr := googleCalendarRequest(ctx, token, tokenType, http.MethodGet, endpoint, nil)
+		if getErr != nil {
+			return nil, getErr
+		}
+		var current googleCalendarEvent
+		if json.Unmarshal(currentRaw, &current) != nil || current.ID == "" {
+			return nil, errors.New("google calendar event response was invalid")
+		}
+		if !googleCalendarRemoteUnchanged(link.RemoteUpdatedAt, current.Updated) {
+			return nil, db.ErrSpaceConflict
+		}
+		if current.ETag != "" {
+			requestHeaders.Set("If-Match", current.ETag)
+		}
 	}
-	raw, err := googleCalendarRequest(ctx, token, tokenType, method, endpoint, payload)
+	raw, err := googleCalendarRequestWithHeaders(ctx, token, tokenType, method, endpoint, payload, requestHeaders)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +118,23 @@ func (s *SpacesService) publishTaskToGoogle(ctx context.Context, userID, spaceID
 		link.CanceledAt = ""
 	}
 	return s.database.SetSpaceTaskCalendar(ctx, spaceID, task.ID, schedule, link, nil)
+}
+
+func googleCalendarRemoteUnchanged(publishedUpdated, currentUpdated string) bool {
+	publishedUpdated, currentUpdated = strings.TrimSpace(publishedUpdated), strings.TrimSpace(currentUpdated)
+	if publishedUpdated == "" || currentUpdated == "" {
+		return true
+	}
+	published, publishedErr := time.Parse(time.RFC3339Nano, publishedUpdated)
+	current, currentErr := time.Parse(time.RFC3339Nano, currentUpdated)
+	if publishedErr == nil && currentErr == nil {
+		return published.Equal(current)
+	}
+	return publishedUpdated == currentUpdated
+}
+
+func TestingGoogleCalendarRemoteUnchanged(publishedUpdated, currentUpdated string) bool {
+	return googleCalendarRemoteUnchanged(publishedUpdated, currentUpdated)
 }
 
 // googleEventPayload shapes a schedule for Google.

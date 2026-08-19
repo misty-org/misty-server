@@ -37,26 +37,28 @@ func (s *SpacesService) SpaceTasks() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, page)
 		case http.MethodPost:
 			var body struct {
-				Title           string          `json:"title"`
-				Notes           string          `json:"notes"`
-				Status          string          `json:"status"`
-				Priority        string          `json:"priority"`
-				AssigneeUserID  string          `json:"assignee_user_id"`
-				AssigneeAgentID string          `json:"assignee_agent_id"`
-				DueAt           *time.Time      `json:"due_at"`
-				DueTimezone     string          `json:"due_timezone"`
-				SourceRefs      json.RawMessage `json:"source_refs"`
+				Title           string                     `json:"title"`
+				Notes           string                     `json:"notes"`
+				Status          string                     `json:"status"`
+				Priority        string                     `json:"priority"`
+				AssigneeUserID  string                     `json:"assignee_user_id"`
+				AssigneeAgentID string                     `json:"assignee_agent_id"`
+				DueAt           *time.Time                 `json:"due_at"`
+				DueTimezone     string                     `json:"due_timezone"`
+				SourceRefs      json.RawMessage            `json:"source_refs"`
+				AgentRun        *db.SpaceTaskAgentRunInput `json:"agent_run"`
 			}
 			if decodeJSON(w, r, &body) != nil {
 				return
 			}
-			item, err := s.database.CreateSpaceTask(r.Context(), userID, db.SpaceTask{SpaceID: spaceID, Title: body.Title, Notes: body.Notes, Status: body.Status, Priority: body.Priority, AssigneeUserID: body.AssigneeUserID, AssigneeAgentID: body.AssigneeAgentID, DueAt: body.DueAt, DueTimezone: body.DueTimezone, SourceRefs: body.SourceRefs})
+			item, err := s.database.CreateSpaceTask(r.Context(), userID, db.SpaceTask{SpaceID: spaceID, Title: body.Title, Notes: body.Notes, Status: body.Status, Priority: body.Priority, AssigneeUserID: body.AssigneeUserID, AssigneeAgentID: body.AssigneeAgentID, DueAt: body.DueAt, DueTimezone: body.DueTimezone, SourceRefs: body.SourceRefs, AgentRun: body.AgentRun})
 			if err != nil {
 				writeSpaceError(w, err)
 				return
 			}
 			_, _ = s.ProcessSpaceTaskEvent(r.Context(), *item, "created")
 			if item.AssigneeAgentID != "" {
+				item.AgentRun = body.AgentRun
 				s.queueAssignedPersonalAgent(r.Context(), userID, item)
 			}
 			writeJSON(w, http.StatusCreated, item)
@@ -119,6 +121,7 @@ func (s *SpacesService) SpaceTask() http.HandlerFunc {
 			}
 			_, _ = s.ProcessSpaceTaskEvent(r.Context(), *item, "updated")
 			if item.AssigneeAgentID != "" {
+				item.AgentRun = body.AgentRun
 				s.queueAssignedPersonalAgent(r.Context(), userID, item)
 			}
 			writeJSON(w, http.StatusOK, item)

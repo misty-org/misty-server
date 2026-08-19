@@ -222,3 +222,15 @@ func TestDateOnlyNormalizesBothFormats(t *testing.T) {
 		t.Fatalf("dateOnly(date) = %q", got)
 	}
 }
+
+func TestCalendarPublishDetectsRemoteVersionChanges(t *testing.T) {
+	if !TestingGoogleCalendarRemoteUnchanged("2026-08-19T12:00:00Z", "2026-08-19T12:00:00.000Z") {
+		t.Fatal("equivalent provider timestamps were treated as different versions")
+	}
+	if TestingGoogleCalendarRemoteUnchanged("2026-08-19T12:00:00Z", "2026-08-19T12:01:00Z") {
+		t.Fatal("a changed remote event was allowed to be overwritten")
+	}
+	if !TestingGoogleCalendarRemoteUnchanged("", "2026-08-19T12:01:00Z") {
+		t.Fatal("a legacy event without a remote version cannot be compared")
+	}
+}

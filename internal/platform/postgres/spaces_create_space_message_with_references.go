@@ -83,14 +83,13 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 				mentionUsers[span.UserID] = true
 			}
 			if span.AgentID != "" {
-				membership, personalErr := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, span.AgentID)
-				if personalErr != nil || !agentRolePermission(membership, PermissionMessagesWrite) {
-					return ErrSpaceInvalid
-				}
-				if conversationID != "" {
-					var participating bool
-					if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_conversation_members
-						WHERE conversation_id=$1 AND actor_kind='agent' AND agent_id=$2)`, conversationID, span.AgentID).Scan(&participating); err != nil || !participating {
+				if _, personalErr := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, span.AgentID); personalErr != nil {
+					var publiclyReferenced bool
+					if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+						SELECT 1 FROM personal_agents a WHERE a.id=$1 AND a.deleted_at IS NULL AND (
+							EXISTS(SELECT 1 FROM space_tasks t WHERE t.space_id=$2 AND t.assignee_agent_id=a.id) OR
+							EXISTS(SELECT 1 FROM space_messages m WHERE m.space_id=$2 AND m.sender_agent_id=a.id)
+						))`, span.AgentID, spaceID).Scan(&publiclyReferenced); err != nil || !publiclyReferenced {
 						return ErrSpaceInvalid
 					}
 				}
@@ -241,7 +240,7 @@ func parsePGTextArray(raw string) []string {
 	return strings.Split(strings.TrimSuffix(strings.TrimPrefix(raw, "{"), "}"), ",")
 }
 
-const spaceMessageColumns = `m.seq,m.id,m.space_id,COALESCE(m.conversation_id,''),m.sender_user_id,CASE WHEN m.origin->>'author_name' IS NOT NULL AND m.origin->>'author_name'<>'' THEN m.origin->>'author_name' WHEN m.sender_kind='agent' THEN COALESCE(a.name,(SELECT v.name FROM personal_agent_space_grants g JOIN personal_agent_versions v ON v.id=g.approved_version_id WHERE g.agent_id=m.sender_agent_id AND g.space_id=m.space_id LIMIT 1),'Former agent') ELSE COALESCE(u.name,'System') END,CASE WHEN m.sender_kind='person' AND COALESCE(m.origin->>'author_name','')='' THEN COALESCE(u.avatar_version,0) ELSE 0 END,m.sender_kind,m.sender_agent_id,m.content,m.file_node_ids::text,m.edited_at,m.created_at,COALESCE(m.reply_to_message_id,''),m.origin`
+const spaceMessageColumns = `m.seq,m.id,m.space_id,COALESCE(m.conversation_id,''),m.sender_user_id,CASE WHEN m.origin->>'author_name' IS NOT NULL AND m.origin->>'author_name'<>'' THEN m.origin->>'author_name' WHEN m.sender_kind='agent' THEN COALESCE(a.name,(SELECT p.name FROM personal_agents p WHERE p.id=m.sender_agent_id),'Former agent') ELSE COALESCE(u.name,'System') END,CASE WHEN m.sender_kind='person' AND COALESCE(m.origin->>'author_name','')='' THEN COALESCE(u.avatar_version,0) ELSE 0 END,m.sender_kind,m.sender_agent_id,m.content,m.file_node_ids::text,m.edited_at,m.created_at,COALESCE(m.reply_to_message_id,''),m.origin`
 
 func (db *Database) SpaceMessages(ctx context.Context, userID, spaceID string, before int64, limit int) ([]SpaceMessage, error) {
 	if limit < 1 || limit > 100 {

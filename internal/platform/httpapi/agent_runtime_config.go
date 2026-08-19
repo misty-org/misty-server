@@ -25,30 +25,22 @@ const (
 )
 
 type AgentRuntimeConfig struct {
-	Mode           string
 	Kind           string
 	URL            string
 	InternalAPIURL string
 	secret         []byte
 	previousSecret []byte
 	client         *http.Client
-	ownerAllowlist map[string]bool
-	agentAllowlist map[string]bool
 }
 
 func AgentRuntimeConfigFromEnv() (AgentRuntimeConfig, error) {
-	mode := strings.ToLower(strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_RUNTIME_MODE")))
-	if mode == "" {
-		mode = "legacy"
-	}
-	if mode != "legacy" && mode != "workflow" {
-		return AgentRuntimeConfig{}, errors.New("MISTY_AGENT_RUNTIME_MODE must be legacy or workflow")
-	}
-	config := AgentRuntimeConfig{Mode: mode, Kind: "vercel-workflow", client: &http.Client{Timeout: 20 * time.Second}}
-	if mode == "legacy" {
+	config := AgentRuntimeConfig{Kind: "vercel-workflow", client: &http.Client{Timeout: 20 * time.Second}}
+	rawURL := strings.TrimRight(strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_RUNTIME_URL")), "/")
+	rawSecret := strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET"))
+	if rawURL == "" && rawSecret == "" && !strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production") {
 		return config, nil
 	}
-	parsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_RUNTIME_URL")), "/"))
+	parsed, err := url.Parse(rawURL)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil {
 		return AgentRuntimeConfig{}, errors.New("MISTY_AGENT_RUNTIME_URL must be an absolute URL")
 	}
@@ -66,33 +58,11 @@ func AgentRuntimeConfigFromEnv() (AgentRuntimeConfig, error) {
 	if config.previousSecret, err = decodeOptionalServiceSecret("MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS"); err != nil {
 		return AgentRuntimeConfig{}, err
 	}
-	config.ownerAllowlist = agentRuntimeAllowlist(envconfig.Getenv("MISTY_AGENT_RUNTIME_OWNER_IDS"))
-	config.agentAllowlist = agentRuntimeAllowlist(envconfig.Getenv("MISTY_AGENT_RUNTIME_AGENT_IDS"))
 	return config, nil
 }
 
 func (c AgentRuntimeConfig) Enabled() bool {
-	return c.Mode == "workflow" && c.URL != "" && len(c.secret) > 0
-}
-
-func (c AgentRuntimeConfig) EnabledFor(ownerID, agentID string) bool {
-	if !c.Enabled() {
-		return false
-	}
-	if len(c.ownerAllowlist) == 0 && len(c.agentAllowlist) == 0 {
-		return true
-	}
-	return c.ownerAllowlist[ownerID] || c.agentAllowlist[agentID]
-}
-
-func agentRuntimeAllowlist(value string) map[string]bool {
-	items := map[string]bool{}
-	for _, item := range strings.Split(value, ",") {
-		if item = strings.TrimSpace(item); item != "" {
-			items[item] = true
-		}
-	}
-	return items
+	return c.URL != "" && len(c.secret) > 0
 }
 
 type agentRuntimeStartRequest struct {
@@ -122,6 +92,18 @@ func (c AgentRuntimeConfig) Cancel(ctx context.Context, runtimeRunID, mistyRunID
 	}
 	path := "/v1/runs/" + url.PathEscape(runtimeRunID) + "/cancel"
 	return c.request(ctx, http.MethodPost, path, mistyRunID+":cancel", []byte(`{}`), nil)
+}
+
+func (c AgentRuntimeConfig) ResumeApproval(ctx context.Context, hookToken, runID, approvalID string, approved bool) error {
+	body, _ := json.Marshal(map[string]any{"approved": approved, "approval_id": approvalID})
+	path := "/v1/approvals/" + url.PathEscape(hookToken)
+	return c.request(ctx, http.MethodPost, path, runID+":approval:"+approvalID, body, nil)
+}
+
+func (c AgentRuntimeConfig) ResumeDevice(ctx context.Context, hookToken, runID string, available bool) error {
+	body, _ := json.Marshal(map[string]any{"available": available})
+	path := "/v1/devices/" + url.PathEscape(hookToken)
+	return c.request(ctx, http.MethodPost, path, runID+":device:"+strconv.FormatBool(available), body, nil)
 }
 
 func (c AgentRuntimeConfig) request(ctx context.Context, method, path, idempotencyKey string, body []byte, output any) error {
@@ -203,4 +185,17 @@ func readAgentRuntimeRequest(c AgentRuntimeConfig, w http.ResponseWriter, r *htt
 		return false
 	}
 	return true
+}
+
+// TestingAgentRuntimeSignature exposes the wire signature for tests that live
+// outside production packages by repository convention.
+func TestingAgentRuntimeSignature(secret []byte, method, path, timestamp string, body []byte) string {
+	return signAgentRuntimeRequest(secret, method, path, timestamp, body)
+}
+
+func TestingAgentRuntimeSignatureVerifies(current, previous []byte, method, path, timestamp, signature string, body []byte) bool {
+	request := &http.Request{Method: method, URL: &url.URL{Path: path}, Header: http.Header{}}
+	request.Header.Set("X-Misty-Agent-Timestamp", timestamp)
+	request.Header.Set("X-Misty-Agent-Signature", signature)
+	return (AgentRuntimeConfig{secret: current, previousSecret: previous}).verifyRequest(request, body)
 }

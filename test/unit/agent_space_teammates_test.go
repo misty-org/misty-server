@@ -38,24 +38,7 @@ func TestValidateSpaceTaskAgentAssignmentAndTypedSources(t *testing.T) {
 	}
 }
 
-func TestNormalizeAgentSpacePermissionsFailsClosed(t *testing.T) {
-	permissions, err := db.TestingNormalizeAgentSpacePermissions(json.RawMessage(`{"messages.read":false,"messages.write":true,"tasks.view":false,"tasks.manage":true,"attached_files.read":true}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var values map[string]bool
-	if err := json.Unmarshal(permissions, &values); err != nil {
-		t.Fatal(err)
-	}
-	if values[db.PermissionMessagesWrite] || values[db.PermissionTasksManage] {
-		t.Fatalf("child permissions must be disabled with their read parents: %s", permissions)
-	}
-	if _, err := db.TestingNormalizeAgentSpacePermissions(json.RawMessage(`{"library.view":true}`)); !errors.Is(err, db.ErrSpaceInvalid) {
-		t.Fatalf("expected broad Library permission to be rejected, got %v", err)
-	}
-}
-
-func TestCompileAgentIntentOnlyGrantsExplicitTaskWrites(t *testing.T) {
+func TestCompileAgentIntentOnlyGrantsExplicitSpaceWrites(t *testing.T) {
 	tests := []struct {
 		prompt string
 		want   []string
@@ -73,7 +56,13 @@ func TestCompileAgentIntentOnlyGrantsExplicitTaskWrites(t *testing.T) {
 		{"Delegate this launch summary to Researcher", []string{"tasks.query", "agents.delegate"}},
 		{"Can you delegate work to Agents?", []string{"tasks.query"}},
 		{"Do not delegate this to the Agent", []string{"tasks.query"}},
-		{"Create a note", []string{"tasks.query"}},
+		{"Create a note", []string{"tasks.query", "notes.create"}},
+		{"Schedule a calendar event for tomorrow", []string{"tasks.query", "calendar.create"}},
+		{"Reschedule the meeting", []string{"tasks.query", "calendar.update"}},
+		{"Create a product roadmap", []string{"tasks.query", "roadmaps.create"}},
+		{"Rename the roadmap", []string{"tasks.query", "roadmaps.update"}},
+		{"Tag the file in the library", []string{"tasks.query", "library.update"}},
+		{"Save the attachment to the library", []string{"tasks.query", "library.promote_attachment"}},
 		{"Recreate the summary of this task", []string{"tasks.query"}},
 		{"Do not create a task", []string{"tasks.query"}},
 	}
@@ -101,6 +90,26 @@ func TestCompileAgentIntentCarriesWritesThroughOneClarification(t *testing.T) {
 	)
 	if slices.Contains(canceled, "tasks.create") {
 		t.Fatalf("canceled continuation capabilities = %v, must not include tasks.create", canceled)
+	}
+}
+
+func TestCompileAgentIntentCarriesWritesThroughAdditiveFollowup(t *testing.T) {
+	got := api.TestingCompileAgentIntentWithContinuation(
+		"Can you also tell her to do laundry?",
+		"Add a task for Melissa to wash the dishes by 7pm",
+		"Task created and assigned to Melissa.",
+	)
+	if !slices.Contains(got, "tasks.create") {
+		t.Fatalf("additive continuation capabilities = %v, want tasks.create", got)
+	}
+
+	canceled := api.TestingCompileAgentIntentWithContinuation(
+		"Never mind, don't add another one",
+		"Add a task for Melissa to wash the dishes by 7pm",
+		"Task created and assigned to Melissa.",
+	)
+	if slices.Contains(canceled, "tasks.create") {
+		t.Fatalf("canceled additive continuation capabilities = %v, must not include tasks.create", canceled)
 	}
 }
 
@@ -139,7 +148,7 @@ func TestPrivateSpaceToolboxRegistrationsAreCompleteAndGuardWrites(t *testing.T)
 			t.Fatalf("write tool lacks approval or audit policy: %#v", descriptor)
 		}
 	}
-	want := []string{"messages.search", "messages.send", "library.search", "tasks.query", "calendar.query", "tasks.create", "tasks.update", "agents.delegate"}
+	want := []string{"context.get", "members.list", "members.resolve", "messages.search", "messages.send", "library.search", "tasks.query", "calendar.query", "tasks.create", "tasks.update", "agents.list", "agents.status", "agents.delegate", "notes.search", "notes.read", "notes.create", "notes.update", "calendar.create", "calendar.update", "roadmaps.query", "roadmaps.read", "roadmaps.create", "roadmaps.update", "library.read", "library.update", "library.promote_attachment"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("Toolbox tools = %v, want %v", names, want)
 	}
@@ -163,43 +172,11 @@ func TestCanonicalAndProviderActionsUseToolboxDescriptors(t *testing.T) {
 		}
 	}
 	want := []string{
-		"messages.search", "messages.send", "library.search", "tasks.query", "calendar.query", "tasks.create", "tasks.update",
+		"context.get", "members.list", "members.resolve", "messages.search", "messages.send", "library.search", "tasks.query", "calendar.query", "tasks.create", "tasks.update", "notes.search", "notes.read", "notes.create", "notes.update", "calendar.create", "calendar.update", "roadmaps.query", "roadmaps.read", "roadmaps.create", "roadmaps.update", "library.read", "library.update", "library.promote_attachment", "agents.list", "agents.status",
 		"provider.slack.query", "provider.slack.write", "provider.notion.query", "provider.google.query",
 	}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("canonical Toolbox tools = %v, want %v", names, want)
-	}
-}
-
-func TestPersonalAgentToolPolicyEnforcesReadAndWriteSeparately(t *testing.T) {
-	policy := json.RawMessage(`{"read":true,"write":false,"integrations":[]}`)
-	if !api.TestingPersonalAgentToolPolicyAllows(policy, "read") {
-		t.Fatal("read policy should allow read tools")
-	}
-	if api.TestingPersonalAgentToolPolicyAllows(policy, "write") {
-		t.Fatal("write policy must deny write tools")
-	}
-	if api.TestingPersonalAgentToolPolicyAllows(json.RawMessage(`{}`), "read") {
-		t.Fatal("missing policy fields must fail closed")
-	}
-	if api.TestingPersonalAgentToolPolicyAllows(json.RawMessage(`{"read":false,"write":true}`), "write") {
-		t.Fatal("write access must not bypass a revoked parent read grant")
-	}
-}
-
-func TestPersonalAgentToolPolicyUsesExactRiskBoundGrantsWhenPresent(t *testing.T) {
-	policy := json.RawMessage(`{"read":true,"write":true,"grants":[{"capability":"tasks.query","risk":"read"}]}`)
-	if !api.TestingPersonalAgentCapabilityAllowed(policy, "tasks.query", "read") {
-		t.Fatal("exact Task query grant was denied")
-	}
-	if api.TestingPersonalAgentCapabilityAllowed(policy, "tasks.query", "write") {
-		t.Fatal("a read grant must not authorize the same capability at write risk")
-	}
-	if api.TestingPersonalAgentCapabilityAllowed(policy, "tasks.update", "write") {
-		t.Fatal("legacy write=true must not bypass a present exact grant list")
-	}
-	if api.TestingPersonalAgentCapabilityAllowed(json.RawMessage(`{"read":true,"write":true,"grants":[]}`), "tasks.query", "read") {
-		t.Fatal("an explicit empty grant list must fail closed")
 	}
 }
 

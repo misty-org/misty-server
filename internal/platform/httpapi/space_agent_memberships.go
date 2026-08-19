@@ -16,28 +16,12 @@ func (s *SpacesService) SpaceAgentMemberships() http.HandlerFunc {
 			return
 		}
 		spaceID := chi.URLParam(r, "spaceID")
-		switch r.Method {
-		case http.MethodGet:
-			items, err := s.database.SpaceAgentMemberships(r.Context(), userID, spaceID)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"agents": items})
-		case http.MethodPost:
-			var body db.SpaceAgentMembershipInput
-			if decodeJSON(w, r, &body) != nil {
-				return
-			}
-			item, err := s.database.AddSpaceAgentMembership(r.Context(), userID, spaceID, body)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusCreated, item)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		items, err := s.database.SpaceAgentMemberships(r.Context(), userID, spaceID)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
 		}
+		writeJSON(w, http.StatusOK, map[string]any{"agents": items})
 	}
 }
 
@@ -103,50 +87,4 @@ func publicAgentContextSummary(permissions json.RawMessage) []string {
 		items = append(items, "Files attached to assigned work")
 	}
 	return items
-}
-
-func (s *SpacesService) SpaceAgentMembership() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID, agentID := chi.URLParam(r, "spaceID"), strings.TrimSpace(chi.URLParam(r, "agentID"))
-		switch r.Method {
-		case http.MethodPatch:
-			var body db.SpaceAgentMembershipInput
-			if decodeJSON(w, r, &body) != nil {
-				return
-			}
-			item, err := s.database.UpdateSpaceAgentMembership(r.Context(), userID, spaceID, agentID, body)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, item)
-		case http.MethodDelete:
-			if err := s.database.RemoveSpaceAgentMembership(r.Context(), userID, spaceID, agentID); err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}
-}
-
-func (s *SpacesService) ApproveSpaceAgentVersion() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		item, err := s.database.ApproveSpaceAgentVersion(r.Context(), userID, chi.URLParam(r, "spaceID"), chi.URLParam(r, "agentID"))
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, item)
-	}
 }

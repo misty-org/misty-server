@@ -34,11 +34,6 @@ func TestAgentDirectConversationsAreCanonicalPerMemberAndSpace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.AddSpaceAgentMembership(
-		ctx, owner.ID, space.ID, SpaceAgentMembershipInput{AgentID: agent.ID},
-	); err != nil {
-		t.Fatal(err)
-	}
 	first, err := database.DirectAgentConversation(ctx, owner.ID, space.ID, agent.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -50,12 +45,8 @@ func TestAgentDirectConversationsAreCanonicalPerMemberAndSpace(t *testing.T) {
 	if first.ID != again.ID || first.Kind != "direct" || len(first.Participants) != 2 {
 		t.Fatalf("canonical direct conversation mismatch: %#v %#v", first, again)
 	}
-	memberDirect, err := database.DirectAgentConversation(ctx, member.ID, space.ID, agent.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if memberDirect.ID == first.ID {
-		t.Fatalf("different members shared direct conversation %q", first.ID)
+	if _, err := database.DirectAgentConversation(ctx, member.ID, space.ID, agent.ID); err == nil {
+		t.Fatal("non-creator opened a direct Agent conversation")
 	}
 	group, err := database.CreateSpaceConversation(ctx, owner.ID, space.ID, "Research group", []SpaceActorRef{
 		{Kind: "person", UserID: member.ID}, {Kind: "agent", AgentID: agent.ID},
@@ -65,6 +56,40 @@ func TestAgentDirectConversationsAreCanonicalPerMemberAndSpace(t *testing.T) {
 	}
 	if len(group.Participants) != 3 {
 		t.Fatalf("group participants = %#v", group.Participants)
+	}
+}
+
+func TestAgentDirectConversationWorksInDefaultMistySpace(t *testing.T) {
+	database := openTestDatabase(t)
+	ctx := context.Background()
+	owner, err := database.CreateUser(
+		"Default companion owner",
+		"default-companion-owner@example.com",
+		"password123",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.EnsureDefaultSpace(ctx, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	space := requireDefaultMistySpace(t, database, ctx, owner.ID)
+	agent, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{
+		Name:      "Welcome companion",
+		ModelMode: "pinned",
+		ModelID:   "google/gemini-2.5-flash-lite",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conversation, err := database.DirectAgentConversation(ctx, owner.ID, space.ID, agent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conversation.Kind != "direct" || conversation.DirectUserID != owner.ID ||
+		conversation.DirectAgentID != agent.ID {
+		t.Fatalf("default companion conversation = %#v", conversation)
 	}
 }
 
@@ -81,11 +106,6 @@ func TestDeletingAgentDirectConversationClosesAndRecreatesIt(t *testing.T) {
 		ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite",
 	})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.AddSpaceAgentMembership(
-		ctx, owner.ID, space.ID, SpaceAgentMembershipInput{AgentID: agent.ID},
-	); err != nil {
 		t.Fatal(err)
 	}
 	direct, err := database.DirectAgentConversation(ctx, owner.ID, space.ID, agent.ID)
@@ -153,11 +173,6 @@ func TestAgentRepliesPostIntoConversationsThatHaveAgentMembers(t *testing.T) {
 		ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite",
 	})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.AddSpaceAgentMembership(
-		ctx, owner.ID, space.ID, SpaceAgentMembershipInput{AgentID: agent.ID},
-	); err != nil {
 		t.Fatal(err)
 	}
 	direct, err := database.DirectAgentConversation(ctx, owner.ID, space.ID, agent.ID)

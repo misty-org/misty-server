@@ -34,6 +34,7 @@ type AgentsService struct {
 	database         *db.Database
 	avatarStore      LibraryObjectStore
 	connectedDevices ConnectedDevicesConfig
+	voiceAnalyzer    *serveragent.SmartLibraryAnalyzer
 }
 
 func NewAgentsService(database *db.Database) *AgentsService {
@@ -45,6 +46,10 @@ func NewAgentsService(database *db.Database) *AgentsService {
 // pinned after the owner changes the Agent's core identity.
 func (s *AgentsService) SetAvatarStore(store LibraryObjectStore) {
 	s.avatarStore = store
+}
+
+func (s *AgentsService) SetVoiceAnalyzer(analyzer *serveragent.SmartLibraryAnalyzer) {
+	s.voiceAnalyzer = analyzer
 }
 
 func (s *AgentsService) PersonalAgents() http.HandlerFunc {
@@ -64,10 +69,6 @@ func (s *AgentsService) PersonalAgents() http.HandlerFunc {
 		case http.MethodPost:
 			var body db.PersonalAgent
 			if decodeAIJSON(w, r, &body) != nil {
-				return
-			}
-			if !personalAgentToolGrantsKnown(body.ToolPermissions) {
-				writeAgentError(w, db.ErrSpaceInvalid)
 				return
 			}
 			if strings.TrimSpace(body.ModelID) == "" {
@@ -112,10 +113,6 @@ func (s *AgentsService) PersonalAgent() http.HandlerFunc {
 				return
 			}
 			body.ID = agentID
-			if !personalAgentToolGrantsKnown(body.ToolPermissions) {
-				writeAgentError(w, db.ErrSpaceInvalid)
-				return
-			}
 			if strings.TrimSpace(body.ModelID) == "" {
 				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_required"})
 				return
@@ -155,7 +152,7 @@ func (s *AgentsService) PersonalAgentToolbox() http.HandlerFunc {
 			writeAgentError(w, err)
 			return
 		}
-		items := personalAgentToolboxItems(personal.ToolPermissions)
+		items := personalAgentToolboxItems(json.RawMessage(`{"mode":"inherit_creator"}`))
 		audits, err := s.database.PersonalAgentToolboxActionAudits(r.Context(), userID, agentID, 50)
 		if err != nil {
 			writeAgentError(w, err)
@@ -170,7 +167,7 @@ func (s *AgentsService) PersonalAgentToolboxCatalog() http.HandlerFunc {
 		if _, ok := s.requireUser(w, r); !ok {
 			return
 		}
-		defaults := json.RawMessage(`{"mode":"inherit_invoker","disabled_surfaces":[],"read":true,"write":true,"integrations":[]}`)
+		defaults := json.RawMessage(`{"mode":"inherit_creator"}`)
 		writeJSON(w, http.StatusOK, map[string]any{"actions": personalAgentToolboxItems(defaults), "recent_activity": []db.AgentToolboxActionAudit{}})
 	}
 }
@@ -193,62 +190,6 @@ func personalAgentToolboxItems(policy json.RawMessage) []agentToolboxCatalogItem
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 	return items
-}
-
-func personalAgentToolGrantsKnown(raw json.RawMessage) bool {
-	var policy struct {
-		Grants *[]db.AgentCapabilityGrant `json:"grants"`
-	}
-	if json.Unmarshal(raw, &policy) != nil || policy.Grants == nil {
-		return true
-	}
-	known := map[string]string{}
-	for _, descriptor := range personalAgentToolboxCatalogDescriptors() {
-		known[descriptor.Name] = descriptor.Risk
-	}
-	seen := map[string]bool{}
-	for _, grant := range *policy.Grants {
-		if known[grant.Capability] != grant.Risk || seen[grant.Capability] {
-			return false
-		}
-		seen[grant.Capability] = true
-	}
-	return true
-}
-
-func (s *AgentsService) PersonalAgentGrants() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		agentID := strings.TrimSpace(chi.URLParam(r, "agentID"))
-		if r.Method == http.MethodGet {
-			items, err := s.database.PersonalAgentGrants(r.Context(), userID, agentID)
-			if err != nil {
-				writeAgentError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"grants": items})
-			return
-		}
-		if r.Method != http.MethodPut {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		var body struct {
-			Spaces []db.PersonalAgentGrantInput `json:"spaces"`
-		}
-		if decodeAIJSON(w, r, &body) != nil {
-			return
-		}
-		items, err := s.database.ReplacePersonalAgentGrants(r.Context(), userID, agentID, body.Spaces)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"grants": items})
-	}
 }
 
 func (s *AgentsService) Models() http.HandlerFunc {

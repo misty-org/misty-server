@@ -26,9 +26,6 @@ func TestPersonalAgentRuntimeIsFIFOAndSingleActivePerAgent(t *testing.T) {
 		if createErr != nil {
 			t.Fatal(createErr)
 		}
-		if _, createErr = database.AddSpaceAgentMembership(ctx, owner.ID, space.ID, SpaceAgentMembershipInput{AgentID: agent.ID}); createErr != nil {
-			t.Fatal(createErr)
-		}
 		return agent
 	}
 	firstAgent, secondAgent := createAgent("First Runtime Agent"), createAgent("Second Runtime Agent")
@@ -104,9 +101,6 @@ func TestPersonalAgentRuntimeCancelAndRetryAreOwnerScoped(t *testing.T) {
 	}
 	agent, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{Name: "Cancelable Agent", ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite"})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = database.AddSpaceAgentMembership(ctx, owner.ID, space.ID, SpaceAgentMembershipInput{AgentID: agent.ID}); err != nil {
 		t.Fatal(err)
 	}
 	task, err := database.CreateSpaceTask(ctx, owner.ID, SpaceTask{SpaceID: space.ID, Title: "Cancelable task", Status: "todo", AssigneeAgentID: agent.ID})

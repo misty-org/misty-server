@@ -231,6 +231,16 @@ type SpaceRun struct {
 	RuntimeRunID          string          `json:"runtime_run_id,omitempty"`
 	RuntimePhase          string          `json:"runtime_phase,omitempty"`
 	RuntimeHeartbeatAt    *time.Time      `json:"runtime_heartbeat_at,omitempty"`
+	OwnerUserID           string          `json:"owner_user_id"`
+	InitialRunMode        string          `json:"initial_run_mode"`
+	EffectiveRunMode      string          `json:"effective_run_mode"`
+	AgentVersionSnapshot  json.RawMessage `json:"agent_version_snapshot"`
+	ApprovalState         string          `json:"approval_state"`
+	ParentRunID           string          `json:"parent_run_id,omitempty"`
+	DelegationDepth       int             `json:"delegation_depth"`
+	ContextBindings       json.RawMessage `json:"context_bindings"`
+	DeviceWaitHookToken   string          `json:"-"`
+	DeviceWaitExpiresAt   *time.Time      `json:"device_wait_expires_at,omitempty"`
 }
 
 func (db *Database) TestingSpaceTx(ctx context.Context, fn func(*sql.Tx) error) error {

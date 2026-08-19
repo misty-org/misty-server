@@ -2,6 +2,8 @@ import express, { type Request } from "express";
 import { getRun, start } from "workflow/api";
 import { runSpaceTaskAgent } from "../workflows/space-task-agent.js";
 import { controlPlaneURL } from "./control-plane.js";
+import { agentToolApprovalHook } from "./approval.js";
+import { agentDeviceHook } from "./device.js";
 import {
   decodeControlSecret,
   signatureHeaders,
@@ -58,12 +60,10 @@ app.post("/v1/runs", async (request: RawRequest, response) => {
     ]);
     return response.status(202).json({ runtime_run_id: run.runId });
   } catch (error) {
-    return response
-      .status(503)
-      .json({
-        code: "workflow_start_failed",
-        message: error instanceof Error ? error.message : "unknown error",
-      });
+    return response.status(503).json({
+      code: "workflow_start_failed",
+      message: error instanceof Error ? error.message : "unknown error",
+    });
   }
 });
 
@@ -83,14 +83,65 @@ app.post(
       await getRun(runtimeRunId).cancel();
       return response.json({ canceled: true });
     } catch (error) {
-      return response
-        .status(503)
-        .json({
-          code: "workflow_cancel_failed",
-          message: error instanceof Error ? error.message : "unknown error",
-        });
+      return response.status(503).json({
+        code: "workflow_cancel_failed",
+        message: error instanceof Error ? error.message : "unknown error",
+      });
     }
   },
 );
+
+app.post("/v1/approvals/:hookToken", async (request: RawRequest, response) => {
+  if (!authorized(request))
+    return response.status(401).json({ code: "unauthorized" });
+  if (!request.header(signatureHeaders.idempotency))
+    return response.status(400).json({ code: "idempotency_key_required" });
+  const hookToken = Array.isArray(request.params.hookToken)
+    ? request.params.hookToken[0]
+    : request.params.hookToken;
+  if (
+    !hookToken ||
+    typeof request.body?.approved !== "boolean" ||
+    typeof request.body?.approval_id !== "string"
+  ) {
+    return response.status(400).json({ code: "invalid_approval_resume" });
+  }
+  try {
+    await agentToolApprovalHook.resume(hookToken, {
+      approved: request.body.approved,
+      approval_id: request.body.approval_id,
+    });
+    return response.json({ resumed: true });
+  } catch (error) {
+    return response.status(409).json({
+      code: "approval_resume_failed",
+      message: error instanceof Error ? error.message : "unknown error",
+    });
+  }
+});
+
+app.post("/v1/devices/:hookToken", async (request: RawRequest, response) => {
+  if (!authorized(request))
+    return response.status(401).json({ code: "unauthorized" });
+  if (!request.header(signatureHeaders.idempotency))
+    return response.status(400).json({ code: "idempotency_key_required" });
+  const hookToken = Array.isArray(request.params.hookToken)
+    ? request.params.hookToken[0]
+    : request.params.hookToken;
+  if (!hookToken || typeof request.body?.available !== "boolean") {
+    return response.status(400).json({ code: "invalid_device_resume" });
+  }
+  try {
+    await agentDeviceHook.resume(hookToken, {
+      available: request.body.available,
+    });
+    return response.json({ resumed: true });
+  } catch (error) {
+    return response.status(409).json({
+      code: "device_resume_failed",
+      message: error instanceof Error ? error.message : "unknown error",
+    });
+  }
+});
 
 export default app;

@@ -50,7 +50,7 @@ func (s *SpacesService) spaceAgentDelegationHandler(
 		if membership.AgentID == delegatingAgentID || !delegatedAgentTargetGrounded(invocation.OriginalInput, membership) {
 			return nil, workflowv2.ErrCapabilityDenied
 		}
-		reply, runID, err := s.runMentionedAgentAtDepth(
+		_, runID, err := s.runMentionedAgentAtDepth(
 			ctx, requestingUserID, spaceID, conversationID, membership.AgentID, sourceMessageID, "delegation",
 			[]db.MessageSpan{{Type: "text", Text: input.Prompt}}, nil, nil, nil, depth,
 		)
@@ -58,8 +58,8 @@ func (s *SpacesService) spaceAgentDelegationHandler(
 			return nil, err
 		}
 		return TestingMustAPIRawJSON(map[string]any{
-			"status": "completed", "agent_id": membership.AgentID, "agent_name": membership.Name,
-			"run_id": runID, "message_id": reply.ID,
+			"status": "queued", "agent_id": membership.AgentID, "agent_name": membership.Name,
+			"run_id": runID,
 		}), nil
 	}
 }

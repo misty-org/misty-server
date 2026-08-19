@@ -102,6 +102,21 @@ func (db *Database) UpdateNativeCalendarEvent(ctx context.Context, userID string
 	return out, err
 }
 
+func (db *Database) NativeCalendarEvent(ctx context.Context, userID, spaceID, eventID string) (*SpaceCalendarEvent, error) {
+	out := &SpaceCalendarEvent{}
+	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionTasksView); err != nil {
+			return err
+		}
+		err := scanNativeCalendarEvent(tx.QueryRowContext(ctx, `SELECT `+nativeCalendarEventColumns+` FROM space_native_calendar_events WHERE id=$1 AND space_id=$2 AND archived_at IS NULL AND (audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=audience_conversation_id AND cm.actor_kind='person' AND cm.user_id=$3))`, eventID, spaceID, userID), out)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrSpaceNotFound
+		}
+		return err
+	})
+	return out, err
+}
+
 func (db *Database) ArchiveNativeCalendarEvent(ctx context.Context, userID, spaceID, eventID string, version int64) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionTasksManage); err != nil {

@@ -14,6 +14,30 @@ func agentToolObjectOutputSchema() json.RawMessage {
 	return json.RawMessage(`{"type":"object"}`)
 }
 
+func contextGetToolDescriptor() agenttools.Descriptor {
+	return agenttools.Descriptor{
+		Name: toolboxContextGet, Version: 1, Description: "Get authoritative current time, timezone, and Space identity for this run.",
+		Risk: serveragent.RiskRead, InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}}), OutputSchema: agentToolObjectOutputSchema(),
+		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
+	}
+}
+
+func membersListToolDescriptor() agenttools.Descriptor {
+	return agenttools.Descriptor{
+		Name: toolboxMembersList, Version: 1, Description: "List members of the current Space with stable user IDs and roles.",
+		Risk: serveragent.RiskRead, InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}}), OutputSchema: agentToolObjectOutputSchema(),
+		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
+	}
+}
+
+func membersResolveToolDescriptor() agenttools.Descriptor {
+	return agenttools.Descriptor{
+		Name: toolboxMembersResolve, Version: 1, Description: "Resolve a member name or email in the current Space. Ambiguous matches are returned without guessing.",
+		Risk: serveragent.RiskRead, InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]any{"type": "string", "minLength": 1, "maxLength": 320}}}), OutputSchema: agentToolObjectOutputSchema(),
+		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
+	}
+}
+
 func messagesSearchToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
 		Name: toolboxMessagesSearch, Version: 1, Description: "Search messages visible to the member in the current Space.",
@@ -152,9 +176,15 @@ func browserAgentToolSchema(kind string) json.RawMessage {
 
 func canonicalAgentToolboxCatalogDescriptors() []agenttools.Descriptor {
 	descriptors := []agenttools.Descriptor{
+		contextGetToolDescriptor(), membersListToolDescriptor(), membersResolveToolDescriptor(),
 		messagesSearchToolDescriptor(), messagesSendToolDescriptor(), librarySearchToolDescriptor(), tasksQueryToolDescriptor(),
 		calendarQueryToolDescriptor(), tasksCreateToolDescriptor(), tasksUpdateToolDescriptor(),
 	}
+	descriptors = append(descriptors, noteAgentToolDescriptors()...)
+	descriptors = append(descriptors, calendarWriteToolDescriptors()...)
+	descriptors = append(descriptors, roadmapAgentToolDescriptors()...)
+	descriptors = append(descriptors, libraryMutationToolDescriptors()...)
+	descriptors = append(descriptors, companionReadToolDescriptors()...)
 	descriptors = append(descriptors, browserToolDescriptors()...)
 	for _, provider := range canonicalAgentToolboxProviders {
 		descriptors = append(descriptors, canonicalProviderToolDescriptor(provider, false))

@@ -96,7 +96,9 @@ func requireRunResourceEnabledTx(ctx context.Context, tx *sql.Tx, run *SpaceRun)
 	var err error
 	switch run.ResourceKind {
 	case "agent":
-		err = tx.QueryRowContext(ctx, `SELECT g.enabled AND g.removed_at IS NULL AND g.approved_version_id=$3 AND a.enabled AND a.deleted_at IS NULL FROM personal_agent_space_grants g JOIN personal_agents a ON a.id=g.agent_id WHERE g.agent_id=$1 AND g.space_id=$2`, run.ResourceID, run.SpaceID, run.AgentVersionID).Scan(&enabled)
+		err = tx.QueryRowContext(ctx, `SELECT a.enabled AND a.deleted_at IS NULL AND EXISTS(
+			SELECT 1 FROM space_members m WHERE m.space_id=$2 AND m.user_id=a.owner_user_id)
+			FROM personal_agents a WHERE a.id=$1`, run.ResourceID, run.SpaceID).Scan(&enabled)
 	default:
 		return ErrSpaceInvalid
 	}

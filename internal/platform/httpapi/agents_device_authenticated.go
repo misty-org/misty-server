@@ -165,11 +165,14 @@ func writeAgentResult(w http.ResponseWriter, value any, err error, status int) {
 }
 
 func writeAgentError(w http.ResponseWriter, err error) {
+	var invalidRequest serveragent.ErrInvalidRequest
 	switch {
+	case errors.As(err, &invalidRequest):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "invalid_tool_input", "message": invalidRequest.Error()})
 	case errors.Is(err, db.ErrLibraryForbidden), errors.Is(err, db.ErrSpaceForbidden):
-		http.Error(w, "forbidden", http.StatusForbidden)
-	case errors.Is(err, db.ErrDeviceNotFound), errors.Is(err, db.ErrAgentJobNotFound), errors.Is(err, db.ErrAgentNotFound), errors.Is(err, db.ErrPersonalAgentNotFound):
-		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "permission_denied", "message": "Your current Space access does not allow that action."})
+	case errors.Is(err, db.ErrDeviceNotFound), errors.Is(err, db.ErrAgentJobNotFound), errors.Is(err, db.ErrAgentNotFound), errors.Is(err, db.ErrPersonalAgentNotFound), errors.Is(err, db.ErrSpaceNotFound), errors.Is(err, db.ErrLibraryNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found", "message": "The selected item is no longer available in this Space."})
 	case errors.Is(err, db.ErrPairingNotFound), errors.Is(err, db.ErrDevicePair):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "pairing_not_found"})
 	case errors.Is(err, db.ErrPairingExpired):
@@ -178,12 +181,16 @@ func writeAgentError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"code": "pairing_locked"})
 	case errors.Is(err, db.ErrPairingState):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "invalid_pairing_state"})
-	case errors.Is(err, db.ErrPersonalAgentConflict):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict"})
+	case errors.Is(err, db.ErrPersonalAgentConflict), errors.Is(err, db.ErrLibraryConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict", "message": "That item changed while the Agent was working. Please retry."})
 	case errors.Is(err, db.ErrSpaceConflict):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "run_conflict"})
-	case errors.Is(err, db.ErrSpaceInvalid):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_request"})
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "run_conflict", "message": "The requested change conflicts with newer Space data. Please retry."})
+	case errors.Is(err, db.ErrSpaceInvalid), errors.Is(err, db.ErrLibraryInvalid):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "invalid_tool_input", "message": "The requested values are not valid for this action."})
+	case errors.Is(err, db.ErrLibraryQuota):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "message": "This Space has reached its storage limit."})
+	case errors.Is(err, db.ErrLibraryReauthentication):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "reauthentication_required", "message": "This Library item requires you to confirm access first."})
 	case errors.Is(err, db.ErrPersonalAgentModel):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_unavailable"})
 	case isHostedAILimitReached(err):

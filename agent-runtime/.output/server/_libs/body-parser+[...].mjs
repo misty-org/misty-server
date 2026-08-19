@@ -1,7 +1,7 @@
 import { createRequire as __wkfCreateRequire } from "node:module";
 if (typeof globalThis.require === "undefined") globalThis.require = __wkfCreateRequire(import.meta.url);
 import { r as __require, t as __commonJSMin } from "../_runtime.mjs";
-import { c as require_src } from "./@workflow/core+[...].mjs";
+import { l as require_src } from "./@workflow/core+[...].mjs";
 import { n as require_mime_types } from "./accepts+[...].mjs";
 //#region ../node_modules/depd/index.js
 var require_depd = /* @__PURE__ */ __commonJSMin(((exports, module) => {

@@ -113,7 +113,10 @@ func activeBrowserGrantTabs(grants []db.AgentDeviceGrant) []string {
 }
 
 func canonicalAgentToolRegistrations(handler agenttools.Handler) []agenttools.Registration {
-	return []agenttools.Registration{
+	registrations := []agenttools.Registration{
+		{Descriptor: contextGetToolDescriptor(), Handler: handler},
+		{Descriptor: membersListToolDescriptor(), Handler: handler},
+		{Descriptor: membersResolveToolDescriptor(), Handler: handler},
 		{Descriptor: messagesSearchToolDescriptor(), Handler: handler},
 		{Descriptor: messagesSendToolDescriptor(), Handler: handler},
 		{Descriptor: librarySearchToolDescriptor(), Handler: handler},
@@ -122,6 +125,22 @@ func canonicalAgentToolRegistrations(handler agenttools.Handler) []agenttools.Re
 		{Descriptor: tasksCreateToolDescriptor(), Handler: handler},
 		{Descriptor: tasksUpdateToolDescriptor(), Handler: handler},
 	}
+	for _, descriptor := range noteAgentToolDescriptors() {
+		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
+	}
+	for _, descriptor := range calendarWriteToolDescriptors() {
+		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
+	}
+	for _, descriptor := range roadmapAgentToolDescriptors() {
+		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
+	}
+	for _, descriptor := range libraryMutationToolDescriptors() {
+		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
+	}
+	for _, descriptor := range companionReadToolDescriptors() {
+		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
+	}
+	return registrations
 }
 
 func canonicalProviderToolRegistration(provider string, write bool, handler agenttools.Handler) agenttools.Registration {

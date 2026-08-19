@@ -119,12 +119,14 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Content          []db.MessageSpan `json:"content"`
-			FileNodeIDs      []string         `json:"file_node_ids"`
-			AttachmentIDs    []string         `json:"attachment_ids"`
-			LibraryItemIDs   []string         `json:"library_item_ids"`
-			ReplyToMessageID string           `json:"reply_to_message_id"`
-			ClientNonce      string           `json:"client_nonce"`
+			Content          []db.MessageSpan          `json:"content"`
+			FileNodeIDs      []string                  `json:"file_node_ids"`
+			AttachmentIDs    []string                  `json:"attachment_ids"`
+			LibraryItemIDs   []string                  `json:"library_item_ids"`
+			ReplyToMessageID string                    `json:"reply_to_message_id"`
+			ClientNonce      string                    `json:"client_nonce"`
+			AgentInvocations []explicitAgentInvocation `json:"agent_invocations"`
+			InputModality    string                    `json:"input_modality"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -145,18 +147,20 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 				return
 			}
 		}
-		message, agentIDs, err := s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+		message, _, err := s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		triggerKind := "mention"
-		if directAgentID != "" {
-			agentIDs = []string{directAgentID}
-			triggerKind = "direct"
+		if directAgentID != "" && len(body.AgentInvocations) == 0 {
+			body.AgentInvocations = []explicitAgentInvocation{{AgentID: directAgentID}}
 		}
-		triggers := s.enqueueSpaceAgentMessageTriggers(r.Context(), userID, spaceID, conversationID, message.ID, triggerKind, agentIDs, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs)
-		if directAgentID == "" && len(agentIDs) == 0 {
+		sourceType := "mention"
+		if directAgentID != "" {
+			sourceType = "direct"
+		}
+		triggers := s.queueExplicitAgentInvocations(r.Context(), userID, spaceID, conversationID, message.ID, sourceType, body.InputModality, body.AgentInvocations, body.Content)
+		if directAgentID == "" && len(body.AgentInvocations) == 0 {
 			_ = s.database.QueueSpaceActionSuggestionAnalysis(r.Context(), userID, spaceID, conversationID, message.ID)
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"message": message, "triggered_runs": triggers})

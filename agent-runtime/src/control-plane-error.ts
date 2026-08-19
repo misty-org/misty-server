@@ -4,6 +4,7 @@ export class ControlPlaneError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code = "control_plane_error",
   ) {
     super(message);
     this.name = "ControlPlaneError";

@@ -15,4 +15,4 @@ Durable assigned-Task execution for Misty, built with AI SDK 7 `WorkflowAgent`. 
 - `MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS`: optional previous secret during rotation.
 - `AI_GATEWAY_API_KEY`: AI Gateway credential outside Vercel OIDC environments.
 
-The Go API enables the runtime with `MISTY_AGENT_RUNTIME_MODE=workflow` and `MISTY_AGENT_RUNTIME_URL`. Optional comma-separated `MISTY_AGENT_RUNTIME_OWNER_IDS` and `MISTY_AGENT_RUNTIME_AGENT_IDS` allow canary rollout; when both are empty, all assigned-task runs use the workflow runtime.
+The Go API uses this workflow runtime for every assigned Space task. Configure its endpoint with `MISTY_AGENT_RUNTIME_URL`; there is no legacy/runtime mode switch. `misty server up` starts the local Postgres world, setup job, runtime, and Go API together.

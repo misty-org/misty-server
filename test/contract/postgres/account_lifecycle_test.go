@@ -48,9 +48,6 @@ func TestAccountDeletionBlocksOwnersAndAnonymizesMembersAfterRetention(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.AddSpaceAgentMembership(ctx, member.ID, space.ID, SpaceAgentMembershipInput{AgentID: agent.ID}); err != nil {
-		t.Fatal(err)
-	}
 	if err := database.AppendPersonalAgentMemory(ctx, member.ID, space.ID, agent.ID, "private prompt", "private response"); err != nil {
 		t.Fatal(err)
 	}
@@ -90,14 +87,11 @@ func TestAccountDeletionBlocksOwnersAndAnonymizesMembersAfterRetention(t *testin
 	if user, err := database.GetUserByID(member.ID); err != nil || user != nil {
 		t.Fatalf("pending user remained login-visible = %#v, %v", user, err)
 	}
-	var agentEnabled, membershipEnabled bool
+	var agentEnabled bool
 	if err := database.Conn.QueryRow(`SELECT enabled FROM personal_agents WHERE id=$1`, agent.ID).Scan(&agentEnabled); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.Conn.QueryRow(`SELECT enabled FROM personal_agent_space_grants WHERE agent_id=$1`, agent.ID).Scan(&membershipEnabled); err != nil {
-		t.Fatal(err)
-	}
-	if agentEnabled || membershipEnabled {
+	if agentEnabled {
 		t.Fatal("pending deletion left owned Agent invokable")
 	}
 	if err := database.ScheduleAccountDeletion(
@@ -144,9 +138,7 @@ func TestAccountDeletionBlocksOwnersAndAnonymizesMembersAfterRetention(t *testin
 		t.Fatal(err)
 	}
 	var privateRows int
-	if err := database.Conn.QueryRow(`SELECT
-		(SELECT COUNT(*) FROM agent_conversations WHERE user_id=$1)+
-		(SELECT COUNT(*) FROM personal_agent_instances WHERE invoker_user_id=$1 OR agent_id=$2)`, member.ID, agent.ID).Scan(&privateRows); err != nil {
+	if err := database.Conn.QueryRow(`SELECT COUNT(*) FROM agent_conversations WHERE user_id=$1`, member.ID).Scan(&privateRows); err != nil {
 		t.Fatal(err)
 	}
 	if agentName != "Deleted Agent" || instructions != "" || versionInstructions != "" || privateRows != 0 {

@@ -1,10 +1,10 @@
 # Misty Self-hosted
 
-This bundle runs one Misty API leader, PostgreSQL, and the Yjs collaboration service. Desktop clients connect through one HTTPS origin. The reverse proxy must send `/api/*` to the API and `/parties/*` WebSocket upgrades to the collaboration service.
+This bundle runs one Misty API leader, PostgreSQL, the Yjs collaboration service, and the assigned-task workflow runtime with its own Postgres database. Desktop clients connect through one HTTPS origin. The reverse proxy must send `/api/*` to the API and `/parties/*` WebSocket upgrades to the collaboration service.
 
 ## Install
 
-1. Copy `.env.example` to `.env`, use the immutable image digests from a Misty release, and replace every placeholder secret.
+1. Copy `.env.example` to `.env`, use the immutable image digests from a Misty release, and replace every placeholder secret. `AI_GATEWAY_API_KEY` is required for assigned Space agents.
 2. Set `MISTY_PUBLIC_API_URL` to the externally reachable HTTPS URL ending in `/api`, `MISTY_COLLAB_PUBLIC_URL` to the same public origin, and `PARTYKIT_HOST` to its hostname. Loopback development may use an `http://127.0.0.1:PORT` collaboration origin; non-loopback deployments require HTTPS.
 3. Choose `MISTY_LIBRARY_BACKEND=filesystem` for the bundled `library_data` volume, or `s3` and fill the generic S3 settings. The older `R2_*` names remain supported by the API.
 4. Start the stack with `docker compose --env-file .env -f compose.yml up -d`.

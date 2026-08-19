@@ -215,20 +215,9 @@ func (db *Database) QueueSpaceActionSuggestionAnalysis(ctx context.Context, user
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT enabled FROM space_action_suggestion_settings WHERE space_id=$1),FALSE)`, spaceID).Scan(&enabled); err != nil || !enabled {
 			return err
 		}
-		if conversationID == "" {
-			if err := tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM space_members WHERE space_id=$1)>=2
-				AND EXISTS(SELECT 1 FROM personal_agent_space_grants WHERE space_id=$1 AND enabled AND removed_at IS NULL AND approved_version_id IS NOT NULL)`, spaceID).Scan(&eligible); err != nil {
-				return err
-			}
-		} else {
-			if err := tx.QueryRowContext(ctx, `SELECT c.kind<>'direct'
-				AND (SELECT count(*) FROM space_conversation_members WHERE conversation_id=c.id AND actor_kind='person')>=2
-				AND EXISTS(SELECT 1 FROM space_conversation_members cm JOIN personal_agent_space_grants g ON g.space_id=c.space_id AND g.agent_id=cm.agent_id AND g.enabled AND g.removed_at IS NULL AND g.approved_version_id IS NOT NULL WHERE cm.conversation_id=c.id AND cm.actor_kind='agent')
-				AND NOT EXISTS(SELECT 1 FROM space_conversation_suggestion_vetoes WHERE conversation_id=c.id)
-				FROM space_conversations c WHERE c.id=$1 AND c.space_id=$2`, conversationID, spaceID).Scan(&eligible); err != nil {
-				return err
-			}
-		}
+		// Companion Agents are creator-driven and do not participate in autonomous
+		// suggestion watching.
+		eligible = false
 		if !eligible {
 			return nil
 		}

@@ -56,13 +56,24 @@ export async function controlPlaneRequest<T>(
       [signatureHeaders.idempotency]: idempotencyKey,
     },
     body,
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(action === "tools" ? 5 * 60_000 : 30_000),
   });
   const text = await response.text();
-  if (!response.ok)
+  if (!response.ok) {
+    let code = "control_plane_error";
+    let detail = text.slice(0, 500);
+    try {
+      const payload = JSON.parse(text) as { code?: string; message?: string };
+      code = payload.code?.trim() || code;
+      detail = payload.message?.trim() || payload.code?.trim() || detail;
+    } catch {
+      // Non-JSON errors are still bounded before they enter user-visible logs.
+    }
     throw new ControlPlaneError(
       response.status,
-      `Misty control plane returned ${response.status}: ${text.slice(0, 500)}`,
+      `${code}: ${detail || `Misty control plane returned ${response.status}`}`,
+      code,
     );
+  }
   return (text ? JSON.parse(text) : {}) as T;
 }

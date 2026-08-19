@@ -25,7 +25,7 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	agent, err := fixture.database.CreatePersonalAgent(fixture.ctx, fixture.creator, PersonalAgent{
+	_, err := fixture.database.CreatePersonalAgent(fixture.ctx, fixture.creator, PersonalAgent{
 		Name: "Portable Agent", Instructions: "Export this private behavior.",
 		ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite",
 	})
@@ -33,9 +33,6 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := fixture.database.SetSpaceMemberPermission(fixture.ctx, fixture.owner, fixture.spaceID, fixture.creator, PermissionAgentsManage, "allow"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fixture.database.AddSpaceAgentMembership(fixture.ctx, fixture.creator, fixture.spaceID, SpaceAgentMembershipInput{AgentID: agent.ID}); err != nil {
 		t.Fatal(err)
 	}
 	digest := strings.Repeat("d", 64)
@@ -70,7 +67,7 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 		len(export.Journal) != 2 || len(export.Messages) != 1 ||
 		len(export.Assets) != 1 || export.Assets[0].Kind != "library" ||
 		len(export.Agents) != 1 || len(export.Agents[0].Versions) != 1 ||
-		len(export.Agents[0].Memberships) != 1 {
+		len(export.Agents[0].Memberships) != 0 {
 		t.Fatalf("portable export = %#v", export)
 	}
 	raw, err := json.Marshal(export)

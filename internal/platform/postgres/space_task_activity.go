@@ -113,9 +113,24 @@ func (db *Database) ClaimAssignedAgentTaskRun(ctx context.Context, userID string
 		if err != nil {
 			return err
 		}
-		if !agentMembershipPermission(membership.Permissions, PermissionTasksView) || !agentMembershipPermission(membership.Permissions, PermissionTasksManage) {
-			return ErrSpaceForbidden
+		mode := membership.DefaultRunMode
+		if task.AgentRun != nil && strings.TrimSpace(task.AgentRun.Mode) != "" {
+			mode = strings.ToLower(strings.TrimSpace(task.AgentRun.Mode))
 		}
+		if !validAgentRunMode(mode) {
+			return ErrSpaceInvalid
+		}
+		contextReferences := []CreatorAgentContextReference{}
+		if task.AgentRun != nil {
+			contextReferences = task.AgentRun.ContextReferences
+		}
+		if contextReferences == nil {
+			contextReferences = []CreatorAgentContextReference{}
+		}
+		if len(contextReferences) > 8 {
+			return ErrSpaceInvalid
+		}
+		snapshot := mustJSON(map[string]any{"id": task.AssigneeAgentID, "version": membership.ApprovedVersion, "version_id": membership.ApprovedVersionID, "name": membership.Name, "instructions": membership.Instructions, "model_id": membership.ModelID, "reasoning_effort": membership.ReasoningEffort, "default_run_mode": membership.DefaultRunMode})
 		var assignmentExists bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_task_activity WHERE task_id=$1 AND kind='assigned'
 			AND actor_agent_id IS NULL AND metadata->>'agent_id'=$2 AND metadata->>'task_version'=$3)`, task.ID, task.AssigneeAgentID, strconv.FormatInt(task.Version, 10)).Scan(&assignmentExists); err != nil {
@@ -126,9 +141,9 @@ func (db *Database) ClaimAssignedAgentTaskRun(ctx context.Context, userID string
 		}
 		envelope := mustJSON(map[string]any{
 			"trigger": "task_assignment", "task_id": task.ID, "assignment_task_version": task.Version,
-			"agent_membership_id": membership.ID, "approved_agent_version_id": membership.ApprovedVersionID,
-			"allowed_tools": []string{"tasks.query", "tasks.update_assigned", "task.activity.write", "attached_files.read"},
-			"approval_mode": "explicit_assignment",
+			"approved_agent_version_id": membership.ApprovedVersionID,
+			"allowed_tools":             []string{"tasks.query", "tasks.update_assigned", "task.activity.write", "attached_files.read"},
+			"approval_mode":             "explicit_assignment",
 		})
 		var existingID string
 		err = tx.QueryRowContext(ctx, `SELECT id FROM space_runs WHERE source_task_id=$1 AND agent_id=$2
@@ -149,17 +164,36 @@ func (db *Database) ClaimAssignedAgentTaskRun(ctx context.Context, userID string
 		}
 		err = scanSpaceRun(tx.QueryRowContext(ctx, `INSERT INTO space_runs(
 			id,space_id,resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,result,
-			requesting_member_id,source_type,agent_id,capability_id,outputs,artifacts,attempt,source_task_id,action_envelope
-		) VALUES($1,$2,'agent',$3,$4,$4,'task_assignment','queued',$5,'{}'::jsonb,$4,'task',$3,'task_assignment','{}'::jsonb,'[]'::jsonb,1,$6,$7)
-		ON CONFLICT DO NOTHING
-		RETURNING `+spaceRunColumns, out.ID, task.SpaceID, task.AssigneeAgentID, userID, input, task.ID, envelope), out)
+			requesting_member_id,source_type,agent_id,capability_id,outputs,artifacts,attempt,source_task_id,action_envelope,
+			owner_user_id,initial_run_mode,effective_run_mode,agent_version_id,agent_version_snapshot,context_bindings
+		) VALUES($1,$2,'agent',$3,$4,$4,'task_assignment','queued',$5,'{}'::jsonb,$4,'task',$3,'task_assignment','{}'::jsonb,'[]'::jsonb,1,$6,$7,$4,$8,$8,NULL,$9,$10)
+		ON CONFLICT DO NOTHING RETURNING `+spaceRunColumns, out.ID, task.SpaceID, task.AssigneeAgentID, userID, input, task.ID, envelope, mode, snapshot, mustJSON(contextReferences)), out)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO personal_agent_task_run_jobs(run_id,space_id,task_id,agent_id)
+		for _, ref := range contextReferences {
+			ref.Kind = strings.TrimSpace(ref.Kind)
+			ref.OpaqueRef = strings.TrimSpace(ref.OpaqueRef)
+			ref.DeviceID = strings.TrimSpace(ref.DeviceID)
+			capabilities, normalizeErr := normalizeDeviceAgentCapabilities(ref.Capabilities)
+			if normalizeErr != nil || (ref.Kind != "browser_tab" && ref.Kind != "project_root") || ref.OpaqueRef == "" || ref.DeviceID == "" {
+				return ErrSpaceInvalid
+			}
+			if len(ref.Metadata) == 0 {
+				ref.Metadata = json.RawMessage(`{}`)
+			}
+			var deviceExists bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL)`, ref.DeviceID, userID).Scan(&deviceExists); err != nil || !deviceExists {
+				return ErrDeviceNotFound
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO agent_run_contexts(id,run_id,owner_user_id,space_id,device_id,kind,opaque_ref,display_name,capabilities,metadata,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()+INTERVAL '24 hours')`, `context_`+uuid.NewString(), out.ID, userID, task.SpaceID, ref.DeviceID, ref.Kind, ref.OpaqueRef, ref.DisplayName, capabilities, ref.Metadata); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO agent_run_jobs(run_id,space_id,task_id,agent_id)
 			VALUES($1,$2,$3,$4)`, out.ID, task.SpaceID, task.ID, task.AssigneeAgentID); err != nil {
 			return err
 		}

@@ -155,12 +155,11 @@ func decodeWorkflowTask(value map[string]any) (db.SpaceTask, error) {
 	}
 	var dueAt *time.Time
 	if wire.DueAt != "" {
-		value, err := time.Parse(time.RFC3339, wire.DueAt)
+		value, err := parseAgentToolTime(wire.DueAt, "dueAt", wire.DueTimezone)
 		if err != nil {
 			return db.SpaceTask{}, workflowv2.ErrOutputInvalid
 		}
-		value = value.UTC()
-		dueAt = &value
+		dueAt = value
 	}
 	return db.SpaceTask{ID: wire.ID, Title: wire.Title, Notes: wire.Notes, Status: wire.Status, Priority: wire.Priority, AssigneeUserID: wire.AssigneeUserID, DueAt: dueAt, DueTimezone: wire.DueTimezone, SourceRefs: wire.SourceRefs, Version: wire.Version}, nil
 }

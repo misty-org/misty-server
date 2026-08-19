@@ -67,6 +67,7 @@ func (s *Server) MountHandlers() error {
 	mediaSearchService := api.NewMediaSearchService(s.Database, libraryAnalyzer)
 	agentsService := api.NewAgentsService(s.Database)
 	agentsService.SetAvatarStore(s.LibraryStore)
+	agentsService.SetVoiceAnalyzer(libraryAnalyzer)
 	if serverFeatureEnabled("MISTY_CONNECTED_DEVICES_ENABLED") {
 		connectedDevicesConfig, configErr := api.ConnectedDevicesConfigFromEnv()
 		if configErr != nil {

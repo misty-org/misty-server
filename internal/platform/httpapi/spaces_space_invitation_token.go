@@ -153,23 +153,25 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Content          []db.MessageSpan `json:"content"`
-			FileNodeIDs      []string         `json:"file_node_ids"`
-			AttachmentIDs    []string         `json:"attachment_ids"`
-			LibraryItemIDs   []string         `json:"library_item_ids"`
-			ReplyToMessageID string           `json:"reply_to_message_id"`
-			ClientNonce      string           `json:"client_nonce"`
+			Content          []db.MessageSpan          `json:"content"`
+			FileNodeIDs      []string                  `json:"file_node_ids"`
+			AttachmentIDs    []string                  `json:"attachment_ids"`
+			LibraryItemIDs   []string                  `json:"library_item_ids"`
+			ReplyToMessageID string                    `json:"reply_to_message_id"`
+			ClientNonce      string                    `json:"client_nonce"`
+			AgentInvocations []explicitAgentInvocation `json:"agent_invocations"`
+			InputModality    string                    `json:"input_modality"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		message, agentIDs, err := s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+		message, _, err := s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		triggers := s.enqueueSpaceAgentMessageTriggers(r.Context(), userID, spaceID, "", message.ID, "mention", agentIDs, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs)
-		if len(agentIDs) == 0 {
+		triggers := s.queueExplicitAgentInvocations(r.Context(), userID, spaceID, "", message.ID, "mention", body.InputModality, body.AgentInvocations, body.Content)
+		if len(body.AgentInvocations) == 0 {
 			_ = s.database.QueueSpaceActionSuggestionAnalysis(r.Context(), userID, spaceID, "", message.ID)
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"message": message, "triggered_runs": triggers})

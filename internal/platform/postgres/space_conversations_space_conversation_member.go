@@ -79,8 +79,8 @@ func loadSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, conver
 		CASE WHEN cm.actor_kind='agent' THEN v.avatar ELSE NULL END,cm.joined_at
 		FROM space_conversation_members cm
 		LEFT JOIN users u ON u.id=cm.user_id
-		LEFT JOIN personal_agent_space_grants g ON g.agent_id=cm.agent_id AND g.space_id=$2
-		LEFT JOIN personal_agent_versions v ON v.id=g.approved_version_id
+		LEFT JOIN personal_agents pa ON pa.id=cm.agent_id
+		LEFT JOIN personal_agent_versions v ON v.agent_id=pa.id AND v.version=pa.version
 		WHERE cm.conversation_id=$1 ORDER BY cm.actor_kind,u.name,v.name`
 	if conversation.VisibleToSpace {
 		query = `SELECT 'person',sm.user_id,'',u.name,u.email,NULL,sm.joined_at
@@ -88,7 +88,7 @@ func loadSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, conver
 			WHERE sm.space_id=$1 ORDER BY u.name,u.email`
 	}
 	argument := conversation.ID
-	arguments := []any{argument, conversation.SpaceID}
+	arguments := []any{argument}
 	if conversation.VisibleToSpace {
 		argument = conversation.SpaceID
 		arguments = []any{argument}
@@ -274,9 +274,6 @@ func (db *Database) DirectAgentConversation(ctx context.Context, userID, spaceID
 	out := &SpaceConversation{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
-			return err
-		}
-		if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		membership, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID)

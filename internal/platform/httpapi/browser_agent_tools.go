@@ -57,7 +57,7 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 	}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
-	timeout := time.NewTimer(2 * time.Minute)
+	timeout := time.NewTimer(5 * time.Minute)
 	defer timeout.Stop()
 	for {
 		select {

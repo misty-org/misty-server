@@ -305,10 +305,11 @@ func (db *Database) SpaceChatAgents(ctx context.Context, userID, spaceID string)
 			return err
 		}
 		personalRows, err := tx.QueryContext(ctx, `SELECT a.id,a.owner_user_id,v.name,v.description,v.icon,a.model_mode,a.model_id,
-			a.enabled,v.version,a.created_at,g.updated_at FROM personal_agent_space_grants g
-			JOIN personal_agents a ON a.id=g.agent_id AND a.enabled AND a.deleted_at IS NULL
-			JOIN personal_agent_versions v ON v.id=g.approved_version_id
-			WHERE g.space_id=$1 AND g.enabled AND g.removed_at IS NULL ORDER BY lower(v.name),a.id`, spaceID)
+			a.enabled,v.version,a.created_at,a.updated_at FROM personal_agents a
+			JOIN personal_agent_versions v ON v.agent_id=a.id AND v.version=a.version
+			WHERE a.owner_user_id=$2 AND a.enabled AND a.deleted_at IS NULL
+			AND EXISTS(SELECT 1 FROM space_members m WHERE m.space_id=$1 AND m.user_id=a.owner_user_id)
+			ORDER BY lower(v.name),a.id`, spaceID, userID)
 		if err != nil {
 			return err
 		}

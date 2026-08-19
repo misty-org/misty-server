@@ -14,6 +14,12 @@ import (
 )
 
 func (s *SpacesService) executeOrdinaryAgentTool(ctx context.Context, run *db.SpaceRun, tool serveragent.ToolRequest) (json.RawMessage, error) {
+	if tool.Name == toolboxContextGet || tool.Name == toolboxMembersList || tool.Name == toolboxMembersResolve || tool.Name == toolboxAgentsList || tool.Name == toolboxAgentsStatus || strings.HasPrefix(tool.Name, "notes.") || strings.HasPrefix(tool.Name, "roadmaps.") || tool.Name == toolboxLibraryRead || tool.Name == toolboxLibraryUpdate || tool.Name == toolboxLibraryPromoteAttachment || tool.Name == toolboxCalendarCreate || tool.Name == toolboxCalendarUpdate {
+		return executeSpaceConversationTool(ctx, s.database, spaceConversationToolActor{
+			userID: run.RequestingMemberID, spaceID: run.SpaceID, agentID: run.AgentID, runID: run.ID,
+			conversationID: run.ScopeConversationID,
+		}, string(run.Input), tool)
+	}
 	if strings.HasPrefix(tool.Name, "browser.") {
 		return s.executeBrowserAgentTool(ctx, run, tool)
 	}
@@ -186,11 +192,18 @@ func spaceSearchAgentToolSchema() json.RawMessage {
 }
 
 func taskAgentToolSchema(write bool) json.RawMessage {
-	properties := map[string]any{"query": map[string]any{"type": "string"}, "status": map[string]any{"type": "string"}, "assigneeUserId": map[string]any{"type": "string"}, "from": map[string]any{"type": "string"}, "to": map[string]any{"type": "string"}}
+	properties := map[string]any{
+		"query":          map[string]any{"type": "string"},
+		"status":         map[string]any{"type": "string", "enum": []string{"todo", "in_progress", "done", "canceled"}},
+		"assigneeUserId": map[string]any{"type": "string"},
+		"from":           map[string]any{"type": "string"},
+		"to":             map[string]any{"type": "string"},
+	}
 	if write {
 		properties["id"] = map[string]any{"type": "string"}
 		properties["title"] = map[string]any{"type": "string"}
 		properties["notes"] = map[string]any{"type": "string"}
+		properties["priority"] = map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}}
 		properties["dueAt"] = map[string]any{"type": "string"}
 		properties["dueTimezone"] = map[string]any{"type": "string"}
 		properties["version"] = map[string]any{"type": "integer"}

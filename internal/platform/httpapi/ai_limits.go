@@ -4,19 +4,28 @@ import (
 	"net/http"
 
 	agent "github.com/kannachi323/misty/server/internal/agents"
+	platformmetrics "github.com/kannachi323/misty/server/internal/platform/metrics"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 const TestingMaxAIJSONBodyBytes = 2 << 20
 
 type AIService struct {
-	database *db.Database
-	runtime  *agent.Service
-	guard    *AIRequestGuard
+	database    *db.Database
+	runtime     *agent.Service
+	guard       *AIRequestGuard
+	invocations *aiInvocationHub
+	metrics     *platformmetrics.Registry
+	analyzer    *agent.SmartLibraryAnalyzer
+}
+
+func (s *AIService) SetMetrics(registry *platformmetrics.Registry) { s.metrics = registry }
+func (s *AIService) SetEmbeddingAnalyzer(analyzer *agent.SmartLibraryAnalyzer) {
+	s.analyzer = analyzer
 }
 
 func NewAIService(database *db.Database, runtime *agent.Service) *AIService {
-	return &AIService{database: database, runtime: runtime, guard: NewAIRequestGuard()}
+	return &AIService{database: database, runtime: runtime, guard: NewAIRequestGuard(), invocations: newAIInvocationHub(database)}
 }
 
 func (s *AIService) Status() http.HandlerFunc {

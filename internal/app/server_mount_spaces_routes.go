@@ -83,6 +83,7 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.Get(prefix+"/agents/catalog", spaces.AgentCatalog())
 	s.Router.Get(prefix+"/agents/discovery", spaces.AgentDiscovery())
 	s.Router.Post(prefix+"/agents/delegate", spaces.AgentDelegation())
+	s.Router.Post(prefix+"/ai/runs", spaces.AIRuns())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/agents/{agentID}/runs", spaces.DirectAgentRun())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/agents/{agentID}/runs", spaces.DirectAgentRun())
 	s.Router.Get(prefix+"/spaces/{spaceID}/members/{userID}/avatar", spaces.MemberAvatar())

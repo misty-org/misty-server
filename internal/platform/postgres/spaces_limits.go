@@ -241,6 +241,7 @@ type SpaceRun struct {
 	ContextBindings       json.RawMessage `json:"context_bindings"`
 	DeviceWaitHookToken   string          `json:"-"`
 	DeviceWaitExpiresAt   *time.Time      `json:"device_wait_expires_at,omitempty"`
+	IdempotentReplay      bool            `json:"-"`
 }
 
 func (db *Database) TestingSpaceTx(ctx context.Context, fn func(*sql.Tx) error) error {

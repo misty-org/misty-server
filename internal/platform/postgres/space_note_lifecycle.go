@@ -15,14 +15,10 @@ const NoteArchiveWindow = 30 * 24 * time.Hour
 // longer a member.
 //
 // Notes belong to the Space, so a creator leaving does not archive or remove
-// them. Only the departing member's own per-note preferences are cleared.
-func handleNoteMembershipLossTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
-	// Notes belong to the Space, so a departing member takes nothing with them.
-	// Only their own per-note UI state is removed.
-	_, err := tx.ExecContext(ctx,
-		`DELETE FROM space_note_preferences pref USING space_notes n
-		 WHERE pref.note_id=n.id AND n.space_id=$1 AND pref.user_id=$2`, spaceID, userID)
-	return err
+// them. Journal has no per-member note state to clean up.
+func handleNoteMembershipLossTx(_ context.Context, _ *sql.Tx, _, _ string) error {
+	// Notes belong to the Space, and Journal no longer stores per-note preferences.
+	return nil
 }
 
 // handleNoteMembershipRestoreTx runs inside the transaction that re-adds a user
@@ -87,10 +83,13 @@ func (db *Database) PurgeExpiredNotes(ctx context.Context, limit int) (int64, er
 		result, err := tx.ExecContext(ctx,
 			`DELETE FROM space_notes WHERE id IN (
 			     SELECT n.id FROM space_notes n
-			     WHERE (n.lifecycle_state=$1 AND n.purge_after<=NOW())
+			     WHERE ((n.lifecycle_state=$1 AND n.purge_after<=NOW())
 			        OR (n.lifecycle_state=$2 AND EXISTS(
 			            SELECT 1 FROM space_note_control_outbox o
-			            WHERE o.note_id=n.id AND o.command='purge' AND o.delivered_at IS NOT NULL))
+			            WHERE o.note_id=n.id AND o.command='purge' AND o.delivered_at IS NOT NULL)))
+			       AND NOT EXISTS (
+			           SELECT 1 FROM space_note_assets a
+			           WHERE a.note_id=n.id AND a.lifecycle_state<>'deleted')
 			     LIMIT $3)`,
 			NoteLifecycleArchivedCreatorLeft, NoteLifecycleDeleting, limit)
 		if err != nil {
@@ -177,48 +176,4 @@ func (db *Database) NoteControlBacklog(ctx context.Context) (int64, error) {
 			Scan(&backlog)
 	})
 	return backlog, err
-}
-
-// ExpiredNoteAssets returns object keys for assets that are no longer
-// referenced and are past their safety window, so the caller can delete the R2
-// objects before the rows go away.
-func (db *Database) ExpiredNoteAssets(ctx context.Context, safetyWindow time.Duration, limit int) ([]ExpiredLibraryUpload, error) {
-	if limit < 1 || limit > 500 {
-		limit = 100
-	}
-	if safetyWindow < time.Hour {
-		safetyWindow = 24 * time.Hour
-	}
-	assets := []ExpiredLibraryUpload{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx,
-			`SELECT a.id,b.r2_object_key FROM space_note_assets a
-			 JOIN library_files f ON f.id=a.file_id
-			 JOIN library_blobs b ON b.id=f.blob_id
-			 WHERE a.lifecycle_state IN ('unreferenced','deleting')
-			   AND a.deleted_at IS NOT NULL AND a.deleted_at<=NOW()-$1::interval
-			 LIMIT $2`, safetyWindow.String(), limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var asset ExpiredLibraryUpload
-			if err := rows.Scan(&asset.ID, &asset.ObjectKey); err != nil {
-				return err
-			}
-			assets = append(assets, asset)
-		}
-		return rows.Err()
-	})
-	return assets, err
-}
-
-// MarkNoteAssetDeleted finalizes one asset after its object is gone.
-func (db *Database) MarkNoteAssetDeleted(ctx context.Context, assetID string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx,
-			`UPDATE space_note_assets SET lifecycle_state='deleted',deleted_at=NOW() WHERE id=$1`, assetID)
-		return err
-	})
 }

@@ -59,40 +59,6 @@ func TestCreatorRemovedKeepsTheNote(t *testing.T) {
 	}
 }
 
-// A departing member's own UI state goes away, since it can never apply again.
-func TestLeavingClearsOnlyThatMembersPreferences(t *testing.T) {
-	fixture := newNoteFixture(t, "note-life-prefs")
-	for _, userID := range []string{fixture.member, fixture.owner} {
-		if _, err := fixture.database.Conn.Exec(
-			`INSERT INTO space_note_preferences(note_id,user_id,is_favorite) VALUES($1,$2,TRUE)`,
-			fixture.note.ID, userID); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if err := fixture.database.LeaveSpace(fixture.ctx, fixture.member, fixture.spaceID); err != nil {
-		t.Fatal(err)
-	}
-
-	var departed, remaining int
-	if err := fixture.database.Conn.QueryRow(
-		`SELECT COUNT(*) FROM space_note_preferences WHERE note_id=$1 AND user_id=$2`,
-		fixture.note.ID, fixture.member).Scan(&departed); err != nil {
-		t.Fatal(err)
-	}
-	if departed != 0 {
-		t.Fatalf("departed member kept %d preference rows", departed)
-	}
-	if err := fixture.database.Conn.QueryRow(
-		`SELECT COUNT(*) FROM space_note_preferences WHERE note_id=$1 AND user_id=$2`,
-		fixture.note.ID, fixture.owner).Scan(&remaining); err != nil {
-		t.Fatal(err)
-	}
-	if remaining != 1 {
-		t.Fatal("an unrelated member's preferences were cleared")
-	}
-}
-
 // Deleting an account must not delete the Space's notes. Destructive control
 // moves to the Space owner instead.
 func TestAccountDeletionReassignsNotesToTheSpaceOwner(t *testing.T) {

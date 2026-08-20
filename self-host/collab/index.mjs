@@ -17,6 +17,7 @@ const port = Number(process.env.PORT || 1999);
 const apiBase = String(process.env.MISTY_INTERNAL_API_BASE || "http://api:8080").replace(/\/$/, "");
 const internalSecret = String(process.env.MISTY_COLLAB_INTERNAL_SECRET || "");
 const controlSecret = loadControlSecret(process.env.JOURNAL_COLLAB_CONTROL_SECRET || "");
+const projectionSecret = loadControlSecret(process.env.JOURNAL_COLLAB_PROJECTION_SECRET || "");
 const roomSalt = loadControlSecret(process.env.JOURNAL_COLLAB_ROOM_SALT || "");
 const issuer = "misty-api";
 const audience = "misty-journal-collab";
@@ -212,7 +213,11 @@ async function persist(room) {
     },
     body: update,
   }).catch(() => null);
-  if (!response?.ok) schedulePersistence(room);
+  if (!response?.ok) {
+    schedulePersistence(room);
+  } else if (room.resourceType === "note") {
+    await publishNoteProjection(room).catch(() => schedulePersistence(room));
+  }
 }
 
 async function handleHTTPRequest(request, response) {
@@ -251,11 +256,12 @@ async function handleControl(response, room, command, payload) {
     const initialized = room.doc.share.size === 0;
     if (initialized) {
       room.doc.transact(() => {
-        const metadata = room.doc.getMap("misty:bootstrap");
-        metadata.set("title", title);
-        metadata.set("markdown", markdown);
-        metadata.set("format", "markdown");
-        room.doc.getText("markdown").insert(0, markdown);
+        const metadata = room.doc.getMap("misty:document");
+        metadata.set("schema", "tiptap-v1");
+        metadata.set("pending_version", 1);
+        metadata.set("pending_markdown", markdown);
+        replaceText(room.doc.getText("misty:title"), title);
+        replaceText(room.doc.getText("misty:markdown"), markdown);
       });
       await persist(room);
     }
@@ -268,13 +274,13 @@ async function handleControl(response, room, command, payload) {
       return writeJSON(response, 400, { code: "invalid_note_content" });
     }
     room.doc.transact(() => {
-      const metadata = room.doc.getMap("misty:bootstrap");
-      metadata.set("title", title);
-      metadata.set("markdown", markdown);
-      metadata.set("format", "markdown");
-      const text = room.doc.getText("markdown");
-      text.delete(0, text.length);
-      if (markdown) text.insert(0, markdown);
+      const metadata = room.doc.getMap("misty:document");
+      const version = Number(metadata.get("pending_version") || 0) + 1;
+      metadata.set("schema", "tiptap-v1");
+      metadata.set("pending_version", version);
+      metadata.set("pending_markdown", markdown);
+      replaceText(room.doc.getText("misty:title"), title);
+      replaceText(room.doc.getText("misty:markdown"), markdown);
     });
     await persist(room);
     return writeJSON(response, 200, { ok: true });
@@ -328,6 +334,35 @@ function verifyControlRequest(request, body) {
   const actualBuffer = Buffer.from(signature);
   const expectedBuffer = Buffer.from(expected);
   if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) throw new Error("invalid_control_signature");
+}
+
+function replaceText(text, value) {
+  text.delete(0, text.length);
+  if (value) text.insert(0, value);
+}
+
+async function publishNoteProjection(room) {
+  const metadata = room.doc.getMap("misty:document");
+  const markdown = room.doc.getText("misty:markdown").toString();
+  const outgoing = Array.isArray(metadata.get("outgoing_note_ids"))
+    ? metadata.get("outgoing_note_ids").filter((value) => typeof value === "string")
+    : [];
+  const body = Buffer.from(JSON.stringify({
+    note_id: room.resourceID,
+    revision: Date.now(),
+    title: room.doc.getText("misty:title").toString().trim() || "Untitled note",
+    markdown,
+    plain_text: markdown.replace(/!\[[^\]]*\]\([^)]*\)/gu, " ").replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1").replace(/[`*_>#~-]+/gu, " ").replace(/\s+/gu, " ").trim(),
+    outgoing_note_ids: outgoing,
+  }));
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac("sha256", projectionSecret).update(timestamp).update("\n").update(body).digest("base64url");
+  const response = await fetch(`${apiBase}/internal/journal/note-projections`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Misty-Timestamp": timestamp, "X-Misty-Signature": signature },
+    body,
+  });
+  if (!response.ok) throw new Error("projection_failed");
 }
 
 function readRequestBody(request, limit) {

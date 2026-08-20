@@ -10,6 +10,7 @@ import {
 import {
   isRecord,
   jsonResponse,
+  signServiceRequest,
   verifyControlRequestWithRotation,
 } from "./control-protocol";
 import {
@@ -57,9 +58,24 @@ const JTI_RETENTION_MS = 5 * 60 * 1000;
 const MAX_CONTROL_BODY_BYTES = 128 * 1024;
 const BOOTSTRAP_APPLIED_KEY = "bootstrap:applied";
 
+function replaceSharedText(text: Y.Text, value: string): void {
+  text.delete(0, text.length);
+  if (value) text.insert(0, value);
+}
+
+function markdownToPlainText(markdown: string): string {
+  return markdown
+    .replace(/!\[[^\]]*\]\([^)]*\)/gu, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
+    .replace(/[`*_>#~-]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
 export abstract class PersistentDocumentRoom extends YServer<Env> {
   protected abstract readonly resourceType: CollaborationResourceType;
   protected readonly supportsMarkdownBootstrap: boolean = false;
+  protected readonly supportsNoteProjection: boolean = false;
   /**
    * Persist shortly after edits stop rather than on every keystroke. A single
    * burst of typing is one write instead of hundreds.
@@ -139,6 +155,10 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
       resourceID: claims.resource_id,
       spaceID: claims.space_id,
     });
+    await Promise.all([
+      this.ctx.storage.put("resourceID", claims.resource_id),
+      this.ctx.storage.put("spaceID", claims.space_id),
+    ]);
     await super.onConnect(connection, ctx);
   }
 
@@ -312,11 +332,12 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
         const initialized = this.document.share.size === 0;
         if (initialized) {
           this.document.transact(() => {
-            const metadata = this.document.getMap<string>("misty:bootstrap");
-            metadata.set("title", title);
-            metadata.set("markdown", markdown);
-            metadata.set("format", "markdown");
-            this.document.getText("markdown").insert(0, markdown);
+            const metadata = this.document.getMap<unknown>("misty:document");
+            metadata.set("schema", "tiptap-v1");
+            metadata.set("pending_version", 1);
+            metadata.set("pending_markdown", markdown);
+            replaceSharedText(this.document.getText("misty:title"), title);
+            replaceSharedText(this.document.getText("misty:markdown"), markdown);
           });
           await this.onSave();
         }
@@ -334,15 +355,16 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
         if (!title || title.length > 500 || markdown.length > 100_000) {
           return jsonResponse({ code: "invalid_note_content" }, 400);
         }
+        const revision = ((await this.ctx.storage.get<number>("pendingVersion")) ?? 0) + 1;
         this.document.transact(() => {
-          const metadata = this.document.getMap<string>("misty:bootstrap");
-          metadata.set("title", title);
-          metadata.set("markdown", markdown);
-          metadata.set("format", "markdown");
-          const text = this.document.getText("markdown");
-          text.delete(0, text.length);
-          if (markdown) text.insert(0, markdown);
+          const metadata = this.document.getMap<unknown>("misty:document");
+          metadata.set("schema", "tiptap-v1");
+          metadata.set("pending_version", revision);
+          metadata.set("pending_markdown", markdown);
+          replaceSharedText(this.document.getText("misty:title"), title);
+          replaceSharedText(this.document.getText("misty:markdown"), markdown);
         });
+        await this.ctx.storage.put("pendingVersion", revision);
         await this.onSave();
         return jsonResponse({ ok: true });
       }
@@ -502,6 +524,7 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
         manifest.byteLength >= DOCUMENT_WARNING_BYTES ? "warning" : "saved",
         manifest.byteLength,
       );
+      if (this.supportsNoteProjection) await this.publishNoteProjection();
     } catch (error) {
       const code =
         error instanceof Error && error.message === "document_limit_exceeded"
@@ -511,6 +534,36 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
       this.log(code, { document_bytes: update.byteLength });
       throw error;
     }
+  }
+
+  private async publishNoteProjection(): Promise<void> {
+    const noteID = (await this.ctx.storage.get<string>("resourceID")) ?? "";
+    if (!noteID) return;
+    const title = this.document.getText("misty:title").toString().trim() || "Untitled note";
+    const markdown = this.document.getText("misty:markdown").toString();
+    const metadata = this.document.getMap<unknown>("misty:document");
+    const outgoing = Array.isArray(metadata.get("outgoing_note_ids"))
+      ? (metadata.get("outgoing_note_ids") as unknown[]).filter((value): value is string => typeof value === "string")
+      : [];
+    const revision = ((await this.ctx.storage.get<number>("projectionRevision")) ?? 0) + 1;
+    const payload = JSON.stringify({
+      note_id: noteID,
+      revision,
+      title,
+      markdown,
+      plain_text: markdownToPlainText(markdown),
+      outgoing_note_ids: outgoing,
+    });
+    const bytes = new TextEncoder().encode(payload);
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const signature = await signServiceRequest(this.env.JOURNAL_COLLAB_PROJECTION_SECRET, timestamp, bytes);
+    const response = await fetch(`${this.env.MISTY_INTERNAL_API_BASE.replace(/\/$/u, "")}/internal/journal/note-projections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Misty-Timestamp": timestamp, "X-Misty-Signature": signature },
+      body: bytes,
+    });
+    if (!response.ok) throw new Error(`projection_callback_${response.status}`);
+    await this.ctx.storage.put("projectionRevision", revision);
   }
 
   private sendDocumentStatus(

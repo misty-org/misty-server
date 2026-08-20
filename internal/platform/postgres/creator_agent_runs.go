@@ -21,6 +21,7 @@ type CreatorAgentRunInput struct {
 	SourceType         string                         `json:"source_type,omitempty"`
 	InputModality      string                         `json:"input_modality,omitempty"`
 	Timezone           string                         `json:"timezone,omitempty"`
+	ContextNoteID      string                         `json:"context_note_id,omitempty"`
 }
 
 type CreatorAgentContextReference struct {
@@ -45,6 +46,7 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 	input.SourceType = strings.TrimSpace(input.SourceType)
 	input.InputModality = strings.ToLower(strings.TrimSpace(input.InputModality))
 	input.Timezone = strings.TrimSpace(input.Timezone)
+	input.ContextNoteID = strings.TrimSpace(input.ContextNoteID)
 	if input.Instruction == "" || len([]rune(input.Instruction)) > 32_000 {
 		return nil, ErrSpaceInvalid
 	}
@@ -74,6 +76,16 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, ownerUserID); err != nil {
 			return err
+		}
+		if input.ContextNoteID != "" {
+			access, err := noteAccessForTx(ctx, tx, ownerUserID, input.ContextNoteID)
+			if err != nil || !access.CanView {
+				return ErrSpaceNotFound
+			}
+			var noteSpaceID string
+			if err := tx.QueryRowContext(ctx, `SELECT space_id FROM space_notes WHERE id=$1`, input.ContextNoteID).Scan(&noteSpaceID); err != nil || noteSpaceID != spaceID {
+				return ErrSpaceNotFound
+			}
 		}
 		if input.ConversationTarget != "" {
 			if err := requireSpaceConversationMemberTx(ctx, tx, ownerUserID, spaceID, input.ConversationTarget); err != nil {

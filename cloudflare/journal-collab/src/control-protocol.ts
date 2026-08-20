@@ -55,6 +55,23 @@ export async function verifyControlRequestWithRotation(
   );
 }
 
+export async function signServiceRequest(
+  encodedSecret: string,
+  timestamp: string,
+  body: Uint8Array,
+): Promise<string> {
+  const secret = Uint8Array.from(atob(encodedSecret.trim()), (character) =>
+    character.charCodeAt(0),
+  );
+  const key = await crypto.subtle.importKey(
+    "raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const prefix = new TextEncoder().encode(`${timestamp}\n`);
+  const signed = new Uint8Array(prefix.byteLength + body.byteLength);
+  signed.set(prefix); signed.set(body, prefix.byteLength);
+  return base64URL(new Uint8Array(await crypto.subtle.sign("HMAC", key, signed)));
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

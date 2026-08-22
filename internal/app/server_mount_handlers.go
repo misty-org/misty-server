@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
@@ -11,7 +10,6 @@ import (
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
 	"github.com/go-chi/cors"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	appbilling "github.com/kannachi323/misty/server/internal/billing"
 	"github.com/kannachi323/misty/server/internal/platform/metrics"
 )
@@ -57,10 +55,10 @@ func (s *Server) MountHandlers() error {
 		return err
 	}
 	aiService := api.NewAIService(s.Database, s.AIAgent)
-	libraryAnalyzer := &serveragent.SmartLibraryAnalyzer{
-		APIKey:  strings.TrimSpace(envconfig.Getenv("AI_GATEWAY_API_KEY")),
-		BaseURL: strings.TrimSpace(envconfig.Getenv("AI_GATEWAY_BASE_URL")),
-	}
+	s.AI = aiService
+	aiService.SetMetrics(s.Metrics)
+	libraryAnalyzer := s.AIAnalyzer
+	aiService.SetEmbeddingAnalyzer(libraryAnalyzer)
 	intelligenceEnabled := libraryAnalyzer.APIKey != ""
 	s.Library.SetIntelligence(libraryAnalyzer, intelligenceEnabled)
 	smartLibraryService := api.NewSmartLibraryService(s.Database, libraryAnalyzer)

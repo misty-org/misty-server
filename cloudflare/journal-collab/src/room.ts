@@ -1,9 +1,10 @@
 import { PersistentDocumentRoom } from "./document-room";
 
-/** Collaborative BlockNote document. */
+/** Collaborative TipTap document. */
 export class NoteRoom extends PersistentDocumentRoom {
   protected readonly resourceType = "note" as const;
   protected override readonly supportsMarkdownBootstrap = true;
+  protected override readonly supportsNoteProjection = true;
 }
 
 /** Collaborative Excalidraw scene. */

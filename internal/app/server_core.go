@@ -36,6 +36,8 @@ type Server struct {
 	Telemetry                 telemetry.Client
 	HealthMonitor             *healthMonitor
 	Metrics                   *metrics.Registry
+	AIAnalyzer                *serveragent.SmartLibraryAnalyzer
+	AI                        *api.AIService
 }
 
 func CreateServer() (*Server, error) {
@@ -88,6 +90,10 @@ func CreateServer() (*Server, error) {
 		),
 		serveragent.WithUsageMeter(usageMeter),
 	)
+	s.AIAnalyzer = &serveragent.SmartLibraryAnalyzer{
+		APIKey:  strings.TrimSpace(envconfig.Getenv("AI_GATEWAY_API_KEY")),
+		BaseURL: strings.TrimSpace(envconfig.Getenv("AI_GATEWAY_BASE_URL")),
+	}
 	s.LibraryStore, err = TestingLibraryStoreFromEnv()
 	if err != nil {
 		return nil, err

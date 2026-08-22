@@ -165,6 +165,7 @@ type SpaceNote struct {
 	SpaceID                string    `json:"space_id"`
 	CreatorUserID          string    `json:"creator_user_id"`
 	TitleProjection        string    `json:"title"`
+	MarkdownProjection     string    `json:"markdown,omitempty"`
 	PlainTextProjection    string    `json:"plain_text,omitempty"`
 	LifecycleState         string    `json:"lifecycle_state"`
 	CollaborationRevision  int64     `json:"collaboration_revision"`
@@ -175,7 +176,9 @@ type SpaceNote struct {
 	UpdatedAt              time.Time `json:"updated_at"`
 	// Role is the caller's own effective role. A non-creator never receives the
 	// full grant set, only this.
-	Role string `json:"role"`
+	Role          string `json:"role"`
+	CanDelete     bool   `json:"can_delete"`
+	BacklinkCount int64  `json:"backlink_count"`
 }
 
 // CreateSpaceNote creates a note shared with every current Space member.
@@ -189,7 +192,8 @@ func (db *Database) CreateSpaceNoteWithAudience(ctx context.Context, creatorUser
 	}
 	note := &SpaceNote{
 		ID: "note_" + uuid.NewString(), SpaceID: spaceID, CreatorUserID: creatorUserID,
-		TitleProjection: title, LifecycleState: NoteLifecycleActive, ACLVersion: 1, Role: NoteRoleCreator,
+		TitleProjection: title, LifecycleState: NoteLifecycleActive, ACLVersion: 1,
+		Role: NoteRoleCreator, CanDelete: true,
 	}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, creatorUserID); err != nil {
@@ -230,9 +234,17 @@ func (db *Database) AccessibleSpaceNotes(ctx context.Context, userID, spaceID st
 			return err
 		}
 		rows, err := tx.QueryContext(ctx,
-			`SELECT n.id,n.space_id,n.creator_user_id,n.title_projection,n.lifecycle_state,
+			`SELECT n.id,n.space_id,n.creator_user_id,n.title_projection,n.markdown_projection,n.plain_text_projection,n.lifecycle_state,
 			        n.collaboration_revision,n.acl_version,n.audience_kind,COALESCE(n.audience_conversation_id,''),n.created_at,n.updated_at,
-			        CASE WHEN n.creator_user_id=$1 THEN 'creator' ELSE 'editor' END AS effective_role
+			        CASE WHEN n.creator_user_id=$1 THEN 'creator' ELSE 'editor' END AS effective_role,
+			        (n.creator_user_id=$1 OR EXISTS(SELECT 1 FROM spaces s WHERE s.id=n.space_id AND s.owner_user_id=$1)) AS can_delete,
+			        (SELECT COUNT(*) FROM space_note_links links
+			         JOIN space_notes source ON source.id=links.source_note_id
+			         WHERE links.target_note_id=n.id AND source.lifecycle_state='active'
+			           AND (source.audience_kind='space' OR EXISTS(
+			               SELECT 1 FROM space_conversation_members cm
+			               WHERE cm.conversation_id=source.audience_conversation_id
+			                 AND cm.actor_kind='person' AND cm.user_id=$1))) AS backlink_count
 			 FROM space_notes n
 			 WHERE n.space_id=$2 AND n.lifecycle_state='active'
 			   AND (n.audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=n.audience_conversation_id AND cm.actor_kind='person' AND cm.user_id=$1))
@@ -244,8 +256,8 @@ func (db *Database) AccessibleSpaceNotes(ctx context.Context, userID, spaceID st
 		for rows.Next() {
 			var note SpaceNote
 			if err := rows.Scan(&note.ID, &note.SpaceID, &note.CreatorUserID, &note.TitleProjection,
-				&note.LifecycleState, &note.CollaborationRevision, &note.ACLVersion, &note.AudienceKind, &note.AudienceConversationID,
-				&note.CreatedAt, &note.UpdatedAt, &note.Role); err != nil {
+				&note.MarkdownProjection, &note.PlainTextProjection, &note.LifecycleState, &note.CollaborationRevision, &note.ACLVersion, &note.AudienceKind, &note.AudienceConversationID,
+				&note.CreatedAt, &note.UpdatedAt, &note.Role, &note.CanDelete, &note.BacklinkCount); err != nil {
 				return err
 			}
 			notes = append(notes, note)

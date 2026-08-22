@@ -28,13 +28,15 @@ func (db *Database) UpdateSpaceNoteContent(ctx context.Context, userID, noteID, 
 			return ErrSpaceNotFound
 		}
 		var spaceID string
-		if err := tx.QueryRowContext(ctx, `UPDATE space_notes SET title_projection=$1,plain_text_projection=$2,updated_at=NOW() WHERE id=$3 AND lifecycle_state='active' RETURNING space_id`, title, markdown, noteID).Scan(&spaceID); err != nil {
+		if err := tx.QueryRowContext(ctx,
+			`SELECT space_id FROM space_notes WHERE id=$1 AND lifecycle_state='active'`, noteID).
+			Scan(&spaceID); err != nil {
 			return err
 		}
 		if err := enqueueNoteControlTx(ctx, tx, noteID, "replace_markdown", map[string]any{"title": title, "markdown": markdown}); err != nil {
 			return err
 		}
-		return recordNoteEventTx(ctx, tx, spaceID, userID, "note.projection.updated", noteID, nil)
+		return recordNoteEventTx(ctx, tx, spaceID, userID, "note.replacement.pending", noteID, nil)
 	})
 	if err != nil {
 		return nil, err
@@ -55,13 +57,21 @@ func (db *Database) SpaceNoteByID(ctx context.Context, userID, noteID string) (*
 			return ErrSpaceNotFound
 		}
 		note.Role = access.Role
+		note.CanDelete = access.CanDelete
 		return tx.QueryRowContext(ctx,
-			`SELECT id,space_id,creator_user_id,title_projection,plain_text_projection,
-			        lifecycle_state,collaboration_revision,acl_version,audience_kind,COALESCE(audience_conversation_id,''),created_at,updated_at
-			 FROM space_notes WHERE id=$1`, noteID).Scan(
+			`SELECT id,space_id,creator_user_id,title_projection,markdown_projection,plain_text_projection,
+			        lifecycle_state,collaboration_revision,acl_version,audience_kind,COALESCE(audience_conversation_id,''),created_at,updated_at,
+			        (SELECT COUNT(*) FROM space_note_links links
+			         JOIN space_notes source ON source.id=links.source_note_id
+			         WHERE links.target_note_id=space_notes.id AND source.lifecycle_state='active'
+			           AND (source.audience_kind='space' OR EXISTS(
+			               SELECT 1 FROM space_conversation_members cm
+			               WHERE cm.conversation_id=source.audience_conversation_id
+			                 AND cm.actor_kind='person' AND cm.user_id=$2)))
+			 FROM space_notes WHERE id=$1`, noteID, userID).Scan(
 			&note.ID, &note.SpaceID, &note.CreatorUserID, &note.TitleProjection,
-			&note.PlainTextProjection, &note.LifecycleState, &note.CollaborationRevision,
-			&note.ACLVersion, &note.AudienceKind, &note.AudienceConversationID, &note.CreatedAt, &note.UpdatedAt)
+			&note.MarkdownProjection, &note.PlainTextProjection, &note.LifecycleState, &note.CollaborationRevision,
+			&note.ACLVersion, &note.AudienceKind, &note.AudienceConversationID, &note.CreatedAt, &note.UpdatedAt, &note.BacklinkCount)
 	})
 	if err != nil {
 		return nil, err
@@ -183,6 +193,13 @@ func (db *Database) DeleteSpaceNote(ctx context.Context, userID, noteID string) 
 			return err
 		}
 		if err := recordNoteEventTx(ctx, tx, spaceID, userID, "note.deleted", noteID, nil); err != nil {
+			return err
+		}
+		// Files must remain referenced until the Journal asset worker has either
+		// deleted their blob or proved that another live reference owns it.
+		if _, err := tx.ExecContext(ctx, `UPDATE space_note_assets
+			SET lifecycle_state='deleting',deleted_at=COALESCE(deleted_at,NOW())
+			WHERE note_id=$1 AND lifecycle_state IN ('ready','unreferenced')`, noteID); err != nil {
 			return err
 		}
 		// The room must be torn down even if the control call fails right now,

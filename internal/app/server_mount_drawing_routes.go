@@ -82,6 +82,8 @@ func (s *Server) mountNoteRoutes(prefix string, spaces *api.SpacesService) {
 	// without this the path was unreachable over HTTP.
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/notes/{noteID}", spaces.SpaceNote())
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/notes/{noteID}/metadata", spaces.SpaceNoteMetadata())
+	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/notes/{noteID}/backlinks", spaces.SpaceNoteBacklinks())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/internal/journal/note-projections", spaces.JournalNoteProjection())
 	s.Router.Post(prefix+"/spaces/{spaceID}/notes/{noteID}/collaboration-ticket", spaces.SpaceNoteCollaborationTicket())
 	if s.Library == nil {
 		return
@@ -267,6 +269,18 @@ func TestingIsAllowedCORSOrigin(origin string) bool {
 func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Get(prefix+"/status", aiService.Status())
 	s.Router.Post(prefix+"/complete", aiService.Complete())
+	s.Router.MethodFunc(http.MethodGet, prefix+"/settings", aiService.Settings())
+	s.Router.MethodFunc(http.MethodPut, prefix+"/settings", aiService.Settings())
+	s.Router.MethodFunc(http.MethodPut, prefix+"/preferences/{surfaceID}", aiService.SurfacePreference())
+	s.Router.Get(prefix+"/recaps", aiService.Recaps())
+	s.Router.Put(prefix+"/recaps/{surfaceID}", aiService.Recap())
+	s.Router.Post(prefix+"/recaps/{surfaceID}/seen", aiService.RecapSeen())
+	s.Router.Post(prefix+"/invocations", aiService.CreateInvocation())
+	s.Router.Get(prefix+"/invocations/{invocationID}/events", aiService.InvocationEvents())
+	s.Router.Post(prefix+"/invocations/{invocationID}/cancel", aiService.CancelInvocation())
+	s.Router.Post(prefix+"/invocations/{invocationID}/feedback", aiService.InvocationFeedback())
+	s.Router.Post(prefix+"/artifacts/{artifactID}/decision", aiService.DecideArtifact())
+	s.Router.Post(prefix+"/artifacts/{artifactID}/completion", aiService.CompleteArtifact())
 }
 
 func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {

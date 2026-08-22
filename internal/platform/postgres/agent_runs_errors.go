@@ -85,6 +85,12 @@ func (db *Database) CreateAgentRun(ctx context.Context, request AgentRunRequest)
 	if !validJSONObject(request.Input) {
 		return nil, ErrSpaceInvalid
 	}
+	if len(request.ActionEnvelope) == 0 {
+		request.ActionEnvelope = json.RawMessage(`{}`)
+	}
+	if !validJSONObject(request.ActionEnvelope) {
+		return nil, ErrSpaceInvalid
+	}
 	instance, err := db.EnsureAgentInstance(ctx, request.RequestingMemberID, request.SpaceID, request.AgentID)
 	if err != nil {
 		return nil, err
@@ -95,6 +101,7 @@ func (db *Database) CreateAgentRun(ctx context.Context, request AgentRunRequest)
 		RequestingMemberID: request.RequestingMemberID, SourceConversationID: request.SourceConversationID, SourceType: request.SourceType,
 		AgentID: request.AgentID, AgentInstanceID: instance.ID, AgentVersionID: instance.AgentVersionID, Attempt: 1,
 		Input: request.Input, Result: json.RawMessage(`{}`), Outputs: json.RawMessage(`{}`), Artifacts: json.RawMessage(`[]`),
+		ActionEnvelope: request.ActionEnvelope,
 	}
 	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpacePermissionTx(ctx, tx, request.RequestingMemberID, request.SpaceID, PermissionAgentsRun); err != nil {
@@ -149,9 +156,25 @@ func (db *Database) CreateAgentRun(ctx context.Context, request AgentRunRequest)
 				out.State = "awaiting_approval"
 			}
 		}
-		if err := tx.QueryRowContext(ctx, `INSERT INTO space_runs(id,space_id,resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,requesting_member_id,source_conversation_id,source_type,agent_id,workflow_identifier,workflow_version_id,workflow_version,capability_id,outputs,artifacts,agent_instance_id,agent_version_id,attempt,conversation_scope_kind,scope_conversation_id,source_message_id)
-			VALUES($1,$2,'agent',$3,$4,$4,$5,$6,$7,$4,NULLIF($8,''),$9,$3,NULLIF($10,''),NULLIF($11,''),NULLIF($12,''),$13,'{}'::jsonb,'[]'::jsonb,$14,$15,1,$16,NULLIF($17,''),NULLIF($18,'')) RETURNING created_at,updated_at`,
-			out.ID, request.SpaceID, request.AgentID, request.RequestingMemberID, request.TriggerKind, out.State, request.Input, request.SourceConversationID, request.SourceType, out.WorkflowIdentifier, out.WorkflowVersionID, out.WorkflowVersion, out.CapabilityID, instance.ID, instance.AgentVersionID, scope.Kind, scope.ConversationID, request.SourceMessageID).Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
+		var insertedID string
+		err := tx.QueryRowContext(ctx, `INSERT INTO space_runs(id,space_id,resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,requesting_member_id,source_conversation_id,source_type,agent_id,workflow_identifier,workflow_version_id,workflow_version,capability_id,outputs,artifacts,agent_instance_id,agent_version_id,attempt,conversation_scope_kind,scope_conversation_id,source_message_id,action_envelope)
+			VALUES($1,$2,'agent',$3,$4,$4,$5,$6,$7,$4,NULLIF($8,''),$9,$3,NULLIF($10,''),NULLIF($11,''),NULLIF($12,''),$13,'{}'::jsonb,'[]'::jsonb,$14,$15,1,$16,NULLIF($17,''),NULLIF($18,''),$19)
+			ON CONFLICT DO NOTHING RETURNING id,created_at,updated_at`,
+			out.ID, request.SpaceID, request.AgentID, request.RequestingMemberID, request.TriggerKind, out.State, request.Input, request.SourceConversationID, request.SourceType, out.WorkflowIdentifier, out.WorkflowVersionID, out.WorkflowVersion, out.CapabilityID, instance.ID, instance.AgentVersionID, scope.Kind, scope.ConversationID, request.SourceMessageID, request.ActionEnvelope).Scan(&insertedID, &out.CreatedAt, &out.UpdatedAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			var input map[string]any
+			_ = json.Unmarshal(request.Input, &input)
+			idempotencyKey, _ := input["ai_idempotency_key"].(string)
+			if idempotencyKey == "" {
+				return ErrSpaceConflict
+			}
+			if err := scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs WHERE requesting_member_id=$1 AND source_type='agent_console' AND input->>'ai_idempotency_key'=$2`, request.RequestingMemberID, idempotencyKey), out); err != nil {
+				return err
+			}
+			out.IdempotentReplay = true
+			return nil
+		}
+		if err != nil {
 			return err
 		}
 		if out.State == "awaiting_approval" {

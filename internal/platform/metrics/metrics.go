@@ -25,11 +25,14 @@ import (
 type Registry struct {
 	registry *prometheus.Registry
 
-	requests   *prometheus.CounterVec
-	duration   *prometheus.HistogramVec
-	inFlight   prometheus.Gauge
-	sampleAge  prometheus.Gauge
-	sampleFail prometheus.Counter
+	requests      *prometheus.CounterVec
+	duration      *prometheus.HistogramVec
+	inFlight      prometheus.Gauge
+	sampleAge     prometheus.Gauge
+	sampleFail    prometheus.Counter
+	aiInvocations *prometheus.CounterVec
+	aiDuration    *prometheus.HistogramVec
+	aiFirstOutput *prometheus.HistogramVec
 
 	mu       sync.Mutex
 	samplers []sampler
@@ -76,9 +79,37 @@ func New() *Registry {
 			Name: "misty_metrics_sample_failures_total",
 			Help: "Domain gauge samples that returned an error.",
 		}),
+		aiInvocations: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "misty_ai_invocations_total",
+			Help: "Embedded Misty invocations by bounded surface, action, model, and outcome.",
+		}, []string{"surface", "action", "model", "outcome"}),
+		aiDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "misty_ai_invocation_duration_seconds",
+			Help:    "End-to-end embedded Misty invocation latency.",
+			Buckets: []float64{0.25, 0.5, 1, 2, 3, 5, 8, 15, 30, 60, 120, 300},
+		}, []string{"surface", "action", "model"}),
+		aiFirstOutput: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "misty_ai_first_output_seconds",
+			Help:    "Time until the first user-visible answer, citation, or artifact output from an embedded Misty invocation.",
+			Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 3, 5, 8, 15, 30, 60},
+		}, []string{"surface", "action", "model"}),
 	}
-	registry.MustRegister(m.requests, m.duration, m.inFlight, m.sampleAge, m.sampleFail)
+	registry.MustRegister(m.requests, m.duration, m.inFlight, m.sampleAge, m.sampleFail, m.aiInvocations, m.aiDuration, m.aiFirstOutput)
 	return m
+}
+
+// RecordAIInvocation records only bounded labels validated by the AI API.
+// Keeping this in the private registry makes release dashboards available
+// without exposing user, Space, pane, prompt, or object identifiers.
+func (m *Registry) RecordAIInvocation(surface, action, model, outcome string, duration, firstOutput time.Duration) {
+	if m == nil {
+		return
+	}
+	m.aiInvocations.WithLabelValues(surface, action, model, outcome).Inc()
+	m.aiDuration.WithLabelValues(surface, action, model).Observe(duration.Seconds())
+	if firstOutput > 0 {
+		m.aiFirstOutput.WithLabelValues(surface, action, model).Observe(firstOutput.Seconds())
+	}
 }
 
 // WatchGauge registers a domain gauge refreshed by the background sampler.

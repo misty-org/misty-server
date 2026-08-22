@@ -9,6 +9,7 @@ import (
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 
 	"github.com/google/uuid"
+	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	appbilling "github.com/kannachi323/misty/server/internal/billing"
 )
 
@@ -57,6 +58,7 @@ func Run() {
 		WorkerFunc(func(ctx context.Context) { runLibraryIntelligenceProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runActionSuggestionProcessing(ctx, server) }),
+		WorkerFunc(func(ctx context.Context) { runAIEmbeddingProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runSubscriptionReconciliation(ctx, server) }),
 	)
 	// Domain gauges refresh on their own schedule so a scrape never holds a
@@ -70,6 +72,48 @@ func Run() {
 		panic(err)
 	}
 	log.Println("Misty server stopped")
+}
+
+func runAIEmbeddingProcessing(ctx context.Context, server *Server) {
+	if server.AIAnalyzer == nil || strings.TrimSpace(server.AIAnalyzer.APIKey) == "" {
+		return
+	}
+	process := func() {
+		chunks, err := server.Database.PendingAIEmbeddingChunks(ctx, 32)
+		if err != nil || len(chunks) == 0 {
+			if err != nil {
+				log.Printf("AI retrieval embedding scan failed: %v", err)
+			}
+			return
+		}
+		inputs := make([]string, len(chunks))
+		for index, chunk := range chunks {
+			inputs[index] = chunk.Content
+		}
+		vectors, _, err := server.AIAnalyzer.Embed(ctx, inputs)
+		if err != nil || len(vectors) != len(chunks) {
+			if err != nil {
+				log.Printf("AI retrieval embedding failed: %v", err)
+			}
+			return
+		}
+		for index, chunk := range chunks {
+			if err := server.Database.CompleteAIEmbeddingChunk(ctx, chunk, vectors[index], serveragent.SmartLibraryEmbeddingModel); err != nil {
+				log.Printf("AI retrieval embedding write failed: %v", err)
+			}
+		}
+	}
+	process()
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			process()
+		}
+	}
 }
 
 func runActionSuggestionProcessing(ctx context.Context, server *Server) {
@@ -240,9 +284,20 @@ func runAgentRetention(ctx context.Context, server *Server) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if _, err := server.Database.ProcessAICleanupJobs(ctx, 25); err != nil {
+				log.Printf("AI privacy cleanup failed: %v", err)
+			}
+			if _, err := server.Database.PurgeExpiredAITransients(ctx, 250); err != nil {
+				log.Printf("AI transient retention cleanup failed: %v", err)
+			}
 			if server.Spaces != nil {
 				if _, err := server.Spaces.ProcessAccountDeletions(ctx, 10); err != nil {
 					log.Printf("Account deletion cleanup failed: %v", err)
+				}
+			}
+			if server.AI != nil {
+				if _, err := server.AI.ProcessDueAIRecaps(ctx, time.Now().UTC(), 25); err != nil {
+					log.Printf("AI recurring briefing processing failed: %v", err)
 				}
 			}
 			if _, err := server.CleanupExpiredLibraryData(ctx, 100); err != nil {

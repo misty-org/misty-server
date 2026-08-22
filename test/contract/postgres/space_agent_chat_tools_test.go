@@ -242,12 +242,8 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 		t.Fatal(err)
 	}
 	var updated SpaceNote
-	if json.Unmarshal(updatedRaw, &updated) != nil || !strings.Contains(updated.PlainTextProjection, "Ready for beta") {
+	if json.Unmarshal(updatedRaw, &updated) != nil || updated.ID != created.ID {
 		t.Fatalf("updated note = %s", updatedRaw)
-	}
-	searchRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Find launch notes", "notes.search", json.RawMessage(`{"query":"Ready for beta"}`))
-	if err != nil || !strings.Contains(string(searchRaw), created.ID) {
-		t.Fatalf("searched notes = %s, %v", searchRaw, err)
 	}
 	commands, err := database.PendingNoteControlCommands(ctx, 10)
 	if err != nil {
@@ -261,6 +257,17 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 	}
 	if !foundReplace {
 		t.Fatalf("missing durable replace_markdown command: %#v", commands)
+	}
+	applied, err := database.ApplySpaceNoteProjection(ctx, SpaceNoteProjection{
+		NoteID: created.ID, Revision: created.CollaborationRevision + 1, Title: "Launch plan",
+		Markdown: "# Launch\nReady for beta", PlainText: "Launch\nReady for beta",
+	})
+	if err != nil || !applied {
+		t.Fatalf("room projection was not applied: applied=%v err=%v", applied, err)
+	}
+	searchRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Find launch notes", "notes.search", json.RawMessage(`{"query":"Ready for beta"}`))
+	if err != nil || !strings.Contains(string(searchRaw), created.ID) {
+		t.Fatalf("searched notes = %s, %v", searchRaw, err)
 	}
 }
 

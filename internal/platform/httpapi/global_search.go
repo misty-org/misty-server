@@ -49,14 +49,44 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 		}
 		lowerQuery := strings.ToLower(query)
 		hits := make([]globalSearchHit, 0, limit)
+		seenHits := map[string]bool{}
 		appendHit := func(hit globalSearchHit) bool {
 			if len(hits) >= limit {
 				return false
 			}
+			if seenHits[hit.ID] {
+				return true
+			}
+			seenHits[hit.ID] = true
 			hit.AccountID = userID
 			hit.Source = "server"
 			hits = append(hits, hit)
 			return len(hits) < limit
+		}
+		spaceNames := map[string]string{}
+		for _, space := range spaces {
+			spaceNames[space.ID] = space.Name
+		}
+		indexed, indexErr := s.database.SearchAIRetrieval(r.Context(), userID, query, nil, limit)
+		if indexErr != nil {
+			writeSpaceError(w, indexErr)
+			return
+		}
+		for _, item := range indexed {
+			kind := item.SourceKind
+			if kind == "provider" {
+				kind = "message"
+			}
+			if kind != "note" && kind != "task" && kind != "roadmap" && kind != "calendar" && kind != "message" {
+				continue
+			}
+			if !appendHit(globalSearchHit{
+				ID: item.SourceKind + ":" + item.SourceID, Kind: kind, Title: item.Title,
+				Body: aiExcerpt(item.Content), Keywords: []string{kind, spaceNames[item.SpaceID]}, Href: item.Href,
+				SpaceID: item.SpaceID, SpaceName: spaceNames[item.SpaceID], Source: "server",
+			}) {
+				break
+			}
 		}
 
 		for _, space := range spaces {

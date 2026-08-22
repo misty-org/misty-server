@@ -1,7 +1,10 @@
 package api
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,6 +13,52 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
+
+const noteProjectionBodyLimit = 512 * 1024
+
+// JournalNoteProjection accepts a signed callback from the serialized Yjs
+// room. It is intentionally separate from member-authenticated note routes.
+func (s *SpacesService) JournalNoteProjection() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, noteProjectionBodyLimit+1))
+		if err != nil || len(body) > noteProjectionBodyLimit {
+			writeSpaceError(w, db.ErrSpaceInvalid)
+			return
+		}
+		timestamp := r.Header.Get("X-Misty-Timestamp")
+		issuedAt, parseErr := strconv.ParseInt(timestamp, 10, 64)
+		if parseErr != nil || time.Since(time.Unix(issuedAt, 0)).Abs() > 5*time.Minute ||
+			!s.TestingJournalCollab.VerifyProjectionSignature(timestamp, body, r.Header.Get("X-Misty-Signature")) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "unauthorized"})
+			return
+		}
+		var input struct {
+			NoteID          string   `json:"note_id"`
+			Revision        int64    `json:"revision"`
+			Title           string   `json:"title"`
+			Markdown        string   `json:"markdown"`
+			PlainText       string   `json:"plain_text"`
+			OutgoingNoteIDs []string `json:"outgoing_note_ids"`
+		}
+		if json.Unmarshal(body, &input) != nil {
+			writeSpaceError(w, db.ErrSpaceInvalid)
+			return
+		}
+		applied, err := s.database.ApplySpaceNoteProjection(r.Context(), db.SpaceNoteProjection{
+			NoteID: input.NoteID, Revision: input.Revision, Title: input.Title,
+			Markdown: input.Markdown, PlainText: input.PlainText, OutgoingNoteIDs: input.OutgoingNoteIDs,
+		})
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"applied": applied})
+	}
+}
 
 // SpaceNotes handles membership-wide native Space notes.
 func (s *SpacesService) SpaceNotes() http.HandlerFunc {
@@ -126,6 +175,27 @@ func (s *SpacesService) SpaceNoteMetadata() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, note)
+	}
+}
+
+func (s *SpacesService) SpaceNoteBacklinks() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := authenticatedUser(w, r, s.database)
+		if !ok {
+			return
+		}
+		noteID := chi.URLParam(r, "noteID")
+		note, err := s.database.SpaceNoteByID(r.Context(), userID, noteID)
+		if err != nil || note.SpaceID != chi.URLParam(r, "spaceID") {
+			writeSpaceError(w, db.ErrSpaceNotFound)
+			return
+		}
+		links, err := s.database.SpaceNoteBacklinks(r.Context(), userID, noteID)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"backlinks": links})
 	}
 }
 

@@ -104,25 +104,36 @@ func TestingIsLocalhostHostname(host string) bool {
 const TestingDefaultStripeWebhookPath = "/stripe/webhook"
 
 func TestingStripeWebhookPathFromEnv() (string, error) {
-	rawPath := strings.TrimSpace(envconfig.Getenv("STRIPE_WEBHOOK_PATH"))
-	if rawPath == "" {
+	rawValue := strings.TrimSpace(envconfig.Getenv("STRIPE_WEBHOOK_PATH"))
+	if rawValue == "" {
 		return TestingDefaultStripeWebhookPath, nil
 	}
 
-	parsedPath, err := url.ParseRequestURI(rawPath)
-	if err != nil ||
-		!strings.HasPrefix(rawPath, "/") ||
-		strings.HasPrefix(rawPath, "//") ||
-		parsedPath.IsAbs() ||
-		parsedPath.Host != "" ||
-		parsedPath.RawQuery != "" ||
-		parsedPath.Fragment != "" ||
-		rawPath == "/" ||
-		strings.ContainsAny(rawPath, "{}*") {
-		return "", fmt.Errorf("STRIPE_WEBHOOK_PATH must be a static absolute path such as %s", TestingDefaultStripeWebhookPath)
+	parsedValue, err := url.ParseRequestURI(rawValue)
+	if err != nil {
+		return "", fmt.Errorf("STRIPE_WEBHOOK_PATH must be a static absolute path or HTTP(S) URL")
 	}
 
-	return rawPath, nil
+	routePath := rawValue
+	if parsedValue.IsAbs() {
+		if parsedValue.Host == "" || parsedValue.User != nil ||
+			(parsedValue.Scheme != "https" &&
+				!(parsedValue.Scheme == "http" && TestingIsLocalhostHostname(parsedValue.Hostname()))) {
+			return "", fmt.Errorf("STRIPE_WEBHOOK_PATH URL must use https unless it targets localhost")
+		}
+		routePath = parsedValue.Path
+	}
+
+	if !strings.HasPrefix(routePath, "/") ||
+		strings.HasPrefix(routePath, "//") ||
+		parsedValue.RawQuery != "" ||
+		parsedValue.Fragment != "" ||
+		routePath == "/" ||
+		strings.ContainsAny(routePath, "{}*") {
+		return "", fmt.Errorf("STRIPE_WEBHOOK_PATH must identify one static webhook route")
+	}
+
+	return routePath, nil
 }
 
 // warnOnInsecureBillingConfiguration surfaces a missing webhook secret at boot

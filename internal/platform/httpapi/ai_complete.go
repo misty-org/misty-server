@@ -1,11 +1,13 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 
 	agent "github.com/kannachi323/misty/server/internal/agents"
@@ -19,37 +21,55 @@ func (s *AIService) Complete() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Prompt string `json:"prompt"`
+			Prompt   string `json:"prompt"`
+			Timezone string `json:"timezone,omitempty"`
 		}
 		if err := decodeAIJSON(w, r, &body); err != nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		release, ok := s.acquireProviderCall(w, userID)
-		if !ok {
+		input := aiInvocationInput{
+			Mode: "drawer", SurfaceID: "global", Trigger: "explicit", Prompt: strings.TrimSpace(body.Prompt),
+			IdempotencyKey: "ai-complete:" + uuid.NewString(), Timezone: body.Timezone,
+		}
+		if err := validateAIInvocationInput(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_invocation", "message": err.Error()})
 			return
 		}
-		defer release()
-		text, usage, err := s.runtime.CompleteWithModelContext(r.Context(), userID, body.Prompt, db.CreditMeterAutomationAI, agent.InitialSelectedModelID)
+		if !s.agentRuntime.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "agent_runtime_unavailable", "message": "Misty's agent runtime is not configured."})
+			return
+		}
+		payload, _ := json.Marshal(input)
+		now := time.Now().UTC()
+		stored, _, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
+			ID: "invocation_" + uuid.NewString(), UserID: userID, SurfaceID: "global", Mode: "drawer", Trigger: "explicit",
+			State: "queued", IdempotencyKey: input.IdempotencyKey, RequestPayload: payload, ExpiresAt: now.Add(aiInvocationTTL),
+		})
 		if err != nil {
 			TestingWriteAIError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"text": text, "model": agent.InitialSelectedModelID, "hosted_ai_used_ratio": usage.UsedRatio, "hosted_ai_reset_at": usage.ResetAt})
+		if _, err := s.invocations.restoreDurable(r.Context(), stored); err != nil {
+			TestingWriteAIError(w, err)
+			return
+		}
+		if _, err := s.agentRuntime.Start(r.Context(), stored.ID); err != nil {
+			s.invocations.fail(stored.ID, "Misty could not start the agent runtime. Please try again.")
+			TestingWriteAIError(w, err)
+			return
+		}
+		text, _, err := s.awaitAIInvocationAnswer(r, userID, stored.ID)
+		if err != nil {
+			TestingWriteAIError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"text": text, "model": agent.InitialSelectedModelID})
 	}
 }
 
 func agentDocumentsEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_DOCUMENTS_ENABLED")), "true")
-}
-
-func (s *AIService) acquireProviderCall(w http.ResponseWriter, userID string) (func(), bool) {
-	release, retryAfter, allowed := s.guard.AcquireProviderCall(userID)
-	if !allowed {
-		TestingWriteAIRateLimit(w, retryAfter)
-		return nil, false
-	}
-	return release, true
 }
 
 func TestingWriteAIRateLimit(w http.ResponseWriter, retryAfter time.Duration) {
@@ -59,17 +79,6 @@ func TestingWriteAIRateLimit(w http.ResponseWriter, retryAfter time.Duration) {
 		"code": "rate_limited", "message": "Agent request limit reached. Try again later.",
 		"retry_after_seconds": seconds,
 	})
-}
-
-func (s *AIService) agentTierForUser(userID string) (agent.AgentTier, error) {
-	license, err := s.database.GetLicenseByUserID(userID)
-	if err != nil {
-		return agent.TierLow, err
-	}
-	if license == nil {
-		return agent.TierLow, nil
-	}
-	return TestingAgentTierForLicenseTier(license.Tier), nil
 }
 
 // agentTierForLicenseTier deliberately routes every paid plan to the same tier;

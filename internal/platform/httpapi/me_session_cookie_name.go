@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	appbilling "github.com/kannachi323/misty/server/internal/billing"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
@@ -81,6 +82,16 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+		hasCompletedPurchase, err := database.HasCompletedStripePurchase(userID)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		trialEligible := appbilling.EligibleForProTrial(
+			license,
+			subscription,
+			hasCompletedPurchase,
+		)
 		billingKind := "free"
 		if license.Status == db.LicenseStatusTrialing {
 			billingKind = "trial"
@@ -111,6 +122,7 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			"allows_use":       TestingLicenseAllowsUse(license),
 			"expires_at":       license.ExpiresAt,
 			"trial_started_at": license.TrialStartedAt,
+			"trial_eligible":   trialEligible,
 			"license_device":   license.LicenseDevice,
 			"billing":          billingSummary,
 		})

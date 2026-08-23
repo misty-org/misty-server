@@ -119,3 +119,22 @@ func TestOnlyEligibleProCheckoutReceivesTrial(t *testing.T) {
 		t.Fatalf("returning customer = %#v", returning.Customer)
 	}
 }
+
+func TestProTrialEligibilityIsOneTimeAndRequiresNoBillingHistory(t *testing.T) {
+	license := &db.License{}
+	if !EligibleForProTrial(license, nil, false) {
+		t.Fatal("fresh account was not eligible for its one-time trial")
+	}
+
+	trialStartedAt := time.Now().UTC()
+	usedTrial := &db.License{TrialStartedAt: &trialStartedAt}
+	if EligibleForProTrial(usedTrial, nil, false) {
+		t.Fatal("account that used its trial remained eligible")
+	}
+	if EligibleForProTrial(license, &db.StripeSubscription{Status: db.SubscriptionStatusPastDue}, false) {
+		t.Fatal("account with subscription history remained eligible")
+	}
+	if EligibleForProTrial(license, nil, true) {
+		t.Fatal("account with purchase history remained eligible")
+	}
+}

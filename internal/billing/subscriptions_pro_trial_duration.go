@@ -76,23 +76,38 @@ type CheckoutSessionFetcher func(
 
 type PortalSessionCreator func(secretKey, customerID, returnURL string) (string, error)
 
+type SubscriptionCanceler func(
+	cfg CheckoutConfig,
+	subscriptionID string,
+) (*stripe.Subscription, error)
+
 type Service struct {
-	database       *db.Database
-	createCheckout CheckoutSessionCreator
-	fetchCheckout  CheckoutSessionFetcher
-	createPortal   PortalSessionCreator
-	trialDuration  time.Duration
+	database           *db.Database
+	createCheckout     CheckoutSessionCreator
+	fetchCheckout      CheckoutSessionFetcher
+	createPortal       PortalSessionCreator
+	cancelSubscription SubscriptionCanceler
+	trialDuration      time.Duration
 }
 
 type ServiceOption func(*Service)
 
 func NewService(database *db.Database, opts ...ServiceOption) *Service {
 	service := &Service{database: database, createCheckout: createStripeCheckoutSession, createPortal: createStripePortalSession,
-		fetchCheckout: fetchStripeCheckoutSession, trialDuration: ProTrialDuration}
+		fetchCheckout: fetchStripeCheckoutSession, cancelSubscription: cancelStripeSubscription,
+		trialDuration: ProTrialDuration}
 	for _, opt := range opts {
 		opt(service)
 	}
 	return service
+}
+
+func WithSubscriptionCanceler(fn SubscriptionCanceler) ServiceOption {
+	return func(service *Service) {
+		if fn != nil {
+			service.cancelSubscription = fn
+		}
+	}
 }
 
 func WithCheckoutSessionFetcher(fn CheckoutSessionFetcher) ServiceOption {
@@ -133,4 +148,13 @@ func TestingValidPaidTier(tier db.Tier) bool {
 
 func TestingValidInterval(interval BillingInterval) bool {
 	return interval == BillingIntervalMonth || interval == BillingIntervalYear
+}
+
+func EligibleForProTrial(
+	license *db.License,
+	existing *db.StripeSubscription,
+	hasCompletedPurchase bool,
+) bool {
+	return license != nil && license.TrialStartedAt == nil &&
+		license.LegacyTier == nil && existing == nil && !hasCompletedPurchase
 }

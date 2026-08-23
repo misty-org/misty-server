@@ -143,7 +143,7 @@ func (hub *aiInvocationHub) addStructuredArtifact(userID, invocationID, kind, su
 		ID: "artifact_" + uuid.NewString(), SchemaVersion: 1, Kind: kind, Title: spec.Title, Summary: summary,
 		Sources: sources, Target: target, BaseRevision: baseRevision, Operations: operations,
 		Risk: spec.Risk, ApprovalPolicy: spec.ApprovalPolicy, IdempotencyKey: "artifact:" + invocationID + ":" + kind,
-		ExpiresAt: time.Now().UTC().Add(aiInvocationTTL).Format(time.RFC3339Nano), State: "proposed", OwnerUserID: userID,
+		ExpiresAt: time.Now().UTC().Add(aiInvocationTTL).Format(time.RFC3339Nano), State: "proposed", InvocationID: invocationID, OwnerUserID: userID,
 	}
 	hub.mu.Lock()
 	hub.artifacts[artifact.ID] = artifact
@@ -236,7 +236,7 @@ func (hub *aiInvocationHub) addTaskSetArtifact(userID, invocationID string, task
 		Summary: "Create these reviewed tasks in the current Space. No assignees or due dates will be inferred.", Sources: sources,
 		Target: map[string]any{"kind": "space", "id": spaceID, "spaceId": spaceID}, Operations: map[string]any{"tasks": tasks},
 		Risk: "consequential", ApprovalPolicy: "confirm", IdempotencyKey: "artifact:" + invocationID,
-		ExpiresAt: time.Now().UTC().Add(aiInvocationTTL).Format(time.RFC3339Nano), State: "proposed", OwnerUserID: userID,
+		ExpiresAt: time.Now().UTC().Add(aiInvocationTTL).Format(time.RFC3339Nano), State: "proposed", InvocationID: invocationID, OwnerUserID: userID,
 	}
 	hub.mu.Lock()
 	hub.artifacts[artifact.ID] = artifact

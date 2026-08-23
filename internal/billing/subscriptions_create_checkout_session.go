@@ -9,6 +9,7 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/stripe/stripe-go/v82"
 	checkoutsession "github.com/stripe/stripe-go/v82/checkout/session"
+	stripesubscription "github.com/stripe/stripe-go/v82/subscription"
 )
 
 func (service *Service) CreateCheckoutSession(userID string, tier db.Tier, interval BillingInterval) (string, error) {
@@ -32,6 +33,10 @@ func (service *Service) CreateCheckoutSession(userID string, tier db.Tier, inter
 	if existing != nil && db.SubscriptionAllowsPaidAccess(existing.Status) {
 		return "", ErrSubscriptionExists
 	}
+	replacePastDue := existing != nil && strings.EqualFold(
+		strings.TrimSpace(existing.Status),
+		db.SubscriptionStatusPastDue,
+	)
 	if existing == nil {
 		completedCheckout, err := service.database.HasCompletedSubscriptionCheckoutWithoutSubscription(
 			context.Background(),
@@ -62,7 +67,7 @@ func (service *Service) CreateCheckoutSession(userID string, tier db.Tier, inter
 	}
 	// The one-time trial remains a Pro benefit. Max Checkout never receives an
 	// automatic trial, even when the account would otherwise be eligible.
-	trialEligible := tier == db.TierPro && license != nil && license.TrialStartedAt == nil && !hasPurchase
+	trialEligible := tier == db.TierPro && EligibleForProTrial(license, existing, hasPurchase)
 	attempt, _, err := service.database.BeginSubscriptionCheckout(
 		context.Background(),
 		user.ID,
@@ -135,6 +140,15 @@ func (service *Service) CreateCheckoutSession(userID string, tier db.Tier, inter
 	if result.ExpiresAt.IsZero() {
 		result.ExpiresAt = attempt.ExpiresAt
 	}
+	if replacePastDue {
+		if err := service.replacePastDueSubscription(
+			cfg,
+			existing,
+			attempt.ID,
+		); err != nil {
+			return "", err
+		}
+	}
 	if err := service.database.OpenSubscriptionCheckout(
 		context.Background(),
 		attempt.ID,
@@ -145,6 +159,38 @@ func (service *Service) CreateCheckoutSession(userID string, tier db.Tier, inter
 		return "", err
 	}
 	return result.URL, nil
+}
+
+func (service *Service) replacePastDueSubscription(
+	cfg CheckoutConfig,
+	existing *db.StripeSubscription,
+	checkoutAttemptID string,
+) error {
+	canonical, err := service.cancelSubscription(cfg, existing.StripeSubscriptionID)
+	if err != nil {
+		return err
+	}
+	if canonical == nil || canonical.ID != existing.StripeSubscriptionID ||
+		canonical.Status != stripe.SubscriptionStatusCanceled {
+		return errors.New("Stripe did not cancel the past-due subscription")
+	}
+
+	now := time.Now().UTC()
+	replacement := *existing
+	replacement.Status = string(stripe.SubscriptionStatusCanceled)
+	replacement.CancelAtPeriodEnd = false
+	replacement.CanceledAt = &now
+	replacement.SourceEventCreatedAt = &now
+	replacement.SourceEventID = "checkout-replacement:" + checkoutAttemptID
+	replacement.ReconcileAfter = nextSubscriptionReconcileAt(now, replacement.CurrentPeriodEnd)
+	applied, err := service.database.UpsertStripeSubscriptionFromWebhook(&replacement)
+	if err != nil {
+		return err
+	}
+	if !applied {
+		return errors.New("past-due subscription replacement was not applied")
+	}
+	return service.database.ApplyEffectiveSubscriptionEntitlement(&replacement)
 }
 
 func (service *Service) CreateCreditCheckoutSession(userID, packID string) (string, error) {
@@ -231,6 +277,27 @@ func fetchStripeCheckoutSession(
 	}
 	stripe.Key = cfg.secretKey
 	return checkoutsession.Get(sessionID, nil)
+}
+
+func cancelStripeSubscription(
+	cfg CheckoutConfig,
+	subscriptionID string,
+) (*stripe.Subscription, error) {
+	if strings.TrimSpace(subscriptionID) == "" {
+		return nil, errors.New("Stripe subscription id is required")
+	}
+	stripe.Key = cfg.secretKey
+	canonical, err := stripesubscription.Get(subscriptionID, nil)
+	if err != nil {
+		return nil, err
+	}
+	if canonical.Status == stripe.SubscriptionStatusCanceled {
+		return canonical, nil
+	}
+	return stripesubscription.Cancel(subscriptionID, &stripe.SubscriptionCancelParams{
+		InvoiceNow: stripe.Bool(false),
+		Prorate:    stripe.Bool(false),
+	})
 }
 
 func TestingStripeCheckoutSessionParams(cfg CheckoutConfig, user *db.User, tier db.Tier, interval BillingInterval, customerID string, trialEligible bool) *stripe.CheckoutSessionParams {

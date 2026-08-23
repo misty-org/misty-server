@@ -91,6 +91,7 @@ func TestIsTransferRequestOnlyMatchesObjectByteRoutes(t *testing.T) {
 		"/api/spaces/space_1/library/uploads/upload_1/content",
 		"/api/spaces/space_1/library/items/item_1/download",
 		"/api/spaces/space_1/library/items/item_1/preview",
+		"/v1/spaces/space_1/library/items/item_1/download",
 	}
 	for _, path := range transfers {
 		if !TestingIsTransferRequest(httptest.NewRequest(http.MethodGet, path, nil)) {

@@ -214,6 +214,63 @@ func TestDuplicateAndAmbiguousEventsCannotRestorePaidAccess(t *testing.T) {
 	}
 }
 
+func TestCanceledSubscriptionCannotDowngradeAnotherActiveSubscription(t *testing.T) {
+	database := openTestDatabase(t)
+	user, err := database.CreateUser(
+		"Replacement Subscriber",
+		"replacement-subscriber@example.com",
+		"password123",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	periodEnd := now.Add(30 * 24 * time.Hour)
+	older := &StripeSubscription{
+		UserID: user.ID, LicenseID: user.LicenseID,
+		StripeSubscriptionID: "sub_replaced", StripeCustomerID: "cus_replaced",
+		StripePriceID: "price_pro", Tier: TierPro, BillingInterval: "month",
+		Status: "canceled", CurrentPeriodEnd: &periodEnd,
+		ReconcileAfter: now.Add(time.Hour),
+	}
+	active := &StripeSubscription{
+		UserID: user.ID, LicenseID: user.LicenseID,
+		StripeSubscriptionID: "sub_replacement", StripeCustomerID: "cus_replaced",
+		StripePriceID: "price_max", Tier: TierMax, BillingInterval: "month",
+		Status: SubscriptionStatusActive, CurrentPeriodEnd: &periodEnd,
+		ReconcileAfter: now.Add(time.Hour),
+	}
+	if err := database.UpsertStripeSubscription(older); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.UpsertStripeSubscription(active); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.ApplyEffectiveSubscriptionEntitlement(active); err != nil {
+		t.Fatal(err)
+	}
+
+	// A late deletion event for the older subscription must preserve the
+	// replacement subscription's entitlement.
+	if err := database.ApplyEffectiveSubscriptionEntitlement(older); err != nil {
+		t.Fatal(err)
+	}
+	license, err := database.GetLicenseByUserID(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if license == nil || license.Tier != TierMax {
+		t.Fatalf("late cancellation downgraded replacement license: %#v", license)
+	}
+	selected, err := database.GetStripeSubscriptionByUserID(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected == nil || selected.StripeSubscriptionID != active.StripeSubscriptionID {
+		t.Fatalf("selected subscription = %#v, want active replacement", selected)
+	}
+}
+
 func TestStaleSubscriptionEntitlementExpiresButStillBlocksNewCheckout(t *testing.T) {
 	database := openTestDatabase(t)
 	user, err := database.CreateUser(

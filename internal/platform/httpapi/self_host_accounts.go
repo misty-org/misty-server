@@ -181,7 +181,7 @@ func SelfHostedFeatureGate(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		path := strings.TrimPrefix(r.URL.Path, "/api")
+		path := trimPublicAPIPrefix(r.URL.Path)
 		blockedPrefix := []string{
 			"/ai", "/agents", "/billing", "/cloud", "/integrations", "/misty",
 			"/provider-callbacks", "/runs", "/waitlist", "/auth/forgot", "/auth/reset", "/auth/handoff",
@@ -257,13 +257,25 @@ func selfHostEntitlementPublicKeys() map[string]ed25519.PublicKey {
 }
 
 func selfHostRecoveryPath(path string) bool {
-	path = strings.TrimPrefix(path, "/api")
+	path = trimPublicAPIPrefix(path)
 	switch path {
 	case "/health", "/instance", "/login", "/logout", "/self-host/bootstrap", "/self-host/enroll", "/self-host/entitlement":
 		return true
 	default:
 		return false
 	}
+}
+
+func trimPublicAPIPrefix(path string) string {
+	for _, prefix := range []string{"/api", "/v1"} {
+		if path == prefix {
+			return "/"
+		}
+		if strings.HasPrefix(path, prefix+"/") {
+			return strings.TrimPrefix(path, prefix)
+		}
+	}
+	return path
 }
 
 func writeSelfHostAccountError(w http.ResponseWriter, err error) {

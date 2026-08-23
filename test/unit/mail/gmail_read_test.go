@@ -175,6 +175,69 @@ func TestGmailRejectsMalformedAndOversizedResponses(t *testing.T) {
 	})
 }
 
+func TestGmailListThreadsHydratesMetadataAndUnescapesHTML(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/gmail/v1/users/me/threads":
+			fmt.Fprint(writer, `{"threads":[{"id":"t-123","snippet":"Don&#39;t miss $29+ jeans &amp; FREE ship*"}],"resultSizeEstimate":1}`)
+		case "/gmail/v1/users/me/threads/t-123":
+			if request.URL.Query().Get("format") != "metadata" {
+				t.Errorf("format = %q, want metadata", request.URL.Query().Get("format"))
+			}
+			fmt.Fprint(writer, `{
+				"id":"t-123",
+				"snippet":"Don&#39;t miss $29+ jeans &amp; FREE ship*",
+				"messages":[{
+					"id":"msg-1",
+					"threadId":"t-123",
+					"internalDate":"1755950400000",
+					"labelIds":["UNREAD","INBOX"],
+					"snippet":"Don&#39;t miss $29+ jeans &amp; FREE ship*",
+					"payload":{
+						"headers":[
+							{"name":"Subject","value":"New Arrivals &amp; Discounts"},
+							{"name":"From","value":"Pacsun &lt;deals@pacsun.com&gt;"},
+							{"name":"To","value":"User &lt;user@example.com&gt;"},
+							{"name":"Cc","value":"Rewards &lt;rewards@pacsun.com&gt;"},
+							{"name":"Date","value":"Sun, 23 Aug 2026 12:00:00 +0000"}
+						]
+					}
+				}]
+			}`)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	provider := newGmail(t, server.URL+"/gmail/v1", mailbox.GmailConfig{AccountID: "conn-1"})
+	page, err := provider.ListThreads(context.Background(), mailbox.ListThreadsRequest{PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Threads) != 1 {
+		t.Fatalf("got %d threads, want 1", len(page.Threads))
+	}
+	th := page.Threads[0]
+	if th.ProviderID != "t-123" {
+		t.Errorf("providerID = %q", th.ProviderID)
+	}
+	if th.Subject != "New Arrivals & Discounts" {
+		t.Errorf("subject = %q, want unescaped subject", th.Subject)
+	}
+	if th.Snippet != "Don't miss $29+ jeans & FREE ship*" {
+		t.Errorf("snippet = %q, want unescaped snippet", th.Snippet)
+	}
+	// Participants must contain From (Pacsun) and Cc (Rewards), but not To (User).
+	if len(th.Participants) != 2 || th.Participants[0].Name != "Pacsun" || th.Participants[1].Name != "Rewards" {
+		t.Errorf("participants = %#v", th.Participants)
+	}
+	if !th.Unread {
+		t.Errorf("unread = false, want true")
+	}
+}
+
 func newGmail(t *testing.T, baseURL string, extra mailbox.GmailConfig) *mailbox.Gmail {
 	t.Helper()
 	extra.BaseURL = baseURL

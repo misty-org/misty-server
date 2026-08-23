@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 
 	agent "github.com/kannachi323/misty/server/internal/agents"
@@ -44,6 +45,10 @@ func TestingWriteAIError(w http.ResponseWriter, err error) {
 	case isAIInvalidRequest(err):
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
+		// Keep the response deliberately opaque, but retain the actual cause in
+		// server logs. Without this, invocation setup failures collapse into an
+		// unactionable HTTP 500 and cannot be correlated with the request log.
+		log.Printf("AI request failed: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }

@@ -63,11 +63,14 @@ func TestingNormalizeRateLimitPath(path string) string {
 	if trimmed == "" {
 		return "/"
 	}
-	if strings.HasPrefix(trimmed, "/api/") {
-		trimmed = trimmed[len("/api"):]
-	}
-	if trimmed == "/api" {
-		return "/"
+	for _, prefix := range []string{"/api", "/v1"} {
+		if trimmed == prefix {
+			return "/"
+		}
+		if strings.HasPrefix(trimmed, prefix+"/") {
+			trimmed = trimmed[len(prefix):]
+			break
+		}
 	}
 	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
 	if len(parts) == 4 && parts[0] == "spaces" && parts[2] == "library" && parts[3] == "reauthenticate" {

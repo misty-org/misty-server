@@ -125,14 +125,32 @@ func (db *Database) upsertStripeSubscription(
 }
 
 func (db *Database) GetStripeSubscriptionByUserID(userID string) (*StripeSubscription, error) {
-	return db.getStripeSubscription("user_id", userID, userRLSSettings(userID))
+	return db.getStripeSubscription(
+		"user_id",
+		userID,
+		userRLSSettings(userID),
+		`CASE
+			WHEN status IN ('trialing','active') THEN 0
+			WHEN status = 'past_due' THEN 1
+			ELSE 2
+		 END, updated_at DESC`,
+	)
 }
 
 func (db *Database) GetStripeSubscriptionByStripeID(subscriptionID string) (*StripeSubscription, error) {
-	return db.getStripeSubscription("stripe_subscription_id", subscriptionID, TestingServiceRLSSettings())
+	return db.getStripeSubscription(
+		"stripe_subscription_id",
+		subscriptionID,
+		TestingServiceRLSSettings(),
+		"updated_at DESC",
+	)
 }
 
-func (db *Database) getStripeSubscription(column, value string, settings map[string]string) (*StripeSubscription, error) {
+func (db *Database) getStripeSubscription(
+	column, value string,
+	settings map[string]string,
+	orderBy string,
+) (*StripeSubscription, error) {
 	if strings.TrimSpace(value) == "" {
 		return nil, nil
 	}
@@ -145,7 +163,7 @@ func (db *Database) getStripeSubscription(column, value string, settings map[str
 			       cancel_at_period_end, canceled_at,source_event_created_at,
 			       source_event_id,last_reconciled_at,reconcile_after,
 			       reconcile_failures,last_reconcile_error
-			FROM stripe_subscriptions WHERE `+column+` = $1 ORDER BY updated_at DESC LIMIT 1
+			FROM stripe_subscriptions WHERE `+column+` = $1 ORDER BY `+orderBy+` LIMIT 1
 		`, value).Scan(&subscription.ID, &subscription.UserID, &subscription.LicenseID,
 			&subscription.StripeSubscriptionID, &subscription.StripeCustomerID,
 			&subscription.StripePriceID, &subscription.Tier, &subscription.BillingInterval,
@@ -212,6 +230,15 @@ func SubscriptionAllowsPaidAccess(status string) bool {
 func (db *Database) ApplyEffectiveSubscriptionEntitlement(subscription *StripeSubscription) error {
 	if subscription == nil {
 		return nil
+	}
+	if !SubscriptionAllowsPaidAccess(subscription.Status) {
+		effective, err := db.GetStripeSubscriptionByUserID(subscription.UserID)
+		if err != nil {
+			return err
+		}
+		if effective != nil && SubscriptionAllowsPaidAccess(effective.Status) {
+			subscription = effective
+		}
 	}
 	if strings.EqualFold(subscription.Status, SubscriptionStatusTrialing) {
 		return db.SetStripeTrialState(subscription.LicenseID, subscription.Tier, subscription.CurrentPeriodEnd)

@@ -104,43 +104,27 @@ func (s *AIService) ProcessDueAIRecaps(ctx context.Context, now time.Time, limit
 }
 
 func (s *AIService) processAIRecap(ctx context.Context, item db.AIRecap, now time.Time) error {
-	startedAt := time.Now()
-	outcome := "failed"
-	firstOutput := time.Duration(0)
-	defer func() {
-		if s.metrics != nil {
-			s.metrics.RecordAIInvocation(item.SurfaceID, "recap", agent.InitialSelectedModelID, outcome, time.Since(startedAt), firstOutput)
-		}
-	}()
 	available, err := s.database.AIActionAvailable(ctx, item.UserID, item.SurfaceID, "recap", agent.InitialSelectedModelID)
 	if err != nil || !available {
 		if err == nil {
 			err = errors.New("recap feature is unavailable")
 		}
-		outcome = "unavailable"
 		_ = s.database.CompleteAIRecap(ctx, item, "", "", nil, err, now)
 		return err
 	}
-	hits, err := s.database.RecentAIRetrieval(ctx, item.UserID, 12)
-	if err != nil {
+	if !s.agentRuntime.Enabled() {
+		err = errors.New("agent runtime is unavailable")
 		_ = s.database.CompleteAIRecap(ctx, item, "", "", nil, err, now)
 		return err
-	}
-	resolved := make([]aiResolvedContext, 0, len(hits))
-	for _, hit := range hits {
-		resolved = append(resolved, aiResolvedContext{
-			Label: "permission-filtered Misty index", Content: aiRelevantChunk(hit.Content, item.Prompt),
-			Citation: aiCitation{ID: hit.SourceID, Kind: hit.SourceKind, Title: hit.Title, Href: hit.Href, Revision: hit.SourceRevision, Excerpt: aiExcerpt(hit.Content)},
-		})
 	}
 	prompt := firstAIText(item.Prompt, "Summarize recent progress, upcoming commitments, decisions, risks, and blockers. Be concise and omit sections with no grounded evidence.")
-	body := aiInvocationInput{Mode: "drawer", SurfaceID: item.SurfaceID, Trigger: "schedule", Prompt: prompt}
+	body := aiInvocationInput{Mode: "drawer", SurfaceID: item.SurfaceID, Trigger: "schedule", Prompt: prompt, Timezone: item.Timezone}
 	payload, _ := json.Marshal(body)
 	scheduledAt := now
 	if item.NextRunAt != nil {
 		scheduledAt = *item.NextRunAt
 	}
-	invocation, _, err := s.database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{
+	invocation, created, err := s.database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{
 		ID: "invocation_" + uuid.NewString(), UserID: item.UserID, SurfaceID: item.SurfaceID,
 		Mode: "drawer", Trigger: "schedule", State: "queued",
 		IdempotencyKey: "recap:" + item.SurfaceID + ":" + scheduledAt.UTC().Format(time.RFC3339),
@@ -150,36 +134,17 @@ func (s *AIService) processAIRecap(ctx context.Context, item db.AIRecap, now tim
 		_ = s.database.CompleteAIRecap(ctx, item, "", "", nil, err, now)
 		return err
 	}
-	s.invocations.restore(invocation, nil)
-	runContext, cancel := context.WithTimeout(ctx, aiInvocationTimeout)
-	defer cancel()
-	s.invocations.setCancel(invocation.ID, cancel)
-	s.invocations.append(invocation.ID, aiInvocationEvent{Type: "invocation.started", State: "running"})
-	modelPrompt := aiInvocationSystemPrompt(item.SurfaceID) + "\n\nThis is an explicitly enabled recurring personal briefing. Include [N] citations for factual claims.\n\n" + aiContextPrompt(prompt, resolved, nil)
-	answer, _, runErr := s.runtime.CompleteWithModelContext(runContext, item.UserID, modelPrompt, "assistant_ai", agent.InitialSelectedModelID)
-	if runErr != nil {
-		if errors.Is(runErr, context.Canceled) {
-			outcome = "canceled"
-		}
-		s.invocations.fail(invocation.ID, publicAIInvocationError(runErr))
-		_ = s.database.CompleteAIRecap(ctx, item, invocation.ID, "", nil, runErr, now)
-		return runErr
-	}
-	answer = strings.TrimSpace(answer)
-	firstOutput = time.Since(startedAt)
-	citations := mistyAnswerCitations(answer, resolved)
-	for index := range citations {
-		citation := citations[index]
-		s.invocations.append(invocation.ID, aiInvocationEvent{Type: "citation", Citation: &citation})
-	}
-	for _, delta := range aiTextDeltas(answer, 320) {
-		s.invocations.append(invocation.ID, aiInvocationEvent{Type: "response.delta", Delta: delta})
-	}
-	s.invocations.complete(invocation.ID)
-	citationsJSON, _ := json.Marshal(citations)
-	if err := s.database.CompleteAIRecap(ctx, item, invocation.ID, answer, citationsJSON, nil, now); err != nil {
+	if _, err := s.invocations.restoreDurable(ctx, invocation); err != nil {
+		_ = s.database.CompleteAIRecap(ctx, item, "", "", nil, err, now)
 		return err
 	}
-	outcome = "completed"
+	if !created || aiInvocationTerminal(invocation.State) || invocation.RuntimeRunID != "" {
+		return nil
+	}
+	if _, err := s.agentRuntime.Start(ctx, invocation.ID); err != nil {
+		s.invocations.fail(invocation.ID, "Misty could not start the agent runtime. Please try again.")
+		_ = s.database.CompleteAIRecap(ctx, item, invocation.ID, "", nil, err, now)
+		return err
+	}
 	return nil
 }

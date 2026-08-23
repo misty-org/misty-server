@@ -79,9 +79,27 @@ func TestStripeWebhookPathFromEnv(t *testing.T) {
 		t.Fatalf("custom webhook path = %q, want %q", path, "/dev/stripe/events")
 	}
 
+	for _, webhookURL := range []string{
+		"https://dev-api.example.com/v1/stripe/webhook",
+		"http://localhost:8081/v1/stripe/webhook",
+	} {
+		t.Setenv("STRIPE_WEBHOOK_PATH", webhookURL)
+		path, err = TestingStripeWebhookPathFromEnv()
+		if err != nil {
+			t.Fatalf("stripeWebhookPathFromEnv(%q) error = %v", webhookURL, err)
+		}
+		if path != "/v1/stripe/webhook" {
+			t.Fatalf("webhook URL path = %q, want %q", path, "/v1/stripe/webhook")
+		}
+	}
+
 	for _, invalid := range []string{
 		"stripe/webhook",
-		"http://localhost:8081/stripe/webhook",
+		"http://example.com/stripe/webhook",
+		"ftp://example.com/stripe/webhook",
+		"https://user:password@example.com/stripe/webhook",
+		"https://example.com",
+		"https://example.com/stripe/webhook?source=dev",
 		"//stripe/webhook",
 		"/stripe/webhook?source=dev",
 		"/stripe/{event}",
@@ -99,7 +117,7 @@ func TestMountHandlersUsesConfiguredStripeWebhookPath(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "")
 	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
 	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8081/auth/reset/start")
-	t.Setenv("STRIPE_WEBHOOK_PATH", "/dev/stripe/webhook")
+	t.Setenv("STRIPE_WEBHOOK_PATH", "https://dev-api.example.com/dev/stripe/webhook")
 	t.Setenv("STRIPE_WEBHOOK_SECRET", "")
 	t.Setenv("R2_ENDPOINT", "")
 	t.Setenv("R2_BUCKET", "")

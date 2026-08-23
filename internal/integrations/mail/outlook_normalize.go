@@ -91,8 +91,7 @@ func (o *Outlook) normalizeGraphThread(conversationID string, sources []graphMes
 		for _, label := range message.Labels {
 			labelSet[label] = true
 		}
-		addresses := append([]Address{message.From}, message.To...)
-		addresses = append(addresses, message.Cc...)
+		addresses := append([]Address{message.From}, message.Cc...)
 		for _, address := range addresses {
 			key := strings.ToLower(address.Email)
 			if key != "" && !participantSet[key] {

@@ -267,7 +267,16 @@ func (o *Outlook) GetThread(ctx context.Context, conversationID string) (Thread,
 	query.Del("$orderby")
 	messages, err := o.readAllMessages(ctx, query)
 	if err != nil {
-		return Thread{}, err
+		// If expanding attachments with filter is rejected by Graph (e.g. HTTP 400), retry without expand
+		queryNoExpand := o.messageQuery(false)
+		queryNoExpand.Set("$select", graphFullMessageSelect)
+		queryNoExpand.Set("$filter", "conversationId eq "+odataString(conversationID))
+		queryNoExpand.Del("$orderby")
+		var retryErr error
+		messages, retryErr = o.readAllMessages(ctx, queryNoExpand)
+		if retryErr != nil {
+			return Thread{}, err
+		}
 	}
 	if len(messages) == 0 {
 		return Thread{}, &ProviderError{StatusCode: http.StatusNotFound, Message: "conversation not found"}
@@ -276,10 +285,15 @@ func (o *Outlook) GetThread(ctx context.Context, conversationID string) (Thread,
 	if err != nil {
 		return Thread{}, err
 	}
-	if len(threads) != 1 || threads[0].ProviderID != conversationID {
-		return Thread{}, errors.New("Microsoft Graph returned mismatched conversation")
+	for _, thread := range threads {
+		if strings.EqualFold(thread.ProviderID, conversationID) {
+			return thread, nil
+		}
 	}
-	return threads[0], nil
+	if len(threads) > 0 {
+		return threads[0], nil
+	}
+	return Thread{}, &ProviderError{StatusCode: http.StatusNotFound, Message: "conversation not found"}
 }
 
 func (o *Outlook) messageQuery(full bool) url.Values {

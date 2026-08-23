@@ -32,7 +32,10 @@ const (
 
 // streamingRoutePrefixes are paths that hold a connection open far longer than
 // a JSON call. They must never inherit the short write deadline.
-var streamingRoutePrefixes = []string{"/api/realtime", "/api/spaces"}
+var streamingRoutePrefixes = []string{
+	"/api/realtime", "/api/spaces",
+	"/v1/realtime", "/v1/spaces",
+}
 
 // isWebSocketRequest reports whether the client asked to upgrade the
 // connection. Upgraded connections take over the socket, so any write deadline
@@ -47,7 +50,7 @@ func TestingIsWebSocketRequest(r *http.Request) bool {
 // proxy route and server-generated previews still stream.
 func TestingIsTransferRequest(r *http.Request) bool {
 	path := r.URL.Path
-	if !strings.HasPrefix(path, "/api/") {
+	if !strings.HasPrefix(path, "/api/") && !strings.HasPrefix(path, "/v1/") {
 		return false
 	}
 	return strings.Contains(path, "/content") ||

@@ -22,7 +22,7 @@ func (s *SpacesService) connectedAccountAccessTokenForCapability(ctx context.Con
 	if err != nil {
 		return "", "", err
 	}
-	if item.Status != "active" || item.RevokedAt != nil {
+	if item.RevokedAt != nil {
 		return "", "", db.ErrSpaceForbidden
 	}
 	if capability = strings.ToLower(strings.TrimSpace(capability)); capability == "" || !containsString(item.Capabilities, capability) {
@@ -38,7 +38,7 @@ func (s *SpacesService) connectedAccountAccessTokenForCapability(ctx context.Con
 		_ = s.database.SetConnectedAccountHealth(ctx, userID, item.ID, "needs_attention", "credential_invalid")
 		return "", "", errors.New("connected account credential is invalid")
 	}
-	if item.ExpiresAt == nil || item.ExpiresAt.After(time.Now().UTC().Add(5*time.Minute)) {
+	if item.Status == "active" && (item.ExpiresAt == nil || item.ExpiresAt.After(time.Now().UTC().Add(5*time.Minute))) {
 		return token.AccessToken, firstNonempty(token.TokenType, "Bearer"), nil
 	}
 	definition, exists := TestingConnectedAccountOAuthCatalog[item.Provider]

@@ -188,6 +188,9 @@ func providerDisplayName(provider string) string {
 	if definition, ok := TestingCloudOAuthCatalog[provider]; ok {
 		return definition.Name
 	}
+	if definition, ok := TestingConnectedAccountOAuthCatalog[provider]; ok {
+		return definition.Name
+	}
 	if strings.TrimSpace(provider) == "" {
 		return "The provider"
 	}

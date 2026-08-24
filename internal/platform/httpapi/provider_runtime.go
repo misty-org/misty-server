@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
-
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
@@ -158,39 +156,16 @@ func (s *SpacesService) providerWriteNode(ctx context.Context, run *db.SpaceRun,
 }
 
 func (s *SpacesService) providerTokenForSharedResource(ctx context.Context, resource db.ProviderSharedResource) (string, string, error) {
-	if resource.Provider == "discord" {
-		token := strings.TrimSpace(envconfig.Getenv("DISCORD_BOT_TOKEN"))
-		if token == "" {
-			return "", "", workflowv2.ErrProviderMissing
-		}
-		return token, "Bot", nil
-	}
 	token, _, err := s.providerAccessToken(ctx, resource.PublishedByUserID, resource.SpaceID, resource.IntegrationID)
 	return token, "Bearer", err
 }
 
 func revalidateProviderDestination(ctx context.Context, provider, token, tokenType, destination string) error {
-	if provider == "slack" {
-		query := url.Values{"channel": {destination}}
-		payload, err := providerJSONRequest(ctx, token, tokenType, http.MethodGet, "https://slack.com/api/conversations.info?"+query.Encode(), nil, nil)
-		if err != nil {
-			return err
-		}
-		var result map[string]any
-		if json.Unmarshal(payload, &result) != nil {
-			return errors.New("slack destination validation failed")
-		}
-		if ok, _ := result["ok"].(bool); !ok {
-			return workflowv2.ErrCapabilityDenied
-		}
-		return nil
-	}
-	_, err := providerJSONRequest(ctx, token, "Bot", http.MethodGet, "https://discord.com/api/v10/channels/"+url.PathEscape(destination), nil, nil)
-	return err
+	return nil
 }
 
 func (s *SpacesService) providerReadContent(ctx context.Context, run *db.SpaceRun, invocation workflowv2.Invocation, provider, resourceID string, ref map[string]any) (workflowv2.Invocation, error) {
-	if provider != "slack" && provider != "discord" && provider != "notion" && provider != "github" && provider != "figma" {
+	if provider != "github" && provider != "figma" {
 		return invocation, workflowv2.ErrUnsupportedContent
 	}
 	record, err := s.database.ProviderContentRecord(ctx, run.RequestingMemberID, run.SpaceID, provider, resourceID)

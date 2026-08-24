@@ -17,7 +17,7 @@ func (s *SpacesService) executeOrdinaryAgentTool(ctx context.Context, run *db.Sp
 	if strings.HasPrefix(tool.Name, "mcp.") {
 		return s.executeMCPAgentTool(ctx, run, tool, true, canonicalAgentToolSource)
 	}
-	if tool.Name == toolboxContextGet || tool.Name == toolboxMembersList || tool.Name == toolboxMembersResolve || tool.Name == toolboxAgentsList || tool.Name == toolboxAgentsStatus || strings.HasPrefix(tool.Name, "notes.") || strings.HasPrefix(tool.Name, "roadmaps.") || tool.Name == toolboxLibraryRead || tool.Name == toolboxLibraryUpdate || tool.Name == toolboxLibraryPromoteAttachment || tool.Name == toolboxCalendarCreate || tool.Name == toolboxCalendarUpdate {
+	if tool.Name == toolboxContextGet || tool.Name == toolboxMembersList || tool.Name == toolboxMembersResolve || tool.Name == toolboxAgentsList || tool.Name == toolboxAgentsStatus || strings.HasPrefix(tool.Name, "notes.") || strings.HasPrefix(tool.Name, "drawings.") || strings.HasPrefix(tool.Name, "roadmaps.") || tool.Name == toolboxLibraryRead || tool.Name == toolboxLibraryUpdate || tool.Name == toolboxLibraryPromoteAttachment || tool.Name == toolboxCalendarCreate || tool.Name == toolboxCalendarUpdate {
 		return executeSpaceConversationTool(ctx, s.database, spaceConversationToolActor{
 			userID: run.RequestingMemberID, spaceID: run.SpaceID, agentID: run.AgentID, runID: run.ID,
 			conversationID: run.ScopeConversationID,
@@ -196,7 +196,7 @@ func providerAgentToolSchema(provider string, write bool) json.RawMessage {
 
 func providerSupportsWrite(provider string) bool {
 	switch provider {
-	case "slack", "discord", "github", "figma":
+	case "github", "figma":
 		return true
 	}
 	return false

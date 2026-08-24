@@ -10,6 +10,10 @@ import (
 
 func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if isAIInvocationRuntimeID(chi.URLParam(r, "runID")) {
+			s.agentRuntimeCompleteAIInvocation(w, r)
+			return
+		}
 		var body struct {
 			RuntimeRunID string          `json:"runtime_run_id"`
 			Status       string          `json:"status"`
@@ -31,6 +35,10 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 						writeAgentError(w, publishErr)
 						return
 					}
+				}
+				if projectionErr := s.completeLinkedAIInvocation(r.Context(), existingRun, body.Status, body.Text, body.ErrorMessage); projectionErr != nil {
+					writeAgentError(w, projectionErr)
+					return
 				}
 				writeJSON(w, http.StatusOK, map[string]any{"run_id": existingRun.ID, "state": existingRun.State})
 				return
@@ -58,6 +66,10 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 		}
 		if body.Status == "success" && !done && body.Text == "" {
 			body.Text = "The Agent stopped without marking the task done."
+		}
+		if err := s.settlePersonalAgentRuntimeUsage(r.Context(), run, body.Status, body.Usage); err != nil {
+			writeAgentError(w, err)
+			return
 		}
 		message := body.Text
 		if message == "" {
@@ -95,6 +107,10 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 				writeAgentError(w, err)
 				return
 			}
+		}
+		if err := s.completeLinkedAIInvocation(r.Context(), finished, body.Status, body.Text, body.ErrorMessage); err != nil {
+			writeAgentError(w, err)
+			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"run_id": finished.ID, "state": finished.State})
 	}

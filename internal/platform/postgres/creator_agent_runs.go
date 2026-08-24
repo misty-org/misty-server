@@ -22,6 +22,9 @@ type CreatorAgentRunInput struct {
 	InputModality      string                         `json:"input_modality,omitempty"`
 	Timezone           string                         `json:"timezone,omitempty"`
 	ContextNoteID      string                         `json:"context_note_id,omitempty"`
+	AIInvocationID     string                         `json:"-"`
+	AIConversationID   string                         `json:"-"`
+	AIIdempotencyKey   string                         `json:"-"`
 }
 
 type CreatorAgentContextReference struct {
@@ -47,7 +50,13 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 	input.InputModality = strings.ToLower(strings.TrimSpace(input.InputModality))
 	input.Timezone = strings.TrimSpace(input.Timezone)
 	input.ContextNoteID = strings.TrimSpace(input.ContextNoteID)
+	input.AIInvocationID = strings.TrimSpace(input.AIInvocationID)
+	input.AIConversationID = strings.TrimSpace(input.AIConversationID)
+	input.AIIdempotencyKey = strings.TrimSpace(input.AIIdempotencyKey)
 	if input.Instruction == "" || len([]rune(input.Instruction)) > 32_000 {
+		return nil, ErrSpaceInvalid
+	}
+	if len(input.AIIdempotencyKey) > 200 {
 		return nil, ErrSpaceInvalid
 	}
 	if len(input.ContextReferences) > 8 {
@@ -77,6 +86,9 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, ownerUserID); err != nil {
 			return err
 		}
+		if err := requireSpacePermissionTx(ctx, tx, ownerUserID, spaceID, PermissionAgentsRun); err != nil {
+			return err
+		}
 		if input.ContextNoteID != "" {
 			access, err := noteAccessForTx(ctx, tx, ownerUserID, input.ContextNoteID)
 			if err != nil || !access.CanView {
@@ -93,11 +105,12 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 			}
 		}
 		var name, instructions, modelID, effort, defaultMode, versionID string
+		var systemManaged bool
 		var version int64
-		if err := tx.QueryRowContext(ctx, `SELECT a.name,a.instructions,a.model_id,a.reasoning_effort,a.default_run_mode,a.version,v.id
+		if err := tx.QueryRowContext(ctx, `SELECT a.name,a.instructions,a.model_id,a.reasoning_effort,a.default_run_mode,a.system_managed,a.version,v.id
 			FROM personal_agents a JOIN personal_agent_versions v ON v.agent_id=a.id AND v.version=a.version
 			WHERE a.id=$1 AND a.owner_user_id=$2 AND a.enabled AND a.deleted_at IS NULL`, agentID, ownerUserID).
-			Scan(&name, &instructions, &modelID, &effort, &defaultMode, &version, &versionID); err != nil {
+			Scan(&name, &instructions, &modelID, &effort, &defaultMode, &systemManaged, &version, &versionID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrPersonalAgentNotFound
 			}
@@ -118,7 +131,7 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 				Scan(&parentOwner, &parentSpace, &parentAgent, &parentMode, &parentDepth); err != nil {
 				return ErrSpaceForbidden
 			}
-			if parentOwner != ownerUserID || parentSpace != spaceID || parentAgent == agentID || parentDepth >= 2 {
+			if parentOwner != ownerUserID || parentSpace != spaceID || (parentAgent == agentID && !systemManaged) || parentDepth >= 2 {
 				return ErrSpaceForbidden
 			}
 			if runModeRank(mode) > runModeRank(defaultMode) {
@@ -136,8 +149,13 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 			}
 			depth = parentDepth + 1
 		}
-		snapshot := mustJSON(map[string]any{"id": agentID, "version": version, "version_id": versionID, "name": name, "instructions": instructions, "model_id": modelID, "reasoning_effort": effort, "default_run_mode": defaultMode})
-		runInput := mustJSON(map[string]any{"instruction": input.Instruction, "conversation_target": input.ConversationTarget, "input_modality": input.InputModality, "timezone": input.Timezone})
+		snapshot := mustJSON(map[string]any{"id": agentID, "version": version, "version_id": versionID, "name": name, "instructions": instructions, "model_id": modelID, "reasoning_effort": effort, "default_run_mode": defaultMode, "system_managed": systemManaged})
+		runInput := mustJSON(map[string]any{
+			"instruction": input.Instruction, "conversation_target": input.ConversationTarget,
+			"input_modality": input.InputModality, "timezone": input.Timezone,
+			"ai_invocation_id": input.AIInvocationID, "ai_conversation_id": input.AIConversationID,
+			"ai_idempotency_key": input.AIIdempotencyKey,
+		})
 		trigger := "direct_instruction"
 		if input.ParentRunID != "" {
 			trigger = "delegated"
@@ -183,6 +201,18 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 		_, err := recordSpaceEventTx(ctx, tx, spaceID, ownerUserID, "agent.run.queued", out.ID, map[string]any{"agent_id": agentID, "mode": mode, "trigger_kind": trigger})
 		return err
 	})
+	if err != nil && input.AIIdempotencyKey != "" {
+		var existing SpaceRun
+		lookupErr := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+			return scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs
+				WHERE owner_user_id=$1 AND input->>'ai_idempotency_key'=$2 AND trigger_kind='direct_instruction'
+				ORDER BY created_at LIMIT 1`, ownerUserID, input.AIIdempotencyKey), &existing)
+		})
+		if lookupErr == nil {
+			existing.IdempotentReplay = true
+			return &existing, nil
+		}
+	}
 	if err != nil && input.SourceMessageID != "" {
 		// A duplicate HTTP delivery may lose the unique-index race above. Resolve
 		// it to the already queued run so callers observe idempotent success.
@@ -193,6 +223,7 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 				ORDER BY created_at LIMIT 1`, input.SourceMessageID, agentID, ownerUserID), &existing)
 		})
 		if lookupErr == nil {
+			existing.IdempotentReplay = true
 			return &existing, nil
 		}
 	}

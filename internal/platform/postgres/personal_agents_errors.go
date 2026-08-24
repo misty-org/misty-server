@@ -35,6 +35,7 @@ type PersonalAgent struct {
 	DefaultRunMode  string          `json:"default_run_mode"`
 	VoiceID         string          `json:"voice_id"`
 	Enabled         bool            `json:"enabled"`
+	SystemManaged   bool            `json:"system_managed,omitempty"`
 	Version         int64           `json:"version"`
 	LatestVersionID string          `json:"latest_version_id,omitempty"`
 	CreatedAt       time.Time       `json:"created_at"`
@@ -61,12 +62,12 @@ type PersonalAgentVersion struct {
 	CreatedAt       time.Time       `json:"created_at"`
 }
 
-const personalAgentColumns = `id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,enabled,version,created_at,updated_at`
+const personalAgentColumns = `id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,enabled,system_managed,version,created_at,updated_at`
 
 func scanPersonalAgent(row scanner, out *PersonalAgent) error {
 	err := row.Scan(&out.ID, &out.OwnerUserID, &out.Name, &out.Role, &out.Description, &out.Icon, &out.Avatar, &out.Instructions,
 		&out.ModelMode, &out.ModelID, &out.ReasoningEffort, &out.DefaultRunMode, &out.VoiceID, &out.Enabled,
-		&out.Version, &out.CreatedAt, &out.UpdatedAt)
+		&out.SystemManaged, &out.Version, &out.CreatedAt, &out.UpdatedAt)
 	if err == nil {
 		out.LatestVersionID = personalAgentVersionID(out.ID, out.Version)
 	}
@@ -244,7 +245,7 @@ func (db *Database) UpdatePersonalAgent(ctx context.Context, userID string, item
 	}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		err := scanPersonalAgent(tx.QueryRowContext(ctx, `UPDATE personal_agents SET name=$1,role=$2,description=$3,icon=$4,avatar=$5,instructions=$6,model_mode=$7,model_id=$8,reasoning_effort=$9,default_run_mode=$10,voice_id=$11,enabled=$12,version=version+1,updated_at=NOW()
-			WHERE id=$13 AND owner_user_id=$14 AND version=$15 AND deleted_at IS NULL RETURNING `+personalAgentColumns,
+			WHERE id=$13 AND owner_user_id=$14 AND version=$15 AND deleted_at IS NULL AND NOT system_managed RETURNING `+personalAgentColumns,
 			item.Name, item.Role, item.Description, item.Icon, item.Avatar, item.Instructions, item.ModelMode, item.ModelID, item.ReasoningEffort, item.DefaultRunMode, item.VoiceID, item.Enabled, item.ID, userID, item.Version), &item)
 		if err == nil {
 			if !item.Enabled {
@@ -272,7 +273,7 @@ func (db *Database) UpdatePersonalAgent(ctx context.Context, userID string, item
 
 func (db *Database) DeletePersonalAgent(ctx context.Context, userID, agentID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE personal_agents SET enabled=FALSE,deleted_at=NOW(),version=version+1,updated_at=NOW() WHERE id=$1 AND owner_user_id=$2 AND deleted_at IS NULL`, agentID, userID)
+		result, err := tx.ExecContext(ctx, `UPDATE personal_agents SET enabled=FALSE,deleted_at=NOW(),version=version+1,updated_at=NOW() WHERE id=$1 AND owner_user_id=$2 AND deleted_at IS NULL AND NOT system_managed`, agentID, userID)
 		if err != nil {
 			return err
 		}

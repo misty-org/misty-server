@@ -67,6 +67,10 @@ func companionToolApprovalSummary(name string, arguments json.RawMessage) string
 		return "Create note “" + stringValue("title") + "”"
 	case toolboxNotesUpdate:
 		return "Update note " + stringValue("id", "title")
+	case toolboxDrawingsCreate:
+		return "Create drawing “" + stringValue("title") + "”"
+	case toolboxDrawingsApply:
+		return "Apply Excalidraw scene changes to " + stringValue("drawing_id")
 	case toolboxCalendarCreate:
 		return "Create calendar event “" + stringValue("title") + "”"
 	case toolboxCalendarUpdate:

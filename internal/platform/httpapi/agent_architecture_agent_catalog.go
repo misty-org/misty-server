@@ -8,135 +8,28 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 
-	"github.com/go-chi/chi/v5"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
 
-func (s *SpacesService) AgentCatalog() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		items, err := s.database.DiscoverAgentCatalog(r.Context(), userID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"agents": items})
-	}
-}
-
-func (s *SpacesService) AgentDiscovery() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaces, err := s.database.ListSpaces(r.Context(), userID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		agents, err := s.database.DiscoverAgentCatalog(r.Context(), userID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"spaces": spaces, "agents": agents})
-	}
-}
-
-func (s *SpacesService) AgentDelegation() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		var body struct {
-			Prompt               string          `json:"prompt"`
-			SpaceID              string          `json:"space_id"`
-			AgentID              string          `json:"agent_id"`
-			CapabilityID         string          `json:"capability_id"`
-			SourceConversationID string          `json:"source_conversation_id"`
-			Input                json.RawMessage `json:"input"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		body.Prompt = strings.TrimSpace(body.Prompt)
-		if body.Prompt == "" {
-			writeSpaceError(w, db.ErrSpaceInvalid)
-			return
-		}
-		decision, err := s.database.RouteAgentRequest(r.Context(), userID, body.Prompt, body.SpaceID, body.AgentID, body.CapabilityID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if decision.NeedsClarification || decision.Selected == nil {
-			writeJSON(w, http.StatusOK, map[string]any{"status": "needs_clarification", "routing": decision})
-			return
-		}
-		if len(body.Input) == 0 {
-			body.Input = TestingMustAPIRawJSON(map[string]string{"prompt": body.Prompt})
-		}
-		run, err := s.database.CreateAgentRun(r.Context(), db.AgentRunRequest{
-			RequestingMemberID: userID, SpaceID: decision.Selected.SpaceID, AgentID: decision.Selected.AgentID,
-			SourceConversationID: body.SourceConversationID, SourceType: db.RunSourceAgentConsole, CapabilityID: decision.Selected.CapabilityID,
-			Input: body.Input, TriggerKind: db.RunSourceAgentConsole,
-		})
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		trace := fmt.Sprintf("The agent system assigned this task to %s in %s.", decision.Selected.AgentName, decision.Selected.SpaceName)
-		if run.State == "awaiting_approval" {
-			writeJSON(w, http.StatusAccepted, map[string]any{"status": "awaiting_approval", "trace": trace, "routing": decision, "run": run})
-			return
-		}
-		finished, err := s.executeCanonicalAgentRun(r, run, body.Prompt)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"status": finished.State, "trace": trace, "routing": decision, "run": finished})
-	}
-}
-
-func (s *SpacesService) DirectAgentRun() http.HandlerFunc {
+// AgentRunHistory preserves access to historical work without exposing a
+// custom-Agent execution path.
+func (s *SpacesService) AgentRunHistory() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
 		if !ok {
 			return
 		}
 		spaceID, agentID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "agentID")
-		if r.Method == http.MethodGet {
-			items, err := s.database.SpaceRuns(r.Context(), userID, spaceID, agentID, 100)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"runs": items})
-			return
-		}
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		var body db.CreatorAgentRunInput
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		run, err := s.database.CreateCreatorAgentRun(r.Context(), userID, spaceID, agentID, body)
+		items, err := s.database.SpaceRuns(r.Context(), userID, spaceID, agentID, 100)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusAccepted, run)
+		writeJSON(w, http.StatusOK, map[string]any{"runs": items})
 	}
 }
 

@@ -73,7 +73,6 @@ func (monitor *healthMonitor) snapshot(parent context.Context) (TestingHealthSna
 func (monitor *healthMonitor) evaluate(ctx context.Context) (TestingHealthSnapshot, int) {
 	now := time.Now().UTC()
 	checks := map[string]TestingHealthCheck{}
-	databaseOK := false
 	checks["database"] = activeHealthCheck(ctx, true, func(ctx context.Context) error {
 		if monitor.server == nil || monitor.server.Database == nil || monitor.server.Database.Conn == nil {
 			return errors.New("database is not started")
@@ -81,7 +80,6 @@ func (monitor *healthMonitor) evaluate(ctx context.Context) (TestingHealthSnapsh
 		if err := monitor.server.Database.Conn.PingContext(ctx); err != nil {
 			return err
 		}
-		databaseOK = true
 		return nil
 	})
 	checks["library_storage"] = activeHealthCheck(ctx, true, func(ctx context.Context) error {
@@ -115,10 +113,6 @@ func (monitor *healthMonitor) evaluate(ctx context.Context) (TestingHealthSnapsh
 		"STRIPE_CHECKOUT_CANCEL_URL",
 		"STRIPE_PORTAL_RETURN_URL",
 	)
-	checks["google"] = environmentConfigurationCheck("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET")
-	checks["slack"] = environmentConfigurationCheck("SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET", "SLACK_SIGNING_SECRET")
-	checks["notion"] = environmentConfigurationCheck("NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET", "NOTION_WEBHOOK_VERIFICATION_TOKEN")
-	checks["discord"] = monitor.discordHealthCheck(ctx, databaseOK)
 
 	overall, status := TestingSummarizeHealth(checks)
 	version := strings.TrimSpace(envconfig.Getenv("MISTY_SERVER_VERSION"))
@@ -182,21 +176,6 @@ func TestingPublicAPIConfigurationCheck() TestingHealthCheck {
 		result.Status, result.Message = "degraded", "production API base must use HTTPS"
 	}
 	return result
-}
-
-func (monitor *healthMonitor) discordHealthCheck(ctx context.Context, databaseOK bool) TestingHealthCheck {
-	configured := environmentConfigurationCheck("DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "DISCORD_BOT_TOKEN")
-	if configured.Status != "ready" || !databaseOK || monitor.server == nil || monitor.server.Database == nil {
-		return configured
-	}
-	state, err := monitor.server.Database.ProviderGatewayState(ctx, "discord")
-	if err != nil {
-		return TestingHealthCheck{Status: "unavailable", Mode: "active", Critical: false, Message: "gateway state unavailable"}
-	}
-	if state.Status != "connected" || state.LastHeartbeatAt == nil || state.LastHeartbeatAt.Before(time.Now().UTC().Add(-2*time.Minute)) {
-		return TestingHealthCheck{Status: "degraded", Mode: "active", Critical: false, Message: "gateway disconnected or stale"}
-	}
-	return TestingHealthCheck{Status: "ok", Mode: "active", Critical: false}
 }
 
 func TestingSummarizeHealth(checks map[string]TestingHealthCheck) (string, int) {

@@ -15,14 +15,7 @@ import (
 
 func TestHealthIsSanitizedAndFailsWhenCriticalDependenciesAreUnavailable(t *testing.T) {
 	secret := "must-not-appear-in-health-response"
-	for _, key := range []string{
-		"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
-		"SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET", "SLACK_SIGNING_SECRET",
-		"NOTION_CLIENT_ID", "NOTION_CLIENT_SECRET", "NOTION_WEBHOOK_VERIFICATION_TOKEN",
-		"DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "DISCORD_BOT_TOKEN",
-	} {
-		t.Setenv(key, secret)
-	}
+	t.Setenv("STRIPE_SECRET_KEY", secret)
 	server := &Server{Database: &db.Database{}, LibraryStore: api.NewMemoryLibraryObjectStore()}
 	request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	recorder := httptest.NewRecorder()
@@ -45,17 +38,12 @@ func TestHealthIsSanitizedAndFailsWhenCriticalDependenciesAreUnavailable(t *test
 	if snapshot.Status != "unavailable" || snapshot.Checks["database"].Status != "unavailable" || snapshot.Checks["realtime"].Status != "unavailable" {
 		t.Fatalf("unexpected critical health: %+v", snapshot)
 	}
-	for _, provider := range []string{"google", "slack", "notion"} {
-		if snapshot.Checks[provider].Status != "ready" {
-			t.Fatalf("%s health = %+v, want configured readiness", provider, snapshot.Checks[provider])
-		}
-	}
 }
 
 func TestSummarizeHealthUses503OnlyForCriticalFailures(t *testing.T) {
 	status, code := TestingSummarizeHealth(map[string]TestingHealthCheck{
 		"database": {Status: "ok", Critical: true},
-		"notion":   {Status: "unconfigured", Critical: false},
+		"storage":  {Status: "unconfigured", Critical: false},
 	})
 	if status != "degraded" || code != http.StatusOK {
 		t.Fatalf("optional failure summary = (%q,%d), want (degraded,200)", status, code)

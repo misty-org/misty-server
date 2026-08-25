@@ -10,6 +10,7 @@ export class NoteRoom extends PersistentDocumentRoom {
 /** Collaborative Excalidraw scene. */
 export class DrawingRoom extends PersistentDocumentRoom {
   protected readonly resourceType = "drawing" as const;
+  protected override readonly supportsDrawingScene = true;
 }
 
 export type { Env } from "./document-room";

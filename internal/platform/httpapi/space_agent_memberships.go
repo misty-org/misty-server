@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -23,6 +24,28 @@ func (s *SpacesService) SpaceAgentMemberships() http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"agents": items})
 	}
+}
+
+// personalAgentToolboxItems remains private to the read-only Space membership
+// view. It does not expose a route for configuring or invoking an Agent.
+func personalAgentToolboxItems(policy json.RawMessage) []agentToolboxCatalogItem {
+	descriptors := personalAgentToolboxCatalogDescriptors()
+	items := make([]agentToolboxCatalogItem, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		granted := personalAgentToolPolicyAllows(policy, descriptor)
+		item := agentToolboxCatalogItem{
+			Name: descriptor.Name, Description: descriptor.Description, Risk: descriptor.Risk,
+			Approval: descriptor.Approval, Locality: descriptor.Locality, Idempotent: descriptor.Idempotent,
+			AuditEvent: descriptor.AuditEvent, RequiredPermission: descriptor.RequiredPermission,
+			Granted: granted, Available: granted, Reasons: []agentToolboxAvailabilityReason{},
+		}
+		if !granted {
+			item.Reasons = append(item.Reasons, agentToolboxAvailabilityReason{Code: "grant_required", Message: "This action is not enabled for this Agent."})
+		}
+		items = append(items, item)
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	return items
 }
 
 // SpaceAgentToolbox is the public, permission-checked capability manual for an

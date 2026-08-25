@@ -173,15 +173,18 @@ func (s *SpacesService) executeReviewedSuggestion(ctx context.Context, userID st
 			artifact, err = s.database.CreateSpaceTask(ctx, userID, db.SpaceTask{SpaceID: batch.SpaceID, Title: input.Title, Notes: input.Notes, Status: "todo", Priority: input.Priority, DueAt: input.DueAt, DueTimezone: input.DueTimezone, AssigneeUserID: input.AssigneeUserID, CreatedByUserID: userID, CreatedByAgentID: item.SelectedAgentID, SourceRunID: run.ID, AudienceKind: audience.Kind, AudienceConversationID: audience.ConversationID, AudienceCreatorUserID: userID})
 		}
 	case db.SuggestionCalendarCreate:
-		var input reviewedCalendarEventInput
-		err = json.Unmarshal(item.ApprovedInput, &input)
-		if err == nil && batch.Scope.Kind == db.ConversationScopePrivate && input.CalendarSourceID != "" && input.CalendarSourceID != "misty" {
-			err = db.ErrSpaceForbidden
+		var input struct {
+			Title       string    `json:"title"`
+			Description string    `json:"description"`
+			Location    string    `json:"location"`
+			StartsAt    time.Time `json:"starts_at"`
+			EndsAt      time.Time `json:"ends_at"`
+			AllDay      bool      `json:"all_day"`
+			Timezone    string    `json:"timezone"`
 		}
-		if err == nil && (input.CalendarSourceID == "" || input.CalendarSourceID == "misty") {
+		err = json.Unmarshal(item.ApprovedInput, &input)
+		if err == nil {
 			artifact, err = s.database.CreateNativeCalendarEvent(ctx, userID, db.SpaceCalendarEvent{SpaceID: batch.SpaceID, Title: input.Title, Description: input.Description, Location: input.Location, StartsAt: input.StartsAt, EndsAt: input.EndsAt, AllDay: input.AllDay, Timezone: input.Timezone, Status: "confirmed", AudienceKind: audience.Kind, AudienceConversationID: audience.ConversationID, CreatedByUserID: userID, CreatedByAgentID: item.SelectedAgentID, SourceRunID: run.ID})
-		} else if err == nil {
-			artifact, err = s.createReviewedExternalCalendarEvent(ctx, userID, batch.SpaceID, input)
 		}
 	case db.SuggestionJournalCreate:
 		var input struct {

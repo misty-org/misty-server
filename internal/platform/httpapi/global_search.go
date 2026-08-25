@@ -1,27 +1,46 @@
 package api
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 type globalSearchHit struct {
-	ID        string   `json:"id"`
-	AccountID string   `json:"accountId"`
-	Kind      string   `json:"kind"`
-	Title     string   `json:"title"`
-	Body      string   `json:"body"`
-	Keywords  []string `json:"keywords"`
-	Href      string   `json:"href"`
-	SpaceID   string   `json:"spaceId,omitempty"`
-	SpaceName string   `json:"spaceName,omitempty"`
-	UpdatedAt string   `json:"updatedAt,omitempty"`
-	Source    string   `json:"source"`
+	ID            string   `json:"id"`
+	AccountID     string   `json:"accountId"`
+	Kind          string   `json:"kind"`
+	Title         string   `json:"title"`
+	Body          string   `json:"body"`
+	Keywords      []string `json:"keywords"`
+	Href          string   `json:"href"`
+	SpaceID       string   `json:"spaceId,omitempty"`
+	SpaceName     string   `json:"spaceName,omitempty"`
+	UpdatedAt     string   `json:"updatedAt,omitempty"`
+	Source        string   `json:"source"`
+	CanonicalID   string   `json:"canonicalId"`
+	Revision      string   `json:"revision,omitempty"`
+	Score         float64  `json:"score"`
+	LexicalScore  float64  `json:"lexicalScore"`
+	SemanticScore float64  `json:"semanticScore"`
+}
+
+type globalSearchEmbeddingCacheEntry struct {
+	vector    []float64
+	expiresAt time.Time
+}
+
+type globalSearchEmbeddingFlight struct {
+	done   chan struct{}
+	vector []float64
 }
 
 // GlobalSearch returns only records that the current account can read. Each
@@ -34,14 +53,17 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 			return
 		}
 		query := strings.TrimSpace(r.URL.Query().Get("q"))
+		requestID := uuid.NewString()
 		if query == "" {
-			writeJSON(w, http.StatusOK, map[string]any{"hits": []globalSearchHit{}})
+			writeJSON(w, http.StatusOK, map[string]any{"hits": []globalSearchHit{}, "request_id": requestID, "semantic_enrichment_used": false})
 			return
 		}
 		limit := 40
 		if parsed, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && parsed >= 1 && parsed <= 100 {
 			limit = parsed
 		}
+		kindFilter := parseGlobalSearchKinds(r.URL.Query().Get("kinds"))
+		spaceFilter := strings.TrimSpace(r.URL.Query().Get("space_id"))
 		spaces, err := s.database.ListSpaces(r.Context(), userID)
 		if err != nil {
 			writeSpaceError(w, err)
@@ -54,10 +76,19 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 			if len(hits) >= limit {
 				return false
 			}
-			if seenHits[hit.ID] {
+			if len(kindFilter) > 0 && !kindFilter[hit.Kind] {
 				return true
 			}
-			seenHits[hit.ID] = true
+			if spaceFilter != "" && hit.SpaceID != spaceFilter {
+				return true
+			}
+			if hit.CanonicalID == "" {
+				hit.CanonicalID = hit.Kind + ":" + strings.TrimPrefix(hit.ID, hit.Kind+":")
+			}
+			if seenHits[hit.CanonicalID] {
+				return true
+			}
+			seenHits[hit.CanonicalID] = true
 			hit.AccountID = userID
 			hit.Source = "server"
 			hits = append(hits, hit)
@@ -67,10 +98,11 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 		for _, space := range spaces {
 			spaceNames[space.ID] = space.Name
 		}
-		indexed, indexErr := s.database.SearchAIRetrieval(r.Context(), userID, query, nil, limit)
+		embedding, semanticUsed := s.globalSearchQueryEmbedding(r.Context(), userID, query)
+		indexed, indexErr := s.database.SearchAIRetrieval(r.Context(), userID, query, embedding, 100)
 		if indexErr != nil {
-			writeSpaceError(w, indexErr)
-			return
+			indexed = nil
+			semanticUsed = false
 		}
 		for _, item := range indexed {
 			kind := item.SourceKind
@@ -80,10 +112,16 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 			if kind != "note" && kind != "task" && kind != "roadmap" && kind != "calendar" && kind != "message" {
 				continue
 			}
+			href := item.Href
+			if kind == "note" && item.SpaceID != "" {
+				href = "/spaces/" + url.PathEscape(item.SpaceID) + "/notes?note=" + url.QueryEscape(item.SourceID)
+			}
 			if !appendHit(globalSearchHit{
 				ID: item.SourceKind + ":" + item.SourceID, Kind: kind, Title: item.Title,
-				Body: aiExcerpt(item.Content), Keywords: []string{kind, spaceNames[item.SpaceID]}, Href: item.Href,
+				Body: aiExcerpt(item.Content), Keywords: []string{kind, spaceNames[item.SpaceID]}, Href: href,
 				SpaceID: item.SpaceID, SpaceName: spaceNames[item.SpaceID], Source: "server",
+				CanonicalID: item.SourceKind + ":" + item.SourceID, Revision: item.SourceRevision,
+				Score: normalizedSearchScore(item.Score), LexicalScore: normalizedSearchScore(item.LexicalScore), SemanticScore: normalizedSearchScore(item.SemanticScore),
 			}) {
 				break
 			}
@@ -132,7 +170,7 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 					}
 					if !appendHit(globalSearchHit{
 						ID: "note:" + note.ID, Kind: "note", Title: note.TitleProjection, Body: "Note in " + space.Name,
-						Keywords: []string{"note", space.Name}, Href: "/spaces/" + url.PathEscape(space.ID) + "/notes",
+						Keywords: []string{"note", space.Name}, Href: "/spaces/" + url.PathEscape(space.ID) + "/notes?note=" + url.QueryEscape(note.ID),
 						SpaceID: space.ID, SpaceName: space.Name, UpdatedAt: searchTime(note.UpdatedAt),
 					}) {
 						break
@@ -221,8 +259,85 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 				}
 			}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"hits": hits})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"hits":                     hits,
+			"request_id":               requestID,
+			"semantic_enrichment_used": semanticUsed,
+		})
 	}
+}
+
+func parseGlobalSearchKinds(value string) map[string]bool {
+	allowed := map[string]bool{
+		"space": true, "task": true, "note": true, "message": true, "conversation": true,
+		"calendar": true, "roadmap": true, "drawing": true, "agent": true, "workflow": true,
+	}
+	result := map[string]bool{}
+	for _, part := range strings.Split(value, ",") {
+		kind := strings.ToLower(strings.TrimSpace(part))
+		if allowed[kind] {
+			result[kind] = true
+		}
+	}
+	return result
+}
+
+func normalizedSearchScore(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+func (s *SpacesService) globalSearchQueryEmbedding(ctx context.Context, userID, query string) ([]float64, bool) {
+	normalized := strings.ToLower(strings.Join(strings.Fields(query), " "))
+	if len([]rune(normalized)) < 3 || s.searchAnalyzer == nil {
+		return nil, false
+	}
+	key := userID + "\x00" + normalized
+	now := time.Now()
+	s.searchEmbeddingMu.Lock()
+	if cached, ok := s.searchEmbeddings[key]; ok && cached.expiresAt.After(now) {
+		vector := append([]float64(nil), cached.vector...)
+		s.searchEmbeddingMu.Unlock()
+		return vector, len(vector) == 768
+	}
+	if flight, ok := s.searchEmbeddingInflight[key]; ok {
+		s.searchEmbeddingMu.Unlock()
+		select {
+		case <-flight.done:
+			vector := append([]float64(nil), flight.vector...)
+			return vector, len(vector) == 768
+		case <-ctx.Done():
+			return nil, false
+		}
+	}
+	flight := &globalSearchEmbeddingFlight{done: make(chan struct{})}
+	s.searchEmbeddingInflight[key] = flight
+	s.searchEmbeddingMu.Unlock()
+
+	digest := sha256.Sum256([]byte(key))
+	operation, err := beginHostedSemanticQuery(ctx, s.database, s.searchAnalyzer, userID, "global-search-query:"+hex.EncodeToString(digest[:]), normalized)
+	var vector []float64
+	if err == nil && operation != nil && len(operation.Vector) == 768 {
+		if settleErr := operation.Settle(s.database); settleErr == nil {
+			vector = append([]float64(nil), operation.Vector...)
+		} else {
+			operation.Release(s.database)
+		}
+	}
+	s.searchEmbeddingMu.Lock()
+	if len(vector) == 768 {
+		s.searchEmbeddings[key] = globalSearchEmbeddingCacheEntry{vector: vector, expiresAt: now.Add(2 * time.Minute)}
+	}
+	flight.vector = vector
+	delete(s.searchEmbeddingInflight, key)
+	close(flight.done)
+	s.searchEmbeddingMu.Unlock()
+	return append([]float64(nil), vector...), len(vector) == 768
 }
 
 func searchTime(value time.Time) string {

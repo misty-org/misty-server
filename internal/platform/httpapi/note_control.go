@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const noteControlResponseLimit = 64 * 1024
+const collaborationControlResponseLimit = 6 << 20
 
 var TestingNoteControlHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
@@ -69,12 +69,21 @@ func (s *SpacesService) deliverCollaborationControlCommand(
 	party, room, resourceID, command string,
 	payload []byte,
 ) error {
+	_, err := s.requestCollaborationControlCommand(ctx, party, room, resourceID, command, payload)
+	return err
+}
+
+func (s *SpacesService) requestCollaborationControlCommand(
+	ctx context.Context,
+	party, room, resourceID, command string,
+	payload []byte,
+) (json.RawMessage, error) {
 	if !json.Valid(payload) {
-		return errors.New("collaboration control payload is invalid JSON")
+		return nil, errors.New("collaboration control payload is invalid JSON")
 	}
 	body, err := json.Marshal(TestingNoteControlEnvelope{Command: command, Payload: json.RawMessage(payload)})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	endpoint := fmt.Sprintf(
@@ -85,7 +94,7 @@ func (s *SpacesService) deliverCollaborationControlCommand(
 	)
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Misty-Timestamp", timestamp)
@@ -99,17 +108,28 @@ func (s *SpacesService) deliverCollaborationControlCommand(
 
 	response, err := TestingNoteControlHTTPClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("send collaboration control command: %w", err)
+		return nil, fmt.Errorf("send collaboration control command: %w", err)
 	}
 	defer response.Body.Close()
-	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, noteControlResponseLimit))
-		return nil
+	responseBody, readErr := io.ReadAll(io.LimitReader(response.Body, collaborationControlResponseLimit+1))
+	if readErr != nil {
+		return nil, fmt.Errorf("read collaboration control response: %w", readErr)
 	}
-	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, noteControlResponseLimit))
+	if len(responseBody) > collaborationControlResponseLimit {
+		return nil, errors.New("collaboration control response is too large")
+	}
+	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+		if len(responseBody) == 0 {
+			responseBody = []byte(`{}`)
+		}
+		if !json.Valid(responseBody) {
+			return nil, errors.New("collaboration service returned invalid JSON")
+		}
+		return json.RawMessage(responseBody), nil
+	}
 	reason := strings.TrimSpace(string(responseBody))
 	if reason == "" {
 		reason = http.StatusText(response.StatusCode)
 	}
-	return fmt.Errorf("collaboration service returned %d: %s", response.StatusCode, reason)
+	return nil, fmt.Errorf("collaboration service returned %d: %s", response.StatusCode, reason)
 }

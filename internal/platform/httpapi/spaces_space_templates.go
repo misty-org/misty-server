@@ -17,16 +17,7 @@ func (s *SpacesService) SpaceTemplates() http.HandlerFunc {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		providers := []providerOAuthAvailability{}
-		for _, provider := range TestingProviderOAuthAvailabilityCatalog() {
-			if provider.Provider != "google" && provider.Provider != "discord" && provider.Provider != "notion" {
-				continue
-			}
-			if provider.Provider == "discord" && discordBotToken() == "" {
-				provider.Configured = false
-			}
-			providers = append(providers, provider)
-		}
+		providers := TestingProviderOAuthAvailabilityCatalog()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"templates": db.BuiltInSpaceTemplates(),
 			"providers": providers,

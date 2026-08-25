@@ -1,8 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http/httptest"
+	"time"
 
+	agent "github.com/kannachi323/misty/server/internal/agents"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
@@ -16,6 +20,42 @@ func TestingValidateAISelection(content, hash string) error {
 		},
 	}
 	return validateAIInvocationInput(&body)
+}
+
+func TestingValidateAIInvocationMode(mode string) error {
+	body := aiInvocationInput{
+		Mode: mode, SurfaceID: "notes", Trigger: "message", Prompt: "Summarize",
+		IdempotencyKey: "testing",
+	}
+	return validateAIInvocationInput(&body)
+}
+
+func TestingValidateAIInvocationTimezone(timezone string) (string, error) {
+	body := aiInvocationInput{
+		Mode: "drawer", SurfaceID: "global", Trigger: "message", Prompt: "What is due today?",
+		IdempotencyKey: "testing", Timezone: timezone,
+	}
+	err := validateAIInvocationInput(&body)
+	return body.Timezone, err
+}
+
+func TestingCompileAIScheduledPrompt() string {
+	return compileAIInvocationPrompt(aiInvocationInput{
+		Mode: "drawer", SurfaceID: "activity", Trigger: "schedule", Prompt: "Brief me",
+		IdempotencyKey: "testing", Timezone: "America/Los_Angeles",
+	}, nil)
+}
+
+func TestingPublicAIInvocationErrorForHostedReset(resetAt time.Time) string {
+	return publicAIInvocationError(agent.HostedAILimitReachedError{ResetAt: resetAt})
+}
+
+func TestingAgentRuntimeModelUsage(raw json.RawMessage) agent.ModelUsage {
+	return agentRuntimeModelUsage(raw)
+}
+
+func TestingPublicAgentRuntimeFailure(code, message string) string {
+	return publicAgentRuntimeFailure(code, message)
 }
 
 func TestingValidateAIDeviceContext(id, opaqueScope string, metadata map[string]any) error {
@@ -45,6 +85,28 @@ func TestingAIInvocationJournalIsolation() bool {
 
 func TestingAISearchScore(query, content string) int      { return aiSearchScore(query, content) }
 func TestingAIRelevantChunk(content, query string) string { return aiRelevantChunk(content, query) }
+
+func TestingReadAgentVoiceJSON(value string) ([]byte, string, int64, string) {
+	request := httptest.NewRequest("POST", "/agent-voice/transcriptions", bytes.NewBufferString(value))
+	request.Header.Set("Content-Type", "application/json")
+	return readAgentVoiceRecording(httptest.NewRecorder(), request)
+}
+
+func TestingShouldRetrieveAccountContext(prompt string) bool {
+	return shouldRetrieveAccountContext(prompt)
+}
+
+func TestingBoundedAIConversationHistory(prompts, replies []string) string {
+	turns := make([]db.AIConversationTurnRecord, len(prompts))
+	for index, prompt := range prompts {
+		turns[index].InvocationID = "invocation_" + string(rune('a'+index))
+		turns[index].Prompt = prompt
+		if index < len(replies) {
+			turns[index].Reply = replies[index]
+		}
+	}
+	return boundedAIConversationHistory(turns, "")
+}
 
 func TestingMistyCitationIDs(answer string, ids []string) []string {
 	resolved := make([]aiResolvedContext, len(ids))

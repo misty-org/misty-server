@@ -204,6 +204,25 @@ func (a *SmartLibraryAnalyzer) EmbedQuery(ctx context.Context, query string) ([]
 	return vectors[0], usage, nil
 }
 
+// EmbedVisualQuery places a short-lived user image in the same Gemini
+// multimodal embedding space as Smart Library, Space Library, and retrieval
+// documents. Bytes are never persisted by the analyzer.
+func (a *SmartLibraryAnalyzer) EmbedVisualQuery(ctx context.Context, mimeType string, image []byte, query string) ([]float64, ModelUsage, error) {
+	if len(image) == 0 || len(image) > 1<<20 || (mimeType != "image/jpeg" && mimeType != "image/png" && mimeType != "image/webp") {
+		return nil, ModelUsage{}, errors.New("invalid visual query")
+	}
+	query = strings.TrimSpace(query)
+	if len(query) > 512 || utf8.RuneCountInString(query) > 256 {
+		return nil, ModelUsage{}, errors.New("invalid visual query text")
+	}
+	if query == "" {
+		query = "Find visually similar or semantically related Misty content."
+	}
+	return a.embedImageV1(ctx, "task: visual search result | query: "+query, SmartLibraryAsset{
+		AssetID: "visual-query", AssetKind: "image", MimeType: mimeType, Bytes: image,
+	})
+}
+
 // EmbedAssets uses direct image/PDF content when it is available and combines
 // that signal with normalized generated metadata. Text-only assets share the
 // exact same embedding space.

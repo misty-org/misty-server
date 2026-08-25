@@ -48,10 +48,18 @@ func AgentRuntimeConfigFromEnv() (AgentRuntimeConfig, error) {
 		return AgentRuntimeConfig{}, errors.New("MISTY_AGENT_RUNTIME_URL must use HTTPS except for the local runtime")
 	}
 	config.URL = strings.TrimRight(parsed.String(), "/")
-	config.InternalAPIURL = strings.TrimRight(strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_RUNTIME_INTERNAL_API_URL")), "/")
-	if config.InternalAPIURL == "" {
-		config.InternalAPIURL = "http://api:8080"
+	rawInternalAPIURL := strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_RUNTIME_INTERNAL_API_URL"))
+	if rawInternalAPIURL == "" {
+		rawInternalAPIURL = "http://api:8080"
 	}
+	internalAPIURL, internalErr := url.Parse(rawInternalAPIURL)
+	if internalErr != nil || internalAPIURL.Scheme == "" || internalAPIURL.Host == "" || internalAPIURL.User != nil {
+		return AgentRuntimeConfig{}, errors.New("MISTY_AGENT_RUNTIME_INTERNAL_API_URL must be an absolute URL")
+	}
+	if internalAPIURL.Scheme != "https" && internalAPIURL.Hostname() != "localhost" && internalAPIURL.Hostname() != "127.0.0.1" && internalAPIURL.Hostname() != "api" && internalAPIURL.Hostname() != "misty-api" {
+		return AgentRuntimeConfig{}, errors.New("MISTY_AGENT_RUNTIME_INTERNAL_API_URL must use HTTPS except for the local API")
+	}
+	config.InternalAPIURL = strings.TrimRight(internalAPIURL.String(), "/")
 	if config.secret, err = decodeServiceSecret("MISTY_AGENT_RUNTIME_CONTROL_SECRET"); err != nil {
 		return AgentRuntimeConfig{}, err
 	}

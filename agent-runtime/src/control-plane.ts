@@ -15,7 +15,7 @@ function normalizedBaseURL(value: string): string {
   const parsed = new URL(value);
   if (
     parsed.protocol !== "https:" &&
-    !["localhost", "127.0.0.1", "api"].includes(parsed.hostname)
+    !["localhost", "127.0.0.1", "api", "misty-api"].includes(parsed.hostname)
   ) {
     throw new Error(
       "MISTY_INTERNAL_API_BASE must use HTTPS except on the private local network",
@@ -24,15 +24,23 @@ function normalizedBaseURL(value: string): string {
   return parsed.toString().replace(/\/$/, "");
 }
 
-export function controlPlaneURL(): string {
+export function controlPlaneURL(callbackURL?: string): string {
   return normalizedBaseURL(
-    process.env.MISTY_INTERNAL_API_BASE ?? "http://api:8080",
+    callbackURL?.trim() ||
+      process.env.MISTY_INTERNAL_API_BASE ||
+      "http://api:8080",
   );
 }
 
 export async function controlPlaneRequest<T>(
   identity: RuntimeIdentity,
-  action: "activate" | "context" | "tools" | "events" | "complete",
+  action:
+    | "activate"
+    | "context"
+    | "mcp-token"
+    | "tools"
+    | "events"
+    | "complete",
   payload: Record<string, unknown>,
   idempotencyKey: string,
 ): Promise<T> {

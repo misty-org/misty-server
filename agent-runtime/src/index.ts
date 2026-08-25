@@ -24,6 +24,10 @@ app.use(
   }),
 );
 
+function reportRuntimeRouteError(operation: string, error: unknown): void {
+  console.error(`[misty-agent-runtime] ${operation} failed`, error);
+}
+
 function authorized(request: RawRequest): boolean {
   const previousValue =
     process.env.MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS?.trim();
@@ -52,17 +56,25 @@ app.post("/v1/runs", async (request: RawRequest, response) => {
     return response.status(400).json({ code: "idempotency_key_required" });
   const runId =
     typeof request.body?.run_id === "string" ? request.body.run_id.trim() : "";
-  if (!/^run_[0-9a-f-]{36}$/.test(runId))
+  const callbackURL =
+    typeof request.body?.callback_url === "string"
+      ? request.body.callback_url.trim()
+      : "";
+  // Both creator-owned Agent runs and built-in Misty invocations use the same
+  // durable WorkflowAgent. The opaque prefix tells the Go control plane which
+  // authorization/data record owns the run; it does not change execution.
+  if (!/^(?:run|invocation)_[0-9a-f-]{36}$/.test(runId))
     return response.status(400).json({ code: "invalid_run_id" });
   try {
     const run = await start(runSpaceTaskAgent, [
-      { mistyRunId: runId, controlPlaneURL: controlPlaneURL() },
+      { mistyRunId: runId, controlPlaneURL: controlPlaneURL(callbackURL) },
     ]);
     return response.status(202).json({ runtime_run_id: run.runId });
   } catch (error) {
+    reportRuntimeRouteError("workflow start", error);
     return response.status(503).json({
       code: "workflow_start_failed",
-      message: error instanceof Error ? error.message : "unknown error",
+      message: "Misty could not start this work. Please try again shortly.",
     });
   }
 });
@@ -83,9 +95,10 @@ app.post(
       await getRun(runtimeRunId).cancel();
       return response.json({ canceled: true });
     } catch (error) {
+      reportRuntimeRouteError("workflow cancellation", error);
       return response.status(503).json({
         code: "workflow_cancel_failed",
-        message: error instanceof Error ? error.message : "unknown error",
+        message: "Misty could not cancel this work. Please try again shortly.",
       });
     }
   },
@@ -113,9 +126,10 @@ app.post("/v1/approvals/:hookToken", async (request: RawRequest, response) => {
     });
     return response.json({ resumed: true });
   } catch (error) {
+    reportRuntimeRouteError("approval resumption", error);
     return response.status(409).json({
       code: "approval_resume_failed",
-      message: error instanceof Error ? error.message : "unknown error",
+      message: "This approval can no longer be resumed.",
     });
   }
 });
@@ -137,9 +151,10 @@ app.post("/v1/devices/:hookToken", async (request: RawRequest, response) => {
     });
     return response.json({ resumed: true });
   } catch (error) {
+    reportRuntimeRouteError("device resumption", error);
     return response.status(409).json({
       code: "device_resume_failed",
-      message: error instanceof Error ? error.message : "unknown error",
+      message: "This device request can no longer be resumed.",
     });
   }
 });

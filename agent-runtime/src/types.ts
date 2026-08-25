@@ -20,12 +20,45 @@ export interface SpaceTaskContext {
     status: string;
   };
   attached_sources: unknown[];
+  capture?: {
+    id: string;
+    name: string;
+    mime_type: "image/jpeg" | "image/png" | "image/webp";
+    data_url: string;
+    width: number;
+    height: number;
+    content_hash: string;
+  };
+  attachments?: Array<{
+    id: string;
+    name: string;
+    mime_type: "image/jpeg" | "image/png" | "image/webp";
+    data_url: string;
+    width: number;
+    height: number;
+    content_hash: string;
+  }>;
   file_warnings: string;
   allowed_tools: string[];
+  managed_misty?: boolean;
 }
 
 export interface RuntimeToolContext {
   mistyRunId: string;
   runtimeRunId: string;
   controlPlaneURL: string;
+}
+
+export interface MCPRunAccess {
+  access_token: string;
+  token_type: "Bearer";
+  expires_in: number;
+  mcp_path: string;
+  protocol: "2026-07-28";
+}
+
+export interface MCPRemoteTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
 }

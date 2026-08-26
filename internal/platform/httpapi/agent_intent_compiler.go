@@ -36,6 +36,9 @@ func explicitMessageSendIntent(prompt string) bool {
 func TestingCompileAgentIntent(prompt string) []string {
 	lower := strings.ToLower(strings.TrimSpace(prompt))
 	allowed := []string{"tasks.query"}
+	if explicitResourceMention(lower, []string{"draw", "drawing", "drawings", "sketch", "illustration", "canvas", "excalidraw", "diagram", "flowchart", "whiteboard"}) {
+		allowed = append(allowed, toolboxDrawingsList, toolboxDrawingsRead)
+	}
 	if explicitMessageSendIntent(prompt) {
 		allowed = append(allowed, toolboxMessagesSend)
 	}
@@ -48,11 +51,26 @@ func TestingCompileAgentIntent(prompt string) []string {
 	if explicitAgentDelegationIntent(lower) {
 		allowed = append(allowed, toolboxAgentsDelegate)
 	}
+	if explicitMistyMemoryIntent(lower, toolboxMemoryRemember) {
+		allowed = append(allowed, toolboxMemoryRemember)
+	}
+	if explicitMistyMemoryIntent(lower, toolboxMemoryForget) {
+		allowed = append(allowed, toolboxMemoryForget)
+	}
 	if explicitResourceWriteIntent(lower, []string{"note", "notes", "journal"}, []string{"create", "add", "make", "write", "draft"}) {
+		allowed = append(allowed, toolboxNotesCreate)
+	}
+	if explicitResearchPersistenceIntent(lower) {
 		allowed = append(allowed, toolboxNotesCreate)
 	}
 	if explicitResourceWriteIntent(lower, []string{"note", "notes", "journal"}, []string{"update", "edit", "change", "append", "revise"}) {
 		allowed = append(allowed, toolboxNotesUpdate)
+	}
+	if explicitResourceWriteIntent(lower, []string{"draw", "drawing", "drawings", "sketch", "illustration", "canvas", "excalidraw", "diagram", "flowchart", "whiteboard"}, []string{"create", "add", "make", "draw", "sketch", "illustrate", "build"}) {
+		allowed = append(allowed, toolboxDrawingsCreate, toolboxDrawingsApply)
+	}
+	if explicitResourceWriteIntent(lower, []string{"draw", "drawing", "drawings", "sketch", "illustration", "canvas", "excalidraw", "diagram", "flowchart", "whiteboard"}, []string{"update", "edit", "change", "move", "arrange", "replace", "delete", "clear"}) {
+		allowed = append(allowed, toolboxDrawingsApply)
 	}
 	if explicitResourceWriteIntent(lower, []string{"calendar", "event", "meeting", "appointment"}, []string{"create", "add", "make", "schedule", "book"}) {
 		allowed = append(allowed, toolboxCalendarCreate)
@@ -73,6 +91,26 @@ func TestingCompileAgentIntent(prompt string) []string {
 		allowed = append(allowed, toolboxLibraryPromoteAttachment)
 	}
 	return allowed
+}
+
+func explicitResearchPersistenceIntent(value string) bool {
+	value = normalizeAgentIntent(value)
+	if !strings.Contains(value, "research") {
+		return false
+	}
+	return explicitResourceWriteIntent(value, []string{"research"}, []string{"save", "keep", "store", "record", "capture"})
+}
+
+func explicitResourceMention(value string, resources []string) bool {
+	tokens := strings.FieldsFunc(normalizeAgentIntent(value), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	for _, token := range tokens {
+		for _, resource := range resources {
+			if token == resource {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func explicitResourceWriteIntent(value string, resources, actions []string) bool {
@@ -159,7 +197,7 @@ func explicitTaskWriteIntent(value string, words ...string) bool {
 
 func genericTaskCapabilityQuestion(value string) bool {
 	capabilityQuestion := false
-	for _, phrase := range []string{"what can you", "what are you able", "are you able", "can you help me", "do you support", "is it possible"} {
+	for _, phrase := range []string{"what can you", "what are you able", "are you able", "do you support", "is it possible"} {
 		capabilityQuestion = capabilityQuestion || strings.Contains(value, phrase)
 	}
 	if !capabilityQuestion {

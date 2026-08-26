@@ -30,7 +30,7 @@
   "vars": {
     // Non-secret configuration. Every secret is set with `wrangler secret put`
     // and never appears in this file.
-    "MISTY_INTERNAL_API_BASE": "https://mistysys.com/api",
+    "MISTY_INTERNAL_API_BASE": "https://api.mistysys.com/v1",
     "JOURNAL_COLLAB_ISSUER": "misty-api",
     "JOURNAL_COLLAB_AUDIENCE": "misty-journal-collab",
   },

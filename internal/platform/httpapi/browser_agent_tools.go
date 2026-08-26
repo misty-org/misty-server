@@ -43,12 +43,26 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 	if len(schema) == 0 {
 		return nil, workflowv2.ErrCapabilityDenied
 	}
-	job, err := s.database.QueueWorkflowDeviceNodeJob(
-		ctx, invocation.UserID, invocation.RunID, "browser_tool_"+tool.ID, 1,
-		input.ScopeID, tool.Name, tool.Name, tool.Arguments,
-		TestingMustAPIRawJSON(map[string]any{"agentId": invocation.AgentID}),
-		schema, agentToolObjectOutputSchema(),
-	)
+	agentID := invocation.AgentID
+	if agentID == "" {
+		agentID = "misty-unified"
+	}
+	config := TestingMustAPIRawJSON(map[string]any{"agentId": agentID})
+	var job *db.WorkflowDeviceNodeJob
+	var err error
+	if isAIInvocationRuntimeID(invocation.RunID) {
+		job, err = s.database.QueueAIInvocationDeviceNodeJob(
+			ctx, invocation.UserID, invocation.RunID, "browser_tool_"+tool.ID, 1,
+			input.ScopeID, tool.Name, tool.Name, tool.Arguments, config,
+			schema, agentToolObjectOutputSchema(),
+		)
+	} else {
+		job, err = s.database.QueueWorkflowDeviceNodeJob(
+			ctx, invocation.UserID, invocation.RunID, "browser_tool_"+tool.ID, 1,
+			input.ScopeID, tool.Name, tool.Name, tool.Arguments, config,
+			schema, agentToolObjectOutputSchema(),
+		)
+	}
 	if errors.Is(err, db.ErrDeviceNotFound) {
 		return nil, workflowv2.ErrDeviceUnavailable
 	}

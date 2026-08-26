@@ -25,13 +25,28 @@ func (s *AIService) Settings() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "preferences": preferences})
 		case http.MethodPut:
 			var body struct {
-				Enabled       bool `json:"enabled"`
-				RetentionDays int  `json:"retention_days"`
+				Enabled                bool  `json:"enabled"`
+				RetentionDays          int   `json:"retention_days"`
+				CursorCompanionEnabled *bool `json:"cursor_companion_enabled"`
+				MemoryEnabled          *bool `json:"memory_enabled"`
 			}
 			if decodeAIJSON(w, r, &body) != nil {
 				return
 			}
-			settings, err := s.database.UpdateAISettings(r.Context(), userID, body.Enabled, body.RetentionDays)
+			cursorCompanionEnabled := true
+			memoryEnabled := true
+			current, _, currentErr := s.database.AISettings(r.Context(), userID)
+			if body.CursorCompanionEnabled != nil {
+				cursorCompanionEnabled = *body.CursorCompanionEnabled
+			} else if currentErr == nil {
+				cursorCompanionEnabled = current.CursorCompanionEnabled
+			}
+			if body.MemoryEnabled != nil {
+				memoryEnabled = *body.MemoryEnabled
+			} else if currentErr == nil {
+				memoryEnabled = current.MemoryEnabled
+			}
+			settings, err := s.database.UpdateAISettings(r.Context(), userID, body.Enabled, body.RetentionDays, cursorCompanionEnabled, memoryEnabled)
 			if err != nil {
 				TestingWriteAIError(w, err)
 				return
@@ -43,6 +58,31 @@ func (s *AIService) Settings() http.HandlerFunc {
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
+	}
+}
+
+func (s *AIService) ActiveCompanionAgent() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := s.requireUser(w, r)
+		if !ok {
+			return
+		}
+		if r.Method != http.MethodPut {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			AgentID string `json:"agent_id"`
+		}
+		if decodeAIJSON(w, r, &body) != nil {
+			return
+		}
+		settings, err := s.database.UpdateActiveCompanionAgent(r.Context(), userID, "")
+		if err != nil {
+			TestingWriteAIError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"settings": settings})
 	}
 }
 
@@ -70,7 +110,7 @@ func (s *AIService) SurfacePreference() http.HandlerFunc {
 			return
 		}
 		preference, err := s.database.UpsertAISurfacePreference(r.Context(), userID, db.AISurfacePreference{
-			SurfaceID: surfaceID, PinnedAgentID: strings.TrimSpace(body.PinnedAgentID),
+			SurfaceID: surfaceID, PinnedAgentID: "",
 			Proactive: body.Proactive, SavedActions: body.SavedActions,
 		})
 		if err != nil {

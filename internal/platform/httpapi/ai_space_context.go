@@ -65,15 +65,7 @@ func (s *AIService) applySpaceContext(
 		return nil // Nothing the agent can see has changed since the last turn.
 	}
 
-	sections := defaultSpaceContextSections
-	if bound.AgentID != "" {
-		sections, err = s.database.EffectivePersonalAgentContextPermissions(ctx, userID, bound.SpaceID, bound.AgentID)
-		if err != nil {
-			return err
-		}
-	}
-
-	records, err := s.database.PersonalAgentSpaceContext(ctx, userID, bound.SpaceID, sections)
+	shared, err := buildAgentSharedSpaceContext(ctx, s.database, userID, bound.SpaceID, bound.AgentID, request.SpaceSection, revision, nil)
 	if err != nil {
 		return err
 	}
@@ -82,9 +74,10 @@ func (s *AIService) applySpaceContext(
 		return err
 	}
 	if currentTask != "" {
-		records = strings.TrimSpace(records + "\n\n" + currentTask)
+		shared.Records = strings.TrimSpace(shared.Records + "\n\n" + currentTask)
 	}
-	request.SpaceRecords = records
+	request.SpaceCard = string(shared.Card)
+	request.SpaceRecords = shared.Records
 	request.SpaceContextRevision = contextRevision
 	return nil
 }

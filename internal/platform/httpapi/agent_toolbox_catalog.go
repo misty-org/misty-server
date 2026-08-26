@@ -8,7 +8,7 @@ import (
 )
 
 var agentToolboxSpaceSources = []string{"canonical_run", "space_conversation"}
-var canonicalAgentToolboxProviders = []string{"discord", "figma", "github", "google", "notion", "slack"}
+var canonicalAgentToolboxProviders = []string{"figma", "github"}
 
 func agentToolObjectOutputSchema() json.RawMessage {
 	return json.RawMessage(`{"type":"object"}`)
@@ -19,6 +19,24 @@ func contextGetToolDescriptor() agenttools.Descriptor {
 		Name: toolboxContextGet, Version: 1, Description: "Get authoritative current time, timezone, and Space identity for this run.",
 		Risk: serveragent.RiskRead, InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}}), OutputSchema: agentToolObjectOutputSchema(),
 		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
+	}
+}
+
+func weatherCurrentToolDescriptor() agenttools.Descriptor {
+	return agenttools.Descriptor{
+		Name: toolboxWeatherCurrent, Version: 1,
+		Description: "Get live current weather for a city or postal location. Use this instead of guessing current conditions.",
+		Risk:        serveragent.RiskRead,
+		InputSchema: TestingMustAPIRawJSON(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"location": map[string]any{"type": "string", "minLength": 1, "maxLength": 240},
+			},
+			"required":             []string{"location"},
+			"additionalProperties": false,
+		}),
+		OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalNone,
+		Locality: agenttools.LocalityProvider, Idempotent: true, Sources: []string{"ai_invocation"},
 	}
 }
 
@@ -51,11 +69,13 @@ func messagesSearchToolDescriptor() agenttools.Descriptor {
 func messagesSendToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
 		Name: toolboxMessagesSend, Version: 1,
-		Description: "Send an exact member-provided message to the current Space-wide chat.",
+		Description: "Send a member-requested message. Resolve a named member first and pass recipientUserId. Use private for one named recipient unless the member explicitly asks for the group, Space chat, team, or everyone; use space for those shared audiences. Explicit DM/private or group instructions override the default. If the intended recipient or audience is unclear, do not call this tool and do not guess: ask one short clarification such as 'Should I send this privately or in the Space chat?' An explicitly requested research summary may be synthesized only when it includes source URLs.",
 		Risk:        serveragent.RiskWrite,
 		InputSchema: TestingMustAPIRawJSON(map[string]any{
 			"type": "object", "properties": map[string]any{
-				"message": map[string]any{"type": "string", "maxLength": db.MaxMessageChars},
+				"message":         map[string]any{"type": "string", "maxLength": db.MaxMessageChars},
+				"audience":        map[string]any{"type": "string", "enum": []string{"auto", "private", "space"}, "default": "auto"},
+				"recipientUserId": map[string]any{"type": "string", "description": "Stable user ID from members.resolve for the intended individual recipient."},
 			}, "required": []string{"message"},
 		}),
 		OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionMessagesWrite,
@@ -181,10 +201,12 @@ func canonicalAgentToolboxCatalogDescriptors() []agenttools.Descriptor {
 		calendarQueryToolDescriptor(), tasksCreateToolDescriptor(), tasksUpdateToolDescriptor(),
 	}
 	descriptors = append(descriptors, noteAgentToolDescriptors()...)
+	descriptors = append(descriptors, drawingAgentToolDescriptors()...)
 	descriptors = append(descriptors, calendarWriteToolDescriptors()...)
 	descriptors = append(descriptors, roadmapAgentToolDescriptors()...)
 	descriptors = append(descriptors, libraryMutationToolDescriptors()...)
 	descriptors = append(descriptors, companionReadToolDescriptors()...)
+	descriptors = append(descriptors, memoryAgentToolDescriptors()...)
 	descriptors = append(descriptors, browserToolDescriptors()...)
 	for _, provider := range canonicalAgentToolboxProviders {
 		descriptors = append(descriptors, canonicalProviderToolDescriptor(provider, false))

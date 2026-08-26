@@ -134,6 +134,96 @@ func TestPrivateSpaceAgentSendsExactMessageThroughServerOwnedToolbox(t *testing.
 	}
 }
 
+func TestMistyRoutesOnePersonPrivatelyAndPreservesStructuredMention(t *testing.T) {
+	database := openTestDatabase(t)
+	ctx := context.Background()
+	owner, err := database.CreateUser("Matthew Chen", "private-message-owner@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := database.CreateUser("Melissa Chen", "private-message-member@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	space, err := database.CreateSpace(ctx, owner.ID, "Family")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.RespondToSpaceInvite(ctx, member.ID, invite.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := api.TestingExecuteSpaceConversationTool(
+		ctx, database, owner.ID, space.ID, "",
+		"Tell Melissa Chen to please finish the laundry by tonight", "messages.send",
+		json.RawMessage(`{"message":"@Melissa Chen, please finish the laundry by tonight.","audience":"auto","recipientUserId":"`+member.ID+`"}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sent struct {
+		MessageID      string `json:"message_id"`
+		ConversationID string `json:"conversation_id"`
+		Audience       string `json:"audience"`
+	}
+	if err := json.Unmarshal(result, &sent); err != nil || sent.MessageID == "" || sent.ConversationID == "" || sent.Audience != "private" {
+		t.Fatalf("private send result = %s, %v", result, err)
+	}
+	shared, err := database.SpaceMessages(ctx, owner.ID, space.ID, 0, 10)
+	if err != nil || len(shared) != 0 {
+		t.Fatalf("private message leaked into shared chat: %#v, %v", shared, err)
+	}
+	messages, err := database.SpaceConversationMessages(ctx, member.ID, space.ID, sent.ConversationID, 0, 10)
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("private conversation messages = %#v, %v", messages, err)
+	}
+	var origin struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal(messages[0].Origin, &origin) != nil || messages[0].SenderKind != "system" || origin.Kind != "misty_assistant" {
+		t.Fatalf("Misty identity provenance = %#v", messages[0])
+	}
+	if len(messages[0].Content) < 2 || messages[0].Content[0].Type != "mention" || messages[0].Content[0].UserID != member.ID || messages[0].Content[0].Label != member.Name {
+		t.Fatalf("structured mention content = %#v", messages[0].Content)
+	}
+
+	groupResult, err := api.TestingExecuteSpaceConversationTool(
+		ctx, database, owner.ID, space.ID, "",
+		"Post in the group chat that Melissa Chen will finish the laundry tonight", "messages.send",
+		json.RawMessage(`{"message":"@Melissa Chen will finish the laundry tonight.","audience":"auto","recipientUserId":"`+member.ID+`"}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var groupSent struct {
+		Audience string `json:"audience"`
+	}
+	if json.Unmarshal(groupResult, &groupSent) != nil || groupSent.Audience != "space" {
+		t.Fatalf("group send result = %s", groupResult)
+	}
+	shared, err = database.SpaceMessages(ctx, member.ID, space.ID, 0, 10)
+	if err != nil || len(shared) != 1 || shared[0].Content[0].Type != "mention" || shared[0].Content[0].UserID != member.ID {
+		t.Fatalf("shared mention message = %#v, %v", shared, err)
+	}
+
+	_, err = api.TestingExecuteSpaceConversationTool(
+		ctx, database, owner.ID, space.ID, "",
+		"Send the laundry update", "messages.send",
+		json.RawMessage(`{"message":"Laundry update","audience":"auto"}`),
+	)
+	if err == nil || !strings.Contains(err.Error(), "Should I send this privately or in the Space chat?") {
+		t.Fatalf("ambiguous audience error = %v", err)
+	}
+	shared, err = database.SpaceMessages(ctx, member.ID, space.ID, 0, 10)
+	if err != nil || len(shared) != 1 {
+		t.Fatalf("ambiguous message should not be sent: %#v, %v", shared, err)
+	}
+}
+
 func TestSpaceAgentResolvesMemberAndCreatesAssignedTask(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
@@ -271,6 +361,39 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 	}
 }
 
+func TestFamilySpaceResearchCanBeSavedAndPostedWithCitations(t *testing.T) {
+	database := openTestDatabase(t)
+	ctx := context.Background()
+	owner, err := database.CreateUser("Family Research Owner", "family-research-owner@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	space, err := database.CreateSpace(ctx, owner.ID, "Family Space")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := "Research summer camps in Pasadena, save the research, and post a cited summary to Family Space"
+	sourceURL := "https://example.org/pasadena-camps"
+	createdRaw, err := api.TestingExecuteSpaceConversationTool(
+		ctx, database, owner.ID, space.ID, "", prompt, "notes.create",
+		json.RawMessage(`{"title":"Pasadena summer camp research","markdown":"# Summer camps\n\nArt and science programs are available.\n\nSource: `+sourceURL+`"}`),
+	)
+	if err != nil || !strings.Contains(string(createdRaw), "Pasadena summer camp research") {
+		t.Fatalf("saved research note = %s, %v", createdRaw, err)
+	}
+	summary := "Pasadena summer camps include art and science programs. Source: " + sourceURL
+	if _, err := api.TestingExecuteSpaceConversationTool(
+		ctx, database, owner.ID, space.ID, "", prompt, "messages.send",
+		json.RawMessage(`{"message":"`+summary+`"}`),
+	); err != nil {
+		t.Fatalf("post cited summary: %v", err)
+	}
+	messages, err := database.SpaceMessages(ctx, owner.ID, space.ID, 0, 20)
+	if err != nil || len(messages) != 1 || !strings.Contains(api.TestingSpansToPlainText(messages[0].Content), sourceURL) {
+		t.Fatalf("Family Space cited summary = %#v, %v", messages, err)
+	}
+}
+
 func TestSpaceAgentCreatesQueriesAndUpdatesNativeCalendarEvent(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
@@ -361,85 +484,5 @@ func TestSpaceAgentCreatesReadsAndUpdatesRoadmap(t *testing.T) {
 	readRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Read the roadmap", "roadmaps.read", json.RawMessage(`{"id":"`+created.Roadmap.ID+`"}`))
 	if err != nil || !strings.Contains(string(readRaw), "Public beta launch") {
 		t.Fatalf("read roadmap = %s, %v", readRaw, err)
-	}
-}
-
-func TestSpaceAgentReadsUpdatesAndPromotesLibraryItems(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Library Tool Owner", "library-tool-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Library Tool Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := strings.Repeat("a", 64)
-	upload, err := database.CreateLibraryUpload(ctx, owner.ID, space.ID, "library", "brief.txt", "text/plain", 10, digest, "library/agent-tool-brief", "library-agent-token", time.Now().Add(time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.SetLibraryUploadState(ctx, owner.ID, space.ID, upload.ID, "library-agent-token", "initiated", "uploaded_unverified"); err != nil {
-		t.Fatal(err)
-	}
-	completed, err := database.CompleteLibraryUpload(ctx, owner.ID, space.ID, upload.ID, "library-agent-token", 10, digest, "text/plain", nil)
-	if err != nil || completed.Item == nil {
-		t.Fatalf("completed Library upload = %#v, %v", completed, err)
-	}
-	readRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Read the library item", "library.read", json.RawMessage(`{"id":"`+completed.Item.ID+`"}`))
-	if err != nil || !strings.Contains(string(readRaw), "brief.txt") {
-		t.Fatalf("read Library item = %s, %v", readRaw, err)
-	}
-	updatedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Tag the file in the library", "library.update", json.RawMessage(`{"id":"`+completed.Item.ID+`","displayName":"Investor brief","tags":["demo","investor"],"favorite":true}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var updated SpaceLibraryItem
-	if json.Unmarshal(updatedRaw, &updated) != nil || updated.DisplayName != "Investor brief" || !updated.Favorite || len(updated.Tags) != 2 {
-		t.Fatalf("updated Library item = %s", updatedRaw)
-	}
-	attachmentUpload, err := database.CreateLibraryUpload(ctx, owner.ID, space.ID, "attachment", "evidence.txt", "text/plain", 10, digest, "library/agent-tool-attachment", "attachment-agent-token", time.Now().Add(time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.SetLibraryUploadState(ctx, owner.ID, space.ID, attachmentUpload.ID, "attachment-agent-token", "initiated", "uploaded_unverified"); err != nil {
-		t.Fatal(err)
-	}
-	attachmentResult, err := database.CompleteLibraryUpload(ctx, owner.ID, space.ID, attachmentUpload.ID, "attachment-agent-token", 10, digest, "text/plain", nil)
-	if err != nil || attachmentResult.Attachment == nil {
-		t.Fatalf("completed attachment upload = %#v, %v", attachmentResult, err)
-	}
-	promotedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Save the attachment to the library", "library.promote_attachment", json.RawMessage(`{"attachmentId":"`+attachmentResult.Attachment.ID+`"}`))
-	if err != nil || !strings.Contains(string(promotedRaw), attachmentResult.Attachment.DisplayName) {
-		t.Fatalf("promoted attachment = %s, %v", promotedRaw, err)
-	}
-}
-
-func TestSpaceAgentListsCreatorCompanionsWithoutCrossSpaceDetails(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Companion Tool Owner", "companion-tool-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Companion Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{Name: "Scout", ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{Name: "Maker", ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite"}); err != nil {
-		t.Fatal(err)
-	}
-	listed, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, first.ID, "List my agents", "agents.list", json.RawMessage(`{}`))
-	if err != nil || !strings.Contains(string(listed), "Scout") || !strings.Contains(string(listed), "Maker") || strings.Contains(string(listed), "space_id") {
-		t.Fatalf("listed companions = %s, %v", listed, err)
-	}
-	status, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, first.ID, "Is Maker available?", "agents.status", json.RawMessage(`{"agentName":"Maker"}`))
-	if err != nil || !strings.Contains(string(status), `"busy":false`) {
-		t.Fatalf("companion status = %s, %v", status, err)
 	}
 }

@@ -87,6 +87,9 @@ func executeAgentRoadmapTool(ctx context.Context, database *db.Database, actor s
 		if err != nil {
 			return nil, true, err
 		}
+		if err := requireAgentMutationTarget(ctx, database, actor, actor.originalPrompt, "roadmap", input.ID); err != nil {
+			return nil, true, err
+		}
 		name, description := current.Roadmap.Name, current.Roadmap.Description
 		if strings.TrimSpace(input.Name) != "" {
 			name = input.Name

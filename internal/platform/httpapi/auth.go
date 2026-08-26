@@ -132,8 +132,9 @@ func writeAuthSession(
 }
 
 // writeSessionCookie is the single definition of the session cookie shape. The
-// cookie carries no Domain attribute on purpose: website and API are the same
-// host in production, so a host-only cookie reaches both.
+// cookie carries no Domain attribute on purpose. Browser clients send
+// credentialed requests directly to the API origin, so the session should
+// never be exposed to sibling subdomains.
 func writeSessionCookie(w http.ResponseWriter, r *http.Request, token string, ttl time.Duration) {
 	secure := TestingIsSecureRequest(r)
 	http.SetCookie(w, &http.Cookie{

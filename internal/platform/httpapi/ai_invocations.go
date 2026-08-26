@@ -1,12 +1,9 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,7 +17,6 @@ import (
 
 const (
 	aiInvocationTTL       = 24 * time.Hour
-	aiInvocationTimeout   = 5 * time.Minute
 	maxAIInvocationPrompt = 32 << 10
 )
 
@@ -32,27 +28,59 @@ type aiSelectionSnapshot struct {
 	ContentHash string         `json:"contentHash"`
 }
 
+type aiCaptureAttachment struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	MimeType    string `json:"mime_type"`
+	DataURL     string `json:"data_url"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	ContentHash string `json:"content_hash"`
+}
+
+type aiInvocationDeviceContext struct {
+	DeviceID     string          `json:"device_id"`
+	Kind         string          `json:"kind"`
+	OpaqueRef    string          `json:"opaque_ref"`
+	DisplayName  string          `json:"display_name,omitempty"`
+	Capabilities json.RawMessage `json:"capabilities"`
+	Metadata     json.RawMessage `json:"metadata,omitempty"`
+}
+
 type aiInvocationInput struct {
-	Mode                  string               `json:"mode"`
-	SurfaceID             string               `json:"surface_id"`
-	Trigger               string               `json:"trigger"`
-	Prompt                string               `json:"prompt"`
-	Context               []aiContextReference `json:"context"`
-	Selection             *aiSelectionSnapshot `json:"selection,omitempty"`
-	RequestedArtifactKind string               `json:"requested_artifact_kind,omitempty"`
-	ConversationID        string               `json:"conversation_id,omitempty"`
-	AgentID               string               `json:"agent_id,omitempty"`
-	IdempotencyKey        string               `json:"idempotency_key"`
+	Mode                  string                      `json:"mode"`
+	SurfaceID             string                      `json:"surface_id"`
+	Trigger               string                      `json:"trigger"`
+	Prompt                string                      `json:"prompt"`
+	Context               []aiContextReference        `json:"context"`
+	Selection             *aiSelectionSnapshot        `json:"selection,omitempty"`
+	Capture               *aiCaptureAttachment        `json:"capture,omitempty"`
+	AttachmentIDs         []string                    `json:"attachment_ids,omitempty"`
+	DeviceContexts        []aiInvocationDeviceContext `json:"device_contexts,omitempty"`
+	ModelID               string                      `json:"model_id,omitempty"`
+	ReasoningEffort       string                      `json:"reasoning_effort,omitempty"`
+	RequestedArtifactKind string                      `json:"requested_artifact_kind,omitempty"`
+	ConversationID        string                      `json:"conversation_id,omitempty"`
+	AgentID               string                      `json:"agent_id,omitempty"`
+	IdempotencyKey        string                      `json:"idempotency_key"`
+	Timezone              string                      `json:"timezone,omitempty"`
 }
 
 type aiInvocationEvent struct {
-	ID       string      `json:"id"`
-	Type     string      `json:"type"`
-	State    string      `json:"state,omitempty"`
-	Delta    string      `json:"delta,omitempty"`
-	Citation *aiCitation `json:"citation,omitempty"`
-	Artifact *aiArtifact `json:"artifact,omitempty"`
-	Error    string      `json:"error,omitempty"`
+	ID         string      `json:"id"`
+	Type       string      `json:"type"`
+	State      string      `json:"state,omitempty"`
+	Delta      string      `json:"delta,omitempty"`
+	Text       string      `json:"text,omitempty"`
+	Phase      string      `json:"phase,omitempty"`
+	Summary    string      `json:"summary,omitempty"`
+	ArtifactID string      `json:"artifactId,omitempty"`
+	RunID      string      `json:"runId,omitempty"`
+	ToolCallID string      `json:"toolCallId,omitempty"`
+	ToolName   string      `json:"toolName,omitempty"`
+	Citation   *aiCitation `json:"citation,omitempty"`
+	Artifact   *aiArtifact `json:"artifact,omitempty"`
+	Error      string      `json:"error,omitempty"`
 }
 
 type aiArtifact struct {
@@ -71,6 +99,7 @@ type aiArtifact struct {
 	ExpiresAt      string         `json:"expiresAt"`
 	State          string         `json:"state"`
 	Error          string         `json:"error,omitempty"`
+	InvocationID   string         `json:"invocationId,omitempty"`
 	OwnerUserID    string         `json:"-"`
 }
 
@@ -83,7 +112,6 @@ type aiInvocationRecord struct {
 	CreatedAt      time.Time
 	ExpiresAt      time.Time
 	Notify         chan struct{}
-	Cancel         context.CancelFunc
 }
 
 type aiInvocationHub struct {
@@ -117,6 +145,12 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_invocation", "message": err.Error()})
 			return
 		}
+		if body.AgentID != "" {
+			writeJSON(w, http.StatusGone, map[string]any{
+				"code": "custom_agents_retired", "message": "Misty is now the only assistant. Existing Agent tasks remain available as read-only history.",
+			})
+			return
+		}
 		if header := strings.TrimSpace(r.Header.Get("Idempotency-Key")); header != "" {
 			if body.IdempotencyKey != "" && body.IdempotencyKey != header {
 				http.Error(w, "idempotency key mismatch", http.StatusBadRequest)
@@ -132,7 +166,73 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		if actionID == "" {
 			actionID = "ask"
 		}
-		available, err := s.database.AIActionAvailable(r.Context(), userID, body.SurfaceID, actionID, agent.InitialSelectedModelID)
+		if !s.agentRuntime.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "agent_runtime_unavailable", "message": "Misty's agent runtime is not configured."})
+			return
+		}
+		conversationID := strings.TrimSpace(body.ConversationID)
+		var err error
+		modelFallbackNotice := false
+		modelID := strings.TrimSpace(body.ModelID)
+		if modelID == "" {
+			modelID = agent.FrontierDefaultModelID()
+		}
+		reasoning := strings.ToLower(strings.TrimSpace(body.ReasoningEffort))
+		spaceID := firstAIContextSpace(body.Context)
+		if spaceID != "" {
+			if _, spaceErr := s.database.SpaceByID(r.Context(), userID, spaceID); spaceErr != nil {
+				writeSpaceError(w, spaceErr)
+				return
+			}
+		}
+		if conversationID != "" {
+			bound, boundErr := s.database.AgentConversationIdentity(r.Context(), userID, conversationID)
+			if boundErr != nil || bound.AgentID != "" || conversationSpaceChanged(bound.SpaceID, spaceID) {
+				writeJSON(w, http.StatusConflict, map[string]any{"code": "conversation_context_changed", "message": "Start a new Misty task for this Space."})
+				return
+			}
+			if spaceID == "" {
+				spaceID = bound.SpaceID
+			} else if bound.SpaceID == "" {
+				if bindErr := s.database.BindMistyConversationSpace(r.Context(), userID, conversationID, spaceID); bindErr != nil {
+					writeMistyConversationBindingError(w, bindErr)
+					return
+				}
+			}
+			modelID, reasoning = bound.ModelID, bound.ReasoningEffort
+			if !agent.FrontierModelAvailable(r.Context(), modelID) {
+				modelID, reasoning = agent.FrontierDefaultModelID(), ""
+				_ = s.database.UpdateMistyConversationModel(r.Context(), userID, conversationID, modelID, reasoning, agent.FrontierModelCatalogVersion)
+				modelFallbackNotice = true
+			}
+		}
+		if err := validateAIInvocationDeviceContexts(body.Context, body.DeviceContexts, spaceID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_device_context", "message": err.Error()})
+			return
+		}
+		if conversationID == "" && (body.Mode == "drawer" || body.Mode == "companion") && body.RequestedArtifactKind == "" {
+			conversationID, err = s.database.CreateAIConversation(r.Context(), userID, spaceID)
+			if err != nil {
+				TestingWriteAIError(w, err)
+				return
+			}
+			_ = s.database.RenameAgentSession(r.Context(), userID, conversationID, cleanMistyTitle(body.Prompt))
+			_ = s.database.UpdateMistyConversationModel(r.Context(), userID, conversationID, modelID, reasoning, agent.FrontierModelCatalogVersion)
+		}
+		if conversationID == "" && body.Mode == "companion" {
+			conversationID, err = s.database.CreateAIConversation(r.Context(), userID, spaceID)
+			if err != nil {
+				TestingWriteAIError(w, err)
+				return
+			}
+			_ = s.database.RenameAgentSession(r.Context(), userID, conversationID, cleanMistyTitle(body.Prompt))
+			_ = s.database.UpdateMistyConversationModel(r.Context(), userID, conversationID, modelID, reasoning, agent.FrontierModelCatalogVersion)
+		}
+		if !agent.FrontierModelAvailable(r.Context(), modelID) || !agent.FrontierModelReasoningAvailable(r.Context(), modelID, reasoning) {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "model_unavailable", "message": "That model or reasoning level is no longer available. Choose another frontier model."})
+			return
+		}
+		available, err := s.database.AIActionAvailable(r.Context(), userID, body.SurfaceID, actionID, modelID)
 		if err != nil {
 			TestingWriteAIError(w, err)
 			return
@@ -141,20 +241,21 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "ai_surface_unavailable", "message": "Misty is temporarily unavailable for this action."})
 			return
 		}
-		release, ok := s.acquireProviderCall(w, userID)
-		if !ok {
-			return
-		}
-		conversationID := strings.TrimSpace(body.ConversationID)
-		if conversationID == "" && body.Mode == "drawer" && body.RequestedArtifactKind == "" {
-			session := s.runtime.CreateSessionWithModel(userID, userID, agent.InitialSelectedModelID)
-			conversationID = session.ID
-			_ = s.database.RenameAgentSession(r.Context(), userID, conversationID, cleanMistyTitle(body.Prompt))
+		if body.Mode == "companion" && conversationID != "" {
+			if err := s.database.BindCompanionConversation(r.Context(), userID, conversationID, body.AgentID, spaceID, modelID, body.SurfaceID, firstAIContextHref(body.Context), aiInvocationPrivacyBoundary(body.Context)); err != nil {
+				TestingWriteAIError(w, err)
+				return
+			}
 		}
 		body.ConversationID = conversationID
+		body.ModelID = modelID
+		body.ReasoningEffort = reasoning
+		if err := s.database.ValidateAIConversationAttachments(r.Context(), userID, conversationID, body.AttachmentIDs); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_attachment", "message": err.Error()})
+			return
+		}
 		requestPayload, err := json.Marshal(body)
 		if err != nil {
-			release()
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
@@ -165,25 +266,58 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			IdempotencyKey: body.IdempotencyKey, RequestPayload: requestPayload, ExpiresAt: now.Add(aiInvocationTTL),
 		})
 		if err != nil {
-			release()
 			TestingWriteAIError(w, err)
 			return
 		}
-		record := s.invocations.restore(stored, nil)
+		record, err := s.invocations.restoreDurable(r.Context(), stored)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "load invocation stream"})
+			return
+		}
 		if !created {
-			release()
 			writeAIInvocationCreated(w, record)
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), aiInvocationTimeout)
-		s.invocations.setCancel(record.ID, cancel)
-		go func() {
-			defer release()
-			defer cancel()
-			s.runInvocation(ctx, userID, record.ID, body)
-		}()
+		if err := s.database.BindAIConversationAttachments(r.Context(), userID, conversationID, stored.ID, body.AttachmentIDs); err != nil {
+			s.invocations.fail(stored.ID, "Misty could not attach one of those images. Please remove it and try again.")
+			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_attachment", "message": err.Error()})
+			return
+		}
+		for _, deviceContext := range body.DeviceContexts {
+			if _, err := s.database.AttachAIInvocationContext(
+				r.Context(), userID, stored.ID, spaceID, deviceContext.DeviceID, deviceContext.Kind,
+				deviceContext.OpaqueRef, deviceContext.DisplayName, deviceContext.Capabilities, deviceContext.Metadata,
+			); err != nil {
+				s.invocations.fail(stored.ID, "Misty could not connect to its browser workspace. Please keep Misty open and try again.")
+				writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_device_context", "message": "Misty could not connect to that browser workspace."})
+				return
+			}
+		}
+		if modelFallbackNotice {
+			s.invocations.append(stored.ID, aiInvocationEvent{Type: "assistant.status", Text: "The previous model retired, so Misty switched this conversation to the frontier default.", Phase: "model_fallback"})
+		}
+		if _, err := s.agentRuntime.Start(r.Context(), record.ID); err != nil {
+			s.invocations.fail(record.ID, "Misty could not start the agent runtime. Please try again.")
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "agent_runtime_start_failed", "message": "Misty could not start the agent runtime."})
+			return
+		}
 		writeAIInvocationCreated(w, record)
 	}
+}
+
+func conversationSpaceChanged(boundSpaceID, requestedSpaceID string) bool {
+	return boundSpaceID != "" && requestedSpaceID != "" && boundSpaceID != requestedSpaceID
+}
+
+func TestingConversationSpaceChanged(boundSpaceID, requestedSpaceID string) bool {
+	return conversationSpaceChanged(boundSpaceID, requestedSpaceID)
+}
+
+func firstAIError(primary, fallback error) error {
+	if primary != nil {
+		return primary
+	}
+	return fallback
 }
 
 func writeAIInvocationCreated(w http.ResponseWriter, record *aiInvocationRecord) {
@@ -193,153 +327,6 @@ func writeAIInvocationCreated(w http.ResponseWriter, record *aiInvocationRecord)
 		"state":          record.State,
 		"eventsUrl":      "/ai/invocations/" + record.ID + "/events",
 	})
-}
-
-func (s *AIService) runInvocation(ctx context.Context, userID, invocationID string, body aiInvocationInput) {
-	startedAt := time.Now()
-	firstOutput := time.Duration(0)
-	outcome := "failed"
-	actionID := firstAIText(body.RequestedArtifactKind, "ask")
-	defer func() {
-		if s.metrics != nil {
-			s.metrics.RecordAIInvocation(body.SurfaceID, actionID, agent.InitialSelectedModelID, outcome, time.Since(startedAt), firstOutput)
-		}
-	}()
-	s.invocations.append(invocationID, aiInvocationEvent{Type: "invocation.started", State: "running"})
-	broker := aiContextBroker{database: s.database}
-	resolved, err := broker.resolve(ctx, userID, body.Context)
-	if err != nil {
-		s.invocations.fail(invocationID, publicAIInvocationError(err))
-		return
-	}
-	if body.SurfaceID == "home" || body.SurfaceID == "activity" || body.SurfaceID == "global" {
-		var embedding []float64
-		var semantic *hostedSemanticQueryOperation
-		if s.analyzer != nil && len(body.Prompt) <= 512 {
-			semantic, _ = beginHostedSemanticQuery(ctx, s.database, s.analyzer, userID, "ai-retrieval-query:"+invocationID, body.Prompt)
-			if semantic != nil {
-				embedding = semantic.Vector
-			}
-		}
-		retrieved, retrieveErr := broker.retrieveAccount(ctx, userID, body.Prompt, embedding, 8)
-		if retrieveErr != nil {
-			semantic.Release(s.database)
-			s.invocations.fail(invocationID, publicAIInvocationError(retrieveErr))
-			return
-		}
-		if semantic != nil {
-			if settleErr := semantic.Settle(s.database); settleErr != nil {
-				semantic.Release(s.database)
-			}
-		}
-		resolved = mergeAIResolvedContext(resolved, retrieved, 12)
-	}
-	for _, item := range resolved {
-		citation := item.Citation
-		s.invocations.append(invocationID, aiInvocationEvent{Type: "citation", Citation: &citation})
-	}
-	if citation := aiSelectionCitation(body); citation != nil {
-		s.invocations.append(invocationID, aiInvocationEvent{Type: "citation", Citation: citation})
-	}
-	prompt := aiContextPrompt(body.Prompt, resolved, body.Selection, body.Context)
-	artifactKind := body.RequestedArtifactKind
-	if artifactKind == "" && body.Selection != nil && strings.HasPrefix(body.SurfaceID, "notes") {
-		artifactKind = "text_patch"
-	}
-	if artifactKind == "text_patch" {
-		prompt = "Rewrite the selected content to satisfy the user request. Return only the replacement text, with no preface, quotation marks, or Markdown fence.\n\n" + prompt
-	} else if artifactKind == "task_set" {
-		prompt = "Extract concrete, non-duplicative tasks from the authorized content. Return strict JSON only in this shape: {\"tasks\":[{\"title\":\"...\",\"notes\":\"...\",\"priority\":\"high|medium|low\"}]}. Use at most 20 tasks. Do not invent owners, dates, or commitments. Return {\"tasks\":[]} when there are no concrete tasks.\n\n" + prompt
-	} else if spec, ok := aiArtifactSpecs[artifactKind]; ok {
-		prompt = spec.Prompt + " Return strict JSON only in this shape: {\"summary\":\"short review summary\",\"operations\":" + spec.Shape + "}. Do not claim the proposal was applied or executed.\n\n" + prompt
-	}
-	var answer string
-	if body.ConversationID != "" && artifactKind == "" {
-		tier, tierErr := s.agentTierForUser(userID)
-		if tierErr != nil {
-			s.invocations.fail(invocationID, "Misty could not determine the model policy.")
-			return
-		}
-		if err = s.runtime.ConfigureSession(body.ConversationID, userID, aiInvocationSystemPrompt(body.SurfaceID), false, false); err == nil {
-			err = s.runtime.SendMessageWithTierContext(ctx, body.ConversationID, userID, agent.AgentMessageRequest{Mode: agent.ModeAsk, UserMessage: prompt}, tier)
-		}
-		if err == nil {
-			transcript, transcriptErr := s.runtime.Transcript(ctx, body.ConversationID, userID)
-			err = transcriptErr
-			if transcriptErr == nil && len(transcript) > 0 {
-				answer = transcript[len(transcript)-1].Content
-			}
-		}
-	} else {
-		answer, _, err = s.runtime.CompleteWithModelContext(ctx, userID, prompt, "assistant_ai", agent.InitialSelectedModelID)
-	}
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			outcome = "canceled"
-			s.invocations.cancel(invocationID)
-			return
-		}
-		s.invocations.fail(invocationID, publicAIInvocationError(err))
-		return
-	}
-	answer = strings.TrimSpace(answer)
-	firstOutput = time.Since(startedAt)
-	if artifactKind == "text_patch" && body.Selection != nil {
-		artifact := s.invocations.addTextPatchArtifact(userID, invocationID, answer, resolved, body)
-		s.invocations.append(invocationID, aiInvocationEvent{Type: "response.delta", Delta: "I prepared a revision for you to review."})
-		s.invocations.append(invocationID, aiInvocationEvent{Type: "artifact.proposed", Artifact: artifact})
-	} else if artifactKind == "task_set" {
-		tasks, parseErr := parseAITaskDrafts(answer)
-		if parseErr != nil || len(tasks) == 0 {
-			s.invocations.append(invocationID, aiInvocationEvent{Type: "response.delta", Delta: "I did not find concrete tasks that were safe to propose."})
-		} else if artifact := s.invocations.addTaskSetArtifact(userID, invocationID, tasks, resolved, body); artifact != nil {
-			suffix := "s"
-			if len(tasks) == 1 {
-				suffix = ""
-			}
-			s.invocations.append(invocationID, aiInvocationEvent{Type: "response.delta", Delta: fmt.Sprintf("I prepared %d task%s for review.", len(tasks), suffix)})
-			s.invocations.append(invocationID, aiInvocationEvent{Type: "artifact.proposed", Artifact: artifact})
-		} else {
-			s.invocations.fail(invocationID, "Misty could not determine which Space should receive these tasks.")
-			return
-		}
-	} else if spec, ok := aiArtifactSpecs[artifactKind]; ok {
-		summary, operations, parseErr := parseAIStructuredArtifact(answer)
-		if parseErr != nil {
-			s.invocations.fail(invocationID, "Misty could not create a valid reviewable proposal.")
-			return
-		}
-		artifact := s.invocations.addStructuredArtifact(userID, invocationID, artifactKind, summary, operations, resolved, body, spec)
-		s.invocations.append(invocationID, aiInvocationEvent{Type: "response.delta", Delta: "I prepared a reviewable proposal. Nothing has been applied."})
-		s.invocations.append(invocationID, aiInvocationEvent{Type: "artifact.proposed", Artifact: artifact})
-	} else {
-		for _, delta := range aiTextDeltas(answer, 320) {
-			s.invocations.append(invocationID, aiInvocationEvent{Type: "response.delta", Delta: delta})
-		}
-	}
-	s.invocations.complete(invocationID)
-	outcome = "completed"
-}
-
-func aiSelectionCitation(body aiInvocationInput) *aiCitation {
-	if body.Selection == nil || body.Selection.Object["kind"] != "browser-page" {
-		return nil
-	}
-	scopeID, _ := body.Selection.Object["id"].(string)
-	if strings.TrimSpace(scopeID) == "" {
-		return nil
-	}
-	for _, reference := range body.Context {
-		if reference.Kind != "browser-tab" || reference.OpaqueScopeID != scopeID || !reference.Attached {
-			continue
-		}
-		return &aiCitation{
-			ID: scopeID, Kind: "browser-page", Title: firstAIText(reference.Title, "Browser page"),
-			Href: "misty://browser/" + url.PathEscape(scopeID), Revision: reference.Revision,
-			Excerpt: aiExcerpt(body.Selection.Content),
-		}
-	}
-	return nil
 }
 
 func (s *AIService) InvocationEvents() http.HandlerFunc {
@@ -370,7 +357,10 @@ func (s *AIService) InvocationEvents() http.HandlerFunc {
 			}
 			stored.State = state
 			record := s.invocations.restore(*stored, events)
-			if !aiInvocationTerminal(record.State) {
+			// Durable WorkflowAgent runs survive Go process restarts. A bound runtime
+			// will continue posting signed events, so reconnecting must not convert an
+			// active run into a failure merely because the in-memory hub was rebuilt.
+			if !aiInvocationTerminal(record.State) && stored.RuntimeRunID == "" && stored.AgentRunID == "" {
 				s.invocations.fail(record.ID, "Misty was interrupted before finishing. Please retry the request.")
 			}
 		}
@@ -419,19 +409,26 @@ func (s *AIService) CancelInvocation() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		state, found := s.invocations.cancelForUser(userID, chi.URLParam(r, "invocationID"))
+		stored, err := s.database.AIInvocationByID(r.Context(), userID, chi.URLParam(r, "invocationID"))
+		if err != nil {
+			http.Error(w, "invocation not found", http.StatusNotFound)
+			return
+		}
+		if _, err := s.invocations.restoreDurable(r.Context(), *stored); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "load invocation stream"})
+			return
+		}
+		if !aiInvocationTerminal(stored.State) && stored.AgentRunID != "" {
+			if run, cancelErr := s.database.CancelPersonalAgentTaskRunForOwner(r.Context(), userID, stored.AgentRunID); cancelErr == nil && run.RuntimeRunID != "" {
+				_ = s.agentRuntime.Cancel(r.Context(), run.RuntimeRunID, run.ID)
+			}
+		} else if !aiInvocationTerminal(stored.State) && stored.RuntimeRunID != "" {
+			_ = s.agentRuntime.Cancel(r.Context(), stored.RuntimeRunID, stored.ID)
+		}
+		state, found := s.invocations.cancelForUser(userID, stored.ID)
 		if !found {
-			stored, err := s.database.AIInvocationByID(r.Context(), userID, chi.URLParam(r, "invocationID"))
-			if err != nil {
-				http.Error(w, "invocation not found", http.StatusNotFound)
-				return
-			}
-			s.invocations.restore(*stored, nil)
-			state, found = s.invocations.cancelForUser(userID, stored.ID)
-			if !found {
-				http.Error(w, "invocation not found", http.StatusNotFound)
-				return
-			}
+			http.Error(w, "invocation not found", http.StatusNotFound)
+			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"state": state})
 	}

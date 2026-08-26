@@ -268,10 +268,15 @@ func TestingIsAllowedCORSOrigin(origin string) bool {
 
 func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Get(prefix+"/status", aiService.Status())
+	s.Router.Get(prefix+"/models", aiService.FrontierModels())
 	s.Router.Post(prefix+"/complete", aiService.Complete())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/settings", aiService.Settings())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/settings", aiService.Settings())
+	s.Router.Put(prefix+"/settings/companion-agent", aiService.ActiveCompanionAgent())
+	s.Router.Get(prefix+"/memories", aiService.Memories())
+	s.Router.Delete(prefix+"/memories/{memoryID}", aiService.Memory())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/preferences/{surfaceID}", aiService.SurfacePreference())
+	s.Router.Post(prefix+"/preferences/{surfaceID}/proactive-events", aiService.ProactiveEvent())
 	s.Router.Get(prefix+"/recaps", aiService.Recaps())
 	s.Router.Put(prefix+"/recaps/{surfaceID}", aiService.Recap())
 	s.Router.Post(prefix+"/recaps/{surfaceID}/seen", aiService.RecapSeen())
@@ -281,6 +286,8 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Post(prefix+"/invocations/{invocationID}/feedback", aiService.InvocationFeedback())
 	s.Router.Post(prefix+"/artifacts/{artifactID}/decision", aiService.DecideArtifact())
 	s.Router.Post(prefix+"/artifacts/{artifactID}/completion", aiService.CompleteArtifact())
+	s.Router.Get(prefix+"/conversations", aiService.AIConversations())
+	s.Router.Get(prefix+"/conversations/{conversationID}", aiService.AIConversation())
 }
 
 func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {
@@ -289,4 +296,9 @@ func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/misty/conversations/{conversationID}", aiService.MistyConversation())
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/misty/conversations/{conversationID}", aiService.MistyConversation())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/conversations/{conversationID}/turns", aiService.MistyConversationTurn())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/attachments", aiService.MistyAttachments())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/attachments/{attachmentID}/finalize", aiService.MistyAttachment())
+	s.Router.MethodFunc(http.MethodDelete, prefix+"/misty/attachments/{attachmentID}", aiService.MistyAttachment())
+	s.Router.MethodFunc(http.MethodGet, prefix+"/misty/attachments/{attachmentID}/content", aiService.MistyAttachmentContent())
+	s.Router.MethodFunc(http.MethodPut, prefix+"/misty/attachments/{attachmentID}/content", aiService.MistyAttachmentContent())
 }

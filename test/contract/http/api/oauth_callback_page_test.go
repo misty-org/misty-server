@@ -23,7 +23,7 @@ func TestOAuthCallbackFailuresRenderHTMLRatherThanJSON(t *testing.T) {
 		TestingOAuthNotSaved,
 	} {
 		recorder := httptest.NewRecorder()
-		TestingWriteOAuthCallbackFailure(recorder, "notion", failure, errors.New("cause"))
+		TestingWriteOAuthCallbackFailure(recorder, "figma", failure, errors.New("cause"))
 
 		if got := recorder.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
 			t.Fatalf("%s Content-Type = %q, want text/html; charset=utf-8", failure.Reason, got)
@@ -40,7 +40,7 @@ func TestOAuthCallbackFailuresRenderHTMLRatherThanJSON(t *testing.T) {
 		if !strings.Contains(body, failure.Reason) {
 			t.Fatalf("%s page omits its reason: %s", failure.Reason, body)
 		}
-		if !strings.Contains(body, "Notion") {
+		if !strings.Contains(body, "Figma") {
 			t.Fatalf("%s page omits the provider name: %s", failure.Reason, body)
 		}
 	}
@@ -50,7 +50,7 @@ func TestOAuthCallbackFailuresRenderHTMLRatherThanJSON(t *testing.T) {
 // be reported as one.
 func TestDeniedConsentIsNotReportedAsAnError(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	TestingWriteOAuthCallbackFailure(recorder, "google", TestingOAuthDeniedByProvider, nil)
+	TestingWriteOAuthCallbackFailure(recorder, "figma", TestingOAuthDeniedByProvider, nil)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
@@ -75,7 +75,7 @@ func TestUnknownProviderStillRendersAReadablePage(t *testing.T) {
 func TestProviderRefusalDetailSummarisesBothQueryFields(t *testing.T) {
 	request := httptest.NewRequest(
 		http.MethodGet,
-		"/api/oauth/providers/notion/callback?error=access_denied&error_description=User+said+no",
+		"/api/oauth/providers/github/callback?error=access_denied&error_description=User+said+no",
 		nil,
 	)
 	if got, want := TestingProviderRefusalDetail(request), "access_denied: User said no"; got != want {

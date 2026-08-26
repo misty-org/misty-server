@@ -242,7 +242,7 @@ func (provider *serverToolProvider) Next(request ModelRequest) (ModelResponse, e
 func TestCompleteWithToolsUsesTheValidatedAgentToolLoop(t *testing.T) {
 	provider := &serverToolProvider{}
 	service := NewService(NewSessionStore(0), provider)
-	completion, err := service.CompleteWithToolsContext(context.Background(), "user", "user", "You are Buzz. Be terse.", "Read the document", TierLow, ToolManifest{Tools: []ToolDefinition{{Name: "workflow.read_content", Risk: RiskRead}}}, func(_ context.Context, request ToolRequest) (json.RawMessage, error) {
+	completion, err := service.CompleteWithToolsContext(context.Background(), "user", "user", "You are Scout. Be terse.", "Read the document", TierLow, ToolManifest{Tools: []ToolDefinition{{Name: "workflow.read_content", Risk: RiskRead}}}, func(_ context.Context, request ToolRequest) (json.RawMessage, error) {
 		if request.Name != "workflow.read_content" {
 			t.Fatalf("tool = %#v", request)
 		}
@@ -256,7 +256,7 @@ func TestCompleteWithToolsUsesTheValidatedAgentToolLoop(t *testing.T) {
 	// and an Agent whose instructions only appear in the user message is refused
 	// as personaless.
 	for round, systemPrompt := range provider.systemPrompts {
-		if systemPrompt != "You are Buzz. Be terse." {
+		if systemPrompt != "You are Scout. Be terse." {
 			t.Fatalf("system prompt on round %d = %q", round+1, systemPrompt)
 		}
 	}

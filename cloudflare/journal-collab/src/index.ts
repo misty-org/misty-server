@@ -1,6 +1,7 @@
 import { routePartykitRequest } from "partyserver";
 
 import { DrawingRoom, NoteRoom, type Env } from "./room";
+import { responseWithRequestID } from "./response";
 
 export { DrawingRoom, NoteRoom };
 
@@ -20,12 +21,6 @@ export default {
         correlatedRequest,
         env as unknown as Record<string, unknown>,
       )) ?? new Response("not found", { status: 404 });
-    // Upgrade responses carry immutable WebSocket headers in Workers. Trying
-    // to mutate them throws after the room has already burned the single-use
-    // ticket, which makes the provider reconnect with a now-replayed ticket.
-    if (response.status !== 101) {
-      response.headers.set("X-Request-ID", requestID);
-    }
-    return response;
+    return responseWithRequestID(response, requestID);
   },
 };

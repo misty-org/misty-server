@@ -1,6 +1,9 @@
 package api
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -9,6 +12,7 @@ import (
 )
 
 const maxAgentVoiceRecordingBytes = 10 << 20
+const maxAgentVoiceJSONBytes = (maxAgentVoiceRecordingBytes*4)/3 + (1 << 20)
 
 func (s *AgentsService) AgentVoiceTranscription() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -19,28 +23,23 @@ func (s *AgentsService) AgentVoiceTranscription() http.HandlerFunc {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "voice_unavailable"})
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, maxAgentVoiceRecordingBytes+(1<<20))
-		if err := r.ParseMultipartForm(maxAgentVoiceRecordingBytes); err != nil {
-			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"code": "voice_recording_too_large"})
+		audio, mimeType, durationMS, code := readAgentVoiceRecording(w, r)
+		if code != "" {
+			status := http.StatusBadRequest
+			if code == "voice_recording_too_large" {
+				status = http.StatusRequestEntityTooLarge
+			}
+			writeJSON(w, status, map[string]string{"code": code})
 			return
 		}
-		file, header, err := r.FormFile("audio")
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "voice_recording_required"})
-			return
-		}
-		defer file.Close()
-		durationMS, _ := strconv.ParseInt(r.FormValue("duration_ms"), 10, 64)
 		if durationMS <= 0 || durationMS > 60_000 {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "voice_duration_invalid"})
 			return
 		}
-		audio, err := io.ReadAll(io.LimitReader(file, maxAgentVoiceRecordingBytes+1))
-		if err != nil || len(audio) == 0 || len(audio) > maxAgentVoiceRecordingBytes {
+		if len(audio) == 0 || len(audio) > maxAgentVoiceRecordingBytes {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"code": "voice_recording_too_large"})
 			return
 		}
-		mimeType := agentVoiceMIMEType(header)
 		text, language, actualDurationMS, err := s.voiceAnalyzer.TranscribeAgentVoice(r.Context(), audio, mimeType, durationMS)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "voice_transcription_failed"})
@@ -50,38 +49,49 @@ func (s *AgentsService) AgentVoiceTranscription() http.HandlerFunc {
 	}
 }
 
-func (s *AgentsService) AgentVoiceSpeech() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		if s.voiceAnalyzer == nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "voice_unavailable"})
-			return
-		}
+func readAgentVoiceRecording(w http.ResponseWriter, r *http.Request) ([]byte, string, int64, string) {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type"))), "application/json") {
+		r.Body = http.MaxBytesReader(w, r.Body, maxAgentVoiceJSONBytes)
 		var body struct {
-			AgentID string `json:"agent_id"`
-			Text    string `json:"response_text"`
+			AudioBase64 string `json:"audio_base64"`
+			MIMEType    string `json:"mime_type"`
+			DurationMS  int64  `json:"duration_ms"`
 		}
-		if decodeAIJSON(w, r, &body) != nil {
-			return
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&body); err != nil {
+			var maxBytesError *http.MaxBytesError
+			if errors.As(err, &maxBytesError) {
+				return nil, "", 0, "voice_recording_too_large"
+			}
+			return nil, "", 0, "voice_recording_required"
 		}
-		agent, err := s.database.PersonalAgentByID(r.Context(), userID, strings.TrimSpace(body.AgentID))
-		if err != nil {
-			writeAgentError(w, err)
-			return
+		audio, err := base64.StdEncoding.DecodeString(body.AudioBase64)
+		if err != nil || len(audio) == 0 {
+			return nil, "", 0, "voice_recording_required"
 		}
-		audio, contentType, err := s.voiceAnalyzer.GenerateAgentSpeech(r.Context(), body.Text, agent.VoiceID)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "voice_speech_failed"})
-			return
+		mimeType := strings.TrimSpace(body.MIMEType)
+		if mimeType == "" {
+			mimeType = "audio/webm"
 		}
-		w.Header().Set("Content-Type", contentType)
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(audio)
+		return audio, mimeType, body.DurationMS, ""
 	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxAgentVoiceRecordingBytes+(1<<20))
+	if err := r.ParseMultipartForm(maxAgentVoiceRecordingBytes); err != nil {
+		return nil, "", 0, "voice_recording_too_large"
+	}
+	file, header, err := r.FormFile("audio")
+	if err != nil {
+		return nil, "", 0, "voice_recording_required"
+	}
+	defer file.Close()
+	durationMS, _ := strconv.ParseInt(r.FormValue("duration_ms"), 10, 64)
+	audio, err := io.ReadAll(io.LimitReader(file, maxAgentVoiceRecordingBytes+1))
+	if err != nil || len(audio) == 0 || len(audio) > maxAgentVoiceRecordingBytes {
+		return nil, "", 0, "voice_recording_too_large"
+	}
+	return audio, agentVoiceMIMEType(header), durationMS, ""
 }
 
 func agentVoiceMIMEType(header *multipart.FileHeader) string {

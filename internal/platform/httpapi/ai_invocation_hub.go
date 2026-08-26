@@ -29,14 +29,6 @@ func (hub *aiInvocationHub) create(userID, conversationID, idempotencyKey string
 	return record, false
 }
 
-func (hub *aiInvocationHub) setCancel(id string, cancel context.CancelFunc) {
-	hub.mu.Lock()
-	defer hub.mu.Unlock()
-	if record := hub.invocations[id]; record != nil {
-		record.Cancel = cancel
-	}
-}
-
 func (hub *aiInvocationHub) append(id string, event aiInvocationEvent) {
 	hub.mu.Lock()
 	record := hub.invocations[id]
@@ -85,6 +77,40 @@ func (hub *aiInvocationHub) restore(stored db.AIInvocationRecord, events []aiInv
 	return record
 }
 
+// restoreDurable reconstructs the in-memory stream from the database before a
+// resumed workflow can append more events. This keeps event sequence numbers
+// monotonic across Go server restarts.
+func (hub *aiInvocationHub) restoreDurable(ctx context.Context, stored db.AIInvocationRecord) (*aiInvocationRecord, error) {
+	hub.mu.Lock()
+	if existing := hub.invocations[stored.ID]; existing != nil {
+		hub.mu.Unlock()
+		return existing, nil
+	}
+	hub.mu.Unlock()
+	if hub.database == nil {
+		return hub.restore(stored, nil), nil
+	}
+	persisted, state, err := hub.database.AIInvocationEvents(ctx, stored.UserID, stored.ID, 0)
+	if err != nil {
+		return nil, err
+	}
+	events := make([]aiInvocationEvent, 0, len(persisted))
+	for _, item := range persisted {
+		var event aiInvocationEvent
+		if err := json.Unmarshal(item.Payload, &event); err != nil {
+			return nil, err
+		}
+		if event.ID == "" {
+			event.ID = strconv.FormatInt(item.Sequence, 10)
+		}
+		events = append(events, event)
+	}
+	if strings.TrimSpace(state) != "" {
+		stored.State = state
+	}
+	return hub.restore(stored, events), nil
+}
+
 func (hub *aiInvocationHub) complete(id string) {
 	hub.append(id, aiInvocationEvent{Type: "invocation.completed", State: "completed"})
 }
@@ -124,11 +150,7 @@ func (hub *aiInvocationHub) cancelForUser(userID, id string) (string, bool) {
 		hub.mu.Unlock()
 		return state, true
 	}
-	cancel := record.Cancel
 	hub.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
 	hub.cancel(record.ID)
 	return "canceled", true
 }
@@ -155,7 +177,7 @@ func (hub *aiInvocationHub) addTextPatchArtifact(userID, invocationID, replaceme
 	}
 	artifact := &aiArtifact{
 		ID: "artifact_" + uuid.NewString(), SchemaVersion: 1, Kind: "text_patch", Title: "Review revision", Summary: "Replace the selected text with Misty's draft.", Sources: sources,
-		Operations: map[string]any{"replacement": replacement, "selection": body.Selection}, Risk: "draft", ApprovalPolicy: "visible_apply", IdempotencyKey: "artifact:" + invocationID, ExpiresAt: time.Now().UTC().Add(aiInvocationTTL).Format(time.RFC3339Nano), State: "proposed", OwnerUserID: userID,
+		Operations: map[string]any{"replacement": replacement, "selection": body.Selection}, Risk: "draft", ApprovalPolicy: "auto_apply_with_undo", IdempotencyKey: "artifact:" + invocationID, ExpiresAt: time.Now().UTC().Add(aiInvocationTTL).Format(time.RFC3339Nano), State: "proposed", InvocationID: invocationID, OwnerUserID: userID,
 	}
 	if body.Selection != nil {
 		artifact.Target = body.Selection.Object

@@ -18,6 +18,8 @@ type AIRetrievalHit struct {
 	Href           string
 	Content        string
 	Score          float64
+	LexicalScore   float64
+	SemanticScore  float64
 }
 
 type AIEmbeddingChunk struct {
@@ -84,7 +86,9 @@ func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string,
 			rows, err = tx.QueryContext(ctx, `
 				WITH lexical_query AS (SELECT plainto_tsquery('simple',$1) value)
 				SELECT d.id,d.source_kind,d.source_id,COALESCE(d.space_id,''),d.source_revision,d.title,d.href,c.content,
-					(ts_rank_cd(c.lexical,q.value)*0.55 + CASE WHEN c.embedding IS NULL THEN 0 ELSE (1-(c.embedding <=> $2::vector))*0.45 END) score
+					(ts_rank_cd(c.lexical,q.value)*0.55 + CASE WHEN c.embedding IS NULL THEN 0 ELSE (1-(c.embedding <=> $2::vector))*0.45 END) score,
+					ts_rank_cd(c.lexical,q.value) lexical_score,
+					CASE WHEN c.embedding IS NULL THEN 0 ELSE (1-(c.embedding <=> $2::vector)) END semantic_score
 				FROM ai_retrieval_documents d JOIN ai_retrieval_chunks c ON c.document_id=d.id CROSS JOIN lexical_query q
 				WHERE d.lifecycle_state='active'
 				  AND (
@@ -105,7 +109,8 @@ func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string,
 		} else {
 			rows, err = tx.QueryContext(ctx, `
 				WITH lexical_query AS (SELECT plainto_tsquery('simple',$1) value)
-				SELECT d.id,d.source_kind,d.source_id,COALESCE(d.space_id,''),d.source_revision,d.title,d.href,c.content,ts_rank_cd(c.lexical,q.value) score
+				SELECT d.id,d.source_kind,d.source_id,COALESCE(d.space_id,''),d.source_revision,d.title,d.href,c.content,
+					ts_rank_cd(c.lexical,q.value) score,ts_rank_cd(c.lexical,q.value) lexical_score,0::float8 semantic_score
 				FROM ai_retrieval_documents d JOIN ai_retrieval_chunks c ON c.document_id=d.id CROSS JOIN lexical_query q
 				WHERE d.lifecycle_state='active'
 				  AND (
@@ -130,7 +135,7 @@ func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string,
 		defer rows.Close()
 		for rows.Next() {
 			var item AIRetrievalHit
-			if err := rows.Scan(&item.DocumentID, &item.SourceKind, &item.SourceID, &item.SpaceID, &item.SourceRevision, &item.Title, &item.Href, &item.Content, &item.Score); err != nil {
+			if err := rows.Scan(&item.DocumentID, &item.SourceKind, &item.SourceID, &item.SpaceID, &item.SourceRevision, &item.Title, &item.Href, &item.Content, &item.Score, &item.LexicalScore, &item.SemanticScore); err != nil {
 				return err
 			}
 			items = append(items, item)
@@ -150,7 +155,7 @@ func (db *Database) RecentAIRetrieval(ctx context.Context, userID string, limit 
 	items := []AIRetrievalHit{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
-			SELECT d.id,d.source_kind,d.source_id,COALESCE(d.space_id,''),d.source_revision,d.title,d.href,c.content,0::float8
+			SELECT d.id,d.source_kind,d.source_id,COALESCE(d.space_id,''),d.source_revision,d.title,d.href,c.content,0::float8,0::float8,0::float8
 			FROM ai_retrieval_documents d JOIN ai_retrieval_chunks c ON c.document_id=d.id
 			WHERE d.lifecycle_state='active'
 			  AND (
@@ -173,7 +178,7 @@ func (db *Database) RecentAIRetrieval(ctx context.Context, userID string, limit 
 		defer rows.Close()
 		for rows.Next() {
 			var item AIRetrievalHit
-			if err := rows.Scan(&item.DocumentID, &item.SourceKind, &item.SourceID, &item.SpaceID, &item.SourceRevision, &item.Title, &item.Href, &item.Content, &item.Score); err != nil {
+			if err := rows.Scan(&item.DocumentID, &item.SourceKind, &item.SourceID, &item.SpaceID, &item.SourceRevision, &item.Title, &item.Href, &item.Content, &item.Score, &item.LexicalScore, &item.SemanticScore); err != nil {
 				return err
 			}
 			items = append(items, item)

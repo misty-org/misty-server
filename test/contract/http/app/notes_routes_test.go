@@ -51,12 +51,15 @@ func TestNoteRoutesRequireAuthentication(t *testing.T) {
 	}
 }
 
-// The routes must exist on both the bare and /api-prefixed trees, matching how
-// every other Space route is mounted for older clients.
-func TestNoteRoutesAreMountedOnBothPrefixes(t *testing.T) {
+// The routes must exist on the canonical /v1 tree and both compatibility trees.
+func TestNoteRoutesAreMountedOnEveryPublicPrefix(t *testing.T) {
 	server := noteRouteTestServer(t)
 
-	for _, path := range []string{"/spaces/space-1/notes", "/api/spaces/space-1/notes"} {
+	for _, path := range []string{
+		"/spaces/space-1/notes",
+		"/api/spaces/space-1/notes",
+		"/v1/spaces/space-1/notes",
+	} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		recorder := httptest.NewRecorder()
 		server.Router.ServeHTTP(recorder, request)

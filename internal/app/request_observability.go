@@ -95,11 +95,11 @@ func requestLogLevel(status int) string {
 	}
 }
 
-// /api/me is polled to keep the client authentication state synchronized.
+// The current-user endpoint is polled to keep client authentication state synchronized.
 // Successful checks and expected post-logout 401s are routine, high-volume
 // traffic. Server failures remain visible.
 func shouldLogRequest(method, route string, status int) bool {
 	return method != http.MethodGet ||
-		route != "/api/me" ||
+		(route != "/api/me" && route != "/v1/me") ||
 		responseStatus(status) >= http.StatusInternalServerError
 }

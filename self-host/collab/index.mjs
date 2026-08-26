@@ -86,7 +86,7 @@ async function createRoom(name, resourceType, resourceID) {
   const doc = new Y.Doc();
   const awareness = new awarenessProtocol.Awareness(doc);
   awareness.setLocalState(null);
-  const room = { name, resourceType, resourceID, doc, awareness, clients: new Set(), aclVersion: 0, persistTimer: null };
+  const room = { name, resourceType, resourceID, doc, awareness, clients: new Set(), aclVersion: 0, persistTimer: null, drawingRevision: 0, drawingRequests: new Map() };
   const response = await fetch(`${apiBase}/internal/self-host/collaboration/${resourceType}/${encodeURIComponent(resourceID)}`, {
     headers: { "X-Misty-Internal-Secret": internalSecret },
   });
@@ -99,6 +99,7 @@ async function createRoom(name, resourceType, resourceID) {
   } else if (response.status !== 404) {
     throw new Error("snapshot_unavailable");
   }
+  if (resourceType === "drawing") room.drawingRevision = readNonNegativeInteger(doc.getMap("drawing:scene").get("mistyRevision"), 0);
   doc.on("update", (update, origin) => {
     if (origin !== "persistence") broadcastUpdate(room, update, origin);
     schedulePersistence(room);
@@ -228,7 +229,7 @@ async function handleHTTPRequest(request, response) {
   const match = url.pathname.match(/^\/parties\/(note-room|drawing-room)\/([A-Za-z0-9_-]{1,128})$/);
   if (request.method !== "POST" || !match) return writeJSON(response, 404, { code: "not_found" });
 
-  const body = await readRequestBody(request, 128 * 1024);
+  const body = await readRequestBody(request, 512 * 1024);
   verifyControlRequest(request, body);
   const envelope = JSON.parse(body.toString("utf8"));
   const resourceID = String(request.headers["x-misty-resource-id"] || "");
@@ -247,6 +248,54 @@ async function handleHTTPRequest(request, response) {
 }
 
 async function handleControl(response, room, command, payload) {
+  if (command === "drawing_scene_read") {
+    if (room.resourceType !== "drawing") return writeJSON(response, 400, { code: "unknown_command" });
+    return writeJSON(response, 200, drawingSceneResponse(room, payload.include_deleted === true));
+  }
+  if (command === "drawing_scene_apply") {
+    if (room.resourceType !== "drawing") return writeJSON(response, 400, { code: "unknown_command" });
+    const requestID = typeof payload.request_id === "string" ? payload.request_id.trim() : "";
+    if (requestID && (requestID.length > 200 || !/^[A-Za-z0-9:._-]+$/.test(requestID))) {
+      return writeJSON(response, 400, { code: "invalid_request_id" });
+    }
+    room.drawingRequests ||= new Map();
+    if (requestID && room.drawingRequests.has(requestID)) {
+      return writeJSON(response, 200, { ...room.drawingRequests.get(requestID), replayed: true });
+    }
+    const currentHash = drawingSceneHash(room.doc);
+    if (typeof payload.base_hash === "string" && payload.base_hash !== currentHash) {
+      return writeJSON(response, 409, { code: "drawing_conflict", content_hash: currentHash });
+    }
+    let mutation;
+    try {
+      mutation = buildDrawingSceneMutation(room.doc, payload);
+    } catch (error) {
+      return writeJSON(response, 400, { code: error instanceof Error ? error.message : "invalid_drawing_scene" });
+    }
+    const projected = new Y.Doc();
+    Y.applyUpdate(projected, Y.encodeStateAsUpdate(room.doc));
+    applyDrawingSceneMutation(projected, mutation);
+    const projectedBytes = Y.encodeStateAsUpdate(projected).byteLength;
+    projected.destroy();
+    if (projectedBytes > maxDocumentBytes) return writeJSON(response, 413, { code: "document_too_large" });
+    room.drawingRevision = Number(room.drawingRevision || 0) + 1;
+    mutation.scene.mistyRevision = room.drawingRevision;
+    applyDrawingSceneMutation(room.doc, mutation);
+    await persist(room);
+    const result = {
+      ok: true,
+      revision: room.drawingRevision,
+      content_hash: drawingSceneHash(room.doc),
+      changed: mutation.changed,
+      deleted: mutation.deleted,
+      element_count: drawingElements(room.doc, false).length,
+    };
+    if (requestID) {
+      room.drawingRequests.set(requestID, result);
+      if (room.drawingRequests.size > 500) room.drawingRequests.delete(room.drawingRequests.keys().next().value);
+    }
+    return writeJSON(response, 200, result);
+  }
   if (command === "bootstrap") {
     const title = typeof payload.title === "string" ? payload.title.trim() : "";
     const markdown = typeof payload.markdown === "string" ? payload.markdown.trim() : "";
@@ -323,6 +372,146 @@ async function handleControl(response, room, command, payload) {
     return writeJSON(response, 200, { ok: true, purged: true });
   }
   return writeJSON(response, 400, { code: "unknown_command" });
+}
+
+const drawingElementTypes = new Set(["rectangle", "diamond", "ellipse", "text", "line", "arrow", "freedraw", "image", "frame", "magicframe", "iframe", "embeddable"]);
+
+function drawingNumber(value, fallback, minimum = -1_000_000, maximum = 1_000_000) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback;
+}
+
+function drawingInteger(value, fallback) {
+  return Number.isInteger(value) && value > 0 ? Math.min(value, 2_147_483_646) : fallback;
+}
+
+function drawingRandomInteger() {
+  return 1 + Math.floor(Math.random() * 2_147_483_645);
+}
+
+function drawingPoints(value, fallback) {
+  if (!Array.isArray(value) || value.length < 2 || value.length > 10_000) return fallback;
+  const normalized = [];
+  for (const point of value) {
+    if (!Array.isArray(point) || point.length !== 2) return fallback;
+    normalized.push([drawingNumber(point[0], 0), drawingNumber(point[1], 0)]);
+  }
+  return normalized;
+}
+
+function normalizeDrawingElement(input, current, now) {
+  const merged = { ...(current || {}), ...input };
+  const id = typeof merged.id === "string" ? merged.id.trim() : "";
+  const type = typeof merged.type === "string" ? merged.type : "";
+  if (!id || id.length > 128 || !/^[A-Za-z0-9_-]+$/.test(id) || !drawingElementTypes.has(type)) throw new Error("invalid_drawing_element");
+  let fallbackWidth = 100, fallbackHeight = 100, normalizedPoints = null;
+  if (type === "text") {
+    const text = typeof merged.text === "string" ? merged.text : "", fontSize = drawingNumber(merged.fontSize, 20, 1, 512), lines = text.split("\n");
+    fallbackWidth = Math.max(10, Math.min(1_000_000, Math.max(...lines.map((line) => line.length), 1) * fontSize * 0.62));
+    fallbackHeight = Math.max(fontSize, lines.length * fontSize * 1.25);
+  } else if (type === "line" || type === "arrow" || type === "freedraw") {
+    normalizedPoints = drawingPoints(merged.points, [[0, 0], [100, 0]]);
+    const xs = normalizedPoints.map((point) => point[0]), ys = normalizedPoints.map((point) => point[1]);
+    fallbackWidth = Math.max(...xs) - Math.min(...xs); fallbackHeight = Math.max(...ys) - Math.min(...ys);
+  }
+  const width = drawingNumber(merged.width, fallbackWidth, 0);
+  const height = drawingNumber(merged.height, fallbackHeight, 0);
+  const element = {
+    ...merged, id, type,
+    x: drawingNumber(merged.x, 0), y: drawingNumber(merged.y, 0),
+    strokeColor: typeof merged.strokeColor === "string" ? merged.strokeColor : "#1e1e1e",
+    backgroundColor: typeof merged.backgroundColor === "string" ? merged.backgroundColor : "transparent",
+    fillStyle: ["hachure", "cross-hatch", "solid", "zigzag"].includes(merged.fillStyle) ? merged.fillStyle : "solid",
+    strokeWidth: drawingNumber(merged.strokeWidth, 2, 0, 20),
+    strokeStyle: ["solid", "dashed", "dotted"].includes(merged.strokeStyle) ? merged.strokeStyle : "solid",
+    roundness: merged.roundness === null || (merged.roundness && typeof merged.roundness === "object" && !Array.isArray(merged.roundness)) ? merged.roundness : null,
+    roughness: drawingNumber(merged.roughness, 1, 0, 3), opacity: drawingNumber(merged.opacity, 100, 0, 100),
+    width, height, angle: drawingNumber(merged.angle, 0, -Math.PI * 2, Math.PI * 2),
+    seed: drawingInteger(merged.seed, drawingRandomInteger()),
+    version: drawingInteger(current?.version, 0) + 1, versionNonce: drawingRandomInteger(),
+    index: typeof merged.index === "string" ? merged.index : null,
+    isDeleted: merged.isDeleted === true,
+    groupIds: Array.isArray(merged.groupIds) ? merged.groupIds.filter((value) => typeof value === "string").slice(0, 100) : [],
+    frameId: typeof merged.frameId === "string" ? merged.frameId : null,
+    boundElements: Array.isArray(merged.boundElements) ? merged.boundElements.slice(0, 100) : null,
+    updated: now, link: typeof merged.link === "string" ? merged.link.slice(0, 4096) : null, locked: merged.locked === true,
+  };
+  if (type === "text") {
+    const text = typeof merged.text === "string" ? merged.text.slice(0, 100_000) : "";
+    element.text = text; element.originalText = typeof merged.originalText === "string" ? merged.originalText.slice(0, 100_000) : text;
+    element.fontSize = drawingNumber(merged.fontSize, 20, 1, 512); element.fontFamily = drawingInteger(merged.fontFamily, 5);
+    element.textAlign = ["left", "center", "right"].includes(merged.textAlign) ? merged.textAlign : "left";
+    element.verticalAlign = ["top", "middle", "bottom"].includes(merged.verticalAlign) ? merged.verticalAlign : "top";
+    element.containerId = typeof merged.containerId === "string" ? merged.containerId : null;
+    element.autoResize = merged.autoResize !== false; element.lineHeight = drawingNumber(merged.lineHeight, 1.25, 0.5, 4);
+  } else if (type === "line" || type === "arrow") {
+    element.points = normalizedPoints || [[0, 0], [width || 100, height]]; element.lastCommittedPoint = null;
+    element.startBinding = merged.startBinding && typeof merged.startBinding === "object" ? merged.startBinding : null;
+    element.endBinding = merged.endBinding && typeof merged.endBinding === "object" ? merged.endBinding : null;
+    element.startArrowhead = typeof merged.startArrowhead === "string" ? merged.startArrowhead : null;
+    element.endArrowhead = typeof merged.endArrowhead === "string" ? merged.endArrowhead : type === "arrow" ? "arrow" : null;
+    if (type === "arrow") element.elbowed = merged.elbowed === true;
+  } else if (type === "freedraw") {
+    normalizedPoints ||= [[0, 0], [width || 1, height || 1]];
+    element.points = normalizedPoints;
+    element.pressures = Array.isArray(merged.pressures) ? merged.pressures.slice(0, element.points.length).map((value) => drawingNumber(value, 0.5, 0, 1)) : [];
+    element.simulatePressure = merged.simulatePressure !== false; element.lastCommittedPoint = null;
+  } else if (type === "image") {
+    element.fileId = typeof merged.fileId === "string" ? merged.fileId : null;
+    element.status = ["pending", "saved", "error"].includes(merged.status) ? merged.status : element.fileId ? "saved" : "pending";
+    element.scale = Array.isArray(merged.scale) && merged.scale.length === 2 ? merged.scale : [1, 1];
+    element.crop = merged.crop && typeof merged.crop === "object" ? merged.crop : null;
+  } else if (type === "frame" || type === "magicframe") element.name = typeof merged.name === "string" ? merged.name.slice(0, 500) : null;
+  return element;
+}
+
+function drawingElements(doc, includeDeleted = true) {
+  return [...doc.getMap("drawing:elements").values()]
+    .filter((element) => includeDeleted || element.isDeleted !== true)
+    .sort((left, right) => String(left.index || "").localeCompare(String(right.index || "")) || String(left.id).localeCompare(String(right.id)));
+}
+
+function drawingSceneHash(doc) {
+  return createHash("sha256").update(JSON.stringify({ elements: drawingElements(doc, true), scene: Object.fromEntries(doc.getMap("drawing:scene")), files: Object.fromEntries(doc.getMap("drawing:files")) })).digest("hex");
+}
+
+function drawingSceneResponse(room, includeDeleted) {
+  return { ok: true, revision: Number(room.drawingRevision || 0), content_hash: drawingSceneHash(room.doc), elements: drawingElements(room.doc, includeDeleted), scene: Object.fromEntries(room.doc.getMap("drawing:scene")), files: Object.fromEntries(room.doc.getMap("drawing:files")) };
+}
+
+function buildDrawingSceneMutation(doc, payload) {
+  const rawElements = payload.elements || [], rawDeletes = payload.delete_element_ids || [];
+  if (!Array.isArray(rawElements) || rawElements.length > 500 || !Array.isArray(rawDeletes) || rawDeletes.length > 500) throw new Error("invalid_drawing_scene");
+  const next = new Map(doc.getMap("drawing:elements"));
+  let changed = 0, deleted = 0;
+  for (const raw of rawElements) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("invalid_drawing_element");
+    const id = typeof raw.id === "string" ? raw.id.trim() : "";
+    next.set(id, normalizeDrawingElement(raw, next.get(id), Date.now())); changed += 1;
+  }
+  const deleteIDs = new Set(rawDeletes.filter((value) => typeof value === "string"));
+  if (payload.mode === "replace") {
+    const retained = new Set(rawElements.map((value) => typeof value?.id === "string" ? value.id.trim() : ""));
+    for (const [id, element] of next) if (!retained.has(id) && element.isDeleted !== true) deleteIDs.add(id);
+  } else if (payload.mode !== undefined && payload.mode !== "merge") throw new Error("invalid_drawing_scene");
+  for (const id of deleteIDs) {
+    const element = next.get(id); if (!element || element.isDeleted === true) continue;
+    next.set(id, normalizeDrawingElement({ id, isDeleted: true }, element, Date.now())); deleted += 1;
+  }
+  const scene = {};
+  if (payload.scene !== undefined) {
+    if (!payload.scene || typeof payload.scene !== "object" || Array.isArray(payload.scene)) throw new Error("invalid_drawing_scene");
+    if (typeof payload.scene.viewBackgroundColor === "string" && payload.scene.viewBackgroundColor.length <= 100) scene.viewBackgroundColor = payload.scene.viewBackgroundColor;
+  }
+  return { elements: [...next.values()], scene, changed, deleted };
+}
+
+function applyDrawingSceneMutation(doc, mutation) {
+  doc.transact(() => {
+    const elements = doc.getMap("drawing:elements");
+    for (const element of mutation.elements) elements.set(String(element.id), element);
+    const scene = doc.getMap("drawing:scene");
+    for (const [key, value] of Object.entries(mutation.scene)) scene.set(key, value);
+  }, "misty:drawing-control");
 }
 
 function verifyControlRequest(request, body) {

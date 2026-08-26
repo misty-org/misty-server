@@ -41,7 +41,7 @@ func (fake *fakeMCPConnector) CallTool(context.Context, string, string, string, 
 	return mcpintegration.CallResult{Text: []string{"ok"}}, nil
 }
 
-func TestMCPConnectionDiscoveryAndAgentAllowlistContract(t *testing.T) {
+func TestMCPConnectionDiscoveryAndManagedRuntimeContract(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	owner, err := database.CreateUser("MCP HTTP", uniqueTestEmail("mcp-http"), "password123")
 	if err != nil {
@@ -71,8 +71,6 @@ func TestMCPConnectionDiscoveryAndAgentAllowlistContract(t *testing.T) {
 	router.MethodFunc(http.MethodPost, "/mcp/connections", spaces.MCPConnections())
 	router.Post("/mcp/connections/{connectionID}/discover", spaces.DiscoverMCPConnection())
 	router.Get("/mcp/connections/{connectionID}/tools", spaces.MCPConnectionTools())
-	router.MethodFunc(http.MethodGet, "/agents/{agentID}/mcp-tools", spaces.PersonalAgentMCPTools())
-	router.MethodFunc(http.MethodPut, "/agents/{agentID}/mcp-tools", spaces.PersonalAgentMCPTools())
 	token := newConversationTestBearerToken(t, database, owner.ID)
 
 	created := performConversationRequest(t, router, http.MethodPost, "/mcp/connections", token, map[string]any{"name": "Personal tools", "endpoint_url": "https://mcp.example.com/mcp", "bearer_token": "very-secret-token"})
@@ -127,13 +125,12 @@ func TestMCPConnectionDiscoveryAndAgentAllowlistContract(t *testing.T) {
 		t.Fatalf("stable name=%q", echoName)
 	}
 
-	initial := performConversationRequest(t, router, http.MethodGet, "/agents/"+agent.ID+"/mcp-tools", token, nil)
-	if initial.Code != http.StatusOK || strings.Contains(initial.Body.String(), `"enabled":true`) {
-		t.Fatalf("initial bindings=%d body=%s", initial.Code, initial.Body.String())
-	}
-	updated := performConversationRequest(t, router, http.MethodPut, "/agents/"+agent.ID+"/mcp-tools", token, map[string]any{"tools": []map[string]any{{"connection_id": createEnvelope.Connection.ID, "remote_name": "echo", "enabled": true}}})
-	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), `"enabled":true`) || strings.Contains(updated.Body.String(), "bearer") {
-		t.Fatalf("updated bindings=%d body=%s", updated.Code, updated.Body.String())
+	if _, err := database.SetPersonalAgentMCPTools(t.Context(), owner.ID, agent.ID, []db.MCPAgentToolSelection{{
+		ConnectionID: createEnvelope.Connection.ID,
+		RemoteName:   "echo",
+		Enabled:      true,
+	}}); err != nil {
+		t.Fatal(err)
 	}
 	run := &db.SpaceRun{ID: "mcp-run-" + agent.ID, RequestingMemberID: owner.ID, AgentID: agent.ID}
 	request := serveragent.ToolRequest{
@@ -179,10 +176,6 @@ func TestMCPConnectionDiscoveryAndAgentAllowlistContract(t *testing.T) {
 	fake.mu.Unlock()
 	if callCount != 2 {
 		t.Fatalf("approved canonical call count=%d, want 2 total", callCount)
-	}
-	cleared := performConversationRequest(t, router, http.MethodPut, "/agents/"+agent.ID+"/mcp-tools", token, map[string]any{"tools": []any{}})
-	if cleared.Code != http.StatusOK || strings.Contains(cleared.Body.String(), `"enabled":true`) {
-		t.Fatalf("full replacement=%d body=%s", cleared.Code, cleared.Body.String())
 	}
 }
 

@@ -229,3 +229,30 @@ func TestAbuseGuardDoesNotBlockAnIsolatedBurst(t *testing.T) {
 		t.Fatal("an isolated burst must not be blocked")
 	}
 }
+
+func TestInternalAgentRuntimeCallbacksBypassPublicTrafficLimits(t *testing.T) {
+	guard := NewAbuseGuard(AbusePolicy{
+		TotalLimit: 1, TotalWindow: time.Minute,
+		StrikesBeforeBlock: 1, StrikeWindow: time.Minute,
+		BaseBlock: time.Minute, MaxBlock: time.Minute,
+	})
+	limiter := NewAPIRateLimiter().WithAbuseGuard(guard)
+	limiter.TestingNow = func() time.Time { return time.Unix(0, 0) }
+	handler := guard.Middleware(limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})))
+
+	for index := 0; index < 100; index++ {
+		request := httptest.NewRequest(
+			http.MethodPost,
+			"/internal/agent-runtime/runs/run_123/events",
+			nil,
+		)
+		request.RemoteAddr = "203.0.113.25:1234"
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("callback %d status=%d, want %d", index, recorder.Code, http.StatusOK)
+		}
+	}
+}

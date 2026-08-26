@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -58,37 +57,12 @@ func (s *AgentsService) PersonalAgents() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		switch r.Method {
-		case http.MethodGet:
-			items, err := s.database.ListPersonalAgents(r.Context(), userID)
-			if err != nil {
-				writeAgentError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"agents": items})
-		case http.MethodPost:
-			var body db.PersonalAgent
-			if decodeAIJSON(w, r, &body) != nil {
-				return
-			}
-			if strings.TrimSpace(body.ModelID) == "" {
-				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_required"})
-				return
-			}
-			body.ModelMode = "pinned"
-			if !serveragent.GatewayModelAvailable(r.Context(), body.ModelID) {
-				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_unavailable"})
-				return
-			}
-			item, err := s.database.CreatePersonalAgent(r.Context(), userID, body)
-			if err != nil {
-				writeAgentError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusCreated, item)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		items, err := s.database.ListPersonalAgents(r.Context(), userID)
+		if err != nil {
+			writeAgentError(w, err)
+			return
 		}
+		writeJSON(w, http.StatusOK, map[string]any{"agents": items})
 	}
 }
 
@@ -99,110 +73,12 @@ func (s *AgentsService) PersonalAgent() http.HandlerFunc {
 			return
 		}
 		agentID := strings.TrimSpace(chi.URLParam(r, "agentID"))
-		switch r.Method {
-		case http.MethodGet:
-			item, err := s.database.PersonalAgentByID(r.Context(), userID, agentID)
-			if err != nil {
-				writeAgentError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, item)
-		case http.MethodPatch, http.MethodPut:
-			var body db.PersonalAgent
-			if decodeAIJSON(w, r, &body) != nil {
-				return
-			}
-			body.ID = agentID
-			if strings.TrimSpace(body.ModelID) == "" {
-				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_required"})
-				return
-			}
-			body.ModelMode = "pinned"
-			if !serveragent.GatewayModelAvailable(r.Context(), body.ModelID) {
-				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_unavailable"})
-				return
-			}
-			item, err := s.database.UpdatePersonalAgent(r.Context(), userID, body)
-			if err != nil {
-				writeAgentError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, item)
-		case http.MethodDelete:
-			if err := s.database.DeletePersonalAgent(r.Context(), userID, agentID); err != nil {
-				writeAgentError(w, err)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}
-}
-
-func (s *AgentsService) PersonalAgentToolbox() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		agentID := strings.TrimSpace(chi.URLParam(r, "agentID"))
-		personal, err := s.database.PersonalAgentByID(r.Context(), userID, agentID)
+		item, err := s.database.PersonalAgentByID(r.Context(), userID, agentID)
 		if err != nil {
 			writeAgentError(w, err)
 			return
 		}
-		items := personalAgentToolboxItems(json.RawMessage(`{"mode":"inherit_creator"}`))
-		audits, err := s.database.PersonalAgentToolboxActionAudits(r.Context(), userID, agentID, 50)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"agent": personal, "actions": items, "recent_activity": audits})
-	}
-}
-
-func (s *AgentsService) PersonalAgentToolboxCatalog() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := s.requireUser(w, r); !ok {
-			return
-		}
-		defaults := json.RawMessage(`{"mode":"inherit_creator"}`)
-		writeJSON(w, http.StatusOK, map[string]any{"actions": personalAgentToolboxItems(defaults), "recent_activity": []db.AgentToolboxActionAudit{}})
-	}
-}
-
-func personalAgentToolboxItems(policy json.RawMessage) []agentToolboxCatalogItem {
-	descriptors := personalAgentToolboxCatalogDescriptors()
-	items := make([]agentToolboxCatalogItem, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		granted := personalAgentToolPolicyAllows(policy, descriptor)
-		item := agentToolboxCatalogItem{
-			Name: descriptor.Name, Description: descriptor.Description, Risk: descriptor.Risk,
-			Approval: descriptor.Approval, Locality: descriptor.Locality, Idempotent: descriptor.Idempotent,
-			AuditEvent: descriptor.AuditEvent, RequiredPermission: descriptor.RequiredPermission,
-			Granted: granted, Available: granted, Reasons: []agentToolboxAvailabilityReason{},
-		}
-		if !granted {
-			item.Reasons = append(item.Reasons, agentToolboxAvailabilityReason{Code: "grant_required", Message: "This action is not enabled for this Agent."})
-		}
-		items = append(items, item)
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
-	return items
-}
-
-func (s *AgentsService) Models() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := s.requireUser(w, r); !ok {
-			return
-		}
-		models, err := serveragent.GatewayModels(r.Context())
-		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "model_catalog_unavailable"})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"catalog_version": serveragent.GatewayModelCatalogVersion, "models": models})
+		writeJSON(w, http.StatusOK, item)
 	}
 }
 

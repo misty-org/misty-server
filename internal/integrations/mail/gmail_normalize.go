@@ -3,6 +3,7 @@ package mail
 import (
 	"encoding/base64"
 	"fmt"
+	"html"
 	"mime"
 	stdmail "net/mail"
 	"sort"
@@ -48,7 +49,7 @@ func (g *Gmail) normalizeThread(source gmailThread) (Thread, error) {
 		for _, label := range message.Labels {
 			labelSet[label] = true
 		}
-		for _, address := range append([]Address{message.From}, append(message.To, message.Cc...)...) {
+		for _, address := range append([]Address{message.From}, message.Cc...) {
 			key := strings.ToLower(address.Email)
 			if key != "" && !participantSet[key] {
 				participantSet[key] = true
@@ -239,6 +240,7 @@ func hasLabel(labels []string, wanted string) bool {
 }
 
 func cleanHeader(value string) string {
+	value = html.UnescapeString(value)
 	return strings.TrimSpace(strings.Map(func(r rune) rune {
 		if r == '\r' || r == '\n' || r == 0 || (unicode.IsControl(r) && r != '\t') {
 			return ' '
@@ -248,6 +250,7 @@ func cleanHeader(value string) string {
 }
 
 func cleanText(value string) string {
+	value = html.UnescapeString(value)
 	value = strings.ReplaceAll(value, "\r\n", "\n")
 	value = strings.ReplaceAll(value, "\r", "\n")
 	return strings.TrimSpace(strings.Map(func(r rune) rune {

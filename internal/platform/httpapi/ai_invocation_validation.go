@@ -1,11 +1,14 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
 )
+
+const maxAICaptureBytes = 1 << 20
 
 var aiWindowsPathPattern = regexp.MustCompile(`^[A-Za-z]:[\\/]`)
 
@@ -64,6 +67,38 @@ func validateAISelectionAnchor(selection *aiSelectionSnapshot) error {
 	return nil
 }
 
+func validateAICapture(capture *aiCaptureAttachment) error {
+	if capture == nil {
+		return nil
+	}
+	capture.ID = strings.TrimSpace(capture.ID)
+	capture.Name = strings.TrimSpace(capture.Name)
+	capture.MimeType = strings.TrimSpace(capture.MimeType)
+	capture.ContentHash = strings.TrimSpace(capture.ContentHash)
+	if capture.ID == "" || capture.Name == "" || capture.ContentHash == "" {
+		return errors.New("capture identity is required")
+	}
+	if capture.Width < 1 || capture.Height < 1 || capture.Width > 4096 || capture.Height > 4096 {
+		return errors.New("capture dimensions are invalid")
+	}
+	if capture.MimeType != "image/jpeg" && capture.MimeType != "image/png" && capture.MimeType != "image/webp" {
+		return errors.New("capture media type is unsupported")
+	}
+	prefix := "data:" + capture.MimeType + ";base64,"
+	if !strings.HasPrefix(capture.DataURL, prefix) {
+		return errors.New("capture data is invalid")
+	}
+	encoded := strings.TrimPrefix(capture.DataURL, prefix)
+	if base64.StdEncoding.DecodedLen(len(encoded)) > maxAICaptureBytes {
+		return errors.New("capture is too large")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(decoded) == 0 || len(decoded) > maxAICaptureBytes {
+		return errors.New("capture data is invalid or too large")
+	}
+	return nil
+}
+
 func containsRawLocalPath(values map[string]any) bool {
 	for _, value := range values {
 		switch typed := value.(type) {
@@ -89,4 +124,10 @@ func looksLikeRawLocalPath(value string) bool {
 	return strings.HasPrefix(value, "/") || strings.HasPrefix(value, "~/") ||
 		strings.HasPrefix(value, `\\`) || aiWindowsPathPattern.MatchString(value) ||
 		strings.HasPrefix(lower, "file://")
+}
+
+type TestingAICaptureAttachment = aiCaptureAttachment
+
+func TestingValidateAICapture(capture *TestingAICaptureAttachment) error {
+	return validateAICapture(capture)
 }

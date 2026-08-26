@@ -3,6 +3,7 @@ FROM golang:1.25.12-bookworm@sha256:ea341baa9bd5ba6784f6d7161ace70544349a6242d54
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
+RUN GOBIN=/out go install github.com/pressly/goose/v3/cmd/goose@v3.27.3
 COPY . .
 RUN CGO_ENABLED=0 go build \
     -trimpath \
@@ -12,7 +13,6 @@ RUN CGO_ENABLED=0 go build \
     -trimpath \
     -ldflags="-s -w" \
     -o /out/misty-admin ./cmd/misty-admin
-RUN GOBIN=/out go install github.com/pressly/goose/v3/cmd/goose@v3.27.3
 
 FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
 

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -207,16 +208,57 @@ func (g *Gmail) ListThreads(ctx context.Context, input ListThreadsRequest) (Thre
 		return ThreadPage{}, err
 	}
 	page := ThreadPage{NextPageToken: response.NextPageToken, EstimatedTotal: response.ResultSizeEstimate}
-	page.Threads = make([]Thread, 0, len(response.Threads))
+
+	validItems := make([]gmailThread, 0, len(response.Threads))
 	for _, item := range response.Threads {
-		if strings.TrimSpace(item.ID) == "" {
-			continue
+		if strings.TrimSpace(item.ID) != "" {
+			validItems = append(validItems, item)
 		}
-		page.Threads = append(page.Threads, Thread{
-			Provenance: Provenance{Provider: ProviderGmail, ProviderID: item.ID, AccountID: g.accountID},
-			Snippet:    cleanText(item.Snippet),
-		})
 	}
+
+	page.Threads = make([]Thread, len(validItems))
+	if len(validItems) == 0 {
+		return page, nil
+	}
+
+	const maxConcurrency = 10
+	semaphore := make(chan struct{}, maxConcurrency)
+	var wg sync.WaitGroup
+
+	for index, item := range validItems {
+		if len(item.Messages) > 0 {
+			if norm, err := g.normalizeThread(item); err == nil {
+				page.Threads[index] = norm
+				continue
+			}
+		}
+
+		wg.Add(1)
+		go func(idx int, raw gmailThread) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			metaQuery := url.Values{
+				"format":          []string{"metadata"},
+				"metadataHeaders": []string{"Subject", "From", "To", "Cc", "Date"},
+			}
+			var detailed gmailThread
+			if err := g.request(ctx, http.MethodGet, g.endpoint("users", "me", "threads", raw.ID), metaQuery, nil, &detailed); err == nil {
+				if norm, err := g.normalizeThread(detailed); err == nil {
+					page.Threads[idx] = norm
+					return
+				}
+			}
+
+			page.Threads[idx] = Thread{
+				Provenance: Provenance{Provider: ProviderGmail, ProviderID: raw.ID, AccountID: g.accountID},
+				Snippet:    cleanText(raw.Snippet),
+			}
+		}(index, item)
+	}
+	wg.Wait()
+
 	return page, nil
 }
 

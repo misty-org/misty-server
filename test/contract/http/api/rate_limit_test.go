@@ -56,9 +56,12 @@ func TestClientIPIgnoresForwardedHeadersByDefault(t *testing.T) {
 func TestNormalizeRateLimitPath(t *testing.T) {
 	tests := map[string]string{
 		"/api/login":             "/login",
+		"/v1/login":              "/login",
 		"/api/auth/reset":        "/auth/reset",
+		"/v1/auth/reset":         "/auth/reset",
 		"/login":                 "/login",
 		"/api":                   "/",
+		"/v1":                    "/",
 		"":                       "/",
 		"   /api/auth/forgot   ": "/auth/forgot",
 	}
@@ -121,6 +124,30 @@ func TestAPIRateLimiterMiddleware(t *testing.T) {
 	}
 	if secondRecorder.Header().Get("Retry-After") == "" {
 		t.Fatal("Retry-After header should be set on rate-limited responses")
+	}
+}
+
+func TestAPIRateLimiterReservesMCPForAuthenticatedRunLimit(t *testing.T) {
+	limiter := NewAPIRateLimiter()
+	policy, ok := limiter.TestingRoutePolicies["POST /mcp"]
+	if !ok {
+		t.Fatal("expected an explicit public MCP rate-limit policy")
+	}
+	if policy.Limit < 120 {
+		t.Fatalf("MCP public limit = %d, want shared-runtime headroom", policy.Limit)
+	}
+
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	for requestNumber := 0; requestNumber < 31; requestNumber++ {
+		request := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+		request.RemoteAddr = "203.0.113.8:44200"
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("MCP request %d status = %d, want %d", requestNumber+1, response.Code, http.StatusNoContent)
+		}
 	}
 }
 

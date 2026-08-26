@@ -50,6 +50,16 @@ func TestAgentRuntimeIsAlwaysWorkflowWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeRejectsInsecurePublicControlPlaneURL(t *testing.T) {
+	t.Setenv("MISTY_ENVIRONMENT", "production")
+	t.Setenv("MISTY_AGENT_RUNTIME_URL", "https://runtime.test")
+	t.Setenv("MISTY_AGENT_RUNTIME_INTERNAL_API_URL", "http://api.example.com")
+	t.Setenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=")
+	if _, err := api.AgentRuntimeConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "must use HTTPS") {
+		t.Fatalf("expected insecure control-plane URL to fail, got %v", err)
+	}
+}
+
 func TestAgentRuntimeMayBeUnconfiguredOutsideProduction(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "")
 	t.Setenv("MISTY_AGENT_RUNTIME_URL", "")

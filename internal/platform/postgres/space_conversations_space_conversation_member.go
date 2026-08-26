@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -50,6 +51,15 @@ func normalizeConversationTitle(title string) (string, error) {
 		return "", ErrSpaceInvalid
 	}
 	return title, nil
+}
+
+func privateMemberConversationTitle(left, right string) string {
+	title := strings.TrimSpace(left) + " & " + strings.TrimSpace(right)
+	runes := []rune(title)
+	if len(runes) > 80 {
+		title = string(runes[:79]) + "…"
+	}
+	return title
 }
 
 func requireSpaceConversationMemberTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID string) error {
@@ -222,6 +232,68 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "conversation.created", out.ID, map[string]any{"conversation_id": out.ID, "title": title, "participants": participants}); err != nil {
 			return err
 		}
+		return loadSpaceConversationParticipantsTx(ctx, tx, out)
+	})
+	return out, err
+}
+
+// DirectMemberConversation returns the one private conversation between two
+// people in a Space, creating it atomically. It is represented as a hidden
+// standard conversation because direct conversations are reserved for a person
+// and an installed Agent in the storage model.
+func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceID, targetUserID string) (*SpaceConversation, error) {
+	userID, targetUserID = strings.TrimSpace(userID), strings.TrimSpace(targetUserID)
+	if userID == "" || targetUserID == "" || userID == targetUserID {
+		return nil, ErrSpaceInvalid
+	}
+	ids := []string{userID, targetUserID}
+	if ids[1] < ids[0] {
+		ids[0], ids[1] = ids[1], ids[0]
+	}
+	out := &SpaceConversation{}
+	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
+			return err
+		}
+		var leftName, rightName string
+		if err := tx.QueryRowContext(ctx, `SELECT
+			COALESCE((SELECT u.name FROM space_members sm JOIN users u ON u.id=sm.user_id WHERE sm.space_id=$1 AND sm.user_id=$2),''),
+			COALESCE((SELECT u.name FROM space_members sm JOIN users u ON u.id=sm.user_id WHERE sm.space_id=$1 AND sm.user_id=$3),'')`, spaceID, ids[0], ids[1]).Scan(&leftName, &rightName); err != nil {
+			return err
+		}
+		if leftName == "" || rightName == "" {
+			return ErrSpaceInvalid
+		}
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:member-conversation:"+spaceID+":"+ids[0]+":"+ids[1]); err != nil {
+			return err
+		}
+		err := tx.QueryRowContext(ctx, `SELECT c.id,c.space_id,c.title,c.kind,c.created_by_user_id,c.created_at,c.updated_at
+			FROM space_conversations c
+			WHERE c.space_id=$1 AND c.kind='standard' AND NOT c.visible_to_space AND c.origin='misty'
+			  AND (SELECT count(*) FROM space_conversation_members cm WHERE cm.conversation_id=c.id)=2
+			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.actor_kind='person' AND cm.user_id=$2)
+			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.actor_kind='person' AND cm.user_id=$3)
+			ORDER BY c.created_at LIMIT 1`, spaceID, ids[0], ids[1]).Scan(&out.ID, &out.SpaceID, &out.Title, &out.Kind, &out.CreatedByUserID, &out.CreatedAt, &out.UpdatedAt)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			out.ID = "space_conversation_" + uuid.NewString()
+			out.SpaceID, out.Title, out.Kind, out.CreatedByUserID = spaceID, privateMemberConversationTitle(leftName, rightName), "standard", userID
+			if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,created_by_user_id)
+				VALUES($1,$2,$3,$4) RETURNING created_at,updated_at`, out.ID, spaceID, out.Title, userID).Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
+				return err
+			}
+			for _, memberID := range ids {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,user_id,actor_kind) VALUES($1,$2,'person')`, out.ID, memberID); err != nil {
+					return err
+				}
+			}
+			if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "conversation.created", out.ID, map[string]any{"conversation_id": out.ID, "title": out.Title, "participants": []SpaceActorRef{{Kind: "person", UserID: ids[0]}, {Kind: "person", UserID: ids[1]}}}); err != nil {
+				return err
+			}
+		}
+		out.Origin, out.IntegrationStatus, out.VisibleToSpace = "misty", "active", false
 		return loadSpaceConversationParticipantsTx(ctx, tx, out)
 	})
 	return out, err

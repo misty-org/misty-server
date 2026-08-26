@@ -49,29 +49,36 @@ func (db *Database) AIActionAvailable(ctx context.Context, userID, surfaceID, ac
 }
 
 type AIUserSettings struct {
-	Enabled       bool      `json:"enabled"`
-	RetentionDays int       `json:"retention_days"`
-	PurgeState    string    `json:"purge_state"`
-	DisabledAt    time.Time `json:"disabled_at,omitempty"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	Enabled                bool      `json:"enabled"`
+	CursorCompanionEnabled bool      `json:"cursor_companion_enabled"`
+	MemoryEnabled          bool      `json:"memory_enabled"`
+	ActiveCompanionAgentID string    `json:"active_companion_agent_id,omitempty"`
+	RetentionDays          int       `json:"retention_days"`
+	PurgeState             string    `json:"purge_state"`
+	DisabledAt             time.Time `json:"disabled_at,omitempty"`
+	UpdatedAt              time.Time `json:"updated_at"`
 }
 
 type AISurfacePreference struct {
-	SurfaceID     string          `json:"surface_id"`
-	PinnedAgentID string          `json:"pinned_agent_id,omitempty"`
-	Proactive     bool            `json:"proactive_enabled"`
-	SavedActions  json.RawMessage `json:"saved_actions"`
-	UpdatedAt     time.Time       `json:"updated_at"`
+	SurfaceID                string          `json:"surface_id"`
+	PinnedAgentID            string          `json:"pinned_agent_id,omitempty"`
+	Proactive                bool            `json:"proactive_enabled"`
+	ProactiveCooldownMinutes int             `json:"proactive_cooldown_minutes"`
+	ProactiveSnoozedUntil    *time.Time      `json:"proactive_snoozed_until,omitempty"`
+	ProactiveLastShownAt     *time.Time      `json:"proactive_last_shown_at,omitempty"`
+	ProactiveDismissedAt     *time.Time      `json:"proactive_dismissed_at,omitempty"`
+	SavedActions             json.RawMessage `json:"saved_actions"`
+	UpdatedAt                time.Time       `json:"updated_at"`
 }
 
 func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettings, []AISurfacePreference, error) {
-	settings := AIUserSettings{Enabled: true, RetentionDays: 30, PurgeState: "none"}
+	settings := AIUserSettings{Enabled: true, CursorCompanionEnabled: true, MemoryEnabled: true, RetentionDays: 30, PurgeState: "none"}
 	preferences := []AISurfacePreference{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		var disabledAt sql.NullTime
 		err := tx.QueryRowContext(ctx, `
-			SELECT enabled,retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
-		`, userID).Scan(&settings.Enabled, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
+			SELECT enabled,cursor_companion_enabled,memory_enabled,COALESCE(active_companion_agent_id,''),retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
+		`, userID).Scan(&settings.Enabled, &settings.CursorCompanionEnabled, &settings.MemoryEnabled, &settings.ActiveCompanionAgentID, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -79,7 +86,8 @@ func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettin
 			settings.DisabledAt = disabledAt.Time
 		}
 		rows, err := tx.QueryContext(ctx, `
-			SELECT surface_id,COALESCE(pinned_agent_id,''),proactive_enabled,saved_actions,updated_at
+			SELECT surface_id,COALESCE(pinned_agent_id,''),proactive_enabled,proactive_cooldown_minutes,
+				proactive_snoozed_until,proactive_last_shown_at,proactive_dismissed_at,saved_actions,updated_at
 			FROM ai_surface_preferences WHERE user_id=$1 ORDER BY surface_id
 		`, userID)
 		if err != nil {
@@ -88,7 +96,9 @@ func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettin
 		defer rows.Close()
 		for rows.Next() {
 			var item AISurfacePreference
-			if err := rows.Scan(&item.SurfaceID, &item.PinnedAgentID, &item.Proactive, &item.SavedActions, &item.UpdatedAt); err != nil {
+			if err := rows.Scan(&item.SurfaceID, &item.PinnedAgentID, &item.Proactive, &item.ProactiveCooldownMinutes,
+				&item.ProactiveSnoozedUntil, &item.ProactiveLastShownAt, &item.ProactiveDismissedAt,
+				&item.SavedActions, &item.UpdatedAt); err != nil {
 				return err
 			}
 			preferences = append(preferences, item)
@@ -98,7 +108,30 @@ func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettin
 	return settings, preferences, err
 }
 
-func (db *Database) UpdateAISettings(ctx context.Context, userID string, enabled bool, retentionDays int) (AIUserSettings, error) {
+func (db *Database) UpdateActiveCompanionAgent(ctx context.Context, userID, agentID string) (AIUserSettings, error) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID != "" {
+		personal, err := db.PersonalAgentByID(ctx, userID, agentID)
+		if err != nil || !personal.Enabled {
+			return AIUserSettings{}, ErrPersonalAgentNotFound
+		}
+	}
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO ai_user_settings(user_id,active_companion_agent_id)
+			VALUES($1,NULLIF($2,''))
+			ON CONFLICT(user_id) DO UPDATE SET active_companion_agent_id=EXCLUDED.active_companion_agent_id,updated_at=NOW()
+		`, userID, agentID)
+		return err
+	})
+	if err != nil {
+		return AIUserSettings{}, err
+	}
+	settings, _, err := db.AISettings(ctx, userID)
+	return settings, err
+}
+
+func (db *Database) UpdateAISettings(ctx context.Context, userID string, enabled bool, retentionDays int, cursorCompanionEnabled, memoryEnabled bool) (AIUserSettings, error) {
 	if retentionDays < 1 || retentionDays > 365 {
 		return AIUserSettings{}, ErrSpaceInvalid
 	}
@@ -108,11 +141,13 @@ func (db *Database) UpdateAISettings(ctx context.Context, userID string, enabled
 			purgeState = "queued"
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO ai_user_settings(user_id,enabled,retention_days,purge_state,disabled_at)
-			VALUES($1,$2,$3,$4,CASE WHEN $2 THEN NULL ELSE NOW() END)
+			INSERT INTO ai_user_settings(user_id,enabled,retention_days,purge_state,disabled_at,cursor_companion_enabled,memory_enabled)
+			VALUES($1,$2,$3,$4,CASE WHEN $2 THEN NULL ELSE NOW() END,$5,$6)
 			ON CONFLICT(user_id) DO UPDATE SET enabled=EXCLUDED.enabled,retention_days=EXCLUDED.retention_days,
-				purge_state=EXCLUDED.purge_state,disabled_at=EXCLUDED.disabled_at,updated_at=NOW()
-		`, userID, enabled, retentionDays, purgeState); err != nil {
+				purge_state=EXCLUDED.purge_state,disabled_at=EXCLUDED.disabled_at,
+				cursor_companion_enabled=EXCLUDED.cursor_companion_enabled,
+				memory_enabled=EXCLUDED.memory_enabled,updated_at=NOW()
+		`, userID, enabled, retentionDays, purgeState, cursorCompanionEnabled, memoryEnabled); err != nil {
 			return err
 		}
 		if enabled {
@@ -141,6 +176,9 @@ func (db *Database) UpdateAISettings(ctx context.Context, userID string, enabled
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM ai_recaps WHERE user_id=$1`, userID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM misty_memories WHERE user_id=$1`, userID); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO ai_cleanup_jobs(id,user_id) VALUES($1,$2)`, "aicleanup_"+uuid.NewString(), userID)
@@ -241,6 +279,7 @@ func (db *Database) verifyAICleanupJob(ctx context.Context, jobID, userID string
 			`DELETE FROM ai_feedback WHERE user_id=$1`,
 			`DELETE FROM ai_surface_preferences WHERE user_id=$1`,
 			`DELETE FROM ai_recaps WHERE user_id=$1`,
+			`DELETE FROM misty_memories WHERE user_id=$1`,
 			`DELETE FROM ai_invocations i WHERE i.user_id=$1 AND NOT EXISTS(SELECT 1 FROM ai_artifacts a WHERE a.invocation_id=i.id AND a.state='applied')`,
 			`UPDATE ai_invocations SET request_payload='{}'::jsonb,updated_at=NOW() WHERE user_id=$1`,
 			`UPDATE ai_artifacts SET sources='[]'::jsonb,operations='{}'::jsonb,updated_at=NOW() WHERE user_id=$1 AND state='applied'`,
@@ -257,6 +296,7 @@ func (db *Database) verifyAICleanupJob(ctx context.Context, jobID, userID string
 			  (SELECT COUNT(*) FROM ai_feedback WHERE user_id=$1)+
 			  (SELECT COUNT(*) FROM ai_surface_preferences WHERE user_id=$1)+
 			  (SELECT COUNT(*) FROM ai_recaps WHERE user_id=$1)+
+			  (SELECT COUNT(*) FROM misty_memories WHERE user_id=$1)+
 			  (SELECT COUNT(*) FROM ai_invocations i WHERE i.user_id=$1 AND i.request_payload<>'{}'::jsonb)+
 			  (SELECT COUNT(*) FROM ai_artifacts WHERE user_id=$1 AND state='applied' AND (sources<>'[]'::jsonb OR operations<>'{}'::jsonb))
 		`, userID).Scan(&remaining); err != nil {
@@ -318,8 +358,13 @@ func (db *Database) UpsertAISurfacePreference(ctx context.Context, userID string
 			VALUES($1,$2,NULLIF($3,''),$4,$5)
 			ON CONFLICT(user_id,surface_id) DO UPDATE SET pinned_agent_id=EXCLUDED.pinned_agent_id,
 				proactive_enabled=EXCLUDED.proactive_enabled,saved_actions=EXCLUDED.saved_actions,updated_at=NOW()
-			RETURNING surface_id,COALESCE(pinned_agent_id,''),proactive_enabled,saved_actions,updated_at
-		`, userID, preference.SurfaceID, preference.PinnedAgentID, preference.Proactive, preference.SavedActions).Scan(&out.SurfaceID, &out.PinnedAgentID, &out.Proactive, &out.SavedActions, &out.UpdatedAt)
+			RETURNING surface_id,COALESCE(pinned_agent_id,''),proactive_enabled,proactive_cooldown_minutes,
+				proactive_snoozed_until,proactive_last_shown_at,proactive_dismissed_at,saved_actions,updated_at
+		`, userID, preference.SurfaceID, preference.PinnedAgentID, preference.Proactive, preference.SavedActions).Scan(
+			&out.SurfaceID, &out.PinnedAgentID, &out.Proactive, &out.ProactiveCooldownMinutes,
+			&out.ProactiveSnoozedUntil, &out.ProactiveLastShownAt, &out.ProactiveDismissedAt,
+			&out.SavedActions, &out.UpdatedAt,
+		)
 	})
 	return out, err
 }

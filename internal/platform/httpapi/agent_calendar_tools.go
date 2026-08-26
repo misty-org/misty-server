@@ -57,9 +57,12 @@ func executeAgentCalendarTool(ctx context.Context, database *db.Database, actor 
 		if err != nil {
 			return nil, true, err
 		}
+		if err := requireAgentMutationTarget(ctx, database, actor, actor.originalPrompt, "calendar_event", current.ID); err != nil {
+			return nil, true, err
+		}
 		item = *current
 	}
-	item.SpaceID, item.CreatedByUserID, item.CreatedByAgentID, item.SourceRunID = actor.spaceID, actor.userID, actor.agentID, actor.runID
+	item.SpaceID, item.CreatedByUserID, item.CreatedByAgentID, item.SourceRunID = actor.spaceID, actor.userID, actor.agentID, agentSpaceRunSourceID(actor.runID)
 	if strings.TrimSpace(input.Title) != "" {
 		item.Title = input.Title
 	}

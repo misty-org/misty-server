@@ -1,10 +1,14 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
@@ -31,6 +35,7 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 			AgentID        string               `json:"agent_id,omitempty"`
 			CapabilityID   string               `json:"capability_id,omitempty"`
 			InvocationID   string               `json:"invocation_id,omitempty"`
+			ConversationID string               `json:"conversation_id,omitempty"`
 			IdempotencyKey string               `json:"idempotency_key"`
 			Origin         aiRunOrigin          `json:"origin"`
 			Context        []aiContextReference `json:"context,omitempty"`
@@ -64,37 +69,95 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 			return
 		}
 		delegatedPrompt := aiContextPrompt(body.Prompt, resolved, nil, body.Context)
-		decision, err := s.database.RouteAgentRequest(r.Context(), userID, body.Prompt, strings.TrimSpace(body.SpaceID), strings.TrimSpace(body.AgentID), strings.TrimSpace(body.CapabilityID))
+		invocationID := strings.TrimSpace(body.InvocationID)
+		conversationID := strings.TrimSpace(body.ConversationID)
+		if invocationID == "" && conversationID != "" {
+			invocationBody := aiInvocationInput{
+				Mode: "drawer", SurfaceID: body.Origin.SurfaceID, Trigger: "message", Prompt: body.Prompt,
+				Context: body.Context, ConversationID: conversationID,
+				IdempotencyKey: "agent-run:" + body.IdempotencyKey, Timezone: "UTC",
+			}
+			payload, marshalErr := json.Marshal(invocationBody)
+			if marshalErr != nil {
+				writeSpaceError(w, marshalErr)
+				return
+			}
+			stored, _, createErr := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
+				ID: "invocation_" + uuid.NewString(), UserID: userID, ConversationID: conversationID,
+				SurfaceID: body.Origin.SurfaceID, Mode: "drawer", Trigger: "message", State: "queued",
+				IdempotencyKey: invocationBody.IdempotencyKey, RequestPayload: payload,
+				ExpiresAt: time.Now().UTC().Add(aiInvocationTTL),
+			})
+			if createErr != nil {
+				writeSpaceError(w, createErr)
+				return
+			}
+			invocationID = stored.ID
+		}
+		if conversationID != "" {
+			if err := s.database.RenameAgentSession(
+				r.Context(),
+				userID,
+				conversationID,
+				cleanMistyTitle(body.Prompt),
+			); err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+		}
+		space, err := s.managedMistyRunSpace(r.Context(), userID, strings.TrimSpace(body.SpaceID), body.Context)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		if decision.NeedsClarification || decision.Selected == nil {
-			writeJSON(w, http.StatusOK, map[string]any{"status": "needs_clarification", "routing": decision})
+		if conversationID != "" {
+			bound, boundErr := s.database.AgentConversationIdentity(r.Context(), userID, conversationID)
+			if boundErr != nil || bound.AgentID != "" || conversationSpaceChanged(bound.SpaceID, space.ID) {
+				writeJSON(w, http.StatusConflict, map[string]any{"code": "conversation_context_changed", "message": "Start a new conversation to work in a different Space."})
+				return
+			}
+			if bound.SpaceID == "" {
+				if bindErr := s.database.BindMistyConversationSpace(r.Context(), userID, conversationID, space.ID); bindErr != nil {
+					writeMistyConversationBindingError(w, bindErr)
+					return
+				}
+			}
+		}
+		misty, err := s.database.EnsureManagedMistyAgent(r.Context(), userID, serveragent.InitialSelectedModelID)
+		if err != nil {
+			writeSpaceError(w, err)
 			return
 		}
-		citations := make([]aiCitation, 0, len(resolved))
-		for _, item := range resolved {
-			citations = append(citations, item.Citation)
-		}
-		input := TestingMustAPIRawJSON(map[string]any{
-			"prompt": delegatedPrompt, "user_prompt": body.Prompt, "origin": body.Origin,
-			"citations": citations, "ai_invocation_id": strings.TrimSpace(body.InvocationID),
-			"ai_idempotency_key": body.IdempotencyKey,
-		})
-		envelope := TestingMustAPIRawJSON(map[string]any{
-			"source": "ai_surface", "origin": body.Origin, "ai_invocation_id": strings.TrimSpace(body.InvocationID),
-		})
-		run, err := s.database.CreateAgentRun(r.Context(), db.AgentRunRequest{
-			RequestingMemberID: userID, SpaceID: decision.Selected.SpaceID, AgentID: decision.Selected.AgentID,
-			SourceType: db.RunSourceAgentConsole, CapabilityID: decision.Selected.CapabilityID,
-			Input: input, TriggerKind: db.RunSourceAgentConsole, ActionEnvelope: envelope,
+		run, err := s.database.CreateCreatorAgentRun(r.Context(), userID, space.ID, misty.ID, db.CreatorAgentRunInput{
+			Instruction: delegatedPrompt, Mode: "auto", SourceType: "direct", Timezone: "UTC",
+			AIInvocationID: invocationID, AIConversationID: conversationID,
+			AIIdempotencyKey: body.IdempotencyKey,
 		})
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		agentsHref := "/agents?agent=" + url.QueryEscape(decision.Selected.AgentID) + "&space=" + url.QueryEscape(decision.Selected.SpaceID) + "&run=" + url.QueryEscape(run.ID)
+		decision := &db.RoutingDecision{Selected: &db.RoutingOption{
+			SpaceID: space.ID, SpaceName: space.Name, AgentID: misty.ID, AgentName: "Misty",
+			CapabilityID: "companion", CapabilityName: "Misty",
+		}, Reason: "Misty automatically selected the active Space and managed runtime."}
+		if invocationID != "" {
+			if err := s.database.LinkAIInvocationAgentRun(r.Context(), userID, invocationID, run.ID); err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+		}
+		linkedConversationID, err := s.database.LinkAgentRunConversation(r.Context(), userID, run.ID, invocationID)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		agentsHref := "/agents"
+		if linkedConversationID != "" {
+			agentsHref += "?conversation=" + url.QueryEscape(linkedConversationID)
+		} else {
+			agentsHref += "?space=" + url.QueryEscape(space.ID) + "&run=" + url.QueryEscape(run.ID)
+		}
 		if run.IdempotentReplay {
 			writeJSON(w, http.StatusOK, map[string]any{"status": run.State, "routing": decision, "run": run, "agents_href": agentsHref, "origin": body.Origin, "replayed": true})
 			return
@@ -103,11 +166,43 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 			writeJSON(w, http.StatusAccepted, map[string]any{"status": run.State, "routing": decision, "run": run, "agents_href": agentsHref, "origin": body.Origin})
 			return
 		}
-		finished, err := s.executeCanonicalAgentRun(r, run, delegatedPrompt)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"status": finished.State, "routing": decision, "run": finished, "agents_href": agentsHref, "origin": body.Origin})
+		writeJSON(w, http.StatusAccepted, map[string]any{"status": run.State, "routing": decision, "run": run, "agents_href": agentsHref, "origin": body.Origin})
 	}
+}
+
+func (s *SpacesService) managedMistyRunSpace(ctx context.Context, userID, requestedSpaceID string, references []aiContextReference) (*db.Space, error) {
+	spaceID := strings.TrimSpace(requestedSpaceID)
+	if spaceID == "" {
+		spaceID = firstAIContextSpace(references)
+	}
+	if spaceID != "" {
+		space, err := s.database.SpaceByID(ctx, userID, spaceID)
+		if err != nil {
+			return nil, err
+		}
+		if !space.Permissions[db.PermissionAgentsRun] {
+			return nil, db.ErrSpaceForbidden
+		}
+		return space, nil
+	}
+	spaces, err := s.database.ListSpaces(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	var fallback *db.Space
+	for i := range spaces {
+		if !spaces[i].Permissions[db.PermissionAgentsRun] {
+			continue
+		}
+		if spaces[i].Kind != "misty" {
+			return &spaces[i], nil
+		}
+		if fallback == nil {
+			fallback = &spaces[i]
+		}
+	}
+	if fallback != nil {
+		return fallback, nil
+	}
+	return nil, db.ErrSpaceForbidden
 }

@@ -12,11 +12,19 @@ func (db *Database) CreatePersonalAgentSpaceMessage(ctx context.Context, billing
 	return db.createSpaceAgentMessageWithMembership(ctx, billingUserID, spaceID, "", agentID, []MessageSpan{{Type: "text", Text: text}}, true)
 }
 
+func (db *Database) CreatePersonalAgentSpaceMessageWithContent(ctx context.Context, billingUserID, spaceID, agentID string, content []MessageSpan) (*SpaceMessage, error) {
+	return db.createSpaceAgentMessageWithMembership(ctx, billingUserID, spaceID, "", agentID, content, true)
+}
+
 // CreatePersonalAgentConversationMessage publishes a creator-owned companion's
 // result to the conversation that originated the run. Conversation membership
 // and current creator authority are rechecked at the write boundary.
 func (db *Database) CreatePersonalAgentConversationMessage(ctx context.Context, billingUserID, spaceID, conversationID, agentID, text string) (*SpaceMessage, error) {
 	return db.createSpaceAgentMessageWithMembership(ctx, billingUserID, spaceID, conversationID, agentID, []MessageSpan{{Type: "text", Text: text}}, true)
+}
+
+func (db *Database) CreatePersonalAgentConversationMessageWithContent(ctx context.Context, billingUserID, spaceID, conversationID, agentID string, content []MessageSpan) (*SpaceMessage, error) {
+	return db.createSpaceAgentMessageWithMembership(ctx, billingUserID, spaceID, conversationID, agentID, content, true)
 }
 
 // CreatePersonalAgentConversationRunMessage publishes the one canonical

@@ -20,7 +20,7 @@ func (s *SpacesService) resolveCanonicalAgentToolbox(ctx context.Context, run *d
 		return s.executeOrdinaryAgentTool(toolCtx, run, tool)
 	}
 	registrations := canonicalAgentToolRegistrations(handler)
-	requested := []string{toolboxMessagesSearch, toolboxMessagesSend, toolboxLibrarySearch, toolboxTasksQuery, "calendar.query", toolboxTasksCreate, toolboxTasksUpdate}
+	requested := []string{toolboxMessagesSearch, toolboxMessagesSend, toolboxLibrarySearch, toolboxTasksQuery, "calendar.query", toolboxTasksCreate, toolboxTasksUpdate, toolboxDrawingsList, toolboxDrawingsRead, toolboxDrawingsCreate, toolboxDrawingsApply}
 	if grants, grantErr := s.database.AgentDeviceGrants(ctx, run.RequestingMemberID, run.SpaceID, run.AgentID); grantErr == nil {
 		if tabs := activeBrowserGrantTabs(grants); len(tabs) > 0 {
 			for _, descriptor := range browserToolDescriptors() {
@@ -129,6 +129,9 @@ func canonicalAgentToolRegistrations(handler agenttools.Handler) []agenttools.Re
 	for _, descriptor := range noteAgentToolDescriptors() {
 		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
 	}
+	for _, descriptor := range drawingAgentToolDescriptors() {
+		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
+	}
 	for _, descriptor := range calendarWriteToolDescriptors() {
 		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
 	}
@@ -139,6 +142,9 @@ func canonicalAgentToolRegistrations(handler agenttools.Handler) []agenttools.Re
 		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
 	}
 	for _, descriptor := range companionReadToolDescriptors() {
+		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
+	}
+	for _, descriptor := range memoryAgentToolDescriptors() {
 		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: handler})
 	}
 	return registrations

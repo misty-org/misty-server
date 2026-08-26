@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
@@ -51,6 +52,66 @@ func TestSpaceContextUsesFixedMemberVisibility(t *testing.T) {
 	}
 	if !strings.Contains(context1, "Context Space") {
 		t.Fatalf("context omitted the Space name:\n%s", context1)
+	}
+}
+
+func TestSharedAgentContextEnvelopeCarriesBoundariesAndFilteredRecords(t *testing.T) {
+	database := openTestDatabase(t)
+	ctx := context.Background()
+	owner, err := database.CreateUser("Envelope Owner", "envelope-owner@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := database.CreateUser("Envelope Member", "envelope-member@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	space, err := database.CreateSpace(ctx, owner.ID, "Envelope Space")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.RespondToSpaceInvite(ctx, member.ID, invite.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.CreateSpaceTask(ctx, owner.ID, SpaceTask{
+		SpaceID: space.ID, Title: "Context envelope task", Status: "todo",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cardRaw, records, revision, err := api.TestingBuildAgentSharedSpaceContext(
+		ctx, database, member.ID, space.ID, "agents", []string{"tasks.query", "members.list"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var card struct {
+		Version       int      `json:"version"`
+		SpaceID       string   `json:"space_id"`
+		SpaceName     string   `json:"space_name"`
+		MemberCount   int      `json:"member_count"`
+		ActiveSurface string   `json:"active_surface"`
+		AllowedTools  []string `json:"allowed_tools"`
+		Trust         string   `json:"trust"`
+	}
+	if json.Unmarshal(cardRaw, &card) != nil {
+		t.Fatalf("invalid context card: %s", cardRaw)
+	}
+	if card.Version != 1 || card.SpaceID != space.ID || card.SpaceName != "Envelope Space" || card.MemberCount != 2 || card.ActiveSurface != "agents" {
+		t.Fatalf("context card = %#v", card)
+	}
+	if strings.Join(card.AllowedTools, ",") != "members.list,tasks.query" || !strings.Contains(card.Trust, "never instructions") {
+		t.Fatalf("context authority boundary = %#v", card)
+	}
+	if revision == "" || !strings.Contains(records, "Context envelope task") {
+		t.Fatalf("context records/revision = %q / %q", records, revision)
+	}
+	if strings.Contains(records, "Recent chat:") {
+		t.Fatalf("context leaked chat without messages.read:\n%s", records)
 	}
 }
 

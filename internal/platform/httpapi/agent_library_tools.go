@@ -56,6 +56,9 @@ func executeAgentLibraryTool(ctx context.Context, database *db.Database, actor s
 		if err != nil {
 			return nil, true, err
 		}
+		if err := requireAgentMutationTarget(ctx, database, actor, actor.originalPrompt, "library_item", current.ID); err != nil {
+			return nil, true, err
+		}
 		name, caption, tags, favorite, hidden := current.DisplayName, current.Caption, current.Tags, current.Favorite, current.Hidden
 		if input.DisplayName != nil {
 			name = *input.DisplayName

@@ -58,6 +58,22 @@ func (db *Database) CreateSpaceConversationAgentMessageWithSourceLink(ctx contex
 	return db.createSpaceAgentMessageWithMembership(ctx, billingUserID, spaceID, conversationID, agentID, content, false)
 }
 
+func (db *Database) CreateMistySpaceMessage(ctx context.Context, userID, spaceID, text string) (*SpaceMessage, error) {
+	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, "", "", []MessageSpan{{Type: "text", Text: strings.TrimSpace(text)}}, false)
+}
+
+func (db *Database) CreateMistySpaceMessageWithContent(ctx context.Context, userID, spaceID string, content []MessageSpan) (*SpaceMessage, error) {
+	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, "", "", content, false)
+}
+
+func (db *Database) CreateMistySpaceConversationMessage(ctx context.Context, userID, spaceID, conversationID, text string) (*SpaceMessage, error) {
+	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, conversationID, "", []MessageSpan{{Type: "text", Text: strings.TrimSpace(text)}}, false)
+}
+
+func (db *Database) CreateMistySpaceConversationMessageWithContent(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan) (*SpaceMessage, error) {
+	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, conversationID, "", content, false)
+}
+
 func (db *Database) createSpaceAgentMessageWithMembership(ctx context.Context, billingUserID, spaceID, conversationID, agentID string, content []MessageSpan, enforceMembership bool) (*SpaceMessage, error) {
 	return db.createSpaceAgentMessageWithProvenance(ctx, billingUserID, spaceID, conversationID, agentID, content, enforceMembership, "", nil)
 }
@@ -73,7 +89,12 @@ func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, b
 	if !validJSONObject(origin) {
 		return nil, ErrSpaceInvalid
 	}
-	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), SpaceID: spaceID, ConversationID: conversationID, SenderUserID: billingUserID, SenderKind: "agent", SenderAgentID: agentID, Content: content, FileNodeIDs: []string{}, LibraryItemIDs: []string{}, Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID, Origin: origin}
+	senderKind := "agent"
+	if agentID == "" {
+		senderKind = "system"
+		origin, _ = json.Marshal(map[string]any{"kind": "misty_assistant", "author_name": "Misty"})
+	}
+	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), SpaceID: spaceID, ConversationID: conversationID, SenderUserID: billingUserID, SenderKind: senderKind, SenderAgentID: agentID, Content: content, FileNodeIDs: []string{}, LibraryItemIDs: []string{}, Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID, Origin: origin}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceMessageWriteTx(ctx, tx, billingUserID, spaceID); err != nil {
 			return err
@@ -101,13 +122,22 @@ func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, b
 		}
 		raw, _ := json.Marshal(content)
 		if err := tx.QueryRowContext(ctx, `INSERT INTO space_messages(id,space_id,conversation_id,sender_user_id,sender_kind,sender_agent_id,content,reply_to_message_id,origin)
-			VALUES($1,$2,NULLIF($3,''),$4,'agent',$5,$6,NULLIF($7,''),$8) RETURNING seq,created_at`, out.ID, spaceID, conversationID, billingUserID, agentID, raw, replyToMessageID, origin).Scan(&out.Seq, &out.CreatedAt); err != nil {
+			VALUES($1,$2,NULLIF($3,''),$4,$5,NULLIF($6,''),$7,NULLIF($8,''),$9) RETURNING seq,created_at`, out.ID, spaceID, conversationID, billingUserID, senderKind, agentID, raw, replyToMessageID, origin).Scan(&out.Seq, &out.CreatedAt); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT name FROM personal_agents WHERE id=$1),'Former agent')`, agentID).Scan(&out.SenderName); err != nil {
-			return err
+		if conversationID != "" {
+			if _, err := tx.ExecContext(ctx, `UPDATE space_conversations SET updated_at=NOW() WHERE id=$1 AND space_id=$2`, conversationID, spaceID); err != nil {
+				return err
+			}
 		}
-		out.Sender = SpaceMessageSender{Kind: "agent", AgentID: agentID, DisplayName: out.SenderName}
+		if senderKind == "system" {
+			out.SenderName = "Misty"
+		} else {
+			if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT name FROM personal_agents WHERE id=$1),'Former agent')`, agentID).Scan(&out.SenderName); err != nil {
+				return err
+			}
+		}
+		out.Sender = SpaceMessageSender{Kind: senderKind, AgentID: agentID, DisplayName: out.SenderName}
 		eventID, err := recordSpaceEventTx(ctx, tx, spaceID, billingUserID, "message.created", out.ID, out)
 		if err != nil {
 			return err

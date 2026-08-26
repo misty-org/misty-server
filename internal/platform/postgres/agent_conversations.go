@@ -5,12 +5,33 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 )
 
 var _ serveragent.SessionPersistence = (*Database)(nil)
+
+// CreateAIConversation creates the durable user-facing thread used by the
+// Vercel WorkflowAgent runtime. It intentionally does not create a Go Agent
+// session: conversation turns are projected from ai_invocations and remain
+// portable across runtime restarts.
+func (db *Database) CreateAIConversation(ctx context.Context, userID string, requestedSpaceID ...string) (string, error) {
+	id := "conversation_" + uuid.NewString()
+	spaceID := ""
+	if len(requestedSpaceID) > 0 {
+		spaceID = strings.TrimSpace(requestedSpaceID[0])
+	}
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO agent_conversations(
+			id,user_id,state,active_until,retention_expires_at,space_id
+		) VALUES($1,$2,'{}'::jsonb,NOW()+INTERVAL '30 days',NOW()+INTERVAL '30 days',NULLIF($3,''))`, id, userID, spaceID)
+		return err
+	})
+	return id, err
+}
 
 // CreateAgentSession implements agent.SessionPersistence. Conversation state
 // is sanitized by the agent package before it crosses this boundary.
@@ -82,14 +103,19 @@ func (db *Database) SaveAgentSession(ctx context.Context, conversationID, userID
 // AgentSessionSummary is the listing shape: enough to render a session rail
 // without loading conversation state or events.
 type AgentSessionSummary struct {
-	ID              string    `json:"id"`
-	Title           string    `json:"title"`
-	Active          bool      `json:"active"`
-	PersonalAgentID string    `json:"agent_id,omitempty"`
-	SpaceID         string    `json:"space_id,omitempty"`
-	ModelID         string    `json:"model_id,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID               string    `json:"id"`
+	Title            string    `json:"title"`
+	Active           bool      `json:"active"`
+	PersonalAgentID  string    `json:"agent_id,omitempty"`
+	SpaceID          string    `json:"space_id,omitempty"`
+	ConversationKind string    `json:"kind"`
+	OriginSurface    string    `json:"origin_surface,omitempty"`
+	OriginHref       string    `json:"origin_href,omitempty"`
+	PrivacyBoundary  string    `json:"-"`
+	ModelID          string    `json:"model_id,omitempty"`
+	ReasoningEffort  string    `json:"reasoning_effort,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // ListAgentSessions returns the account's retained sessions, newest first.
@@ -100,7 +126,8 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 	items := []AgentSessionSummary{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
-			SELECT id, title, active_until > NOW(), COALESCE(personal_agent_id,''), COALESCE(space_id,''), model_id, created_at, updated_at
+			SELECT id, title, active_until > NOW(), COALESCE(personal_agent_id,''), COALESCE(space_id,''),
+				conversation_kind,origin_surface,origin_href,privacy_boundary,model_id,reasoning_effort,created_at,updated_at
 			FROM agent_conversations
 			WHERE user_id = $1 AND deleted_at IS NULL
 			ORDER BY updated_at DESC
@@ -111,7 +138,7 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 		defer rows.Close()
 		for rows.Next() {
 			var item AgentSessionSummary
-			if err := rows.Scan(&item.ID, &item.Title, &item.Active, &item.PersonalAgentID, &item.SpaceID, &item.ModelID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			if err := rows.Scan(&item.ID, &item.Title, &item.Active, &item.PersonalAgentID, &item.SpaceID, &item.ConversationKind, &item.OriginSurface, &item.OriginHref, &item.PrivacyBoundary, &item.ModelID, &item.ReasoningEffort, &item.CreatedAt, &item.UpdatedAt); err != nil {
 				return err
 			}
 			items = append(items, item)
@@ -119,6 +146,97 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 		return rows.Err()
 	})
 	return items, err
+}
+
+func (db *Database) UpdateMistyConversationModel(ctx context.Context, userID, conversationID, modelID, reasoningEffort, catalogVersion string) error {
+	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `UPDATE agent_conversations SET model_id=$1,reasoning_effort=$2,model_catalog_version=$3,updated_at=NOW() WHERE id=$4 AND user_id=$5 AND deleted_at IS NULL`, modelID, reasoningEffort, catalogVersion, conversationID, userID)
+		if err != nil {
+			return err
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return serveragent.ErrPersistedSessionNotFound
+		}
+		return nil
+	})
+}
+
+// BindMistyConversationSpace establishes the immutable collaborative boundary
+// for a built-in Misty conversation. An unbound account conversation may be
+// attached once; subsequent calls are idempotent only for the same Space.
+func (db *Database) BindMistyConversationSpace(ctx context.Context, userID, conversationID, spaceID string) error {
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID == "" {
+		return ErrSpaceInvalid
+	}
+	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `UPDATE agent_conversations SET
+			space_id=$1,updated_at=NOW()
+			WHERE id=$2 AND user_id=$3 AND deleted_at IS NULL
+				AND personal_agent_id IS NULL AND (space_id IS NULL OR space_id=$1)`,
+			spaceID, conversationID, userID)
+		if err != nil {
+			return err
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows > 0 {
+			return nil
+		}
+		var exists bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+			SELECT 1 FROM agent_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL
+		)`, conversationID, userID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return serveragent.ErrPersistedSessionNotFound
+		}
+		return ErrSpaceConflict
+	})
+}
+
+func (db *Database) BindCompanionConversation(ctx context.Context, userID, conversationID, agentID, spaceID, modelID, surfaceID, originHref, privacyBoundary string) error {
+	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `UPDATE agent_conversations SET
+			personal_agent_id=NULLIF($1,''),space_id=NULLIF($2,''),model_id=$3,
+			conversation_kind='companion_task',origin_surface=$4,origin_href=$5,privacy_boundary=$6,
+			updated_at=NOW() WHERE id=$7 AND user_id=$8 AND deleted_at IS NULL`,
+			agentID, spaceID, modelID, surfaceID, originHref, privacyBoundary, conversationID, userID)
+		if err != nil {
+			return err
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return serveragent.ErrPersistedSessionNotFound
+		}
+		return nil
+	})
+}
+
+func (db *Database) LinkAgentRunConversation(ctx context.Context, userID, runID, invocationID string) (string, error) {
+	conversationID := ""
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `UPDATE space_runs AS run
+			SET source_agent_conversation_id=invocation.conversation_id
+			FROM ai_invocations AS invocation
+			WHERE run.id=$1 AND invocation.id=$2 AND invocation.user_id=$3
+				AND invocation.conversation_id IS NOT NULL
+			RETURNING invocation.conversation_id`, runID, invocationID, userID).Scan(&conversationID)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return conversationID, err
 }
 
 func (db *Database) BindAgentSessionContext(ctx context.Context, userID, conversationID, agentID, spaceID, modelID, catalogVersion string) error {
@@ -151,9 +269,24 @@ func (db *Database) ValidateAgentSpaceAccess(ctx context.Context, userID, spaceI
 // created. It is read from the session row rather than taken from the request,
 // so a caller cannot point an existing session at a different Space.
 type AgentSessionContext struct {
-	SpaceID string
-	AgentID string
-	ModelID string
+	SpaceID         string
+	AgentID         string
+	ModelID         string
+	ReasoningEffort string
+}
+
+func (db *Database) AgentConversationIdentity(ctx context.Context, userID, conversationID string) (AgentSessionContext, error) {
+	var bound AgentSessionContext
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, `SELECT COALESCE(personal_agent_id,''),COALESCE(space_id,''),model_id,reasoning_effort
+			FROM agent_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL`, conversationID, userID).
+			Scan(&bound.AgentID, &bound.SpaceID, &bound.ModelID, &bound.ReasoningEffort)
+		if errors.Is(err, sql.ErrNoRows) {
+			return serveragent.ErrPersistedSessionNotFound
+		}
+		return err
+	})
+	return bound, err
 }
 
 // ValidateAgentSessionAccess revalidates a persisted session's Space access and
@@ -170,10 +303,10 @@ func (db *Database) ValidateAgentSessionAccess(ctx context.Context, userID, conv
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		bound = AgentSessionContext{}
 		err := tx.QueryRowContext(ctx, `
-			SELECT COALESCE(personal_agent_id, ''), COALESCE(space_id, ''), model_id
+			SELECT COALESCE(personal_agent_id, ''), COALESCE(space_id, ''), model_id, reasoning_effort
 			FROM agent_conversations
 			WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL
-		`, conversationID, userID).Scan(&bound.AgentID, &bound.SpaceID, &bound.ModelID)
+		`, conversationID, userID).Scan(&bound.AgentID, &bound.SpaceID, &bound.ModelID, &bound.ReasoningEffort)
 		if errors.Is(err, sql.ErrNoRows) {
 			return serveragent.ErrPersistedSessionNotFound
 		}

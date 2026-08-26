@@ -50,6 +50,7 @@ func spaceAgentToolboxWithBrowserProvidersAndExtra(database *db.Database, browse
 		}
 		return executeSpaceConversationTool(ctx, database, spaceConversationToolActor{
 			userID: invocation.UserID, spaceID: invocation.SpaceID, agentID: invocation.AgentID, runID: invocation.RunID,
+			sessionID: invocation.SessionID, conversationID: invocation.ConversationID,
 		}, invocation.OriginalInput, request)
 	}
 	registrations := []agenttools.Registration{
@@ -70,6 +71,9 @@ func spaceAgentToolboxWithBrowserProvidersAndExtra(database *db.Database, browse
 	for _, descriptor := range noteAgentToolDescriptors() {
 		registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
 	}
+	for _, descriptor := range drawingAgentToolDescriptors() {
+		registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
+	}
 	for _, descriptor := range calendarWriteToolDescriptors() {
 		registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
 	}
@@ -77,6 +81,9 @@ func spaceAgentToolboxWithBrowserProvidersAndExtra(database *db.Database, browse
 		registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
 	}
 	for _, descriptor := range libraryMutationToolDescriptors() {
+		registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
+	}
+	for _, descriptor := range memoryAgentToolDescriptors() {
 		registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
 	}
 	if database != nil && len(browserTabs) > 0 {
@@ -111,7 +118,7 @@ func spaceAgentToolboxWithBrowserProvidersAndExtra(database *db.Database, browse
 func agentDelegationToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
 		Name: toolboxAgentsDelegate, Version: 1,
-		Description: "Delegate an explicit request to an installed, enabled Agent in the current Space and return its audited run result.",
+		Description: "Delegate a bounded independent subtask to a background worker in the current Space and return its audited run result.",
 		Risk:        serveragent.RiskWrite,
 		InputSchema: TestingMustAPIRawJSON(map[string]any{
 			"type": "object", "required": []string{"prompt"},
@@ -240,6 +247,9 @@ func executeSpaceAgentToolbox(ctx context.Context, toolbox *agenttools.Registry,
 	result, err := toolbox.ExecuteWithMiddleware(ctx, invocation, request, authorizeSpaceAgentTool(database), agentToolboxExecutionJournal(database))
 	if errors.Is(err, agenttools.ErrCapabilityDenied) || errors.Is(err, agenttools.ErrToolNotFound) || errors.Is(err, agenttools.ErrApprovalRequired) {
 		return nil, workflowv2.ErrCapabilityDenied
+	}
+	if err == nil {
+		recordAIConversationFocusFromToolResult(ctx, database, invocation, request.Name, result)
 	}
 	return result, err
 }

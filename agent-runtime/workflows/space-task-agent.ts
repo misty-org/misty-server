@@ -1,15 +1,25 @@
 import { WorkflowAgent } from "@ai-sdk/workflow";
-import { isStepCount, tool } from "ai";
-import { FatalError, getWorkflowMetadata } from "workflow";
+import { isStepCount, jsonSchema, tool, type StopCondition } from "ai";
+import { FatalError, getWorkflowMetadata, RetryableError } from "workflow";
 import { z } from "zod";
 import {
   controlPlaneRequest,
   type RuntimeIdentity,
 } from "../src/control-plane.js";
 import { ControlPlaneError } from "../src/control-plane-error.js";
+import { classifyMCPTransportError } from "../src/mcp-errors.js";
+export { classifyMCPTransportError } from "../src/mcp-errors.js";
+import {
+  discoverRemoteMCPTools,
+  requestMCPToolExecution,
+} from "../src/mcp-runtime.js";
 import { agentToolApprovalHook } from "../src/approval.js";
 import { agentDeviceHook } from "../src/device.js";
-import type { RuntimeToolContext, SpaceTaskContext } from "../src/types.js";
+import type {
+  MCPRunAccess,
+  RuntimeToolContext,
+  SpaceTaskContext,
+} from "../src/types.js";
 
 export interface SpaceTaskWorkflowInput {
   mistyRunId: string;
@@ -79,9 +89,24 @@ const calendarUpdateInputSchema = z.object({
 });
 
 function rethrowStepError(error: unknown): never {
-  if (error instanceof ControlPlaneError && !error.transient) {
-    throw new FatalError(error.message);
+  if (error instanceof ControlPlaneError) {
+    if (error.transient) {
+      throw new RetryableError(
+        "Misty's control plane is temporarily unavailable.",
+        {
+          retryAfter: error.status === 429 ? 5_000 : 1_000,
+        },
+      );
+    }
+    throw new FatalError("Misty's authorization or run state changed.");
   }
+  const failure = classifyMCPTransportError(error);
+  if (failure.transient) {
+    throw new RetryableError(failure.message, {
+      retryAfter: failure.retryAfterMs,
+    });
+  }
+  if (failure.recognized) throw new FatalError(failure.message);
   throw error;
 }
 
@@ -113,12 +138,44 @@ export function classifyRuntimeError(error: unknown): {
     normalized.includes("timed out") ||
     normalized.includes("aborted")
   ) {
-    return { code: "agent_runtime_timeout", message };
+    return {
+      code: "agent_runtime_timeout",
+      message: "Misty timed out before completing this request.",
+    };
+  }
+  if (normalized.includes("hosted_ai_limit_reached")) {
+    return {
+      code: "hosted_ai_limit_reached",
+      message:
+        "Your weekly AI agent allowance is fully used. Try again after it resets.",
+    };
   }
   if (error instanceof ControlPlaneError && !error.transient) {
-    return { code: "authorization_or_state_changed", message };
+    return {
+      code: "authorization_or_state_changed",
+      message: "Misty's authorization or run state changed.",
+    };
   }
-  return { code: "agent_runtime_failed", message };
+  if (
+    normalized.includes("gatewayinternalservererror") ||
+    normalized.includes("service temporarily unavailable")
+  ) {
+    return {
+      code: "model_gateway_unavailable",
+      message:
+        "Misty's model providers are temporarily unavailable. Please try again shortly.",
+    };
+  }
+  return {
+    code: "agent_runtime_failed",
+    message: "Misty could not complete this request.",
+  };
+}
+
+function fallbackModels(primaryModel: string): string[] {
+  return ["poolside/laguna-s-2.1", "google/gemini-3-flash"].filter(
+    (model) => model !== primaryModel,
+  );
 }
 
 export function classifyToolCompletion(toolNames: string[]): {
@@ -143,13 +200,70 @@ export function incompleteToolResultText(
   const details = failures
     .slice(0, 3)
     .map(({ toolName, error }) => {
-      const label = toolName.replaceAll("_", " ");
-      const reason = error.trim().slice(0, 300) || "the action was rejected";
+      const label = toolName.replace(/[._]/g, " ");
+      const reason =
+        error.trim().slice(0, 300) || "The action could not be completed.";
       return `${label}: ${reason}`;
     })
     .join("; ");
   return `I couldn't fully complete that request. ${details || "A required action failed."}`;
 }
+
+function stableToolValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableToolValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, stableToolValue(item)]),
+    );
+  }
+  return value;
+}
+
+export function toolFailureSignature(toolName: string, input: unknown): string {
+  let encoded = "";
+  try {
+    encoded = JSON.stringify(stableToolValue(input));
+  } catch {
+    encoded = "[unserializable]";
+  }
+  return `${toolName}:${encoded}`;
+}
+
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "";
+  }
+}
+
+export const stopOnRepeatedOrTerminalToolFailure: StopCondition<any> = ({
+  steps,
+}) => {
+  const counts = new Map<string, number>();
+  for (const step of steps) {
+    for (const part of step.content) {
+      if (part.type !== "tool-error") continue;
+      const signature = toolFailureSignature(part.toolName, part.input);
+      const count = (counts.get(signature) ?? 0) + 1;
+      counts.set(signature, count);
+      const message = errorText(part.error).toLowerCase();
+      if (
+        message.includes("tool_unavailable") ||
+        message.includes("permission_denied") ||
+        message.includes("authorization_or_state_changed") ||
+        count >= 2
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
 
 async function activateRuntime(identity: RuntimeIdentity): Promise<void> {
   "use step";
@@ -272,27 +386,177 @@ async function requestToolExecution(
 }> {
   "use step";
   try {
-    return await controlPlaneRequest(
+    let access: MCPRunAccess;
+    try {
+      access = await controlPlaneRequest<MCPRunAccess>(
+        context,
+        "mcp-token",
+        {},
+        `${context.mistyRunId}:mcp-token:${callId}`,
+      );
+    } catch (error) {
+      // This fallback only happens before an MCP tool call starts, so a rolling
+      // deploy cannot duplicate a consequential action.
+      if (
+        error instanceof ControlPlaneError &&
+        (error.status === 404 || error.status === 405 || error.status === 501)
+      ) {
+        return await requestLegacyToolExecution(
+          context,
+          callId,
+          name,
+          input,
+          approvalHookToken,
+          deviceHookToken,
+          idempotencyKey,
+        );
+      }
+      throw error;
+    }
+    return await requestMCPToolExecution(
       context,
-      "tools",
-      {
-        call_id: callId,
-        name,
-        arguments: input,
-        approval_hook_token: approvalHookToken,
-        device_hook_token: deviceHookToken,
-      },
-      idempotencyKey,
+      access,
+      callId,
+      name,
+      input,
+      approvalHookToken,
+      deviceHookToken,
     );
   } catch (error) {
     const recoverable = recoverableToolError(error);
     if (recoverable) return { tool_error: recoverable };
+    if (error instanceof ControlPlaneError && !error.transient) {
+      return {
+        tool_error: {
+          code:
+            error.status === 401 || error.status === 403
+              ? "permission_denied"
+              : "tool_unavailable",
+          message:
+            error.status === 401 || error.status === 403
+              ? "This run is no longer authorized to use that tool."
+              : "That tool is not available for this run.",
+        },
+      };
+    }
+    const failure = classifyMCPTransportError(error);
+    if (failure.recognized && !failure.transient) {
+      return {
+        tool_error: { code: failure.code, message: failure.message },
+      };
+    }
     rethrowStepError(error);
   }
 }
 
+requestToolExecution.maxRetries = 2;
+
+async function requestLegacyToolExecution(
+  context: RuntimeToolContext,
+  callId: string,
+  name: string,
+  input: unknown,
+  approvalHookToken: string,
+  deviceHookToken: string,
+  idempotencyKey: string,
+): Promise<{
+  result?: unknown;
+  approval?: { id: string; state: string };
+  device_wait?: boolean;
+  tool_error?: { code: string; message: string };
+}> {
+  return await controlPlaneRequest(
+    context,
+    "tools",
+    {
+      call_id: callId,
+      name,
+      arguments: input,
+      approval_hook_token: approvalHookToken,
+      device_hook_token: deviceHookToken,
+    },
+    idempotencyKey,
+  );
+}
+
+const nativeControlPlaneToolNames = new Set([
+  "context.get",
+  "weather.current",
+  "members.list",
+  "members.resolve",
+  "messages.search",
+  "messages.send",
+  "library.search",
+  "library.read",
+  "library.update",
+  "library.promote_attachment",
+  "notes.search",
+  "notes.read",
+  "notes.create",
+  "notes.update",
+  "drawings.list",
+  "drawings.read",
+  "drawings.create",
+  "drawings.apply",
+  "roadmaps.query",
+  "roadmaps.read",
+  "roadmaps.create",
+  "roadmaps.update",
+  "tasks.query",
+  "tasks.update_assigned",
+  "tasks.create",
+  "tasks.update",
+  "calendar.query",
+  "calendar.create",
+  "calendar.update",
+  "agents.delegate",
+  "agents.list",
+  "agents.status",
+  "memory.remember",
+  "memory.forget",
+  "browser.inspect",
+  "browser.navigate",
+  "browser.click",
+  "browser.downloads.list",
+  "task.activity.write",
+  "attached_files.read",
+]);
+
+function remoteMCPToolKey(name: string, index: number): string {
+  const slug = name
+    .replace(/^mcp\./, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 42);
+  return `remote_${index}_${slug || "tool"}`;
+}
+
+export function selectActiveRuntimeToolKeys(
+  controlPlaneNames: Record<string, string>,
+  allowedToolNames: Iterable<string>,
+  catalog: { supported: boolean; advertisedToolNames: Iterable<string> },
+): string[] {
+  const allowed = new Set(allowedToolNames);
+  const advertised = new Set(catalog.advertisedToolNames);
+  return Object.keys(controlPlaneNames).filter((key) => {
+    const canonicalName = controlPlaneNames[key];
+    return (
+      canonicalName !== undefined &&
+      (allowed.has(canonicalName) || canonicalName.startsWith("mcp.")) &&
+      (!catalog.supported || advertised.has(canonicalName))
+    );
+  });
+}
+
 async function queryTasks(
-  input: { query?: string; status?: string },
+  input: {
+    query?: string;
+    status?: string;
+    priority?: "low" | "medium" | "high";
+    assigneeUserId?: string;
+    from?: string;
+    to?: string;
+  },
   options: { context: RuntimeToolContext; toolCallId: string },
 ): Promise<unknown> {
   return executeTool(options.context, options.toolCallId, "tasks.query", input);
@@ -304,37 +568,6 @@ async function executeNamedTool(
   options: { context: RuntimeToolContext; toolCallId: string },
 ): Promise<unknown> {
   return executeTool(options.context, options.toolCallId, name, input);
-}
-
-function providerQueryTool(
-  provider: "discord" | "google" | "notion" | "slack",
-) {
-  return tool({
-    description: `Query the ${provider} connection shared with this Space without exposing credentials.`,
-    inputSchema: z.object({
-      query: z.string().max(2_000).optional(),
-      limit: z.number().int().min(1).max(50).optional(),
-      resource: z.string().max(500).optional(),
-    }),
-    contextSchema: toolContextSchema,
-    execute: (input, options) =>
-      executeNamedTool(`provider.${provider}.query`, input, options),
-  });
-}
-
-function providerWriteTool(provider: "discord" | "slack") {
-  return tool({
-    description: `Write through the ${provider} connection shared with this Space. This is consequential.`,
-    inputSchema: z.object({
-      destination: z.string().max(500).optional(),
-      resource: z.string().max(500).optional(),
-      payload: z.record(z.string(), z.unknown()).optional(),
-      mode: z.enum(["draft", "send"]).optional(),
-    }),
-    contextSchema: toolContextSchema,
-    execute: (input, options) =>
-      executeNamedTool(`provider.${provider}.write`, input, options),
-  });
 }
 
 async function updateAssignedTask(
@@ -430,8 +663,41 @@ function finalText(steps: Array<{ text?: string }>): string {
 }
 
 function visibleErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.trim().slice(0, 500) || "Tool execution failed";
+  const message = errorText(error).toLowerCase();
+  if (message.includes("target_not_grounded")) {
+    return "Misty couldn't confirm which item to change. Open, search for, or name the exact item and try again.";
+  }
+  if (message.includes("invalid_tool_input")) {
+    return "The tool arguments were invalid.";
+  }
+  if (
+    message.includes("permission_denied") ||
+    message.includes("authorization_or_state_changed")
+  ) {
+    return "This run is no longer authorized to use that tool.";
+  }
+  if (
+    message.includes("tool_unavailable") ||
+    message.includes("unknown tool")
+  ) {
+    return "That tool is not available for this run.";
+  }
+  if (message.includes("conflict")) {
+    return "The item changed while Misty was working. Please retry.";
+  }
+  if (
+    message.includes("rate_limited") ||
+    message.includes("too many requests")
+  ) {
+    return "Misty's tool service is busy. Please try again shortly.";
+  }
+  if (
+    message.includes("timeout") ||
+    message.includes("temporarily unavailable")
+  ) {
+    return "Misty's tool service is temporarily unavailable.";
+  }
+  return "The tool could not complete this action.";
 }
 
 export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
@@ -444,8 +710,30 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   };
   await activateRuntime(identity);
   const context = await fetchContext(identity);
+  const mcpCatalog = await discoverRemoteMCPTools(identity);
+  const advertisedMCPTools = new Set(
+    mcpCatalog.tools.map((descriptor) => descriptor.name),
+  );
+  if (mcpCatalog.supported) {
+    const missingAllowedTools = context.allowed_tools.filter(
+      (name) => !advertisedMCPTools.has(name),
+    );
+    await checkpoint(identity, {
+      node_id: "mcp:catalog",
+      state: "completed",
+      phase: "tools_ready",
+      progress: 8,
+      output: {
+        advertised_tool_count: advertisedMCPTools.size,
+        missing_allowed_tools: missingAllowedTools,
+      },
+    });
+  }
+  const remoteMCPDescriptors = mcpCatalog.tools.filter(
+    (descriptor) => !nativeControlPlaneToolNames.has(descriptor.name),
+  );
   const sharedToolContext: RuntimeToolContext = identity;
-  const tools = {
+  const nativeTools = {
     context_get: tool({
       description:
         "Get the authoritative current time, timezone, and Space identity for this run.",
@@ -453,6 +741,14 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       contextSchema: toolContextSchema,
       execute: (input, options) =>
         executeNamedTool("context.get", input, options),
+    }),
+    weather_current: tool({
+      description:
+        "Get live current weather for a city or postal location. Use this instead of guessing current conditions.",
+      inputSchema: z.object({ location: z.string().min(1).max(240) }),
+      contextSchema: toolContextSchema,
+      execute: (input, options) =>
+        executeNamedTool("weather.current", input, options),
     }),
     members_list: tool({
       description:
@@ -480,8 +776,12 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     }),
     messages_send: tool({
       description:
-        "Send an agent-authored message to the main Space chat. This is consequential.",
-      inputSchema: z.object({ message: z.string().min(1).max(12_000) }),
+        "Send a Misty-authored message privately to one resolved member or to the shared Space chat. Use auto only when the member's wording makes the audience unambiguous; otherwise ask before calling.",
+      inputSchema: z.object({
+        message: z.string().min(1).max(12_000),
+        audience: z.enum(["auto", "private", "space"]).optional(),
+        recipientUserId: z.string().min(1).max(200).optional(),
+      }),
       contextSchema: toolContextSchema,
       execute: (input, options) =>
         executeNamedTool("messages.send", input, options),
@@ -563,6 +863,50 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       execute: (input, options) =>
         executeNamedTool("notes.update", input, options),
     }),
+    drawings_list: tool({
+      description: "List collaborative Excalidraw drawings visible in this run's Space.",
+      inputSchema: z.object({
+        query: z.string().max(500).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+      }),
+      contextSchema: toolContextSchema,
+      execute: (input, options) =>
+        executeNamedTool("drawings.list", input, options),
+    }),
+    drawings_read: tool({
+      description: "Read one live Excalidraw scene and its current content hash.",
+      inputSchema: z.object({
+        drawing_id: z.string().min(1).max(200),
+        include_deleted: z.boolean().optional(),
+      }),
+      contextSchema: toolContextSchema,
+      execute: (input, options) =>
+        executeNamedTool("drawings.read", input, options),
+    }),
+    drawings_create: tool({
+      description: "Create an empty collaborative Excalidraw drawing in this run's Space.",
+      inputSchema: z.object({ title: z.string().max(200).optional() }),
+      contextSchema: toolContextSchema,
+      execute: (input, options) =>
+        executeNamedTool("drawings.create", input, options),
+    }),
+    drawings_apply: tool({
+      description: "Create, edit, or delete elements in an identified Excalidraw drawing. Read first and pass its latest base_hash when editing an existing scene.",
+      inputSchema: z.object({
+        drawing_id: z.string().min(1).max(200),
+        base_hash: z.string().length(64).optional(),
+        mode: z.enum(["merge", "replace"]).optional(),
+        elements: z.array(z.object({
+          id: z.string().min(1).max(128),
+          type: z.enum(["rectangle", "diamond", "ellipse", "text", "line", "arrow", "freedraw", "image", "frame", "magicframe", "iframe", "embeddable"]).optional(),
+        }).catchall(z.unknown())).max(500).optional(),
+        delete_element_ids: z.array(z.string().min(1).max(128)).max(500).optional(),
+        scene: z.object({ viewBackgroundColor: z.string().max(100).optional() }).catchall(z.unknown()).optional(),
+      }),
+      contextSchema: toolContextSchema,
+      execute: (input, options) =>
+        executeNamedTool("drawings.apply", input, options),
+    }),
     roadmaps_query: tool({
       description: "List or search roadmaps visible in this run's Space.",
       inputSchema: z.object({ query: z.string().max(500).optional() }),
@@ -600,10 +944,15 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
         executeNamedTool("roadmaps.update", input, options),
     }),
     tasks_query: tool({
-      description: "Query Tasks visible in the assigned Task's Space.",
+      description:
+        "Query Tasks visible in this run's Space. Use from and to from authoritative timezone context for date-bounded questions such as due today or overdue.",
       inputSchema: z.object({
         query: z.string().max(500).optional(),
         status: z.string().max(40).optional(),
+        priority: z.enum(["low", "medium", "high"]).optional(),
+        assigneeUserId: z.string().max(200).optional(),
+        from: z.string().datetime({ offset: true }).optional(),
+        to: z.string().datetime({ offset: true }).optional(),
       }),
       contextSchema: toolContextSchema,
       execute: queryTasks,
@@ -659,20 +1008,17 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       execute: (input, options) =>
         executeNamedTool("calendar.update", input, options),
     }),
-    provider_discord_query: providerQueryTool("discord"),
-    provider_discord_write: providerWriteTool("discord"),
-    provider_google_query: providerQueryTool("google"),
-    provider_notion_query: providerQueryTool("notion"),
-    provider_slack_query: providerQueryTool("slack"),
-    provider_slack_write: providerWriteTool("slack"),
     agents_delegate: tool({
-      description:
-        "Delegate bounded work to another companion Agent owned by the same creator in this Space.",
-      inputSchema: z.object({
-        prompt: z.string().min(1).max(16_000),
-        agent_id: z.string().optional(),
-        agent_name: z.string().optional(),
-      }),
+      description: context.managed_misty
+        ? "Delegate bounded independent work to a hidden background worker. Misty remains responsible for the result."
+        : "Delegate bounded work to another companion Agent owned by the same creator in this Space.",
+      inputSchema: context.managed_misty
+        ? z.object({ prompt: z.string().min(1).max(16_000) })
+        : z.object({
+            prompt: z.string().min(1).max(16_000),
+            agent_id: z.string().optional(),
+            agent_name: z.string().optional(),
+          }),
       contextSchema: toolContextSchema,
       execute: (input, options) =>
         executeNamedTool("agents.delegate", input, options),
@@ -695,6 +1041,27 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       contextSchema: toolContextSchema,
       execute: (input, options) =>
         executeNamedTool("agents.status", input, options),
+    }),
+    memory_remember: tool({
+      description:
+        "Remember a concise fact, preference, or standing instruction only when the user explicitly asks. Never store credentials, secrets, financial identifiers, health records, or inferred sensitive traits.",
+      inputSchema: z.object({
+        content: z.string().min(1).max(1_000),
+        kind: z.enum(["fact", "preference", "instruction"]),
+        scope: z.enum(["personal", "space"]),
+        reason: z.string().max(500).optional(),
+      }),
+      contextSchema: toolContextSchema,
+      execute: (input, options) =>
+        executeNamedTool("memory.remember", input, options),
+    }),
+    memory_forget: tool({
+      description:
+        "Forget one remembered item only when the user explicitly asks. Use its exact ID from remembered context.",
+      inputSchema: z.object({ memoryId: z.string().min(1).max(200) }),
+      contextSchema: toolContextSchema,
+      execute: (input, options) =>
+        executeNamedTool("memory.forget", input, options),
     }),
     browser_inspect: tool({
       description:
@@ -752,8 +1119,28 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       execute: readAttachedFiles,
     }),
   };
-  const controlPlaneNames: Record<keyof typeof tools, string> = {
+  const remoteTools = Object.fromEntries(
+    remoteMCPDescriptors.map((descriptor, index) => [
+      remoteMCPToolKey(descriptor.name, index),
+      tool({
+        description: descriptor.description,
+        inputSchema: jsonSchema(
+          descriptor.inputSchema as Parameters<typeof jsonSchema>[0],
+        ),
+        contextSchema: toolContextSchema,
+        execute: (input, options) =>
+          executeNamedTool(
+            descriptor.name,
+            input as Record<string, unknown>,
+            options,
+          ),
+      }),
+    ]),
+  );
+  const tools = { ...nativeTools, ...remoteTools };
+  const controlPlaneNames: Record<string, string> = {
     context_get: "context.get",
+    weather_current: "weather.current",
     members_list: "members.list",
     members_resolve: "members.resolve",
     messages_search: "messages.search",
@@ -766,6 +1153,10 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     notes_read: "notes.read",
     notes_create: "notes.create",
     notes_update: "notes.update",
+    drawings_list: "drawings.list",
+    drawings_read: "drawings.read",
+    drawings_create: "drawings.create",
+    drawings_apply: "drawings.apply",
     roadmaps_query: "roadmaps.query",
     roadmaps_read: "roadmaps.read",
     roadmaps_create: "roadmaps.create",
@@ -777,15 +1168,11 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     calendar_query: "calendar.query",
     calendar_create: "calendar.create",
     calendar_update: "calendar.update",
-    provider_discord_query: "provider.discord.query",
-    provider_discord_write: "provider.discord.write",
-    provider_google_query: "provider.google.query",
-    provider_notion_query: "provider.notion.query",
-    provider_slack_query: "provider.slack.query",
-    provider_slack_write: "provider.slack.write",
     agents_delegate: "agents.delegate",
     agents_list: "agents.list",
     agents_status: "agents.status",
+    memory_remember: "memory.remember",
+    memory_forget: "memory.forget",
     browser_inspect: "browser.inspect",
     browser_navigate: "browser.navigate",
     browser_click: "browser.click",
@@ -793,15 +1180,33 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     task_activity_write: "task.activity.write",
     attached_files_read: "attached_files.read",
   };
-  const allowed = new Set(context.allowed_tools);
-  const activeTools = (
-    Object.keys(controlPlaneNames) as Array<keyof typeof tools>
-  ).filter((name) => allowed.has(controlPlaneNames[name]));
-  const failedToolCalls: Array<{
-    callId: string;
-    toolName: string;
-    error: string;
-  }> = [];
+  remoteMCPDescriptors.forEach((descriptor, index) => {
+    controlPlaneNames[remoteMCPToolKey(descriptor.name, index)] =
+      descriptor.name;
+  });
+  const activeTools = selectActiveRuntimeToolKeys(
+    controlPlaneNames,
+    context.allowed_tools,
+    {
+      supported: mcpCatalog.supported,
+      advertisedToolNames: advertisedMCPTools,
+    },
+  ) as Array<keyof typeof tools>;
+  const failedToolCalls = new Map<
+    string,
+    {
+      callId: string;
+      toolName: string;
+      error: string;
+    }
+  >();
+  const toolCallSignatures = new Map<
+    string,
+    {
+      signature: string;
+      canonicalName: string;
+    }
+  >();
   const agent = new WorkflowAgent({
     id: "misty-space-task-agent",
     model: context.model_id,
@@ -809,6 +1214,7 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     tools,
     toolsContext: {
       context_get: sharedToolContext,
+      weather_current: sharedToolContext,
       members_list: sharedToolContext,
       members_resolve: sharedToolContext,
       tasks_query: sharedToolContext,
@@ -822,6 +1228,10 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       notes_read: sharedToolContext,
       notes_create: sharedToolContext,
       notes_update: sharedToolContext,
+      drawings_list: sharedToolContext,
+      drawings_read: sharedToolContext,
+      drawings_create: sharedToolContext,
+      drawings_apply: sharedToolContext,
       roadmaps_query: sharedToolContext,
       roadmaps_read: sharedToolContext,
       roadmaps_create: sharedToolContext,
@@ -832,24 +1242,23 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       calendar_query: sharedToolContext,
       calendar_create: sharedToolContext,
       calendar_update: sharedToolContext,
-      provider_discord_query: sharedToolContext,
-      provider_discord_write: sharedToolContext,
-      provider_google_query: sharedToolContext,
-      provider_notion_query: sharedToolContext,
-      provider_slack_query: sharedToolContext,
-      provider_slack_write: sharedToolContext,
       agents_delegate: sharedToolContext,
       agents_list: sharedToolContext,
       agents_status: sharedToolContext,
+      memory_remember: sharedToolContext,
+      memory_forget: sharedToolContext,
       browser_inspect: sharedToolContext,
       browser_navigate: sharedToolContext,
       browser_click: sharedToolContext,
       browser_downloads_list: sharedToolContext,
       task_activity_write: sharedToolContext,
       attached_files_read: sharedToolContext,
+      ...Object.fromEntries(
+        Object.keys(remoteTools).map((name) => [name, sharedToolContext]),
+      ),
     },
-    stopWhen: isStepCount(30),
-    maxRetries: 3,
+    stopWhen: [isStepCount(12), stopOnRepeatedOrTerminalToolFailure],
+    maxRetries: 2,
     maxOutputTokens: 2_200,
     reasoning: context.reasoning_effort || undefined,
     telemetry: {
@@ -866,20 +1275,29 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
         progress: Math.min(85, 10 + stepNumber * 6),
       });
     },
-    onStepEnd: async ({ stepNumber, finishReason, usage }) => {
+    onStepEnd: async ({ stepNumber, finishReason, usage, text }) => {
       await checkpoint(identity, {
         node_id: `model:${stepNumber + 1}`,
         state: "completed",
         phase: "working",
         progress: Math.min(90, 15 + stepNumber * 6),
-        output: { finish_reason: finishReason, usage },
+        // The control plane projects this model-owned text into the public SSE
+        // stream for interactive invocations. Tool-only steps normally have no
+        // text, while the final step supplies Markdown as it becomes durable.
+        output: { finish_reason: finishReason, usage, text_delta: text },
       });
     },
     onToolExecutionStart: async ({ toolCall }) => {
+      const canonicalName =
+        controlPlaneNames[toolCall.toolName] ?? toolCall.toolName;
+      toolCallSignatures.set(toolCall.toolCallId, {
+        signature: toolFailureSignature(canonicalName, toolCall.input),
+        canonicalName,
+      });
       await checkpoint(identity, {
         node_id: `tool:${toolCall.toolCallId}`,
         state: "running",
-        phase: `using_${toolCall.toolName}`,
+        phase: `using_${canonicalName.replaceAll(".", "_")}`,
         progress: 40,
         input:
           typeof toolCall.input === "object" && toolCall.input !== null
@@ -890,17 +1308,20 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     onToolExecutionEnd: async (event) => {
       const { toolCall, durationMs, success } = event;
       const errorMessage = success ? "" : visibleErrorMessage(event.error);
+      const canonicalName =
+        controlPlaneNames[toolCall.toolName] ?? toolCall.toolName;
+      const tracked = toolCallSignatures.get(toolCall.toolCallId);
+      const signature =
+        tracked?.signature ??
+        toolFailureSignature(canonicalName, toolCall.input);
       if (!success) {
-        const existing = failedToolCalls.find(
-          (item) => item.callId === toolCall.toolCallId,
-        );
-        if (existing) existing.error = errorMessage;
-        else
-          failedToolCalls.push({
-            callId: toolCall.toolCallId,
-            toolName: toolCall.toolName,
-            error: errorMessage,
-          });
+        failedToolCalls.set(signature, {
+          callId: toolCall.toolCallId,
+          toolName: tracked?.canonicalName ?? canonicalName,
+          error: errorMessage,
+        });
+      } else {
+        failedToolCalls.delete(signature);
       }
       await checkpoint(identity, {
         node_id: `tool:${toolCall.toolCallId}`,
@@ -908,7 +1329,7 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
         phase: success ? "working" : "tool_failed",
         progress: success ? 60 : 40,
         output: {
-          tool: toolCall.toolName,
+          tool: tracked?.canonicalName ?? canonicalName,
           duration_ms: durationMs,
           success,
         },
@@ -918,14 +1339,41 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   });
   let result;
   try {
-    result = await agent.stream({
-      prompt: context.prompt,
+    const shared = {
       activeTools,
+      providerOptions: {
+        gateway: { models: fallbackModels(context.model_id) },
+      },
       // WorkflowAgent applies this inside its durable model step. The workflow
       // coordinator does not expose AbortSignal and must not construct one.
       timeout: 30 * 60_000,
       runtimeContext: { mistyRunId: input.mistyRunId },
-    });
+    };
+    const images = [
+      ...(context.attachments ?? []),
+      ...(context.capture ? [context.capture] : []),
+    ];
+    result = images.length
+      ? await agent.stream({
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: context.prompt },
+                ...images.map(
+                  (image) =>
+                    ({
+                      type: "image",
+                      image: image.data_url,
+                      mediaType: image.mime_type,
+                    }) as const,
+                ),
+              ],
+            },
+          ],
+          ...shared,
+        })
+      : await agent.stream({ prompt: context.prompt, ...shared });
   } catch (error) {
     const failure = classifyRuntimeError(error);
     await complete(identity, {
@@ -937,20 +1385,21 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     throw new FatalError(failure.message);
   }
   const text = finalText(result.steps);
-  if (failedToolCalls.length > 0) {
+  const unresolvedToolFailures = [...failedToolCalls.values()];
+  if (unresolvedToolFailures.length > 0) {
     const completion = classifyToolCompletion(
-      failedToolCalls.map((item) => item.toolName),
+      unresolvedToolFailures.map((item) => item.toolName),
     );
     await complete(identity, {
       status: completion.status,
-      text: incompleteToolResultText(failedToolCalls),
+      text: incompleteToolResultText(unresolvedToolFailures),
       usage: result.totalUsage as unknown as Record<string, unknown>,
       error_code: completion.error_code,
       error_message: completion.error_message,
     });
     return {
       mistyRunId: input.mistyRunId,
-      text: incompleteToolResultText(failedToolCalls),
+      text: incompleteToolResultText(unresolvedToolFailures),
       steps: result.steps.length,
       incomplete: true,
     };

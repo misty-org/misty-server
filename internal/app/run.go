@@ -58,6 +58,8 @@ func Run() {
 		WorkerFunc(func(ctx context.Context) { runLibraryIntelligenceProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runActionSuggestionProcessing(ctx, server) }),
+		WorkerFunc(func(ctx context.Context) { runSocialDeliveryProcessing(ctx, server) }),
+		WorkerFunc(func(ctx context.Context) { server.Spaces.RunDiscordSocialGateway(ctx) }),
 		WorkerFunc(func(ctx context.Context) { runAIEmbeddingProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runSubscriptionReconciliation(ctx, server) }),
 	)
@@ -72,6 +74,27 @@ func Run() {
 		panic(err)
 	}
 	log.Println("Misty server stopped")
+}
+
+func runSocialDeliveryProcessing(ctx context.Context, server *Server) {
+	if server.Spaces == nil {
+		return
+	}
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if _, err := server.Spaces.ProcessSocialAutomations(ctx, 10); err != nil {
+				log.Printf("Social automation processing failed: %v", err)
+			}
+			if _, err := server.Spaces.ProcessSocialDelivery(ctx, 20); err != nil {
+				log.Printf("Social delivery processing failed: %v", err)
+			}
+		}
+	}
 }
 
 func runAIEmbeddingProcessing(ctx context.Context, server *Server) {

@@ -6,8 +6,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -98,13 +100,19 @@ func OpenDatabase(t testing.TB) *db.Database {
 // so the files are resolved from the repository root rather than relative to
 // the caller. godotenv never overwrites a value already present in the
 // process environment, so test.sh's exports and CI's job environment still
-// take precedence over both files.
+// take precedence over the scoped development files.
 func LoadEnvironment() {
 	loadEnvironmentOnce.Do(func() {
 		root := repositoryRoot()
-		for _, name := range []string{".env", ".env.dev"} {
-			_ = godotenv.Load(filepath.Join(root, name))
-		}
+		var files []string
+		_ = filepath.WalkDir(filepath.Join(root, ".env", "dev"), func(path string, entry fs.DirEntry, err error) error {
+			if err == nil && entry.Type().IsRegular() && filepath.Ext(path) == ".env" {
+				files = append(files, path)
+			}
+			return nil
+		})
+		sort.Strings(files)
+		_ = godotenv.Load(files...)
 	})
 }
 
@@ -220,7 +228,7 @@ func testDatabaseRole() (user, password string) {
 
 // testDatabaseSSLMode ignores a production DB_SSLMODE for loopback hosts. The
 // bootstrapped container has no TLS, so inheriting sslmode=require from
-// .env.dev would fail every connection.
+// .env/dev/database.env would fail every connection.
 func testDatabaseSSLMode(host string) string {
 	if mode := configured("TEST_DB_SSLMODE"); mode != "" {
 		return mode

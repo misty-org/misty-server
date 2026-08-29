@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -150,7 +149,7 @@ func (s *SpacesService) DiscoverMCPConnection() http.HandlerFunc {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"code": mcpErrorCode(err)})
 			return
 		}
-		tools := normalizeMCPDiscovery(item.ID, discovery.Tools)
+		tools := normalizeMCPDiscoveryForProvider(item.ID, item.Provider, discovery.Tools)
 		fingerprint := mcpCatalogFingerprint(tools)
 		snapshot, err := s.database.SaveMCPDiscovery(r.Context(), userID, db.MCPDiscoverySnapshot{ConnectionID: item.ID, ProtocolVersion: discovery.ProtocolVersion, ServerName: discovery.ServerName, ServerVersion: discovery.ServerVersion, CatalogFingerprint: fingerprint, ToolCount: len(tools), Status: "complete"}, tools)
 		if err != nil {
@@ -194,60 +193,14 @@ func (s *SpacesService) MCPConnectionTools() http.HandlerFunc {
 	}
 }
 
-func (s *SpacesService) PersonalAgentMCPTools() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		agentID := chi.URLParam(r, "agentID")
-		if r.Method == http.MethodGet {
-			items, err := s.database.PersonalAgentMCPTools(r.Context(), userID, agentID)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"agent_id": agentID, "tools": mcpBindingDTOs(items)})
-			return
-		}
-		var body struct {
-			Tools []db.MCPAgentToolSelection `json:"tools"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		items, err := s.database.SetPersonalAgentMCPTools(r.Context(), userID, agentID, body.Tools)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"agent_id": agentID, "tools": mcpBindingDTOs(items)})
-	}
-}
-
-func (s *SpacesService) PersonalAgentMCPExecutions() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		if limit < 1 || limit > 100 {
-			limit = 50
-		}
-		items, err := s.database.MCPExecutionAudits(r.Context(), userID, chi.URLParam(r, "agentID"), limit)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"executions": items})
-	}
-}
-
 func (s *SpacesService) mcpConnectionAccess(r *http.Request, userID, connectionID string) (*db.MCPRemoteConnection, string, error) {
 	item, err := s.database.MCPRemoteConnection(r.Context(), userID, connectionID)
 	if err != nil {
 		return nil, "", err
+	}
+	if item.Provider == "activepieces" {
+		bearer, oauthErr := s.activepiecesAccessToken(r.Context(), userID, item)
+		return item, bearer, oauthErr
 	}
 	bearer, err := s.decryptMCPBearer(item.BearerCiphertext, item.BearerNonce)
 	return item, bearer, err
@@ -275,8 +228,15 @@ func validMCPHTTPSURL(raw string) bool {
 }
 
 func normalizeMCPDiscovery(connectionID string, remote []mcpintegration.Tool) []db.MCPRemoteTool {
+	return normalizeMCPDiscoveryForProvider(connectionID, "custom", remote)
+}
+
+func normalizeMCPDiscoveryForProvider(connectionID, provider string, remote []mcpintegration.Tool) []db.MCPRemoteTool {
 	items := make([]db.MCPRemoteTool, 0, len(remote))
 	for _, tool := range remote {
+		if provider == "activepieces" && !allowedActivepiecesMCPTool(tool.Name) {
+			continue
+		}
 		schema := tool.InputSchema
 		status, reason := "valid", ""
 		if err := validateMCPToolSchema(schema); err != nil {
@@ -287,6 +247,25 @@ func normalizeMCPDiscovery(connectionID string, remote []mcpintegration.Tool) []
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].RemoteName < items[j].RemoteName })
 	return items
+}
+
+var activepiecesMCPToolAllowlist = map[string]bool{
+	"ap_list_flows": true, "ap_flow_structure": true, "ap_read_step_code": true,
+	"ap_read_step_settings": true, "ap_validate_flow": true, "ap_research_pieces": true,
+	"ap_search_actions": true, "ap_search_triggers": true, "ap_get_piece_props": true,
+	"ap_resolve_property_options": true, "ap_resolve_property_chain": true,
+	"ap_validate_step_config": true, "ap_list_connections": true, "ap_list_runs": true,
+	"ap_get_run": true, "ap_setup_guide": true, "ap_set_project_context": true,
+	"ap_create_flow": true, "ap_duplicate_flow": true, "ap_rename_flow": true,
+	"ap_change_flow_status": true, "ap_lock_and_publish": true, "ap_build_flow": true,
+	"ap_update_trigger": true, "ap_add_step": true, "ap_update_step": true,
+	"ap_delete_step": true, "ap_add_branch": true, "ap_update_branch": true,
+	"ap_delete_branch": true, "ap_manage_notes": true, "ap_test_flow": true,
+	"ap_test_step": true, "ap_retry_run": true,
+}
+
+func allowedActivepiecesMCPTool(name string) bool {
+	return activepiecesMCPToolAllowlist[strings.TrimSpace(name)]
 }
 
 func stableMCPToolName(connectionID, remoteName string) string {
@@ -326,7 +305,16 @@ func validateMCPToolSchemaNode(value any) error {
 	if !ok {
 		return errors.New("schema must be object")
 	}
-	allowed := map[string]bool{"type": true, "properties": true, "required": true, "additionalProperties": true, "items": true, "enum": true, "minItems": true, "maxItems": true, "minLength": true, "maxLength": true, "description": true, "title": true, "default": true, "$schema": true}
+	allowed := map[string]bool{
+		"type": true, "properties": true, "required": true, "additionalProperties": true,
+		"items": true, "enum": true, "const": true, "minItems": true, "maxItems": true,
+		"uniqueItems": true, "minLength": true, "maxLength": true,
+		"minimum": true, "maximum": true, "exclusiveMinimum": true, "exclusiveMaximum": true,
+		"multipleOf": true, "minProperties": true, "maxProperties": true,
+		"description": true, "title": true, "default": true, "examples": true,
+		"format": true, "$schema": true, "$id": true, "$ref": true, "$defs": true,
+		"definitions": true, "anyOf": true, "oneOf": true, "allOf": true, "not": true,
+	}
 	for key := range object {
 		if !allowed[key] {
 			return errors.New("unsupported schema keyword")
@@ -361,9 +349,14 @@ func validateMCPToolSchemaNode(value any) error {
 			}
 		}
 	}
+	if reference, exists := object["$ref"].(string); exists && !strings.HasPrefix(reference, "#/") {
+		return errors.New("external schema references are unsupported")
+	}
 	if additional, exists := object["additionalProperties"]; exists {
 		if _, ok := additional.(bool); !ok {
-			return errors.New("unsupported additionalProperties")
+			if err := validateMCPToolSchemaNode(additional); err != nil {
+				return errors.New("unsupported additionalProperties")
+			}
 		}
 	}
 	if items, exists := object["items"]; exists {
@@ -371,15 +364,38 @@ func validateMCPToolSchemaNode(value any) error {
 			return err
 		}
 	}
-	return nil
-}
-
-func mcpBindingDTOs(items []db.MCPAgentToolBinding) []map[string]any {
-	out := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		out = append(out, map[string]any{"connection_id": item.ConnectionID, "connection_name": item.ConnectionName, "remote_name": item.RemoteName, "stable_name": item.StableName, "description": item.Description, "input_schema": item.InputSchema, "schema_status": item.SchemaStatus, "disabled_reason": item.DisabledReason, "enabled": item.Enabled, "default_risk": "write", "approval": "interactive", "locality": "provider"})
+	for _, keyword := range []string{"anyOf", "oneOf", "allOf"} {
+		if branches, exists := object[keyword]; exists {
+			values, ok := branches.([]any)
+			if !ok || len(values) == 0 || len(values) > 64 {
+				return errors.New("invalid schema branches")
+			}
+			for _, branch := range values {
+				if err := validateMCPToolSchemaNode(branch); err != nil {
+					return err
+				}
+			}
+		}
 	}
-	return out
+	if not, exists := object["not"]; exists {
+		if err := validateMCPToolSchemaNode(not); err != nil {
+			return err
+		}
+	}
+	for _, keyword := range []string{"$defs", "definitions"} {
+		if definitions, exists := object[keyword]; exists {
+			values, ok := definitions.(map[string]any)
+			if !ok || len(values) > 128 {
+				return errors.New("invalid schema definitions")
+			}
+			for _, definition := range values {
+				if err := validateMCPToolSchemaNode(definition); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func mcpErrorCode(err error) string {
@@ -393,4 +409,16 @@ func mcpErrorCode(err error) string {
 	default:
 		return "mcp_unavailable"
 	}
+}
+
+func TestingAllowedActivepiecesMCPTool(name string) bool {
+	return allowedActivepiecesMCPTool(name)
+}
+
+func TestingNormalizeMCPDiscoveryForProvider(connectionID, provider string, remote []mcpintegration.Tool) []db.MCPRemoteTool {
+	return normalizeMCPDiscoveryForProvider(connectionID, provider, remote)
+}
+
+func TestingValidateMCPToolSchema(schema json.RawMessage) error {
+	return validateMCPToolSchema(schema)
 }

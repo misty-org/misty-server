@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 # A caller-supplied database setting means the entire connection contract comes
 # from the caller. Never mix an isolated CI/staging connection with migration
-# credentials silently loaded from a developer's normal .env.dev file.
+# credentials silently loaded from a developer's normal database env file.
 misty_goose_has_explicit_config=false
 for misty_goose_name in \
   DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME DB_SSLMODE \
@@ -16,10 +16,10 @@ for misty_goose_name in \
     break
   fi
 done
-if [[ "$misty_goose_has_explicit_config" == false && -f .env.dev ]]; then
+if [[ "$misty_goose_has_explicit_config" == false && -f .env/dev/database.env ]]; then
   set -a
   # shellcheck disable=SC1091
-  source .env.dev
+  source .env/dev/database.env
   set +a
 fi
 

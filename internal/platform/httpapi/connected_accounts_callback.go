@@ -100,6 +100,9 @@ func exchangeConnectedAccountCode(ctx context.Context, definition ConnectedAccou
 		"client_id":     {connectedAccountClientID(definition)},
 		"client_secret": {connectedAccountClientSecret(definition)}, "code_verifier": {verifier},
 	}
+	if definition.DisablePKCE {
+		values.Del("code_verifier")
+	}
 	return requestConnectedAccountToken(ctx, definition, values)
 }
 
@@ -153,11 +156,21 @@ func fetchConnectedAccountIdentity(ctx context.Context, definition ConnectedAcco
 	if method == "" {
 		method = http.MethodGet
 	}
-	request, err := http.NewRequestWithContext(ctx, method, definition.IdentityURL, nil)
+	identityURL := definition.IdentityURL
+	if definition.IdentityTokenQuery {
+		separator := "?"
+		if strings.Contains(identityURL, "?") {
+			separator = "&"
+		}
+		identityURL += separator + "access_token=" + url.QueryEscape(token.AccessToken)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, identityURL, nil)
 	if err != nil {
 		return "", ""
 	}
-	request.Header.Set("Authorization", firstNonempty(token.TokenType, "Bearer")+" "+token.AccessToken)
+	if !definition.IdentityTokenQuery {
+		request.Header.Set("Authorization", firstNonempty(token.TokenType, "Bearer")+" "+token.AccessToken)
+	}
 	request.Header.Set("Accept", "application/json")
 	if method == http.MethodPost {
 		request.Header.Set("Content-Type", "application/json")
@@ -179,7 +192,7 @@ func fetchConnectedAccountIdentity(ctx context.Context, definition ConnectedAcco
 		return "", ""
 	}
 	id := firstProviderString(value, "sub", "id", "account_id")
-	display := firstProviderString(value, "email", "mail", "userPrincipalName", "displayName", "handle", "name", "display_name")
+	display := firstProviderString(value, "email", "mail", "userPrincipalName", "username", "displayName", "handle", "name", "display_name")
 	if display == "" {
 		display = definition.Name + " account"
 	}

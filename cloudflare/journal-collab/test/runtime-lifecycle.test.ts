@@ -121,7 +121,7 @@ test("NoteRoom survives restart and purge cannot resurrect in-memory content", a
     const exportedDocument = new Y.Doc();
     Y.applyUpdate(exportedDocument, new Uint8Array(await exported.arrayBuffer()));
     assert.equal(
-      exportedDocument.getText("markdown").toString(),
+      exportedDocument.getText("misty:markdown").toString(),
       "Persist this collaborative note across eviction.",
     );
     const replay = await restarted.fetch(
@@ -139,9 +139,23 @@ test("NoteRoom survives restart and purge cannot resurrect in-memory content", a
     const purged = await control(purgedRoom, "status", {});
     assert.ok(purged.document_bytes < restored.document_bytes);
     assert.equal(purged.persisted_bytes, 0);
+    assert.equal(purged.purged, true);
 
-    // The Yjs reset schedules the normal debounced save. If purge only deleted
-    // storage without clearing memory, this wait would recreate the old note.
+    const staleExport = await purgedRoom.fetch(
+      `http://room.internal/?export=1&ticket=${encodeURIComponent(mintTicket("runtime-note", "user-after-purge"))}`,
+    );
+    assert.equal(staleExport.status, 410);
+    assert.deepEqual(await staleExport.json(), { code: "resource_deleted" });
+
+    const staleBootstrap = await controlResponse(purgedRoom, "bootstrap", {
+      title: "Must not return",
+      markdown: "A delayed command cannot recreate deleted content.",
+    });
+    assert.equal(staleBootstrap.status, 410);
+    assert.deepEqual(await staleBootstrap.json(), { code: "resource_deleted" });
+
+    // A save may already be queued when purge starts. It must not recreate the
+    // deleted snapshot after the purge response has succeeded.
     await new Promise((resolve) => setTimeout(resolve, 2_300));
     await runtime.dispose();
     runtime = createRuntime(persistence);
@@ -149,6 +163,7 @@ test("NoteRoom survives restart and purge cannot resurrect in-memory content", a
     const afterPurge = await control(afterPurgeRestart, "status", {});
     assert.ok(afterPurge.document_bytes < restored.document_bytes);
     assert.ok(afterPurge.persisted_bytes < restored.persisted_bytes);
+    assert.equal(afterPurge.purged, true);
     assert.deepEqual(await control(afterPurgeRestart, "purge", {}), {
       ok: true,
       purged: true,
@@ -181,6 +196,32 @@ test("DrawingRoom saves, restarts, reconnects, and purges a scene", async () => 
     await new Promise((resolve) => setTimeout(resolve, 2_300));
 
     const room = await roomStub(runtime, "DRAWING_ROOM", roomName);
+    const applied = await control(room, "drawing_scene_apply", {
+      request_id: "runtime-drawing-apply-1",
+      elements: [
+        { id: "mcp_box", type: "rectangle", x: 40, y: 60, width: 180, height: 90 },
+        { id: "mcp_label", type: "text", x: 70, y: 90, text: "Drawn through MCP" },
+      ],
+      scene: { viewBackgroundColor: "#f8f9fa" },
+    });
+    assert.equal(applied.changed, 2);
+    assert.equal(applied.element_count, 2);
+    await waitFor(() => drawing.getMap("drawing:elements").has("mcp_box"));
+    const read = await control(room, "drawing_scene_read", {});
+    assert.equal(read.elements.length, 2);
+    assert.equal(read.scene.viewBackgroundColor, "#f8f9fa");
+    assert.equal(read.content_hash, applied.content_hash);
+    const replay = await control(room, "drawing_scene_apply", {
+      request_id: "runtime-drawing-apply-1",
+      elements: [{ id: "ignored", type: "ellipse", x: 0, y: 0 }],
+    });
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.content_hash, applied.content_hash);
+    const conflict = await controlResponse(room, "drawing_scene_apply", {
+      base_hash: "0".repeat(64),
+      elements: [{ id: "conflict", type: "ellipse", x: 0, y: 0 }],
+    });
+    assert.equal(conflict.status, 409);
     const saved = await control(room, "status", {});
     assert.equal(saved.persistence_source, "current");
     assert.ok(saved.persisted_bytes > 2);

@@ -25,6 +25,7 @@ type fakeMailProvider struct {
 	lastDraft    mailintegration.DraftInput
 	accountError error
 	folderError  error
+	threadError  error
 }
 
 func testMailMessage() mailintegration.Message {
@@ -48,6 +49,9 @@ func (f *fakeMailProvider) ListFolders(context.Context) ([]mailintegration.Folde
 	return []mailintegration.Folder{{Provenance: mailintegration.Provenance{Provider: "gmail", ProviderID: "INBOX", AccountID: "account-1"}, Name: "Inbox", Kind: mailintegration.FolderInbox, System: true, Total: 20, Unread: 3}}, nil
 }
 func (f *fakeMailProvider) ListThreads(context.Context, mailintegration.ListThreadsRequest) (mailintegration.ThreadPage, error) {
+	if f.threadError != nil {
+		return mailintegration.ThreadPage{}, f.threadError
+	}
 	threads := make([]mailintegration.Thread, 8)
 	for index := range threads {
 		threads[index].Provenance = mailintegration.Provenance{Provider: "gmail", ProviderID: "thread-" + string(rune('1'+index)), AccountID: "account-1"}
@@ -253,5 +257,37 @@ func TestMailAccountsClassifiesMicrosoftIdentityWithoutMailbox(t *testing.T) {
 		!strings.Contains(recorder.Body.String(), "mail_provider_mailbox_unavailable") ||
 		!strings.Contains(recorder.Body.String(), "needs_attention") {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestMailThreadsPersistsProviderAuthorizationFailure(t *testing.T) {
+	database := openPresenceTestDatabase(t)
+	owner, _ := database.CreateUser("Expired Mail", uniqueTestEmail("expired-mail"), "password123")
+	key := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("e", 32)))
+	spaces, _ := NewSpacesService(database, nil, key)
+	ciphertext, nonce, _ := spaces.TestingEncryptConnectedAccountAccessToken("google", "token")
+	connection, _ := database.SaveConnectedAccount(t.Context(), db.ConnectedAccount{UserID: owner.ID,
+		Provider: "google", AccountID: "expired-account", AccountDisplay: "expired@example.com",
+		CredentialCiphertext: ciphertext, CredentialNonce: nonce, KeyVersion: 1, Capabilities: []string{"mail"}})
+	spaces.TestingSetMailProviderFactory(func(db.ConnectedAccount, string) (mailintegration.Provider, error) {
+		return &fakeMailProvider{threadError: &mailintegration.ProviderError{
+			StatusCode: http.StatusUnauthorized,
+		}}, nil
+	})
+
+	recorder := performConversationRequest(t, mailTestRouter(spaces), http.MethodGet,
+		"/mail/threads?connection_id="+connection.ID,
+		newConversationTestBearerToken(t, database, owner.ID), nil)
+	if recorder.Code != http.StatusFailedDependency ||
+		!strings.Contains(recorder.Body.String(), "mail_provider_authorization_failed") {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	updated, err := database.ConnectedAccount(t.Context(), owner.ID, connection.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != "needs_attention" ||
+		updated.LastErrorCode != "mail_provider_authorization_failed" {
+		t.Fatalf("account health=%q/%q", updated.Status, updated.LastErrorCode)
 	}
 }

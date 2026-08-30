@@ -14,7 +14,8 @@ func (s *Server) mountMCPRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.Post(prefix+"/mcp/connections/{connectionID}/test", spaces.TestMCPConnection())
 	s.Router.Post(prefix+"/mcp/connections/{connectionID}/discover", spaces.DiscoverMCPConnection())
 	s.Router.Get(prefix+"/mcp/connections/{connectionID}/tools", spaces.MCPConnectionTools())
-	s.Router.MethodFunc(http.MethodGet, prefix+"/agents/{agentID}/mcp-tools", spaces.PersonalAgentMCPTools())
-	s.Router.MethodFunc(http.MethodPut, prefix+"/agents/{agentID}/mcp-tools", spaces.PersonalAgentMCPTools())
-	s.Router.Get(prefix+"/agents/{agentID}/mcp-executions", spaces.PersonalAgentMCPExecutions())
+	s.Router.Post(prefix+"/mcp/oauth/activepieces/authorize", spaces.BeginActivepiecesAuthorization())
+	s.Router.Get(prefix+"/oauth/mcp/activepieces/callback", spaces.ActivepiecesAuthorizationCallback())
+	s.Router.Get(prefix+"/automations/flows", spaces.ActivepiecesFlows())
+	s.Router.Post(prefix+"/automations/tools/{toolName}", spaces.ActivepiecesTool())
 }

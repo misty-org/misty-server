@@ -56,9 +56,13 @@ func (s *Server) MountHandlers() error {
 	}
 	aiService := api.NewAIService(s.Database, s.AIAgent)
 	s.AI = aiService
+	aiService.SetAgentRuntime(s.AgentRuntime)
+	aiService.AttachSpacesRuntime(s.Spaces)
 	aiService.SetMetrics(s.Metrics)
 	libraryAnalyzer := s.AIAnalyzer
 	aiService.SetEmbeddingAnalyzer(libraryAnalyzer)
+	aiService.SetAttachmentStore(s.LibraryStore)
+	s.Spaces.SetSearchAnalyzer(libraryAnalyzer)
 	intelligenceEnabled := libraryAnalyzer.APIKey != ""
 	s.Library.SetIntelligence(libraryAnalyzer, intelligenceEnabled)
 	smartLibraryService := api.NewSmartLibraryService(s.Database, libraryAnalyzer)
@@ -89,116 +93,83 @@ func (s *Server) MountHandlers() error {
 	healthHandler := s.HealthMonitor.Handler()
 	instanceHandler := api.Instance(s.Database)
 	entitlementHandler := api.MintSelfHostedEntitlement(s.Database)
-	s.Router.Get("/health", healthHandler)
-	s.Router.Get("/instance", instanceHandler)
+	mountPublicRoutes := func(prefix string) {
+		s.Router.Get(prefix+"/health", healthHandler)
+		s.Router.Get(prefix+"/instance", instanceHandler)
+		s.Router.Post(prefix+"/register", registerHandler)
+		s.Router.Post(prefix+"/self-host/bootstrap", api.SelfHostBootstrap(s.Database))
+		s.Router.Post(prefix+"/self-host/enroll", api.SelfHostEnroll(s.Database))
+		s.Router.Post(prefix+"/self-host/invitations", api.SelfHostInvitation(s.Database))
+		s.Router.Delete(prefix+"/self-host/invitations/{invitationID}", api.SelfHostInvitation(s.Database))
+		s.Router.Post(prefix+"/self-host/entitlement", api.RenewSelfHostEntitlement(s.Database))
+		s.Router.Post(prefix+"/login", loginHandler)
+		s.Router.Post(prefix+"/logout", logoutHandler)
+		s.Router.Post(prefix+"/auth/forgot", forgotPasswordHandler)
+		s.Router.Get(prefix+"/auth/reset/start", startResetHandler)
+		s.Router.Get(prefix+"/auth/reset/validate", validateResetTokenHandler)
+		s.Router.Post(prefix+"/auth/reset", resetPasswordHandler)
+		s.Router.Post(prefix+"/auth/handoff", mintHandoffHandler)
+		s.Router.Get(prefix+"/auth/handoff/start", startHandoffHandler)
+		s.Router.Post(prefix+"/waitlist", waitlistJoinHandler)
+		s.Router.Get(prefix+"/me", api.GetMe(s.Database))
+		s.Router.Put(prefix+"/me/profile", api.UpdateProfile(s.Database))
+		s.Router.Post(prefix+"/me/export", s.Spaces.AccountExportManifest())
+		s.Router.Post(prefix+"/me/deletion", s.Spaces.BeginAccountDeletion())
+		s.Router.Post(prefix+"/account/deletion/status", s.Spaces.AccountDeletionStatus())
+		s.Router.MethodFunc(http.MethodGet, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
+		s.Router.MethodFunc(http.MethodPut, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
+		s.Router.Put(prefix+"/me/device", api.UpdateDevice(s.Database))
+		s.Router.Get(prefix+"/me/settings", api.GetSettings(s.Database))
+		s.Router.Put(prefix+"/me/settings", api.UpdateSettings(s.Database))
+		s.Router.Post(prefix+"/me/home/apps", api.RecordHomeAppActivity(s.Database))
+		s.Router.Put(prefix+"/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
+		s.Router.Post(prefix+"/billing/trial/start", api.StartPersonalTrial(s.Database))
+		s.Router.Post(prefix+"/billing/self-host-entitlement", entitlementHandler)
+		s.Router.Post(prefix+"/billing/checkout-session", api.CreateCheckoutSession(s.Database))
+		s.Router.Post(prefix+"/billing/credit-checkout-session", api.CreateCreditCheckoutSession(s.Database))
+		s.Router.Post(prefix+"/billing/portal-session", api.CreatePortalSession(s.Database))
+		s.Router.Get(prefix+"/billing/usage", api.GetBillingUsage(s.Database))
+		s.mountAIRoutes(prefix+"/ai", aiService)
+		s.mountMistyRoutes(prefix, aiService)
+		s.mountSmartLibraryRoutes(prefix+"/ai/smart-library", smartLibraryService)
+		s.mountMediaSearchRoutes(prefix+"/ai/media-search", mediaSearchService)
+		s.mountAgentsRoutes(prefix, agentsService)
+		s.mountSpacesRoutes(prefix, s.Spaces, s.Realtime)
+		if s.Library != nil {
+			s.mountLibraryRoutes(prefix, s.Library)
+		}
+	}
+
+	// /v1 is the canonical hosted contract. The bare and /api trees remain
+	// available for self-hosted installations and existing desktop releases.
+	for _, prefix := range []string{"", "/api", "/v1"} {
+		mountPublicRoutes(prefix)
+	}
+
 	// Unmounted entirely when no token is configured: the output names every
 	// route, its traffic volume, and its error rate.
 	if token := metricsToken(); token != "" {
 		s.Router.Get("/metrics", s.Metrics.Handler(token))
 	}
-	s.Router.Get("/api/health", healthHandler)
-	s.Router.Get("/api/instance", instanceHandler)
 	s.Router.MethodFunc(http.MethodGet, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
 	s.Router.MethodFunc(http.MethodPut, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
 	s.Router.MethodFunc(http.MethodDelete, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/activate", s.Spaces.AgentRuntimeActivate())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/context", s.Spaces.AgentRuntimeContext())
+	s.Router.Post("/internal/agent-runtime/runs/{runID}/mcp-token", s.Spaces.AgentRuntimeMCPAccess())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/tools", s.Spaces.AgentRuntimeTool())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/events", s.Spaces.AgentRuntimeEvent())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/complete", s.Spaces.AgentRuntimeComplete())
-
-	// Account management
-	s.Router.Post("/register", registerHandler)
-	s.Router.Post("/self-host/bootstrap", api.SelfHostBootstrap(s.Database))
-	s.Router.Post("/self-host/enroll", api.SelfHostEnroll(s.Database))
-	s.Router.Post("/self-host/invitations", api.SelfHostInvitation(s.Database))
-	s.Router.Delete("/self-host/invitations/{invitationID}", api.SelfHostInvitation(s.Database))
-	s.Router.Post("/self-host/entitlement", api.RenewSelfHostEntitlement(s.Database))
-	s.Router.Post("/login", loginHandler)
-	s.Router.Post("/logout", logoutHandler)
-	s.Router.Post("/auth/forgot", forgotPasswordHandler)
-	s.Router.Get("/auth/reset/start", startResetHandler)
-	s.Router.Get("/auth/reset/validate", validateResetTokenHandler)
-	s.Router.Post("/auth/reset", resetPasswordHandler)
-	s.Router.Post("/auth/handoff", mintHandoffHandler)
-	s.Router.Get("/auth/handoff/start", startHandoffHandler)
-	s.Router.Post("/waitlist", waitlistJoinHandler)
-
-	// Dashboard — authenticated endpoints
-	s.Router.Get("/me", api.GetMe(s.Database))
-	s.Router.Put("/me/profile", api.UpdateProfile(s.Database))
-	s.Router.Post("/me/export", s.Spaces.AccountExportManifest())
-	s.Router.Post("/me/deletion", s.Spaces.BeginAccountDeletion())
-	s.Router.Post("/account/deletion/status", s.Spaces.AccountDeletionStatus())
-	s.Router.MethodFunc(http.MethodGet, "/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
-	s.Router.MethodFunc(http.MethodPut, "/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
-	s.Router.Put("/me/device", api.UpdateDevice(s.Database))
-	s.Router.Get("/me/settings", api.GetSettings(s.Database))
-	s.Router.Put("/me/settings", api.UpdateSettings(s.Database))
-	s.Router.Put("/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
-	s.Router.Post("/billing/trial/start", api.StartPersonalTrial(s.Database))
-	s.Router.Post("/billing/self-host-entitlement", entitlementHandler)
-	s.Router.Post("/billing/checkout-session", api.CreateCheckoutSession(s.Database))
-	s.Router.Post("/billing/credit-checkout-session", api.CreateCreditCheckoutSession(s.Database))
-	s.Router.Post("/billing/portal-session", api.CreatePortalSession(s.Database))
-	s.Router.Get("/billing/usage", api.GetBillingUsage(s.Database))
-	s.mountAIRoutes("/ai", aiService)
-	s.mountMistyRoutes("", aiService)
-	s.mountSmartLibraryRoutes("/ai/smart-library", smartLibraryService)
-	s.mountMediaSearchRoutes("/ai/media-search", mediaSearchService)
-	s.mountAgentsRoutes("", agentsService)
-	s.mountSpacesRoutes("", s.Spaces, s.Realtime)
-	if s.Library != nil {
-		s.mountLibraryRoutes("", s.Library)
-	}
-
-	// Compatibility routes for clients configured with the /api prefix.
-	s.Router.Post("/api/register", registerHandler)
-	s.Router.Post("/api/self-host/bootstrap", api.SelfHostBootstrap(s.Database))
-	s.Router.Post("/api/self-host/enroll", api.SelfHostEnroll(s.Database))
-	s.Router.Post("/api/self-host/invitations", api.SelfHostInvitation(s.Database))
-	s.Router.Delete("/api/self-host/invitations/{invitationID}", api.SelfHostInvitation(s.Database))
-	s.Router.Post("/api/self-host/entitlement", api.RenewSelfHostEntitlement(s.Database))
-	s.Router.Post("/api/login", loginHandler)
-	s.Router.Post("/api/logout", logoutHandler)
-	s.Router.Post("/api/auth/forgot", forgotPasswordHandler)
-	s.Router.Get("/api/auth/reset/start", startResetHandler)
-	s.Router.Get("/api/auth/reset/validate", validateResetTokenHandler)
-	s.Router.Post("/api/auth/reset", resetPasswordHandler)
-	s.Router.Post("/api/auth/handoff", mintHandoffHandler)
-	s.Router.Get("/api/auth/handoff/start", startHandoffHandler)
-	s.Router.Post("/api/waitlist", waitlistJoinHandler)
-	s.Router.Get("/api/me", api.GetMe(s.Database))
-	s.Router.Put("/api/me/profile", api.UpdateProfile(s.Database))
-	s.Router.Post("/api/me/export", s.Spaces.AccountExportManifest())
-	s.Router.Post("/api/me/deletion", s.Spaces.BeginAccountDeletion())
-	s.Router.Post("/api/account/deletion/status", s.Spaces.AccountDeletionStatus())
-	s.Router.MethodFunc(http.MethodGet, "/api/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
-	s.Router.MethodFunc(http.MethodPut, "/api/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
-	s.Router.Put("/api/me/device", api.UpdateDevice(s.Database))
-	s.Router.Get("/api/me/settings", api.GetSettings(s.Database))
-	s.Router.Put("/api/me/settings", api.UpdateSettings(s.Database))
-	s.Router.Put("/api/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
-	s.Router.Post("/api/billing/trial/start", api.StartPersonalTrial(s.Database))
-	s.Router.Post("/api/billing/self-host-entitlement", entitlementHandler)
-	s.Router.Post("/api/billing/checkout-session", api.CreateCheckoutSession(s.Database))
-	s.Router.Post("/api/billing/credit-checkout-session", api.CreateCreditCheckoutSession(s.Database))
-	s.Router.Post("/api/billing/portal-session", api.CreatePortalSession(s.Database))
-	s.Router.Get("/api/billing/usage", api.GetBillingUsage(s.Database))
-	s.mountAIRoutes("/api/ai", aiService)
-	s.mountMistyRoutes("/api", aiService)
-	s.mountSmartLibraryRoutes("/api/ai/smart-library", smartLibraryService)
-	s.mountMediaSearchRoutes("/api/ai/media-search", mediaSearchService)
-	s.mountAgentsRoutes("/api", agentsService)
-	s.mountSpacesRoutes("/api", s.Spaces, s.Realtime)
-	if s.Library != nil {
-		s.mountLibraryRoutes("/api", s.Library)
+	s.Router.Post("/mcp", s.Spaces.MistyMCP().ServeHTTP)
+	if activepiecesProxy, proxyErr := activepiecesProxyFromEnv(); proxyErr != nil {
+		return proxyErr
+	} else if activepiecesProxy != nil {
+		mountActivepiecesProxy(s.Router, activepiecesProxy)
 	}
 
 	// Stripe webhook — called by Stripe on payment events
 	if api.InstanceConfigFromEnv().Deployment == "hosted" {
 		s.Router.Post(s.StripeWebhookPath, api.StripeWebhookWithService(envconfig.Getenv("STRIPE_WEBHOOK_SECRET"), appbilling.NewStripeService(s.Database, appbilling.WithTelemetry(s.Telemetry))))
-		s.Spaces.StartProviderWorkers(context.Background())
 	}
 
 	return nil

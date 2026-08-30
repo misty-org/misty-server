@@ -172,63 +172,6 @@ func TestingProviderInfrastructureURL(parts ...string) string {
 	return base + "/provider-callbacks/" + strings.Join(escaped, "/")
 }
 
-func providerErrorCode(err error) string {
-	var apiErr *googleAPIError
-	status := 0
-	if errors.As(err, &apiErr) {
-		status = apiErr.Status
-	}
-	var providerErr *providerAPIError
-	if errors.As(err, &providerErr) {
-		status = providerErr.Status
-	}
-	if status != 0 {
-		switch status {
-		case http.StatusUnauthorized:
-			return "connection_revoked"
-		case http.StatusForbidden:
-			return "permission_missing"
-		case http.StatusTooManyRequests:
-			return "rate_limited"
-		case http.StatusNotFound:
-			return "not_found"
-		case http.StatusGone:
-			return "cursor_expired"
-		case http.StatusPreconditionFailed:
-			return "conflict"
-		}
-	}
-	if errors.Is(err, db.ErrSpaceConflict) {
-		return "conflict"
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return "provider_timeout"
-	}
-	return "provider_unavailable"
-}
-
 func TestingProviderErrorCodeForStatus(status int) string {
 	return providerErrorCode(&providerAPIError{Status: status})
-}
-
-func writeProviderFailure(w http.ResponseWriter, err error) {
-	var apiErr *googleAPIError
-	var providerErr *providerAPIError
-	if errors.As(err, &apiErr) || errors.As(err, &providerErr) {
-		status := http.StatusBadGateway
-		providerStatus := 0
-		if apiErr != nil {
-			providerStatus = apiErr.Status
-		} else if providerErr != nil {
-			providerStatus = providerErr.Status
-		}
-		if providerStatus == http.StatusUnauthorized || providerStatus == http.StatusForbidden {
-			status = http.StatusFailedDependency
-		} else if providerStatus == http.StatusPreconditionFailed {
-			status = http.StatusConflict
-		}
-		writeJSON(w, status, map[string]string{"code": providerErrorCode(err)})
-		return
-	}
-	writeSpaceError(w, err)
 }

@@ -38,6 +38,7 @@ type Server struct {
 	Metrics                   *metrics.Registry
 	AIAnalyzer                *serveragent.SmartLibraryAnalyzer
 	AI                        *api.AIService
+	AgentRuntime              api.AgentRuntimeConfig
 }
 
 func CreateServer() (*Server, error) {
@@ -79,9 +80,10 @@ func CreateServer() (*Server, error) {
 	}
 	usageMeter := appbilling.NewCreditMeter(s.Database)
 	s.AIAgent = serveragent.NewService(
-		// Agent execution state is attached to durable Space runs. The generic
-		// completion service must never recreate the retired private chat store.
-		serveragent.NewSessionStoreWithPersistence(0, nil),
+		// The embodied companion and Agents both use agent_conversations as their
+		// durable task-thread store. Keeping the runtime wired to the database is
+		// also required before an invocation can bind its surface metadata.
+		serveragent.NewSessionStoreWithPersistence(0, s.Database),
 		// Every paid model call in the process passes through this ceiling, so
 		// no path can run up an unbounded provider bill.
 		serveragent.NewBudgetedProvider(
@@ -136,6 +138,11 @@ func CreateServer() (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configure Space link encryption: %w", err)
 	}
+	managedActivepieces, err := api.ManagedActivepiecesFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("configure managed Activepieces: %w", err)
+	}
+	s.Spaces.SetManagedActivepieces(managedActivepieces)
 	journalCollab, err := api.JournalCollabConfigFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("configure journal collaboration: %w", err)
@@ -146,6 +153,7 @@ func CreateServer() (*Server, error) {
 		return nil, fmt.Errorf("configure Agent runtime: %w", err)
 	}
 	s.Spaces.SetAgentRuntime(agentRuntime)
+	s.AgentRuntime = agentRuntime
 	s.Spaces.SetUsageMeter(usageMeter)
 	s.Spaces.SetLibraryProvider(s.Library)
 	s.Spaces.SetAvatarStore(s.LibraryStore)

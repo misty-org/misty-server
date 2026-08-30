@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -173,84 +172,67 @@ func (s *SpacesService) ProviderSharedResources() http.HandlerFunc {
 	}
 }
 
+func writeProviderFailure(w http.ResponseWriter, err error) {
+	if errors.Is(err, db.ErrSpaceForbidden) {
+		writeSpaceError(w, err)
+		return
+	}
+	var googleErr *googleAPIError
+	var providerErr *providerAPIError
+	if errors.As(err, &googleErr) || errors.As(err, &providerErr) {
+		status := http.StatusBadGateway
+		providerStatus := 0
+		if googleErr != nil {
+			providerStatus = googleErr.Status
+		} else if providerErr != nil {
+			providerStatus = providerErr.Status
+		}
+		if providerStatus == http.StatusUnauthorized || providerStatus == http.StatusForbidden {
+			status = http.StatusFailedDependency
+		} else if providerStatus == http.StatusPreconditionFailed {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, map[string]string{"code": providerErrorCode(err)})
+		return
+	}
+	writeJSON(w, http.StatusBadGateway, map[string]string{"code": "provider_error", "message": err.Error()})
+}
+
+func providerErrorCode(err error) string {
+	if err == nil {
+		return ""
+	}
+	var googleErr *googleAPIError
+	var providerErr *providerAPIError
+	status := 0
+	if errors.As(err, &googleErr) {
+		status = googleErr.Status
+	} else if errors.As(err, &providerErr) {
+		status = providerErr.Status
+	}
+	switch status {
+	case http.StatusUnauthorized:
+		return "connection_revoked"
+	case http.StatusForbidden:
+		return "permission_missing"
+	case http.StatusTooManyRequests:
+		return "rate_limited"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusGone:
+		return "cursor_expired"
+	case http.StatusPreconditionFailed:
+		return "conflict"
+	}
+	if errors.Is(err, db.ErrSpaceConflict) {
+		return "conflict"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "provider_timeout"
+	}
+	return "provider_error"
+}
+
 func (s *SpacesService) backfillProviderResource(ctx context.Context, resource db.ProviderSharedResource) error {
-	token, tokenType, err := s.providerTokenForSharedResource(ctx, resource)
-	if err != nil {
-		return err
-	}
-	switch resource.Provider {
-	case "slack":
-		query := url.Values{"channel": {resource.ExternalResourceID}, "limit": {"100"}, "inclusive": {"true"}}
-		payload, err := providerJSONRequest(ctx, token, tokenType, http.MethodGet, "https://slack.com/api/conversations.history?"+query.Encode(), nil, nil)
-		if err != nil {
-			return err
-		}
-		var page struct {
-			OK       bool `json:"ok"`
-			Messages []struct {
-				TS       string          `json:"ts"`
-				ThreadTS string          `json:"thread_ts"`
-				User     string          `json:"user"`
-				BotID    string          `json:"bot_id"`
-				Text     string          `json:"text"`
-				Files    json.RawMessage `json:"files"`
-			} `json:"messages"`
-		}
-		if json.Unmarshal(payload, &page) != nil || !page.OK {
-			return errors.New("slack history backfill failed")
-		}
-		for _, message := range page.Messages {
-			content, _ := json.Marshal(map[string]any{"channel": resource.ExternalResourceID, "ts": message.TS, "thread_ts": message.ThreadTS, "user": message.User, "bot_id": message.BotID, "text": message.Text, "files": json.RawMessage(message.Files)})
-			if err := s.database.UpsertProviderContentRecord(ctx, db.ProviderContentRecord{SpaceID: resource.SpaceID, SharedResourceID: resource.ID, Provider: "slack", ExternalRecordID: message.TS, ParentExternalID: message.ThreadTS, RecordType: "message", Fingerprint: providerPayloadFingerprint(content), DisplayName: resource.DisplayName + " · " + message.User, MIMEType: "application/vnd.slack.message+json", OccurredAt: slackTimestamp(message.TS), Content: content}); err != nil {
-				return err
-			}
-		}
-	case "discord":
-		payload, err := providerJSONRequest(ctx, token, "Bot", http.MethodGet, "https://discord.com/api/v10/channels/"+url.PathEscape(resource.ExternalResourceID)+"/messages?limit=100", nil, nil)
-		if err != nil {
-			return err
-		}
-		var messages []map[string]any
-		if json.Unmarshal(payload, &messages) != nil {
-			return errors.New("discord history backfill failed")
-		}
-		for _, message := range messages {
-			externalID, _ := message["id"].(string)
-			if externalID == "" {
-				continue
-			}
-			content, _ := json.Marshal(message)
-			display := resource.DisplayName
-			if author, _ := message["author"].(map[string]any); author != nil {
-				if username, _ := author["username"].(string); username != "" {
-					display += " · " + username
-				}
-			}
-			var occurredAt *time.Time
-			if timestamp, _ := message["timestamp"].(string); timestamp != "" {
-				if parsed, parseErr := time.Parse(time.RFC3339Nano, timestamp); parseErr == nil {
-					occurredAt = &parsed
-				}
-			}
-			if err := s.database.UpsertProviderContentRecord(ctx, db.ProviderContentRecord{SpaceID: resource.SpaceID, SharedResourceID: resource.ID, Provider: "discord", ExternalRecordID: externalID, RecordType: "message", Fingerprint: providerPayloadFingerprint(content), DisplayName: display, MIMEType: "application/vnd.discord.message+json", OccurredAt: occurredAt, Content: content}); err != nil {
-				return err
-			}
-		}
-	case "notion":
-		event := notionWebhookEvent{ID: "initial:" + resource.ID, Timestamp: time.Now().UTC().Format(time.RFC3339Nano), Type: resource.ResourceType + ".initial_sync"}
-		event.Entity.ID, event.Entity.Type = resource.ExternalResourceID, resource.ResourceType
-		if event.Entity.Type == "data_source" || event.Entity.Type == "database" || event.Entity.Type == "page" {
-			if err := s.fetchAndStoreNotionEntity(ctx, resource, event, TestingMustAPIRawJSON(event)); err != nil {
-				return err
-			}
-			if event.Entity.Type == "data_source" || event.Entity.Type == "database" {
-				if err := s.backfillNotionCollectionRows(ctx, resource, 100); err != nil {
-					return err
-				}
-			}
-			break
-		}
-		return db.ErrSpaceInvalid
-	}
 	return s.database.SetProviderSharedResourceHealth(ctx, resource.ID, "active", "")
 }

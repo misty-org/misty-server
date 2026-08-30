@@ -78,27 +78,6 @@ func (s *SpacesService) Conversation() http.HandlerFunc {
 	}
 }
 
-func (s *SpacesService) DirectAgentConversation() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		var body struct {
-			AgentID string `json:"agent_id"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		item, err := s.database.DirectAgentConversation(r.Context(), userID, chi.URLParam(r, "spaceID"), body.AgentID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, item)
-	}
-}
-
 func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -131,6 +110,13 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
+		var socialBinding *db.SocialBinding
+		if candidate, _, socialErr := s.database.SocialManualSendContext(r.Context(), userID, spaceID, conversationID); socialErr == nil {
+			socialBinding = candidate
+		} else if socialErr == db.ErrSpaceForbidden || (socialErr != nil && socialErr != db.ErrSpaceNotFound) {
+			writeSpaceError(w, socialErr)
+			return
+		}
 		directAgentID, err := s.database.DirectConversationAgentID(r.Context(), userID, spaceID, conversationID)
 		if err != nil {
 			writeSpaceError(w, err)
@@ -151,6 +137,12 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 		if err != nil {
 			writeSpaceError(w, err)
 			return
+		}
+		if socialBinding != nil {
+			if _, queueErr := s.database.QueueSocialManualCommand(r.Context(), userID, spaceID, conversationID, body.Content, body.ClientNonce); queueErr != nil {
+				writeSpaceError(w, queueErr)
+				return
+			}
 		}
 		if directAgentID != "" && len(body.AgentInvocations) == 0 {
 			body.AgentInvocations = []explicitAgentInvocation{{AgentID: directAgentID}}

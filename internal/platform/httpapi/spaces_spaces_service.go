@@ -35,12 +35,17 @@ type SpacesService struct {
 	invitationSender         mistyemail.SpaceInvitationSender
 	invitationBaseURL        string
 	agentRuntime             AgentRuntimeConfig
+	aiInvocations            *aiInvocationHub
+	searchAnalyzer           *serveragent.SmartLibraryAnalyzer
+	searchEmbeddingMu        sync.Mutex
+	searchEmbeddings         map[string]globalSearchEmbeddingCacheEntry
+	searchEmbeddingInflight  map[string]*globalSearchEmbeddingFlight
 	usageMeter               serveragent.UsageMeter
 	mailProviderFactory      MailProviderFactory
-	slackChatProviderFactory SlackChatProviderFactory
 	githubAppProviderFactory GitHubAppProviderFactory
 	figmaProviderFactory     FigmaProviderFactory
 	mcpConnectorClient       mcpintegration.ConnectorClient
+	managedActivepieces      ManagedActivepiecesClient
 }
 
 func (s *SpacesService) TestingSetFigmaProviderFactory(factory FigmaProviderFactory) {
@@ -59,6 +64,18 @@ func (s *SpacesService) SetAgentRuntime(config AgentRuntimeConfig) {
 
 func (s *SpacesService) SetUsageMeter(meter serveragent.UsageMeter) {
 	s.usageMeter = meter
+}
+
+func (s *SpacesService) SetSearchAnalyzer(analyzer *serveragent.SmartLibraryAnalyzer) {
+	s.searchEmbeddingMu.Lock()
+	defer s.searchEmbeddingMu.Unlock()
+	s.searchAnalyzer = analyzer
+	if s.searchEmbeddings == nil {
+		s.searchEmbeddings = map[string]globalSearchEmbeddingCacheEntry{}
+	}
+	if s.searchEmbeddingInflight == nil {
+		s.searchEmbeddingInflight = map[string]*globalSearchEmbeddingFlight{}
+	}
 }
 
 func (s *SpacesService) SetInvitationSender(
@@ -83,12 +100,16 @@ func NewSpacesService(database *db.Database, agent *serveragent.Service, encrypt
 		return nil, err
 	}
 	return &SpacesService{database: database, agent: agent, aead: aead, keyVer: 1,
-		mailProviderFactory: defaultMailProviderFactory, slackChatProviderFactory: defaultSlackChatProviderFactory,
-		mcpConnectorClient: mcpintegration.NewClient(mcpintegration.DefaultLimits())}, nil
+		mailProviderFactory: defaultMailProviderFactory,
+		mcpConnectorClient:  mcpintegration.NewClient(mcpintegration.DefaultLimits())}, nil
 }
 
 func (s *SpacesService) TestingSetMCPConnectorClient(client mcpintegration.ConnectorClient) {
 	s.mcpConnectorClient = client
+}
+
+func (s *SpacesService) SetManagedActivepieces(client ManagedActivepiecesClient) {
+	s.managedActivepieces = client
 }
 
 func (s *SpacesService) TestingSetGitHubAppProviderFactory(factory GitHubAppProviderFactory) {

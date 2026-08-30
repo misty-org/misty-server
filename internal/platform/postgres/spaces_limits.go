@@ -106,8 +106,12 @@ type SpaceMessage struct {
 	EditedAt            *time.Time             `json:"edited_at,omitempty"`
 	// Provenance for a mirrored message. Absent means Misty-native chat, so
 	// every existing client stays valid and "no origin" reads as "ours".
-	Origin    json.RawMessage `json:"origin,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
+	Origin              json.RawMessage `json:"origin,omitempty"`
+	SocialProvider      string          `json:"social_provider,omitempty"`
+	SocialExternalID    string          `json:"social_external_id,omitempty"`
+	SocialDirection     string          `json:"social_direction,omitempty"`
+	SocialDeliveryState string          `json:"social_delivery_state,omitempty"`
+	CreatedAt           time.Time       `json:"created_at"`
 }
 
 type SpaceMessageSender struct {

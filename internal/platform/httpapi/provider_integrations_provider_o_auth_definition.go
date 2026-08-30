@@ -29,17 +29,7 @@ type providerOAuthDefinition struct {
 	PKCE                                                           bool
 }
 
-var TestingProviderOAuthCatalog = map[string]providerOAuthDefinition{
-	// Google is one account-level OAuth connection. Product capabilities such as
-	// Calendar, Gmail, and Drive remain separate adapters and add scopes through
-	// incremental consent instead of creating separate credentials.
-	"google": googleProvider("google", "Google",
-		"https://www.googleapis.com/auth/calendar.readonly",
-		"https://www.googleapis.com/auth/calendar.events"),
-	"slack":   {ID: "slack", Name: "Slack", AuthorizeURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access", ClientIDEnv: "SLACK_CLIENT_ID", ClientSecretEnv: "SLACK_CLIENT_SECRET", Scopes: []string{"app_mentions:read", "channels:history", "channels:read", "chat:write", "files:read", "groups:history", "groups:read", "reactions:read", "users:read"}},
-	"discord": {ID: "discord", Name: "Discord", AuthorizeURL: "https://discord.com/oauth2/authorize", TokenURL: "https://discord.com/api/oauth2/token", ClientIDEnv: "DISCORD_CLIENT_ID", ClientSecretEnv: "DISCORD_CLIENT_SECRET", Scopes: []string{"bot", "applications.commands", "identify"}},
-	"notion":  {ID: "notion", Name: "Notion", AuthorizeURL: "https://api.notion.com/v1/oauth/authorize", TokenURL: "https://api.notion.com/v1/oauth/token", ClientIDEnv: "NOTION_CLIENT_ID", ClientSecretEnv: "NOTION_CLIENT_SECRET"},
-}
+var TestingProviderOAuthCatalog = map[string]providerOAuthDefinition{}
 
 type providerOAuthAvailability struct {
 	Provider   string `json:"provider"`
@@ -49,9 +39,6 @@ type providerOAuthAvailability struct {
 func TestingProviderOAuthAvailabilityCatalog() []providerOAuthAvailability {
 	providers := make([]providerOAuthAvailability, 0, len(TestingProviderOAuthCatalog)+1)
 	for provider, definition := range TestingProviderOAuthCatalog {
-		if provider != "google" && provider != "slack" && provider != "discord" && provider != "notion" {
-			continue
-		}
 		providers = append(providers, providerOAuthAvailability{
 			Provider:   provider,
 			Configured: TestingProviderOAuthClientID(definition) != "" && TestingProviderOAuthClientSecret(definition) != "",
@@ -68,10 +55,6 @@ func TestingProviderOAuthClientID(definition providerOAuthDefinition) string {
 
 func TestingProviderOAuthClientSecret(definition providerOAuthDefinition) string {
 	return strings.TrimSpace(envconfig.Getenv(definition.ClientSecretEnv))
-}
-
-func googleProvider(id, name string, scopes ...string) providerOAuthDefinition {
-	return providerOAuthDefinition{ID: id, Name: name, AuthorizeURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: "https://oauth2.googleapis.com/token", ClientIDEnv: "GOOGLE_CLIENT_ID", ClientSecretEnv: "GOOGLE_CLIENT_SECRET", Scopes: append(scopes, "openid", "email", "profile"), PKCE: true}
 }
 
 type providerTokenEnvelope struct {

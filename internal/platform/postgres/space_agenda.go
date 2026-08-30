@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"sort"
 	"time"
 )
@@ -29,6 +28,7 @@ type SpaceAgendaEntry struct {
 	MeetingURL      string    `json:"meeting_url,omitempty"`
 	Location        string    `json:"location,omitempty"`
 	ExternalEventID string    `json:"external_event_id,omitempty"`
+	Version         int64     `json:"version,omitempty"`
 }
 
 type SpaceAgendaSnapshot struct {
@@ -64,9 +64,8 @@ func (db *Database) SpaceAgenda(ctx context.Context, userID, spaceID string, fro
 
 func loadSpaceAgendaTasksTx(ctx context.Context, tx *sql.Tx, userID, spaceID string, from, to time.Time, out *SpaceAgendaSnapshot) (map[string]bool, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT `+spaceTaskColumns+` FROM space_tasks WHERE space_id=$1 AND archived_at IS NULL AND status<>'canceled' AND (
-		(due_at >= $2 AND due_at < $3) OR
-		(schedule IS NOT NULL AND NULLIF(schedule->>'starts_at','') IS NOT NULL AND NULLIF(schedule->>'ends_at','') IS NOT NULL AND (schedule->>'starts_at')::timestamptz < $3 AND (schedule->>'ends_at')::timestamptz > $2)
-	) AND (audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=audience_conversation_id AND cm.actor_kind='person' AND cm.user_id=$4)) ORDER BY COALESCE((schedule->>'starts_at')::timestamptz,due_at),id`, spaceID, from, to, userID)
+		(due_at >= $2 AND due_at < $3)
+	) AND (audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=audience_conversation_id AND cm.actor_kind='person' AND cm.user_id=$4)) ORDER BY due_at,id`, spaceID, from, to, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -78,25 +77,11 @@ func loadSpaceAgendaTasksTx(ctx context.Context, tx *sql.Tx, userID, spaceID str
 			return nil, err
 		}
 		entry := SpaceAgendaEntry{ID: "task:" + task.ID, Kind: "task", TaskID: task.ID, Title: task.Title, Description: task.Notes, Timezone: task.DueTimezone, Status: task.Status}
-		var schedule TaskSchedule
-		if len(task.Schedule) > 0 && json.Unmarshal(task.Schedule, &schedule) == nil {
-			starts, startErr := time.Parse(time.RFC3339, schedule.StartsAt)
-			ends, endErr := time.Parse(time.RFC3339, schedule.EndsAt)
-			if startErr == nil && endErr == nil {
-				entry.StartsAt, entry.EndsAt, entry.AllDay = starts, ends, schedule.AllDay
-				entry.Timezone, entry.Location = schedule.Timezone, schedule.Location
-			}
-		}
-		if entry.StartsAt.IsZero() && task.DueAt != nil {
+		if task.DueAt != nil {
 			entry.StartsAt, entry.EndsAt = *task.DueAt, task.DueAt.Add(30*time.Minute)
 		}
 		if entry.StartsAt.IsZero() {
 			continue
-		}
-		var calendar TaskCalendarLink
-		if len(task.Calendar) > 0 && json.Unmarshal(task.Calendar, &calendar) == nil && calendar.SourceID != "" && calendar.GoogleEventID != "" {
-			entry.SourceID = calendar.SourceID
-			linked[calendar.SourceID+"\x00"+calendar.GoogleEventID] = true
 		}
 		out.Entries = append(out.Entries, entry)
 	}
@@ -125,7 +110,7 @@ func loadSpaceAgendaCalendarTx(ctx context.Context, tx *sql.Tx, spaceID string, 
 }
 
 func loadSpaceAgendaNativeCalendarTx(ctx context.Context, tx *sql.Tx, userID, spaceID string, from, to time.Time, out *SpaceAgendaSnapshot) error {
-	rows, err := tx.QueryContext(ctx, `SELECT id,title,description,location,starts_at,ends_at,all_day,timezone,status FROM space_native_calendar_events WHERE space_id=$1 AND starts_at<$2 AND ends_at>$3 AND archived_at IS NULL AND status<>'canceled' AND (audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=audience_conversation_id AND cm.actor_kind='person' AND cm.user_id=$4)) ORDER BY starts_at,id`, spaceID, to, from, userID)
+	rows, err := tx.QueryContext(ctx, `SELECT id,title,description,location,starts_at,ends_at,all_day,timezone,status,version FROM space_native_calendar_events WHERE space_id=$1 AND starts_at<$2 AND ends_at>$3 AND archived_at IS NULL AND status<>'canceled' AND (audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=audience_conversation_id AND cm.actor_kind='person' AND cm.user_id=$4)) ORDER BY starts_at,id`, spaceID, to, from, userID)
 	if err != nil {
 		return err
 	}
@@ -133,7 +118,7 @@ func loadSpaceAgendaNativeCalendarTx(ctx context.Context, tx *sql.Tx, userID, sp
 	for rows.Next() {
 		var item SpaceAgendaEntry
 		item.Kind, item.SourceID = "event", "misty"
-		if err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Location, &item.StartsAt, &item.EndsAt, &item.AllDay, &item.Timezone, &item.Status); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.Location, &item.StartsAt, &item.EndsAt, &item.AllDay, &item.Timezone, &item.Status, &item.Version); err != nil {
 			return err
 		}
 		item.ID = "event:" + item.ID

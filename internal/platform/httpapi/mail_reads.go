@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -45,6 +46,7 @@ func (s *SpacesService) MailAccounts() http.HandlerFunc {
 			}
 			profile, err := provider.Account(r.Context())
 			if err != nil {
+				s.recordMailProviderFailure(r.Context(), userID, &connection, err)
 				accounts = append(accounts, fallbackMailAccount(connection, err))
 				continue
 			}
@@ -54,6 +56,7 @@ func (s *SpacesService) MailAccounts() http.HandlerFunc {
 			// repeatedly issuing folder and message requests that can never work.
 			if connection.Provider == "microsoft" {
 				if _, err := provider.ListFolders(r.Context()); err != nil {
+					s.recordMailProviderFailure(r.Context(), userID, &connection, err)
 					accounts = append(accounts, fallbackMailAccount(connection, err))
 					continue
 				}
@@ -94,13 +97,14 @@ func (s *SpacesService) MailFolders() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		provider, _, err := s.mailProvider(r.Context(), userID, r.URL.Query().Get("connection_id"))
+		provider, account, err := s.mailProvider(r.Context(), userID, r.URL.Query().Get("connection_id"))
 		if err != nil {
 			writeMailError(w, err)
 			return
 		}
 		folders, err := provider.ListFolders(r.Context())
 		if err != nil {
+			s.recordMailProviderFailure(r.Context(), userID, account, err)
 			writeMailError(w, err)
 			return
 		}
@@ -140,13 +144,14 @@ func (s *SpacesService) MailThreads() http.HandlerFunc {
 			writeMailError(w, db.ErrSpaceInvalid)
 			return
 		}
-		provider, _, err := s.mailProvider(r.Context(), userID, query.Get("connection_id"))
+		provider, account, err := s.mailProvider(r.Context(), userID, query.Get("connection_id"))
 		if err != nil {
 			writeMailError(w, err)
 			return
 		}
 		page, err := provider.ListThreads(r.Context(), input)
 		if err != nil {
+			s.recordMailProviderFailure(r.Context(), userID, account, err)
 			writeMailError(w, err)
 			return
 		}
@@ -165,18 +170,26 @@ func (s *SpacesService) MailThread() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		threadID := strings.TrimSpace(chi.URLParam(r, "threadID"))
-		if threadID == "" || len(threadID) > 320 {
+		rawThreadID := strings.TrimSpace(chi.URLParam(r, "threadID"))
+		if rawThreadID == "" || len(rawThreadID) > 500 {
 			writeMailError(w, db.ErrSpaceInvalid)
 			return
 		}
-		provider, _, err := s.mailProvider(r.Context(), userID, r.URL.Query().Get("connection_id"))
+		threadID := rawThreadID
+		if unescaped, err := url.PathUnescape(rawThreadID); err == nil && unescaped != "" {
+			threadID = unescaped
+		}
+		if unescaped, err := url.QueryUnescape(threadID); err == nil && unescaped != "" {
+			threadID = unescaped
+		}
+		provider, account, err := s.mailProvider(r.Context(), userID, r.URL.Query().Get("connection_id"))
 		if err != nil {
 			writeMailError(w, err)
 			return
 		}
 		thread, err := provider.GetThread(r.Context(), threadID)
 		if err != nil {
+			s.recordMailProviderFailure(r.Context(), userID, account, err)
 			writeMailError(w, err)
 			return
 		}

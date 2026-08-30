@@ -224,6 +224,16 @@ func scanSpaceMessage(scanner interface{ Scan(...any) error }, out *SpaceMessage
 	}
 	if len(origin) > 0 {
 		out.Origin = append(json.RawMessage(nil), origin...)
+		var socialOrigin struct {
+			System     string `json:"system"`
+			ExternalID string `json:"external_id"`
+		}
+		if json.Unmarshal(origin, &socialOrigin) == nil && (socialOrigin.System == "discord" || socialOrigin.System == "instagram") {
+			out.SocialProvider = socialOrigin.System
+			out.SocialExternalID = socialOrigin.ExternalID
+			out.SocialDirection = "inbound"
+			out.SocialDeliveryState = "delivered"
+		}
 	}
 	if err := json.Unmarshal(raw, &out.Content); err != nil {
 		return err

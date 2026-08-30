@@ -28,6 +28,12 @@ import {
   readDocumentSnapshot,
   writeDocumentSnapshot,
 } from "./document-persistence";
+import {
+  applyDrawingSceneMutation,
+  buildDrawingSceneMutation,
+  drawingSceneHash,
+  drawingSceneState,
+} from "./drawing-scene";
 
 /**
  * One Durable Object per collaborative document.
@@ -54,9 +60,21 @@ export interface Env {
 
 /** Used ticket ids are kept a little past ticket expiry, then swept. */
 const JTI_RETENTION_MS = 5 * 60 * 1000;
-/** Control requests are tiny JSON envelopes, never document snapshots. */
-const MAX_CONTROL_BODY_BYTES = 128 * 1024;
+/** Scene mutations are bounded below the Yjs document ceiling. */
+const MAX_CONTROL_BODY_BYTES = 512 * 1024;
 const BOOTSTRAP_APPLIED_KEY = "bootstrap:applied";
+const DRAWING_REQUESTS_KEY = "drawingRequests";
+const PURGED_KEY = "document:purged";
+const MAX_DRAWING_REQUESTS = 200;
+
+function emptyDocumentBytes(): number {
+  const document = new Y.Doc();
+  try {
+    return Y.encodeStateAsUpdate(document).byteLength;
+  } finally {
+    document.destroy();
+  }
+}
 
 function replaceSharedText(text: Y.Text, value: string): void {
   text.delete(0, text.length);
@@ -76,6 +94,7 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
   protected abstract readonly resourceType: CollaborationResourceType;
   protected readonly supportsMarkdownBootstrap: boolean = false;
   protected readonly supportsNoteProjection: boolean = false;
+  protected readonly supportsDrawingScene: boolean = false;
   /**
    * Persist shortly after edits stop rather than on every keystroke. A single
    * burst of typing is one write instead of hundreds.
@@ -87,6 +106,8 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
 
   /** Newest ACL version this room has been told about. */
   private aclVersion = 0;
+  /** Prevents a deleted room from being repopulated by an already-minted ticket. */
+  private purged = false;
   /** Per-object-instance id for joining privacy-safe Worker log events. */
   private readonly correlationID = `room_${crypto.randomUUID()}`;
 
@@ -100,6 +121,10 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
     connection: Connection,
     ctx: ConnectionContext,
   ): Promise<void> {
+    if (this.purged) {
+      this.refuse(connection, "resource_deleted");
+      return;
+    }
     const url = new URL(ctx.request.url);
     const token = url.searchParams.get("ticket") ?? "";
 
@@ -174,6 +199,10 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
     connection: Connection,
     message: ArrayBuffer | string,
   ): Promise<void> {
+    if (this.purged) {
+      this.refuse(connection, "resource_deleted");
+      return;
+    }
     const size =
       typeof message === "string" ? message.length : message.byteLength;
     if (messageIsTooLarge(size)) {
@@ -251,6 +280,9 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
    * after rechecking access; image bodies remain in R2 and are never embedded.
    */
   private async handleDocumentExport(request: Request): Promise<Response> {
+    if (this.purged) {
+      return jsonResponse({ code: "resource_deleted" }, 410);
+    }
     const url = new URL(request.url);
     if (url.searchParams.get("export") !== "1") {
       return jsonResponse({ code: "not_found" }, 404);
@@ -304,7 +336,70 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
     command: string,
     payload: Record<string, unknown>,
   ): Promise<Response> {
+    if (this.purged && command !== "purge" && command !== "status") {
+      return jsonResponse({ code: "resource_deleted" }, 410);
+    }
     switch (command) {
+      case "drawing_scene_read": {
+        if (!this.supportsDrawingScene) return jsonResponse({ code: "unknown_command" }, 400);
+        const revision = (await this.ctx.storage.get<number>("drawingRevision")) ?? 0;
+        return jsonResponse({
+          ok: true,
+          revision,
+          content_hash: await drawingSceneHash(this.document),
+          ...drawingSceneState(this.document, payload.include_deleted === true),
+        });
+      }
+      case "drawing_scene_apply": {
+        if (!this.supportsDrawingScene) return jsonResponse({ code: "unknown_command" }, 400);
+        const requestID = typeof payload.request_id === "string" ? payload.request_id.trim() : "";
+        if (requestID && (requestID.length > 200 || !/^[A-Za-z0-9:._-]+$/u.test(requestID))) {
+          return jsonResponse({ code: "invalid_request_id" }, 400);
+        }
+        if (requestID) {
+          const requests = (await this.ctx.storage.get<Record<string, Record<string, unknown>>>(DRAWING_REQUESTS_KEY)) ?? {};
+          const replay = requests[requestID];
+          if (replay) return jsonResponse({ ...replay, replayed: true });
+        }
+        const currentHash = await drawingSceneHash(this.document);
+        if (typeof payload.base_hash === "string" && payload.base_hash !== currentHash) {
+          return jsonResponse({ code: "drawing_conflict", content_hash: currentHash }, 409);
+        }
+        let mutation;
+        try {
+          mutation = buildDrawingSceneMutation(this.document, payload);
+        } catch (error) {
+          return jsonResponse({ code: error instanceof Error ? error.message : "invalid_drawing_scene" }, 400);
+        }
+        const projected = new Y.Doc();
+        Y.applyUpdate(projected, Y.encodeStateAsUpdate(this.document));
+        applyDrawingSceneMutation(projected, mutation);
+        const projectedBytes = Y.encodeStateAsUpdate(projected).byteLength;
+        projected.destroy();
+        if (projectedBytes > MAX_DOCUMENT_BYTES) return jsonResponse({ code: "document_too_large" }, 413);
+        applyDrawingSceneMutation(this.document, mutation);
+        await this.onSave();
+        const revision = ((await this.ctx.storage.get<number>("drawingRevision")) ?? 0) + 1;
+        const result = {
+          ok: true,
+          revision,
+          content_hash: await drawingSceneHash(this.document),
+          changed: mutation.changed,
+          deleted: mutation.deleted,
+          element_count: drawingSceneState(this.document, false).elements instanceof Array
+            ? (drawingSceneState(this.document, false).elements as unknown[]).length
+            : 0,
+        };
+        await this.ctx.storage.put("drawingRevision", revision);
+        if (requestID) {
+          const requests = (await this.ctx.storage.get<Record<string, Record<string, unknown>>>(DRAWING_REQUESTS_KEY)) ?? {};
+          requests[requestID] = result;
+          const ids = Object.keys(requests);
+          for (const id of ids.slice(0, Math.max(0, ids.length - MAX_DRAWING_REQUESTS))) delete requests[id];
+          await this.ctx.storage.put(DRAWING_REQUESTS_KEY, requests);
+        }
+        return jsonResponse(result);
+      }
       case "bootstrap": {
         if (!this.supportsMarkdownBootstrap) {
           return jsonResponse({ code: "unknown_command" }, 400);
@@ -394,21 +489,22 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
         return jsonResponse({
           ok: true,
           acl_version: this.aclVersion,
-          document_bytes: Y.encodeStateAsUpdate(this.document).byteLength,
+          document_bytes: this.purged
+            ? emptyDocumentBytes()
+            : Y.encodeStateAsUpdate(this.document).byteLength,
           persisted_bytes: persisted?.update.byteLength ?? 0,
           persistence_source: persisted?.source ?? "empty",
+          purged: this.purged,
         });
       }
       case "purge": {
-        // Idempotent: purging an already-empty room succeeds, which is what
-        // lets the Go retention worker retry safely.
+        // Keep only a tombstone. It blocks already-minted tickets and delayed
+        // callbacks without retaining any document content.
         this.disconnectUsers(null);
+        this.purged = true;
         await this.ctx.storage.deleteAll();
+        await this.ctx.storage.put(PURGED_KEY, true);
         this.aclVersion = 0;
-        // The active Y.Doc still contains the deleted content. Abort this
-        // object after the response so no later request or debounced save can
-        // serve or recreate it; the next request starts with empty storage.
-        setTimeout(() => this.ctx.abort("room_purged"), 25);
         return jsonResponse({ ok: true, purged: true });
       }
       default:
@@ -488,6 +584,7 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
   }
 
   override async onStart(): Promise<void> {
+    this.purged = (await this.ctx.storage.get<boolean>(PURGED_KEY)) === true;
     this.aclVersion = (await this.ctx.storage.get<number>("aclVersion")) ?? 0;
     await super.onStart?.();
   }
@@ -500,6 +597,7 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
    * moment the object is evicted.
    */
   override async onLoad(): Promise<void> {
+    if (this.purged) return;
     const snapshot = await readDocumentSnapshot(this.ctx.storage);
     if (snapshot) {
       Y.applyUpdate(this.document, snapshot.update);
@@ -517,6 +615,7 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
    * so the snapshot is chunked.
    */
   override async onSave(): Promise<void> {
+    if (this.purged) return;
     const update = Y.encodeStateAsUpdate(this.document);
     try {
       const manifest = await writeDocumentSnapshot(this.ctx.storage, update);
@@ -524,7 +623,13 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
         manifest.byteLength >= DOCUMENT_WARNING_BYTES ? "warning" : "saved",
         manifest.byteLength,
       );
-      if (this.supportsNoteProjection) await this.publishNoteProjection();
+      if (this.supportsNoteProjection) {
+        try {
+          await this.publishNoteProjection();
+        } catch (projectionError) {
+          this.log("note_projection_failed", { error: String(projectionError) });
+        }
+      }
     } catch (error) {
       const code =
         error instanceof Error && error.message === "document_limit_exceeded"

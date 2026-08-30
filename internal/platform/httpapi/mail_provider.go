@@ -86,10 +86,15 @@ func mailErrorCode(err error) string {
 		providerMessage := strings.ToLower(strings.TrimSpace(providerError.Message))
 		if providerCode == "mailboxnotenabledforrestapi" ||
 			providerCode == "errormailboxnotenabledforrestapi" ||
+			providerCode == "resourcenotfound" ||
+			providerCode == "erroritemnotfound" ||
 			(strings.Contains(providerMessage, "mailbox") &&
 				(strings.Contains(providerMessage, "not enabled") ||
 					strings.Contains(providerMessage, "not licensed") ||
-					strings.Contains(providerMessage, "not found"))) {
+					strings.Contains(providerMessage, "not found") ||
+					strings.Contains(providerMessage, "inactive") ||
+					strings.Contains(providerMessage, "soft-deleted"))) ||
+			strings.Contains(providerMessage, "resource could not be discovered") {
 			return "mail_provider_mailbox_unavailable"
 		}
 		switch providerError.StatusCode {
@@ -104,6 +109,24 @@ func mailErrorCode(err error) string {
 		}
 	}
 	return "mail_provider_unavailable"
+}
+
+func (s *SpacesService) recordMailProviderFailure(
+	ctx context.Context,
+	userID string,
+	account *db.ConnectedAccount,
+	err error,
+) {
+	if account == nil || mailErrorCode(err) != "mail_provider_authorization_failed" {
+		return
+	}
+	_ = s.database.SetConnectedAccountHealth(
+		ctx,
+		userID,
+		account.ID,
+		"needs_attention",
+		"mail_provider_authorization_failed",
+	)
 }
 
 func writeMailError(w http.ResponseWriter, err error) {

@@ -3,7 +3,7 @@ set -eu
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
   echo "CLOUDFLARE_API_TOKEN is required for the containerized Worker deployment." >&2
-  echo "Add a Workers Scripts:Edit API token to the root .env.dev file." >&2
+  echo "Add a Workers Scripts:Edit API token to .env/dev/integrations/cloudflare.env." >&2
   exit 1
 fi
 
@@ -12,21 +12,16 @@ if [ ! -s /workspace/.dev.vars ]; then
   exit 1
 fi
 
-if [ ! -s /run/misty/tunnel-url ]; then
-  echo "The Cloudflare tunnel URL is not ready." >&2
-  exit 1
-fi
-
-tunnel_url="$(tr -d '\r\n' < /run/misty/tunnel-url)"
-case "$tunnel_url" in
-  https://*.trycloudflare.com) ;;
+api_origin="${MISTY_DEV_API_ORIGIN:-https://dev-api.mistysys.com}"
+case "$api_origin" in
+  https://*) ;;
   *)
-    echo "Refusing unexpected tunnel URL: $tunnel_url" >&2
+    echo "Refusing non-HTTPS development API origin: $api_origin" >&2
     exit 1
     ;;
 esac
 
-api_base="${tunnel_url%/}/api"
+api_base="${api_origin%/}/v1"
 worker_name="${MISTY_CLOUDFLARE_WORKER_NAME:-misty-journal-collab-dev}"
 
 echo "Deploying $worker_name with callbacks to $api_base"

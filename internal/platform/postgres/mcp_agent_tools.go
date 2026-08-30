@@ -18,22 +18,23 @@ type MCPAgentToolSelection struct {
 }
 
 type MCPAgentToolBinding struct {
-	AgentID           string          `json:"agent_id"`
-	ConnectionID      string          `json:"connection_id"`
-	ConnectionName    string          `json:"connection_name"`
-	RemoteToolID      string          `json:"-"`
-	RemoteName        string          `json:"remote_name"`
-	StableName        string          `json:"stable_name"`
-	Description       string          `json:"description"`
-	InputSchema       json.RawMessage `json:"input_schema"`
-	SchemaFingerprint string          `json:"-"`
-	SchemaStatus      string          `json:"schema_status"`
-	DisabledReason    string          `json:"disabled_reason,omitempty"`
-	Enabled           bool            `json:"enabled"`
-	EndpointURL       string          `json:"-"`
-	BearerCipher      []byte          `json:"-"`
-	BearerNonce       []byte          `json:"-"`
-	ConnectionUp      bool            `json:"-"`
+	AgentID            string          `json:"agent_id"`
+	ConnectionID       string          `json:"connection_id"`
+	ConnectionName     string          `json:"connection_name"`
+	ConnectionProvider string          `json:"-"`
+	RemoteToolID       string          `json:"-"`
+	RemoteName         string          `json:"remote_name"`
+	StableName         string          `json:"stable_name"`
+	Description        string          `json:"description"`
+	InputSchema        json.RawMessage `json:"input_schema"`
+	SchemaFingerprint  string          `json:"-"`
+	SchemaStatus       string          `json:"schema_status"`
+	DisabledReason     string          `json:"disabled_reason,omitempty"`
+	Enabled            bool            `json:"enabled"`
+	EndpointURL        string          `json:"-"`
+	BearerCipher       []byte          `json:"-"`
+	BearerNonce        []byte          `json:"-"`
+	ConnectionUp       bool            `json:"-"`
 }
 
 type MCPExecutionAudit struct {
@@ -54,10 +55,10 @@ type MCPExecutionAudit struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-const mcpAgentToolColumns = `a.id,c.id,c.name,t.id,t.remote_name,t.stable_name,t.description,t.input_schema,t.schema_fingerprint,t.schema_status,t.disabled_reason,COALESCE(b.enabled,FALSE),c.endpoint_url,c.bearer_ciphertext,c.bearer_nonce,(c.status='active' AND c.revoked_at IS NULL AND (b.id IS NULL OR b.schema_fingerprint=t.schema_fingerprint))`
+const mcpAgentToolColumns = `a.id,c.id,c.name,c.provider,t.id,t.remote_name,t.stable_name,t.description,t.input_schema,t.schema_fingerprint,t.schema_status,t.disabled_reason,COALESCE(b.enabled,FALSE),c.endpoint_url,c.bearer_ciphertext,c.bearer_nonce,(c.status='active' AND c.revoked_at IS NULL AND (b.id IS NULL OR b.schema_fingerprint=t.schema_fingerprint))`
 
 func scanMCPAgentTool(row scanner, item *MCPAgentToolBinding) error {
-	return row.Scan(&item.AgentID, &item.ConnectionID, &item.ConnectionName, &item.RemoteToolID, &item.RemoteName, &item.StableName, &item.Description, &item.InputSchema, &item.SchemaFingerprint, &item.SchemaStatus, &item.DisabledReason, &item.Enabled, &item.EndpointURL, &item.BearerCipher, &item.BearerNonce, &item.ConnectionUp)
+	return row.Scan(&item.AgentID, &item.ConnectionID, &item.ConnectionName, &item.ConnectionProvider, &item.RemoteToolID, &item.RemoteName, &item.StableName, &item.Description, &item.InputSchema, &item.SchemaFingerprint, &item.SchemaStatus, &item.DisabledReason, &item.Enabled, &item.EndpointURL, &item.BearerCipher, &item.BearerNonce, &item.ConnectionUp)
 }
 
 func (db *Database) PersonalAgentMCPTools(ctx context.Context, userID, agentID string) ([]MCPAgentToolBinding, error) {

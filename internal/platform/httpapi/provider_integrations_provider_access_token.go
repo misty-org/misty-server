@@ -32,7 +32,7 @@ func (s *SpacesService) providerAccessToken(ctx context.Context, userID, spaceID
 		if token.RefreshToken == "" {
 			return "", "", errors.New("provider connection requires reauthorization")
 		}
-		definition, exists := TestingProviderOAuthCatalog[credential.Provider]
+		definition, exists := providerRefreshDefinition(credential.Provider)
 		if !exists {
 			return "", "", errors.New("provider configuration is missing")
 		}
@@ -59,6 +59,22 @@ func (s *SpacesService) providerAccessToken(ctx context.Context, userID, spaceID
 		token = refreshed
 	}
 	return token.AccessToken, token.TokenType, nil
+}
+
+func providerRefreshDefinition(provider string) (providerOAuthDefinition, bool) {
+	if definition, exists := TestingProviderOAuthCatalog[provider]; exists {
+		return definition, true
+	}
+	connected, exists := TestingConnectedAccountOAuthCatalog[provider]
+	if !exists {
+		return providerOAuthDefinition{}, false
+	}
+	return providerOAuthDefinition{
+		ID: connected.ID, Name: connected.Name,
+		AuthorizeURL: connected.AuthorizeURL, TokenURL: connected.TokenURL,
+		ClientIDEnv: connected.ClientIDEnv, ClientSecretEnv: connected.ClientSecretEnv,
+		PKCE: !connected.DisablePKCE,
+	}, true
 }
 
 func exchangeProviderCode(ctx context.Context, definition providerOAuthDefinition, code, verifier, redirect string) (providerTokenEnvelope, []byte, error) {

@@ -15,8 +15,8 @@ Tokens cannot be reused for another Misty run or Vercel Workflow run. During a r
 ## Worlds
 
 - Local development: omit `WORKFLOW_TARGET_WORLD` to use Workflow's local world.
-- Self-hosted: set `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`; run `npm run world:setup --workspace=@misty/agent-runtime` before the worker starts.
-- Vercel: deploy the repository with `npm run build:agent-runtime` as the build command. Workflow selects the managed Vercel world in that environment.
+- Self-hosted: set `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`; run `npm run world:setup` from `agent-runtime/` before the worker starts.
+- Vercel: use `agent-runtime` as the project root and `npm run build` as the build command. Workflow selects the managed Vercel world in that environment.
 
 A Vercel Workflow is the durable execution host for Misty's agent loop, not the
 browser frontend and not the MCP server. In development, `misty server up` runs

@@ -9,6 +9,10 @@
 
 
 **/bin
+**/build
+**/dist
+**/node_modules
+**/.output
 .demo/
 
 **.secrets

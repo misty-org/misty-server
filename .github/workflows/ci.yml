@@ -76,7 +76,9 @@ jobs:
         with:
           node-version-file: cloudflare/journal-collab/.nvmrc
           cache: npm
-          cache-dependency-path: cloudflare/journal-collab/package-lock.json
+          cache-dependency-path: |
+            agent-runtime/package-lock.json
+            cloudflare/journal-collab/package-lock.json
       - run: npm ci
         working-directory: cloudflare/journal-collab
       - run: npm run typecheck
@@ -87,3 +89,15 @@ jobs:
         working-directory: cloudflare/journal-collab
       - run: npm run audit:production
         working-directory: cloudflare/journal-collab
+      - name: Install agent runtime dependencies
+        run: npm ci
+        working-directory: agent-runtime
+      - name: Type-check agent runtime
+        run: npm run typecheck
+        working-directory: agent-runtime
+      - name: Test agent runtime
+        run: npm test
+        working-directory: agent-runtime
+      - name: Build agent runtime
+        run: npm run build
+        working-directory: agent-runtime

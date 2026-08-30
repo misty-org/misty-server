@@ -170,7 +170,7 @@ services:
 
   agent-runtime-setup:
     build:
-      context: ..
+      context: .
       dockerfile: agent-runtime/Dockerfile
       target: setup
     restart: "no"
@@ -185,7 +185,7 @@ services:
   agent-runtime:
     image: misty-agent-runtime-dev:local
     build:
-      context: ..
+      context: .
       dockerfile: agent-runtime/Dockerfile
       target: runtime
     restart: unless-stopped

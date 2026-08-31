@@ -40,6 +40,11 @@ export interface SpaceTaskContext {
   }>;
   file_warnings: string;
   allowed_tools: string[];
+  /**
+   * Write tools the control plane derived from the user's explicit request.
+   * A run must not report success until each one has a confirmed tool result.
+   */
+  required_tools?: string[];
   managed_misty?: boolean;
 }
 

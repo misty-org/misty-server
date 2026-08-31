@@ -42,24 +42,6 @@ func (s *SpacesService) agentRuntimeActivateAIInvocation(w http.ResponseWriter, 
 	writeJSON(w, http.StatusOK, map[string]any{"run_id": record.ID, "state": record.State})
 }
 
-type preparedAIInvocationRuntime struct {
-	body               aiInvocationInput
-	resolved           []aiResolvedContext
-	spaceID            string
-	spaceName          string
-	spaceKind          string
-	members            []map[string]string
-	modelID            string
-	reasoning          string
-	system             string
-	prompt             string
-	timezone           string
-	currentTime        time.Time
-	allowedTools       []string
-	previousUserPrompt string
-	previousAgentReply string
-}
-
 func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *db.AIInvocationRecord) (*preparedAIInvocationRuntime, error) {
 	var body aiInvocationInput
 	if record == nil || json.Unmarshal(record.RequestPayload, &body) != nil {
@@ -110,6 +92,9 @@ func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *
 		}
 		previousUserPrompt, previousAgentReply = previousAIConversationExchange(turns, record.ID)
 	}
+	requiredTools := requiredAgentMutationTools(TestingCompileAgentIntentWithContinuation(
+		body.Prompt, previousUserPrompt, previousAgentReply,
+	))
 	if spaceID != "" {
 		space, spaceErr := s.database.SpaceByID(ctx, record.UserID, spaceID)
 		if spaceErr != nil {
@@ -188,6 +173,7 @@ func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *
 		body: body, resolved: resolved, spaceID: spaceID, spaceName: spaceName, spaceKind: spaceKind,
 		members: members, modelID: modelID, reasoning: reasoning, system: system, prompt: prompt,
 		timezone: body.Timezone, currentTime: now, allowedTools: uniqueAgentToolNames(allowedTools),
+		requiredTools:      uniqueAgentToolNames(requiredTools),
 		previousUserPrompt: previousUserPrompt, previousAgentReply: previousAgentReply,
 	}, nil
 }
@@ -229,8 +215,9 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 		"members": prepared.members, "model_id": prepared.modelID, "reasoning_effort": prepared.reasoning,
 		"run_mode": "ask", "system": prepared.system, "prompt": prepared.prompt,
 		"attached_sources": []any{}, "file_warnings": "", "allowed_tools": prepared.allowedTools,
-		"capture":     prepared.body.Capture,
-		"attachments": attachments,
+		"required_tools": prepared.requiredTools,
+		"capture":        prepared.body.Capture,
+		"attachments":    attachments,
 	})
 }
 

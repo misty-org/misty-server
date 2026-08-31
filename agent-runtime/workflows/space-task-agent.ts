@@ -209,6 +209,77 @@ export function incompleteToolResultText(
   return `I couldn't fully complete that request. ${details || "A required action failed."}`;
 }
 
+export const proactiveExecutionInstructions = `Execution contract:
+- Treat a concrete imperative request as work to perform now, not as a request for instructions or a proposal.
+- Privately break multi-part requests into the necessary steps and continue until every requested action and deliverable is complete or a real blocker prevents progress.
+- When creating or updating an artifact with generated content, compose the complete final content before the write. Check every explicit constraint—including title, format, count, length, and requested sections—and send the full result in the tool call. Never create a placeholder, outline, partial draft, or empty shell when the user requested finished content.
+- Every tool named as required by the control plane represents an explicitly requested effect. Call it, inspect its confirming result, and do not claim success without that evidence.
+- Do not ask the user to restate, plan, create subtasks, or say “finish” when the request already contains enough detail. Ask one focused clarification only when a missing choice would materially change the result.
+- If any requested part cannot be completed, say exactly what remains incomplete and why.`;
+
+export function missingRequiredToolCalls(
+  requiredToolNames: Iterable<string>,
+  successfulToolNames: Iterable<string>,
+): string[] {
+  const successful = new Set(successfulToolNames);
+  return [...new Set(requiredToolNames)]
+    .map((name) => name.trim())
+    .filter((name) => name !== "" && !successful.has(name));
+}
+
+export function incompleteRequiredToolText(toolNames: string[]): string {
+  const labels = toolNames
+    .slice(0, 4)
+    .map(humanToolActionLabel)
+    .join(", ");
+  return `I couldn't fully complete that request. The required ${labels || "action"} action did not finish.`;
+}
+
+export function confirmedActionFallbackText(toolNames: string[]): string {
+  const labels = toolNames
+    .slice(0, 4)
+    .map(humanToolActionLabel)
+    .join(", ");
+  return labels
+    ? `Done — I completed the requested ${labels} action${toolNames.length === 1 ? "" : "s"}.`
+    : "Done — I completed the requested action.";
+}
+
+function humanToolActionLabel(name: string): string {
+  return (
+    {
+      "notes.create": "note creation",
+      "notes.update": "note update",
+      "tasks.create": "task creation",
+      "tasks.update": "task update",
+      "calendar.create": "event creation",
+      "calendar.update": "event update",
+      "messages.send": "message sending",
+      "drawings.create": "drawing creation",
+      "drawings.apply": "drawing update",
+      "roadmaps.create": "roadmap creation",
+      "roadmaps.update": "roadmap update",
+      "library.update": "Library update",
+      "library.promote_attachment": "attachment save",
+      "agents.delegate": "delegation",
+      "memory.remember": "memory save",
+      "memory.forget": "memory removal",
+    }[name] ?? name.replace(/[._]/g, " ")
+  );
+}
+
+export function unconfirmedToolResultReason(output: unknown): string {
+  if (!output || typeof output !== "object") return "";
+  const result = output as Record<string, unknown>;
+  if (result.denied === true) {
+    return "The requested action was not approved.";
+  }
+  if (result.unavailable === true) {
+    return "The device required for this action was unavailable.";
+  }
+  return "";
+}
+
 function stableToolValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableToolValue);
   if (value && typeof value === "object") {
@@ -843,7 +914,8 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
         executeNamedTool("notes.read", input, options),
     }),
     notes_create: tool({
-      description: "Create a native Note in this run's Space.",
+      description:
+        "Create a native Note in this run's Space. When the user asks for written content, put the complete, final content in markdown in this call; never create a placeholder or partial draft. A successful result includes a content receipt for the accepted body.",
       inputSchema: z.object({
         title: z.string().min(1).max(500),
         markdown: z.string().min(1).max(100_000),
@@ -1207,10 +1279,11 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       canonicalName: string;
     }
   >();
+  const successfulToolCalls = new Set<string>();
   const agent = new WorkflowAgent({
     id: "misty-space-task-agent",
     model: context.model_id,
-    instructions: context.system,
+    instructions: `${context.system}\n\n${proactiveExecutionInstructions}`,
     tools,
     toolsContext: {
       context_get: sharedToolContext,
@@ -1307,14 +1380,20 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     },
     onToolExecutionEnd: async (event) => {
       const { toolCall, durationMs, success } = event;
-      const errorMessage = success ? "" : visibleErrorMessage(event.error);
+      const unconfirmedReason = success
+        ? unconfirmedToolResultReason(event.output)
+        : "";
+      const confirmed = success && unconfirmedReason === "";
+      const errorMessage = confirmed
+        ? ""
+        : unconfirmedReason || visibleErrorMessage(event.error);
       const canonicalName =
         controlPlaneNames[toolCall.toolName] ?? toolCall.toolName;
       const tracked = toolCallSignatures.get(toolCall.toolCallId);
       const signature =
         tracked?.signature ??
         toolFailureSignature(canonicalName, toolCall.input);
-      if (!success) {
+      if (!confirmed) {
         failedToolCalls.set(signature, {
           callId: toolCall.toolCallId,
           toolName: tracked?.canonicalName ?? canonicalName,
@@ -1322,18 +1401,19 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
         });
       } else {
         failedToolCalls.delete(signature);
+        successfulToolCalls.add(tracked?.canonicalName ?? canonicalName);
       }
       await checkpoint(identity, {
         node_id: `tool:${toolCall.toolCallId}`,
-        state: success ? "completed" : "failed",
-        phase: success ? "working" : "tool_failed",
-        progress: success ? 60 : 40,
+        state: confirmed ? "completed" : "failed",
+        phase: confirmed ? "working" : "tool_failed",
+        progress: confirmed ? 60 : 40,
         output: {
           tool: tracked?.canonicalName ?? canonicalName,
           duration_ms: durationMs,
-          success,
+          success: confirmed,
         },
-        error_message: success ? undefined : errorMessage,
+        error_message: confirmed ? undefined : errorMessage,
       });
     },
   });
@@ -1404,10 +1484,56 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       incomplete: true,
     };
   }
+  const missingRequiredTools = missingRequiredToolCalls(
+    context.required_tools ?? [],
+    successfulToolCalls,
+  );
+  if (missingRequiredTools.length > 0) {
+    const incompleteText = incompleteRequiredToolText(missingRequiredTools);
+    await complete(identity, {
+      status: "incomplete",
+      text: incompleteText,
+      usage: result.totalUsage as unknown as Record<string, unknown>,
+      error_code: "required_action_not_completed",
+      error_message: `Required tool calls did not complete: ${missingRequiredTools.join(", ")}.`,
+    });
+    return {
+      mistyRunId: input.mistyRunId,
+      text: incompleteText,
+      steps: result.steps.length,
+      incomplete: true,
+    };
+  }
+  const completionText =
+    text ||
+    (context.required_tools?.length
+      ? confirmedActionFallbackText(context.required_tools)
+      : "");
+  if (!completionText) {
+    const incompleteText =
+      "I couldn't fully complete that request because no final answer was produced.";
+    await complete(identity, {
+      status: "incomplete",
+      text: incompleteText,
+      usage: result.totalUsage as unknown as Record<string, unknown>,
+      error_code: "empty_agent_response",
+      error_message: "The agent produced neither a final answer nor a required confirmed action.",
+    });
+    return {
+      mistyRunId: input.mistyRunId,
+      text: incompleteText,
+      steps: result.steps.length,
+      incomplete: true,
+    };
+  }
   await complete(identity, {
     status: "success",
-    text,
+    text: completionText,
     usage: result.totalUsage as unknown as Record<string, unknown>,
   });
-  return { mistyRunId: input.mistyRunId, text, steps: result.steps.length };
+  return {
+    mistyRunId: input.mistyRunId,
+    text: completionText,
+    steps: result.steps.length,
+  };
 }

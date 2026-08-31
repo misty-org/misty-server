@@ -19,7 +19,14 @@ func TestingCompileAgentIntentWithContinuation(prompt, previousUserPrompt, previ
 	}
 	for _, capability := range prior {
 		switch capability {
-		case toolboxMessagesSend, toolboxTasksCreate, toolboxTasksUpdate, toolboxAgentsDelegate:
+		case toolboxMessagesSend,
+			toolboxTasksCreate, toolboxTasksUpdate,
+			toolboxAgentsDelegate,
+			toolboxNotesCreate, toolboxNotesUpdate,
+			toolboxDrawingsCreate, toolboxDrawingsApply,
+			toolboxCalendarCreate, toolboxCalendarUpdate,
+			toolboxRoadmapsCreate, toolboxRoadmapsUpdate,
+			toolboxLibraryUpdate, toolboxLibraryPromoteAttachment:
 			if !seen[capability] {
 				current = append(current, capability)
 				seen[capability] = true

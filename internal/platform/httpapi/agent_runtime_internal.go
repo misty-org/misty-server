@@ -77,6 +77,7 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 		timezone := "UTC"
 		managedMisty := managedMistyRun(run)
 		allowedTools := []string{toolboxContextGet, toolboxMembersList, toolboxMembersResolve, toolboxMessagesSearch, toolboxLibrarySearch, toolboxLibraryRead, toolboxTasksQuery, "calendar.query", toolboxNotesSearch, toolboxNotesRead, toolboxDrawingsList, toolboxDrawingsRead, toolboxRoadmapsQuery, toolboxRoadmapsRead}
+		requiredTools := []string{}
 		if !managedMisty {
 			allowedTools = append(allowedTools, toolboxAgentsList, toolboxAgentsStatus)
 		}
@@ -84,6 +85,7 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 			fileContext, fileWarnings, sources = s.explicitTaskFileContext(r.Context(), run.OwnerUserID, task)
 			system, prompt = personalAgentRuntimePrompts(membership, task, fileContext, fileWarnings)
 			allowedTools = []string{toolboxTasksQuery, "tasks.update_assigned", "task.activity.write", "attached_files.read"}
+			requiredTools = []string{"tasks.update_assigned"}
 			if contexts, contextErr := s.database.AgentRunDeviceGrants(r.Context(), run.OwnerUserID, run.ID); contextErr == nil {
 				for _, descriptor := range browserToolDescriptors() {
 					if activeBrowserCapability(contexts, descriptor.Name) {
@@ -116,7 +118,9 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 			if run.SourceConversationID != "" {
 				conversation, _ = s.agentConversationContext(r.Context(), run)
 			}
-			for _, name := range TestingCompileAgentIntentWithContinuation(input.Instruction, conversation.PreviousUserPrompt, conversation.PreviousAgentReply) {
+			compiledIntent := TestingCompileAgentIntentWithContinuation(input.Instruction, conversation.PreviousUserPrompt, conversation.PreviousAgentReply)
+			requiredTools = requiredAgentMutationTools(compiledIntent)
+			for _, name := range compiledIntent {
 				if name != toolboxTasksQuery {
 					allowedTools = append(allowedTools, name)
 				}
@@ -140,6 +144,7 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 					return
 				}
 				prompt, timezone = prepared.prompt, prepared.timezone
+				requiredTools = prepared.requiredTools
 				capture = prepared.body.Capture
 				if s.aiInvocations != nil {
 					if _, err := s.aiInvocations.restoreDurable(r.Context(), *invocationRecord); err != nil {
@@ -201,7 +206,7 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 			"space_name": space.Name, "space_kind": space.Kind, "timezone": timezone, "current_time": now.Format(time.RFC3339), "members": sanitizedAgentMembers(members),
 			"model_id": membership.ModelID, "reasoning_effort": membership.ReasoningEffort,
 			"system": system, "prompt": prompt, "attached_sources": sources, "file_warnings": fileWarnings,
-			"allowed_tools": allowedTools, "capture": capture, "managed_misty": managedMisty,
+			"allowed_tools": allowedTools, "required_tools": uniqueAgentToolNames(requiredTools), "capture": capture, "managed_misty": managedMisty,
 		})
 	}
 }

@@ -115,6 +115,9 @@ func explicitResourceMention(value string, resources []string) bool {
 
 func explicitResourceWriteIntent(value string, resources, actions []string) bool {
 	value = normalizeAgentIntent(value)
+	if genericResourceCapabilityQuestion(value) {
+		return false
+	}
 	tokens := strings.FieldsFunc(value, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 	resourceFound := false
 	for _, token := range tokens {
@@ -130,6 +133,20 @@ func explicitResourceWriteIntent(value string, resources, actions []string) bool
 			if token == action && !agentIntentTokenNegated(tokens, index) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func genericResourceCapabilityQuestion(value string) bool {
+	value = strings.TrimSpace(value)
+	for _, prefix := range []string{
+		"how do i ", "how can i ", "how would i ",
+		"how do agents ", "how can agents ", "how would agents ",
+		"what happens when ", "do you support ", "is it possible to ",
+	} {
+		if strings.HasPrefix(value, prefix) {
+			return true
 		}
 	}
 	return false
@@ -197,7 +214,7 @@ func explicitTaskWriteIntent(value string, words ...string) bool {
 
 func genericTaskCapabilityQuestion(value string) bool {
 	capabilityQuestion := false
-	for _, phrase := range []string{"what can you", "what are you able", "are you able", "do you support", "is it possible"} {
+	for _, phrase := range []string{"what can you", "what are you able", "are you able", "do you support", "is it possible", "how do i", "how can i", "how would i"} {
 		capabilityQuestion = capabilityQuestion || strings.Contains(value, phrase)
 	}
 	if !capabilityQuestion {

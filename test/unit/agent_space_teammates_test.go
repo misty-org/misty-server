@@ -57,6 +57,7 @@ func TestCompileAgentIntentOnlyGrantsExplicitSpaceWrites(t *testing.T) {
 		{"Can you delegate work to Agents?", []string{"tasks.query"}},
 		{"Do not delegate this to the Agent", []string{"tasks.query"}},
 		{"Create a note", []string{"tasks.query", "notes.create"}},
+		{`Create a notes in journal, name it "The First Operating System", and write a 5 paragraph essay on the first operating system created for computers.`, []string{"tasks.query", "notes.create"}},
 		{"Research summer camps and save the research", []string{"tasks.query", "notes.create"}},
 		{"Draw an architecture diagram", []string{"tasks.query", "drawings.list", "drawings.read", "drawings.create", "drawings.apply"}},
 		{"Draw a cat", []string{"tasks.query", "drawings.list", "drawings.read", "drawings.create", "drawings.apply"}},

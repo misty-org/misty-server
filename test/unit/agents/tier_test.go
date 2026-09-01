@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -23,11 +25,39 @@ func (provider namedTestProvider) Next(ModelRequest) (ModelResponse, error) {
 
 type recordingUsageMeter struct {
 	userID   string
+	spaceID  string
 	key      string
 	provider string
 	model    string
 	releases int
 	refunds  int
+}
+
+func (meter *recordingUsageMeter) ReserveForSpace(userID, spaceID, key string, _ string, provider, model string, _, _ int64) (*UsageReservation, error) {
+	meter.spaceID = spaceID
+	return meter.Reserve(userID, key, "", provider, model, 0, 0)
+}
+
+func TestSpaceCompletionPreservesUsageScopeWithAndWithoutTools(t *testing.T) {
+	for _, testCase := range []struct {
+		name     string
+		manifest ToolManifest
+		execute  ToolExecutor
+	}{
+		{name: "tool session", manifest: ToolManifest{Tools: []ToolDefinition{{Name: "tasks.query", Risk: RiskRead}}}, execute: func(context.Context, ToolRequest) (json.RawMessage, error) { return json.RawMessage(`{}`), nil }},
+		{name: "plain fallback"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			meter := &recordingUsageMeter{}
+			service := NewService(nil, namedTestProvider{provider: "gateway", model: "model", text: "done"}, WithUsageMeter(meter))
+			if _, err := service.CompleteWithToolsForSpaceContext(context.Background(), "member", "space-owner", "space-123", "identity", "prompt", TierLow, testCase.manifest, testCase.execute); err != nil {
+				t.Fatal(err)
+			}
+			if meter.userID != "member" || meter.spaceID != "space-123" {
+				t.Fatalf("usage scope = user %q space %q", meter.userID, meter.spaceID)
+			}
+		})
+	}
 }
 
 func (meter *recordingUsageMeter) Reserve(userID string, key string, _ string, provider, model string, _, _ int64) (*UsageReservation, error) {

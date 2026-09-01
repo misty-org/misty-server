@@ -72,7 +72,7 @@ func (s *SpaceLibraryService) processIntelligenceJob(ctx context.Context, job *d
 	if license, licenseErr := s.database.GetLicenseByUserID(job.BillingUserID); licenseErr == nil && license != nil {
 		tier = license.Tier
 	}
-	reservation, _, err := s.database.ReserveCredits(job.BillingUserID, tier, db.CreditMeterAssetAnalysisImage, "space-library-intelligence:"+job.ID, appbilling.EstimateSmartLibraryCharge(1), time.Now())
+	reservation, _, err := s.database.ReserveHostedAIUsageForSpace(job.BillingUserID, job.SpaceID, tier, db.CreditMeterAssetAnalysisImage, "space-library-intelligence:"+job.ID, appbilling.EstimateSmartLibraryCharge(1), time.Now())
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func (s *SpaceLibraryService) SemanticSearch() http.HandlerFunc {
 			writeLibraryError(w, db.ErrLibraryInvalid)
 			return
 		}
-		operation, _ := beginHostedSemanticQuery(r.Context(), s.database, s.intelligence, userID, "space-library-query:"+uuid.NewString(), query)
+		operation, _ := beginHostedSemanticQuery(r.Context(), s.database, s.intelligence, userID, chi.URLParam(r, "spaceID"), "space-library-query:"+uuid.NewString(), query)
 		var vector []float64
 		if operation != nil {
 			vector = operation.Vector
@@ -211,7 +211,7 @@ func (s *SpaceLibraryService) GlobalSemanticSearch() http.HandlerFunc {
 		}
 		var operation *hostedSemanticQueryOperation
 		if s.aiEnabled && s.intelligence != nil {
-			operation, _ = beginHostedSemanticQuery(r.Context(), s.database, s.intelligence, userID, "global-space-library-query:"+uuid.NewString(), query)
+			operation, _ = beginHostedSemanticQuery(r.Context(), s.database, s.intelligence, userID, "", "global-space-library-query:"+uuid.NewString(), query)
 		}
 		var vector []float64
 		if operation != nil {

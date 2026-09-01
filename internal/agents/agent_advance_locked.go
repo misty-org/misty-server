@@ -59,7 +59,7 @@ func (s *Service) advanceLocked(ctx context.Context, session *Session) error {
 		if billingUserID == "" {
 			billingUserID = session.UserID
 		}
-		reservation, err = s.meter.Reserve(billingUserID, idempotencyKey, hostedAIMeterAgent, provider, model, estimateRequestTokens(request), MaxModelOutputTokens)
+		reservation, err = ReserveUsage(s.meter, billingUserID, session.SpaceID, idempotencyKey, hostedAIMeterAgent, provider, model, estimateRequestTokens(request), MaxModelOutputTokens)
 		if err != nil {
 			return err
 		}

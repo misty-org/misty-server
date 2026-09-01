@@ -187,14 +187,19 @@ func writeAgentError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "run_conflict", "message": "The requested change conflicts with newer Space data. Please retry."})
 	case errors.Is(err, db.ErrSpaceInvalid), errors.Is(err, db.ErrLibraryInvalid):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "invalid_tool_input", "message": "The requested values are not valid for this action."})
+	case errors.Is(err, db.ErrPersonalStorageQuota):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "reason": "personal_storage_limit_reached", "message": "Your personal storage limit has been reached."})
+	case errors.Is(err, db.ErrSpaceStorageQuota):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "reason": "space_storage_limit_reached", "message": "This Space has reached its storage limit."})
 	case errors.Is(err, db.ErrLibraryQuota):
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "message": "This Space has reached its storage limit."})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "message": "Storage quota has been reached."})
 	case errors.Is(err, db.ErrLibraryReauthentication):
 		writeJSON(w, http.StatusForbidden, map[string]string{"code": "reauthentication_required", "message": "This Library item requires you to confirm access first."})
 	case errors.Is(err, db.ErrPersonalAgentModel):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_unavailable"})
 	case isHostedAILimitReached(err):
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"code": "hosted_ai_limit_reached"})
+		scope, _ := hostedAILimitScope(err)
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"code": "hosted_ai_limit_reached", "reason": hostedAILimitReason(scope), "message": hostedAILimitMessage(scope)})
 	case errors.Is(err, db.ErrInvalidLease), errors.Is(err, db.ErrInvalidJobState):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "invalid_or_expired_lease"})
 	default:
@@ -203,8 +208,34 @@ func writeAgentError(w http.ResponseWriter, err error) {
 }
 
 func isHostedAILimitReached(err error) bool {
-	var exhausted serveragent.HostedAILimitReachedError
-	return errors.As(err, &exhausted)
+	_, ok := hostedAILimitScope(err)
+	return ok
+}
+
+func hostedAILimitScope(err error) (string, bool) {
+	var agentLimit serveragent.HostedAILimitReachedError
+	if errors.As(err, &agentLimit) {
+		return agentLimit.Scope, true
+	}
+	var databaseLimit db.HostedAILimitReachedError
+	if errors.As(err, &databaseLimit) {
+		return databaseLimit.Scope, true
+	}
+	return "", false
+}
+
+func hostedAILimitReason(scope string) string {
+	if scope == "space" {
+		return "space_ai_limit_reached"
+	}
+	return "personal_ai_limit_reached"
+}
+
+func hostedAILimitMessage(scope string) string {
+	if scope == "space" {
+		return "This Space has used all of its weekly AI agent usage."
+	}
+	return "Your weekly AI agent usage is fully used."
 }
 
 func validText(value string, min, max int) bool {

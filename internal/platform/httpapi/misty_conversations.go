@@ -297,8 +297,14 @@ func (s *AIService) MistyConversationTurn() http.HandlerFunc {
 		}
 		payload, _ := json.Marshal(invocationBody)
 		now := time.Now().UTC()
+		bound, err := s.database.ValidateAgentSessionAccess(r.Context(), userID, conversationID)
+		if err != nil {
+			TestingWriteAIError(w, err)
+			return
+		}
+		spaceID := bound.SpaceID
 		stored, _, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-			ID: "invocation_" + uuid.NewString(), UserID: userID, ConversationID: conversationID,
+			ID: "invocation_" + uuid.NewString(), UserID: userID, SpaceID: spaceID, ConversationID: conversationID,
 			SurfaceID: "global", Mode: "drawer", Trigger: "explicit", State: "queued",
 			IdempotencyKey: invocationBody.IdempotencyKey, RequestPayload: payload, ExpiresAt: now.Add(aiInvocationTTL),
 		})

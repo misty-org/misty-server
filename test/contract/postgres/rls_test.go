@@ -1,8 +1,39 @@
 package db
 
 import (
+	"strings"
 	"testing"
 )
+
+func TestSpaceHostedAIWalletPoliciesKeepMemberAccessReadOnly(t *testing.T) {
+	database := openTestDatabase(t)
+	rows, err := database.Conn.Query(`SELECT cmd,COALESCE(qual,''),COALESCE(with_check,'') FROM pg_policies
+		WHERE schemaname='public' AND tablename='space_hosted_ai_wallets'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	selectAllowsMember := false
+	serviceWriteOnly := false
+	for rows.Next() {
+		var command, using, check string
+		if err := rows.Scan(&command, &using, &check); err != nil {
+			t.Fatal(err)
+		}
+		switch command {
+		case "SELECT":
+			selectAllowsMember = strings.Contains(using, "misty_is_space_member")
+		case "ALL":
+			serviceWriteOnly = strings.Contains(using, "misty_rls_is_service") && strings.Contains(check, "misty_rls_is_service") && !strings.Contains(using+check, "misty_is_space_member")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !selectAllowsMember || !serviceWriteOnly {
+		t.Fatalf("Space hosted AI wallet policies: member select=%v service-only writes=%v", selectAllowsMember, serviceWriteOnly)
+	}
+}
 
 func TestTablesHaveRowLevelSecurityEnabled(t *testing.T) {
 	database := openTestDatabase(t)
@@ -17,6 +48,7 @@ func TestTablesHaveRowLevelSecurityEnabled(t *testing.T) {
 		"stripe_subscriptions",
 		"stripe_webhook_events",
 		"hosted_ai_wallets",
+		"space_hosted_ai_wallets",
 		"hosted_ai_reservations",
 		"hosted_ai_usage_ledger",
 		"owner_storage_usage",

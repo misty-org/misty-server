@@ -12,6 +12,7 @@ import (
 type AIInvocationRecord struct {
 	ID                 string
 	UserID             string
+	SpaceID            string
 	ConversationID     string
 	SurfaceID          string
 	Mode               string
@@ -34,6 +35,15 @@ func (db *Database) CreateAIInvocationRecord(ctx context.Context, record AIInvoc
 	stored := AIInvocationRecord{}
 	created := false
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(record.UserID), func(tx *sql.Tx) error {
+		if record.SpaceID != "" {
+			var member bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_members WHERE space_id=$1 AND user_id=$2)`, record.SpaceID, record.UserID).Scan(&member); err != nil {
+				return err
+			}
+			if !member {
+				return ErrSpaceForbidden
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO ai_user_settings(user_id) VALUES($1) ON CONFLICT(user_id) DO NOTHING`, record.UserID); err != nil {
 			return err
 		}
@@ -46,13 +56,13 @@ func (db *Database) CreateAIInvocationRecord(ctx context.Context, record AIInvoc
 		}
 		var inserted bool
 		err := tx.QueryRowContext(ctx, `
-			INSERT INTO ai_invocations(id,user_id,conversation_id,surface_id,mode,trigger_kind,state,idempotency_key,request_payload,expires_at)
-			VALUES($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10)
+			INSERT INTO ai_invocations(id,user_id,space_id,conversation_id,surface_id,mode,trigger_kind,state,idempotency_key,request_payload,expires_at)
+			VALUES($1,$2,NULLIF($3,''),NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11)
 			ON CONFLICT(user_id,idempotency_key) DO UPDATE SET updated_at=ai_invocations.updated_at
-				RETURNING id,user_id,COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
+				RETURNING id,user_id,COALESCE(space_id,''),COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
 					runtime_kind,runtime_run_id,COALESCE(agent_run_id,''),runtime_heartbeat_at,expires_at,created_at,updated_at,(xmax=0)
-			`, record.ID, record.UserID, record.ConversationID, record.SurfaceID, record.Mode, record.Trigger, record.State, record.IdempotencyKey, record.RequestPayload, record.ExpiresAt).Scan(
-			&stored.ID, &stored.UserID, &stored.ConversationID, &stored.SurfaceID, &stored.Mode, &stored.Trigger, &stored.State, &stored.IdempotencyKey, &stored.RequestPayload,
+			`, record.ID, record.UserID, record.SpaceID, record.ConversationID, record.SurfaceID, record.Mode, record.Trigger, record.State, record.IdempotencyKey, record.RequestPayload, record.ExpiresAt).Scan(
+			&stored.ID, &stored.UserID, &stored.SpaceID, &stored.ConversationID, &stored.SurfaceID, &stored.Mode, &stored.Trigger, &stored.State, &stored.IdempotencyKey, &stored.RequestPayload,
 			&stored.RuntimeKind, &stored.RuntimeRunID, &stored.AgentRunID, &stored.RuntimeHeartbeatAt, &stored.ExpiresAt, &stored.CreatedAt, &stored.UpdatedAt, &inserted,
 		)
 		created = inserted
@@ -65,10 +75,10 @@ func (db *Database) AIInvocationByID(ctx context.Context, userID, invocationID s
 	result := &AIInvocationRecord{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `
-			SELECT id,user_id,COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
+			SELECT id,user_id,COALESCE(space_id,''),COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
 				runtime_kind,runtime_run_id,COALESCE(agent_run_id,''),runtime_heartbeat_at,expires_at,created_at,updated_at
 			FROM ai_invocations WHERE id=$1 AND user_id=$2
-		`, invocationID, userID).Scan(&result.ID, &result.UserID, &result.ConversationID, &result.SurfaceID, &result.Mode, &result.Trigger, &result.State, &result.IdempotencyKey, &result.RequestPayload,
+		`, invocationID, userID).Scan(&result.ID, &result.UserID, &result.SpaceID, &result.ConversationID, &result.SurfaceID, &result.Mode, &result.Trigger, &result.State, &result.IdempotencyKey, &result.RequestPayload,
 			&result.RuntimeKind, &result.RuntimeRunID, &result.AgentRunID, &result.RuntimeHeartbeatAt, &result.ExpiresAt, &result.CreatedAt, &result.UpdatedAt)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -79,8 +89,11 @@ func (db *Database) AIInvocationByID(ctx context.Context, userID, invocationID s
 
 func (db *Database) LinkAIInvocationAgentRun(ctx context.Context, userID, invocationID, runID string) error {
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET agent_run_id=$1,updated_at=NOW()
-			WHERE id=$2 AND user_id=$3 AND (agent_run_id=$1 OR (state='queued' AND agent_run_id IS NULL))`, runID, invocationID, userID)
+		result, err := tx.ExecContext(ctx, `UPDATE ai_invocations invocation SET
+			agent_run_id=$1,space_id=COALESCE(invocation.space_id,run.space_id),updated_at=NOW()
+			FROM space_runs run WHERE invocation.id=$2 AND invocation.user_id=$3 AND run.id=$1
+			AND (invocation.space_id IS NULL OR invocation.space_id=run.space_id)
+			AND (invocation.agent_run_id=$1 OR (invocation.state='queued' AND invocation.agent_run_id IS NULL))`, runID, invocationID, userID)
 		if err != nil {
 			return err
 		}
@@ -105,9 +118,9 @@ func (db *Database) ActivateAIInvocationRuntime(ctx context.Context, invocationI
 		return tx.QueryRowContext(ctx, `UPDATE ai_invocations SET
 			runtime_kind=$1,runtime_run_id=$2,runtime_heartbeat_at=NOW(),state='running',updated_at=NOW()
 			WHERE id=$3 AND state IN ('queued','running') AND (runtime_run_id='' OR runtime_run_id=$2)
-			RETURNING id,user_id,COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
+			RETURNING id,user_id,COALESCE(space_id,''),COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
 				runtime_kind,runtime_run_id,COALESCE(agent_run_id,''),runtime_heartbeat_at,expires_at,created_at,updated_at`, runtimeKind, runtimeRunID, invocationID).Scan(
-			&out.ID, &out.UserID, &out.ConversationID, &out.SurfaceID, &out.Mode, &out.Trigger, &out.State, &out.IdempotencyKey, &out.RequestPayload,
+			&out.ID, &out.UserID, &out.SpaceID, &out.ConversationID, &out.SurfaceID, &out.Mode, &out.Trigger, &out.State, &out.IdempotencyKey, &out.RequestPayload,
 			&out.RuntimeKind, &out.RuntimeRunID, &out.AgentRunID, &out.RuntimeHeartbeatAt, &out.ExpiresAt, &out.CreatedAt, &out.UpdatedAt)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -121,10 +134,10 @@ func (db *Database) ActivateAIInvocationRuntime(ctx context.Context, invocationI
 func (db *Database) ValidateAIInvocationRuntime(ctx context.Context, invocationID, runtimeRunID string) (*AIInvocationRecord, error) {
 	out := &AIInvocationRecord{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT id,user_id,COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
+		return tx.QueryRowContext(ctx, `SELECT id,user_id,COALESCE(space_id,''),COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
 			runtime_kind,runtime_run_id,COALESCE(agent_run_id,''),runtime_heartbeat_at,expires_at,created_at,updated_at
 			FROM ai_invocations WHERE id=$1 AND runtime_run_id=$2 AND state IN ('running','awaiting_approval')`, invocationID, runtimeRunID).Scan(
-			&out.ID, &out.UserID, &out.ConversationID, &out.SurfaceID, &out.Mode, &out.Trigger, &out.State, &out.IdempotencyKey, &out.RequestPayload,
+			&out.ID, &out.UserID, &out.SpaceID, &out.ConversationID, &out.SurfaceID, &out.Mode, &out.Trigger, &out.State, &out.IdempotencyKey, &out.RequestPayload,
 			&out.RuntimeKind, &out.RuntimeRunID, &out.AgentRunID, &out.RuntimeHeartbeatAt, &out.ExpiresAt, &out.CreatedAt, &out.UpdatedAt)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -136,10 +149,10 @@ func (db *Database) ValidateAIInvocationRuntime(ctx context.Context, invocationI
 func (db *Database) AIInvocationRuntimeRecord(ctx context.Context, invocationID, runtimeRunID string) (*AIInvocationRecord, error) {
 	out := &AIInvocationRecord{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT id,user_id,COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
+		return tx.QueryRowContext(ctx, `SELECT id,user_id,COALESCE(space_id,''),COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
 			runtime_kind,runtime_run_id,COALESCE(agent_run_id,''),runtime_heartbeat_at,expires_at,created_at,updated_at
 			FROM ai_invocations WHERE id=$1 AND runtime_run_id=$2`, invocationID, runtimeRunID).Scan(
-			&out.ID, &out.UserID, &out.ConversationID, &out.SurfaceID, &out.Mode, &out.Trigger, &out.State, &out.IdempotencyKey, &out.RequestPayload,
+			&out.ID, &out.UserID, &out.SpaceID, &out.ConversationID, &out.SurfaceID, &out.Mode, &out.Trigger, &out.State, &out.IdempotencyKey, &out.RequestPayload,
 			&out.RuntimeKind, &out.RuntimeRunID, &out.AgentRunID, &out.RuntimeHeartbeatAt, &out.ExpiresAt, &out.CreatedAt, &out.UpdatedAt)
 	})
 	if errors.Is(err, sql.ErrNoRows) {

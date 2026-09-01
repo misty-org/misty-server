@@ -300,10 +300,14 @@ func publicAIInvocationError(err error) string {
 	}
 	var exhausted agent.HostedAILimitReachedError
 	if errors.As(err, &exhausted) {
-		if !exhausted.ResetAt.IsZero() {
-			return "Your weekly hosted AI pool is used up. It resets " + exhausted.ResetAt.UTC().Format("Jan 2 at 3:04 PM UTC") + "."
+		prefix := "Your weekly hosted AI pool is used up."
+		if exhausted.Scope == "space" {
+			prefix = "This Space's weekly hosted AI pool is used up."
 		}
-		return "Your weekly hosted AI pool is used up."
+		if !exhausted.ResetAt.IsZero() {
+			return prefix + " It resets " + exhausted.ResetAt.UTC().Format("Jan 2 at 3:04 PM UTC") + "."
+		}
+		return prefix
 	}
 	return "Misty could not complete this request."
 }

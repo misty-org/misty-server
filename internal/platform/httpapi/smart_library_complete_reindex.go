@@ -92,7 +92,7 @@ func (s *SmartLibraryService) CompleteReindex() http.HandlerFunc {
 		if err != nil {
 			var insufficient db.HostedAILimitReachedError
 			if errors.As(err, &insufficient) {
-				response := map[string]any{"code": "hosted_ai_limit_reached", "message": "Your weekly AI agent usage is fully used."}
+				response := map[string]any{"code": "hosted_ai_limit_reached", "reason": hostedAILimitReason(insufficient.Scope), "message": hostedAILimitMessage(insufficient.Scope)}
 				if usageWallet != nil {
 					response["reset_at"] = usageWallet.ResetAt
 				}

@@ -27,13 +27,15 @@ func TestingDecodeAIJSONWithLimit(w http.ResponseWriter, r *http.Request, dst an
 }
 
 func TestingWriteAIError(w http.ResponseWriter, err error) {
-	var exhausted agent.HostedAILimitReachedError
 	switch {
 	case errors.Is(err, context.Canceled):
 		writeJSON(w, 499, map[string]any{"code": "request_canceled", "message": "Agent request canceled."})
-	case errors.As(err, &exhausted):
+	case isHostedAILimitReached(err):
+		scope, _ := hostedAILimitScope(err)
+		var exhausted agent.HostedAILimitReachedError
+		_ = errors.As(err, &exhausted)
 		writeJSON(w, http.StatusPaymentRequired, map[string]any{
-			"code": "hosted_ai_limit_reached", "message": "Your weekly AI agent usage is fully used.",
+			"code": "hosted_ai_limit_reached", "reason": hostedAILimitReason(scope), "message": hostedAILimitMessage(scope),
 			"reset_at": exhausted.ResetAt, "upgrade_available": true,
 		})
 	case errors.Is(err, agent.ErrSessionNotFound):

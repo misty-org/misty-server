@@ -31,7 +31,7 @@ func (s *SpacesService) meterPersonalAgentRuntimeModel(ctx context.Context, run 
 	if model == "" {
 		model = serveragent.InitialSelectedModelID
 	}
-	_, err = s.usageMeter.Reserve(run.BillingUserID, personalAgentRuntimeUsageKey(run.ID), db.CreditMeterAgentAI, "ai-gateway", model, 32_000, serveragent.MaxModelOutputTokens)
+	_, err = serveragent.ReserveUsage(s.usageMeter, run.RequestingMemberID, run.SpaceID, personalAgentRuntimeUsageKey(run.ID), db.CreditMeterAgentAI, "ai-gateway", model, 32_000, serveragent.MaxModelOutputTokens)
 	return err
 }
 
@@ -49,7 +49,7 @@ func (s *SpacesService) settlePersonalAgentRuntimeUsage(ctx context.Context, run
 		model = serveragent.InitialSelectedModelID
 	}
 	key := personalAgentRuntimeUsageKey(run.ID)
-	reservation, err := s.usageMeter.Reserve(run.BillingUserID, key, db.CreditMeterAgentAI, "ai-gateway", model, 32_000, serveragent.MaxModelOutputTokens)
+	reservation, err := serveragent.ReserveUsage(s.usageMeter, run.RequestingMemberID, run.SpaceID, key, db.CreditMeterAgentAI, "ai-gateway", model, 32_000, serveragent.MaxModelOutputTokens)
 	if err != nil {
 		if status == "failed" {
 			return nil
@@ -69,7 +69,7 @@ func (s *SpacesService) meterAIInvocationRuntimeModel(_ context.Context, record 
 		return nil
 	}
 	modelID := aiInvocationMeteredModel(record)
-	_, err := s.usageMeter.Reserve(record.UserID, aiInvocationRuntimeUsageKey(record.ID), "assistant_ai", "ai-gateway", modelID, 32_000, serveragent.MaxModelOutputTokens)
+	_, err := serveragent.ReserveUsage(s.usageMeter, record.UserID, record.SpaceID, aiInvocationRuntimeUsageKey(record.ID), "assistant_ai", "ai-gateway", modelID, 32_000, serveragent.MaxModelOutputTokens)
 	return err
 }
 
@@ -79,7 +79,7 @@ func (s *SpacesService) settleAIInvocationRuntimeUsage(record *db.AIInvocationRe
 	}
 	modelID := aiInvocationMeteredModel(record)
 	key := aiInvocationRuntimeUsageKey(record.ID)
-	reservation, err := s.usageMeter.Reserve(record.UserID, key, "assistant_ai", "ai-gateway", modelID, 32_000, serveragent.MaxModelOutputTokens)
+	reservation, err := serveragent.ReserveUsage(s.usageMeter, record.UserID, record.SpaceID, key, "assistant_ai", "ai-gateway", modelID, 32_000, serveragent.MaxModelOutputTokens)
 	if err != nil {
 		if status == "failed" {
 			return nil

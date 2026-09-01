@@ -118,7 +118,7 @@ func (s *SpacesService) executeWorkflowNodeV2(ctx context.Context, run *db.Space
 			if err != nil {
 				return nil, err
 			}
-			completion, err := s.agent.CompleteWithToolsContext(ctx, run.RequestingMemberID, run.BillingUserID, identity, request, serveragent.TierLow, manifest, func(toolCtx context.Context, tool serveragent.ToolRequest) (json.RawMessage, error) {
+			completion, err := s.agent.CompleteWithToolsForSpaceContext(ctx, run.RequestingMemberID, run.RequestingMemberID, run.SpaceID, identity, request, serveragent.TierLow, manifest, func(toolCtx context.Context, tool serveragent.ToolRequest) (json.RawMessage, error) {
 				output, toolErr := toolbox.ExecuteWithMiddleware(toolCtx, toolboxInvocation, tool, nil, agentToolboxExecutionJournal(s.database))
 				if errors.Is(toolErr, agenttools.ErrToolNotFound) || errors.Is(toolErr, agenttools.ErrCapabilityDenied) || errors.Is(toolErr, agenttools.ErrApprovalRequired) {
 					return nil, workflowv2.ErrCapabilityDenied

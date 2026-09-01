@@ -211,9 +211,6 @@ func (db *Database) SpaceStorageUsage(ctx context.Context, userID, spaceID strin
 		if err := tx.QueryRowContext(ctx, `SELECT owner_user_id FROM spaces WHERE id=$1`, spaceID).Scan(&out.OwnerUserID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_storage_usage(space_id) VALUES($1) ON CONFLICT DO NOTHING`, spaceID); err != nil {
-			return err
-		}
 		if out.OwnerUserID == userID {
 			// Keep the selected Space counter authoritative at read time. Older
 			// deployments can leave the derived cache at zero even though its
@@ -231,14 +228,19 @@ func (db *Database) SpaceStorageUsage(ctx context.Context, userID, spaceID strin
 				return err
 			}
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT used_bytes,reserved_bytes,version FROM space_storage_usage WHERE space_id=$1`, spaceID).Scan(&out.SpaceUsedBytes, &out.SpaceReservedBytes, &out.Version); err != nil {
-			return err
-		}
-		owner, err := ownerStorageUsageTx(ctx, tx, out.OwnerUserID, false)
+		quota, err := storageQuotaStateTx(ctx, tx, userID, spaceID, false)
 		if err != nil {
 			return err
 		}
-		out.UsedBytes, out.ReservedBytes, out.LimitBytes, out.RemainingBytes = owner.UsedBytes, owner.ReservedBytes, owner.LimitBytes, owner.RemainingBytes
+		out.Personal, out.Space = quota.Personal, quota.Space
+		out.PersonalUsedBytes, out.PersonalReservedBytes = quota.Personal.UsedBytes, quota.Personal.ReservedBytes
+		out.PersonalLimitBytes, out.PersonalRemainingBytes, out.PersonalOverQuota = quota.Personal.LimitBytes, quota.Personal.RemainingBytes, quota.Personal.OverQuota
+		out.SpaceUsedBytes, out.SpaceReservedBytes = quota.Space.UsedBytes, quota.Space.ReservedBytes
+		out.SpaceLimitBytes, out.SpaceRemainingBytes, out.SpaceOverQuota = quota.Space.LimitBytes, quota.Space.RemainingBytes, quota.Space.OverQuota
+		out.UsedBytes, out.ReservedBytes, out.LimitBytes, out.RemainingBytes = quota.Personal.UsedBytes, quota.Personal.ReservedBytes, quota.Personal.LimitBytes, quota.Personal.RemainingBytes
+		if err := tx.QueryRowContext(ctx, `SELECT version FROM space_storage_usage WHERE space_id=$1`, spaceID).Scan(&out.Version); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -262,8 +264,7 @@ func (db *Database) CreateLibraryUploadForConversation(ctx context.Context, user
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, permission); err != nil {
 			return err
 		}
-		var ownerID string
-		if err := tx.QueryRowContext(ctx, `SELECT security_domain_id,owner_user_id FROM spaces WHERE id=$1 FOR SHARE`, spaceID).Scan(&out.SecurityDomainID, &ownerID); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT security_domain_id FROM spaces WHERE id=$1 FOR SHARE`, spaceID).Scan(&out.SecurityDomainID); err != nil {
 			return err
 		}
 		if purpose == "attachment" {
@@ -276,25 +277,9 @@ func (db *Database) CreateLibraryUploadForConversation(ctx context.Context, user
 				}
 			}
 		}
-		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "owner-storage:"+ownerID); err != nil {
+		if _, err := reserveStorageQuotaTx(ctx, tx, userID, spaceID, byteSize); err != nil {
 			return err
 		}
-		ownerUsage, err := ownerStorageUsageTx(ctx, tx, ownerID, true)
-		if err != nil {
-			return err
-		}
-		if ownerUsage.UsedBytes+ownerUsage.ReservedBytes+byteSize > ownerUsage.LimitBytes {
-			return ErrLibraryQuota
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_storage_usage(space_id) VALUES($1) ON CONFLICT DO NOTHING`, spaceID); err != nil {
-			return err
-		}
-		var used, reserved int64
-		if err := tx.QueryRowContext(ctx, `SELECT used_bytes,reserved_bytes FROM space_storage_usage WHERE space_id=$1 FOR UPDATE`, spaceID).Scan(&used, &reserved); err != nil {
-			return err
-		}
-		_ = used
-		_ = reserved
 		if err := tx.QueryRowContext(ctx, `INSERT INTO space_library_uploads(id,space_id,security_domain_id,user_id,object_key,original_filename,purpose,client_declared_mime_type,requested_byte_size,client_sha256,state,upload_token_hash,expires_at,conversation_id)
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'initiated',$11,$12,NULLIF($13,'')) RETURNING created_at,updated_at`, out.ID, spaceID, out.SecurityDomainID, userID, objectKey, filename, purpose, declaredMIME, byteSize, clientSHA, tokenHash, expiresAt, conversationID).Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err

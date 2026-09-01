@@ -56,8 +56,12 @@ func (s *SpaceLibraryService) ImportItems() http.HandlerFunc {
 		for _, item := range items {
 			required += item.ByteSize
 		}
-		if required > usage.RemainingBytes {
-			writeLibraryError(w, db.ErrLibraryQuota)
+		if required > usage.PersonalRemainingBytes {
+			writeLibraryError(w, db.ErrPersonalStorageQuota)
+			return
+		}
+		if required > usage.SpaceRemainingBytes {
+			writeLibraryError(w, db.ErrSpaceStorageQuota)
 			return
 		}
 		imported := make([]db.SpaceLibraryItem, 0, len(items))
@@ -115,8 +119,12 @@ func (s *SpaceLibraryService) DuplicateItems() http.HandlerFunc {
 		for _, source := range items {
 			required += source.ByteSize
 		}
-		if required > usage.RemainingBytes {
-			writeLibraryError(w, db.ErrLibraryQuota)
+		if required > usage.PersonalRemainingBytes {
+			writeLibraryError(w, db.ErrPersonalStorageQuota)
+			return
+		}
+		if required > usage.SpaceRemainingBytes {
+			writeLibraryError(w, db.ErrSpaceStorageQuota)
 			return
 		}
 		duplicated := make([]db.SpaceLibraryItem, 0, len(items))

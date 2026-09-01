@@ -93,6 +93,27 @@ func TestBillingUsageExposesOnlyCustomerSafeAgentUsage(t *testing.T) {
 			t.Fatalf("agent_usage missing %q: %#v", key, usage)
 		}
 	}
+	personal, ok := body["personal"].(map[string]any)
+	if !ok {
+		t.Fatalf("personal usage = %#v", body["personal"])
+	}
+	for _, dimension := range []string{"storage", "ai"} {
+		if _, exists := personal[dimension]; !exists {
+			t.Fatalf("personal usage missing %q: %#v", dimension, personal)
+		}
+	}
+	spaces, ok := body["spaces"].([]any)
+	if !ok || len(spaces) == 0 {
+		t.Fatalf("Space usage = %#v, want at least the permanent Misty Space", body["spaces"])
+	}
+	firstSpace, ok := spaces[0].(map[string]any)
+	if !ok || firstSpace["storage"] == nil || firstSpace["ai"] == nil {
+		t.Fatalf("Space usage does not distinguish storage and AI: %#v", firstSpace)
+	}
+	entitlements, ok := body["entitlements"].(map[string]any)
+	if !ok || entitlements["max_owned_spaces"] == nil || entitlements["personal_storage_limit_bytes"] == nil || entitlements["space_storage_limit_bytes"] == nil || entitlements["personal_ai_limit"] == nil || entitlements["space_ai_limit"] == nil {
+		t.Fatalf("billing usage missing explicit entitlements: %#v", body["entitlements"])
+	}
 	raw := strings.ToLower(recorder.Body.String())
 	for _, forbidden := range []string{"microusd", "weekly_allowance", "weekly_remaining", "provider_cost", "charged_microusd", "credits"} {
 		if strings.Contains(raw, forbidden) {

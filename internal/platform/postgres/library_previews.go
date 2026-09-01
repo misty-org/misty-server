@@ -40,24 +40,21 @@ func (db *Database) LibraryItemPreviewSource(ctx context.Context, userID, spaceI
 		if err := requireLibraryItemAudienceTx(ctx, tx, userID, spaceID, itemID); err != nil {
 			return err
 		}
+		var contributingUserID string
 		if original {
-			if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,b.id,b.r2_object_key,b.server_detected_mime_type,b.byte_size,b.sha256 FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'`, itemID, spaceID).Scan(&out.FileID, &out.SecurityDomainID, &out.SourceIdentity, &out.ObjectKey, &out.MIMEType, &out.ByteSize, &out.SHA256); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,b.id,b.r2_object_key,b.server_detected_mime_type,b.byte_size,b.sha256,i.contributing_user_id FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'`, itemID, spaceID).Scan(&out.FileID, &out.SecurityDomainID, &out.SourceIdentity, &out.ObjectKey, &out.MIMEType, &out.ByteSize, &out.SHA256, &contributingUserID); err != nil {
 				return err
 			}
-		} else if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,COALESCE(rb.id,b.id),COALESCE(rb.r2_object_key,b.r2_object_key),COALESCE(rb.server_detected_mime_type,b.server_detected_mime_type),COALESCE(rb.byte_size,b.byte_size),COALESCE(rb.sha256,b.sha256)
+		} else if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,COALESCE(rb.id,b.id),COALESCE(rb.r2_object_key,b.r2_object_key),COALESCE(rb.server_detected_mime_type,b.server_detected_mime_type),COALESCE(rb.byte_size,b.byte_size),COALESCE(rb.sha256,b.sha256),i.contributing_user_id
 			FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id
 			LEFT JOIN library_item_versions v ON v.id=i.current_edit_version_id AND v.lifecycle_state='ready' AND v.rendition_state='ready'
 			LEFT JOIN library_blobs rb ON rb.id=v.rendition_blob_id AND rb.lifecycle_state='ready'
-			WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'`, itemID, spaceID).Scan(&out.FileID, &out.SecurityDomainID, &out.SourceIdentity, &out.ObjectKey, &out.MIMEType, &out.ByteSize, &out.SHA256); err != nil {
+			WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'`, itemID, spaceID).Scan(&out.FileID, &out.SecurityDomainID, &out.SourceIdentity, &out.ObjectKey, &out.MIMEType, &out.ByteSize, &out.SHA256, &contributingUserID); err != nil {
 			return err
 		}
 		err := tx.QueryRowContext(ctx, `SELECT pb.r2_object_key,pb.server_detected_mime_type,pb.byte_size,pb.sha256 FROM library_derivatives d JOIN library_blobs pb ON pb.id=d.derivative_blob_id AND pb.lifecycle_state='ready' WHERE d.space_library_item_id=$1 AND d.source_file_id=$2 AND d.kind='image_preview' AND d.lifecycle_state='ready' AND d.metadata->>'source_identity'=$3 ORDER BY d.created_at DESC LIMIT 1`, itemID, out.FileID, out.SourceIdentity).Scan(&out.PreviewObjectKey, &out.PreviewMIME, &out.PreviewBytes, &out.PreviewSHA256)
 		if errors.Is(err, sql.ErrNoRows) {
-			var ownerID string
-			if err := tx.QueryRowContext(ctx, `SELECT owner_user_id FROM spaces WHERE id=$1 FOR SHARE`, spaceID).Scan(&ownerID); err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "owner-storage:"+ownerID); err != nil {
+			if _, err := storageQuotaStateTx(ctx, tx, contributingUserID, spaceID, true); err != nil {
 				return err
 			}
 			var expiredReservation int64
@@ -79,17 +76,17 @@ func (db *Database) LibraryItemPreviewSource(ctx context.Context, userID, spaceI
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
-			ownerUsage, err := ownerStorageUsageTx(ctx, tx, ownerID, true)
+			quota, err := storageQuotaStateTx(ctx, tx, contributingUserID, spaceID, true)
 			if err != nil {
 				return err
 			}
 			const previewReserve = int64(25_000_000)
-			if ownerUsage.RemainingBytes < previewReserve {
-				return ErrLibraryQuota
+			if err := storageQuotaError(quota, previewReserve); err != nil {
+				return err
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO space_rendition_reservations(id,space_id,user_id,source_kind,source_id,reserved_bytes,state,expires_at)
 				VALUES($1,$2,$3,'preview',$4,$5,'active',NOW()+INTERVAL '2 hours')
-				ON CONFLICT(source_kind,source_id) DO UPDATE SET id=EXCLUDED.id,space_id=EXCLUDED.space_id,user_id=EXCLUDED.user_id,reserved_bytes=EXCLUDED.reserved_bytes,state='active',expires_at=EXCLUDED.expires_at,updated_at=NOW()`, "preview_reservation_"+uuid.NewString(), spaceID, userID, itemID, previewReserve); err != nil {
+				ON CONFLICT(source_kind,source_id) DO UPDATE SET id=EXCLUDED.id,space_id=EXCLUDED.space_id,user_id=EXCLUDED.user_id,reserved_bytes=EXCLUDED.reserved_bytes,state='active',expires_at=EXCLUDED.expires_at,updated_at=NOW()`, "preview_reservation_"+uuid.NewString(), spaceID, contributingUserID, itemID, previewReserve); err != nil {
 				return err
 			}
 			_, err = tx.ExecContext(ctx, `UPDATE space_storage_usage SET reserved_bytes=reserved_bytes+$1,version=version+1,updated_at=NOW() WHERE space_id=$2`, previewReserve, spaceID)
@@ -114,7 +111,7 @@ func (db *Database) ReleaseLibraryPreviewReservation(ctx context.Context, userID
 			return err
 		}
 		var released int64
-		err := tx.QueryRowContext(ctx, `UPDATE space_rendition_reservations SET state='released',updated_at=NOW() WHERE space_id=$1 AND source_kind='preview' AND source_id=$2 AND user_id=$3 AND state='active' RETURNING reserved_bytes`, spaceID, itemID, userID).Scan(&released)
+		err := tx.QueryRowContext(ctx, `UPDATE space_rendition_reservations SET state='released',updated_at=NOW() WHERE space_id=$1 AND source_kind='preview' AND source_id=$2 AND state='active' RETURNING reserved_bytes`, spaceID, itemID).Scan(&released)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}

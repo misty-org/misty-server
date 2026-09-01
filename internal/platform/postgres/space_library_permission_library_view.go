@@ -120,15 +120,27 @@ var (
 )
 
 type SpaceStorageUsage struct {
-	SpaceID            string `json:"space_id"`
-	OwnerUserID        string `json:"owner_user_id,omitempty"`
-	SpaceUsedBytes     int64  `json:"space_used_bytes"`
-	SpaceReservedBytes int64  `json:"space_reserved_bytes"`
-	UsedBytes          int64  `json:"used_bytes"`
-	ReservedBytes      int64  `json:"reserved_bytes"`
-	LimitBytes         int64  `json:"limit_bytes"`
-	RemainingBytes     int64  `json:"remaining_bytes"`
-	Version            int64  `json:"version"`
+	SpaceID                string                `json:"space_id"`
+	OwnerUserID            string                `json:"owner_user_id,omitempty"`
+	SpaceUsedBytes         int64                 `json:"space_used_bytes"`
+	SpaceReservedBytes     int64                 `json:"space_reserved_bytes"`
+	SpaceLimitBytes        int64                 `json:"space_limit_bytes"`
+	SpaceRemainingBytes    int64                 `json:"space_remaining_bytes"`
+	SpaceOverQuota         bool                  `json:"space_over_quota"`
+	PersonalUsedBytes      int64                 `json:"personal_used_bytes"`
+	PersonalReservedBytes  int64                 `json:"personal_reserved_bytes"`
+	PersonalLimitBytes     int64                 `json:"personal_limit_bytes"`
+	PersonalRemainingBytes int64                 `json:"personal_remaining_bytes"`
+	PersonalOverQuota      bool                  `json:"personal_over_quota"`
+	Personal               StorageQuotaDimension `json:"personal"`
+	Space                  StorageQuotaDimension `json:"space"`
+	// Compatibility fields: these now mirror the requesting user's personal
+	// quota. Explicit Space fields above expose the owner-plan capacity.
+	UsedBytes      int64 `json:"used_bytes"`
+	ReservedBytes  int64 `json:"reserved_bytes"`
+	LimitBytes     int64 `json:"limit_bytes"`
+	RemainingBytes int64 `json:"remaining_bytes"`
+	Version        int64 `json:"version"`
 }
 
 type LibraryUpload struct {

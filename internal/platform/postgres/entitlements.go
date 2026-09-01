@@ -13,7 +13,7 @@ const (
 
 	BasicSpaceLimit = 3
 	ProSpaceLimit   = 10
-	MaxSpaceLimit   = 0 // Unlimited.
+	MaxSpaceLimit   = 10
 
 	BasicWeeklyAgentAllowance = int64(150_000)
 	ProWeeklyAgentAllowance   = BasicWeeklyAgentAllowance * 6
@@ -28,7 +28,16 @@ const (
 )
 
 type PlanEntitlements struct {
-	Plan                      Tier  `json:"plan"`
+	Plan                            Tier  `json:"plan"`
+	MaxOwnedSpaces                  int   `json:"max_owned_spaces"`
+	PersonalStorageLimitBytes       int64 `json:"personal_storage_limit_bytes"`
+	SpaceStorageLimitBytes          int64 `json:"space_storage_limit_bytes"`
+	PersonalWeeklyHostedAIAllowance int64 `json:"personal_ai_limit"`
+	SpaceWeeklyHostedAIAllowance    int64 `json:"space_ai_limit"`
+
+	// Compatibility fields retained for clients that have not yet adopted the
+	// explicit personal-vs-Space entitlement names. SpaceLimit now means owned
+	// Spaces; joining a Space is unlimited for every plan.
 	StorageLimitBytes         int64 `json:"storage_limit_bytes"`
 	WeeklyHostedAIAllowance   int64 `json:"-"`
 	SpaceLimit                int   `json:"space_limit"`
@@ -56,19 +65,24 @@ func EntitlementsForTier(tier Tier) PlanEntitlements {
 	}
 	switch plan {
 	case TierMax:
-		entitlements.StorageLimitBytes = MaxStorageBytes
-		entitlements.WeeklyHostedAIAllowance = MaxWeeklyAgentAllowance
-		entitlements.SpaceLimit = MaxSpaceLimit
-		entitlements.UnlimitedSpaces = true
+		entitlements.PersonalStorageLimitBytes = MaxStorageBytes
+		entitlements.PersonalWeeklyHostedAIAllowance = MaxWeeklyAgentAllowance
+		entitlements.MaxOwnedSpaces = MaxSpaceLimit
 	case TierPro:
-		entitlements.StorageLimitBytes = ProStorageBytes
-		entitlements.WeeklyHostedAIAllowance = ProWeeklyAgentAllowance
-		entitlements.SpaceLimit = ProSpaceLimit
+		entitlements.PersonalStorageLimitBytes = ProStorageBytes
+		entitlements.PersonalWeeklyHostedAIAllowance = ProWeeklyAgentAllowance
+		entitlements.MaxOwnedSpaces = ProSpaceLimit
 	default:
-		entitlements.StorageLimitBytes = BasicStorageBytes
-		entitlements.WeeklyHostedAIAllowance = BasicWeeklyAgentAllowance
-		entitlements.SpaceLimit = BasicSpaceLimit
+		entitlements.PersonalStorageLimitBytes = BasicStorageBytes
+		entitlements.PersonalWeeklyHostedAIAllowance = BasicWeeklyAgentAllowance
+		entitlements.MaxOwnedSpaces = BasicSpaceLimit
 	}
+	// The concepts are independent even though the launch values are equal.
+	entitlements.SpaceStorageLimitBytes = entitlements.PersonalStorageLimitBytes
+	entitlements.SpaceWeeklyHostedAIAllowance = entitlements.PersonalWeeklyHostedAIAllowance
+	entitlements.StorageLimitBytes = entitlements.PersonalStorageLimitBytes
+	entitlements.WeeklyHostedAIAllowance = entitlements.PersonalWeeklyHostedAIAllowance
+	entitlements.SpaceLimit = entitlements.MaxOwnedSpaces
 	return entitlements
 }
 
@@ -85,34 +99,33 @@ func entitlementsForUserTx(ctx context.Context, tx *sql.Tx, userID string, now t
 	return EntitlementsForTier(tier), nil
 }
 
-// addSpaceMembershipTx is the canonical gate for every operation that creates
-// a Space membership. The per-user transaction lock makes creation and invite
-// acceptance serialize against each other, so concurrent requests cannot
-// exceed the member's own plan limit.
+// addSpaceMembershipTx is the canonical write path for Space memberships.
+// Only ownership consumes a plan allowance; ordinary membership is unlimited.
 func addSpaceMembershipTx(ctx context.Context, tx *sql.Tx, spaceID, userID, role string) error {
 	if role != "owner" && role != "member" {
 		return ErrSpaceInvalid
 	}
-	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "space-memberships:"+userID); err != nil {
-		return err
-	}
-	entitlements, err := entitlementsForUserTx(ctx, tx, userID, time.Now())
-	if err != nil {
-		return err
-	}
-	if !entitlements.UnlimitedSpaces {
-		var memberships int
-		// The permanent Misty Space is product infrastructure, not one of the
-		// user's plan-limited collaborative Spaces.
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM space_members m
-			JOIN spaces s ON s.id=m.space_id WHERE m.user_id=$1 AND s.kind='standard'`, userID).Scan(&memberships); err != nil {
+	if role == "owner" {
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:owner:"+userID); err != nil {
 			return err
 		}
-		if memberships >= entitlements.SpaceLimit {
-			return ErrSpaceLimit
+		entitlements, err := entitlementsForUserTx(ctx, tx, userID, time.Now())
+		if err != nil {
+			return err
+		}
+		var memberships int
+		// The permanent Misty Space is product infrastructure, not one of the
+		// user's plan-limited owned collaborative Spaces. The Space being
+		// created already exists in this transaction, hence the strict > check.
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM spaces
+			WHERE owner_user_id=$1 AND kind='standard' AND lifecycle_state<>'deleted'`, userID).Scan(&memberships); err != nil {
+			return err
+		}
+		if memberships > entitlements.MaxOwnedSpaces {
+			return ErrSpaceOwnershipLimit
 		}
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,$3)`, spaceID, userID, role)
+	_, err := tx.ExecContext(ctx, `INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,$3)`, spaceID, userID, role)
 	return err
 }
 

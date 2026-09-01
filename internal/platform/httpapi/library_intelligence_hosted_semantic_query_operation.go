@@ -19,7 +19,7 @@ type hostedSemanticQueryOperation struct {
 	settled     bool
 }
 
-func beginHostedSemanticQuery(ctx context.Context, database *db.Database, analyzer *serveragent.SmartLibraryAnalyzer, userID, idempotencyKey, query string) (*hostedSemanticQueryOperation, error) {
+func beginHostedSemanticQuery(ctx context.Context, database *db.Database, analyzer *serveragent.SmartLibraryAnalyzer, userID, spaceID, idempotencyKey, query string) (*hostedSemanticQueryOperation, error) {
 	var usage serveragent.ModelUsage
 	if database == nil || analyzer == nil {
 		return nil, errors.New("semantic search is unavailable")
@@ -30,7 +30,13 @@ func beginHostedSemanticQuery(ctx context.Context, database *db.Database, analyz
 	} else if license != nil {
 		tier = license.Tier
 	}
-	reservation, _, err := database.ReserveHostedAIUsage(userID, tier, db.HostedAIMeterSemanticQuery, idempotencyKey, appbilling.EstimateSemanticQueryCharge(), time.Now())
+	var reservation *db.HostedAIReservation
+	var err error
+	if spaceID == "" {
+		reservation, _, err = database.ReserveHostedAIUsage(userID, tier, db.HostedAIMeterSemanticQuery, idempotencyKey, appbilling.EstimateSemanticQueryCharge(), time.Now())
+	} else {
+		reservation, _, err = database.ReserveHostedAIUsageForSpace(userID, spaceID, tier, db.HostedAIMeterSemanticQuery, idempotencyKey, appbilling.EstimateSemanticQueryCharge(), time.Now())
+	}
 	if err != nil {
 		return nil, err
 	}

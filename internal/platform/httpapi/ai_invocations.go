@@ -261,7 +261,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		}
 		now := time.Now().UTC()
 		stored, created, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-			ID: "invocation_" + uuid.NewString(), UserID: userID, ConversationID: conversationID,
+			ID: "invocation_" + uuid.NewString(), UserID: userID, SpaceID: spaceID, ConversationID: conversationID,
 			SurfaceID: body.SurfaceID, Mode: body.Mode, Trigger: body.Trigger, State: "queued",
 			IdempotencyKey: body.IdempotencyKey, RequestPayload: requestPayload, ExpiresAt: now.Add(aiInvocationTTL),
 		})

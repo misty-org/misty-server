@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 )
 
 func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID, memberID string) error {
@@ -29,6 +30,11 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 		if _, err := tx.ExecContext(ctx, `SELECT 1 FROM spaces WHERE id=$1 FOR UPDATE`, spaceID); err != nil {
 			return err
 		}
+		// Reclaim expired AI reservations while the common Space lock is held so
+		// they do not unnecessarily block a transfer.
+		if _, err := refreshSpaceHostedAIWalletTx(ctx, tx, spaceID, time.Now().UTC()); err != nil {
+			return err
+		}
 		var role string
 		if err := tx.QueryRowContext(ctx, `SELECT role FROM space_members WHERE space_id=$1 AND user_id=$2 FOR UPDATE`, spaceID, memberID).Scan(&role); errors.Is(err, sql.ErrNoRows) {
 			return ErrSpaceNotFound
@@ -38,46 +44,31 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 		if role != "member" {
 			return ErrSpaceInvalid
 		}
-		storageLockOwners := []string{ownerID, memberID}
-		if storageLockOwners[1] < storageLockOwners[0] {
-			storageLockOwners[0], storageLockOwners[1] = storageLockOwners[1], storageLockOwners[0]
+		entitlements, err := entitlementsForUserTx(ctx, tx, memberID, time.Now())
+		if err != nil {
+			return err
 		}
-		for _, storageOwnerID := range storageLockOwners {
-			if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "owner-storage:"+storageOwnerID); err != nil {
-				return err
-			}
+		var ownedSpaces int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM spaces
+			WHERE owner_user_id=$1 AND kind='standard' AND lifecycle_state<>'deleted'`, memberID).Scan(&ownedSpaces); err != nil {
+			return err
+		}
+		if ownedSpaces >= entitlements.MaxOwnedSpaces {
+			return ErrSpaceOwnershipLimit
 		}
 		var activeReservations int
 		if err := tx.QueryRowContext(ctx, `SELECT
 			(SELECT count(*) FROM space_upload_reservations WHERE space_id=$1 AND state='active')+
-			(SELECT count(*) FROM space_rendition_reservations WHERE space_id=$1 AND state='active')`, spaceID).Scan(&activeReservations); err != nil {
+			(SELECT count(*) FROM space_rendition_reservations WHERE space_id=$1 AND state='active')+
+			(SELECT count(*) FROM hosted_ai_reservations WHERE space_id=$1 AND status='reserved')`, spaceID).Scan(&activeReservations); err != nil {
 			return err
 		}
 		if activeReservations > 0 {
 			return ErrSpaceConflict
 		}
-		incoming, err := ownerStorageUsageTx(ctx, tx, memberID, true)
-		if err != nil {
-			return err
-		}
-		// Use the authoritative per-Space rows for the transfer decision. The
-		// owner aggregate is maintained by triggers, but transfer must remain
-		// correct even if an older deployment left that cache stale.
-		var incomingUsed, incomingReserved int64
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(u.used_bytes),0),COALESCE(SUM(u.reserved_bytes),0)
-			FROM spaces s JOIN space_storage_usage u ON u.space_id=s.id
-			WHERE s.owner_user_id=$1 AND s.lifecycle_state='active'`, memberID).Scan(&incomingUsed, &incomingReserved); err != nil {
-			return err
-		}
-		var spaceUsed, spaceReserved int64
-		if err := tx.QueryRowContext(ctx, `SELECT used_bytes,reserved_bytes FROM space_storage_usage WHERE space_id=$1`, spaceID).Scan(&spaceUsed, &spaceReserved); errors.Is(err, sql.ErrNoRows) {
-			spaceUsed, spaceReserved = 0, 0
-		} else if err != nil {
-			return err
-		}
-		if incomingUsed+incomingReserved+spaceUsed+spaceReserved > incoming.LimitBytes {
-			return ErrLibraryQuota
-		}
+		// Ownership transfer deliberately does not validate current storage.
+		// The incoming owner's plan becomes the Space capacity immediately; an
+		// oversized Space remains accessible and is reported as over quota.
 		if _, err := tx.ExecContext(ctx, `UPDATE space_members SET role='member' WHERE space_id=$1 AND user_id=$2`, spaceID, ownerID); err != nil {
 			return err
 		}
@@ -88,6 +79,10 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE security_domains SET owner_user_id=$1,version=version+1,updated_at=NOW() WHERE space_id=$2 AND kind='space'`, memberID, spaceID); err != nil {
+			return err
+		}
+		// Apply the incoming owner's allowance before releasing the Space lock.
+		if _, err := refreshSpaceHostedAIWalletTx(ctx, tx, spaceID, time.Now().UTC()); err != nil {
 			return err
 		}
 		_, err = recordSpaceEventTx(ctx, tx, spaceID, ownerID, "owner.transferred", memberID, map[string]any{})

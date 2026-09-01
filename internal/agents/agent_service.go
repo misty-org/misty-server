@@ -43,14 +43,24 @@ var ErrToolRoundLimit = errors.New("agent run exceeded its tool round limit")
 // identity that does not arrive through that field. Callers with no Agent
 // identity of their own pass an empty string.
 func (s *Service) CompleteWithToolsContext(ctx context.Context, userID, billingUserID, systemPrompt, prompt string, tier AgentTier, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
+	return s.CompleteWithToolsForSpaceContext(ctx, userID, billingUserID, "", systemPrompt, prompt, tier, manifest, execute)
+}
+
+func (s *Service) CompleteWithToolsForSpaceContext(ctx context.Context, userID, billingUserID, spaceID, systemPrompt, prompt string, tier AgentTier, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID != "" {
+		// Space work always consumes the initiating member's personal allowance;
+		// the meter separately applies the owner-plan allowance to the Space.
+		billingUserID = userID
+	}
 	if execute == nil || len(manifest.Tools) == 0 {
 		// The plain completion path has no session to carry the identity, so it
 		// is the one place the two prompts have to travel together.
 		merged := strings.TrimSpace(strings.TrimSpace(systemPrompt) + "\n\n" + prompt)
-		text, _, err := s.CompleteWithTierContext(ctx, billingUserID, merged, "automation_ai", tier)
+		text, _, err := s.CompleteWithTierForSpaceContext(ctx, billingUserID, spaceID, merged, "automation_ai", tier)
 		return ToolCompletion{Text: text}, err
 	}
-	session := s.CreateSessionWithBilling(userID, billingUserID)
+	session := s.CreateSessionWithBillingAndSpace(userID, billingUserID, spaceID)
 	defer func() { _ = s.Forget(session.ID, userID) }()
 	if err := s.SetSessionSystemPrompt(session.ID, userID, systemPrompt); err != nil {
 		return ToolCompletion{}, err
@@ -117,6 +127,10 @@ func (s *Service) CompleteWithToolsContext(ctx context.Context, userID, billingU
 // pinned gateway model. Agent memberships pin immutable profile versions, so a
 // Space run must not silently fall back to the service's default provider.
 func (s *Service) CompleteWithModelToolsContext(ctx context.Context, userID, billingUserID, systemPrompt, prompt, modelID string, tier AgentTier, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
+	return s.CompleteWithModelToolsForSpaceContext(ctx, userID, billingUserID, "", systemPrompt, prompt, modelID, tier, manifest, execute)
+}
+
+func (s *Service) CompleteWithModelToolsForSpaceContext(ctx context.Context, userID, billingUserID, spaceID, systemPrompt, prompt, modelID string, tier AgentTier, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
 	if !GatewayModelAvailable(ctx, modelID) {
 		return ToolCompletion{}, ErrModelUnavailable
 	}
@@ -125,7 +139,7 @@ func (s *Service) CompleteWithModelToolsContext(ctx context.Context, userID, bil
 		return ToolCompletion{}, err
 	}
 	selected := &Service{store: s.store, provider: provider, policy: s.policy, meter: s.meter}
-	return selected.CompleteWithToolsContext(ctx, userID, billingUserID, systemPrompt, prompt, tier, manifest, execute)
+	return selected.CompleteWithToolsForSpaceContext(ctx, userID, billingUserID, spaceID, systemPrompt, prompt, tier, manifest, execute)
 }
 
 func (s *Service) Complete(userID, prompt, meterName string) (string, UsageSettlement, error) {
@@ -137,10 +151,18 @@ func (s *Service) CompleteWithTier(userID, prompt, meterName string, tier AgentT
 }
 
 func (s *Service) CompleteWithTierContext(ctx context.Context, userID, prompt, meterName string, tier AgentTier) (string, UsageSettlement, error) {
-	return s.completeWithProviderContext(ctx, userID, prompt, meterName, TestingResolveAgentProvider(s.provider, NormalizeAgentTier(tier)), NormalizeAgentTier(tier))
+	return s.CompleteWithTierForSpaceContext(ctx, userID, "", prompt, meterName, tier)
+}
+
+func (s *Service) CompleteWithTierForSpaceContext(ctx context.Context, userID, spaceID, prompt, meterName string, tier AgentTier) (string, UsageSettlement, error) {
+	return s.completeWithProviderContext(ctx, userID, spaceID, prompt, meterName, TestingResolveAgentProvider(s.provider, NormalizeAgentTier(tier)), NormalizeAgentTier(tier))
 }
 
 func (s *Service) CompleteWithModelContext(ctx context.Context, userID, prompt, meterName, modelID string) (string, UsageSettlement, error) {
+	return s.CompleteWithModelForSpaceContext(ctx, userID, "", prompt, meterName, modelID)
+}
+
+func (s *Service) CompleteWithModelForSpaceContext(ctx context.Context, userID, spaceID, prompt, meterName, modelID string) (string, UsageSettlement, error) {
 	if !GatewayModelAvailable(ctx, modelID) {
 		return "", UsageSettlement{}, ErrModelUnavailable
 	}
@@ -148,10 +170,10 @@ func (s *Service) CompleteWithModelContext(ctx context.Context, userID, prompt, 
 	if err != nil {
 		return "", UsageSettlement{}, err
 	}
-	return s.completeWithProviderContext(ctx, userID, prompt, meterName, provider, TierLow)
+	return s.completeWithProviderContext(ctx, userID, spaceID, prompt, meterName, provider, TierLow)
 }
 
-func (s *Service) completeWithProviderContext(ctx context.Context, userID, prompt, meterName string, selectedProvider ModelProvider, tier AgentTier) (string, UsageSettlement, error) {
+func (s *Service) completeWithProviderContext(ctx context.Context, userID, spaceID, prompt, meterName string, selectedProvider ModelProvider, tier AgentTier) (string, UsageSettlement, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		return "", UsageSettlement{}, ErrInvalidRequest("prompt is required")
@@ -165,7 +187,7 @@ func (s *Service) completeWithProviderContext(ctx context.Context, userID, promp
 	var reservation *UsageReservation
 	var err error
 	if s.meter != nil && provider != ProviderMock {
-		reservation, err = s.meter.Reserve(userID, idempotencyKey, meterName, provider, model, estimateRequestTokens(request), MaxModelOutputTokens)
+		reservation, err = ReserveUsage(s.meter, userID, spaceID, idempotencyKey, meterName, provider, model, estimateRequestTokens(request), MaxModelOutputTokens)
 		if err != nil {
 			return "", UsageSettlement{}, err
 		}
@@ -245,6 +267,23 @@ func (s *Service) CreateSession(userID string) *Session {
 
 func (s *Service) CreateSessionWithBilling(userID, billingUserID string) *Session {
 	return s.store.CreateWithBilling(userID, billingUserID)
+}
+
+func (s *Service) CreateSessionWithBillingAndSpace(userID, billingUserID, spaceID string) *Session {
+	spaceID = strings.TrimSpace(spaceID)
+	if spaceID != "" {
+		billingUserID = userID
+	}
+	session := s.store.CreateWithBilling(userID, billingUserID)
+	if spaceID == "" {
+		return session
+	}
+	_ = s.store.WithSession(session.ID, userID, func(current *Session) error {
+		current.SpaceID = spaceID
+		return nil
+	})
+	session.SpaceID = spaceID
+	return session
 }
 
 func (s *Service) CreateSessionWithModel(userID, billingUserID, modelID string) *Session {

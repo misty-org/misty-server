@@ -16,15 +16,20 @@ func TestCanonicalPlanEntitlements(t *testing.T) {
 	}{
 		{TierBasic, 2_000_000_000, 3, false, BasicWeeklyAgentAllowance},
 		{TierPro, 50_000_000_000, 10, false, ProWeeklyAgentAllowance},
-		{TierMax, 250_000_000_000, 0, true, MaxWeeklyAgentAllowance},
+		{TierMax, 250_000_000_000, 10, false, MaxWeeklyAgentAllowance},
 	}
 	for _, testCase := range tests {
 		entitlements := EntitlementsForTier(testCase.tier)
 		if entitlements.Plan != testCase.tier ||
 			entitlements.StorageLimitBytes != testCase.storage ||
+			entitlements.PersonalStorageLimitBytes != testCase.storage ||
+			entitlements.SpaceStorageLimitBytes != testCase.storage ||
 			entitlements.SpaceLimit != testCase.spaces ||
+			entitlements.MaxOwnedSpaces != testCase.spaces ||
 			entitlements.UnlimitedSpaces != testCase.unlimited ||
-			entitlements.WeeklyHostedAIAllowance != testCase.agentAllowance {
+			entitlements.WeeklyHostedAIAllowance != testCase.agentAllowance ||
+			entitlements.PersonalWeeklyHostedAIAllowance != testCase.agentAllowance ||
+			entitlements.SpaceWeeklyHostedAIAllowance != testCase.agentAllowance {
 			t.Fatalf("%s entitlements = %#v", testCase.tier, entitlements)
 		}
 	}

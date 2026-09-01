@@ -242,8 +242,15 @@ func writeSpaceError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_people_limit_reached"})
 	case errors.Is(err, db.ErrSpaceNodeLimit):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_node_limit_reached"})
+	case errors.Is(err, db.ErrPersonalStorageQuota):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "owner_storage_quota_exceeded", "reason": "personal_storage_limit_reached"})
+	case errors.Is(err, db.ErrSpaceStorageQuota):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "owner_storage_quota_exceeded", "reason": "space_storage_limit_reached"})
 	case errors.Is(err, db.ErrLibraryQuota):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "owner_storage_quota_exceeded"})
+	case isHostedAILimitReached(err):
+		scope, _ := hostedAILimitScope(err)
+		writeJSON(w, http.StatusPaymentRequired, map[string]string{"code": "hosted_ai_limit_reached", "reason": hostedAILimitReason(scope), "message": hostedAILimitMessage(scope)})
 	case errors.Is(err, db.ErrSpaceConflict):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict"})
 	case errors.Is(err, db.ErrSpaceInviteExpired):

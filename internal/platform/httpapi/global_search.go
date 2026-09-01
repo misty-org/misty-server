@@ -320,7 +320,7 @@ func (s *SpacesService) globalSearchQueryEmbedding(ctx context.Context, userID, 
 	s.searchEmbeddingMu.Unlock()
 
 	digest := sha256.Sum256([]byte(key))
-	operation, err := beginHostedSemanticQuery(ctx, s.database, s.searchAnalyzer, userID, "global-search-query:"+hex.EncodeToString(digest[:]), normalized)
+	operation, err := beginHostedSemanticQuery(ctx, s.database, s.searchAnalyzer, userID, "", "global-search-query:"+hex.EncodeToString(digest[:]), normalized)
 	var vector []float64
 	if err == nil && operation != nil && len(operation.Vector) == 768 {
 		if settleErr := operation.Settle(s.database); settleErr == nil {

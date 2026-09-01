@@ -241,10 +241,28 @@ type UsageMeter interface {
 	Refund(reservation *UsageReservation, idempotencyKey, reason string) (UsageSettlement, error)
 }
 
+// SpaceUsageMeter is an additive extension implemented by meters that can
+// atomically enforce both a member's personal allowance and a Space allowance.
+// Keeping UsageMeter unchanged preserves compatibility with local/test meters.
+type SpaceUsageMeter interface {
+	UsageMeter
+	ReserveForSpace(userID, spaceID, idempotencyKey, meter, provider, model string, estimatedInputTokens, maxOutputTokens int64) (*UsageReservation, error)
+}
+
+func ReserveUsage(meter UsageMeter, userID, spaceID, idempotencyKey, usageMeter, provider, model string, estimatedInputTokens, maxOutputTokens int64) (*UsageReservation, error) {
+	if spaceID != "" {
+		if scoped, ok := meter.(SpaceUsageMeter); ok {
+			return scoped.ReserveForSpace(userID, spaceID, idempotencyKey, usageMeter, provider, model, estimatedInputTokens, maxOutputTokens)
+		}
+	}
+	return meter.Reserve(userID, idempotencyKey, usageMeter, provider, model, estimatedInputTokens, maxOutputTokens)
+}
+
 type HostedAILimitReachedError struct {
 	Required  int64
 	Available int64
 	ResetAt   time.Time
+	Scope     string
 }
 
 func (e HostedAILimitReachedError) Error() string { return "weekly hosted AI limit reached" }

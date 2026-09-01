@@ -93,29 +93,16 @@ func (db *Database) QueueLibraryEditRendition(ctx context.Context, userID, space
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		var ownerID string
-		if err := tx.QueryRowContext(ctx, `SELECT owner_user_id FROM spaces WHERE id=$1 FOR SHARE`, spaceID).Scan(&ownerID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "owner-storage:"+ownerID); err != nil {
-			return err
-		}
-		ownerUsage, err := ownerStorageUsageTx(ctx, tx, ownerID, true)
+		quota, err := storageQuotaStateTx(ctx, tx, userID, spaceID, true)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_storage_usage(space_id) VALUES($1) ON CONFLICT DO NOTHING`, spaceID); err != nil {
-			return err
+		remaining := quota.Personal.RemainingBytes
+		if quota.Space.RemainingBytes < remaining {
+			remaining = quota.Space.RemainingBytes
 		}
-		var used, reserved int64
-		if err := tx.QueryRowContext(ctx, `SELECT used_bytes,reserved_bytes FROM space_storage_usage WHERE space_id=$1 FOR UPDATE`, spaceID).Scan(&used, &reserved); err != nil {
-			return err
-		}
-		_ = used
-		_ = reserved
-		remaining := ownerUsage.RemainingBytes
 		if remaining < minimumLibraryRenditionReserve {
-			return ErrLibraryQuota
+			return storageQuotaError(quota, minimumLibraryRenditionReserve)
 		}
 		requested := maximumBytes
 		if requested == 0 {
@@ -130,10 +117,10 @@ func (db *Database) QueueLibraryEditRendition(ctx context.Context, userID, space
 				requested = remaining
 			}
 		} else if requested > remaining {
-			return ErrLibraryQuota
+			return storageQuotaError(quota, requested)
 		}
 		if requested < minimumLibraryRenditionReserve {
-			return ErrLibraryQuota
+			return storageQuotaError(quota, minimumLibraryRenditionReserve)
 		}
 		reservationID := "rendition_reservation_" + uuid.NewString()
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_rendition_reservations(id,space_id,user_id,source_kind,source_id,reserved_bytes,state,expires_at)

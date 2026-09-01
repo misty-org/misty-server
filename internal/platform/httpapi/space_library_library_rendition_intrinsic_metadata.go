@@ -177,8 +177,15 @@ func writeLibraryError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "library_reauthentication_required"})
 	case errors.Is(err, db.ErrLibraryInvalid):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_request"})
+	case errors.Is(err, db.ErrPersonalStorageQuota):
+		writeJSON(w, http.StatusConflict, map[string]any{"code": "owner_storage_quota_exceeded", "reason": "personal_storage_limit_reached", "owner_can_upgrade": true})
+	case errors.Is(err, db.ErrSpaceStorageQuota):
+		writeJSON(w, http.StatusConflict, map[string]any{"code": "owner_storage_quota_exceeded", "reason": "space_storage_limit_reached", "owner_can_upgrade": true})
 	case errors.Is(err, db.ErrLibraryQuota):
 		writeJSON(w, http.StatusConflict, map[string]any{"code": "owner_storage_quota_exceeded", "owner_can_upgrade": true})
+	case isHostedAILimitReached(err):
+		scope, _ := hostedAILimitScope(err)
+		writeJSON(w, http.StatusPaymentRequired, map[string]any{"code": "hosted_ai_limit_reached", "reason": hostedAILimitReason(scope), "message": hostedAILimitMessage(scope), "upgrade_available": true})
 	case errors.Is(err, db.ErrLibraryConflict):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict"})
 	case errors.Is(err, db.ErrLibraryUploadMismatch):

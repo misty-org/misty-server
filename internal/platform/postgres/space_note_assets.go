@@ -49,26 +49,13 @@ func (db *Database) CreateNoteAssetUpload(ctx context.Context, userID, noteID, f
 			// the same answer as a note that does not exist.
 			return ErrLibraryNotFound
 		}
-		var ownerID string
 		if err := tx.QueryRowContext(ctx,
-			`SELECT n.space_id,s.security_domain_id,s.owner_user_id
+			`SELECT n.space_id,s.security_domain_id
 			 FROM space_notes n JOIN spaces s ON s.id=n.space_id WHERE n.id=$1 FOR SHARE OF s`,
-			noteID).Scan(&out.SpaceID, &out.SecurityDomainID, &ownerID); err != nil {
+			noteID).Scan(&out.SpaceID, &out.SecurityDomainID); err != nil {
 			return err
 		}
-		// Note assets consume the same owner storage pool as Library files, so
-		// they take the same advisory lock to keep quota accounting serialized.
-		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "owner-storage:"+ownerID); err != nil {
-			return err
-		}
-		ownerUsage, err := ownerStorageUsageTx(ctx, tx, ownerID, true)
-		if err != nil {
-			return err
-		}
-		if ownerUsage.UsedBytes+ownerUsage.ReservedBytes+byteSize > ownerUsage.LimitBytes {
-			return ErrLibraryQuota
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_storage_usage(space_id) VALUES($1) ON CONFLICT DO NOTHING`, out.SpaceID); err != nil {
+		if _, err := reserveStorageQuotaTx(ctx, tx, userID, out.SpaceID, byteSize); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx,

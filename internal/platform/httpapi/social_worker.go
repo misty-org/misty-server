@@ -28,7 +28,7 @@ func (s *SpacesService) ProcessSocialAutomations(ctx context.Context, limit int)
 			continue
 		}
 		prompt := fmt.Sprintf(`You are drafting a background reply for Misty Social. Return strict JSON only: {"reply":"...","confidence":0.0,"sensitive":false}. Follow the user's standing instructions, but never claim to be the account owner, never make payments or legal/medical commitments, never expose secrets, and never reply to abusive or ambiguous requests. Mark sensitive true for money, credentials, legal, medical, safety, sexual, or high-impact decisions. Keep the reply concise. Standing instructions: %s\nTone: %s\nIncoming message: %s`, trigger.Instructions, trigger.Tone, trigger.Text)
-		text, _, modelErr := s.agent.CompleteWithModelContext(ctx, trigger.UserID, prompt, db.CreditMeterAutomationAI, serveragent.InitialSelectedModelID)
+		text, _, modelErr := s.agent.CompleteWithModelForSpaceContext(ctx, trigger.UserID, trigger.SpaceID, prompt, db.CreditMeterAutomationAI, serveragent.InitialSelectedModelID)
 		if modelErr != nil {
 			_, _ = s.database.RecordSocialAutomationDecision(ctx, trigger.SocialAutomationCandidate, trigger.TriggerMessageID, "blocked", "model_failed", "", 0)
 			continue

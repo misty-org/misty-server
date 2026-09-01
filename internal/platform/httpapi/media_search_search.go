@@ -155,7 +155,7 @@ func (s *MediaSearchService) TestingCachedEmbedding(ctx context.Context, userID,
 	if found && cached.expires.After(time.Now()) {
 		return append([]float64(nil), cached.vector...), nil, nil
 	}
-	operation, err := beginHostedSemanticQuery(ctx, s.database, s.analyzer, userID, "media-query:"+strconv.FormatInt(time.Now().UnixNano(), 10), query)
+	operation, err := beginHostedSemanticQuery(ctx, s.database, s.analyzer, userID, "", "media-query:"+strconv.FormatInt(time.Now().UnixNano(), 10), query)
 	if err != nil {
 		return nil, nil, err
 	}

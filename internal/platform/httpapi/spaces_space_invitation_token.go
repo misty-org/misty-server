@@ -181,33 +181,39 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 type agentMentionFailure struct {
 	AgentID string `json:"agent_id"`
 	Code    string `json:"code"`
+	Reason  string `json:"reason,omitempty"`
 	Message string `json:"message"`
 }
 
 func TestingAgentMentionFailureFromError(agentID string, err error) agentMentionFailure {
-	code, message := spaceRunFailureFromError(err)
-	return agentMentionFailure{AgentID: agentID, Code: code, Message: message}
+	code, reason, message := spaceRunFailureDetails(err)
+	return agentMentionFailure{AgentID: agentID, Code: code, Reason: reason, Message: message}
 }
 
 func spaceRunFailureFromError(err error) (string, string) {
-	var exhausted serveragent.HostedAILimitReachedError
+	code, _, message := spaceRunFailureDetails(err)
+	return code, message
+}
+
+func spaceRunFailureDetails(err error) (string, string, string) {
 	switch {
 	case errors.Is(err, context.Canceled):
-		return "request_canceled", "The run was canceled before it could start."
-	case errors.As(err, &exhausted):
-		return "hosted_ai_limit_reached", "This member has used all of their weekly AI agent usage."
+		return "request_canceled", "", "The run was canceled before it could start."
+	case isHostedAILimitReached(err):
+		scope, _ := hostedAILimitScope(err)
+		return "hosted_ai_limit_reached", hostedAILimitReason(scope), hostedAILimitMessage(scope)
 	case errors.Is(err, db.ErrWorkflowIntegrationRequired):
-		return "integration_required", "The run needs a required Space integration before it can start."
+		return "integration_required", "", "The run needs a required Space integration before it can start."
 	case errors.Is(err, db.ErrLibraryForbidden), errors.Is(err, db.ErrSpaceForbidden):
-		return "forbidden", "You no longer have permission to run this resource."
+		return "forbidden", "", "You no longer have permission to run this resource."
 	case errors.Is(err, db.ErrAgentNotFound), errors.Is(err, db.ErrLibraryNotFound), errors.Is(err, db.ErrSpaceNotFound):
-		return "resource_unavailable", "This resource is no longer available in the Space."
+		return "resource_unavailable", "", "This resource is no longer available in the Space."
 	case errors.Is(err, serveragent.ErrModelUnavailable):
-		return "agent_model_unavailable", "This Agent's selected model is unavailable. Its owner must choose another model or Automatic."
+		return "agent_model_unavailable", "", "This Agent's selected model is unavailable. Its owner must choose another model or Automatic."
 	case errors.Is(err, db.ErrSpaceInvalid), errors.Is(err, db.ErrLibraryInvalid):
-		return "invalid_request", "The run input or workflow definition is invalid."
+		return "invalid_request", "", "The run input or workflow definition is invalid."
 	default:
-		return "run_failed", "The run could not start. Try again or inspect its details in Studio."
+		return "run_failed", "", "The run could not start. Try again or inspect its details in Studio."
 	}
 }
 

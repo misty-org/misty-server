@@ -42,7 +42,7 @@ func scanSpaceDrawingAsset(scanner interface{ Scan(...any) error }, asset *Space
 	)
 }
 
-// CreateDrawingAssetUpload reserves owner-pool quota after rechecking current
+// CreateDrawingAssetUpload reserves personal and Space quota after rechecking current
 // edit access to the parent drawing.
 func (db *Database) CreateDrawingAssetUpload(
 	ctx context.Context,
@@ -77,38 +77,18 @@ func (db *Database) CreateDrawingAssetUpload(
 		if !access.CanEdit {
 			return ErrLibraryNotFound
 		}
-		var ownerID string
 		if err := tx.QueryRowContext(
 			ctx,
-			`SELECT d.space_id,s.security_domain_id,s.owner_user_id
+			`SELECT d.space_id,s.security_domain_id
 			 FROM space_drawings d
 			 JOIN spaces s ON s.id=d.space_id
 			 WHERE d.id=$1 AND d.lifecycle_state='active'
 			 FOR SHARE OF s`,
 			drawingID,
-		).Scan(&out.SpaceID, &out.SecurityDomainID, &ownerID); err != nil {
+		).Scan(&out.SpaceID, &out.SecurityDomainID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(
-			ctx,
-			`SELECT pg_advisory_xact_lock(hashtext($1))`,
-			"owner-storage:"+ownerID,
-		); err != nil {
-			return err
-		}
-		usage, err := ownerStorageUsageTx(ctx, tx, ownerID, true)
-		if err != nil {
-			return err
-		}
-		if usage.UsedBytes+usage.ReservedBytes+byteSize > usage.LimitBytes {
-			return ErrLibraryQuota
-		}
-		if _, err := tx.ExecContext(
-			ctx,
-			`INSERT INTO space_storage_usage(space_id)
-			 VALUES($1) ON CONFLICT DO NOTHING`,
-			out.SpaceID,
-		); err != nil {
+		if _, err := reserveStorageQuotaTx(ctx, tx, userID, out.SpaceID, byteSize); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(

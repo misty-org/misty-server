@@ -48,7 +48,7 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	invocation, created, err := database.CreateAIInvocationRecord(ctx, AIInvocationRecord{
-		ID: "invocation_browser_context", UserID: user.ID, SurfaceID: "global", Mode: "drawer",
+		ID: "invocation_browser_context", UserID: user.ID, SpaceID: space.ID, SurfaceID: "global", Mode: "drawer",
 		Trigger: "message", State: "queued", IdempotencyKey: "browser-context-test",
 		RequestPayload: json.RawMessage(`{"prompt":"research camps"}`), ExpiresAt: time.Now().Add(time.Hour),
 	})
@@ -71,8 +71,12 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 	if err != nil || len(contexts) != 1 || contexts[0].ID != attached.ID {
 		t.Fatalf("invocation contexts = %#v, %v", contexts, err)
 	}
-	if _, err := database.ActivateAIInvocationRuntime(ctx, invocation.ID, "workflow-agent", "runtime-browser-context"); err != nil {
+	activated, err := database.ActivateAIInvocationRuntime(ctx, invocation.ID, "workflow-agent", "runtime-browser-context")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if activated.SpaceID != space.ID {
+		t.Fatalf("durable invocation Space = %q, want %q", activated.SpaceID, space.ID)
 	}
 	prompt := "Inspect Family Space members, research summer camps in the attached browser, create a task named Compare summer camps, save the research, and post a cited summary to Family Space"
 	toolNames, err := api.TestingResolveAIInvocationSpaceToolNames(

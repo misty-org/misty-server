@@ -234,6 +234,14 @@ func saturatingTokenCost(total, tokens, rate int64) int64 {
 }
 
 func (meter *CreditMeter) Reserve(userID, idempotencyKey, usageMeter, provider, model string, estimatedInputTokens, maxOutputTokens int64) (*agent.UsageReservation, error) {
+	return meter.reserve(userID, "", idempotencyKey, usageMeter, provider, model, estimatedInputTokens, maxOutputTokens)
+}
+
+func (meter *CreditMeter) ReserveForSpace(userID, spaceID, idempotencyKey, usageMeter, provider, model string, estimatedInputTokens, maxOutputTokens int64) (*agent.UsageReservation, error) {
+	return meter.reserve(userID, spaceID, idempotencyKey, usageMeter, provider, model, estimatedInputTokens, maxOutputTokens)
+}
+
+func (meter *CreditMeter) reserve(userID, spaceID, idempotencyKey, usageMeter, provider, model string, estimatedInputTokens, maxOutputTokens int64) (*agent.UsageReservation, error) {
 	license, err := meter.database.GetLicenseByUserID(userID)
 	if err != nil {
 		return nil, err
@@ -247,7 +255,13 @@ func (meter *CreditMeter) Reserve(userID, idempotencyKey, usageMeter, provider, 
 	// A completion's estimate assumes the maximum possible output. If less than
 	// that remains, reserve the whole remainder and settle against actual usage
 	// instead of claiming the weekly allowance is already exhausted.
-	reservation, wallet, err := meter.database.ReserveHostedAIUsageUpTo(userID, tier, usageMeter, idempotencyKey, credits, meter.now())
+	var reservation *db.HostedAIReservation
+	var wallet *db.HostedAIWallet
+	if strings.TrimSpace(spaceID) == "" {
+		reservation, wallet, err = meter.database.ReserveHostedAIUsageUpTo(userID, tier, usageMeter, idempotencyKey, credits, meter.now())
+	} else {
+		reservation, wallet, err = meter.database.ReserveHostedAIUsageUpToForSpace(userID, spaceID, tier, usageMeter, idempotencyKey, credits, meter.now())
+	}
 	if err != nil {
 		var insufficient db.HostedAILimitReachedError
 		if errors.As(err, &insufficient) {
@@ -255,7 +269,7 @@ func (meter *CreditMeter) Reserve(userID, idempotencyKey, usageMeter, provider, 
 			if wallet != nil {
 				resetAt = wallet.ResetAt
 			}
-			return nil, agent.HostedAILimitReachedError{Required: insufficient.Required, Available: insufficient.Available, ResetAt: resetAt}
+			return nil, agent.HostedAILimitReachedError{Required: insufficient.Required, Available: insufficient.Available, ResetAt: resetAt, Scope: insufficient.Scope}
 		}
 		return nil, err
 	}

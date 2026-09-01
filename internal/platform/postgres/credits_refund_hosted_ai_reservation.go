@@ -18,11 +18,11 @@ func (db *Database) RefundHostedAIReservation(reservationID, idempotencyKey, rea
 	}
 	var wallet HostedAIWallet
 	err := db.TestingWithRLSContext(context.Background(), TestingServiceRLSSettings(), func(tx *sql.Tx) error {
-		var userID, meter, provider, model string
+		var userID, spaceID, meter, provider, model string
 		var charged int64
-		if err := tx.QueryRowContext(context.Background(), `SELECT r.user_id,l.meter,l.provider,l.model,l.charged_microusd
+		if err := tx.QueryRowContext(context.Background(), `SELECT r.user_id,COALESCE(r.space_id,''),l.meter,l.provider,l.model,l.charged_microusd
 			FROM hosted_ai_reservations r JOIN hosted_ai_usage_ledger l ON l.reservation_id=r.id AND l.source='consumption'
-			WHERE r.id=$1 FOR UPDATE OF r,l`, reservationID).Scan(&userID, &meter, &provider, &model, &charged); err != nil {
+			WHERE r.id=$1 FOR UPDATE OF r,l`, reservationID).Scan(&userID, &spaceID, &meter, &provider, &model, &charged); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(context.Background(), `SELECT user_id,weekly_allowance_microusd,weekly_remaining_microusd,reserved_microusd,reset_at
@@ -30,6 +30,15 @@ func (db *Database) RefundHostedAIReservation(reservationID, idempotencyKey, rea
 			&wallet.UserID, &wallet.WeeklyAllowanceMicrousd, &wallet.WeeklyRemainingMicrousd, &wallet.ReservedMicrousd, &wallet.ResetAt,
 		); err != nil {
 			return err
+		}
+		var spaceWallet SpaceHostedAIWallet
+		if spaceID != "" {
+			if err := tx.QueryRowContext(context.Background(), `SELECT space_id,weekly_allowance_microusd,weekly_remaining_microusd,reserved_microusd,reset_at
+				FROM space_hosted_ai_wallets WHERE space_id=$1 FOR UPDATE`, spaceID).Scan(
+				&spaceWallet.SpaceID, &spaceWallet.WeeklyAllowanceMicrousd, &spaceWallet.WeeklyRemainingMicrousd, &spaceWallet.ReservedMicrousd, &spaceWallet.ResetAt,
+			); err != nil {
+				return err
+			}
 		}
 		var exists bool
 		if err := tx.QueryRowContext(context.Background(), `SELECT EXISTS(SELECT 1 FROM hosted_ai_usage_ledger WHERE idempotency_key=$1)`, idempotencyKey).Scan(&exists); err != nil || exists {
@@ -44,13 +53,24 @@ func (db *Database) RefundHostedAIReservation(reservationID, idempotencyKey, rea
 			WHERE user_id=$1`, userID, refunded); err != nil {
 			return err
 		}
+		if spaceID != "" {
+			spaceRefunded := min(charged, spaceWallet.WeeklyAllowanceMicrousd-spaceWallet.WeeklyRemainingMicrousd)
+			if spaceRefunded < 0 {
+				spaceRefunded = 0
+			}
+			if _, err := tx.ExecContext(context.Background(), `UPDATE space_hosted_ai_wallets
+				SET weekly_remaining_microusd=LEAST(weekly_allowance_microusd,weekly_remaining_microusd+$2),updated_at=NOW()
+				WHERE space_id=$1`, spaceID, spaceRefunded); err != nil {
+				return err
+			}
+		}
 		source := "internal_failure_refund"
 		if value := strings.TrimSpace(reason); value != "" {
 			source += ":" + value
 		}
 		if _, err := tx.ExecContext(context.Background(), `INSERT INTO hosted_ai_usage_ledger(
-			id,user_id,reservation_id,source,meter,weekly_delta_microusd,provider,model,rate_card_version,idempotency_key
-		) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, uuid.NewString(), userID, reservationID, source, meter, refunded, provider, model, HostedAIRateCardVersion, idempotencyKey); err != nil {
+			id,user_id,space_id,reservation_id,source,meter,weekly_delta_microusd,provider,model,rate_card_version,idempotency_key
+		) VALUES($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11)`, uuid.NewString(), userID, spaceID, reservationID, source, meter, refunded, provider, model, HostedAIRateCardVersion, idempotencyKey); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(context.Background(), `UPDATE hosted_ai_reservations SET status='refunded' WHERE id=$1`, reservationID)

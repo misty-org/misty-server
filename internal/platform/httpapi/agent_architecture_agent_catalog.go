@@ -77,7 +77,7 @@ func (s *SpacesService) executeCanonicalAgentRun(r *http.Request, run *db.SpaceR
 		return s.finishFailedCanonicalRun(r.Context(), run, err)
 	}
 	identity += "\n\nPermission-checked Misty Space context:\n" + spaceContext + "\n\n" + agentToolboxPromptContext(manifest, manifestToolNames(manifest))
-	completion, err := s.agent.CompleteWithToolsContext(r.Context(), run.RequestingMemberID, run.BillingUserID, identity, request, serveragent.TierLow, manifest, func(toolCtx context.Context, tool serveragent.ToolRequest) (json.RawMessage, error) {
+	completion, err := s.agent.CompleteWithToolsForSpaceContext(r.Context(), run.RequestingMemberID, run.RequestingMemberID, run.SpaceID, identity, request, serveragent.TierLow, manifest, func(toolCtx context.Context, tool serveragent.ToolRequest) (json.RawMessage, error) {
 		return executeCanonicalAgentToolbox(toolCtx, toolbox, invocation, s.database, tool)
 	})
 	if err != nil {

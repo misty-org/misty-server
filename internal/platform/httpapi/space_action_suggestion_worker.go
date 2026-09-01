@@ -162,7 +162,7 @@ func (s *SpacesService) ProcessActionSuggestionJobs(ctx context.Context, limit i
 			_ = s.database.FinishSpaceActionSuggestionJob(ctx, job.ID, "skipped", "allowance_exhausted")
 			continue
 		}
-		text, _, modelErr := s.agent.CompleteWithModelContext(ctx, owner, prompt, db.CreditMeterAutomationAI, serveragent.InitialSelectedModelID)
+		text, _, modelErr := s.agent.CompleteWithModelForSpaceContext(ctx, owner, job.SpaceID, prompt, db.CreditMeterAutomationAI, serveragent.InitialSelectedModelID)
 		if modelErr != nil {
 			_ = s.database.FinishSpaceActionSuggestionJob(ctx, job.ID, "failed", "model_failed")
 			continue

@@ -310,12 +310,17 @@ func releasePersonalAgentRuntimeReservationsTx(ctx context.Context, tx *sql.Tx, 
 	_, err := tx.ExecContext(ctx, `WITH released AS (
 		UPDATE hosted_ai_reservations SET status='released',settled_at=NOW()
 		WHERE LEFT(idempotency_key,LENGTH($1))=$1 AND status='reserved'
-		RETURNING user_id,reserved_microusd
-	), totals AS (
+		RETURNING user_id,space_id,reserved_microusd
+	), personal_totals AS (
 		SELECT user_id,SUM(reserved_microusd) AS amount FROM released GROUP BY user_id
+	), personal_release AS (
+		UPDATE hosted_ai_wallets w SET reserved_microusd=GREATEST(0,w.reserved_microusd-t.amount),updated_at=NOW()
+		FROM personal_totals t WHERE w.user_id=t.user_id
+	), space_totals AS (
+		SELECT space_id,SUM(reserved_microusd) AS amount FROM released WHERE space_id IS NOT NULL GROUP BY space_id
 	)
-	UPDATE hosted_ai_wallets w SET reserved_microusd=GREATEST(0,w.reserved_microusd-t.amount),updated_at=NOW()
-	FROM totals t WHERE w.user_id=t.user_id`, "agent-runtime:"+runID+":model:")
+	UPDATE space_hosted_ai_wallets w SET reserved_microusd=GREATEST(0,w.reserved_microusd-t.amount),updated_at=NOW()
+	FROM space_totals t WHERE w.space_id=t.space_id`, "agent-runtime:"+runID+":model:")
 	return err
 }
 

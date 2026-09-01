@@ -154,7 +154,7 @@ func (s *SmartLibraryService) cachedQueryEmbedding(ctx context.Context, userID, 
 	if count, countErr := s.database.SmartLibrarySemanticCallsToday(userID, "semantic_query"); countErr == nil && count >= dailyLimit {
 		return nil, nil, errSemanticSearchRateLimited
 	}
-	operation, err := beginHostedSemanticQuery(ctx, s.database, s.analyzer, userID, "smart-library-query:"+strconv.FormatInt(now.UnixNano(), 10), normalized)
+	operation, err := beginHostedSemanticQuery(ctx, s.database, s.analyzer, userID, "", "smart-library-query:"+strconv.FormatInt(now.UnixNano(), 10), normalized)
 	usage := serveragent.ModelUsage{}
 	if operation != nil {
 		usage = operation.Usage

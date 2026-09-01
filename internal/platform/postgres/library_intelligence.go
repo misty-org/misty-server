@@ -143,9 +143,12 @@ func (db *Database) FailLibraryIntelligenceJob(ctx context.Context, job *Library
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if code == "hosted_ai_limit_reached" {
 			_, err := tx.ExecContext(ctx, `UPDATE library_processing_jobs SET state='queued',error_code=$1,
-				available_at=COALESCE((SELECT reset_at FROM hosted_ai_wallets WHERE user_id=$2),NOW()+INTERVAL '7 days'),
+				available_at=GREATEST(
+					COALESCE((SELECT reset_at FROM hosted_ai_wallets WHERE user_id=$2),NOW()+INTERVAL '7 days'),
+					COALESCE((SELECT reset_at FROM space_hosted_ai_wallets WHERE space_id=$3),NOW()+INTERVAL '7 days')
+				),
 				attempt_count=GREATEST(0,attempt_count-1),lease_token=NULL,lease_owner=NULL,lease_expires_at=NULL,updated_at=NOW()
-				WHERE id=$3 AND lease_token=$4 AND state IN ('leased','running')`, code, job.BillingUserID, job.ID, job.LeaseToken)
+				WHERE id=$4 AND lease_token=$5 AND state IN ('leased','running')`, code, job.BillingUserID, job.SpaceID, job.ID, job.LeaseToken)
 			if err == nil {
 				_, _ = tx.ExecContext(ctx, `INSERT INTO space_library_search_documents(space_id,space_library_item_id,security_domain_id,state,error_code)
 					VALUES($1,$2,$3,'processing',$4) ON CONFLICT(space_id,space_library_item_id)

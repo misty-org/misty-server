@@ -11,6 +11,9 @@ import (
 type HostedAILimitReachedError struct {
 	Required  int64
 	Available int64
+	// Scope is "personal" or "space" for Space-attributed requests. It is
+	// intentionally empty for legacy personal-only callers.
+	Scope string
 }
 
 func (e HostedAILimitReachedError) Error() string { return "hosted AI weekly limit reached" }
@@ -42,6 +45,39 @@ type HostedAIWallet struct {
 	WeeklyRemainingMicrousd int64     `json:"-"`
 	ReservedMicrousd        int64     `json:"-"`
 	ResetAt                 time.Time `json:"reset_at"`
+}
+
+// SpaceHostedAIWallet is the weekly AI allowance supplied by the Space
+// owner's plan. It is consumed alongside, never instead of, the initiating
+// member's personal HostedAIWallet.
+type SpaceHostedAIWallet struct {
+	SpaceID                 string    `json:"space_id"`
+	WeeklyAllowanceMicrousd int64     `json:"-"`
+	WeeklyRemainingMicrousd int64     `json:"-"`
+	ReservedMicrousd        int64     `json:"-"`
+	ResetAt                 time.Time `json:"reset_at"`
+}
+
+func (wallet SpaceHostedAIWallet) Available() int64 {
+	available := wallet.WeeklyRemainingMicrousd - wallet.ReservedMicrousd
+	if available < 0 {
+		return 0
+	}
+	return available
+}
+
+func (wallet SpaceHostedAIWallet) UsedRatio() float64 {
+	if wallet.WeeklyAllowanceMicrousd <= 0 {
+		return 1
+	}
+	used := wallet.WeeklyAllowanceMicrousd - wallet.WeeklyRemainingMicrousd
+	if used <= 0 {
+		return 0
+	}
+	if used >= wallet.WeeklyAllowanceMicrousd {
+		return 1
+	}
+	return float64(used) / float64(wallet.WeeklyAllowanceMicrousd)
 }
 
 func (wallet HostedAIWallet) Available() int64 {
@@ -86,6 +122,7 @@ type CreditUsage = HostedAIUsage
 type HostedAIReservation struct {
 	ID               string
 	UserID           string
+	SpaceID          string
 	ReservedMicrousd int64
 	ReservedCredits  int64
 	Status           string
@@ -131,11 +168,12 @@ func (db *Database) GetOrCreateHostedAIWallet(userID string, tier Tier, now time
 		if _, err := tx.ExecContext(context.Background(), `
 			WITH released AS (
 				UPDATE hosted_ai_reservations SET status='released',settled_at=NOW()
-				WHERE user_id=$1 AND status='reserved' AND created_at<NOW()-INTERVAL '15 minutes'
+				WHERE user_id=$1 AND space_id IS NULL AND status='reserved' AND created_at<NOW()-INTERVAL '15 minutes'
 				RETURNING reserved_microusd
 			)
-			UPDATE hosted_ai_wallets SET reserved_microusd=GREATEST(0,reserved_microusd-COALESCE((SELECT SUM(reserved_microusd) FROM released),0))
-			WHERE user_id=$1`, userID); err != nil {
+			UPDATE hosted_ai_wallets SET reserved_microusd=GREATEST(0,reserved_microusd-COALESCE((SELECT SUM(reserved_microusd) FROM released),0)),updated_at=NOW()
+			WHERE user_id=$1
+			`, userID); err != nil {
 			return err
 		}
 		result, err := tx.ExecContext(context.Background(), `
@@ -186,6 +224,84 @@ func (db *Database) GetOrCreateHostedAIWallet(userID string, tier Tier, now time
 		return nil, err
 	}
 	return &wallet, nil
+}
+
+// GetOrCreateSpaceHostedAIWallet applies the current owner's plan while
+// preserving already-consumed usage across upgrades and downgrades.
+func (db *Database) GetOrCreateSpaceHostedAIWallet(spaceID string, now time.Time) (*SpaceHostedAIWallet, error) {
+	now = now.UTC()
+	var wallet SpaceHostedAIWallet
+	err := db.TestingWithRLSContext(context.Background(), TestingServiceRLSSettings(), func(tx *sql.Tx) error {
+		var err error
+		wallet, err = refreshSpaceHostedAIWalletTx(context.Background(), tx, spaceID, now)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &wallet, nil
+}
+
+// refreshSpaceHostedAIWalletTx serializes allowance selection with ownership
+// transfer by taking the same Space row lock as TransferSpaceOwnership. It also
+// reclaims every stale reservation in the Space, so cleanup does not depend on
+// the original member returning.
+func refreshSpaceHostedAIWalletTx(ctx context.Context, tx *sql.Tx, spaceID string, now time.Time) (SpaceHostedAIWallet, error) {
+	var wallet SpaceHostedAIWallet
+	var ownerUserID string
+	if err := tx.QueryRowContext(ctx, `SELECT owner_user_id FROM spaces WHERE id=$1 AND lifecycle_state='active' FOR UPDATE`, spaceID).Scan(&ownerUserID); err != nil {
+		return wallet, err
+	}
+	entitlements, err := entitlementsForUserTx(ctx, tx, ownerUserID, now)
+	if err != nil {
+		return wallet, err
+	}
+	allowance := entitlements.SpaceWeeklyHostedAIAllowance
+	result, err := tx.ExecContext(ctx, `INSERT INTO space_hosted_ai_wallets(space_id,weekly_allowance_microusd,weekly_remaining_microusd,reset_at)
+		VALUES($1,$2,$2,$3) ON CONFLICT(space_id) DO NOTHING`, spaceID, allowance, nextWeeklyReset(now))
+	if err != nil {
+		return wallet, err
+	}
+	inserted, _ := result.RowsAffected()
+	var priorAllowance, priorRemaining, priorReserved int64
+	var priorReset time.Time
+	if err := tx.QueryRowContext(ctx, `SELECT weekly_allowance_microusd,weekly_remaining_microusd,reserved_microusd,reset_at
+		FROM space_hosted_ai_wallets WHERE space_id=$1 FOR UPDATE`, spaceID).Scan(&priorAllowance, &priorRemaining, &priorReserved, &priorReset); err != nil {
+		return wallet, err
+	}
+	var released int64
+	if err := tx.QueryRowContext(ctx, `WITH stale AS (
+		UPDATE hosted_ai_reservations SET status='released',settled_at=NOW()
+		WHERE space_id=$1 AND status='reserved' AND created_at<NOW()-INTERVAL '15 minutes'
+		RETURNING user_id,reserved_microusd
+	), personal_release AS (
+		UPDATE hosted_ai_wallets wallet SET reserved_microusd=GREATEST(0,wallet.reserved_microusd-stale.total),updated_at=NOW()
+		FROM (SELECT user_id,SUM(reserved_microusd) total FROM stale GROUP BY user_id) stale
+		WHERE wallet.user_id=stale.user_id
+		RETURNING stale.total
+	)
+	SELECT COALESCE(SUM(reserved_microusd),0) FROM stale`, spaceID).Scan(&released); err != nil {
+		return wallet, err
+	}
+	if released > 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE space_hosted_ai_wallets SET reserved_microusd=GREATEST(0,reserved_microusd-$2),updated_at=NOW() WHERE space_id=$1`, spaceID, released); err != nil {
+			return wallet, err
+		}
+		priorReserved = max(int64(0), priorReserved-released)
+	}
+	resetDue := inserted == 0 && !priorReset.After(now)
+	remaining, resetAt := priorRemaining, priorReset
+	if resetDue {
+		remaining, resetAt = allowance, nextWeeklyReset(now)
+	} else if priorAllowance != allowance {
+		used := max(int64(0), priorAllowance-priorRemaining)
+		remaining = max(int64(0), allowance-used)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE space_hosted_ai_wallets SET weekly_allowance_microusd=$2,weekly_remaining_microusd=$3,reset_at=$4,updated_at=NOW() WHERE space_id=$1`, spaceID, allowance, remaining, resetAt); err != nil {
+		return wallet, err
+	}
+	wallet = SpaceHostedAIWallet{SpaceID: spaceID, WeeklyAllowanceMicrousd: allowance, WeeklyRemainingMicrousd: remaining, ReservedMicrousd: priorReserved, ResetAt: resetAt}
+	return wallet, nil
 }
 
 func (db *Database) GetOrCreateCreditWallet(userID string, tier Tier, now time.Time) (*CreditWallet, error) {

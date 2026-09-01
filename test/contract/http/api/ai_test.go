@@ -63,17 +63,21 @@ func TestWriteAIErrorReturnsCanceledWithoutProviderDetails(t *testing.T) {
 }
 
 func TestWriteAIErrorReturnsStructuredHostedAILimit(t *testing.T) {
-	recorder := httptest.NewRecorder()
-	TestingWriteAIError(recorder, agent.CreditsExhaustedError{Required: 25, Available: 10})
-	if recorder.Code != http.StatusPaymentRequired {
-		t.Fatalf("status = %d", recorder.Code)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload["code"] != "hosted_ai_limit_reached" || payload["message"] == "" {
-		t.Fatalf("payload = %#v", payload)
+	for _, testCase := range []struct{ scope, reason string }{{"personal", "personal_ai_limit_reached"}, {"space", "space_ai_limit_reached"}} {
+		t.Run(testCase.scope, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			TestingWriteAIError(recorder, agent.CreditsExhaustedError{Required: 25, Available: 10, Scope: testCase.scope})
+			if recorder.Code != http.StatusPaymentRequired {
+				t.Fatalf("status = %d", recorder.Code)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload["code"] != "hosted_ai_limit_reached" || payload["reason"] != testCase.reason || payload["message"] == "" {
+				t.Fatalf("payload = %#v", payload)
+			}
+		})
 	}
 }
 

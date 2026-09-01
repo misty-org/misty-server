@@ -45,14 +45,14 @@ func TestAccountsStartWithMistyAndStandardSpacesBecomeSharedOnlyByInvite(t *test
 	if err != nil {
 		t.Fatalf("CreateSpace(third additional) = %#v, %v, want success", thirdAdditional, err)
 	}
-	if _, err := database.CreateSpace(ctx, owner.ID, "Fourth collaborative Space"); !errors.Is(err, ErrSpaceLimit) {
-		t.Fatalf("CreateSpace(fourth collaborative) error = %v, want ErrSpaceLimit", err)
+	if _, err := database.CreateSpace(ctx, owner.ID, "Fourth collaborative Space"); !errors.Is(err, ErrSpaceOwnershipLimit) {
+		t.Fatalf("CreateSpace(fourth collaborative) error = %v, want ErrSpaceOwnershipLimit", err)
 	}
 	if err := database.DeleteSpace(ctx, owner.ID, secondAdditional.ID, secondAdditional.Name); err != nil {
 		t.Fatalf("DeleteSpace(second additional) error = %v", err)
 	}
-	if _, err := database.CreateSpace(ctx, owner.ID, "Still another Space"); !errors.Is(err, ErrSpaceLimit) {
-		t.Fatalf("CreateSpace while deletion pending error = %v, want ErrSpaceLimit because inactive memberships still count", err)
+	if _, err := database.CreateSpace(ctx, owner.ID, "Still another Space"); !errors.Is(err, ErrSpaceOwnershipLimit) {
+		t.Fatalf("CreateSpace while deletion pending error = %v, want ErrSpaceOwnershipLimit because recoverable Spaces still count", err)
 	}
 
 	memberSpaces, err := database.ListSpaces(ctx, member.ID)
@@ -141,7 +141,7 @@ func TestAccountsStartWithMistyAndStandardSpacesBecomeSharedOnlyByInvite(t *test
 	}
 }
 
-func TestOwnershipTransferRequiresRecipientStorageCapacity(t *testing.T) {
+func TestOwnershipTransferAllowsSpaceToBecomeOverQuota(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
 	owner, err := database.CreateUser("Transfer Owner", "transfer-owner@example.com", "password123")
@@ -149,10 +149,6 @@ func TestOwnershipTransferRequiresRecipientStorageCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 	recipient, err := database.CreateUser("Transfer Recipient", "transfer-recipient@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	recipientOwned, err := database.CreateSpace(ctx, recipient.ID, "Recipient workspace")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,17 +172,16 @@ func TestOwnershipTransferRequiresRecipientStorageCapacity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	setUsage(project.ID, 200_000_000)
-	setUsage(recipientOwned.ID, 1_900_000_000)
-	if err := database.TransferSpaceOwnership(ctx, owner.ID, project.ID, recipient.ID); !errors.Is(err, ErrLibraryQuota) {
-		t.Fatalf("over-capacity transfer = %v, want ErrLibraryQuota", err)
-	}
-	setUsage(recipientOwned.ID, 1_700_000_000)
+	setUsage(project.ID, BasicStorageBytes+1)
 	if err := database.TransferSpaceOwnership(ctx, owner.ID, project.ID, recipient.ID); err != nil {
-		t.Fatalf("transfer with capacity = %v", err)
+		t.Fatalf("over-capacity transfer = %v", err)
 	}
 	transferred, err := database.SpaceByID(ctx, recipient.ID, project.ID)
 	if err != nil || transferred.OwnerUserID != recipient.ID {
 		t.Fatalf("transferred Space = %#v, %v", transferred, err)
+	}
+	usage, err := database.SpaceStorageUsage(ctx, recipient.ID, project.ID)
+	if err != nil || !usage.SpaceOverQuota || usage.SpaceLimitBytes != BasicStorageBytes {
+		t.Fatalf("transferred storage usage = %#v, %v", usage, err)
 	}
 }

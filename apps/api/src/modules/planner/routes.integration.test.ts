@@ -35,6 +35,7 @@ beforeAll(async () => {
     GRANT SELECT,INSERT,UPDATE,DELETE ON users,licenses,sessions,spaces,security_domains,space_members,space_roles,space_storage_usage,owner_storage_usage,
       space_setup_integrations,space_creation_requests,space_events,user_app_installations,app_runtime_sessions,app_install_events,app_data_deletion_jobs TO misty_hono_app_test;
     GRANT SELECT ON space_member_permission_overrides,space_invitations,space_conversations,space_conversation_members,space_task_activity TO misty_hono_app_test;
+    GRANT UPDATE ON space_conversation_members TO misty_hono_app_test;
     GRANT SELECT,INSERT,UPDATE ON space_tasks,space_task_counters,space_task_activity,native_task_effects TO misty_hono_app_test;
     GRANT SELECT ON space_library_items,space_message_attachments,space_roadmap_goal_tasks,space_roadmaps TO misty_hono_app_test;
     GRANT SELECT,UPDATE ON personal_agents,space_roadmap_goals TO misty_hono_app_test;

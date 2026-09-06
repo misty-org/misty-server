@@ -84,6 +84,19 @@ jobs:
         run: npm ci
       - name: Verify Go routes against the SDK contract snapshot
         run: npm run contracts:check
+      - name: Verify the separate billing service
+        run: |
+          npm run typecheck:payments
+          npm run test:payments
+          npm run build:payments
+      - name: Create isolated billing integration database
+        env:
+          PGPASSWORD: misty-test-password
+        run: psql -h 127.0.0.1 -U misty -d misty_test -v ON_ERROR_STOP=1 -c 'CREATE DATABASE misty_billing_test'
+      - name: Test the billing database boundary
+        env:
+          MISTY_TEST_DATABASE_URL: postgres://misty:misty-test-password@127.0.0.1:5432/misty_billing_test
+        run: npm run test:payments:integration
       - run: npm ci
         working-directory: apps/journal-collab
       - run: npm run typecheck

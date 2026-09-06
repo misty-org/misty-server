@@ -1,14 +1,45 @@
 {
-  "name": "@misty/backend-tooling",
+  "name": "@misty/backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "contracts:sync": "node scripts/contracts/sync-contracts.mjs && node scripts/contracts/sync-go-contracts.mjs",
     "contracts:check": "node scripts/contracts/sync-go-contracts.mjs --check",
-    "contracts:check-source": "node scripts/contracts/sync-contracts.mjs --check"
+    "contracts:check-source": "node scripts/contracts/sync-contracts.mjs --check",
+    "dev:payments": "tsx watch apps/payments/src/main.ts",
+    "build:payments": "tsc -p tsconfig.build.json",
+    "start:payments": "node dist/apps/payments/src/main.js",
+    "typecheck:payments": "tsc --noEmit",
+    "test:payments": "vitest run --project unit",
+    "test:payments:integration": "vitest run --project integration",
+    "migrate:payments": "tsx apps/payments/src/migrate.ts",
+    "import:legacy-purchases": "tsx apps/payments/src/import-legacy-purchases.ts",
+    "import:legacy-subscriptions": "tsx apps/payments/src/import-legacy-subscriptions.ts",
+    "import:legacy-checkouts": "tsx apps/payments/src/import-legacy-checkouts.ts",
+    "recover:legacy-checkouts": "tsx apps/payments/src/recover-legacy-checkouts.ts",
+    "initialize:entitlements": "tsx apps/payments/src/initialize-entitlements.ts"
   },
   "dependencies": {
-    "@misty/contracts": "file:third-party/misty-contracts"
+    "@misty/contracts": "file:third-party/misty-contracts",
+    "@hono/node-server": "2.1.1",
+    "hono": "4.13.7",
+    "jose": "6.2.11",
+    "pg": "8.23.0",
+    "pino": "10.3.1",
+    "zod": "4.4.3"
+  },
+  "workspaces": [
+    "apps/payments"
+  ],
+  "engines": {
+    "node": ">=24 <27"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
   }
 }

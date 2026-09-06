@@ -81,6 +81,10 @@ jobs:
         run: ./scripts/docker/postgres-grant-app-role.sh
       - name: Test backend and database integration serially
         run: go test -p 1 ./... -count=1
+      - name: Remove the Go-only role before the isolated Hono migration checks
+        env:
+          PGPASSWORD: misty-test-password
+        run: psql -h 127.0.0.1 -U misty -d misty_test -v ON_ERROR_STOP=1 -c 'DROP OWNED BY misty_app; DROP ROLE misty_app;'
       - run: ./scripts/check-container-contract.sh
       - uses: actions/setup-node@v7
         with:

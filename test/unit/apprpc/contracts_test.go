@@ -3,6 +3,7 @@ package apprpc
 import (
 	"context"
 	"encoding/json"
+	. "github.com/kannachi323/misty/server/internal/apprpc"
 	"net/http"
 	"net/http/httptest"
 	"strings"

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	"os"
 	"reflect"
 	"testing"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestNativeBillingAIUsageFixtures(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/migration/fixtures/billing-ai-usage.json")
+	raw, err := os.ReadFile("../../../../docs/migration/fixtures/billing-ai-usage.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,15 +20,15 @@ func TestNativeBillingAIUsageFixtures(t *testing.T) {
 		Allowance int64
 		Balance   int64
 		Reserved  int64
-		Expected  billingAIUsage
+		Expected  TestingBillingAIUsage
 	}
 	if err := json.Unmarshal(raw, &fixtures); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range fixtures {
 		t.Run(f.Name, func(t *testing.T) {
-			personal := personalBillingAIUsage(&db.HostedAIWallet{WeeklyAllowanceMicrousd: f.Allowance, WeeklyRemainingMicrousd: f.Balance, ReservedMicrousd: f.Reserved, ResetAt: f.Expected.ResetAt})
-			space := spaceBillingAIUsage(&db.SpaceHostedAIWallet{WeeklyAllowanceMicrousd: f.Allowance, WeeklyRemainingMicrousd: f.Balance, ReservedMicrousd: f.Reserved, ResetAt: f.Expected.ResetAt})
+			personal := TestingPersonalBillingAIUsage(&db.HostedAIWallet{WeeklyAllowanceMicrousd: f.Allowance, WeeklyRemainingMicrousd: f.Balance, ReservedMicrousd: f.Reserved, ResetAt: f.Expected.ResetAt})
+			space := TestingSpaceBillingAIUsage(&db.SpaceHostedAIWallet{WeeklyAllowanceMicrousd: f.Allowance, WeeklyRemainingMicrousd: f.Balance, ReservedMicrousd: f.Reserved, ResetAt: f.Expected.ResetAt})
 			if !reflect.DeepEqual(personal, f.Expected) || !reflect.DeepEqual(space, f.Expected) {
 				t.Fatalf("personal=%+v space=%+v want=%+v", personal, space, f.Expected)
 			}

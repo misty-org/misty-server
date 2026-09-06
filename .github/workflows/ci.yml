@@ -69,6 +69,16 @@ jobs:
       - name: Install pinned migration tool
         run: go install github.com/pressly/goose/v3/cmd/goose@v3.27.3
       - run: ./scripts/goose.sh up
+      - name: Provision the unprivileged application role for RLS checks
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: misty
+          PGPASSWORD: misty-test-password
+          PGDATABASE: misty_test
+          MISTY_APP_DB_USER: misty_app
+          MISTY_APP_DB_PASSWORD: misty-app-test-password
+        run: ./scripts/docker/postgres-grant-app-role.sh
       - name: Test backend and database integration serially
         run: go test -p 1 ./... -count=1
       - run: ./scripts/check-container-contract.sh

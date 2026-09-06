@@ -194,6 +194,7 @@ GET /api/ai/status
 GET /api/app-runtime/records
 GET /api/app-runtime/session
 GET /api/apps
+GET /api/apps/release
 GET /api/apps/{appID}
 GET /api/auth/handoff/start
 GET /api/auth/reset/start
@@ -317,6 +318,7 @@ GET /api/webhooks/social/instagram
 GET /app-runtime/records
 GET /app-runtime/session
 GET /apps
+GET /apps/release
 GET /apps/{appID}
 GET /auth/handoff/start
 GET /auth/reset/start
@@ -458,6 +460,7 @@ GET /v1/ai/status
 GET /v1/app-runtime/records
 GET /v1/app-runtime/session
 GET /v1/apps
+GET /v1/apps/release
 GET /v1/apps/{appID}
 GET /v1/auth/handoff/start
 GET /v1/auth/reset/start

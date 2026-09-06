@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,7 +14,7 @@ import (
 )
 
 func TestNativeMailThreadFixtures(t *testing.T) {
-	const path = "../../../docs/migration/fixtures/mail-threads.json"
+	const path = "../../../../docs/migration/fixtures/mail-threads.json"
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +29,7 @@ func TestNativeMailThreadFixtures(t *testing.T) {
 	if err := json.Unmarshal(raw, &fixtures); err != nil {
 		t.Fatal(err)
 	}
-	update := os.Getenv("MISTY_UPDATE_MAIL_FIXTURES") == "1"
+	update := envconfig.Getenv("MISTY_UPDATE_MAIL_FIXTURES") == "1"
 	for index := range fixtures {
 		fixture := &fixtures[index]
 		t.Run(fixture.Name, func(t *testing.T) {
@@ -55,7 +57,7 @@ func TestNativeMailThreadFixtures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			actual, err := json.Marshal(mailThreadToDTO(thread))
+			actual, err := json.Marshal(TestingMailThreadToDTO(thread))
 			if err != nil {
 				t.Fatal(err)
 			}

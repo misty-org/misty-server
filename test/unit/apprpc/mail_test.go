@@ -3,6 +3,7 @@ package apprpc
 import (
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
+	. "github.com/kannachi323/misty/server/internal/apprpc"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -40,7 +41,7 @@ func TestMailEnvelopeLimitsAndSendConsentPrecedeDispatch(t *testing.T) {
 		{"large draft without write", "mail.drafts.create", []string{"mail.read"}, `{"text":"` + strings.Repeat("x", 5<<20) + `"}`, 0, 400},
 		{"other method remains small", "notes.create", []string{"mail.write"}, `{"title":"` + strings.Repeat("x", 5<<20) + `"}`, 0, 400},
 		{"large ordinary whitespace", "notes.list", []string{"mail.write"}, "null", 5 << 20, 400},
-		{"oversized draft", "mail.drafts.create", []string{"mail.write"}, `{"text":"` + strings.Repeat("x", mailJSONLimit) + `"}`, 0, 400},
+		{"oversized draft", "mail.drafts.create", []string{"mail.write"}, `{"text":"` + strings.Repeat("x", TestingMailJSONLimit) + `"}`, 0, 400},
 		{"unconfirmed send", "mail.drafts.send", []string{"mail.write"}, `{"connection_id":"connection_1","authoring_source":"user","confirmed":false}`, 0, 400},
 		{"missing source", "mail.drafts.send", []string{"mail.write"}, `{"connection_id":"connection_1","confirmed":true}`, 0, 400},
 		{"confirmed send", "mail.drafts.send", []string{"mail.write"}, `{"connection_id":"connection_1","authoring_source":"ai","confirmed":true}`, 0, 204},

@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	"io"
 	"net/http/httptest"
 	"os"
@@ -16,7 +18,7 @@ import (
 )
 
 func TestNativeAvatarPNGFixtures(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/migration/fixtures/avatar-png.json")
+	raw, err := os.ReadFile("../../../../docs/migration/fixtures/avatar-png.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +50,7 @@ func TestNativeAvatarPNGFixtures(t *testing.T) {
 }
 
 func TestNativeAvatarFilesystemRoundTrip(t *testing.T) {
-	directory := os.Getenv("MISTY_TEST_AVATAR_DIRECTORY")
+	directory := envconfig.Getenv("MISTY_TEST_AVATAR_DIRECTORY")
 	if directory == "" {
 		t.Skip("Run scripts/migration/check-avatar-storage.mjs for the disposable cross-runtime proof")
 	}

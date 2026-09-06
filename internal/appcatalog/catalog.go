@@ -64,7 +64,7 @@ const generatedCatalog = `{
       "name": "Social",
       "publisher": "Misty",
       "description": "Conversations with people and agents in a Space.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
@@ -89,16 +89,17 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/chat/1.1.0/desktop.zip",
-        "sha256": "591c49ca9f00f04877f4d06758f3b67900b897a751df1602a7cf86c02a6129bb",
-        "signature": "glcPI3djyOOZt0K1uMMOmFFa2Oh/SFMH14eQQ81ZwnY3aM+6s+n2hewidu8orC4zcRLWQdU5fSZwKqBV2hyBCw==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 1476313,
-        "additional_storage_bytes": 5230215
+        "entry": "https://apps.mistysys.com/official-apps/chat/1.1.0-beta.1/desktop.zip",
+        "sha256": "b4d211949d4df4709e5145457c121e0a20b644d435afa0f209f431998c282fd0",
+        "signature": "odwgBrUN23eyszsEs1dPNnO05JqBfyZp8pPR0ShkJShwS4F1GvewDPnXanWY7HbEd/NyzlmgvEf5Ea4pzhCdAA==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 1479872,
+        "additional_storage_bytes": 5230471
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     },
     {
       "id": "journal",
@@ -107,7 +108,7 @@ const generatedCatalog = `{
       "name": "Journal",
       "publisher": "Misty",
       "description": "Notes and drawings for ideas worth keeping.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
@@ -135,16 +136,17 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/journal/1.1.0/desktop.zip",
-        "sha256": "b6f1eba2a41fcc6c69fa3683afe3e68f3eeafb006c1df1c30643bb8017fe540b",
-        "signature": "hP3QNaZy2EVkqurMZBrzAbS6VZElfhitnvhmllV+9At1a2uwOiMU8SqS8rGJc0todWF696xAJtAR1qoJImz6AA==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 15386467,
-        "additional_storage_bytes": 25535465
+        "entry": "https://apps.mistysys.com/official-apps/journal/1.1.0-beta.1/desktop.zip",
+        "sha256": "4ea90acf17023673ac79f1b84e8456b1b95f763a43749a3ee359ce510f54d8f5",
+        "signature": "AlJOoGr970Y5D1edA3UmvarVmvrEM3ES1Y0jyRatixXKx9mVq1CSdZAbxhn2/o8crB3zUQ7Z/TeX5FMa9lJRBQ==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 15322770,
+        "additional_storage_bytes": 25535521
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     },
     {
       "id": "planner",
@@ -153,7 +155,7 @@ const generatedCatalog = `{
       "name": "Planner",
       "publisher": "Misty",
       "description": "Tasks, agenda, and roadmaps for work in motion.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 4,
       "minimum_host_protocol": 2,
       "official": true,
@@ -178,16 +180,17 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/planner/1.1.0/desktop.zip",
-        "sha256": "5e69ee1ce5df7788f0612f8a4351e7065b013e331e397929f302b45d20fe4efe",
-        "signature": "5nxUhWQWYa3u65sqi6U4d/MyJDculp37ds3N6tSWGExsd338EYibamZ+AnefQgYBo74LHWPhEd/6Cv8at4aRBA==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 704247,
-        "additional_storage_bytes": 2430145
+        "entry": "https://apps.mistysys.com/official-apps/planner/1.1.0-beta.1/desktop.zip",
+        "sha256": "9a79d6e484460b89e78530756f16321922ed5668a031c582d6e9e0500565a74f",
+        "signature": "+flqQkT7iuQ03Y1HKsrBN4m7Nfm6M+pRzaGd0+1uGZXIGPS56JBzvSXUazKuJjhNroXW6fGPMORTtdPGtwduDA==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 709787,
+        "additional_storage_bytes": 2430201
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     },
     {
       "id": "library",
@@ -196,7 +199,7 @@ const generatedCatalog = `{
       "name": "Library",
       "publisher": "Misty",
       "description": "Curated resources shared with a Space.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
@@ -218,16 +221,17 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/library/1.1.0/desktop.zip",
-        "sha256": "1d87e9e4ebfbb9621518a20c08f8d7b143c373b9851554eea83db333b5246ea1",
-        "signature": "LDLX9pYqJRvjAvmi+0kDLFqYJB0jnsG1xB3pi4rvB/SJWG9tytwvFesACfnHniJvwGxAtZhYIeykLZpEL0z/Bg==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 1485426,
-        "additional_storage_bytes": 5273048
+        "entry": "https://apps.mistysys.com/official-apps/library/1.1.0-beta.1/desktop.zip",
+        "sha256": "99f7aa4bc8bf4a3ee72c1a44a6ad0c073e0a29b57ebf08e151d4519bc6d75129",
+        "signature": "fW8XvlZ+sbUK2L/EgRkPgWz4eano5wty3lOKwDrLvlrAnjgDDfZVdiTTpxFlon23uwX6L3Vxm4ourxGDjZPmCQ==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 1490314,
+        "additional_storage_bytes": 5273280
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     },
     {
       "id": "inbox",
@@ -236,7 +240,7 @@ const generatedCatalog = `{
       "name": "Inbox",
       "publisher": "Misty",
       "description": "Updates and conversations that need attention.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
@@ -261,16 +265,17 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/inbox/1.1.0/desktop.zip",
-        "sha256": "a0e238d51e408427c4d2d9a4dc5c14991965bdcf39a82ffc8de630ea9a61cc4e",
-        "signature": "PDJccV0gyua36S42WMgYJnhqCpFMwLYwTLJWjdO0zi28rKb/1qUiEZc6D4KriX1ZnQt/BZgB2m61ydABRQxsAw==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 245445,
-        "additional_storage_bytes": 952443
+        "entry": "https://apps.mistysys.com/official-apps/inbox/1.1.0-beta.1/desktop.zip",
+        "sha256": "7c6fbf8abb3ce910c390e870d2385a83a0199eddcb0f1ff44957ece858b97ff6",
+        "signature": "Qp85JB/+ZS+alEhyih3el4jbCe+Wt84v5h8zj8fKiH15eVWVJ+l6k2X3kVV0frp4X8uDGmQ1dAYUGST4oamiCg==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 246115,
+        "additional_storage_bytes": 952499
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     },
     {
       "id": "agents",
@@ -279,7 +284,7 @@ const generatedCatalog = `{
       "name": "Agents",
       "publisher": "Misty",
       "description": "Create and manage AI collaborators.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
@@ -306,16 +311,17 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/agents/1.1.0/desktop.zip",
-        "sha256": "75ff7f9d63987bbbb954c1f09934f8960786a682a61468988e6cecf79e083f8a",
-        "signature": "a+UZQ/1aKAWtmu7B8Ud01oSmhbrN/abKyxvTo2U5ni73OLoROGIB28QzVLBcr2cnq2AtFC5oTpKvRLzAREQuBg==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 415669,
-        "additional_storage_bytes": 1450694
+        "entry": "https://apps.mistysys.com/official-apps/agents/1.1.0-beta.1/desktop.zip",
+        "sha256": "e076aa0535b725dbb1b777d56b41444e6df06f311bdbec2d17581537595212f4",
+        "signature": "33RINLvjESqBWmbmR/ep4xbRHot7BoSSzjDmeGoRPSNMOimolEaG5pEHd8Kk7+hehZzCemYrHiClBmRcd2uCBA==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 416878,
+        "additional_storage_bytes": 1450913
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     },
     {
       "id": "files",
@@ -324,7 +330,7 @@ const generatedCatalog = `{
       "name": "Files",
       "publisher": "Misty",
       "description": "Browse local and connected files, and manage file transfers.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
@@ -346,16 +352,17 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/files/1.1.0/desktop.zip",
-        "sha256": "3e8ac7aca7c5a0b001d44cc1422f2044bdd63b4b90c6805b138d2d8fd85fe0d3",
-        "signature": "cX6imbQDvBRwZoI8h/GZD+BM5vkTgzuyJ+LnWdbDpzXPLQtj9rlKuqqMlcLDNg7gRsHVFW8hDC02M3lcQXGEBQ==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 1487472,
-        "additional_storage_bytes": 5279959
+        "entry": "https://apps.mistysys.com/official-apps/files/1.1.0-beta.1/desktop.zip",
+        "sha256": "5215821d04efe2e0df7ede97ff8b0cefb8f37cf9ed887daf7886c77ac53842ef",
+        "signature": "O+ghDfYIH20G5An8LTk+1/gUQput8j72/OZHtdDINrkM/R16py1isFOLybLSHdtDHMoVa7VyNjef3KctX9DlDQ==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 1492448,
+        "additional_storage_bytes": 5280015
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     },
     {
       "id": "browser",
@@ -364,7 +371,7 @@ const generatedCatalog = `{
       "name": "Browser",
       "publisher": "Misty",
       "description": "Research beside your work.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 2,
       "minimum_host_protocol": 2,
       "official": true,
@@ -381,16 +388,17 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/browser/1.1.0/desktop.zip",
-        "sha256": "2578ab5b6c856eee46d3cdfb07326f434de7d1d401188461a34b2e9033ba6d4f",
-        "signature": "AWRNHaNivqkfHQ/YK2Xnq1zLDAWh47kEId9+wl2DaLqqmOsZocnHCv4g3t69xa3EgHmhRoTNFSrJhj1PA+zqBw==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 174022,
-        "additional_storage_bytes": 722980
+        "entry": "https://apps.mistysys.com/official-apps/browser/1.1.0-beta.1/desktop.zip",
+        "sha256": "469d6be01caff8d838a00e0036095be85bb513d5aabe8e7d4f915e718c694b60",
+        "signature": "fg4P1ThC5KRsmQ9vXBmMVVAdHBwvambEmreSF8J9oH+5Dn4hZnxgmh3QUU0ErH12YqmmmVFXOPzKUnDQy1zEBw==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 174373,
+        "additional_storage_bytes": 723036
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     },
     {
       "id": "code",
@@ -399,7 +407,7 @@ const generatedCatalog = `{
       "name": "Code",
       "publisher": "Misty",
       "description": "A focused development workspace.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
@@ -415,16 +423,17 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/code/1.1.0/desktop.zip",
-        "sha256": "9d2dadccfa54e88d4d087835ba0d323c8fee055728d36c50b33024cb4fdaf1ec",
-        "signature": "epZAhXracJAgpG/LdkrA981VOILpuipQqghhOlkfJfTk6yty/y4StZuf2MiyyhfI1+Xpljxk415b4L0reEaEAQ==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 794393,
-        "additional_storage_bytes": 2552615
+        "entry": "https://apps.mistysys.com/official-apps/code/1.1.0-beta.1/desktop.zip",
+        "sha256": "0e2e419231f20ce223bf3f504fa7e1f3b094f07399cb577056d5867d5b7987d5",
+        "signature": "8wYt2aJRpZl/7/qpSgj7l1DdKmSIKoqh5b0r6vaB88hm1Emz9+F1togUD76J+S862Elyz0S8RN6qs69r4B1YDA==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 803936,
+        "additional_storage_bytes": 2552671
       },
       "mobile": {
         "runtime": "unsupported"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     },
     {
       "id": "terminal",
@@ -433,7 +442,7 @@ const generatedCatalog = `{
       "name": "Terminal",
       "publisher": "Misty",
       "description": "Command-line tools inside the workspace.",
-      "version": "1.1.0",
+      "version": "1.1.0-beta.1",
       "permission_version": 2,
       "minimum_host_protocol": 2,
       "official": true,
@@ -447,21 +456,22 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/terminal/1.1.0/desktop.zip",
-        "sha256": "98bd7b22e8c4a7e4b11d116c04209dd5bdd5ebd4f1eb281857ca07ffabff9eea",
-        "signature": "5P+0kdHcfl5F+zU2/G44CgvBd8defOq9tVNxOeIY/51cNvEaikg+LCNTY1xZvs7i+zYDR4IMfSTNJ9lyI8f6CQ==",
-        "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 242021,
-        "additional_storage_bytes": 875518
+        "entry": "https://apps.mistysys.com/official-apps/terminal/1.1.0-beta.1/desktop.zip",
+        "sha256": "997ee50c96397a75415140efb3104654d643c6c8f3669db18e2cb73aee579649",
+        "signature": "6lguhzxS8zIdo92TMUtZmMHo+gkcPhLcbBVMcR3V2qKFE0pRjYiiTD4NwoMNlwuc7Cxqu7oZpFzw+6EP626HCg==",
+        "signature_key_id": "misty-official-2026-09",
+        "download_bytes": 243103,
+        "additional_storage_bytes": 875574
       },
       "mobile": {
         "runtime": "unsupported"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1"
     }
   ],
   "signing": {
-    "key_id": "misty-development-2026-01",
-    "public_key": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+    "key_id": "misty-official-2026-09",
+    "public_key": "On4McQn01VlxUIFfW9W4iPzh8lTMU8cwgjbq/+E5YNg="
   }
 }`
 

@@ -88,7 +88,7 @@ it("serves the reviewed catalog and account installation list under all aliases 
   expect((await session.json()).scopes).toEqual(["spaces.read", "browser.navigate", "browser.inspect", "browser.interact", "clipboard.write", "links.open", "navigation.write", "ai.use"]);
   const inbox = catalog.find("inbox")!;
   expect(inbox).toMatchObject({ version: "1.1.0", permission_version: 3, minimum_host_protocol: 2,
-    desktop: { runtime: "downloaded", sha256: "469e09edea0a4f79fa044bbdd3aca55a8e5853ab6fb580ea5371bfd5eb3b074b" } });
+    desktop: { runtime: "downloaded", sha256: "a0e238d51e408427c4d2d9a4dc5c14991965bdcf39a82ffc8de630ea9a61cc4e" } });
   expect((await f.request("/me/apps/inbox", "PUT", { permission_version: 2 })).status).toBe(409);
   expect((await f.request("/me/apps/inbox", "PUT", { permission_version: 3 })).status).toBe(200);
   const inboxSession = await f.request("/me/apps/inbox/sessions", "POST", {}); expect(inboxSession.status).toBe(201);

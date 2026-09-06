@@ -96,7 +96,7 @@ beforeAll(async () => {
     GRANT SELECT,INSERT,UPDATE ON space_integrations,space_provider_credentials TO misty_hono_app_test;
     GRANT SELECT,UPDATE,INSERT ON connected_accounts TO misty_hono_app_test;
     GRANT SELECT,INSERT,UPDATE,DELETE ON connection_authorization_requests TO misty_hono_app_test;
-    GRANT SELECT ON self_host_accounts TO misty_hono_app_test;
+    GRANT SELECT,UPDATE ON self_host_accounts TO misty_hono_app_test;
     GRANT SELECT,UPDATE ON figma_webhook_subscriptions,figma_space_bindings,provider_shared_resources,space_integrations TO misty_hono_app_test;
     GRANT USAGE,SELECT ON app_install_events_id_seq,space_events_id_seq TO misty_hono_app_test;`);
   application = new Pool({ connectionString: process.env.MISTY_TEST_DATABASE_URL, options: "-c role=misty_hono_app_test", max: 8 });

@@ -45,7 +45,7 @@ beforeAll(async () => {
   await applyMigrations(admin, await readMigrations(fileURLToPath(new URL("../../../../../internal/platform/postgres/migrations/", import.meta.url))));
   await admin.query(`DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='misty_hono_app_test') THEN CREATE ROLE misty_hono_app_test NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF; END $$;
     GRANT USAGE ON SCHEMA public TO misty_hono_app_test;
-    GRANT SELECT,INSERT,UPDATE,DELETE ON users,licenses,sessions,spaces,security_domains,space_members,space_roles,space_storage_usage,
+    GRANT SELECT,INSERT,UPDATE,DELETE ON users,licenses,sessions,spaces,security_domains,space_members,space_roles,space_storage_usage,owner_storage_usage,
       space_setup_integrations,space_creation_requests,space_events,user_app_installations,app_runtime_sessions,app_install_events,app_data_deletion_jobs TO misty_hono_app_test;
     GRANT SELECT ON space_invitations TO misty_hono_app_test;
     GRANT SELECT,UPDATE ON connected_accounts,figma_webhook_subscriptions,figma_space_bindings,provider_shared_resources,space_integrations TO misty_hono_app_test;

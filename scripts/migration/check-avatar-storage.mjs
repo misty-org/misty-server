@@ -15,7 +15,7 @@ try {
   for (const key of ["avatars/avatar_12345678", "library/native_12345678"]) {
     await store.putBytes(key, data, { byteSize: data.length, sha256: createHash("sha256").update(data).digest("hex"), mimeType: "image/png" });
   }
-  await promisify(execFile)("go", ["test", "./internal/platform/httpapi", "-run", "^TestNativeAvatarFilesystemRoundTrip$", "-count=1"], {
+  await promisify(execFile)("go", ["test", "./test/contract/http/api", "-run", "^TestNativeAvatarFilesystemRoundTrip$", "-count=1"], {
     cwd: new URL("../../", import.meta.url), env: { ...process.env, MISTY_TEST_AVATAR_DIRECTORY: root }, timeout: 120000,
   });
   for (const key of ["avatars/user_12345678", "library/legacy_12345678"]) {

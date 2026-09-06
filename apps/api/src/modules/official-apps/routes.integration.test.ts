@@ -80,15 +80,15 @@ it("serves the reviewed catalog and account installation list under all aliases 
   expect((await f.request("/apps/unknown")).status).toBe(404);
   expect((await f.request("/apps", "GET", undefined, "invalid")).status).toBe(401);
   const browser = catalog.find("browser")!;
-  expect(browser).toMatchObject({ version: "1.1.0", permission_version: 2, minimum_host_protocol: 2, desktop: { runtime: "downloaded" }, mobile: { runtime: "embedded" } });
+  expect(browser).toMatchObject({ version: "1.1.0-beta.1", minimum_host_version: "0.1.0-beta.1", permission_version: 2, minimum_host_protocol: 2, desktop: { runtime: "downloaded" }, mobile: { runtime: "embedded" } });
   expect(browser.desktop.sha256).toMatch(/^[a-f0-9]{64}$/); expect(browser.desktop.signature).toBeTruthy();
   expect((await f.request("/me/apps/browser", "PUT", { permission_version: 1 })).status).toBe(409);
   expect((await f.request("/me/apps/browser", "PUT", { permission_version: 2 })).status).toBe(200);
   const session = await f.request("/me/apps/browser/sessions", "POST", {}); expect(session.status).toBe(201);
   expect((await session.json()).scopes).toEqual(["spaces.read", "browser.navigate", "browser.inspect", "browser.interact", "clipboard.write", "links.open", "navigation.write", "ai.use"]);
   const inbox = catalog.find("inbox")!;
-  expect(inbox).toMatchObject({ version: "1.1.0", permission_version: 3, minimum_host_protocol: 2,
-    desktop: { runtime: "downloaded", sha256: "a0e238d51e408427c4d2d9a4dc5c14991965bdcf39a82ffc8de630ea9a61cc4e" } });
+  expect(inbox).toMatchObject({ version: "1.1.0-beta.1", minimum_host_version: "0.1.0-beta.1", permission_version: 3, minimum_host_protocol: 2,
+    desktop: { runtime: "downloaded", sha256: "7c6fbf8abb3ce910c390e870d2385a83a0199eddcb0f1ff44957ece858b97ff6" } });
   expect((await f.request("/me/apps/inbox", "PUT", { permission_version: 2 })).status).toBe(409);
   expect((await f.request("/me/apps/inbox", "PUT", { permission_version: 3 })).status).toBe(200);
   const inboxSession = await f.request("/me/apps/inbox/sessions", "POST", {}); expect(inboxSession.status).toBe(201);

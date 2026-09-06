@@ -113,7 +113,7 @@ func (s *SpacesService) adoptCloudConnectionIntoConnectedAccount(ctx context.Con
 	case "onedrive":
 		accountProvider = "microsoft"
 	case "dropbox":
-		accountProvider = "dropbox"
+		accountProvider = "dropbox" // gitleaks:allow -- provider identifier, not a token
 	}
 	definition, exists := TestingConnectedAccountOAuthCatalog[accountProvider]
 	if !exists || secret.ClientID != connectedAccountClientID(definition) || secret.ClientSecret != connectedAccountClientSecret(definition) {

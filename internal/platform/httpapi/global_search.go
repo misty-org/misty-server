@@ -131,7 +131,7 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 			if strings.Contains(strings.ToLower(space.Name), lowerQuery) {
 				if !appendHit(globalSearchHit{
 					ID: "space:" + space.ID, Kind: "space", Title: space.Name,
-					Body: space.Kind, Keywords: []string{"space", space.Name}, Href: "/spaces/" + url.PathEscape(space.ID),
+					Body: "Space", Keywords: []string{"space", space.Name}, Href: "/spaces/" + url.PathEscape(space.ID),
 					SpaceID: space.ID, SpaceName: space.Name, UpdatedAt: searchTime(space.UpdatedAt),
 				}) {
 					break

@@ -32,14 +32,6 @@ func Run() {
 		panic(err)
 	}
 	defer server.Database.Stop()
-	if !strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_DEPLOYMENT_MODE")), "self_hosted") {
-		if err := server.Database.ConfigureCanonicalMistySpace(
-			context.Background(),
-			strings.TrimSpace(envconfig.Getenv("MISTY_OPERATOR_USER_ID")),
-		); err != nil {
-			panic(err)
-		}
-	}
 	if err := server.MountHandlers(); err != nil {
 		panic(err)
 	}
@@ -52,6 +44,7 @@ func Run() {
 	startWorkers(
 		workerContext,
 		WorkerFunc(func(ctx context.Context) { runAgentRetention(ctx, server) }),
+		WorkerFunc(func(ctx context.Context) { runAppDataRetention(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runPersonalAgentTaskProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runLibraryPeopleProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runLibraryRenditionProcessing(ctx, server) }),
@@ -74,6 +67,38 @@ func Run() {
 		panic(err)
 	}
 	log.Println("Misty server stopped")
+}
+
+func runAppDataRetention(ctx context.Context, server *Server) {
+	process := func() {
+		jobs, err := server.Database.ClaimDueAppDataDeletionJobs(ctx, 25)
+		if err != nil {
+			log.Printf("App data retention scan failed: %v", err)
+			return
+		}
+		for _, job := range jobs {
+			if err := server.Database.CompleteAppDataDeletion(ctx, job, time.Now().UTC()); err != nil {
+				log.Printf("App data purge failed for %s: %v", job.AppID, err)
+				if failErr := server.Database.FailAppDataDeletion(ctx, job, err); failErr != nil {
+					log.Printf("App data purge failure could not be recorded for %s: %v", job.AppID, failErr)
+				}
+			}
+		}
+		if _, err := server.Database.PurgeExpiredAppRuntimeSessions(ctx, 1000); err != nil {
+			log.Printf("App runtime session cleanup failed: %v", err)
+		}
+	}
+	process()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			process()
+		}
+	}
 }
 
 func runSocialDeliveryProcessing(ctx context.Context, server *Server) {

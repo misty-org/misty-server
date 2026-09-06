@@ -1,0 +1,100 @@
+{
+  "checkedAt": "2026-09-05T17:06:27.749Z",
+  "imageId": "sha256:fd2a11a860b96e2c1c03b2c34656402cbe937eea47aa672d9976da0a70883d53",
+  "scope": "Release-image HTTP/RPC + validation + MIME + loopback provider HTTP; authentication/database are fixtures, not a production load claim",
+  "node": "v24.20.0",
+  "containerMemoryLimitBytes": 1073741824,
+  "apiBaseline": {
+    "rss": 113909760,
+    "heapTotal": 57864192,
+    "heapUsed": 35241776,
+    "external": 4361162,
+    "arrayBuffers": 340021
+  },
+  "results": [
+    {
+      "transport": "rpc",
+      "content": "binary",
+      "concurrency": 2,
+      "draftJsonBytes": 13981244,
+      "envelopeBytes": 13981307,
+      "providerRequestBytes": [
+        19132372,
+        19132372
+      ],
+      "overflowStatus": 503,
+      "heldMemory": {
+        "rss": 398143488,
+        "heapTotal": 135229440,
+        "heapUsed": 95757224,
+        "external": 172613793,
+        "arrayBuffers": 116187492
+      },
+      "maxRssKiB": 402696,
+      "elapsedToHeldMs": 434
+    },
+    {
+      "transport": "rpc",
+      "content": "escaped-text",
+      "concurrency": 2,
+      "draftJsonBytes": 29360128,
+      "envelopeBytes": 29360191,
+      "providerRequestBytes": [
+        8928550,
+        8928550
+      ],
+      "overflowStatus": 503,
+      "heldMemory": {
+        "rss": 436535296,
+        "heapTotal": 95858688,
+        "heapUsed": 57350408,
+        "external": 98917193,
+        "arrayBuffers": 76867954
+      },
+      "maxRssKiB": 465992,
+      "elapsedToHeldMs": 591
+    },
+    {
+      "transport": "rest",
+      "content": "binary",
+      "concurrency": 2,
+      "draftJsonBytes": 13981244,
+      "envelopeBytes": 13981244,
+      "providerRequestBytes": [
+        19132372,
+        19132372
+      ],
+      "overflowStatus": 503,
+      "heldMemory": {
+        "rss": 449425408,
+        "heapTotal": 134443008,
+        "heapUsed": 96184472,
+        "external": 158644249,
+        "arrayBuffers": 88224878
+      },
+      "maxRssKiB": 465992,
+      "elapsedToHeldMs": 232
+    },
+    {
+      "transport": "rest",
+      "content": "escaped-text",
+      "concurrency": 2,
+      "draftJsonBytes": 29360128,
+      "envelopeBytes": 29360128,
+      "providerRequestBytes": [
+        8928550,
+        8928550
+      ],
+      "overflowStatus": 503,
+      "heldMemory": {
+        "rss": 390094848,
+        "heapTotal": 95072256,
+        "heapUsed": 57667608,
+        "external": 108274314,
+        "arrayBuffers": 27504819
+      },
+      "maxRssKiB": 465992,
+      "elapsedToHeldMs": 431
+    }
+  ]
+}

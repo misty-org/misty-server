@@ -1,0 +1,301 @@
+{
+  "protocol": 2,
+  "methods": {
+    "tasks.activity.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/tasks/{taskID}/activity"
+    },
+    "tasks.move": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/tasks/{taskID}/move"
+    },
+    "agenda.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/agenda"
+    },
+    "calendar.sources.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/calendar/sources"
+    },
+    "calendar.sources.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/calendar/sources"
+    },
+    "calendar.sources.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/calendar/sources/{sourceID}"
+    },
+    "calendar.google.calendars": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/calendar/google/calendars"
+    },
+    "calendar.sync": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/calendar/sync"
+    },
+    "roadmaps.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}"
+    },
+    "roadmaps.nodeDefinitions.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/roadmap-node-definitions"
+    },
+    "roadmaps.nodeDefinitions.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/roadmap-node-definitions"
+    },
+    "roadmaps.nodeDefinitions.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/roadmap-node-definitions/{definitionID}"
+    },
+    "roadmaps.nodeDefinitions.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/roadmap-node-definitions/{definitionID}"
+    },
+    "roadmaps.milestones.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/milestones"
+    },
+    "roadmaps.milestones.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/milestones/{milestoneID}"
+    },
+    "roadmaps.milestones.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/milestones/{milestoneID}"
+    },
+    "roadmaps.goals.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/goals"
+    },
+    "roadmaps.goals.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}"
+    },
+    "roadmaps.goals.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}"
+    },
+    "roadmaps.goals.setTasks": {
+      "verb": "PUT",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}/tasks"
+    },
+    "roadmaps.nodes.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/nodes"
+    },
+    "roadmaps.nodes.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}"
+    },
+    "roadmaps.nodes.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}"
+    },
+    "roadmaps.edges.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/edges"
+    },
+    "roadmaps.edges.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/edges/{edgeID}"
+    },
+    "roadmaps.edges.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/edges/{edgeID}"
+    },
+    "roadmaps.layout.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}/layout"
+    },
+    "notes.assets.reserve": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/notes/{noteID}/assets/uploads"
+    },
+    "notes.assets.finalize": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/notes/{noteID}/assets/uploads/{uploadID}/finalize"
+    },
+    "notes.assets.download": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/notes/{noteID}/assets/{assetID}/download"
+    },
+    "drawings.assets.reserve": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/drawings/{drawingID}/assets/uploads"
+    },
+    "drawings.assets.finalize": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/drawings/{drawingID}/assets/uploads/{uploadID}/finalize"
+    },
+    "drawings.assets.download": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/drawings/{drawingID}/assets/{assetID}/download"
+    },
+    "connections.list": {
+      "verb": "GET",
+      "path": "/connections"
+    },
+    "connections.remove": {
+      "verb": "DELETE",
+      "path": "/connections/{connectionID}"
+    },
+    "connections.authorize": {
+      "verb": "POST",
+      "path": "/connections/{provider}/authorize"
+    },
+    "integrations.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/integrations"
+    },
+    "integrations.bind": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/integrations/{provider}/bind"
+    },
+    "mail.accounts.list": {
+      "verb": "GET",
+      "path": "/mail/accounts"
+    },
+    "mail.folders.list": {
+      "verb": "GET",
+      "path": "/mail/folders"
+    },
+    "mail.threads.list": {
+      "verb": "GET",
+      "path": "/mail/threads"
+    },
+    "mail.threads.get": {
+      "verb": "GET",
+      "path": "/mail/threads/{threadID}"
+    },
+    "mail.threads.action": {
+      "verb": "POST",
+      "path": "/mail/threads/{threadID}/actions"
+    },
+    "mail.drafts.create": {
+      "verb": "POST",
+      "path": "/mail/drafts"
+    },
+    "mail.drafts.update": {
+      "verb": "PUT",
+      "path": "/mail/drafts/{draftID}"
+    },
+    "mail.drafts.send": {
+      "verb": "POST",
+      "path": "/mail/drafts/{draftID}/send"
+    },
+    "spaces.get": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}"
+    },
+    "spaces.members.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/members"
+    },
+    "notes.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/notes"
+    },
+    "notes.get": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/notes/{noteID}"
+    },
+    "notes.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/notes"
+    },
+    "notes.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/notes/{noteID}/metadata"
+    },
+    "notes.archive": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/notes/{noteID}"
+    },
+    "notes.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/notes/{noteID}"
+    },
+    "notes.backlinks": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/notes/{noteID}/backlinks"
+    },
+    "notes.collaboration.ticket": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/notes/{noteID}/collaboration-ticket"
+    },
+    "drawings.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/drawings"
+    },
+    "drawings.get": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/drawings/{drawingID}"
+    },
+    "drawings.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/drawings"
+    },
+    "drawings.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/drawings/{drawingID}"
+    },
+    "drawings.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/drawings/{drawingID}"
+    },
+    "drawings.collaboration.ticket": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/drawings/{drawingID}/collaboration-ticket"
+    },
+    "tasks.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/tasks"
+    },
+    "tasks.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/tasks"
+    },
+    "tasks.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/tasks/{taskID}"
+    },
+    "tasks.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/tasks/{taskID}"
+    },
+    "roadmaps.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/roadmaps"
+    },
+    "roadmaps.get": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}"
+    },
+    "roadmaps.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/roadmaps"
+    },
+    "roadmaps.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/roadmaps/{roadmapID}"
+    },
+    "calendar.events.list": {
+      "verb": "GET",
+      "path": "/spaces/{spaceID}/calendar/events"
+    },
+    "calendar.events.create": {
+      "verb": "POST",
+      "path": "/spaces/{spaceID}/calendar/events"
+    },
+    "calendar.events.update": {
+      "verb": "PATCH",
+      "path": "/spaces/{spaceID}/calendar/events/{eventID}"
+    },
+    "calendar.events.delete": {
+      "verb": "DELETE",
+      "path": "/spaces/{spaceID}/calendar/events/{eventID}"
+    }
+  }
+}

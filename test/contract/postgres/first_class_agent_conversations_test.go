@@ -59,7 +59,7 @@ func TestAgentDirectConversationsAreCanonicalPerMemberAndSpace(t *testing.T) {
 	}
 }
 
-func TestAgentDirectConversationWorksInDefaultMistySpace(t *testing.T) {
+func TestAgentDirectConversationWorksInDefaultSpace(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
 	owner, err := database.CreateUser(
@@ -70,10 +70,7 @@ func TestAgentDirectConversationWorksInDefaultMistySpace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.EnsureDefaultSpace(ctx, owner.ID); err != nil {
-		t.Fatal(err)
-	}
-	space := requireDefaultMistySpace(t, database, ctx, owner.ID)
+	space := createTestSpace(t, database, ctx, owner.ID, "Personal")
 	agent, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{
 		Name:      "Welcome companion",
 		ModelMode: "pinned",

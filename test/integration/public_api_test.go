@@ -103,12 +103,8 @@ func TestBillingUsageExposesOnlyCustomerSafeAgentUsage(t *testing.T) {
 		}
 	}
 	spaces, ok := body["spaces"].([]any)
-	if !ok || len(spaces) == 0 {
-		t.Fatalf("Space usage = %#v, want at least the permanent Misty Space", body["spaces"])
-	}
-	firstSpace, ok := spaces[0].(map[string]any)
-	if !ok || firstSpace["storage"] == nil || firstSpace["ai"] == nil {
-		t.Fatalf("Space usage does not distinguish storage and AI: %#v", firstSpace)
+	if !ok || len(spaces) != 0 {
+		t.Fatalf("Space usage = %#v, want none before onboarding", body["spaces"])
 	}
 	entitlements, ok := body["entitlements"].(map[string]any)
 	if !ok || entitlements["max_owned_spaces"] == nil || entitlements["personal_storage_limit_bytes"] == nil || entitlements["space_storage_limit_bytes"] == nil || entitlements["personal_ai_limit"] == nil || entitlements["space_ai_limit"] == nil {

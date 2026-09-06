@@ -19,6 +19,9 @@ type SpaceNoteAsset struct {
 	DisplayName    string    `json:"display_name"`
 	LifecycleState string    `json:"lifecycle_state"`
 	CreatedAt      time.Time `json:"created_at"`
+	MIMEType       string    `json:"mime_type"`
+	ByteSize       int64     `json:"byte_size"`
+	SHA256         string    `json:"sha256"`
 }
 
 // CreateNoteAssetUpload reserves quota and creates a pending note_attachment
@@ -94,8 +97,10 @@ func (db *Database) NoteAssets(ctx context.Context, userID, noteID string) ([]Sp
 			return ErrSpaceNotFound
 		}
 		rows, err := tx.QueryContext(ctx,
-			`SELECT id,note_id,file_id,uploader_user_id,display_name,lifecycle_state,created_at
-			 FROM space_note_assets WHERE note_id=$1 AND lifecycle_state='ready' ORDER BY created_at`, noteID)
+			`SELECT a.id,a.note_id,a.file_id,a.uploader_user_id,a.display_name,a.lifecycle_state,a.created_at,
+			        COALESCE(b.server_detected_mime_type,b.client_declared_mime_type),b.byte_size,b.sha256
+			 FROM space_note_assets a JOIN library_files f ON f.id=a.file_id JOIN library_blobs b ON b.id=f.blob_id
+			 WHERE a.note_id=$1 AND a.lifecycle_state='ready' ORDER BY a.created_at`, noteID)
 		if err != nil {
 			return err
 		}
@@ -103,7 +108,7 @@ func (db *Database) NoteAssets(ctx context.Context, userID, noteID string) ([]Sp
 		for rows.Next() {
 			var asset SpaceNoteAsset
 			if err := rows.Scan(&asset.ID, &asset.NoteID, &asset.FileID, &asset.UploaderUserID,
-				&asset.DisplayName, &asset.LifecycleState, &asset.CreatedAt); err != nil {
+				&asset.DisplayName, &asset.LifecycleState, &asset.CreatedAt, &asset.MIMEType, &asset.ByteSize, &asset.SHA256); err != nil {
 				return err
 			}
 			assets = append(assets, asset)

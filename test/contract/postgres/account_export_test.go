@@ -11,6 +11,7 @@ import (
 
 func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	fixture := newNoteFixture(t, "account-export")
+	createTestSpace(t, fixture.database, fixture.ctx, fixture.creator, "Creator Home")
 	if _, err := fixture.database.CreateSpaceDrawing(
 		fixture.ctx, fixture.creator, fixture.spaceID, "Exported drawing",
 	); err != nil {

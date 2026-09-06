@@ -10,7 +10,7 @@ mkdir -p "$runtime_dir"
 rm -f "$url_file" "$fifo"
 mkfifo "$fifo"
 
-cloudflared --no-autoupdate tunnel --url "$origin" >"$fifo" 2>&1 &
+cloudflared --no-autoupdate tunnel --protocol http2 --url "$origin" >"$fifo" 2>&1 &
 cloudflared_pid=$!
 
 stop_cloudflared() {

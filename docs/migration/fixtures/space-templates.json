@@ -1,0 +1,88 @@
+[
+  {
+    "id": "blank",
+    "name": "Blank Space",
+    "description": "Start with a clean Space.",
+    "version": 1,
+    "recommended_integrations": [],
+    "seed_summary": {
+      "task_count": 0,
+      "note_count": 0,
+      "collection_count": 0
+    }
+  },
+  {
+    "id": "student-project",
+    "name": "Student Project",
+    "description": "Organize a class project from brief to delivery.",
+    "version": 1,
+    "recommended_integrations": [
+      "google",
+      "notion"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 3
+    }
+  },
+  {
+    "id": "startup",
+    "name": "Startup",
+    "description": "Keep an early team aligned around customers and outcomes.",
+    "version": 1,
+    "recommended_integrations": [
+      "google",
+      "notion"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 3
+    }
+  },
+  {
+    "id": "research",
+    "name": "Research",
+    "description": "Collect sources, coordinate work, and track outputs.",
+    "version": 1,
+    "recommended_integrations": [
+      "google",
+      "notion"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 3
+    }
+  },
+  {
+    "id": "game-development",
+    "name": "Game Development",
+    "description": "Coordinate a small game team around the next playable build.",
+    "version": 1,
+    "recommended_integrations": [
+      "discord"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 3
+    }
+  },
+  {
+    "id": "creative-team",
+    "name": "Creative Team",
+    "description": "Move a shared brief through review and delivery.",
+    "version": 1,
+    "recommended_integrations": [
+      "discord",
+      "notion"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 4
+    }
+  }
+]

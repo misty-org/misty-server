@@ -1,0 +1,44 @@
+[
+  {
+    "name": "Personal Space",
+    "apps": [
+      {
+        "ID": "journal",
+        "Version": "1.0.0",
+        "PermissionVersion": 1,
+        "Scopes": [
+          "notes.read",
+          "notes.write"
+        ]
+      },
+      {
+        "ID": "agents",
+        "Version": "1.2.0",
+        "PermissionVersion": 2,
+        "Scopes": []
+      }
+    ],
+    "fingerprint": "ddaee7d2cc360ade8a6c1617a232080f70e869e5c64743cd04dac4862e86c92e"
+  },
+  {
+    "name": "Team <Research> & 🙂 Next Line",
+    "apps": [
+      {
+        "ID": "journal",
+        "Version": "1.0.0",
+        "PermissionVersion": 1,
+        "Scopes": [
+          "notes.read",
+          "notes.write"
+        ]
+      },
+      {
+        "ID": "agents",
+        "Version": "1.2.0",
+        "PermissionVersion": 2,
+        "Scopes": []
+      }
+    ],
+    "fingerprint": "e3d4b334b6d11ee5e902f6389150194ed54fc45e11fef95df08d6cf622c1c196"
+  }
+]

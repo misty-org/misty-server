@@ -64,15 +64,6 @@ func (s *SpacesService) publishPersonalAgentTaskCompletion(ctx context.Context, 
 }
 
 func (s *SpacesService) publishPersonalAgentCompletion(ctx context.Context, run *db.SpaceRun, task *db.SpaceTask, text string) error {
-	space, err := s.database.SpaceByID(ctx, run.OwnerUserID, run.SpaceID)
-	if err != nil {
-		return err
-	}
-	// The private Misty workspace intentionally has no shared chat. The result
-	// remains available on the owner-only Agents page.
-	if space.Kind == "misty" && run.SourceConversationID == "" {
-		return nil
-	}
 	if run.SourceTaskID != "" {
 		return s.publishPersonalAgentTaskCompletion(ctx, run, task, text)
 	}

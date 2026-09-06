@@ -1,0 +1,130 @@
+[
+  {
+    "name": "unused",
+    "allowance": 150000,
+    "balance": 150000,
+    "reserved": 0,
+    "expected": {
+      "used": 0,
+      "reserved": 0,
+      "limit": 150000,
+      "remaining": 150000,
+      "used_ratio": 0,
+      "available": true,
+      "paused": false,
+      "reset_at": "2026-09-07T00:00:00Z"
+    }
+  },
+  {
+    "name": "spent",
+    "allowance": 150000,
+    "balance": 143000,
+    "reserved": 0,
+    "expected": {
+      "used": 7000,
+      "reserved": 0,
+      "limit": 150000,
+      "remaining": 143000,
+      "used_ratio": 0.04666666666666667,
+      "available": true,
+      "paused": false,
+      "reset_at": "2026-09-07T00:00:00Z"
+    }
+  },
+  {
+    "name": "reserved",
+    "allowance": 150000,
+    "balance": 150000,
+    "reserved": 20000,
+    "expected": {
+      "used": 0,
+      "reserved": 20000,
+      "limit": 150000,
+      "remaining": 130000,
+      "used_ratio": 0,
+      "available": true,
+      "paused": false,
+      "reset_at": "2026-09-07T00:00:00Z"
+    }
+  },
+  {
+    "name": "spent-and-reserved",
+    "allowance": 150000,
+    "balance": 143000,
+    "reserved": 10000,
+    "expected": {
+      "used": 7000,
+      "reserved": 10000,
+      "limit": 150000,
+      "remaining": 133000,
+      "used_ratio": 0.04666666666666667,
+      "available": true,
+      "paused": false,
+      "reset_at": "2026-09-07T00:00:00Z"
+    }
+  },
+  {
+    "name": "exhausted",
+    "allowance": 150000,
+    "balance": 0,
+    "reserved": 0,
+    "expected": {
+      "used": 150000,
+      "reserved": 0,
+      "limit": 150000,
+      "remaining": 0,
+      "used_ratio": 1,
+      "available": false,
+      "paused": true,
+      "reset_at": "2026-09-07T00:00:00Z"
+    }
+  },
+  {
+    "name": "over-reserved",
+    "allowance": 150000,
+    "balance": 5000,
+    "reserved": 10000,
+    "expected": {
+      "used": 145000,
+      "reserved": 10000,
+      "limit": 150000,
+      "remaining": 0,
+      "used_ratio": 0.9666666666666667,
+      "available": false,
+      "paused": true,
+      "reset_at": "2026-09-07T00:00:00Z"
+    }
+  },
+  {
+    "name": "over-credited",
+    "allowance": 150000,
+    "balance": 170000,
+    "reserved": 0,
+    "expected": {
+      "used": 0,
+      "reserved": 0,
+      "limit": 150000,
+      "remaining": 170000,
+      "used_ratio": 0,
+      "available": true,
+      "paused": false,
+      "reset_at": "2026-09-07T00:00:00Z"
+    }
+  },
+  {
+    "name": "zero-allowance",
+    "allowance": 0,
+    "balance": 0,
+    "reserved": 0,
+    "expected": {
+      "used": 0,
+      "reserved": 0,
+      "limit": 0,
+      "remaining": 0,
+      "used_ratio": 1,
+      "available": false,
+      "paused": true,
+      "reset_at": "2026-09-07T00:00:00Z"
+    }
+  }
+]

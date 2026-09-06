@@ -11,6 +11,8 @@
 **/bin
 **/build
 **/dist
+!third-party/misty-contracts/dist
+!third-party/misty-contracts/dist/**
 **/node_modules
 **/.output
 .demo/

@@ -55,7 +55,7 @@ func buildAgentSharedSpaceContext(
 		"version":        agentSharedContextVersion,
 		"space_id":       space.ID,
 		"space_name":     space.Name,
-		"space_kind":     space.Kind,
+		"is_default":     space.IsDefault,
 		"member_role":    space.Role,
 		"member_count":   space.MemberCount,
 		"is_shared":      space.IsShared,

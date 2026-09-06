@@ -1,0 +1,22 @@
+{
+  "checkedAt": "2026-09-05T06:56:37.698Z",
+  "scope": "Local isolated runtime images; no external network or active workflow/Yjs sessions",
+  "results": [
+    {
+      "service": "agent-runtime",
+      "node": "v24.18.0",
+      "uid": 1000,
+      "health": 200,
+      "shutdownExitCode": 0,
+      "imageId": "sha256:b66937afe0ca37ba9e2d8781291e11f5f53e0f5b7b8db2cf336c7a31994ec172"
+    },
+    {
+      "service": "self-host-collab",
+      "node": "v24.18.0",
+      "uid": 1000,
+      "health": 200,
+      "shutdownExitCode": 0,
+      "imageId": "sha256:98eead0742528a688e9307837755cb76b30b977f38b53d518609eeabe3169b07"
+    }
+  ]
+}

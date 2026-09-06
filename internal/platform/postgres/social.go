@@ -170,7 +170,7 @@ func (db *Database) CreateSocialBinding(ctx context.Context, userID, spaceID, co
 	}
 	item := &SocialBinding{ID: "social_binding_" + uuid.NewString(), SpaceID: spaceID, ConnectionID: connectionID, ConnectedByUserID: userID, Provider: provider, ExternalResourceID: resourceID, ExternalParentID: strings.TrimSpace(parentID), DisplayName: displayName, Direction: "two_way", Status: "active", Capabilities: json.RawMessage(`{"read":true,"send":true,"schedule":true,"automate":true}`)}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, userID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
 		var owns bool
@@ -207,7 +207,7 @@ func (db *Database) CreateSocialBinding(ctx context.Context, userID, spaceID, co
 
 func (db *Database) DisableSocialBinding(ctx context.Context, userID, spaceID, bindingID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, userID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE social_bindings SET status='disabled',disabled_at=NOW(),updated_at=NOW() WHERE id=$1 AND space_id=$2 AND disabled_at IS NULL`, bindingID, spaceID)

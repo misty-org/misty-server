@@ -2,11 +2,9 @@ package api
 
 import (
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	mailintegration "github.com/kannachi323/misty/server/internal/integrations/mail"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
@@ -170,17 +168,10 @@ func (s *SpacesService) MailThread() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		rawThreadID := strings.TrimSpace(chi.URLParam(r, "threadID"))
-		if rawThreadID == "" || len(rawThreadID) > 500 {
+		threadID := strings.TrimSpace(mailPathID(r, "threadID"))
+		if threadID == "" || len(threadID) > 320 {
 			writeMailError(w, db.ErrSpaceInvalid)
 			return
-		}
-		threadID := rawThreadID
-		if unescaped, err := url.PathUnescape(rawThreadID); err == nil && unescaped != "" {
-			threadID = unescaped
-		}
-		if unescaped, err := url.QueryUnescape(threadID); err == nil && unescaped != "" {
-			threadID = unescaped
 		}
 		provider, account, err := s.mailProvider(r.Context(), userID, r.URL.Query().Get("connection_id"))
 		if err != nil {

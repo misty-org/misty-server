@@ -55,13 +55,13 @@ func (db *Database) ClaimPersonalAgentTaskRunJobs(ctx context.Context, workerID 
 			WHEN r.state IN ('completed','completed_with_errors') THEN 'completed'
 			WHEN r.state='failed' THEN 'failed' ELSE 'canceled' END,
 			lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW() FROM space_runs r
-			WHERE j.run_id=r.id AND j.state IN ('queued','leased','dispatched') AND r.state IN ('completed','completed_with_errors','failed','canceled','rejected')`); err != nil {
+			WHERE j.run_id=r.id AND r.execution_owner='go' AND j.state IN ('queued','leased','dispatched') AND r.state IN ('completed','completed_with_errors','failed','canceled','rejected')`); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT j.run_id,j.agent_id FROM agent_run_jobs j
 			JOIN space_runs r ON r.id=j.run_id LEFT JOIN space_tasks t ON t.id=j.task_id
 			WHERE ((j.state='queued' AND j.available_at<=NOW()) OR (j.state='leased' AND j.lease_expires_at<=NOW()))
-			  AND r.state IN ('queued','running') AND (j.task_id IS NULL OR (t.assignee_agent_id=j.agent_id AND t.archived_at IS NULL))
+			  AND r.execution_owner='go' AND r.state IN ('queued','running') AND (j.task_id IS NULL OR (t.assignee_agent_id=j.agent_id AND t.archived_at IS NULL))
 			  AND NOT EXISTS(SELECT 1 FROM agent_run_jobs active
 			    WHERE active.agent_id=j.agent_id AND active.run_id<>j.run_id AND active.state='dispatched')
 			ORDER BY j.available_at,j.created_at FOR UPDATE OF j SKIP LOCKED LIMIT $1`, limit*5)
@@ -335,7 +335,7 @@ func (db *Database) ReconcileStalePersonalAgentTaskRuns(ctx context.Context, sta
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `SELECT j.run_id,j.space_id,j.task_id,j.agent_id,j.attempt
 			FROM agent_run_jobs j JOIN space_runs r ON r.id=j.run_id
-			WHERE j.state='dispatched' AND r.state='running'
+			WHERE j.state='dispatched' AND r.execution_owner='go' AND r.state='running'
 			  AND COALESCE(r.runtime_heartbeat_at,r.updated_at)<$1
 			ORDER BY COALESCE(r.runtime_heartbeat_at,r.updated_at),j.created_at
 			FOR UPDATE OF j,r SKIP LOCKED LIMIT $2`, staleBefore, limit)

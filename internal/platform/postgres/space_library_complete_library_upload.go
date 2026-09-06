@@ -21,6 +21,9 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 		if upload.UploadTokenHash != tokenHash || upload.ExpiresAt.Before(time.Now()) {
 			return ErrLibraryForbidden
 		}
+		if err := requireJournalUploadAccessTx(ctx, tx, userID, uploadID, upload.Purpose); err != nil {
+			return err
+		}
 		if upload.State == "ready" {
 			return loadCompletedLibraryUploadTx(ctx, tx, upload, result)
 		}
@@ -92,6 +95,7 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 				return ErrLibraryInvalid
 			}
 			asset := &SpaceNoteAsset{ID: "noteasset_" + uuid.NewString(), NoteID: noteID, FileID: file.ID, UploaderUserID: userID, DisplayName: upload.OriginalFilename, LifecycleState: "ready"}
+			asset.MIMEType, asset.ByteSize, asset.SHA256 = detectedMIME, verifiedSize, verifiedSHA
 			if err := tx.QueryRowContext(ctx, `INSERT INTO space_note_assets(id,note_id,file_id,uploader_user_id,display_name) VALUES($1,$2,$3,$4,$5) RETURNING created_at`, asset.ID, noteID, file.ID, userID, upload.OriginalFilename).Scan(&asset.CreatedAt); err != nil {
 				return err
 			}

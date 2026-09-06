@@ -1,0 +1,21 @@
+{
+  "name": "@misty/contracts",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Public method contracts for host-mediated Misty apps",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

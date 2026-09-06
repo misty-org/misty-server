@@ -102,7 +102,7 @@ func executeSpaceConversationTool(ctx context.Context, database *db.Database, ac
 		timezone := agentToolTimezone(originalPrompt)
 		location, _ := time.LoadLocation(timezone)
 		now := time.Now().In(location)
-		return TestingMustAPIRawJSON(map[string]any{"space_id": space.ID, "space_name": space.Name, "space_kind": space.Kind, "timezone": timezone, "current_time": now.Format(time.RFC3339), "current_date": now.Format("2006-01-02")}), nil
+		return TestingMustAPIRawJSON(map[string]any{"space_id": space.ID, "space_name": space.Name, "is_default": space.IsDefault, "timezone": timezone, "current_time": now.Format(time.RFC3339), "current_date": now.Format("2006-01-02")}), nil
 	}
 	if tool.Name == toolboxMembersList || tool.Name == toolboxMembersResolve {
 		members, err := database.SpaceMembers(ctx, actor.userID, actor.spaceID)

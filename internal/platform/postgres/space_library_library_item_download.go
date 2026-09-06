@@ -149,15 +149,17 @@ func loadCompletedLibraryUploadTx(ctx context.Context, tx *sql.Tx, upload *Libra
 		asset := &SpaceNoteAsset{}
 		if err := tx.QueryRowContext(
 			ctx,
-			`SELECT id,note_id,file_id,uploader_user_id,display_name,
-			        lifecycle_state,created_at
-			 FROM space_note_assets
-			 WHERE file_id=$1`,
+			`SELECT a.id,a.note_id,a.file_id,a.uploader_user_id,a.display_name,
+			        a.lifecycle_state,a.created_at,
+			        COALESCE(b.server_detected_mime_type,b.client_declared_mime_type),b.byte_size,b.sha256
+			 FROM space_note_assets a JOIN library_files f ON f.id=a.file_id JOIN library_blobs b ON b.id=f.blob_id
+			 WHERE a.file_id=$1`,
 			upload.FileID,
 		).Scan(
 			&asset.ID, &asset.NoteID, &asset.FileID,
 			&asset.UploaderUserID, &asset.DisplayName,
 			&asset.LifecycleState, &asset.CreatedAt,
+			&asset.MIMEType, &asset.ByteSize, &asset.SHA256,
 		); err != nil {
 			return err
 		}

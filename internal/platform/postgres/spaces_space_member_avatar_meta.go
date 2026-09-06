@@ -14,7 +14,12 @@ import (
 // and returns the member's avatar version (0 when unset). The bytes themselves are
 // streamed from the object store (R2).
 func (db *Database) SpaceMemberAvatarMeta(ctx context.Context, requestingUserID, spaceID, memberID string) (int64, error) {
-	var version int64
+	avatar, err := db.SpaceMemberAvatarReference(ctx, requestingUserID, spaceID, memberID)
+	return avatar.Version, err
+}
+
+func (db *Database) SpaceMemberAvatarReference(ctx context.Context, requestingUserID, spaceID, memberID string) (UserAvatarReference, error) {
+	var avatar UserAvatarReference
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, requestingUserID); err != nil {
 			return err
@@ -22,13 +27,13 @@ func (db *Database) SpaceMemberAvatarMeta(ctx context.Context, requestingUserID,
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, memberID); err != nil {
 			return err
 		}
-		err := tx.QueryRowContext(ctx, `SELECT avatar_version FROM users WHERE id=$1`, memberID).Scan(&version)
+		err := tx.QueryRowContext(ctx, `SELECT avatar_version,COALESCE(avatar_object_key,'avatars/'||id) FROM users WHERE id=$1`, memberID).Scan(&avatar.Version, &avatar.ObjectKey)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
 		return err
 	})
-	return version, err
+	return avatar, err
 }
 
 func (db *Database) InviteToSpace(ctx context.Context, ownerID, spaceID, email string) (*SpaceInvitation, error) {
@@ -52,7 +57,7 @@ func (db *Database) InviteToSpaceWithToken(
 		ExpiresAt: time.Now().UTC().Add(7 * 24 * time.Hour),
 	}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:owner:"+ownerID); err != nil {
@@ -150,7 +155,7 @@ func (db *Database) PendingSpaceInvitations(
 ) ([]SpaceInvitation, error) {
 	items := []SpaceInvitation{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.space_id,s.name,
@@ -188,7 +193,7 @@ func (db *Database) RefreshSpaceInvitation(
 	out := &SpaceInvitation{}
 	expiresAt := time.Now().UTC().Add(7 * 24 * time.Hour)
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
 		err := tx.QueryRowContext(ctx, `UPDATE space_invitations i
@@ -216,7 +221,7 @@ func (db *Database) RevokeSpaceInvitation(
 	ownerID, spaceID, inviteID string,
 ) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE space_invitations SET revoked_at=NOW()

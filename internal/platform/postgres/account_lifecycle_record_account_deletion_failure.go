@@ -20,7 +20,7 @@ func (db *Database) RecordAccountDeletionFailure(
 		_, err := tx.ExecContext(ctx, `
 			UPDATE account_deletion_requests
 			SET last_error_code=$1,updated_at=NOW()
-			WHERE id=$2 AND status='processing'`, code, requestID)
+			WHERE id=$2 AND cleanup_owner='go' AND status='processing'`, code, requestID)
 		return err
 	})
 }
@@ -36,7 +36,7 @@ func (db *Database) ScheduleAccountDeletion(
 		var userID string
 		if err := tx.QueryRowContext(ctx, `
 			SELECT user_id FROM account_deletion_requests
-			WHERE id=$1 AND status='processing' FOR UPDATE`,
+			WHERE id=$1 AND cleanup_owner='go' AND status='processing' FOR UPDATE`,
 			requestID,
 		).Scan(&userID); err != nil {
 			return err
@@ -152,7 +152,7 @@ func (db *Database) DueAccountDeletions(
 			SELECT id,user_id,status,purge_after,provider_revocation_status,
 			       last_error_code,created_at,updated_at,completed_at
 			FROM account_deletion_requests
-			WHERE status='scheduled' AND purge_after<=NOW()
+			WHERE cleanup_owner='go' AND status='scheduled' AND purge_after<=NOW()
 			ORDER BY purge_after FOR UPDATE SKIP LOCKED LIMIT $1`, limit)
 		if err != nil {
 			return err
@@ -177,7 +177,7 @@ func (db *Database) CompleteAccountDeletion(
 		var userID string
 		if err := tx.QueryRowContext(ctx, `
 			SELECT user_id FROM account_deletion_requests
-			WHERE id=$1 AND status='scheduled' AND purge_after<=NOW()
+			WHERE id=$1 AND cleanup_owner='go' AND status='scheduled' AND purge_after<=NOW()
 			FOR UPDATE`, requestID,
 		).Scan(&userID); err != nil {
 			return err

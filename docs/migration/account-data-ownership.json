@@ -1,0 +1,922 @@
+{
+  "schemaVersion": 1,
+  "applicationMigration": 163,
+  "scope": "Direct public-schema user foreign keys plus user_id/owner_user_id columns, including composite ownership. This is not a complete transitive/private-payload inventory. Table categories do not authorize blanket deletion or retention of every column.",
+  "records": [
+    {
+      "table_name": "account_deletion_requests",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "agent_conversation_events",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "agent_conversations",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "agent_run_contexts",
+      "column_name": "owner_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "agent_run_tool_approvals",
+      "column_name": "decided_by_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "agent_run_tool_approvals",
+      "column_name": "owner_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "agent_toolbox_action_journal",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "ai_artifacts",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "ai_cleanup_jobs",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "ai_conversation_attachments",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "ai_feature_flags",
+      "column_name": "updated_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "ai_feedback",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "ai_invocation_contexts",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "ai_invocations",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "ai_recaps",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "ai_retrieval_documents",
+      "column_name": "owner_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "ai_surface_preferences",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "ai_user_settings",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "app_data_deletion_jobs",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "app_install_events",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "app_personal_records",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "app_runtime_sessions",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "auth_handoff_tokens",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "cloud_connections",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "cloud_credential_handoffs",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "cloud_oauth_states",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "connected_account_oauth_states",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "connected_accounts",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "connection_authorization_requests",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "device_pairing_sessions",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "device_pairs",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "device_presence",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "figma_comment_audit",
+      "column_name": "actor_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "figma_space_bindings",
+      "column_name": "bound_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "github_app_installations",
+      "column_name": "installed_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "github_app_setup_states",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "github_code_workspaces",
+      "column_name": "bound_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "github_credential_handoffs",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "github_mutation_audit",
+      "column_name": "actor_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "hosted_ai_reservations",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "hosted_ai_usage_ledger",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "hosted_ai_wallets",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "library_exports",
+      "column_name": "requested_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "library_files",
+      "column_name": "uploader_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "library_item_versions",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "library_legal_holds",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "library_processing_jobs",
+      "column_name": "billing_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "library_reauthentication_grants",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "license_lifetime_grants",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "licenses",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "mail_action_audit",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "mcp_oauth_credentials",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "mcp_oauth_states",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "mcp_remote_connections",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "mcp_tool_execution_audit",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "media_search_assets",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "media_search_chunks",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "media_search_devices",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "media_search_segments",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "misty_conversation_focus",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "misty_conversation_pending_actions",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "misty_memories",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "object_deletion_jobs",
+      "column_name": "created_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "onboarding_completions",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "owner_storage_usage",
+      "column_name": "owner_user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "password_recovery_jobs",
+      "column_name": "issued_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "password_reset_tokens",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "payment_entitlement_inbox",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "payment_entitlement_projections",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "payment_purchase_reversals",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "personal_agent_mcp_tools",
+      "column_name": "owner_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "personal_agent_versions",
+      "column_name": "created_by_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "personal_agents",
+      "column_name": "owner_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "provider_event_inbox",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "provider_oauth_states",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "provider_shared_resources",
+      "column_name": "published_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "provider_subscriptions",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "realtime_tickets",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "security_domains",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "self_host_accounts",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "sessions",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "smart_library_assets",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "smart_library_cost_events",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "smart_library_folders",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "smart_library_reindex_jobs",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "social_automation_rules",
+      "column_name": "created_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "social_bindings",
+      "column_name": "connected_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "social_outbound_commands",
+      "column_name": "requested_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "social_scheduled_messages",
+      "column_name": "created_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "social_send_authorities",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_action_suggestion_dismissals",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "space_action_suggestion_items",
+      "column_name": "accepted_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_action_suggestion_settings",
+      "column_name": "updated_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_agent_conversation_events",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "space_agent_conversations",
+      "column_name": "owner_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "space_agent_instances",
+      "column_name": "user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "space_agent_message_triggers",
+      "column_name": "requesting_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_agent_versions",
+      "column_name": "creator_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_agents",
+      "column_name": "creator_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_agents",
+      "column_name": "updated_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_album_folders",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_album_items",
+      "column_name": "added_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_albums",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_calendar_sources",
+      "column_name": "connected_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_conversation_follow_up_recipients",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_conversation_follow_ups",
+      "column_name": "authorizing_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_conversation_members",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_conversation_reads",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "space_conversation_suggestion_vetoes",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "space_conversations",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_conversations",
+      "column_name": "direct_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_creation_requests",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_discord_links",
+      "column_name": "connected_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_drawing_assets",
+      "column_name": "uploader_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_drawings",
+      "column_name": "creator_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_events",
+      "column_name": "actor_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_inbox_items",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "space_integrations",
+      "column_name": "connected_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_invitations",
+      "column_name": "invited_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_invitations",
+      "column_name": "invited_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_item_aliases",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_library_asset_stacks",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_library_audit_events",
+      "column_name": "actor_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_library_direct_references",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_library_grants",
+      "column_name": "granted_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_library_groups",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_library_imports",
+      "column_name": "importer_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_library_intelligence_policies",
+      "column_name": "enabled_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_library_item_views",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "space_library_items",
+      "column_name": "added_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_library_items",
+      "column_name": "contributing_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_library_uploads",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_member_permission_overrides",
+      "column_name": "updated_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_member_permission_overrides",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_member_roles",
+      "column_name": "assigned_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_member_roles",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_member_storage_usage",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "space_members",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_memory_preferences",
+      "column_name": "updated_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_message_attachments",
+      "column_name": "uploader_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_message_library_references",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_message_reactions",
+      "column_name": "user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_messages",
+      "column_name": "sender_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_native_calendar_events",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_nodes",
+      "column_name": "uploader_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_note_assets",
+      "column_name": "uploader_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_note_permissions",
+      "column_name": "granted_by",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_note_permissions",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_notes",
+      "column_name": "creator_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_people",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_pinned_collections",
+      "column_name": "pinned_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_provider_credentials",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_rendition_reservations",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_resolve_tickets",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "space_roadmap_goal_tasks",
+      "column_name": "added_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_roadmap_goals",
+      "column_name": "manual_completed_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_roadmap_node_definitions",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_roadmaps",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_run_approvals",
+      "column_name": "decided_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_run_approvals",
+      "column_name": "requested_from_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_runs",
+      "column_name": "billing_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "space_runs",
+      "column_name": "initiated_by_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "space_runs",
+      "column_name": "owner_user_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "space_runs",
+      "column_name": "requesting_member_id",
+      "disposition": "private_agent_phase"
+    },
+    {
+      "table_name": "space_slack_links",
+      "column_name": "connected_by_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_storage_contributions",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "space_task_activity",
+      "column_name": "actor_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_tasks",
+      "column_name": "assignee_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_tasks",
+      "column_name": "audience_creator_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_tasks",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_upload_reservations",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "space_workflow_versions",
+      "column_name": "created_by_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "space_workflows",
+      "column_name": "creator_user_id",
+      "disposition": "retain_shared_attribution"
+    },
+    {
+      "table_name": "spaces",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "stripe_purchases",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "stripe_subscription_checkout_attempts",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "stripe_subscriptions",
+      "column_name": "user_id",
+      "disposition": "retain_financial_identity"
+    },
+    {
+      "table_name": "trusted_device_request_nonces",
+      "column_name": "owner_user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "trusted_devices",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "user_app_activity",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "user_app_installations",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    },
+    {
+      "table_name": "user_home_activity",
+      "column_name": "user_id",
+      "disposition": "private_account_phase"
+    },
+    {
+      "table_name": "workflow_device_node_jobs",
+      "column_name": "user_id",
+      "disposition": "requires_other_cleanup_policy"
+    }
+  ]
+}

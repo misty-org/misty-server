@@ -285,6 +285,7 @@ func TestSpaceHostedAIWalletRefreshesDuringOwnershipTransfer(t *testing.T) {
 	if err := database.SetLicenseStateByID(recipient.LicenseID, TierPro, LicenseStatusActive, nil); err != nil {
 		t.Fatal(err)
 	}
+	createTestSpace(t, database, ctx, owner.ID, "Home")
 	space, err := database.CreateSpace(ctx, owner.ID, "Transfer allowance")
 	if err != nil {
 		t.Fatal(err)

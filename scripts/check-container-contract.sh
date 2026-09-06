@@ -24,7 +24,7 @@ fail() {
   fail "the legacy standalone staging stack must not diverge from the shared stack"
 [ ! -e Dockerfile.cloudflared-dev ] ||
   fail "the development tunnel build must stay inside compose.dev.yml"
-[ ! -e cloudflare/journal-collab/Dockerfile.dev ] ||
+[ ! -e apps/journal-collab/Dockerfile.dev ] ||
   fail "the development Worker build must stay inside compose.dev.yml"
 
 grep -q 'dockerfile: Dockerfile' compose.dev.yml ||
@@ -60,7 +60,7 @@ grep -q 'https://dev-api.mistysys.com}/v1' compose.dev.yml ||
   fail "development must publish the canonical versioned API base"
 grep -q 'MISTY_DEV_API_ORIGIN:-https://dev-api.mistysys.com' compose.dev.yml ||
   fail "the development Worker must callback through the stable named API tunnel"
-if grep -q 'trycloudflare.com' cloudflare/journal-collab/docker/cloudflare-deploy.sh; then
+if grep -q 'trycloudflare.com' apps/journal-collab/docker/cloudflare-deploy.sh; then
   fail "the development Worker callback must not depend on an ephemeral quick tunnel"
 fi
 cloudflare_env_consumers="$(grep -c 'path: .env/dev/integrations/cloudflare.env' compose.dev.yml)"

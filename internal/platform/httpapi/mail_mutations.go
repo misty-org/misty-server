@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	mailintegration "github.com/kannachi323/misty/server/internal/integrations/mail"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
@@ -96,7 +95,7 @@ func (s *SpacesService) MailThreadActions() http.HandlerFunc {
 		if decodeMailJSON(w, r, &input) != nil {
 			return
 		}
-		threadID := strings.TrimSpace(chi.URLParam(r, "threadID"))
+		threadID := strings.TrimSpace(mailPathID(r, "threadID"))
 		if threadID == "" || len(threadID) > 320 || (input.Read == nil && input.Archived == nil && input.Starred == nil) {
 			writeMailError(w, db.ErrSpaceInvalid)
 			return
@@ -158,7 +157,7 @@ func (s *SpacesService) MailDraft() http.HandlerFunc {
 		if decodeMailJSON(w, r, &input) != nil {
 			return
 		}
-		draftID := strings.TrimSpace(chi.URLParam(r, "draftID"))
+		draftID := strings.TrimSpace(mailPathID(r, "draftID"))
 		if draftID == "" || len(draftID) > 320 {
 			writeMailError(w, db.ErrSpaceInvalid)
 			return
@@ -190,7 +189,7 @@ func (s *SpacesService) MailSendDraft() http.HandlerFunc {
 		if decodeMailJSON(w, r, &input) != nil {
 			return
 		}
-		draftID := strings.TrimSpace(chi.URLParam(r, "draftID"))
+		draftID := strings.TrimSpace(mailPathID(r, "draftID"))
 		source := strings.ToLower(strings.TrimSpace(input.AuthoringSource))
 		if draftID == "" || len(draftID) > 320 || (source != "user" && source != "ai") {
 			writeMailError(w, db.ErrSpaceInvalid)

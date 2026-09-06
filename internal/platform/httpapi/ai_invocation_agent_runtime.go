@@ -100,7 +100,7 @@ func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *
 		if spaceErr != nil {
 			return nil, spaceErr
 		}
-		spaceName, spaceKind = space.Name, space.Kind
+		spaceName, spaceKind = space.Name, "space"
 		spaceMembers, memberErr := s.database.SpaceMembers(ctx, record.UserID, spaceID)
 		if memberErr != nil {
 			return nil, memberErr

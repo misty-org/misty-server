@@ -114,11 +114,10 @@ func addSpaceMembershipTx(ctx context.Context, tx *sql.Tx, spaceID, userID, role
 			return err
 		}
 		var memberships int
-		// The permanent Misty Space is product infrastructure, not one of the
-		// user's plan-limited owned collaborative Spaces. The Space being
-		// created already exists in this transaction, hence the strict > check.
+		// The Space being created already exists in this transaction, hence the
+		// strict > check.
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM spaces
-			WHERE owner_user_id=$1 AND kind='standard' AND lifecycle_state<>'deleted'`, userID).Scan(&memberships); err != nil {
+			WHERE owner_user_id=$1 AND lifecycle_state<>'deleted'`, userID).Scan(&memberships); err != nil {
 			return err
 		}
 		if memberships > entitlements.MaxOwnedSpaces {

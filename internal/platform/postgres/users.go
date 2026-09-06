@@ -127,7 +127,7 @@ func (db *Database) BumpUserAvatarVersion(id string) (int64, error) {
 	err := db.TestingWithRLSContext(context.Background(), userRLSSettings(id), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(
 			context.Background(),
-			`UPDATE users SET avatar_version = avatar_version + 1, avatar_updated_at = NOW() WHERE id = $1 RETURNING avatar_version`,
+			`UPDATE users SET avatar_version = avatar_version + 1, avatar_updated_at = NOW(), avatar_object_key = NULL WHERE id = $1 RETURNING avatar_version`,
 			id,
 		).Scan(&version)
 	})
@@ -140,22 +140,25 @@ func (db *Database) BumpUserAvatarVersion(id string) (int64, error) {
 // GetUserAvatarVersion returns the current avatar version (0 when the user has
 // never set an avatar), used to build the ETag and decide whether to serve.
 func (db *Database) GetUserAvatarVersion(id string) (int64, error) {
-	var version int64
+	avatar, err := db.GetUserAvatarReference(id)
+	return avatar.Version, err
+}
+
+type UserAvatarReference struct {
+	Version   int64
+	ObjectKey string
+}
+
+func (db *Database) GetUserAvatarReference(id string) (UserAvatarReference, error) {
+	var avatar UserAvatarReference
 	err := db.TestingWithRLSContext(context.Background(), userRLSSettings(id), func(tx *sql.Tx) error {
-		return tx.QueryRowContext(
-			context.Background(),
-			`SELECT avatar_version FROM users WHERE id = $1`,
-			id,
-		).Scan(&version)
+		return tx.QueryRowContext(context.Background(),
+			`SELECT avatar_version,COALESCE(avatar_object_key,'avatars/'||id) FROM users WHERE id=$1`, id).Scan(&avatar.Version, &avatar.ObjectKey)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
+		return avatar, nil
 	}
-	if err != nil {
-		log.Println("Failed to get user avatar version:", err)
-		return 0, err
-	}
-	return version, nil
+	return avatar, err
 }
 
 func (db *Database) GetUserByID(id string) (*User, error) {

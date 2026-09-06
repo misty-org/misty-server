@@ -9,7 +9,7 @@ import (
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func TestAccountsStartWithMistyAndStandardSpacesBecomeSharedOnlyByInvite(t *testing.T) {
+func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
 
@@ -26,12 +26,15 @@ func TestAccountsStartWithMistyAndStandardSpacesBecomeSharedOnlyByInvite(t *test
 	if err != nil {
 		t.Fatalf("ListSpaces(owner) error = %v", err)
 	}
-	if len(ownerSpaces) != 1 || ownerSpaces[0].Kind != "misty" || ownerSpaces[0].Name != "Misty" {
-		t.Fatalf("initial owner Spaces = %#v, want canonical Misty Space", ownerSpaces)
+	if len(ownerSpaces) != 0 {
+		t.Fatalf("initial owner Spaces = %#v, want onboarding to create one", ownerSpaces)
 	}
 	project, err := database.CreateSpace(ctx, owner.ID, "Project")
 	if err != nil {
 		t.Fatalf("CreateSpace(Project) error = %v", err)
+	}
+	if !project.IsDefault {
+		t.Fatalf("first owned Space = %#v, want default", project)
 	}
 	renamed, err := database.RenameSpace(ctx, owner.ID, project.ID, "Home base")
 	if err != nil || renamed.Name != "Home base" {
@@ -56,8 +59,8 @@ func TestAccountsStartWithMistyAndStandardSpacesBecomeSharedOnlyByInvite(t *test
 	}
 
 	memberSpaces, err := database.ListSpaces(ctx, member.ID)
-	if err != nil || len(memberSpaces) != 1 || memberSpaces[0].Kind != "misty" || memberSpaces[0].Name != "Misty" {
-		t.Fatalf("ListSpaces(member) = %#v, %v, want canonical Misty Space", memberSpaces, err)
+	if err != nil || len(memberSpaces) != 0 {
+		t.Fatalf("ListSpaces(member) = %#v, %v, want none before onboarding or invite", memberSpaces, err)
 	}
 
 	invite, err := database.InviteToSpace(ctx, owner.ID, project.ID, member.Email)
@@ -136,8 +139,8 @@ func TestAccountsStartWithMistyAndStandardSpacesBecomeSharedOnlyByInvite(t *test
 	if err != nil || projectAfterRemove.IsShared || projectAfterRemove.MemberCount != 1 {
 		t.Fatalf("Space after remove = %#v, %v, want private again", projectAfterRemove, err)
 	}
-	if err := database.DeleteSpace(ctx, owner.ID, project.ID, projectAfterRemove.Name); err != nil {
-		t.Fatalf("DeleteSpace() error = %v", err)
+	if err := database.DeleteSpace(ctx, owner.ID, project.ID, projectAfterRemove.Name); !errors.Is(err, ErrDefaultSpaceProtected) {
+		t.Fatalf("DeleteSpace(default) error = %v, want ErrDefaultSpaceProtected", err)
 	}
 }
 
@@ -152,6 +155,7 @@ func TestOwnershipTransferAllowsSpaceToBecomeOverQuota(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	createTestSpace(t, database, ctx, owner.ID, "Home")
 	project, err := database.CreateSpace(ctx, owner.ID, "Transfer project")
 	if err != nil {
 		t.Fatal(err)
@@ -163,16 +167,21 @@ func TestOwnershipTransferAllowsSpaceToBecomeOverQuota(t *testing.T) {
 	if _, err := database.RespondToSpaceInvite(ctx, recipient.ID, invite.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	setUsage := func(spaceID string, used int64) {
+	setUsage := func(spaceID, contributorID string, used int64) {
 		t.Helper()
 		if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO space_storage_contributions(
+				id,space_id,user_id,source_kind,source_id,logical_bytes,state
+			) VALUES($1,$2,$3,'library_item',$4,$5,'active')`, "contribution_"+spaceID, spaceID, contributorID, "transfer_fixture_"+spaceID, used); err != nil {
+				return err
+			}
 			_, err := tx.ExecContext(ctx, `UPDATE space_storage_usage SET used_bytes=$2,version=version+1,updated_at=NOW() WHERE space_id=$1`, spaceID, used)
 			return err
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	setUsage(project.ID, BasicStorageBytes+1)
+	setUsage(project.ID, owner.ID, BasicStorageBytes+1)
 	if err := database.TransferSpaceOwnership(ctx, owner.ID, project.ID, recipient.ID); err != nil {
 		t.Fatalf("over-capacity transfer = %v", err)
 	}

@@ -1,0 +1,16 @@
+{
+  "name": "@misty/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1127.0",
+    "@aws-sdk/s3-request-presigner": "3.1127.0",
+    "bcrypt": "6.0.0",
+    "email-addresses": "5.0.0",
+    "entities": "8.0.0",
+    "libmime": "5.4.3",
+    "nodemailer": "10.0.0",
+    "parse5": "8.0.1"
+  }
+}

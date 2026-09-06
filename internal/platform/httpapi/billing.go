@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -150,6 +151,7 @@ func GetBillingUsage(database *db.Database) http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		userID, err := sessionUserID(r, database)
 		if err != nil {
+			log.Printf("billing usage: resolve session: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
@@ -159,26 +161,31 @@ func GetBillingUsage(database *db.Database) http.HandlerFunc {
 		}
 		license, err := database.GetLicenseByUserID(userID)
 		if err != nil || license == nil {
+			log.Printf("billing usage: load license: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 		wallet, err := database.GetOrCreateHostedAIWallet(userID, license.Tier, time.Now())
 		if err != nil {
+			log.Printf("billing usage: load personal AI wallet: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 		storage, err := database.OwnerStorageUsage(r.Context(), userID)
 		if err != nil {
+			log.Printf("billing usage: load personal storage: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 		entitlements, err := database.EntitlementsForUser(r.Context(), userID)
 		if err != nil {
+			log.Printf("billing usage: load entitlements: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 		spaces, err := database.ListSpaces(r.Context(), userID)
 		if err != nil {
+			log.Printf("billing usage: list Spaces: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
@@ -186,11 +193,13 @@ func GetBillingUsage(database *db.Database) http.HandlerFunc {
 		for _, space := range spaces {
 			spaceStorage, storageErr := database.SpaceStorageUsage(r.Context(), userID, space.ID)
 			if storageErr != nil {
+				log.Printf("billing usage: load Space storage: %v", storageErr)
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
 			spaceWallet, walletErr := database.GetOrCreateSpaceHostedAIWallet(space.ID, time.Now())
 			if walletErr != nil {
+				log.Printf("billing usage: load Space AI wallet: %v", walletErr)
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
@@ -217,6 +226,7 @@ func GetBillingUsage(database *db.Database) http.HandlerFunc {
 			"hosted_ai": map[string]any{"used_ratio": wallet.UsedRatio(), "reset_at": wallet.ResetAt},
 		}
 		if subscription, subscriptionErr := database.GetStripeSubscriptionByUserID(userID); subscriptionErr != nil {
+			log.Printf("billing usage: load subscription: %v", subscriptionErr)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		} else if subscription != nil {

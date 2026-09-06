@@ -84,6 +84,11 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			writeLibraryError(w, db.ErrLibraryForbidden)
 			return
 		}
+		if err := s.database.ValidateJournalUploadTarget(r.Context(), userID, spaceID, uploadID,
+			chi.URLParam(r, "noteID"), chi.URLParam(r, "drawingID")); err != nil {
+			writeLibraryError(w, err)
+			return
+		}
 		if upload.State == "ready" {
 			result, err := s.database.CompleteLibraryUpload(r.Context(), userID, spaceID, uploadID, tokenHash, upload.RequestedByteSize, upload.ClientSHA256, upload.DetectedMIMEType, nil)
 			if err != nil {

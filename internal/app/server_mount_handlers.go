@@ -70,7 +70,7 @@ func (s *Server) MountHandlers() error {
 	agentsService := api.NewAgentsService(s.Database)
 	agentsService.SetAvatarStore(s.LibraryStore)
 	agentsService.SetVoiceAnalyzer(libraryAnalyzer)
-	if serverFeatureEnabled("MISTY_CONNECTED_DEVICES_ENABLED") {
+	if serverConnectedDevicesConfigured() {
 		connectedDevicesConfig, configErr := api.ConnectedDevicesConfigFromEnv()
 		if configErr != nil {
 			return configErr
@@ -110,6 +110,7 @@ func (s *Server) MountHandlers() error {
 		s.Router.Post(prefix+"/auth/reset", resetPasswordHandler)
 		s.Router.Post(prefix+"/auth/handoff", mintHandoffHandler)
 		s.Router.Get(prefix+"/auth/handoff/start", startHandoffHandler)
+		s.Router.Post(prefix+"/onboarding/finish", api.FinishOnboarding(s.Database))
 		s.Router.Post(prefix+"/waitlist", waitlistJoinHandler)
 		s.Router.Get(prefix+"/me", api.GetMe(s.Database))
 		s.Router.Put(prefix+"/me/profile", api.UpdateProfile(s.Database))
@@ -121,6 +122,19 @@ func (s *Server) MountHandlers() error {
 		s.Router.Put(prefix+"/me/device", api.UpdateDevice(s.Database))
 		s.Router.Get(prefix+"/me/settings", api.GetSettings(s.Database))
 		s.Router.Put(prefix+"/me/settings", api.UpdateSettings(s.Database))
+		s.Router.Get(prefix+"/apps/release", api.OfficialAppRelease)
+		s.Router.Get(prefix+"/apps", api.OfficialApps(s.Database))
+		s.Router.Get(prefix+"/apps/{appID}", api.OfficialApp(s.Database))
+		s.Router.Get(prefix+"/me/apps", api.MyOfficialApps(s.Database))
+		s.Router.MethodFunc(http.MethodPut, prefix+"/me/apps/{appID}", api.MyOfficialApp(s.Database))
+		s.Router.MethodFunc(http.MethodPatch, prefix+"/me/apps/{appID}", api.MyOfficialApp(s.Database))
+		s.Router.MethodFunc(http.MethodDelete, prefix+"/me/apps/{appID}", api.MyOfficialApp(s.Database))
+		s.Router.Post(prefix+"/me/apps/{appID}/sessions", api.CreateOfficialAppSession(s.Database))
+		s.Router.Get(prefix+"/app-runtime/session", api.OfficialAppRuntimeSession(s.Database))
+		s.Router.Post(prefix+"/app-runtime/rpc", api.OfficialAppRPC(s.Database, s.Router, prefix))
+		s.Router.Get(prefix+"/app-runtime/records", api.OfficialAppPersonalRecords(s.Database))
+		s.Router.MethodFunc(http.MethodPut, prefix+"/app-runtime/records/{recordKey}", api.OfficialAppPersonalRecord(s.Database))
+		s.Router.MethodFunc(http.MethodDelete, prefix+"/app-runtime/records/{recordKey}", api.OfficialAppPersonalRecord(s.Database))
 		s.Router.Post(prefix+"/me/home/apps", api.RecordHomeAppActivity(s.Database))
 		s.Router.Put(prefix+"/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
 		s.Router.Post(prefix+"/billing/trial/start", api.StartPersonalTrial(s.Database))

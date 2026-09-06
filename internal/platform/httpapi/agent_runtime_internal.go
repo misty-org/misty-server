@@ -199,11 +199,11 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 		location, _ := time.LoadLocation(timezone)
 		now := time.Now().In(location)
 		memberContext, _ := json.Marshal(sanitizedAgentMembers(members))
-		system += "\n\nAuthoritative run context:\n- Space: " + space.Name + " (" + space.Kind + ", " + space.ID + ")\n- Current time: " + now.Format(time.RFC3339) + "\n- Timezone: " + timezone + "\n- Space members: " + string(memberContext) + "\nUse member IDs returned here or by members.resolve for assignments. Never guess a member identity. Interpret relative dates using this current time and timezone."
+		system += "\n\nAuthoritative run context:\n- Space: " + space.Name + " (" + space.ID + ")\n- Current time: " + now.Format(time.RFC3339) + "\n- Timezone: " + timezone + "\n- Space members: " + string(memberContext) + "\nUse member IDs returned here or by members.resolve for assignments. Never guess a member identity. Interpret relative dates using this current time and timezone."
 		_ = s.database.TouchPersonalAgentTaskRuntime(r.Context(), run.ID, body.RuntimeRunID, "reading_context", 5)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"run_id": run.ID, "agent_id": run.AgentID, "space_id": run.SpaceID, "task": task, "run_mode": run.EffectiveRunMode,
-			"space_name": space.Name, "space_kind": space.Kind, "timezone": timezone, "current_time": now.Format(time.RFC3339), "members": sanitizedAgentMembers(members),
+			"space_name": space.Name, "is_default": space.IsDefault, "timezone": timezone, "current_time": now.Format(time.RFC3339), "members": sanitizedAgentMembers(members),
 			"model_id": membership.ModelID, "reasoning_effort": membership.ReasoningEffort,
 			"system": system, "prompt": prompt, "attached_sources": sources, "file_warnings": fileWarnings,
 			"allowed_tools": allowedTools, "required_tools": uniqueAgentToolNames(requiredTools), "capture": capture, "managed_misty": managedMisty,

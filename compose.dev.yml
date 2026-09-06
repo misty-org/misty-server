@@ -33,7 +33,7 @@ x-activepieces-environment: &activepieces-environment
 x-cloudflare-image: &cloudflare-image
   image: misty-journal-collab-dev:local
   build:
-    context: cloudflare/journal-collab
+    context: apps/journal-collab
     dockerfile_inline: |
       FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd
 
@@ -56,7 +56,7 @@ services:
     restart: "no"
     entrypoint: ["/bin/sh", "/usr/local/bin/misty-cloudflare-init"]
     volumes:
-      - ./cloudflare/journal-collab:/workspace
+      - ./apps/journal-collab:/workspace
       - dev_runtime:/run/misty
     networks: [edge]
 
@@ -171,7 +171,7 @@ services:
   agent-runtime-setup:
     build:
       context: .
-      dockerfile: agent-runtime/Dockerfile
+      dockerfile: apps/agent-runtime/Dockerfile
       target: setup
     restart: "no"
     environment:
@@ -186,7 +186,7 @@ services:
     image: misty-agent-runtime-dev:local
     build:
       context: .
-      dockerfile: agent-runtime/Dockerfile
+      dockerfile: apps/agent-runtime/Dockerfile
       target: runtime
     restart: unless-stopped
     environment:
@@ -306,7 +306,6 @@ services:
       DB_USER: ${DB_USER:-misty_app}
       DB_PASSWORD: ${DB_PASSWORD:-misty}
       DB_NAME: ${DB_NAME:-misty_server}
-      MISTY_OPERATOR_USER_ID: ${MISTY_OPERATOR_USER_ID:-8e66b16c-f644-49a7-9730-d62eeae46021}
       DB_MIGRATION_USER: ""
       DB_MIGRATION_PASSWORD: ""
       CLOUDFLARE_API_TOKEN: ""
@@ -365,7 +364,7 @@ services:
       - |
         export TUNNEL_TOKEN="$${CLOUDFLARE_TUNNEL_TOKEN}"
         unset CLOUDFLARE_TUNNEL_TOKEN
-        exec /usr/local/bin/cloudflared tunnel --no-autoupdate --metrics 0.0.0.0:20241 run
+        exec /usr/local/bin/cloudflared tunnel --no-autoupdate --protocol http2 --metrics 0.0.0.0:20241 run
 
     depends_on:
       misty-api:
@@ -396,7 +395,7 @@ services:
       MISTY_CLOUDFLARE_WORKER_NAME: ${MISTY_CLOUDFLARE_WORKER_NAME:-misty-journal-collab-dev}
       MISTY_DEV_API_ORIGIN: ${MISTY_DEV_API_ORIGIN:-https://dev-api.mistysys.com}
     volumes:
-      - ./cloudflare/journal-collab:/workspace:ro
+      - ./apps/journal-collab:/workspace:ro
     depends_on:
       tunnel:
         condition: service_healthy

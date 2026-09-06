@@ -13,22 +13,15 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:owner:"+memberID); err != nil {
 			return err
 		}
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
 			return err
 		}
-		if misty, err := isMistySpaceTx(ctx, tx, spaceID); err != nil {
+		var isDefault bool
+		if err := tx.QueryRowContext(ctx, `SELECT is_default FROM spaces WHERE id=$1 FOR UPDATE`, spaceID).Scan(&isDefault); err != nil {
 			return err
-		} else if misty {
-			operator, operatorErr := isMistyOperatorTx(ctx, tx, memberID)
-			if operatorErr != nil {
-				return operatorErr
-			}
-			if !operator {
-				return ErrSpaceForbidden
-			}
 		}
-		if _, err := tx.ExecContext(ctx, `SELECT 1 FROM spaces WHERE id=$1 FOR UPDATE`, spaceID); err != nil {
-			return err
+		if isDefault {
+			return ErrDefaultSpaceProtected
 		}
 		// Reclaim expired AI reservations while the common Space lock is held so
 		// they do not unnecessarily block a transfer.
@@ -50,7 +43,7 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 		}
 		var ownedSpaces int
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM spaces
-			WHERE owner_user_id=$1 AND kind='standard' AND lifecycle_state<>'deleted'`, memberID).Scan(&ownedSpaces); err != nil {
+			WHERE owner_user_id=$1 AND lifecycle_state<>'deleted'`, memberID).Scan(&ownedSpaces); err != nil {
 			return err
 		}
 		if ownedSpaces >= entitlements.MaxOwnedSpaces {

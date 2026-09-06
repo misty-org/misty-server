@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 )
 
 // IsSpaceMember reports whether userID is an active member of spaceID. It
@@ -36,58 +35,6 @@ func requireSpaceOwnerTx(ctx context.Context, tx *sql.Tx, spaceID, userID string
 		return err
 	}
 	if role != "owner" {
-		return ErrSpaceForbidden
-	}
-	return nil
-}
-
-func isMistySpaceTx(ctx context.Context, tx *sql.Tx, spaceID string) (bool, error) {
-	var misty bool
-	err := tx.QueryRowContext(ctx, `SELECT kind='misty' FROM spaces WHERE id=$1`, spaceID).Scan(&misty)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, ErrSpaceNotFound
-	}
-	return misty, err
-}
-
-func isMistyOperatorTx(ctx context.Context, tx *sql.Tx, userID string) (bool, error) {
-	var operator bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM misty_space_operators WHERE user_id=$1
-	)`, userID).Scan(&operator)
-	return operator, err
-}
-
-// requireSpaceLifecycleManagerTx keeps ordinary Space ownership separate from
-// Misty's control-plane operator role.
-func requireSpaceLifecycleManagerTx(
-	ctx context.Context,
-	tx *sql.Tx,
-	spaceID, userID string,
-) error {
-	misty, err := isMistySpaceTx(ctx, tx, spaceID)
-	if err != nil {
-		return err
-	}
-	if !misty {
-		return requireSpaceOwnerTx(ctx, tx, spaceID, userID)
-	}
-	operator, err := isMistyOperatorTx(ctx, tx, userID)
-	if err != nil {
-		return err
-	}
-	if !operator {
-		return ErrSpaceForbidden
-	}
-	return nil
-}
-
-func requireStandardSpaceTx(ctx context.Context, tx *sql.Tx, spaceID string) error {
-	misty, err := isMistySpaceTx(ctx, tx, spaceID)
-	if err != nil {
-		return err
-	}
-	if misty {
 		return ErrSpaceForbidden
 	}
 	return nil
@@ -128,14 +75,12 @@ func (db *Database) CreateSpace(ctx context.Context, userID, name string) (*Spac
 func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, error) {
 	spaces := []Space{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT s.id,s.security_domain_id,s.owner_user_id,s.name,s.kind,m.role,
-			CASE WHEN s.kind='misty' THEN 1+(SELECT count(*) FROM misty_space_operators o WHERE o.user_id<>$1)
-			ELSE (SELECT count(*) FROM space_members sm WHERE sm.space_id=s.id) END,
-			CASE WHEN s.kind='misty' THEN 0 ELSE (SELECT count(*) FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW()
-			  AND si.revoked_at IS NULL AND si.consumed_at IS NULL) END,
-			CASE WHEN s.kind='misty' THEN FALSE ELSE
-			 (EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=s.id AND sm.role='member') OR
-			  EXISTS(SELECT 1 FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW() AND si.revoked_at IS NULL AND si.consumed_at IS NULL)) END,
+		rows, err := tx.QueryContext(ctx, `SELECT s.id,s.security_domain_id,s.owner_user_id,s.name,s.is_default,m.role,
+			(SELECT count(*) FROM space_members sm WHERE sm.space_id=s.id),
+			(SELECT count(*) FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW()
+			  AND si.revoked_at IS NULL AND si.consumed_at IS NULL),
+			(EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=s.id AND sm.role='member') OR
+			 EXISTS(SELECT 1 FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW() AND si.revoked_at IS NULL AND si.consumed_at IS NULL)),
 			s.created_at,s.updated_at
 			FROM spaces s JOIN space_members m ON m.space_id=s.id
 			WHERE m.user_id=$1 AND s.lifecycle_state='active' ORDER BY s.updated_at DESC`, userID)
@@ -144,7 +89,7 @@ func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, err
 		}
 		for rows.Next() {
 			var space Space
-			if err := rows.Scan(&space.ID, &space.SecurityDomainID, &space.OwnerUserID, &space.Name, &space.Kind, &space.Role, &space.MemberCount, &space.PendingCount, &space.IsShared, &space.CreatedAt, &space.UpdatedAt); err != nil {
+			if err := rows.Scan(&space.ID, &space.SecurityDomainID, &space.OwnerUserID, &space.Name, &space.IsDefault, &space.Role, &space.MemberCount, &space.PendingCount, &space.IsShared, &space.CreatedAt, &space.UpdatedAt); err != nil {
 				rows.Close()
 				return err
 			}
@@ -170,17 +115,15 @@ func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, err
 func (db *Database) SpaceByID(ctx context.Context, userID, spaceID string) (*Space, error) {
 	out := &Space{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, `SELECT s.id,s.security_domain_id,s.owner_user_id,s.name,s.kind,m.role,
-			CASE WHEN s.kind='misty' THEN 1+(SELECT count(*) FROM misty_space_operators o WHERE o.user_id<>$2)
-			ELSE (SELECT count(*) FROM space_members sm WHERE sm.space_id=s.id) END,
-			CASE WHEN s.kind='misty' THEN 0 ELSE (SELECT count(*) FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW()
-			  AND si.revoked_at IS NULL AND si.consumed_at IS NULL) END,
-			CASE WHEN s.kind='misty' THEN FALSE ELSE
-			 (EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=s.id AND sm.role='member') OR
-			  EXISTS(SELECT 1 FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW() AND si.revoked_at IS NULL AND si.consumed_at IS NULL)) END,
+		if err := tx.QueryRowContext(ctx, `SELECT s.id,s.security_domain_id,s.owner_user_id,s.name,s.is_default,m.role,
+			(SELECT count(*) FROM space_members sm WHERE sm.space_id=s.id),
+			(SELECT count(*) FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW()
+			  AND si.revoked_at IS NULL AND si.consumed_at IS NULL),
+			(EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=s.id AND sm.role='member') OR
+			 EXISTS(SELECT 1 FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW() AND si.revoked_at IS NULL AND si.consumed_at IS NULL)),
 			s.created_at,s.updated_at
 			FROM spaces s JOIN space_members m ON m.space_id=s.id
-			WHERE s.id=$1 AND m.user_id=$2 AND s.lifecycle_state='active'`, spaceID, userID).Scan(&out.ID, &out.SecurityDomainID, &out.OwnerUserID, &out.Name, &out.Kind, &out.Role, &out.MemberCount, &out.PendingCount, &out.IsShared, &out.CreatedAt, &out.UpdatedAt); err != nil {
+			WHERE s.id=$1 AND m.user_id=$2 AND s.lifecycle_state='active'`, spaceID, userID).Scan(&out.ID, &out.SecurityDomainID, &out.OwnerUserID, &out.Name, &out.IsDefault, &out.Role, &out.MemberCount, &out.PendingCount, &out.IsShared, &out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err
 		}
 		return populateSpacePermissionsTx(ctx, tx, userID, out)
@@ -204,61 +147,13 @@ func populateSpacePermissionsTx(ctx context.Context, tx *sql.Tx, userID string, 
 		space.Permissions[permission] = allowed
 	}
 	applySpacePermissionDependencies(space.Permissions)
-	canManage, err := canManageSpaceLifecycleTx(ctx, tx, userID, space.ID, space.Role)
-	if err != nil {
-		return err
-	}
+	canManage := space.Role == "owner"
 	space.Permissions[PermissionSpaceInvite] = canManage
 	space.Permissions[PermissionSpaceRename] = canManage
-	space.Permissions[PermissionSpaceTransfer] = canManage
-	space.Permissions[PermissionSpaceDelete] = canManage
-	space.Permissions[PermissionSpaceLeave] = space.Kind != "misty" && space.Role != "owner"
+	space.Permissions[PermissionSpaceTransfer] = canManage && !space.IsDefault
+	space.Permissions[PermissionSpaceDelete] = canManage && !space.IsDefault
+	space.Permissions[PermissionSpaceLeave] = space.Role != "owner"
 	return nil
-}
-
-func canManageSpaceLifecycleTx(ctx context.Context, tx *sql.Tx, userID, spaceID, role string) (bool, error) {
-	misty, err := isMistySpaceTx(ctx, tx, spaceID)
-	if err != nil {
-		return false, err
-	}
-	if !misty {
-		return role == "owner", nil
-	}
-	return isMistyOperatorTx(ctx, tx, userID)
-}
-
-// ConfigureCanonicalMistySpace validates the deployment operator and creates
-// (or repairs) the one shared Misty Space before HTTP traffic is accepted.
-func (db *Database) ConfigureCanonicalMistySpace(ctx context.Context, operatorUserID string) error {
-	operatorUserID = strings.TrimSpace(operatorUserID)
-	if operatorUserID == "" {
-		return errors.New("MISTY_OPERATOR_USER_ID is required")
-	}
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var spaceID sql.NullString
-		if err := tx.QueryRowContext(ctx, `SELECT misty_configure_canonical_space($1)`, operatorUserID).Scan(&spaceID); err != nil {
-			return err
-		}
-		if !spaceID.Valid || spaceID.String == "" {
-			return errors.New("MISTY_OPERATOR_USER_ID does not identify an active user")
-		}
-		return nil
-	})
-}
-
-// EnsureDefaultSpace provisions membership and one private conversation in
-// the shared canonical Misty Space.
-func (db *Database) EnsureDefaultSpace(ctx context.Context, userID string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var spaceID sql.NullString
-		if err := tx.QueryRowContext(ctx, `SELECT misty_ensure_default_space($1)`, userID).Scan(&spaceID); err != nil {
-			return err
-		}
-		if !spaceID.Valid || spaceID.String == "" {
-			return errors.New("default Misty Space could not be provisioned")
-		}
-		return nil
-	})
 }
 
 func (db *Database) RenameSpace(ctx context.Context, userID, spaceID, name string) (*Space, error) {
@@ -267,7 +162,7 @@ func (db *Database) RenameSpace(ctx context.Context, userID, spaceID, name strin
 		return nil, err
 	}
 	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, userID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE spaces SET name=$1,updated_at=NOW() WHERE id=$2`, name, spaceID); err != nil {
@@ -284,13 +179,17 @@ func (db *Database) RenameSpace(ctx context.Context, userID, spaceID, name strin
 
 func (db *Database) DeleteSpace(ctx context.Context, userID, spaceID, confirmation string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, userID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
 		var name string
-		if err := tx.QueryRowContext(ctx, `SELECT s.name
-			FROM spaces s WHERE s.id=$1 FOR UPDATE`, spaceID).Scan(&name); err != nil {
+		var isDefault bool
+		if err := tx.QueryRowContext(ctx, `SELECT s.name,s.is_default
+			FROM spaces s WHERE s.id=$1 FOR UPDATE`, spaceID).Scan(&name, &isDefault); err != nil {
 			return err
+		}
+		if isDefault {
+			return ErrDefaultSpaceProtected
 		}
 		if confirmation != name {
 			return ErrSpaceInvalid
@@ -331,14 +230,9 @@ func (db *Database) SpaceMembers(ctx context.Context, userID, spaceID string) ([
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT m.space_id,m.user_id,u.name,u.email,m.role,m.joined_at,m.read_message_seq
 			FROM space_members m
-			JOIN spaces s ON s.id=m.space_id
 			JOIN users u ON u.id=m.user_id
-			WHERE m.space_id=$1 AND (
-				s.kind<>'misty' OR m.user_id=$2 OR EXISTS(
-					SELECT 1 FROM misty_space_operators o WHERE o.user_id=m.user_id
-				)
-			)
-			ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END,u.name`, spaceID, userID)
+			WHERE m.space_id=$1
+			ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END,u.name`, spaceID)
 		if err != nil {
 			return err
 		}

@@ -39,7 +39,7 @@ func (db *Database) AccountDeletionBlockers(
 			SELECT s.id,s.name,COUNT(m.user_id)
 			FROM spaces s
 			LEFT JOIN space_members m ON m.space_id=s.id
-			WHERE s.owner_user_id=$1 AND s.lifecycle_state='active' AND s.kind='standard'
+			WHERE s.owner_user_id=$1 AND s.lifecycle_state='active'
 			GROUP BY s.id,s.name
 			HAVING COUNT(m.user_id)>1
 			ORDER BY s.created_at`, userID)
@@ -83,7 +83,7 @@ func (db *Database) BeginAccountDeletion(
 		var sharedOwned int
 		if err := tx.QueryRowContext(ctx, `
 			SELECT COUNT(*) FROM spaces s
-			WHERE s.owner_user_id=$1 AND s.lifecycle_state='active' AND s.kind='standard'
+			WHERE s.owner_user_id=$1 AND s.lifecycle_state='active'
 			  AND EXISTS(SELECT 1 FROM space_members m WHERE m.space_id=s.id AND m.user_id<>$1)`, userID,
 		).Scan(&sharedOwned); err != nil {
 			return err
@@ -222,7 +222,7 @@ func (db *Database) ProcessingAccountDeletions(
 			SELECT id,user_id,status,purge_after,provider_revocation_status,
 			       last_error_code,created_at,updated_at,completed_at
 			FROM account_deletion_requests
-			WHERE status='processing'
+			WHERE cleanup_owner='go' AND status='processing'
 			ORDER BY updated_at
 			LIMIT $1`, limit)
 		if err != nil {

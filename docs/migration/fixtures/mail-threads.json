@@ -1,0 +1,576 @@
+[
+  {
+    "name": "gmail-mime-and-headers",
+    "provider": "google",
+    "threadId": "a+b/c==",
+    "raw": {
+      "id": "a+b/c==",
+      "snippet": "Raw \u0026amp; preview\r\nline",
+      "messages": [
+        {
+          "id": "new-message",
+          "threadId": "a+b/c==",
+          "internalDate": "1788609600123",
+          "labelIds": [
+            "UNREAD",
+            "STARRED",
+            "INBOX"
+          ],
+          "snippet": "New \u0026amp; preview",
+          "payload": {
+            "mimeType": "multipart/mixed",
+            "headers": [
+              {
+                "name": "Subject",
+                "value": "=?UTF-8?B?SGFsbG8g4pyT?="
+              },
+              {
+                "name": "subject",
+                "value": "Ignored duplicate"
+              },
+              {
+                "name": "From",
+                "value": "\"Alice, Example\" \u003calice@example.invalid\u003e"
+              },
+              {
+                "name": "Cc",
+                "value": "Friends: Bob \u003cbob@example.invalid\u003e, Alice \u003calice@example.invalid\u003e;"
+              },
+              {
+                "name": "To",
+                "value": "Recipient \u003cto@example.invalid\u003e"
+              },
+              {
+                "name": "Message-ID",
+                "value": "\u003crfc@example.invalid\u003e"
+              }
+            ],
+            "parts": [
+              {
+                "partId": "0",
+                "mimeType": "text/plain; charset=UTF-8",
+                "body": {
+                  "data": "UGxhaW4gJmFtcDsgdGV4dA0KU2Vjb25kACBsaW5l"
+                }
+              },
+              {
+                "partId": "1",
+                "mimeType": "text/html",
+                "body": {
+                  "data": "PGRpdj5SaWNoICZhbXA7IHRleHQ8L2Rpdj48c2NyaXB0Pmlnbm9yZWQoKTwvc2NyaXB0PjxwPk5leHQ8L3A-"
+                }
+              },
+              {
+                "partId": "2",
+                "mimeType": "image/png",
+                "filename": "inline \u0026amp; image.png",
+                "headers": [
+                  {
+                    "name": "Content-Disposition",
+                    "value": "inline"
+                  },
+                  {
+                    "name": "Content-ID",
+                    "value": "\u003cimage@test\u003e"
+                  }
+                ],
+                "body": {
+                  "attachmentId": "attach+/=",
+                  "size": 42
+                }
+              },
+              {
+                "partId": "3",
+                "mimeType": "application/pdf",
+                "filename": "file.pdf",
+                "body": {
+                  "size": 17
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "old-message",
+          "labelIds": [
+            "INBOX"
+          ],
+          "payload": {
+            "mimeType": "text/plain",
+            "headers": [
+              {
+                "name": "Subject",
+                "value": "Older subject"
+              },
+              {
+                "name": "From",
+                "value": "Bob \u003cbob@example.invalid\u003e"
+              },
+              {
+                "name": "Date",
+                "value": "Fri, 21 Nov 1997 09:55:06 -0600"
+              }
+            ],
+            "body": {
+              "data": "T2xkIHBsYWlu"
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "provider": "gmail",
+      "provider_id": "a+b/c==",
+      "account_id": "fixture-account",
+      "subject": "Hallo ✓",
+      "snippet": "Raw \u0026 preview\nline",
+      "participants": [
+        {
+          "name": "Alice, Example",
+          "email": "alice@example.invalid"
+        },
+        {
+          "name": "Bob",
+          "email": "bob@example.invalid"
+        }
+      ],
+      "messages": [
+        {
+          "provider": "gmail",
+          "provider_id": "old-message",
+          "account_id": "fixture-account",
+          "thread_id": "a+b/c==",
+          "rfc822_id": "",
+          "subject": "Older subject",
+          "from": {
+            "name": "Bob",
+            "email": "bob@example.invalid"
+          },
+          "to": [],
+          "cc": [],
+          "bcc": [],
+          "reply_to": [],
+          "sent_at": "1997-11-21T15:55:06Z",
+          "snippet": "",
+          "body": {
+            "text": "Old plain",
+            "had_html": false,
+            "truncated": false
+          },
+          "labels": [
+            "INBOX"
+          ],
+          "unread": false,
+          "starred": false,
+          "draft": false,
+          "attachments": []
+        },
+        {
+          "provider": "gmail",
+          "provider_id": "new-message",
+          "account_id": "fixture-account",
+          "thread_id": "a+b/c==",
+          "rfc822_id": "\u003crfc@example.invalid\u003e",
+          "subject": "Hallo ✓",
+          "from": {
+            "name": "Alice, Example",
+            "email": "alice@example.invalid"
+          },
+          "to": [
+            {
+              "name": "Recipient",
+              "email": "to@example.invalid"
+            }
+          ],
+          "cc": [
+            {
+              "name": "Bob",
+              "email": "bob@example.invalid"
+            },
+            {
+              "name": "Alice",
+              "email": "alice@example.invalid"
+            }
+          ],
+          "bcc": [],
+          "reply_to": [],
+          "sent_at": "2026-09-05T12:00:00.123Z",
+          "snippet": "New \u0026 preview",
+          "body": {
+            "text": "Plain \u0026 text\nSecond line",
+            "html": "\u003cdiv\u003eRich \u0026 text\u003c/div\u003e\u003cscript\u003eignored()\u003c/script\u003e\u003cp\u003eNext\u003c/p\u003e",
+            "had_html": true,
+            "truncated": false
+          },
+          "labels": [
+            "INBOX",
+            "STARRED",
+            "UNREAD"
+          ],
+          "unread": true,
+          "starred": true,
+          "draft": false,
+          "attachments": [
+            {
+              "provider": "gmail",
+              "provider_id": "attach+/=",
+              "account_id": "fixture-account",
+              "message_id": "new-message",
+              "filename": "inline \u0026 image.png",
+              "content_type": "image/png",
+              "size": 42,
+              "inline": true,
+              "content_id": "image@test"
+            },
+            {
+              "provider": "gmail",
+              "provider_id": "new-message:part:3",
+              "account_id": "fixture-account",
+              "message_id": "new-message",
+              "filename": "file.pdf",
+              "content_type": "application/pdf",
+              "size": 17,
+              "inline": false,
+              "content_id": ""
+            }
+          ]
+        }
+      ],
+      "labels": [
+        "INBOX",
+        "STARRED",
+        "UNREAD"
+      ],
+      "last_message_at": "2026-09-05T12:00:00.123Z",
+      "unread": true,
+      "starred": true
+    }
+  },
+  {
+    "name": "gmail-html-and-zero-date",
+    "provider": "google",
+    "threadId": "%2F",
+    "raw": {
+      "id": "%2F",
+      "messages": [
+        {
+          "id": "m",
+          "internalDate": "invalid",
+          "payload": {
+            "mimeType": "text/html",
+            "headers": [
+              {
+                "name": "From",
+                "value": "invalid address"
+              },
+              {
+                "name": "Subject",
+                "value": "=?ISO-8859-1?Q?caf=E9?="
+              }
+            ],
+            "body": {
+              "data": "PHA-QSAmYW1wO2FtcDsgQjwvcD48c3R5bGU-aGlkZGVuPC9zdHlsZT48c3ZnPjx0ZXh0PmhpZGRlbjwvdGV4dD48L3N2Zz48dWw-PGxpPk9uZTwvbGk-PGxpPlR3bzwvbGk-PC91bD4"
+            }
+          }
+        }
+      ]
+    },
+    "expected": {
+      "provider": "gmail",
+      "provider_id": "%2F",
+      "account_id": "fixture-account",
+      "subject": "café",
+      "snippet": "",
+      "participants": [],
+      "messages": [
+        {
+          "provider": "gmail",
+          "provider_id": "m",
+          "account_id": "fixture-account",
+          "thread_id": "%2F",
+          "rfc822_id": "",
+          "subject": "café",
+          "from": {
+            "name": "",
+            "email": ""
+          },
+          "to": [],
+          "cc": [],
+          "bcc": [],
+          "reply_to": [],
+          "sent_at": "0001-01-01T00:00:00Z",
+          "snippet": "",
+          "body": {
+            "text": "A \u0026 B One Two",
+            "html": "\u003cp\u003eA \u0026amp; B\u003c/p\u003e\u003cstyle\u003ehidden\u003c/style\u003e\u003csvg\u003e\u003ctext\u003ehidden\u003c/text\u003e\u003c/svg\u003e\u003cul\u003e\u003cli\u003eOne\u003c/li\u003e\u003cli\u003eTwo\u003c/li\u003e\u003c/ul\u003e",
+            "had_html": true,
+            "truncated": false
+          },
+          "labels": [],
+          "unread": false,
+          "starred": false,
+          "draft": false,
+          "attachments": []
+        }
+      ],
+      "labels": [],
+      "last_message_at": "0001-01-01T00:00:00Z",
+      "unread": false,
+      "starred": false
+    }
+  },
+  {
+    "name": "graph-body-and-precision",
+    "provider": "microsoft",
+    "threadId": "opaque+/=",
+    "raw": {
+      "value": [
+        {
+          "id": "later",
+          "conversationId": "opaque+/=",
+          "internetMessageId": "\u003cgraph@example.invalid\u003e",
+          "subject": "Subject \u0026amp; value",
+          "bodyPreview": "Later preview",
+          "body": {
+            "contentType": "html",
+            "content": "\u003cp\u003eHello \u0026amp;amp; world\u003c/p\u003e\u003cscript\u003ehidden\u003c/script\u003e\u003cdiv\u003eNext\u003c/div\u003e"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Alice \u0026amp; Bob",
+              "address": "alice@example.invalid"
+            }
+          },
+          "ccRecipients": [
+            {
+              "emailAddress": {
+                "name": "Bob",
+                "address": "bob@example.invalid"
+              }
+            }
+          ],
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "address": "to@example.invalid"
+              }
+            }
+          ],
+          "sentDateTime": "2026-09-05T13:00:00.123456789+01:00",
+          "isRead": false,
+          "isDraft": true,
+          "parentFolderId": "folder+/=",
+          "flag": {
+            "flagStatus": "Flagged"
+          },
+          "attachments": [
+            {
+              "name": "file\nname.txt",
+              "contentType": "text/plain",
+              "size": 14,
+              "isInline": true,
+              "contentId": "cid"
+            }
+          ]
+        },
+        {
+          "id": "earlier",
+          "conversationId": "opaque+/=",
+          "subject": "Earlier",
+          "body": {
+            "contentType": "text",
+            "content": " Plain\r\nText\u0000 "
+          },
+          "sentDateTime": "invalid",
+          "receivedDateTime": "2026-09-05T12:00:00.1234Z",
+          "isRead": true,
+          "from": {
+            "emailAddress": {
+              "address": "bob@example.invalid"
+            }
+          }
+        },
+        {
+          "id": "unrelated",
+          "conversationId": "another-thread",
+          "subject": "Other",
+          "sentDateTime": "2026-09-06T00:00:00Z",
+          "isRead": true
+        }
+      ]
+    },
+    "expected": {
+      "provider": "outlook",
+      "provider_id": "opaque+/=",
+      "account_id": "fixture-account",
+      "subject": "Subject \u0026 value",
+      "snippet": "Later preview",
+      "participants": [
+        {
+          "name": "Alice \u0026 Bob",
+          "email": "alice@example.invalid"
+        },
+        {
+          "name": "Bob",
+          "email": "bob@example.invalid"
+        }
+      ],
+      "messages": [
+        {
+          "provider": "outlook",
+          "provider_id": "earlier",
+          "account_id": "fixture-account",
+          "thread_id": "opaque+/=",
+          "rfc822_id": "",
+          "subject": "Earlier",
+          "from": {
+            "name": "",
+            "email": "bob@example.invalid"
+          },
+          "to": [],
+          "cc": [],
+          "bcc": [],
+          "reply_to": [],
+          "sent_at": "2026-09-05T12:00:00.1234Z",
+          "snippet": "",
+          "body": {
+            "text": "Plain\nText",
+            "had_html": false,
+            "truncated": false
+          },
+          "labels": [],
+          "unread": false,
+          "starred": false,
+          "draft": false,
+          "attachments": []
+        },
+        {
+          "provider": "outlook",
+          "provider_id": "later",
+          "account_id": "fixture-account",
+          "thread_id": "opaque+/=",
+          "rfc822_id": "\u003cgraph@example.invalid\u003e",
+          "subject": "Subject \u0026 value",
+          "from": {
+            "name": "Alice \u0026 Bob",
+            "email": "alice@example.invalid"
+          },
+          "to": [
+            {
+              "name": "",
+              "email": "to@example.invalid"
+            }
+          ],
+          "cc": [
+            {
+              "name": "Bob",
+              "email": "bob@example.invalid"
+            }
+          ],
+          "bcc": [],
+          "reply_to": [],
+          "sent_at": "2026-09-05T12:00:00.123456789Z",
+          "snippet": "Later preview",
+          "body": {
+            "text": "Hello \u0026 world Next",
+            "html": "\u003cp\u003eHello \u0026amp; world\u003c/p\u003e\u003cscript\u003ehidden\u003c/script\u003e\u003cdiv\u003eNext\u003c/div\u003e",
+            "had_html": true,
+            "truncated": false
+          },
+          "labels": [
+            "DRAFT",
+            "STARRED",
+            "UNREAD",
+            "folder+/="
+          ],
+          "unread": true,
+          "starred": true,
+          "draft": true,
+          "attachments": [
+            {
+              "provider": "outlook",
+              "provider_id": "later:attachment:0",
+              "account_id": "fixture-account",
+              "message_id": "later",
+              "filename": "file name.txt",
+              "content_type": "text/plain",
+              "size": 14,
+              "inline": true,
+              "content_id": "cid"
+            }
+          ]
+        }
+      ],
+      "labels": [
+        "DRAFT",
+        "STARRED",
+        "UNREAD",
+        "folder+/="
+      ],
+      "last_message_at": "2026-09-05T12:00:00.123456789Z",
+      "unread": true,
+      "starred": true
+    }
+  },
+  {
+    "name": "graph-zero-date",
+    "provider": "microsoft",
+    "threadId": "thread-zero",
+    "raw": {
+      "value": [
+        {
+          "id": "m",
+          "conversationId": "thread-zero",
+          "body": {
+            "contentType": "text",
+            "content": "Body"
+          },
+          "sentDateTime": "invalid",
+          "isRead": true
+        }
+      ]
+    },
+    "expected": {
+      "provider": "outlook",
+      "provider_id": "thread-zero",
+      "account_id": "fixture-account",
+      "subject": "",
+      "snippet": "",
+      "participants": [],
+      "messages": [
+        {
+          "provider": "outlook",
+          "provider_id": "m",
+          "account_id": "fixture-account",
+          "thread_id": "thread-zero",
+          "rfc822_id": "",
+          "subject": "",
+          "from": {
+            "name": "",
+            "email": ""
+          },
+          "to": [],
+          "cc": [],
+          "bcc": [],
+          "reply_to": [],
+          "sent_at": "0001-01-01T00:00:00Z",
+          "snippet": "",
+          "body": {
+            "text": "Body",
+            "had_html": false,
+            "truncated": false
+          },
+          "labels": [],
+          "unread": false,
+          "starred": false,
+          "draft": false,
+          "attachments": []
+        }
+      ],
+      "labels": [],
+      "last_message_at": "0001-01-01T00:00:00Z",
+      "unread": false,
+      "starred": false
+    }
+  }
+]

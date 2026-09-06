@@ -190,6 +190,10 @@ func TestingValidGoogleDriveTarget(raw string) (*url.URL, error) {
 func authenticatedUser(w http.ResponseWriter, r *http.Request, database *db.Database) (string, bool) {
 	userID, err := sessionUserID(r, database)
 	if err != nil {
+		if errors.Is(err, db.ErrAppRuntimeForbidden) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"code": "app_scope_forbidden"})
+			return "", false
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "internal_error"})
 		return "", false
 	}
@@ -208,17 +212,17 @@ func (s *SpacesService) MemberAvatar() http.HandlerFunc {
 		}
 		spaceID := chi.URLParam(r, "spaceID")
 		memberID := chi.URLParam(r, "userID")
-		version, err := s.database.SpaceMemberAvatarMeta(r.Context(), requestingUserID, spaceID, memberID)
+		avatar, err := s.database.SpaceMemberAvatarReference(r.Context(), requestingUserID, spaceID, memberID)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		if version == 0 {
+		if avatar.Version == 0 {
 			writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
 			return
 		}
 		// Authorization was checked above; stream the bytes from the object store.
-		serveAvatarObject(w, r, s.avatarStore, memberID, version)
+		serveAvatarObject(w, r, s.avatarStore, avatar.ObjectKey, avatar.Version)
 	}
 }
 
@@ -238,6 +242,8 @@ func writeSpaceError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_limit_reached"})
 	case errors.Is(err, db.ErrSpaceOwnershipLimit):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_ownership_limit_reached"})
+	case errors.Is(err, db.ErrDefaultSpaceProtected):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "default_space_protected"})
 	case errors.Is(err, db.ErrSpacePeopleLimit):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_people_limit_reached"})
 	case errors.Is(err, db.ErrSpaceNodeLimit):
@@ -271,10 +277,6 @@ func (s *SpacesService) Spaces() http.HandlerFunc {
 		}
 		switch r.Method {
 		case http.MethodGet:
-			if err := s.database.EnsureDefaultSpace(r.Context(), userID); err != nil {
-				writeSpaceError(w, fmt.Errorf("ensure default Misty Space: %w", err))
-				return
-			}
 			entitlements, err := s.database.EntitlementsForUser(r.Context(), userID)
 			if err != nil {
 				writeSpaceError(w, fmt.Errorf("load entitlements: %w", err))

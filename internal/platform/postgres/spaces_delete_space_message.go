@@ -15,11 +15,7 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
-		if conversationID == "" {
-			if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
-				return err
-			}
-		} else {
+		if conversationID != "" {
 			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 				return err
 			}
@@ -98,11 +94,6 @@ func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, b
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceMessageWriteTx(ctx, tx, billingUserID, spaceID); err != nil {
 			return err
-		}
-		if conversationID == "" {
-			if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
-				return err
-			}
 		}
 		if enforceMembership {
 			if _, err := activePersonalAgentMembershipTx(ctx, tx, billingUserID, spaceID, agentID); err != nil {

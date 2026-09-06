@@ -17,17 +17,18 @@ const (
 )
 
 var (
-	ErrSpaceNotFound        = errors.New("space not found")
-	ErrSpaceForbidden       = errors.New("space permission denied")
-	ErrSpaceLimit           = errors.New("space limit reached")
-	ErrSpaceOwnershipLimit  = errors.New("space ownership limit reached")
-	ErrSpacePeopleLimit     = errors.New("space member limit reached")
-	ErrSpaceNodeLimit       = errors.New("space node limit reached")
-	ErrSpaceConflict        = errors.New("space resource version conflict")
-	ErrSpaceInviteNotFound  = errors.New("space invitation not found")
-	ErrSpaceInviteeNotFound = errors.New("no misty account found for invitee email")
-	ErrSpaceInviteExpired   = errors.New("space invitation expired")
-	ErrSpaceInvalid         = errors.New("invalid space data")
+	ErrSpaceNotFound         = errors.New("space not found")
+	ErrSpaceForbidden        = errors.New("space permission denied")
+	ErrSpaceLimit            = errors.New("space limit reached")
+	ErrSpaceOwnershipLimit   = errors.New("space ownership limit reached")
+	ErrSpacePeopleLimit      = errors.New("space member limit reached")
+	ErrSpaceNodeLimit        = errors.New("space node limit reached")
+	ErrSpaceConflict         = errors.New("space resource version conflict")
+	ErrSpaceInviteNotFound   = errors.New("space invitation not found")
+	ErrSpaceInviteeNotFound  = errors.New("no misty account found for invitee email")
+	ErrSpaceInviteExpired    = errors.New("space invitation expired")
+	ErrSpaceInvalid          = errors.New("invalid space data")
+	ErrDefaultSpaceProtected = errors.New("default space cannot be deleted or transferred")
 )
 
 type Space struct {
@@ -35,7 +36,7 @@ type Space struct {
 	SecurityDomainID string          `json:"security_domain_id"`
 	OwnerUserID      string          `json:"owner_user_id"`
 	Name             string          `json:"name"`
-	Kind             string          `json:"kind"`
+	IsDefault        bool            `json:"is_default"`
 	Role             string          `json:"role"`
 	MemberCount      int             `json:"member_count"`
 	PendingCount     int             `json:"pending_count"`

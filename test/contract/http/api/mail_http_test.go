@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -13,8 +14,11 @@ import (
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/kannachi323/misty/server/internal/appcatalog"
 	mailintegration "github.com/kannachi323/misty/server/internal/integrations/mail"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
 type fakeMailProvider struct {
@@ -26,6 +30,96 @@ type fakeMailProvider struct {
 	accountError error
 	folderError  error
 	threadError  error
+}
+
+func TestMailRPCPreservesOpaqueProviderIDsAndLargeDraftAttachments(t *testing.T) {
+	database := openPresenceTestDatabase(t)
+	owner, err := database.CreateUserWithUsername("Mail RPC", "mail_"+uuid.NewString()[:8], uniqueTestEmail("mail-rpc"), "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	space, err := database.CreateSpace(t.Context(), owner.ID, "Inbox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, ok := appcatalog.Find("inbox")
+	if !ok {
+		t.Fatal("missing Inbox")
+	}
+	if _, err := database.InstallUserApp(t.Context(), owner.ID, app.ID, app.Version, app.PermissionVersion, app.Scopes); err != nil {
+		t.Fatal(err)
+	}
+	token := "mail-rpc-" + uuid.NewString()
+	if _, err := database.CreateAppRuntimeSession(t.Context(), owner.ID, app.ID, security.HashToken(token), space.ID, db.AppRuntimeSessionTTL); err != nil {
+		t.Fatal(err)
+	}
+	spaces, err := NewSpacesService(database, nil, base64.StdEncoding.EncodeToString([]byte(strings.Repeat("m", 32))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciphertext, nonce, err := spaces.TestingEncryptConnectedAccountAccessToken("google", "test-only-provider-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	connection, err := database.SaveConnectedAccount(t.Context(), db.ConnectedAccount{UserID: owner.ID, Provider: "google", AccountID: "account-1", AccountDisplay: "owner@example.invalid", CredentialCiphertext: ciphertext, CredentialNonce: nonce, KeyVersion: 1, Capabilities: []string{"mail"}, GrantedScopes: []string{"gmail.modify", "gmail.send"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeMailProvider{}
+	spaces.TestingSetMailProviderFactory(func(account db.ConnectedAccount, credential string) (mailintegration.Provider, error) {
+		if account.ID != connection.ID || credential != "test-only-provider-token" {
+			t.Fatal("incorrect private credential binding")
+		}
+		return fake, nil
+	})
+	router := mailTestRouter(spaces)
+	router.Post("/app-runtime/rpc", OfficialAppRPC(database, router, ""))
+	call := func(method string, params map[string]any) map[string]any {
+		t.Helper()
+		response := performConversationRequest(t, router, "POST", "/app-runtime/rpc", token, map[string]any{"protocol": 2, "method": method, "params": params})
+		if response.Code < 200 || response.Code >= 300 {
+			t.Fatalf("%s status=%d body=%s", method, response.Code, response.Body.String())
+		}
+		var result map[string]any
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	for _, id := range []string{"a+b/c==", "%2F", "%25?x#y", "a/../b"} {
+		thread := call("mail.threads.get", map[string]any{"path": map[string]string{"threadID": id}, "query": map[string]string{"connection_id": connection.ID}})
+		if thread["thread"].(map[string]any)["provider_id"] != id {
+			t.Fatalf("corrupted RPC thread ID %q", id)
+		}
+		action := call("mail.threads.action", map[string]any{"path": map[string]string{"threadID": id}, "body": map[string]any{"connection_id": connection.ID, "read": true}})
+		if action["thread_id"] != id {
+			t.Fatalf("corrupted action ID %q", id)
+		}
+		draft := call("mail.drafts.update", map[string]any{"path": map[string]string{"draftID": id}, "body": map[string]any{"connection_id": connection.ID, "to": []any{}, "subject": "Test", "text": "Draft only"}})
+		if draft["draft"].(map[string]any)["provider_id"] != id {
+			t.Fatalf("corrupted draft ID %q", id)
+		}
+		// Raw REST requests must also decode only once, including a literal %2F.
+		response := performConversationRequest(t, router, "GET", "/mail/threads/"+url.PathEscape(id)+"?connection_id="+url.QueryEscape(connection.ID), token, nil)
+		if response.Code != 200 {
+			t.Fatalf("direct read failed: %d %s", response.Code, response.Body.String())
+		}
+		var direct map[string]any
+		if err := json.Unmarshal(response.Body.Bytes(), &direct); err != nil {
+			t.Fatal(err)
+		}
+		if direct["thread"].(map[string]any)["provider_id"] != id {
+			t.Fatalf("corrupted direct ID %q", id)
+		}
+	}
+	attachment := strings.Repeat("x", 4<<20)
+	call("mail.drafts.create", map[string]any{"body": map[string]any{"connection_id": connection.ID, "to": []any{}, "subject": "Draft attachment", "text": "Test only", "attachments": []map[string]any{{"filename": "test.txt", "content_type": "text/plain", "data": base64.StdEncoding.EncodeToString([]byte(attachment)), "inline": false}}}})
+	if len(fake.lastDraft.Attachments) != 1 || string(fake.lastDraft.Attachments[0].Data) != attachment {
+		t.Fatal("large attachment did not reach provider intact")
+	}
+	if fake.sends.Load() != 0 {
+		t.Fatal("draft checks must not send mail")
+	}
 }
 
 func testMailMessage() mailintegration.Message {

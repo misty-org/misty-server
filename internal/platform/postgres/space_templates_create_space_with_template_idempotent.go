@@ -33,7 +33,7 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 	result := &CreateSpaceResult{
 		Space: Space{
 			ID: "space_" + uuid.NewString(), SecurityDomainID: "sd_" + uuid.NewString(),
-			OwnerUserID: userID, Name: name, Kind: "standard", Role: "owner", MemberCount: 1,
+			OwnerUserID: userID, Name: name, Role: "owner", MemberCount: 1,
 		},
 		Setup: SpaceSetup{SelectedProviders: providers, PendingProviders: append([]string(nil), providers...), CompletedProviders: []string{}},
 	}
@@ -69,10 +69,18 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 				return err
 			}
 		}
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`,
+			"spaces:owner:"+userID); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO security_domains(id,kind,owner_user_id,space_id) VALUES($1,'space',$2,$3)`, result.Space.SecurityDomainID, userID, result.Space.ID); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, `INSERT INTO spaces(id,owner_user_id,name,security_domain_id) VALUES($1,$2,$3,$4) RETURNING created_at,updated_at`, result.Space.ID, userID, name, result.Space.SecurityDomainID).Scan(&result.Space.CreatedAt, &result.Space.UpdatedAt); err != nil {
+		if err := tx.QueryRowContext(ctx, `INSERT INTO spaces(id,owner_user_id,name,security_domain_id,is_default)
+			SELECT $1,$2,$3,$4,NOT EXISTS(
+				SELECT 1 FROM spaces WHERE owner_user_id=$2 AND is_default AND lifecycle_state='active'
+			)
+			RETURNING is_default,created_at,updated_at`, result.Space.ID, userID, name, result.Space.SecurityDomainID).Scan(&result.Space.IsDefault, &result.Space.CreatedAt, &result.Space.UpdatedAt); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_storage_usage(space_id) VALUES($1)`, result.Space.ID); err != nil {

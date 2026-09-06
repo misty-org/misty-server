@@ -61,24 +61,6 @@ func OpenDatabase(t testing.TB) *db.Database {
 		t.Fatalf("failed to acquire test database lock: %v", err)
 	}
 	resetDatabase(t, database)
-	operator, _, err := database.GetUserByEmail("test-misty-operator@example.com")
-	if err != nil {
-		t.Fatalf("find canonical Misty test operator: %v", err)
-	}
-	if operator == nil {
-		operator, err = database.CreateUserWithUsername(
-			"Test Misty Operator",
-			"test_misty_operator",
-			"test-misty-operator@example.com",
-			"password123",
-		)
-		if err != nil {
-			t.Fatalf("create canonical Misty test operator: %v", err)
-		}
-	}
-	if err := database.ConfigureCanonicalMistySpace(t.Context(), operator.ID); err != nil {
-		t.Fatalf("configure canonical Misty test Space: %v", err)
-	}
 
 	t.Cleanup(func() {
 		resetDatabase(t, database)

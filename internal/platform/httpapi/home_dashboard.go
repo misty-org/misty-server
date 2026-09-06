@@ -10,7 +10,7 @@ import (
 
 var homeAppIDs = map[string]bool{
 	"home": true, "journal": true, "planner": true, "social": true, "library": true,
-	"inbox": true, "browser": true, "code": true, "files": true, "transfers": true,
+	"inbox": true, "browser": true, "code": true, "files": true,
 	"terminal": true, "agents": true, "marketplace": true,
 }
 

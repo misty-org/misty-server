@@ -209,13 +209,6 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
-		if misty, err := isMistySpaceTx(ctx, tx, spaceID); err != nil {
-			return err
-		} else if misty {
-			if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, userID); err != nil {
-				return err
-			}
-		}
 		if err := validateSpaceActorRefsTx(ctx, tx, userID, spaceID, participants); err != nil {
 			return err
 		}

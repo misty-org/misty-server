@@ -1,0 +1,84 @@
+{
+  "checkedAt": "2026-09-05T22:56:38.924Z",
+  "scope": "Local isolated image smoke; no production or Stripe network access",
+  "results": [
+    {
+      "service": "api",
+      "deployment": "hosted",
+      "storageBackend": null,
+      "paymentsMode": null,
+      "node": "v24.20.0",
+      "uid": 1000,
+      "liveness": 200,
+      "readiness": 503,
+      "stripeInstalled": false,
+      "imageId": "sha256:9d5fbaecd6b4dd3c6273307fa5911c6d85f7d3abc31215965c384f1b4be8921f",
+      "shutdownExitCode": 0
+    },
+    {
+      "service": "api",
+      "deployment": "self_hosted",
+      "storageBackend": null,
+      "paymentsMode": null,
+      "node": "v24.20.0",
+      "uid": 1000,
+      "liveness": 200,
+      "readiness": 503,
+      "stripeInstalled": false,
+      "imageId": "sha256:9d5fbaecd6b4dd3c6273307fa5911c6d85f7d3abc31215965c384f1b4be8921f",
+      "shutdownExitCode": 0
+    },
+    {
+      "service": "api",
+      "deployment": "self_hosted",
+      "storageBackend": "filesystem",
+      "paymentsMode": null,
+      "node": "v24.20.0",
+      "uid": 1000,
+      "liveness": 200,
+      "readiness": 503,
+      "stripeInstalled": false,
+      "imageId": "sha256:9d5fbaecd6b4dd3c6273307fa5911c6d85f7d3abc31215965c384f1b4be8921f",
+      "shutdownExitCode": 0
+    },
+    {
+      "service": "payments",
+      "deployment": "hosted",
+      "storageBackend": null,
+      "paymentsMode": "paused",
+      "node": "v24.20.0",
+      "uid": 1000,
+      "liveness": 200,
+      "readiness": 503,
+      "stripeInstalled": true,
+      "imageId": "sha256:cd745831ae6752dab5c22269969912e2c73a1be0fa3d49bdae274a62dfe687e5",
+      "shutdownExitCode": 0
+    },
+    {
+      "service": "payments",
+      "deployment": "hosted",
+      "storageBackend": null,
+      "paymentsMode": "delivery",
+      "node": "v24.20.0",
+      "uid": 1000,
+      "liveness": 200,
+      "readiness": 503,
+      "stripeInstalled": true,
+      "imageId": "sha256:cd745831ae6752dab5c22269969912e2c73a1be0fa3d49bdae274a62dfe687e5",
+      "shutdownExitCode": 0
+    },
+    {
+      "service": "payments",
+      "deployment": "hosted",
+      "storageBackend": null,
+      "paymentsMode": "active",
+      "node": "v24.20.0",
+      "uid": 1000,
+      "liveness": 200,
+      "readiness": 503,
+      "stripeInstalled": true,
+      "imageId": "sha256:cd745831ae6752dab5c22269969912e2c73a1be0fa3d49bdae274a62dfe687e5",
+      "shutdownExitCode": 0
+    }
+  ]
+}

@@ -24,11 +24,7 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
-		if conversationID == "" {
-			if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
-				return err
-			}
-		} else {
+		if conversationID != "" {
 			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 				return err
 			}
@@ -259,9 +255,6 @@ func (db *Database) SpaceMessages(ctx context.Context, userID, spaceID string, b
 	items := []SpaceMessage{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
-			return err
-		}
-		if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT `+spaceMessageColumns+` FROM space_messages m

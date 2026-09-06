@@ -102,6 +102,11 @@ func serverFeatureEnabled(name string) bool {
 	return strings.EqualFold(strings.TrimSpace(envconfig.Getenv(name)), "true")
 }
 
+func serverConnectedDevicesConfigured() bool {
+	return strings.TrimSpace(envconfig.Getenv("MISTY_DEVICE_TICKET_PRIVATE_KEY")) != "" &&
+		strings.TrimSpace(envconfig.Getenv("MISTY_DEVICE_PAIRING_PEPPER")) != ""
+}
+
 type libraryS3Config struct {
 	endpoint, bucket, region, accessKey, secretKey string
 	forcePathStyle                                 bool
@@ -216,6 +221,7 @@ func TestingAllowedCORSOrigins() []string {
 		"https://tauri.localhost",
 		"http://localhost:5173",
 		"http://127.0.0.1:5173",
+		"https://apps.mistysys.com",
 	}
 	for _, origin := range strings.Split(envconfig.Getenv("MISTY_ALLOWED_ORIGINS"), ",") {
 		origin = strings.TrimSpace(origin)

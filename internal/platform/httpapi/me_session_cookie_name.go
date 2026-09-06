@@ -24,7 +24,23 @@ func sessionUserID(r *http.Request, database *db.Database) (string, error) {
 		return "", nil
 	}
 	tokenHash := security.HashToken(token)
-	return database.GetSessionUserID(tokenHash)
+	userID, err := database.GetSessionUserID(tokenHash)
+	if err != nil || userID != "" {
+		return userID, err
+	}
+	// Cookies are always full account sessions. Only an explicit Bearer token
+	// can be interpreted as a restricted hosted-app credential.
+	if _, bearer := TestingBearerTokenFromRequest(r); !bearer {
+		return "", nil
+	}
+	appSession, err := database.AppRuntimeSessionByToken(r.Context(), tokenHash)
+	if err != nil || appSession == nil {
+		return "", err
+	}
+	if !TestingAuthorizeAppRuntimeRequest(*appSession, r.Method, r.URL.Path) {
+		return "", db.ErrAppRuntimeForbidden
+	}
+	return appSession.UserID, nil
 }
 
 func sessionTokenFromRequest(r *http.Request) (string, bool) {
@@ -148,16 +164,16 @@ func UserAvatar(database *db.Database, store LibraryObjectStore) http.HandlerFun
 
 		switch r.Method {
 		case http.MethodGet:
-			version, err := database.GetUserAvatarVersion(userID)
+			avatar, err := database.GetUserAvatarReference(userID)
 			if err != nil {
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
-			if version == 0 {
+			if avatar.Version == 0 {
 				http.Error(w, "avatar not found", http.StatusNotFound)
 				return
 			}
-			serveAvatarObject(w, r, store, userID, version)
+			serveAvatarObject(w, r, store, avatar.ObjectKey, avatar.Version)
 		case http.MethodPut:
 			data, ok := TestingReadAvatarPNG(w, r)
 			if !ok {
@@ -196,14 +212,14 @@ func serveAvatarObject(
 	w http.ResponseWriter,
 	r *http.Request,
 	store LibraryObjectStore,
-	userID string,
+	objectKey string,
 	version int64,
 ) {
 	if store == nil {
 		http.Error(w, "avatar not found", http.StatusNotFound)
 		return
 	}
-	reader, _, err := store.Open(r.Context(), avatarObjectKey(userID))
+	reader, _, err := store.Open(r.Context(), objectKey)
 	if err != nil {
 		if errors.Is(err, ErrLibraryObjectNotFound) {
 			http.Error(w, "avatar not found", http.StatusNotFound)

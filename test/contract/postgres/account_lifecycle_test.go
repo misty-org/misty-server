@@ -151,3 +151,47 @@ func TestAccountDeletionBlocksOwnersAndAnonymizesMembersAfterRetention(t *testin
 		t.Fatalf("completed status = %#v, %v", status, err)
 	}
 }
+
+// A migration can retain Go-owned requests while the replacement owns new ones.
+// Neither legacy worker selection nor an already-dispatched legacy callback may
+// mutate a native request. The public status capability remains compatible.
+func TestAccountDeletionLegacyWorkersDoNotAdoptNativeRequests(t *testing.T) {
+	database := openTestDatabase(t)
+	ctx := context.Background()
+	user, err := database.CreateUser("Native deletion", "native-deletion@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, token := "deletion_native_test", strings.Repeat("e", 64)
+	if _, err := database.Conn.Exec(`INSERT INTO account_deletion_requests(id,user_id,status_token_hash,purge_after,cleanup_owner)
+		VALUES($1,$2,$3,NOW()-INTERVAL '1 minute','native')`, id, user.ID, token); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Conn.Exec(`UPDATE users SET lifecycle_state='pending_deletion' WHERE id=$1`, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	processing, err := database.ProcessingAccountDeletions(ctx, 25)
+	if err != nil || len(processing) != 0 {
+		t.Fatalf("legacy processing = %#v, %v", processing, err)
+	}
+	if err := database.ScheduleAccountDeletion(ctx, id, map[string]string{}); err == nil {
+		t.Fatal("legacy worker scheduled a native request")
+	}
+	if err := database.RecordAccountDeletionFailure(ctx, id, "legacy_failure"); err != nil {
+		t.Fatal(err)
+	}
+	status, err := database.AccountDeletionStatus(ctx, id, token)
+	if err != nil || status.Status != "processing" || status.LastErrorCode != "" {
+		t.Fatalf("native status = %#v, %v", status, err)
+	}
+	if _, err := database.Conn.Exec(`UPDATE account_deletion_requests SET status='scheduled' WHERE id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	due, err := database.DueAccountDeletions(ctx, 25)
+	if err != nil || len(due) != 0 {
+		t.Fatalf("legacy purge = %#v, %v", due, err)
+	}
+	if err := database.CompleteAccountDeletion(ctx, id); err == nil {
+		t.Fatal("legacy worker purged a native request")
+	}
+}

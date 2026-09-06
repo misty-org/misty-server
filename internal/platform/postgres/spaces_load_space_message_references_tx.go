@@ -75,11 +75,7 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
-		if conversationID == "" {
-			if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
-				return err
-			}
-		} else {
+		if conversationID != "" {
 			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 				return err
 			}
@@ -168,11 +164,7 @@ func (db *Database) setSpaceMessageReaction(ctx context.Context, userID, spaceID
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
-		if conversationID == "" {
-			if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
-				return err
-			}
-		} else {
+		if conversationID != "" {
 			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 				return err
 			}
@@ -211,11 +203,7 @@ func (db *Database) spaceMessageByID(ctx context.Context, userID, spaceID, conve
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
 			return err
 		}
-		if conversationID == "" {
-			if err := requireStandardSpaceTx(ctx, tx, spaceID); err != nil {
-				return err
-			}
-		} else {
+		if conversationID != "" {
 			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 				return err
 			}

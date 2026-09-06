@@ -1,0 +1,71 @@
+name: Sync production official-app catalog
+
+on:
+  repository_dispatch:
+    types: [official-apps-released]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Misty Store release tag, such as v0.3.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    env:
+      STORE_TAG: ${{ github.event.client_payload.tag || inputs.tag }}
+    steps:
+      - name: Validate the Store release tag
+        run: |
+          if ! printf '%s' "$STORE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+            echo "Invalid Misty Store release tag: $STORE_TAG"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check out the matching Store generator
+        uses: actions/checkout@v4
+        with:
+          repository: misty-org/misty-apps
+          ref: ${{ env.STORE_TAG }}
+          token: ${{ secrets.MISTY_REPO_DISPATCH_TOKEN }}
+          path: .store-source
+      - name: Generate and verify the server catalog
+        run: |
+          node .store-source/scripts/sync-server-official-apps.mjs \
+            internal/appcatalog/catalog.go \
+            .store-source/apps/catalog.json
+          gofmt -w internal/appcatalog/catalog.go
+          node scripts/migration/sync-app-catalog.mjs .store-source/apps/catalog.json
+          npm ci
+          npm run check
+          go test ./test/contract/appcatalog ./test/contract/http/api \
+            -run '^(TestOfficial|TestFinishOnboarding|TestAppRuntime)' -count=1
+      - name: Open the catalog update pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- internal/appcatalog/catalog.go apps/api/src/modules/official-apps/catalog.generated.ts; then
+            echo "Server catalog already matches $STORE_TAG."
+            exit 0
+          fi
+          branch="codex/official-apps-${STORE_TAG#v}"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git fetch origin "$branch" || true
+          git checkout -B "$branch"
+          git add internal/appcatalog/catalog.go apps/api/src/modules/official-apps/catalog.generated.ts
+          git commit -m "Sync official apps from $STORE_TAG"
+          git push --force-with-lease origin "$branch"
+          gh pr view "$branch" >/dev/null 2>&1 || gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "Sync production official apps from $STORE_TAG" \
+            --body "Updates the Go and TypeScript server catalogs from the reviewed Misty Store release $STORE_TAG. Native type checks, unit tests and build, plus Go catalog and selected HTTP contract tests, passed before this pull request was created."

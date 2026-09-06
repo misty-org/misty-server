@@ -155,7 +155,7 @@ func (db *Database) SpaceCalendarEvents(ctx context.Context, userID, spaceID str
 func (db *Database) CalendarSourceByWatchChannel(ctx context.Context, channelID string) (*SpaceCalendarSource, error) {
 	out := &SpaceCalendarSource{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return scanCalendarSource(tx.QueryRowContext(ctx, `SELECT `+calendarSourceColumns+` FROM space_calendar_sources WHERE watch_channel_id=$1 AND status IN ('active','syncing')`, channelID), out)
+		return scanCalendarSource(tx.QueryRowContext(ctx, `SELECT `+calendarSourceColumns+` FROM space_calendar_sources WHERE watch_channel_id=$1 AND execution_owner='go' AND status IN ('active','syncing')`, channelID), out)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound
@@ -215,7 +215,7 @@ func (db *Database) CalendarSourcesNeedingReconciliation(ctx context.Context, li
 	out := []SpaceCalendarSource{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `SELECT `+calendarSourceColumns+` FROM space_calendar_sources
-			WHERE status IN ('pending','active','needs_attention') AND disabled_at IS NULL AND
+			WHERE execution_owner='go' AND status IN ('pending','active','needs_attention') AND disabled_at IS NULL AND
 			(last_reconciled_at IS NULL OR last_reconciled_at<NOW()-INTERVAL '15 minutes' OR watch_expires_at IS NULL OR watch_expires_at<NOW()+INTERVAL '24 hours')
 			ORDER BY COALESCE(last_reconciled_at,'epoch'),id LIMIT $1`, limit)
 		if err != nil {

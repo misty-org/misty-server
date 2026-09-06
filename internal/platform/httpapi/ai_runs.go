@@ -189,20 +189,11 @@ func (s *SpacesService) managedMistyRunSpace(ctx context.Context, userID, reques
 	if err != nil {
 		return nil, err
 	}
-	var fallback *db.Space
 	for i := range spaces {
 		if !spaces[i].Permissions[db.PermissionAgentsRun] {
 			continue
 		}
-		if spaces[i].Kind != "misty" {
-			return &spaces[i], nil
-		}
-		if fallback == nil {
-			fallback = &spaces[i]
-		}
-	}
-	if fallback != nil {
-		return fallback, nil
+		return &spaces[i], nil
 	}
 	return nil, db.ErrSpaceForbidden
 }

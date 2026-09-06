@@ -74,30 +74,47 @@ jobs:
       - run: ./scripts/check-container-contract.sh
       - uses: actions/setup-node@v7
         with:
-          node-version-file: cloudflare/journal-collab/.nvmrc
+          node-version-file: apps/journal-collab/.nvmrc
           cache: npm
           cache-dependency-path: |
-            agent-runtime/package-lock.json
-            cloudflare/journal-collab/package-lock.json
+            package-lock.json
+            apps/agent-runtime/package-lock.json
+            apps/journal-collab/package-lock.json
+      - name: Install Hono backend dependencies
+        run: npm ci
+      - name: Verify Hono backend foundation
+        run: npm run check
+      - name: Verify Go and native filesystem avatar compatibility
+        run: node scripts/migration/check-avatar-storage.mjs
+      - name: Create isolated Hono integration database
+        env:
+          PGPASSWORD: misty-test-password
+        run: psql -h 127.0.0.1 -U misty -d misty_test -v ON_ERROR_STOP=1 -c 'CREATE DATABASE misty_hono_test'
+      - name: Test Hono database and payments integration
+        env:
+          MISTY_TEST_DATABASE_URL: postgres://misty:misty-test-password@127.0.0.1:5432/misty_hono_test
+        run: npm run test:integration
       - run: npm ci
-        working-directory: cloudflare/journal-collab
+        working-directory: apps/journal-collab
       - run: npm run typecheck
-        working-directory: cloudflare/journal-collab
+        working-directory: apps/journal-collab
       - run: npm test
-        working-directory: cloudflare/journal-collab
+        working-directory: apps/journal-collab
       - run: npm run test:runtime
-        working-directory: cloudflare/journal-collab
+        working-directory: apps/journal-collab
+      - name: Verify native API tickets against the collaboration Worker
+        run: node scripts/migration/check-journal-runtime.mjs
       - run: npm run audit:production
-        working-directory: cloudflare/journal-collab
+        working-directory: apps/journal-collab
       - name: Install agent runtime dependencies
         run: npm ci
-        working-directory: agent-runtime
+        working-directory: apps/agent-runtime
       - name: Type-check agent runtime
         run: npm run typecheck
-        working-directory: agent-runtime
+        working-directory: apps/agent-runtime
       - name: Test agent runtime
         run: npm test
-        working-directory: agent-runtime
+        working-directory: apps/agent-runtime
       - name: Build agent runtime
         run: npm run build
-        working-directory: agent-runtime
+        working-directory: apps/agent-runtime

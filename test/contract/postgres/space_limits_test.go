@@ -91,6 +91,7 @@ func TestOwnershipTransferEnforcesRecipientOwnedSpaceLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	createTestSpace(t, database, ctx, owner.ID, "Home")
 	space, err := database.CreateSpace(ctx, owner.ID, "Transfer candidate")
 	if err != nil {
 		t.Fatal(err)

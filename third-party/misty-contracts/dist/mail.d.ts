@@ -1,0 +1,774 @@
+import { z } from "zod";
+/** Provider IDs are opaque, not Misty UUIDs. Reserved characters are encoded once by the server router. */
+export declare const MailProviderIdSchema: z.ZodString;
+export declare const MailAddressSchema: z.ZodObject<{
+    name: z.ZodOptional<z.ZodString>;
+    email: z.ZodString;
+}, z.core.$strip>;
+export declare const MailAccountSchema: z.ZodObject<{
+    connection_id: z.ZodString;
+    provider: z.ZodString;
+    account_id: z.ZodString;
+    email: z.ZodString;
+    display_name: z.ZodString;
+    total: z.ZodNumber;
+    unread: z.ZodNumber;
+    status: z.ZodOptional<z.ZodString>;
+    error_code: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const MailFolderSchema: z.ZodObject<{
+    provider: z.ZodString;
+    provider_id: z.ZodString;
+    account_id: z.ZodString;
+    name: z.ZodString;
+    kind: z.ZodString;
+    system: z.ZodBoolean;
+    total: z.ZodNumber;
+    unread: z.ZodNumber;
+    text_color: z.ZodOptional<z.ZodString>;
+    background: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const MailAttachmentSchema: z.ZodObject<{
+    provider: z.ZodString;
+    provider_id: z.ZodString;
+    account_id: z.ZodString;
+    message_id: z.ZodString;
+    filename: z.ZodString;
+    content_type: z.ZodString;
+    size: z.ZodNumber;
+    inline: z.ZodBoolean;
+    content_id: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const MailMessageSchema: z.ZodObject<{
+    provider: z.ZodString;
+    provider_id: z.ZodString;
+    account_id: z.ZodString;
+    thread_id: z.ZodString;
+    rfc822_id: z.ZodOptional<z.ZodString>;
+    subject: z.ZodString;
+    from: z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strip>;
+    to: z.ZodArray<z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strip>>;
+    cc: z.ZodArray<z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strip>>;
+    bcc: z.ZodArray<z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strip>>;
+    reply_to: z.ZodArray<z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strip>>;
+    sent_at: z.ZodString;
+    snippet: z.ZodString;
+    body: z.ZodObject<{
+        text: z.ZodString;
+        html: z.ZodOptional<z.ZodString>;
+        had_html: z.ZodBoolean;
+        truncated: z.ZodBoolean;
+    }, z.core.$strip>;
+    labels: z.ZodArray<z.ZodString>;
+    unread: z.ZodBoolean;
+    starred: z.ZodBoolean;
+    draft: z.ZodBoolean;
+    attachments: z.ZodArray<z.ZodObject<{
+        provider: z.ZodString;
+        provider_id: z.ZodString;
+        account_id: z.ZodString;
+        message_id: z.ZodString;
+        filename: z.ZodString;
+        content_type: z.ZodString;
+        size: z.ZodNumber;
+        inline: z.ZodBoolean;
+        content_id: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export declare const MailThreadSchema: z.ZodObject<{
+    provider: z.ZodString;
+    provider_id: z.ZodString;
+    account_id: z.ZodString;
+    subject: z.ZodString;
+    snippet: z.ZodString;
+    participants: z.ZodArray<z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strip>>;
+    labels: z.ZodArray<z.ZodString>;
+    last_message_at: z.ZodString;
+    unread: z.ZodBoolean;
+    starred: z.ZodBoolean;
+    messages: z.ZodArray<z.ZodObject<{
+        provider: z.ZodString;
+        provider_id: z.ZodString;
+        account_id: z.ZodString;
+        thread_id: z.ZodString;
+        rfc822_id: z.ZodOptional<z.ZodString>;
+        subject: z.ZodString;
+        from: z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>;
+        to: z.ZodArray<z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>>;
+        cc: z.ZodArray<z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>>;
+        bcc: z.ZodArray<z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>>;
+        reply_to: z.ZodArray<z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>>;
+        sent_at: z.ZodString;
+        snippet: z.ZodString;
+        body: z.ZodObject<{
+            text: z.ZodString;
+            html: z.ZodOptional<z.ZodString>;
+            had_html: z.ZodBoolean;
+            truncated: z.ZodBoolean;
+        }, z.core.$strip>;
+        labels: z.ZodArray<z.ZodString>;
+        unread: z.ZodBoolean;
+        starred: z.ZodBoolean;
+        draft: z.ZodBoolean;
+        attachments: z.ZodArray<z.ZodObject<{
+            provider: z.ZodString;
+            provider_id: z.ZodString;
+            account_id: z.ZodString;
+            message_id: z.ZodString;
+            filename: z.ZodString;
+            content_type: z.ZodString;
+            size: z.ZodNumber;
+            inline: z.ZodBoolean;
+            content_id: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>>;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export declare const MailDraftSchema: z.ZodObject<{
+    provider: z.ZodString;
+    provider_id: z.ZodString;
+    account_id: z.ZodString;
+    thread_id: z.ZodOptional<z.ZodString>;
+    message: z.ZodObject<{
+        provider: z.ZodString;
+        provider_id: z.ZodString;
+        account_id: z.ZodString;
+        thread_id: z.ZodString;
+        rfc822_id: z.ZodOptional<z.ZodString>;
+        subject: z.ZodString;
+        from: z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>;
+        to: z.ZodArray<z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>>;
+        cc: z.ZodArray<z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>>;
+        bcc: z.ZodArray<z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>>;
+        reply_to: z.ZodArray<z.ZodObject<{
+            name: z.ZodOptional<z.ZodString>;
+            email: z.ZodString;
+        }, z.core.$strip>>;
+        sent_at: z.ZodString;
+        snippet: z.ZodString;
+        body: z.ZodObject<{
+            text: z.ZodString;
+            html: z.ZodOptional<z.ZodString>;
+            had_html: z.ZodBoolean;
+            truncated: z.ZodBoolean;
+        }, z.core.$strip>;
+        labels: z.ZodArray<z.ZodString>;
+        unread: z.ZodBoolean;
+        starred: z.ZodBoolean;
+        draft: z.ZodBoolean;
+        attachments: z.ZodArray<z.ZodObject<{
+            provider: z.ZodString;
+            provider_id: z.ZodString;
+            account_id: z.ZodString;
+            message_id: z.ZodString;
+            filename: z.ZodString;
+            content_type: z.ZodString;
+            size: z.ZodNumber;
+            inline: z.ZodBoolean;
+            content_id: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>>;
+    }, z.core.$strip>;
+}, z.core.$strip>;
+declare const attachment: z.ZodObject<{
+    filename: z.ZodString;
+    content_type: z.ZodString;
+    data: z.ZodString;
+    inline: z.ZodBoolean;
+    content_id: z.ZodOptional<z.ZodString>;
+}, z.core.$strict>;
+/** Matches the existing providers' 10 MiB combined body/attachment bound. */
+export declare const MISTY_MAIL_CONTENT_MAX_BYTES: number;
+export declare const MISTY_MAIL_JSON_MAX_BYTES: number;
+export declare const MailDraftInputSchema: z.ZodObject<{
+    connection_id: z.ZodString;
+    thread_id: z.ZodOptional<z.ZodString>;
+    to: z.ZodArray<z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strict>>;
+    cc: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strict>>>;
+    bcc: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strict>>>;
+    reply_to: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        name: z.ZodOptional<z.ZodString>;
+        email: z.ZodString;
+    }, z.core.$strict>>>;
+    subject: z.ZodString;
+    text: z.ZodString;
+    attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        filename: z.ZodString;
+        content_type: z.ZodString;
+        data: z.ZodString;
+        inline: z.ZodBoolean;
+        content_id: z.ZodOptional<z.ZodString>;
+    }, z.core.$strict>>>;
+}, z.core.$strict>;
+export declare const MailThreadActionSchema: z.ZodObject<{
+    connection_id: z.ZodString;
+    read: z.ZodOptional<z.ZodBoolean>;
+    archived: z.ZodOptional<z.ZodBoolean>;
+    starred: z.ZodOptional<z.ZodBoolean>;
+}, z.core.$strict>;
+export declare const mistyMailContracts: {
+    readonly "mail.accounts.list": {
+        readonly verb: "GET";
+        readonly path: "/mail/accounts";
+        readonly params: z.ZodObject<{
+            path: z.ZodOptional<z.ZodObject<{
+                spaceID: z.ZodOptional<z.ZodString>;
+            }, z.core.$strict>>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            accounts: z.ZodArray<z.ZodObject<{
+                connection_id: z.ZodString;
+                provider: z.ZodString;
+                account_id: z.ZodString;
+                email: z.ZodString;
+                display_name: z.ZodString;
+                total: z.ZodNumber;
+                unread: z.ZodNumber;
+                status: z.ZodOptional<z.ZodString>;
+                error_code: z.ZodOptional<z.ZodString>;
+            }, z.core.$strip>>;
+        }, z.core.$strip>;
+    };
+    readonly "mail.folders.list": {
+        readonly verb: "GET";
+        readonly path: "/mail/folders";
+        readonly params: z.ZodObject<{
+            query: z.ZodObject<{
+                connection_id: z.ZodString;
+            }, z.core.$strict>;
+            path: z.ZodOptional<z.ZodObject<{
+                spaceID: z.ZodOptional<z.ZodString>;
+            }, z.core.$strict>>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            folders: z.ZodArray<z.ZodObject<{
+                provider: z.ZodString;
+                provider_id: z.ZodString;
+                account_id: z.ZodString;
+                name: z.ZodString;
+                kind: z.ZodString;
+                system: z.ZodBoolean;
+                total: z.ZodNumber;
+                unread: z.ZodNumber;
+                text_color: z.ZodOptional<z.ZodString>;
+                background: z.ZodOptional<z.ZodString>;
+            }, z.core.$strip>>;
+        }, z.core.$strip>;
+    };
+    readonly "mail.threads.list": {
+        readonly verb: "GET";
+        readonly path: "/mail/threads";
+        readonly params: z.ZodObject<{
+            query: z.ZodObject<{
+                connection_id: z.ZodString;
+                folder_id: z.ZodOptional<z.ZodString>;
+                query: z.ZodOptional<z.ZodString>;
+                page_token: z.ZodOptional<z.ZodString>;
+                page_size: z.ZodOptional<z.ZodNumber>;
+            }, z.core.$strict>;
+            path: z.ZodOptional<z.ZodObject<{
+                spaceID: z.ZodOptional<z.ZodString>;
+            }, z.core.$strict>>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            threads: z.ZodArray<z.ZodObject<{
+                provider: z.ZodString;
+                provider_id: z.ZodString;
+                account_id: z.ZodString;
+                subject: z.ZodString;
+                snippet: z.ZodString;
+                participants: z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strip>>;
+                labels: z.ZodArray<z.ZodString>;
+                last_message_at: z.ZodString;
+                unread: z.ZodBoolean;
+                starred: z.ZodBoolean;
+                messages: z.ZodArray<z.ZodObject<{
+                    provider: z.ZodString;
+                    provider_id: z.ZodString;
+                    account_id: z.ZodString;
+                    thread_id: z.ZodString;
+                    rfc822_id: z.ZodOptional<z.ZodString>;
+                    subject: z.ZodString;
+                    from: z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>;
+                    to: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    cc: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    bcc: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    reply_to: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    sent_at: z.ZodString;
+                    snippet: z.ZodString;
+                    body: z.ZodObject<{
+                        text: z.ZodString;
+                        html: z.ZodOptional<z.ZodString>;
+                        had_html: z.ZodBoolean;
+                        truncated: z.ZodBoolean;
+                    }, z.core.$strip>;
+                    labels: z.ZodArray<z.ZodString>;
+                    unread: z.ZodBoolean;
+                    starred: z.ZodBoolean;
+                    draft: z.ZodBoolean;
+                    attachments: z.ZodArray<z.ZodObject<{
+                        provider: z.ZodString;
+                        provider_id: z.ZodString;
+                        account_id: z.ZodString;
+                        message_id: z.ZodString;
+                        filename: z.ZodString;
+                        content_type: z.ZodString;
+                        size: z.ZodNumber;
+                        inline: z.ZodBoolean;
+                        content_id: z.ZodOptional<z.ZodString>;
+                    }, z.core.$strip>>;
+                }, z.core.$strip>>;
+            }, z.core.$strip>>;
+            next_page_token: z.ZodOptional<z.ZodString>;
+            estimated_total: z.ZodOptional<z.ZodNumber>;
+        }, z.core.$strip>;
+    };
+    readonly "mail.threads.get": {
+        readonly verb: "GET";
+        readonly path: "/mail/threads/{threadID}";
+        readonly params: z.ZodObject<{
+            path: z.ZodObject<{
+                spaceID: z.ZodOptional<z.ZodString>;
+                threadID: z.ZodString;
+            }, z.core.$strict>;
+            query: z.ZodObject<{
+                connection_id: z.ZodString;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            thread: z.ZodObject<{
+                provider: z.ZodString;
+                provider_id: z.ZodString;
+                account_id: z.ZodString;
+                subject: z.ZodString;
+                snippet: z.ZodString;
+                participants: z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strip>>;
+                labels: z.ZodArray<z.ZodString>;
+                last_message_at: z.ZodString;
+                unread: z.ZodBoolean;
+                starred: z.ZodBoolean;
+                messages: z.ZodArray<z.ZodObject<{
+                    provider: z.ZodString;
+                    provider_id: z.ZodString;
+                    account_id: z.ZodString;
+                    thread_id: z.ZodString;
+                    rfc822_id: z.ZodOptional<z.ZodString>;
+                    subject: z.ZodString;
+                    from: z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>;
+                    to: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    cc: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    bcc: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    reply_to: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    sent_at: z.ZodString;
+                    snippet: z.ZodString;
+                    body: z.ZodObject<{
+                        text: z.ZodString;
+                        html: z.ZodOptional<z.ZodString>;
+                        had_html: z.ZodBoolean;
+                        truncated: z.ZodBoolean;
+                    }, z.core.$strip>;
+                    labels: z.ZodArray<z.ZodString>;
+                    unread: z.ZodBoolean;
+                    starred: z.ZodBoolean;
+                    draft: z.ZodBoolean;
+                    attachments: z.ZodArray<z.ZodObject<{
+                        provider: z.ZodString;
+                        provider_id: z.ZodString;
+                        account_id: z.ZodString;
+                        message_id: z.ZodString;
+                        filename: z.ZodString;
+                        content_type: z.ZodString;
+                        size: z.ZodNumber;
+                        inline: z.ZodBoolean;
+                        content_id: z.ZodOptional<z.ZodString>;
+                    }, z.core.$strip>>;
+                }, z.core.$strip>>;
+            }, z.core.$strip>;
+        }, z.core.$strip>;
+    };
+    readonly "mail.threads.action": {
+        readonly verb: "POST";
+        readonly path: "/mail/threads/{threadID}/actions";
+        readonly params: z.ZodObject<{
+            path: z.ZodObject<{
+                spaceID: z.ZodOptional<z.ZodString>;
+                threadID: z.ZodString;
+            }, z.core.$strict>;
+            body: z.ZodObject<{
+                connection_id: z.ZodString;
+                read: z.ZodOptional<z.ZodBoolean>;
+                archived: z.ZodOptional<z.ZodBoolean>;
+                starred: z.ZodOptional<z.ZodBoolean>;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            thread_id: z.ZodString;
+            added_labels: z.ZodArray<z.ZodString>;
+            removed_labels: z.ZodArray<z.ZodString>;
+        }, z.core.$strip>;
+    };
+    readonly "mail.drafts.create": {
+        readonly verb: "POST";
+        readonly path: "/mail/drafts";
+        readonly params: z.ZodObject<{
+            body: z.ZodObject<{
+                connection_id: z.ZodString;
+                thread_id: z.ZodOptional<z.ZodString>;
+                to: z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strict>>;
+                cc: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strict>>>;
+                bcc: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strict>>>;
+                reply_to: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strict>>>;
+                subject: z.ZodString;
+                text: z.ZodString;
+                attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    filename: z.ZodString;
+                    content_type: z.ZodString;
+                    data: z.ZodString;
+                    inline: z.ZodBoolean;
+                    content_id: z.ZodOptional<z.ZodString>;
+                }, z.core.$strict>>>;
+            }, z.core.$strict>;
+            path: z.ZodOptional<z.ZodObject<{
+                spaceID: z.ZodOptional<z.ZodString>;
+            }, z.core.$strict>>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            draft: z.ZodObject<{
+                provider: z.ZodString;
+                provider_id: z.ZodString;
+                account_id: z.ZodString;
+                thread_id: z.ZodOptional<z.ZodString>;
+                message: z.ZodObject<{
+                    provider: z.ZodString;
+                    provider_id: z.ZodString;
+                    account_id: z.ZodString;
+                    thread_id: z.ZodString;
+                    rfc822_id: z.ZodOptional<z.ZodString>;
+                    subject: z.ZodString;
+                    from: z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>;
+                    to: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    cc: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    bcc: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    reply_to: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    sent_at: z.ZodString;
+                    snippet: z.ZodString;
+                    body: z.ZodObject<{
+                        text: z.ZodString;
+                        html: z.ZodOptional<z.ZodString>;
+                        had_html: z.ZodBoolean;
+                        truncated: z.ZodBoolean;
+                    }, z.core.$strip>;
+                    labels: z.ZodArray<z.ZodString>;
+                    unread: z.ZodBoolean;
+                    starred: z.ZodBoolean;
+                    draft: z.ZodBoolean;
+                    attachments: z.ZodArray<z.ZodObject<{
+                        provider: z.ZodString;
+                        provider_id: z.ZodString;
+                        account_id: z.ZodString;
+                        message_id: z.ZodString;
+                        filename: z.ZodString;
+                        content_type: z.ZodString;
+                        size: z.ZodNumber;
+                        inline: z.ZodBoolean;
+                        content_id: z.ZodOptional<z.ZodString>;
+                    }, z.core.$strip>>;
+                }, z.core.$strip>;
+            }, z.core.$strip>;
+        }, z.core.$strip>;
+    };
+    readonly "mail.drafts.update": {
+        readonly verb: "PUT";
+        readonly path: "/mail/drafts/{draftID}";
+        readonly params: z.ZodObject<{
+            path: z.ZodObject<{
+                spaceID: z.ZodOptional<z.ZodString>;
+                draftID: z.ZodString;
+            }, z.core.$strict>;
+            body: z.ZodObject<{
+                connection_id: z.ZodString;
+                thread_id: z.ZodOptional<z.ZodString>;
+                to: z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strict>>;
+                cc: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strict>>>;
+                bcc: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strict>>>;
+                reply_to: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strict>>>;
+                subject: z.ZodString;
+                text: z.ZodString;
+                attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    filename: z.ZodString;
+                    content_type: z.ZodString;
+                    data: z.ZodString;
+                    inline: z.ZodBoolean;
+                    content_id: z.ZodOptional<z.ZodString>;
+                }, z.core.$strict>>>;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            draft: z.ZodObject<{
+                provider: z.ZodString;
+                provider_id: z.ZodString;
+                account_id: z.ZodString;
+                thread_id: z.ZodOptional<z.ZodString>;
+                message: z.ZodObject<{
+                    provider: z.ZodString;
+                    provider_id: z.ZodString;
+                    account_id: z.ZodString;
+                    thread_id: z.ZodString;
+                    rfc822_id: z.ZodOptional<z.ZodString>;
+                    subject: z.ZodString;
+                    from: z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>;
+                    to: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    cc: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    bcc: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    reply_to: z.ZodArray<z.ZodObject<{
+                        name: z.ZodOptional<z.ZodString>;
+                        email: z.ZodString;
+                    }, z.core.$strip>>;
+                    sent_at: z.ZodString;
+                    snippet: z.ZodString;
+                    body: z.ZodObject<{
+                        text: z.ZodString;
+                        html: z.ZodOptional<z.ZodString>;
+                        had_html: z.ZodBoolean;
+                        truncated: z.ZodBoolean;
+                    }, z.core.$strip>;
+                    labels: z.ZodArray<z.ZodString>;
+                    unread: z.ZodBoolean;
+                    starred: z.ZodBoolean;
+                    draft: z.ZodBoolean;
+                    attachments: z.ZodArray<z.ZodObject<{
+                        provider: z.ZodString;
+                        provider_id: z.ZodString;
+                        account_id: z.ZodString;
+                        message_id: z.ZodString;
+                        filename: z.ZodString;
+                        content_type: z.ZodString;
+                        size: z.ZodNumber;
+                        inline: z.ZodBoolean;
+                        content_id: z.ZodOptional<z.ZodString>;
+                    }, z.core.$strip>>;
+                }, z.core.$strip>;
+            }, z.core.$strip>;
+        }, z.core.$strip>;
+    };
+    readonly "mail.drafts.send": {
+        readonly verb: "POST";
+        readonly path: "/mail/drafts/{draftID}/send";
+        readonly params: z.ZodObject<{
+            path: z.ZodObject<{
+                spaceID: z.ZodOptional<z.ZodString>;
+                draftID: z.ZodString;
+            }, z.core.$strict>;
+            body: z.ZodObject<{
+                connection_id: z.ZodString;
+                authoring_source: z.ZodEnum<{
+                    user: "user";
+                    ai: "ai";
+                }>;
+                confirmed: z.ZodLiteral<true>;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            message: z.ZodObject<{
+                provider: z.ZodString;
+                provider_id: z.ZodString;
+                account_id: z.ZodString;
+                thread_id: z.ZodString;
+                rfc822_id: z.ZodOptional<z.ZodString>;
+                subject: z.ZodString;
+                from: z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strip>;
+                to: z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strip>>;
+                cc: z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strip>>;
+                bcc: z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strip>>;
+                reply_to: z.ZodArray<z.ZodObject<{
+                    name: z.ZodOptional<z.ZodString>;
+                    email: z.ZodString;
+                }, z.core.$strip>>;
+                sent_at: z.ZodString;
+                snippet: z.ZodString;
+                body: z.ZodObject<{
+                    text: z.ZodString;
+                    html: z.ZodOptional<z.ZodString>;
+                    had_html: z.ZodBoolean;
+                    truncated: z.ZodBoolean;
+                }, z.core.$strip>;
+                labels: z.ZodArray<z.ZodString>;
+                unread: z.ZodBoolean;
+                starred: z.ZodBoolean;
+                draft: z.ZodBoolean;
+                attachments: z.ZodArray<z.ZodObject<{
+                    provider: z.ZodString;
+                    provider_id: z.ZodString;
+                    account_id: z.ZodString;
+                    message_id: z.ZodString;
+                    filename: z.ZodString;
+                    content_type: z.ZodString;
+                    size: z.ZodNumber;
+                    inline: z.ZodBoolean;
+                    content_id: z.ZodOptional<z.ZodString>;
+                }, z.core.$strip>>;
+            }, z.core.$strip>;
+        }, z.core.$strip>;
+    };
+};
+export type MailAccount = z.output<typeof MailAccountSchema>;
+export type MailFolder = z.output<typeof MailFolderSchema>;
+export type MailAddress = z.output<typeof MailAddressSchema>;
+export type MailMessage = z.output<typeof MailMessageSchema>;
+export type MailThread = z.output<typeof MailThreadSchema>;
+export type MailDraft = z.output<typeof MailDraftSchema>;
+export type MailDraftInput = z.input<typeof MailDraftInputSchema>;
+export type MailDraftAttachmentInput = z.input<typeof attachment>;
+export type MailThreadAction = z.input<typeof MailThreadActionSchema>;
+export {};

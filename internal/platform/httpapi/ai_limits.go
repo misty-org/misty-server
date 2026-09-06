@@ -12,15 +12,15 @@ import (
 const TestingMaxAIJSONBodyBytes = 2 << 20
 
 type AIService struct {
-	database     *db.Database
-	runtime      *agent.Service
-	invocations  *aiInvocationHub
-	metrics      *platformmetrics.Registry
-	analyzer     *agent.SmartLibraryAnalyzer
-	agentRuntime AgentRuntimeConfig
-	attachmentStore LibraryObjectStore
-	attachmentPresigner LibraryObjectPresigner
-	attachmentUploadTTL time.Duration
+	database              *db.Database
+	runtime               *agent.Service
+	invocations           *aiInvocationHub
+	metrics               *platformmetrics.Registry
+	analyzer              *agent.SmartLibraryAnalyzer
+	agentRuntime          AgentRuntimeConfig
+	attachmentStore       LibraryObjectStore
+	attachmentPresigner   LibraryObjectPresigner
+	attachmentUploadTTL   time.Duration
 	attachmentDownloadTTL time.Duration
 }
 

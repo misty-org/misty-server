@@ -16,7 +16,7 @@ func (db *Database) SpaceMemberPermissions(ctx context.Context, actorUserID, spa
 			return err
 		}
 		if actorUserID != memberUserID {
-			if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, actorUserID); err != nil {
+			if err := requireSpaceOwnerTx(ctx, tx, spaceID, actorUserID); err != nil {
 				return ErrLibraryForbidden
 			}
 		}
@@ -68,7 +68,7 @@ func (db *Database) SetSpaceMemberPermission(
 	}
 
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, ownerUserID); err != nil {
+		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerUserID); err != nil {
 			return ErrLibraryForbidden
 		}
 		role, err := requireSpaceMemberTx(ctx, tx, spaceID, memberUserID)
@@ -140,25 +140,6 @@ func hasSpacePermissionTx(ctx context.Context, tx *sql.Tx, userID, spaceID, perm
 	}
 	if role == "owner" {
 		return true, nil
-	}
-	misty, err := isMistySpaceTx(ctx, tx, spaceID)
-	if err != nil {
-		return false, err
-	}
-	if misty {
-		operator, err := isMistyOperatorTx(ctx, tx, userID)
-		if err != nil {
-			return false, err
-		}
-		if operator {
-			return true, nil
-		}
-		switch permission {
-		case PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload:
-			return true, nil
-		default:
-			return false, nil
-		}
 	}
 	var effect string
 	err = tx.QueryRowContext(

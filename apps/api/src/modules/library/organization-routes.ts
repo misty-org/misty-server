@@ -1,0 +1,31 @@
+import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { requireAccount, type AccountEnvironment } from "../auth/account-session.js";
+import type { AuthService } from "../auth/service.js";
+import type { createLibraryOrganization } from "./organization.js";
+import { queryVersion } from "./organization-model.js";
+export function createOrganizationRoutes(auth: AuthService, organization: ReturnType<typeof createLibraryOrganization>) {
+  const app = new Hono<AccountEnvironment>(), base = "/spaces/:spaceID/library", albums = `${base}/albums`, folders = `${base}/album-folders`;
+  for (const path of [albums, `${albums}/*`, folders, `${folders}/*`]) app.use(path, requireAccount(auth));
+  const body = bodyLimit({ maxSize: 1024 * 1024, onError: c => c.json({ code: "invalid_request" }, 400) });
+  app.get(albums, async c => c.json(await organization.albums.list(c.get("account").id, c.req.param("spaceID"))));
+  app.post(albums, body, async c => c.json(await organization.albums.create(c.get("account").id, c.req.param("spaceID"), await c.req.json().catch(() => null)), 201));
+  app.get(`${albums}/:albumID`, async c => c.json(await organization.albums.get(c.get("account").id, c.req.param("spaceID"), c.req.param("albumID"))));
+  app.patch(`${albums}/:albumID`, body, async c => c.json(await organization.albums.update(c.get("account").id, c.req.param("spaceID"), c.req.param("albumID"), await c.req.json().catch(() => null))));
+  app.delete(`${albums}/:albumID`, async c => { await organization.albums.delete(c.get("account").id, c.req.param("spaceID"), c.req.param("albumID"), queryVersion(c.req.query("version"))); return c.body(null, 204); });
+  app.put(`${albums}/:albumID/organization`, body, async c => c.json(await organization.albums.organize(c.get("account").id, c.req.param("spaceID"), c.req.param("albumID"), await c.req.json().catch(() => null))));
+  app.post(`${albums}/:albumID/order`, body, async c => c.json(await organization.items.reorder(c.get("account").id, c.req.param("spaceID"), c.req.param("albumID"), await c.req.json().catch(() => null))));
+  app.get(`${albums}/:albumID/items`, async c => c.json(await organization.items.list(c.get("account").id, c.req.param("spaceID"), c.req.param("albumID"))));
+  app.post(`${albums}/:albumID/items`, body, async c => { await organization.items.add(c.get("account").id, c.req.param("spaceID"), c.req.param("albumID"), await c.req.json().catch(() => null)); return c.body(null, 204); });
+  app.delete(`${albums}/:albumID/items/:itemID`, async c => { await organization.items.remove(c.get("account").id, c.req.param("spaceID"), c.req.param("albumID"), c.req.param("itemID")); return c.body(null, 204); });
+  app.get(folders, async c => c.json(await organization.folders.list(c.get("account").id, c.req.param("spaceID"))));
+  app.post(folders, body, async c => c.json(await organization.folders.create(c.get("account").id, c.req.param("spaceID"), await c.req.json().catch(() => null)), 201));
+  app.patch(`${folders}/:folderID`, body, async c => c.json(await organization.folders.update(c.get("account").id, c.req.param("spaceID"), c.req.param("folderID"), await c.req.json().catch(() => null))));
+  app.delete(`${folders}/:folderID`, async c => { await organization.folders.delete(c.get("account").id, c.req.param("spaceID"), c.req.param("folderID"), queryVersion(c.req.query("version"))); return c.body(null, 204); });
+  const groups = `${base}/groups`;
+  for (const path of [groups, `${groups}/*`]) app.use(path, requireAccount(auth));
+  app.get(groups, async c => c.json(await organization.groups.list(c.get("account").id, c.req.param("spaceID"))));
+  app.post(groups, body, async c => c.json(await organization.groups.create(c.get("account").id, c.req.param("spaceID"), await c.req.json().catch(() => null)), 201));
+  app.get(`${groups}/:groupID/items`, async c => c.json(await organization.groups.items(c.get("account").id, c.req.param("spaceID"), c.req.param("groupID"))));
+  return app;
+}

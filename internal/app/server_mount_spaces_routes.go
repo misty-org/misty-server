@@ -245,7 +245,7 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 	s.Router.Get(prefix+"/agents/{agentID}/avatar", service.PersonalAgentAvatar())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/agent-voice/transcriptions", service.AgentVoiceTranscription())
 	deviceJobsEnabled := serverFeatureEnabled("MISTY_DEVICE_JOBS_ENABLED")
-	connectedDevicesEnabled := serverFeatureEnabled("MISTY_CONNECTED_DEVICES_ENABLED")
+	connectedDevicesEnabled := serverConnectedDevicesConfigured()
 	if !deviceJobsEnabled && !connectedDevicesEnabled {
 		return
 	}

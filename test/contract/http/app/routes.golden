@@ -6,10 +6,12 @@ DELETE /api/ai/media-search/assets/{assetID}
 DELETE /api/ai/media-search/devices/{deviceID}
 DELETE /api/ai/memories/{memoryID}
 DELETE /api/ai/smart-library/folders/{folderID}
+DELETE /api/app-runtime/records/{recordKey}
 DELETE /api/cloud/connections/{connectionID}
 DELETE /api/connections/{connectionID}
 DELETE /api/integrations/{integrationID}
 DELETE /api/mcp/connections/{connectionID}
+DELETE /api/me/apps/{appID}
 DELETE /api/misty/attachments/{attachmentID}
 DELETE /api/misty/conversations/{conversationID}
 DELETE /api/self-host/invitations/{invitationID}
@@ -52,11 +54,13 @@ DELETE /api/spaces/{spaceID}/social/bindings/{bindingID}
 DELETE /api/spaces/{spaceID}/social/scheduled-messages/{scheduledID}
 DELETE /api/spaces/{spaceID}/studio/workflows/{resourceID}
 DELETE /api/spaces/{spaceID}/tasks/{taskID}
+DELETE /app-runtime/records/{recordKey}
 DELETE /cloud/connections/{connectionID}
 DELETE /connections/{connectionID}
 DELETE /integrations/{integrationID}
 DELETE /internal/self-host/collaboration/{resourceType}/{resourceID}
 DELETE /mcp/connections/{connectionID}
+DELETE /me/apps/{appID}
 DELETE /misty/attachments/{attachmentID}
 DELETE /misty/conversations/{conversationID}
 DELETE /self-host/invitations/{invitationID}
@@ -103,10 +107,12 @@ DELETE /v1/ai/media-search/assets/{assetID}
 DELETE /v1/ai/media-search/devices/{deviceID}
 DELETE /v1/ai/memories/{memoryID}
 DELETE /v1/ai/smart-library/folders/{folderID}
+DELETE /v1/app-runtime/records/{recordKey}
 DELETE /v1/cloud/connections/{connectionID}
 DELETE /v1/connections/{connectionID}
 DELETE /v1/integrations/{integrationID}
 DELETE /v1/mcp/connections/{connectionID}
+DELETE /v1/me/apps/{appID}
 DELETE /v1/misty/attachments/{attachmentID}
 DELETE /v1/misty/conversations/{conversationID}
 DELETE /v1/self-host/invitations/{invitationID}
@@ -185,6 +191,10 @@ GET /api/ai/smart-library/folders/{folderID}/progress
 GET /api/ai/smart-library/folders/{folderID}/results
 GET /api/ai/smart-library/index-status
 GET /api/ai/status
+GET /api/app-runtime/records
+GET /api/app-runtime/session
+GET /api/apps
+GET /api/apps/{appID}
 GET /api/auth/handoff/start
 GET /api/auth/reset/start
 GET /api/auth/reset/validate
@@ -206,6 +216,7 @@ GET /api/mcp/connections
 GET /api/mcp/connections/{connectionID}
 GET /api/mcp/connections/{connectionID}/tools
 GET /api/me
+GET /api/me/apps
 GET /api/me/avatar
 GET /api/me/settings
 GET /api/misty/attachments/{attachmentID}/content
@@ -303,6 +314,10 @@ GET /api/spaces/{spaceID}/studio/workflows/{workflowID}/versions
 GET /api/spaces/{spaceID}/tasks
 GET /api/spaces/{spaceID}/tasks/{taskID}/activity
 GET /api/webhooks/social/instagram
+GET /app-runtime/records
+GET /app-runtime/session
+GET /apps
+GET /apps/{appID}
 GET /auth/handoff/start
 GET /auth/reset/start
 GET /auth/reset/validate
@@ -325,6 +340,7 @@ GET /mcp/connections
 GET /mcp/connections/{connectionID}
 GET /mcp/connections/{connectionID}/tools
 GET /me
+GET /me/apps
 GET /me/avatar
 GET /me/settings
 GET /misty/attachments/{attachmentID}/content
@@ -439,6 +455,10 @@ GET /v1/ai/smart-library/folders/{folderID}/progress
 GET /v1/ai/smart-library/folders/{folderID}/results
 GET /v1/ai/smart-library/index-status
 GET /v1/ai/status
+GET /v1/app-runtime/records
+GET /v1/app-runtime/session
+GET /v1/apps
+GET /v1/apps/{appID}
 GET /v1/auth/handoff/start
 GET /v1/auth/reset/start
 GET /v1/auth/reset/validate
@@ -460,6 +480,7 @@ GET /v1/mcp/connections
 GET /v1/mcp/connections/{connectionID}
 GET /v1/mcp/connections/{connectionID}/tools
 GET /v1/me
+GET /v1/me/apps
 GET /v1/me/avatar
 GET /v1/me/settings
 GET /v1/misty/attachments/{attachmentID}/content
@@ -558,6 +579,7 @@ GET /v1/spaces/{spaceID}/tasks
 GET /v1/spaces/{spaceID}/tasks/{taskID}/activity
 GET /v1/webhooks/social/instagram
 GET /webhooks/social/instagram
+PATCH /api/me/apps/{appID}
 PATCH /api/misty/conversations/{conversationID}
 PATCH /api/spaces/{spaceID}
 PATCH /api/spaces/{spaceID}/calendar/events/{eventID}
@@ -581,6 +603,7 @@ PATCH /api/spaces/{spaceID}/roadmaps/{roadmapID}/milestones/{milestoneID}
 PATCH /api/spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}
 PATCH /api/spaces/{spaceID}/setup
 PATCH /api/spaces/{spaceID}/tasks/{taskID}
+PATCH /me/apps/{appID}
 PATCH /misty/conversations/{conversationID}
 PATCH /spaces/{spaceID}
 PATCH /spaces/{spaceID}/calendar/events/{eventID}
@@ -604,6 +627,7 @@ PATCH /spaces/{spaceID}/roadmaps/{roadmapID}/milestones/{milestoneID}
 PATCH /spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}
 PATCH /spaces/{spaceID}/setup
 PATCH /spaces/{spaceID}/tasks/{taskID}
+PATCH /v1/me/apps/{appID}
 PATCH /v1/misty/conversations/{conversationID}
 PATCH /v1/spaces/{spaceID}
 PATCH /v1/spaces/{spaceID}/calendar/events/{eventID}
@@ -687,9 +711,11 @@ POST /api/ai/smart-library/folders/{folderID}/search
 POST /api/ai/smart-library/reindex
 POST /api/ai/smart-library/reindex/{jobID}/complete
 POST /api/ai/smart-library/search
+POST /api/app-runtime/rpc
 POST /api/auth/forgot
 POST /api/auth/handoff
 POST /api/auth/reset
+POST /api/automations/tools/{toolName}
 POST /api/billing/checkout-session
 POST /api/billing/credit-checkout-session
 POST /api/billing/portal-session
@@ -710,6 +736,7 @@ POST /api/mcp/connections
 POST /api/mcp/connections/{connectionID}/discover
 POST /api/mcp/connections/{connectionID}/test
 POST /api/mcp/oauth/activepieces/authorize
+POST /api/me/apps/{appID}/sessions
 POST /api/me/deletion
 POST /api/me/export
 POST /api/me/home/apps
@@ -718,6 +745,7 @@ POST /api/misty/attachments/{attachmentID}/finalize
 POST /api/misty/conversations
 POST /api/misty/conversations/{conversationID}/turns
 POST /api/native/github/credential-handoffs/redeem
+POST /api/onboarding/finish
 POST /api/provider-callbacks/figma
 POST /api/provider-callbacks/github
 POST /api/provider-callbacks/google/calendar
@@ -815,9 +843,11 @@ POST /api/spaces/{spaceID}/tasks/{taskID}/move
 POST /api/spaces/{spaceID}/transfer
 POST /api/waitlist
 POST /api/webhooks/social/instagram
+POST /app-runtime/rpc
 POST /auth/forgot
 POST /auth/handoff
 POST /auth/reset
+POST /automations/tools/{toolName}
 POST /billing/checkout-session
 POST /billing/credit-checkout-session
 POST /billing/portal-session
@@ -845,6 +875,7 @@ POST /mcp/connections
 POST /mcp/connections/{connectionID}/discover
 POST /mcp/connections/{connectionID}/test
 POST /mcp/oauth/activepieces/authorize
+POST /me/apps/{appID}/sessions
 POST /me/deletion
 POST /me/export
 POST /me/home/apps
@@ -853,6 +884,7 @@ POST /misty/attachments/{attachmentID}/finalize
 POST /misty/conversations
 POST /misty/conversations/{conversationID}/turns
 POST /native/github/credential-handoffs/redeem
+POST /onboarding/finish
 POST /provider-callbacks/figma
 POST /provider-callbacks/github
 POST /provider-callbacks/google/calendar
@@ -979,9 +1011,11 @@ POST /v1/ai/smart-library/folders/{folderID}/search
 POST /v1/ai/smart-library/reindex
 POST /v1/ai/smart-library/reindex/{jobID}/complete
 POST /v1/ai/smart-library/search
+POST /v1/app-runtime/rpc
 POST /v1/auth/forgot
 POST /v1/auth/handoff
 POST /v1/auth/reset
+POST /v1/automations/tools/{toolName}
 POST /v1/billing/checkout-session
 POST /v1/billing/credit-checkout-session
 POST /v1/billing/portal-session
@@ -1002,6 +1036,7 @@ POST /v1/mcp/connections
 POST /v1/mcp/connections/{connectionID}/discover
 POST /v1/mcp/connections/{connectionID}/test
 POST /v1/mcp/oauth/activepieces/authorize
+POST /v1/me/apps/{appID}/sessions
 POST /v1/me/deletion
 POST /v1/me/export
 POST /v1/me/home/apps
@@ -1010,6 +1045,7 @@ POST /v1/misty/attachments/{attachmentID}/finalize
 POST /v1/misty/conversations
 POST /v1/misty/conversations/{conversationID}/turns
 POST /v1/native/github/credential-handoffs/redeem
+POST /v1/onboarding/finish
 POST /v1/provider-callbacks/figma
 POST /v1/provider-callbacks/github
 POST /v1/provider-callbacks/google/calendar
@@ -1119,7 +1155,9 @@ PUT /api/ai/recaps/{surfaceID}
 PUT /api/ai/settings
 PUT /api/ai/settings/companion-agent
 PUT /api/ai/smart-library/folders/{folderID}/assets/{assetID}/tags
+PUT /api/app-runtime/records/{recordKey}
 PUT /api/mail/drafts/{draftID}
+PUT /api/me/apps/{appID}
 PUT /api/me/avatar
 PUT /api/me/device
 PUT /api/me/profile
@@ -1140,8 +1178,10 @@ PUT /api/spaces/{spaceID}/messages/{messageID}
 PUT /api/spaces/{spaceID}/messages/{messageID}/reactions/{emoji}
 PUT /api/spaces/{spaceID}/nodes/{nodeID}
 PUT /api/spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}/tasks
+PUT /app-runtime/records/{recordKey}
 PUT /internal/self-host/collaboration/{resourceType}/{resourceID}
 PUT /mail/drafts/{draftID}
+PUT /me/apps/{appID}
 PUT /me/avatar
 PUT /me/device
 PUT /me/profile
@@ -1167,7 +1207,9 @@ PUT /v1/ai/recaps/{surfaceID}
 PUT /v1/ai/settings
 PUT /v1/ai/settings/companion-agent
 PUT /v1/ai/smart-library/folders/{folderID}/assets/{assetID}/tags
+PUT /v1/app-runtime/records/{recordKey}
 PUT /v1/mail/drafts/{draftID}
+PUT /v1/me/apps/{appID}
 PUT /v1/me/avatar
 PUT /v1/me/device
 PUT /v1/me/profile

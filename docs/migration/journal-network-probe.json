@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-09-05T11:40:33.079Z",
+  "scope": "Real SDK host clients through local Hono HTTP/PostgreSQL and local HTTPS object protocol fixture; not production R2 or native desktop",
+  "runner": "../misty/scripts/sdk-journal-network-probe.ts",
+  "result": "PASS: SDK note/drawing upload, native RPC finalize, HTTPS download, byte/hash verification, corrupt-byte rejection, revocation before commit, and scope cleanup. 11 real RPC calls; 10 object requests.",
+  "fixtureCleanup": {
+    "users": "0",
+    "uploads": "0",
+    "files": "0",
+    "deletion_jobs": "0"
+  }
+}

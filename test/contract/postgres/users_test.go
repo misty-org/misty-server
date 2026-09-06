@@ -106,4 +106,23 @@ func TestUserAvatarVersionBumps(t *testing.T) {
 	if err != nil || version != 1 {
 		t.Fatalf("GetUserAvatarVersion() = %d, %v; want 1, nil", version, err)
 	}
+	key := "avatars/avatar_12345678-1234-1234-1234-123456789abc"
+	if _, err := database.Conn.Exec(`UPDATE users SET avatar_object_key=$2 WHERE id=$1`, user.ID, key); err != nil {
+		t.Fatal(err)
+	}
+	avatar, err := database.GetUserAvatarReference(user.ID)
+	if err != nil || avatar.ObjectKey != key || avatar.Version != 1 {
+		t.Fatalf("native reference = %#v, %v", avatar, err)
+	}
+	if _, err := database.BumpUserAvatarVersion(user.ID); err != nil {
+		t.Fatal(err)
+	}
+	avatar, err = database.GetUserAvatarReference(user.ID)
+	if err != nil || avatar.ObjectKey != "avatars/"+user.ID || avatar.Version != 2 {
+		t.Fatalf("rollback reference = %#v, %v", avatar, err)
+	}
+	var jobs int
+	if err := database.Conn.QueryRow(`SELECT count(*) FROM object_deletion_jobs WHERE object_key=$1`, key).Scan(&jobs); err != nil || jobs != 1 {
+		t.Fatalf("cleanup jobs = %d, %v", jobs, err)
+	}
 }

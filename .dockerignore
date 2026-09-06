@@ -6,7 +6,12 @@
 **/.secrets/**
 **/.wrangler
 **/node_modules
+**/.output
+**/.nitro
+**/.cache
 **/dist
+!third-party/misty-contracts/dist
+!third-party/misty-contracts/dist/**
 **/build
 **/target
 .git

@@ -50,16 +50,16 @@ server mounts the URL's path and verifies deliveries with the corresponding
 Dashboard signing secret.
 
 `misty server up` is a complete development redeploy: it rebuilds buildable
-images, force-recreates every Compose container, removes orphaned containers,
-and publishes the collaboration Worker. Detached startup returns only after
-the Worker deploy completes successfully and the public API tunnel is ready.
+images, recreates services whose image or configuration changed, removes
+orphaned containers, and publishes the collaboration Worker. It keeps an
+unchanged Cloudflare connector online so routine API rebuilds do not unpublish
+the named development hostname. Detached startup returns only after the Worker
+deploy completes successfully and the public API tunnel is ready.
 
 ## Production
 
 Populate the real private files under `.env/prod/` and set `MISTY_API_IMAGE`
-to the exact tested image digest. Resolve the active operator account in the
-production database and set its immutable ID as `MISTY_OPERATOR_USER_ID`
-before running the canonical Misty Space migration. The CLI validates file
+to the exact tested image digest. The CLI validates file
 ownership, permissions, duplicate names, placeholders, and required values.
 
 ```sh
@@ -156,7 +156,7 @@ curl --fail https://api.mistysys.com/v1/health
 curl --fail https://replace-with-your-runtime.vercel.app/health
 ```
 
-Deploy the Vercel runtime from `agent-runtime/` with `vercel deploy --prod`.
+Deploy the Vercel runtime from `apps/agent-runtime/` with `vercel deploy --prod`.
 Either side may be deployed first: the runtime only falls back to the legacy
 signed tool route when MCP discovery is explicitly unavailable, and never
 replays a consequential call through both transports.

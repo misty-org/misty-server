@@ -12,16 +12,15 @@ import (
 func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	values := map[string]string{
-		"R2_ENDPOINT":            "https://account.r2.cloudflarestorage.com",
-		"R2_BUCKET":              "misty-production",
-		"R2_ACCESS_KEY":          "access",
-		"R2_SECRET_KEY":          "secret",
-		"DB_HOST":                "database.internal",
-		"DB_USER":                "misty",
-		"DB_PASSWORD":            "password",
-		"DB_NAME":                "misty",
-		"MISTY_PUBLIC_API_URL":   "http://api.example.com/api",
-		"MISTY_OPERATOR_USER_ID": "operator-user-id",
+		"R2_ENDPOINT":          "https://account.r2.cloudflarestorage.com",
+		"R2_BUCKET":            "misty-production",
+		"R2_ACCESS_KEY":        "access",
+		"R2_SECRET_KEY":        "secret",
+		"DB_HOST":              "database.internal",
+		"DB_USER":              "misty",
+		"DB_PASSWORD":          "password",
+		"DB_NAME":              "misty",
+		"MISTY_PUBLIC_API_URL": "http://api.example.com/api",
 		"MISTY_SELF_HOST_ENTITLEMENT_PRIVATE_KEY":    "private-key",
 		"MISTY_SELF_HOST_ENTITLEMENT_KEY_ID":         "misty-2026-01",
 		"MISTY_SELF_HOST_ENTITLEMENT_SUBJECT_SECRET": "subject-secret",
@@ -150,7 +149,11 @@ func TestCORSAllowsAppOrigins(t *testing.T) {
 		t.Fatalf("MountHandlers() error = %v", err)
 	}
 
-	for _, origin := range []string{"tauri://localhost", "http://127.0.0.1:5174"} {
+	for _, origin := range []string{
+		"tauri://localhost",
+		"http://127.0.0.1:5174",
+		"https://apps.mistysys.com",
+	} {
 		req := httptest.NewRequest(http.MethodOptions, "/api/login", nil)
 		req.Header.Set("Origin", origin)
 		req.Header.Set("Access-Control-Request-Method", "POST")

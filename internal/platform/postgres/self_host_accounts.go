@@ -115,7 +115,7 @@ func (db *Database) createSelfHostUser(ctx context.Context, name, username, emai
 			switch pqError.Constraint {
 			case "users_username_unique_idx":
 				return nil, ErrUsernameTaken
-			case "users_email_key":
+			case "users_email_key", "users_email_normalized_unique_idx":
 				return nil, errors.New("email already registered")
 			case "self_host_accounts_entitlement_subject_key":
 				return nil, ErrSelfHostSubjectBound

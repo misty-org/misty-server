@@ -41,11 +41,7 @@ func (db *Database) UpdateSpaceConversation(ctx context.Context, userID, spaceID
 		if createdByUserID != userID {
 			return ErrSpaceForbidden
 		}
-		if conversationKind == "misty_support" {
-			if err := requireSpaceLifecycleManagerTx(ctx, tx, spaceID, userID); err != nil {
-				return err
-			}
-		} else if conversationKind != "standard" {
+		if conversationKind != "standard" {
 			return ErrSpaceForbidden
 		}
 		out.CreatedByUserID = createdByUserID

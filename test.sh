@@ -71,10 +71,11 @@ if [[ "$SHOULD_BOOTSTRAP_TEST_DB" == "true" ]]; then
 
   # DB_USER is the application role and is deliberately unprivileged, so it can
   # neither recreate the test database nor TRUNCATE between tests. Bootstrap and
-  # run as the migration role when one is configured.
-  if [[ -z "$EXPLICIT_TEST_DB_USER" && -n "${DB_MIGRATION_USER:-}" ]]; then
-    export TEST_DB_USER="$DB_MIGRATION_USER"
-    export TEST_DB_PASSWORD="${DB_MIGRATION_PASSWORD:-$TEST_DB_PASSWORD}"
+  # run as the same migration role Compose uses, including its development
+  # default when the environment leaves DB_MIGRATION_USER unset.
+  if [[ -z "$EXPLICIT_TEST_DB_USER" ]]; then
+    export TEST_DB_USER="${DB_MIGRATION_USER:-misty}"
+    export TEST_DB_PASSWORD="${DB_MIGRATION_PASSWORD:-misty}"
   fi
   ADMIN_DB_USER="$TEST_DB_USER"
 
@@ -141,4 +142,6 @@ SQL
 fi
 
 ./scripts/check-go-file-sizes.sh
-go test ./... -count=1 "$@"
+# Database-backed packages share this one disposable database. Keep package
+# execution serial so one package cannot truncate or reseed beneath another.
+go test -p 1 ./... -count=1 "$@"

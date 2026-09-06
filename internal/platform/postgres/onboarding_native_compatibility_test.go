@@ -8,7 +8,7 @@ import (
 )
 
 func TestNativeOnboardingFingerprintAndTemplateCompatibility(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/migration/fixtures/onboarding-fingerprints.json")
+	raw, err := os.ReadFile("../../../test/fixtures/compatibility/onboarding-fingerprints.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestNativeOnboardingFingerprintAndTemplateCompatibility(t *testing.T) {
 			t.Fatalf("native onboarding retry fingerprint differs for %q", fixture.Name)
 		}
 	}
-	raw, err = os.ReadFile("../../../docs/migration/fixtures/space-templates.json")
+	raw, err = os.ReadFile("../../../test/fixtures/compatibility/space-templates.json")
 	if err != nil {
 		t.Fatal(err)
 	}

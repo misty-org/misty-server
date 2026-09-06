@@ -9,7 +9,7 @@ import (
 )
 
 func TestNodeAndGoPasswordHashCompatibility(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/migration/fixtures/auth-passwords.json")
+	raw, err := os.ReadFile("../../../test/fixtures/compatibility/auth-passwords.json")
 	if err != nil {
 		t.Fatal(err)
 	}

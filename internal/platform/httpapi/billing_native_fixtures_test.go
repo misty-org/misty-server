@@ -10,7 +10,7 @@ import (
 )
 
 func TestNativeBillingAIUsageFixtures(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/migration/fixtures/billing-ai-usage.json")
+	raw, err := os.ReadFile("../../../test/fixtures/compatibility/billing-ai-usage.json")
 	if err != nil {
 		t.Fatal(err)
 	}

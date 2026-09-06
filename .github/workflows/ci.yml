@@ -80,20 +80,10 @@ jobs:
             package-lock.json
             apps/agent-runtime/package-lock.json
             apps/journal-collab/package-lock.json
-      - name: Install Hono backend dependencies
+      - name: Install SDK contract tooling
         run: npm ci
-      - name: Verify Hono backend foundation
-        run: npm run check
-      - name: Verify Go and native filesystem avatar compatibility
-        run: node scripts/migration/check-avatar-storage.mjs
-      - name: Create isolated Hono integration database
-        env:
-          PGPASSWORD: misty-test-password
-        run: psql -h 127.0.0.1 -U misty -d misty_test -v ON_ERROR_STOP=1 -c 'CREATE DATABASE misty_hono_test'
-      - name: Test Hono database and payments integration
-        env:
-          MISTY_TEST_DATABASE_URL: postgres://misty:misty-test-password@127.0.0.1:5432/misty_hono_test
-        run: npm run test:integration
+      - name: Verify Go routes against the SDK contract snapshot
+        run: npm run contracts:check
       - run: npm ci
         working-directory: apps/journal-collab
       - run: npm run typecheck
@@ -102,8 +92,6 @@ jobs:
         working-directory: apps/journal-collab
       - run: npm run test:runtime
         working-directory: apps/journal-collab
-      - name: Verify native API tickets against the collaboration Worker
-        run: node scripts/migration/check-journal-runtime.mjs
       - run: npm run audit:production
         working-directory: apps/journal-collab
       - name: Install agent runtime dependencies

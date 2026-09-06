@@ -1,7 +1,0 @@
-{
-  "name": "@misty/payments",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "dependencies": { "stripe": "22.6.1" }
-}

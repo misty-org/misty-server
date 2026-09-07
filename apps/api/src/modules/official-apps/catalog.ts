@@ -6,7 +6,7 @@ const platform = z.object({ runtime: z.enum(["downloaded", "hosted", "embedded",
   download_bytes: z.number().int().nonnegative().optional(), additional_storage_bytes: z.number().int().nonnegative().optional() });
 const appSchema = z.object({ id: z.string().min(1).max(80), app_id: z.string().optional(), slug: z.string().optional(),
   name: z.string(), publisher: z.string(), description: z.string(), version: z.string().min(1).max(40), permission_version: z.number().int().positive(),
-  minimum_host_protocol: z.number().int().positive(), official: z.boolean(), age_rating: z.string(), scopes: z.array(z.string()), desktop: platform, mobile: platform });
+  minimum_host_protocol: z.number().int().positive(), minimum_host_version: z.string().min(1).max(40).optional(), official: z.boolean(), age_rating: z.string(), scopes: z.array(z.string()), desktop: platform, mobile: platform });
 export type OfficialApp = z.infer<typeof appSchema>;
 export function createOfficialCatalog(document: unknown = catalogDocument) {
   const parsed = z.object({ schema_version: z.literal(1), host_protocol_version: z.number().int().positive(), apps: z.array(appSchema) }).parse(document);

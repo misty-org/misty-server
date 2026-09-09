@@ -165,7 +165,7 @@ func TestAppCalendarCapabilitiesAreExplicitAndSpaceBound(t *testing.T) {
 		{http.MethodGet, "calendar/google/calendars", []string{"calendar.read"}, false},
 		{http.MethodGet, "calendar/google/calendars", []string{"calendar.read", "connections.read"}, true},
 		{http.MethodGet, "integrations", []string{"connections.read"}, true},
-		{http.MethodGet, "integrations/google/resources", []string{"connections.read"}, true},
+		{http.MethodGet, "integrations/google/resources", []string{"connections.read"}, false},
 		{http.MethodPost, "integrations/google/bind", []string{"connections.read"}, false},
 		{http.MethodPost, "integrations/google/bind", []string{"connections.write"}, true},
 		{http.MethodPost, "integrations/google/authorize", []string{"connections.write"}, true},

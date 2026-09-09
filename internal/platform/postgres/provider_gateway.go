@@ -43,13 +43,3 @@ func (db *Database) SaveProviderGatewayState(ctx context.Context, item ProviderG
 		return err
 	})
 }
-
-func (db *Database) SetProviderSharedResourceHealth(ctx context.Context, resourceID, status, errorCode string) error {
-	if status != "active" && status != "needs_attention" && status != "disabled" {
-		return ErrSpaceInvalid
-	}
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE provider_shared_resources SET status=$1,last_error_code=$2,updated_at=NOW() WHERE id=$3`, status, errorCode, resourceID)
-		return err
-	})
-}

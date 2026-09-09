@@ -37,7 +37,7 @@ func (db *Database) CreateAIConversationAttachment(ctx context.Context, item AIC
 	return db.TestingWithRLSContext(ctx, userRLSSettings(item.UserID), func(tx *sql.Tx) error {
 		if item.Scope == "conversation" {
 			var exists bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL)`, item.ConversationID, item.UserID).Scan(&exists); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM misty_ask_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL)`, item.ConversationID, item.UserID).Scan(&exists); err != nil {
 				return err
 			}
 			if !exists {

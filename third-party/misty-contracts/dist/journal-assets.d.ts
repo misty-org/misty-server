@@ -1,8 +1,8 @@
 import { z } from "zod";
 export declare const MISTY_JOURNAL_ASSET_MAX_BYTES: number;
 export declare const JournalAssetMimeSchema: z.ZodEnum<{
-    "image/png": "image/png";
     "image/jpeg": "image/jpeg";
+    "image/png": "image/png";
     "image/webp": "image/webp";
     "image/gif": "image/gif";
     "image/avif": "image/avif";
@@ -13,8 +13,8 @@ export declare const JournalAssetMimeSchema: z.ZodEnum<{
 export declare const JournalAssetUploadInputSchema: z.ZodObject<{
     filename: z.ZodString;
     mime_type: z.ZodEnum<{
-        "image/png": "image/png";
         "image/jpeg": "image/jpeg";
+        "image/png": "image/png";
         "image/webp": "image/webp";
         "image/gif": "image/gif";
         "image/avif": "image/avif";
@@ -43,8 +43,8 @@ export declare const JournalAssetReservationSchema: z.ZodObject<{
 export declare const JournalAssetRecordSchema: z.ZodObject<{
     id: z.ZodString;
     mime_type: z.ZodEnum<{
-        "image/png": "image/png";
         "image/jpeg": "image/jpeg";
+        "image/png": "image/png";
         "image/webp": "image/webp";
         "image/gif": "image/gif";
         "image/avif": "image/avif";
@@ -60,8 +60,8 @@ export declare const JournalAssetDownloadSchema: z.ZodObject<{
     expires_at: z.ZodISODateTime;
     filename: z.ZodString;
     mime_type: z.ZodEnum<{
-        "image/png": "image/png";
         "image/jpeg": "image/jpeg";
+        "image/png": "image/png";
         "image/webp": "image/webp";
         "image/gif": "image/gif";
         "image/avif": "image/avif";
@@ -84,8 +84,8 @@ export declare const mistyJournalAssetServerContracts: {
             body: z.ZodObject<{
                 filename: z.ZodString;
                 mime_type: z.ZodEnum<{
-                    "image/png": "image/png";
                     "image/jpeg": "image/jpeg";
+                    "image/png": "image/png";
                     "image/webp": "image/webp";
                     "image/gif": "image/gif";
                     "image/avif": "image/avif";
@@ -126,8 +126,8 @@ export declare const mistyJournalAssetServerContracts: {
             note_asset: z.ZodObject<{
                 id: z.ZodString;
                 mime_type: z.ZodEnum<{
-                    "image/png": "image/png";
                     "image/jpeg": "image/jpeg";
+                    "image/png": "image/png";
                     "image/webp": "image/webp";
                     "image/gif": "image/gif";
                     "image/avif": "image/avif";
@@ -155,8 +155,8 @@ export declare const mistyJournalAssetServerContracts: {
             expires_at: z.ZodISODateTime;
             filename: z.ZodString;
             mime_type: z.ZodEnum<{
-                "image/png": "image/png";
                 "image/jpeg": "image/jpeg";
+                "image/png": "image/png";
                 "image/webp": "image/webp";
                 "image/gif": "image/gif";
                 "image/avif": "image/avif";
@@ -179,8 +179,8 @@ export declare const mistyJournalAssetServerContracts: {
             body: z.ZodObject<{
                 filename: z.ZodString;
                 mime_type: z.ZodEnum<{
-                    "image/png": "image/png";
                     "image/jpeg": "image/jpeg";
+                    "image/png": "image/png";
                     "image/webp": "image/webp";
                     "image/gif": "image/gif";
                     "image/avif": "image/avif";
@@ -222,8 +222,8 @@ export declare const mistyJournalAssetServerContracts: {
             drawing_asset: z.ZodObject<{
                 id: z.ZodString;
                 mime_type: z.ZodEnum<{
-                    "image/png": "image/png";
                     "image/jpeg": "image/jpeg";
+                    "image/png": "image/png";
                     "image/webp": "image/webp";
                     "image/gif": "image/gif";
                     "image/avif": "image/avif";
@@ -252,8 +252,8 @@ export declare const mistyJournalAssetServerContracts: {
             expires_at: z.ZodISODateTime;
             filename: z.ZodString;
             mime_type: z.ZodEnum<{
-                "image/png": "image/png";
                 "image/jpeg": "image/jpeg";
+                "image/png": "image/png";
                 "image/webp": "image/webp";
                 "image/gif": "image/gif";
                 "image/avif": "image/avif";
@@ -277,8 +277,8 @@ export declare const mistyJournalAssetContracts: {
             resourceId: z.ZodString;
             filename: z.ZodString;
             mimeType: z.ZodEnum<{
-                "image/png": "image/png";
                 "image/jpeg": "image/jpeg";
+                "image/png": "image/png";
                 "image/webp": "image/webp";
                 "image/gif": "image/gif";
                 "image/avif": "image/avif";
@@ -308,8 +308,8 @@ export declare const mistyJournalAssetContracts: {
         readonly result: z.ZodObject<{
             id: z.ZodString;
             mime_type: z.ZodEnum<{
-                "image/png": "image/png";
                 "image/jpeg": "image/jpeg";
+                "image/png": "image/png";
                 "image/webp": "image/webp";
                 "image/gif": "image/gif";
                 "image/avif": "image/avif";
@@ -335,8 +335,8 @@ export declare const mistyJournalAssetContracts: {
             handle: z.ZodUUID;
             filename: z.ZodString;
             mimeType: z.ZodEnum<{
-                "image/png": "image/png";
                 "image/jpeg": "image/jpeg";
+                "image/png": "image/png";
                 "image/webp": "image/webp";
                 "image/gif": "image/gif";
                 "image/avif": "image/avif";

@@ -17,11 +17,12 @@ var (
 )
 
 type AppRuntimeSession struct {
-	UserID    string    `json:"-"`
-	AppID     string    `json:"app_id"`
-	SpaceID   string    `json:"space_id,omitempty"`
-	Scopes    []string  `json:"scopes"`
-	ExpiresAt time.Time `json:"expires_at"`
+	AuthorityGeneration int64     `json:"-"`
+	UserID              string    `json:"-"`
+	AppID               string    `json:"app_id"`
+	SpaceID             string    `json:"space_id,omitempty"`
+	Scopes              []string  `json:"scopes"`
+	ExpiresAt           time.Time `json:"expires_at"`
 }
 
 type AppPersonalRecord struct {
@@ -55,8 +56,8 @@ func (db *Database) CreateAppRuntimeSession(
 			}
 		}
 		var scopesRaw []byte
-		if err := tx.QueryRowContext(ctx, `SELECT granted_scopes
-			FROM user_app_installations WHERE user_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, userID, appID).Scan(&scopesRaw); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT granted_scopes,authority_generation
+			FROM user_app_installations WHERE user_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, userID, appID).Scan(&scopesRaw, &result.AuthorityGeneration); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrAppNotInstalled
 			}
@@ -67,8 +68,8 @@ func (db *Database) CreateAppRuntimeSession(
 		}
 		result.UserID, result.AppID, result.SpaceID = userID, appID, spaceID
 		result.ExpiresAt = time.Now().UTC().Add(ttl)
-		_, err := tx.ExecContext(ctx, `INSERT INTO app_runtime_sessions(token_hash,user_id,app_id,space_id,scopes,expires_at)
-			VALUES($1,$2,$3,NULLIF($4,''),$5::jsonb,$6)`, tokenHash, userID, appID, spaceID, scopesRaw, result.ExpiresAt)
+		_, err := tx.ExecContext(ctx, `INSERT INTO app_runtime_sessions(token_hash,user_id,app_id,space_id,scopes,expires_at,authority_generation)
+			VALUES($1,$2,$3,NULLIF($4,''),$5::jsonb,$6,$7)`, tokenHash, userID, appID, spaceID, scopesRaw, result.ExpiresAt, result.AuthorityGeneration)
 		return err
 	})
 	if err != nil {
@@ -85,11 +86,11 @@ func (db *Database) AppRuntimeSessionByToken(ctx context.Context, tokenHash stri
 	var result AppRuntimeSession
 	var scopesRaw []byte
 	err := db.TestingWithRLSContext(ctx, TestingServiceRLSSettings(), func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT s.user_id,s.app_id,COALESCE(s.space_id,''),s.scopes,s.expires_at
+		return tx.QueryRowContext(ctx, `SELECT s.user_id,s.app_id,COALESCE(s.space_id,''),s.scopes,s.expires_at,s.authority_generation
 			FROM app_runtime_sessions s JOIN user_app_installations i ON i.user_id=s.user_id AND i.app_id=s.app_id
 			WHERE s.token_hash=$1 AND s.expires_at>NOW() AND i.state='installed'
-			AND s.scopes <@ i.granted_scopes`, tokenHash).
-			Scan(&result.UserID, &result.AppID, &result.SpaceID, &scopesRaw, &result.ExpiresAt)
+			AND s.authority_generation=i.authority_generation AND s.scopes <@ i.granted_scopes`, tokenHash).
+			Scan(&result.UserID, &result.AppID, &result.SpaceID, &scopesRaw, &result.ExpiresAt, &result.AuthorityGeneration)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

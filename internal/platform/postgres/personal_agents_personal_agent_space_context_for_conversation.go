@@ -179,22 +179,3 @@ func (db *Database) PersonalAgentSpaceContextForConversation(ctx context.Context
 	})
 	return strings.Join(parts, "\n\n"), err
 }
-
-func (db *Database) AppendPersonalAgentMemory(ctx context.Context, userID, spaceID, agentID, prompt, response string) error {
-	return nil
-}
-
-// PersonalAgentMemoryContext retains the old empty-memory contract while
-// rechecking creator ownership and current Space membership on every read.
-func (db *Database) PersonalAgentMemoryContext(ctx context.Context, userID, spaceID, agentID string) (string, error) {
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if _, err := personalAgentAllowedTx(ctx, tx, userID, spaceID, agentID); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	return "", nil
-}

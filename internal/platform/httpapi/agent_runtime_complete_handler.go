@@ -46,6 +46,19 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 			writeAgentError(w, err)
 			return
 		}
+		if body.Status == "success" {
+			unconfirmed, checkErr := s.database.AgentRunHasUnconfirmedEffects(r.Context(), run.OwnerUserID, run.ID)
+			if checkErr != nil {
+				writeAgentError(w, checkErr)
+				return
+			}
+			if unconfirmed {
+				body.Status = "incomplete"
+				body.ErrorCode = "unconfirmed_effects"
+				body.ErrorMessage = "Some actions have not been confirmed. Review the run before retrying."
+				body.Text = body.ErrorMessage
+			}
+		}
 		body.Text = truncateAgentRuntimeText(strings.TrimSpace(body.Text), 12_000)
 		if len(body.Usage) == 0 || !validJSONObject(body.Usage) {
 			body.Usage = json.RawMessage(`{}`)

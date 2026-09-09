@@ -23,8 +23,8 @@ type SpaceTask struct {
 	Priority               string                  `json:"priority"`
 	Rank                   int64                   `json:"rank"`
 	AssigneeUserID         string                  `json:"assignee_user_id,omitempty"`
-	AssigneeAgentID        string                  `json:"assignee_agent_id,omitempty"`
-	AgentRun               *SpaceTaskAgentRunInput `json:"agent_run,omitempty"`
+	AssigneeAgentID        string                  `json:"-"`
+	AgentRun               *SpaceTaskAgentRunInput `json:"-"`
 	DueAt                  *time.Time              `json:"due_at,omitempty"`
 	DueTimezone            string                  `json:"due_timezone"`
 	SourceRefs             json.RawMessage         `json:"source_refs"`

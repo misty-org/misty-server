@@ -19,11 +19,11 @@ func TestManagedMistyIsSingleFixedAndSupportsBoundedHiddenWorkers(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	misty, err := database.EnsureManagedMistyAgent(ctx, owner.ID, "google/gemini-2.5-flash-lite")
+	misty, err := database.EnsureAskIdentity(ctx, owner.ID, "google/gemini-2.5-flash-lite")
 	if err != nil {
 		t.Fatal(err)
 	}
-	replayedIdentity, err := database.EnsureManagedMistyAgent(ctx, owner.ID, "google/gemini-2.5-flash-lite")
+	replayedIdentity, err := database.EnsureAskIdentity(ctx, owner.ID, "google/gemini-2.5-flash-lite")
 	if err != nil {
 		t.Fatal(err)
 	}

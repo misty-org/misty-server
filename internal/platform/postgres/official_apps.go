@@ -118,7 +118,7 @@ func installUserAppTx(
 	// shared lock on this installation row so an old grant cannot be minted
 	// after this update commits. Regranting later must not revive retired tokens.
 	if _, err := tx.ExecContext(ctx, `DELETE FROM app_runtime_sessions
-		WHERE user_id=$1 AND app_id=$2 AND scopes <> $3::jsonb`, userID, appID, encodedScopes); err != nil {
+		WHERE user_id=$1 AND app_id=$2 AND (scopes <> $3::jsonb OR $4)`, userID, appID, encodedScopes, previousVersion != "" && previousVersion != version); err != nil {
 		return UserAppInstallation{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM app_data_deletion_jobs WHERE user_id=$1 AND app_id=$2`, userID, appID); err != nil {
@@ -188,6 +188,10 @@ func (db *Database) UninstallUserApp(ctx context.Context, userID, appID string, 
 		}
 		if current.State == "purging" {
 			return ErrAppAlreadyPurging
+		}
+		// Reinstall must not revive a still-unexpired credential from this install.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM app_runtime_sessions WHERE user_id=$1 AND app_id=$2`, userID, appID); err != nil {
+			return err
 		}
 		deleteAt := now.Add(AppDataRecoveryPeriod)
 		row := tx.QueryRowContext(ctx, `UPDATE user_app_installations SET state='recoverable',pinned=FALSE,

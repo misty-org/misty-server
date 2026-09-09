@@ -21,7 +21,7 @@ const (
 	toolboxTasksQuery     = "tasks.query"
 	toolboxTasksCreate    = "tasks.create"
 	toolboxTasksUpdate    = "tasks.update"
-	toolboxAgentsDelegate = "agents.delegate"
+	toolboxAgentsDelegate = "ask.delegate"
 )
 
 func spaceAgentToolbox(database *db.Database, delegationHandlers ...agenttools.Handler) *agenttools.Registry {
@@ -64,8 +64,6 @@ func spaceAgentToolboxWithBrowserProvidersAndExtra(database *db.Database, browse
 		agenttools.Registration{Descriptor: withToolTriggers(calendarQueryToolDescriptor(), messageTriggers), Handler: legacyHandler},
 		agenttools.Registration{Descriptor: withToolTriggers(tasksCreateToolDescriptor(), messageTriggers), Handler: legacyHandler},
 		agenttools.Registration{Descriptor: withToolTriggers(tasksUpdateToolDescriptor(), messageTriggers), Handler: legacyHandler},
-		agenttools.Registration{Descriptor: withToolTriggers(companionReadToolDescriptors()[0], messageTriggers), Handler: legacyHandler},
-		agenttools.Registration{Descriptor: withToolTriggers(companionReadToolDescriptors()[1], messageTriggers), Handler: legacyHandler},
 		agenttools.Registration{Descriptor: agentDelegationToolDescriptor(), Handler: delegationHandler},
 	}
 	for _, descriptor := range noteAgentToolDescriptors() {
@@ -111,7 +109,21 @@ func spaceAgentToolboxWithBrowserProvidersAndExtra(database *db.Database, browse
 			}
 		}
 	}
-	registrations = append(registrations, extra...)
+	names := make([]string, 0, len(registrations))
+	for _, r := range registrations {
+		names = append(names, r.Descriptor.Name)
+	}
+	kept := map[string]bool{}
+	for _, name := range withoutReplacedSDKTools(names, extra) {
+		kept[name] = true
+	}
+	filtered := registrations[:0]
+	for _, r := range registrations {
+		if kept[r.Descriptor.Name] {
+			filtered = append(filtered, r)
+		}
+	}
+	registrations = append(filtered, extra...)
 	return agenttools.MustNew(registrations...)
 }
 
@@ -121,15 +133,13 @@ func agentDelegationToolDescriptor() agenttools.Descriptor {
 		Description: "Delegate a bounded independent subtask to a background worker in the current Space and return its audited run result.",
 		Risk:        serveragent.RiskWrite,
 		InputSchema: TestingMustAPIRawJSON(map[string]any{
-			"type": "object", "required": []string{"prompt"},
+			"type": "object", "required": []string{"prompt"}, "additionalProperties": false,
 			"properties": map[string]any{
-				"prompt":     map[string]any{"type": "string", "minLength": 1, "maxLength": 16_000},
-				"agent_id":   map[string]any{"type": "string", "maxLength": 200},
-				"agent_name": map[string]any{"type": "string", "maxLength": 200},
+				"prompt": map[string]any{"type": "string", "minLength": 1, "maxLength": 16_000},
 			},
 		}),
-		OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionAgentsRun,
-		AgentPermission: db.PermissionAgentsRun, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent,
+		OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionAskRun,
+		AgentPermission: db.PermissionAskRun, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent,
 		Locality: agenttools.LocalityServer, Idempotent: false, AuditEvent: "agent.run.started",
 		Sources: []string{"space_conversation"}, Triggers: []string{"message"},
 	}
@@ -205,8 +215,14 @@ func readOnlyToolRequests(toolbox *agenttools.Registry, requested []string) []st
 
 func authorizeSpaceAgentTool(database *db.Database) agenttools.Authorizer {
 	return func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor) (bool, error) {
+		if allowed, err := authorizeAppRuntimeTool(ctx, database, invocation, descriptor); err != nil || !allowed {
+			return false, err
+		}
 		if invocation.ConversationScopeKind == db.ConversationScopePrivate && descriptor.Locality == agenttools.LocalityProvider && descriptor.Risk != serveragent.RiskRead {
 			return false, nil
+		}
+		if descriptor.ProviderBinding != nil {
+			return authorizeAgentSDKTool(ctx, database, invocation, descriptor)
 		}
 		if strings.HasPrefix(descriptor.Name, "mcp.") {
 			return authorizeMCPAgentTool(ctx, database, invocation, descriptor)

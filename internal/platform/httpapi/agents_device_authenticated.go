@@ -167,6 +167,10 @@ func writeAgentResult(w http.ResponseWriter, value any, err error, status int) {
 func writeAgentError(w http.ResponseWriter, err error) {
 	var invalidRequest serveragent.ErrInvalidRequest
 	switch {
+	case errors.Is(err, db.ErrAgentModelTurnLimit):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_turn_limit", "message": "This run reached its model-turn limit. Review its completed work before starting another request."})
+	case errors.Is(err, db.ErrAgentExecutionTimeLimit):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_execution_time_limit", "message": "This run used its execution-time allowance. Review its completed work before starting another request."})
 	case errors.As(err, &invalidRequest):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "invalid_tool_input", "message": invalidRequest.Error()})
 	case errors.Is(err, db.ErrLibraryForbidden), errors.Is(err, db.ErrSpaceForbidden):

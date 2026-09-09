@@ -17,6 +17,7 @@ import (
 	"time"
 
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 const (
@@ -24,7 +25,10 @@ const (
 	agentRuntimeMaxSkew   = 5 * time.Minute
 )
 
+var errAgentRuntimeStartUnconfirmed = errors.New("workflow_start_unconfirmed")
+
 type AgentRuntimeConfig struct {
+	database       *db.Database
 	Kind           string
 	URL            string
 	InternalAPIURL string
@@ -74,8 +78,9 @@ func (c AgentRuntimeConfig) Enabled() bool {
 }
 
 type agentRuntimeStartRequest struct {
-	RunID       string `json:"run_id"`
-	CallbackURL string `json:"callback_url"`
+	RunID          string `json:"run_id"`
+	CallbackURL    string `json:"callback_url"`
+	AdapterVersion string `json:"adapter_version"`
 }
 
 type agentRuntimeStartResponse struct {
@@ -83,7 +88,12 @@ type agentRuntimeStartResponse struct {
 }
 
 func (c AgentRuntimeConfig) Start(ctx context.Context, runID string) (string, error) {
-	body, _ := json.Marshal(agentRuntimeStartRequest{RunID: runID, CallbackURL: c.InternalAPIURL})
+	var err error
+	c, err = c.forRun(ctx, runID)
+	if err != nil {
+		return "", err
+	}
+	body, _ := json.Marshal(agentRuntimeStartRequest{RunID: runID, CallbackURL: c.InternalAPIURL, AdapterVersion: db.BetaAgentRuntimeAdapter})
 	var response agentRuntimeStartResponse
 	if err := c.request(ctx, http.MethodPost, "/v1/runs", runID, body, &response); err != nil {
 		return "", err
@@ -98,20 +108,71 @@ func (c AgentRuntimeConfig) Cancel(ctx context.Context, runtimeRunID, mistyRunID
 	if runtimeRunID == "" {
 		return nil
 	}
+	var err error
+	c, err = c.forRun(ctx, mistyRunID)
+	if err != nil {
+		return err
+	}
 	path := "/v1/runs/" + url.PathEscape(runtimeRunID) + "/cancel"
 	return c.request(ctx, http.MethodPost, path, mistyRunID+":cancel", []byte(`{}`), nil)
 }
 
+func (c AgentRuntimeConfig) Status(ctx context.Context, runtimeID, mistyRunID string) (string, error) {
+	var bindErr error
+	c, bindErr = c.forRun(ctx, mistyRunID)
+	if bindErr != nil {
+		return "", bindErr
+	}
+	var result struct {
+		Status string `json:"status"`
+	}
+	err := c.request(ctx, http.MethodPost, "/v1/runs/"+url.PathEscape(runtimeID)+"/status", mistyRunID+":status", []byte(`{}`), &result)
+	if err != nil {
+		return "", err
+	}
+	switch result.Status {
+	case "pending", "running", "completed", "failed", "cancelled", "missing":
+		return result.Status, nil
+	}
+	return "", errors.New("runtime returned an invalid status")
+}
+
 func (c AgentRuntimeConfig) ResumeApproval(ctx context.Context, hookToken, runID, approvalID string, approved bool) error {
+	var err error
+	c, err = c.forRun(ctx, runID)
+	if err != nil {
+		return err
+	}
 	body, _ := json.Marshal(map[string]any{"approved": approved, "approval_id": approvalID})
 	path := "/v1/approvals/" + url.PathEscape(hookToken)
 	return c.request(ctx, http.MethodPost, path, runID+":approval:"+approvalID, body, nil)
 }
 
 func (c AgentRuntimeConfig) ResumeDevice(ctx context.Context, hookToken, runID string, available bool) error {
+	var err error
+	c, err = c.forRun(ctx, runID)
+	if err != nil {
+		return err
+	}
 	body, _ := json.Marshal(map[string]any{"available": available})
 	path := "/v1/devices/" + url.PathEscape(hookToken)
-	return c.request(ctx, http.MethodPost, path, runID+":device:"+strconv.FormatBool(available), body, nil)
+	waitIdentity := sha256.Sum256([]byte(hookToken))
+	return c.request(ctx, http.MethodPost, path, runID+":device:"+hex.EncodeToString(waitIdentity[:])+":"+strconv.FormatBool(available), body, nil)
+}
+
+func (c AgentRuntimeConfig) forRun(ctx context.Context, runID string) (AgentRuntimeConfig, error) {
+	if c.database == nil {
+		return c, nil
+	}
+	pin, err := c.database.BindAgentRuntime(ctx, runID, c.URL, c.InternalAPIURL)
+	if err != nil {
+		return c, err
+	}
+	if pin.AdapterVersion != db.BetaAgentRuntimeAdapter {
+		return c, errors.New("harness_version_unavailable")
+	}
+	c.URL, c.InternalAPIURL = pin.Endpoint, pin.CallbackEndpoint
+	return c, nil
 }
 
 func (c AgentRuntimeConfig) request(ctx context.Context, method, path, idempotencyKey string, body []byte, output any) error {
@@ -137,6 +198,12 @@ func (c AgentRuntimeConfig) request(ctx context.Context, method, path, idempoten
 		return errors.New("agent runtime response too large")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		var failure struct {
+			Code string `json:"code"`
+		}
+		if path == "/v1/runs" && json.Unmarshal(responseBody, &failure) == nil && failure.Code == "workflow_start_unconfirmed" {
+			return errAgentRuntimeStartUnconfirmed
+		}
 		return fmt.Errorf("agent runtime returned %d: %s", response.StatusCode, strings.TrimSpace(string(responseBody)))
 	}
 	if output != nil && len(responseBody) > 0 {

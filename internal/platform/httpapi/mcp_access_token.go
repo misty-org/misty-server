@@ -24,20 +24,24 @@ const (
 var errMCPAccessDenied = errors.New("MCP access denied")
 
 type mcpAccessClaims struct {
-	Version      int    `json:"v"`
-	Issuer       string `json:"iss"`
-	Audience     string `json:"aud"`
-	Subject      string `json:"sub"`
-	RunID        string `json:"run_id"`
-	RuntimeRunID string `json:"runtime_run_id"`
-	TokenID      string `json:"jti"`
-	IssuedAt     int64  `json:"iat"`
-	ExpiresAt    int64  `json:"exp"`
+	InterventionWaits bool   `json:"intervention_waits,omitempty"`
+	Version           int    `json:"v"`
+	Issuer            string `json:"iss"`
+	Audience          string `json:"aud"`
+	Subject           string `json:"sub"`
+	RunID             string `json:"run_id"`
+	RuntimeRunID      string `json:"runtime_run_id"`
+	TokenID           string `json:"jti"`
+	IssuedAt          int64  `json:"iat"`
+	ExpiresAt         int64  `json:"exp"`
 }
 
 func (s *SpacesService) AgentRuntimeMCPAccess() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var body agentRuntimeIdentity
+		var body struct {
+			RuntimeRunID            string `json:"runtime_run_id"`
+			InterventionWaitVersion int    `json:"intervention_wait_version"`
+		}
 		if !readAgentRuntimeRequest(s.agentRuntime, w, r, &body) {
 			return
 		}
@@ -55,7 +59,7 @@ func (s *SpacesService) AgentRuntimeMCPAccess() http.HandlerFunc {
 			}
 			subject = record.UserID
 		} else {
-			run, _, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), runID, body.RuntimeRunID)
+			run, _, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), runID, body.RuntimeRunID, true)
 			if err != nil {
 				writeAgentError(w, err)
 				return
@@ -64,7 +68,8 @@ func (s *SpacesService) AgentRuntimeMCPAccess() http.HandlerFunc {
 		}
 		now := time.Now().UTC()
 		claims := mcpAccessClaims{
-			Version: 1, Issuer: mcpAccessIssuer, Audience: mcpAccessAudience,
+			InterventionWaits: body.InterventionWaitVersion == 1,
+			Version:           1, Issuer: mcpAccessIssuer, Audience: mcpAccessAudience,
 			Subject: subject, RunID: runID, RuntimeRunID: body.RuntimeRunID,
 			TokenID: randomMCPTokenID(), IssuedAt: now.Unix(), ExpiresAt: now.Add(mcpAccessTTL).Unix(),
 		}
@@ -147,12 +152,13 @@ func verifyMCPAccessToken(token string, secrets ...[]byte) (mcpAccessClaims, err
 	return claims, nil
 }
 
-func TestingSignMCPAccessToken(secret []byte, subject, runID, runtimeRunID, tokenID, audience string, issuedAt, expiresAt time.Time) (string, error) {
+func TestingSignMCPAccessToken(secret []byte, subject, runID, runtimeRunID, tokenID, audience string, issuedAt, expiresAt time.Time, interventionWaits ...bool) (string, error) {
 	if strings.TrimSpace(audience) == "" {
 		audience = mcpAccessAudience
 	}
 	return signMCPAccessToken(secret, mcpAccessClaims{
-		Version: 1, Issuer: mcpAccessIssuer, Audience: audience,
+		InterventionWaits: len(interventionWaits) > 0 && interventionWaits[0],
+		Version:           1, Issuer: mcpAccessIssuer, Audience: audience,
 		Subject: subject, RunID: runID, RuntimeRunID: runtimeRunID, TokenID: tokenID,
 		IssuedAt: issuedAt.UTC().Unix(), ExpiresAt: expiresAt.UTC().Unix(),
 	})

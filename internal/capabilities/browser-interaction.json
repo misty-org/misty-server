@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "fill"
+        },
+        "elementRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 65536
+        }
+      },
+      "required": [
+        "kind",
+        "elementRef",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "select"
+        },
+        "elementRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "values": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "elementRef",
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "scroll"
+        },
+        "elementRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "x": {
+          "type": "integer",
+          "minimum": -4000,
+          "maximum": 4000
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -4000,
+          "maximum": 4000
+        }
+      },
+      "required": [
+        "kind",
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "key"
+        },
+        "elementRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "key": {
+          "type": "string",
+          "enum": [
+            "Enter",
+            "Escape",
+            "Tab",
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight",
+            "Home",
+            "End"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "elementRef",
+        "key"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

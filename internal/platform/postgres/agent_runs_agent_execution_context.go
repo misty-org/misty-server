@@ -6,48 +6,6 @@ import (
 	"errors"
 )
 
-func (db *Database) AgentExecutionContext(ctx context.Context, userID, spaceID, agentID string, versionIDs ...string) (*SpaceStudioResource, *WorkflowVersion, error) {
-	resource := &SpaceStudioResource{Kind: "agent"}
-	var workflow *WorkflowVersion
-	agentVersionID, workflowVersionID := "", ""
-	if len(versionIDs) == 1 {
-		workflowVersionID = versionIDs[0]
-	} else if len(versionIDs) == 2 {
-		agentVersionID, workflowVersionID = versionIDs[0], versionIDs[1]
-	} else {
-		return nil, nil, ErrSpaceInvalid
-	}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAgentsRun); err != nil {
-			return err
-		}
-		if agentVersionID == "" {
-			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(published_agent_version_id,'') FROM space_agents WHERE id=$1 AND space_id=$2`, agentID, spaceID).Scan(&agentVersionID); err != nil {
-				return err
-			}
-		}
-		if err := tx.QueryRowContext(ctx, `SELECT a.id,a.space_id,a.creator_user_id,v.name,v.description,v.icon,v.instructions,a.enabled,a.status,a.runtime_kind,a.version,a.schedules_enabled,COALESCE(a.active_workflow_version_id,''),a.created_at,a.updated_at FROM space_agents a JOIN space_agent_versions v ON v.id=$3 AND v.agent_id=a.id WHERE a.id=$1 AND a.space_id=$2 AND a.enabled AND a.status='available'`, agentID, spaceID, agentVersionID).Scan(&resource.ID, &resource.SpaceID, &resource.CreatorUserID, &resource.Name, &resource.Description, &resource.Icon, &resource.Instructions, &resource.Enabled, &resource.Status, &resource.RuntimeKind, &resource.Version, &resource.SchedulesEnabled, &resource.ActiveWorkflowVersionID, &resource.CreatedAt, &resource.UpdatedAt); err != nil {
-			return err
-		}
-		if workflowVersionID != "" {
-			var err error
-			workflow, err = loadWorkflowVersionTx(ctx, tx, workflowVersionID)
-			if err != nil {
-				return err
-			}
-			var attached bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_agent_version_workflows WHERE agent_version_id=$1 AND workflow_version_id=$2 AND enabled)`, agentVersionID, workflowVersionID).Scan(&attached); err != nil || !attached || workflow.SpaceID != spaceID {
-				return ErrSpaceForbidden
-			}
-		}
-		return nil
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil, ErrSpaceNotFound
-	}
-	return resource, workflow, err
-}
-
 func authorizeWorkflowRequirementsTx(ctx context.Context, tx *sql.Tx, userID, spaceID string, metadata WorkflowMetadata) error {
 	for _, permission := range metadata.RequiredPermissions {
 		spacePermission, ok := TestingWorkflowPermissionSpacePermission(permission)
@@ -224,7 +182,7 @@ func (db *Database) SpaceRun(ctx context.Context, userID, runID string) (*SpaceR
 			return ErrSpaceForbidden
 		}
 		if out.RequestingMemberID == userID {
-			return requireSpacePermissionTx(ctx, tx, userID, out.SpaceID, PermissionAgentsRun)
+			return requireSpacePermissionTx(ctx, tx, userID, out.SpaceID, PermissionAskRun)
 		}
 		return requireSpacePermissionTx(ctx, tx, userID, out.SpaceID, PermissionStudioView)
 	})

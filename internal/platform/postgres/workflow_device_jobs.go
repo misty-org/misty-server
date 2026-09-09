@@ -11,35 +11,41 @@ import (
 )
 
 type WorkflowDeviceNodeJob struct {
-	ID               string          `json:"id"`
-	RunID            string          `json:"runId"`
-	NodeID           string          `json:"nodeId"`
-	UserID           string          `json:"-"`
-	ScopeID          string          `json:"scopeId"`
-	Operation        string          `json:"operation"`
-	State            string          `json:"state"`
-	Attempt          int             `json:"attempt"`
-	Input            json.RawMessage `json:"input"`
-	Config           json.RawMessage `json:"config"`
-	InputSchema      json.RawMessage `json:"inputSchema"`
-	OutputSchema     json.RawMessage `json:"outputSchema"`
-	Output           json.RawMessage `json:"output,omitempty"`
-	LeasedDeviceID   string          `json:"leasedDeviceId,omitempty"`
-	ContextID        string          `json:"contextId,omitempty"`
-	AssignedDeviceID string          `json:"assignedDeviceId,omitempty"`
-	ErrorCode        string          `json:"errorCode,omitempty"`
-	LeaseExpiresAt   *time.Time      `json:"leaseExpiresAt,omitempty"`
-	LastHeartbeatAt  *time.Time      `json:"lastHeartbeatAt,omitempty"`
-	CompletedAt      *time.Time      `json:"completedAt,omitempty"`
-	CreatedAt        time.Time       `json:"createdAt"`
+	ID                 string          `json:"id"`
+	RunID              string          `json:"runId"`
+	NodeID             string          `json:"nodeId"`
+	UserID             string          `json:"-"`
+	ScopeID            string          `json:"scopeId"`
+	Operation          string          `json:"operation"`
+	State              string          `json:"state"`
+	Attempt            int             `json:"attempt"`
+	Input              json.RawMessage `json:"input"`
+	Config             json.RawMessage `json:"config"`
+	InputSchema        json.RawMessage `json:"inputSchema"`
+	OutputSchema       json.RawMessage `json:"outputSchema"`
+	Output             json.RawMessage `json:"output,omitempty"`
+	LeasedDeviceID     string          `json:"leasedDeviceId,omitempty"`
+	ContextID          string          `json:"contextId,omitempty"`
+	AssignedDeviceID   string          `json:"assignedDeviceId,omitempty"`
+	ErrorCode          string          `json:"errorCode,omitempty"`
+	LeaseExpiresAt     *time.Time      `json:"leaseExpiresAt,omitempty"`
+	LastHeartbeatAt    *time.Time      `json:"lastHeartbeatAt,omitempty"`
+	CompletedAt        *time.Time      `json:"completedAt,omitempty"`
+	CreatedAt          time.Time       `json:"createdAt"`
+	ControlVersion     int             `json:"controlVersion"`
+	DeadlineAt         time.Time       `json:"deadlineAt"`
+	RuntimeRunID       string          `json:"-"`
+	RequiredCapability string          `json:"-"`
+	ExecutionStartedAt *time.Time      `json:"executionStartedAt,omitempty"`
+	CancelRequestedAt  *time.Time      `json:"cancelRequestedAt,omitempty"`
 }
 
-const workflowDeviceJobColumns = `id,COALESCE(run_id,invocation_id,''),node_id,attempt,user_id,scope_id,operation,input,config,input_schema,output_schema,state,COALESCE(leased_device_id,''),COALESCE(context_id,ai_context_id,''),COALESCE(assigned_device_id,''),lease_expires_at,last_heartbeat_at,output,COALESCE(error_code,''),created_at,completed_at`
-const workflowDeviceJobUpdateColumns = `j.id,COALESCE(j.run_id,j.invocation_id,''),j.node_id,j.attempt,j.user_id,j.scope_id,j.operation,j.input,j.config,j.input_schema,j.output_schema,j.state,COALESCE(j.leased_device_id,''),COALESCE(j.context_id,j.ai_context_id,''),COALESCE(j.assigned_device_id,''),j.lease_expires_at,j.last_heartbeat_at,j.output,COALESCE(j.error_code,''),j.created_at,j.completed_at`
+const workflowDeviceJobColumns = `id,COALESCE(run_id,invocation_id,''),node_id,attempt,user_id,scope_id,operation,input,config,input_schema,output_schema,state,COALESCE(leased_device_id,''),COALESCE(context_id,ai_context_id,''),COALESCE(assigned_device_id,''),lease_expires_at,last_heartbeat_at,output,COALESCE(error_code,''),created_at,completed_at,control_version,deadline_at,runtime_run_id,required_capability,execution_started_at,cancel_requested_at`
+const workflowDeviceJobUpdateColumns = `j.id,COALESCE(j.run_id,j.invocation_id,''),j.node_id,j.attempt,j.user_id,j.scope_id,j.operation,j.input,j.config,j.input_schema,j.output_schema,j.state,COALESCE(j.leased_device_id,''),COALESCE(j.context_id,j.ai_context_id,''),COALESCE(j.assigned_device_id,''),j.lease_expires_at,j.last_heartbeat_at,j.output,COALESCE(j.error_code,''),j.created_at,j.completed_at,j.control_version,j.deadline_at,j.runtime_run_id,j.required_capability,j.execution_started_at,j.cancel_requested_at`
 
 func scanWorkflowDeviceJob(scanner interface{ Scan(...any) error }, item *WorkflowDeviceNodeJob) error {
 	var output []byte
-	if err := scanner.Scan(&item.ID, &item.RunID, &item.NodeID, &item.Attempt, &item.UserID, &item.ScopeID, &item.Operation, &item.Input, &item.Config, &item.InputSchema, &item.OutputSchema, &item.State, &item.LeasedDeviceID, &item.ContextID, &item.AssignedDeviceID, &item.LeaseExpiresAt, &item.LastHeartbeatAt, &output, &item.ErrorCode, &item.CreatedAt, &item.CompletedAt); err != nil {
+	if err := scanner.Scan(&item.ID, &item.RunID, &item.NodeID, &item.Attempt, &item.UserID, &item.ScopeID, &item.Operation, &item.Input, &item.Config, &item.InputSchema, &item.OutputSchema, &item.State, &item.LeasedDeviceID, &item.ContextID, &item.AssignedDeviceID, &item.LeaseExpiresAt, &item.LastHeartbeatAt, &output, &item.ErrorCode, &item.CreatedAt, &item.CompletedAt, &item.ControlVersion, &item.DeadlineAt, &item.RuntimeRunID, &item.RequiredCapability, &item.ExecutionStartedAt, &item.CancelRequestedAt); err != nil {
 		return err
 	}
 	item.Output = output
@@ -48,7 +54,11 @@ func scanWorkflowDeviceJob(scanner interface{ Scan(...any) error }, item *Workfl
 
 func (db *Database) QueueWorkflowDeviceNodeJob(ctx context.Context, userID, runID, nodeID string, attempt int, scopeID, operation, capability string, input, config, inputSchema, outputSchema json.RawMessage) (*WorkflowDeviceNodeJob, error) {
 	item := &WorkflowDeviceNodeJob{}
-	err := db.agentTx(userID, func(tx *sql.Tx) error {
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		runtimeID, budgetDeadline, err := deviceRunAuthorityTx(ctx, tx, userID, runID, nil, capability)
+		if err != nil {
+			return err
+		}
 		var contextID, deviceID string
 		var contextCapabilities json.RawMessage
 		var contextExpiresAt time.Time
@@ -62,17 +72,25 @@ func (db *Database) QueueWorkflowDeviceNodeJob(ctx context.Context, userID, runI
 			return err
 		}
 		contextConfig := mustJSON(map[string]any{"contextId": contextID, "contextCapabilities": contextCapabilities, "contextExpiresAt": contextExpiresAt})
-		return scanWorkflowDeviceJob(tx.QueryRowContext(ctx, `INSERT INTO workflow_device_node_jobs(id,run_id,node_id,attempt,user_id,scope_id,operation,input,config,input_schema,output_schema,context_id,assigned_device_id)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb||$10::jsonb,$11,$12,$13,$14)
-			ON CONFLICT(run_id,node_id,attempt) DO UPDATE SET run_id=EXCLUDED.run_id
-			RETURNING `+workflowDeviceJobColumns, "devicejob_"+uuid.NewString(), runID, nodeID, attempt, userID, scopeID, operation, input, config, contextConfig, inputSchema, outputSchema, contextID, deviceID), item)
+		return scanWorkflowDeviceJob(tx.QueryRowContext(ctx, `INSERT INTO workflow_device_node_jobs(id,run_id,node_id,attempt,user_id,scope_id,operation,input,config,input_schema,output_schema,context_id,assigned_device_id,deadline_at,runtime_run_id,required_capability)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb||$10::jsonb,$11,$12,$13,$14,$15,$16,$17)
+			ON CONFLICT(run_id,node_id,attempt) WHERE run_id IS NOT NULL DO UPDATE SET run_id=EXCLUDED.run_id
+			WHERE workflow_device_node_jobs.input=EXCLUDED.input AND workflow_device_node_jobs.operation=EXCLUDED.operation AND workflow_device_node_jobs.scope_id=EXCLUDED.scope_id AND workflow_device_node_jobs.context_id=EXCLUDED.context_id AND workflow_device_node_jobs.assigned_device_id=EXCLUDED.assigned_device_id AND workflow_device_node_jobs.runtime_run_id=EXCLUDED.runtime_run_id AND workflow_device_node_jobs.required_capability=EXCLUDED.required_capability AND workflow_device_node_jobs.input_schema=EXCLUDED.input_schema AND workflow_device_node_jobs.output_schema=EXCLUDED.output_schema AND workflow_device_node_jobs.config=EXCLUDED.config
+			RETURNING `+workflowDeviceJobColumns, "devicejob_"+uuid.NewString(), runID, nodeID, attempt, userID, scopeID, operation, input, config, contextConfig, inputSchema, outputSchema, contextID, deviceID, deviceJobDeadline(ctx, contextExpiresAt, budgetDeadline), runtimeID, capability), item)
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrSpaceConflict
+	}
 	return item, err
 }
 
 func (db *Database) QueueAIInvocationDeviceNodeJob(ctx context.Context, userID, invocationID, nodeID string, attempt int, scopeID, operation, capability string, input, config, inputSchema, outputSchema json.RawMessage) (*WorkflowDeviceNodeJob, error) {
 	item := &WorkflowDeviceNodeJob{}
-	err := db.agentTx(userID, func(tx *sql.Tx) error {
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		runtimeID, budgetDeadline, err := deviceRunAuthorityTx(ctx, tx, userID, invocationID, nil, capability)
+		if err != nil {
+			return err
+		}
 		var contextID, deviceID string
 		var contextCapabilities json.RawMessage
 		var contextExpiresAt time.Time
@@ -86,71 +104,14 @@ func (db *Database) QueueAIInvocationDeviceNodeJob(ctx context.Context, userID, 
 			return err
 		}
 		contextConfig := mustJSON(map[string]any{"contextId": contextID, "contextCapabilities": contextCapabilities, "contextExpiresAt": contextExpiresAt})
-		return scanWorkflowDeviceJob(tx.QueryRowContext(ctx, `INSERT INTO workflow_device_node_jobs(id,invocation_id,node_id,attempt,user_id,scope_id,operation,input,config,input_schema,output_schema,ai_context_id,assigned_device_id)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb||$10::jsonb,$11,$12,$13,$14)
+		return scanWorkflowDeviceJob(tx.QueryRowContext(ctx, `INSERT INTO workflow_device_node_jobs(id,invocation_id,node_id,attempt,user_id,scope_id,operation,input,config,input_schema,output_schema,ai_context_id,assigned_device_id,deadline_at,runtime_run_id,required_capability)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb||$10::jsonb,$11,$12,$13,$14,$15,$16,$17)
 			ON CONFLICT(invocation_id,node_id,attempt) WHERE invocation_id IS NOT NULL DO UPDATE SET invocation_id=EXCLUDED.invocation_id
-			RETURNING `+workflowDeviceJobColumns, "devicejob_"+uuid.NewString(), invocationID, nodeID, attempt, userID, scopeID, operation, input, config, contextConfig, inputSchema, outputSchema, contextID, deviceID), item)
-	})
-	return item, err
-}
-
-func (db *Database) ClaimWorkflowDeviceNodeJob(userID, deviceID string, lease time.Duration) (*WorkflowDeviceNodeJob, string, error) {
-	if lease != time.Minute {
-		lease = time.Minute
-	}
-	token, err := TestingSecureToken()
-	if err != nil {
-		return nil, "", err
-	}
-	item := &WorkflowDeviceNodeJob{}
-	err = db.agentTx(userID, func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`UPDATE workflow_device_node_jobs SET state='queued',leased_device_id=NULL,lease_token_hash=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL WHERE user_id=$1 AND state='leased' AND lease_expires_at<=NOW()`, userID); err != nil {
-			return err
-		}
-		return scanWorkflowDeviceJob(tx.QueryRow(`WITH candidate AS (
-			SELECT j.id FROM workflow_device_node_jobs j JOIN trusted_devices d ON d.id=$1 AND d.user_id=$2 AND d.revoked_at IS NULL AND d.last_seen_at>NOW()-INTERVAL '90 seconds'
-			LEFT JOIN agent_run_contexts c ON c.id=j.context_id AND c.device_id=$1 AND c.owner_user_id=$2 AND c.state='attached' AND c.expires_at>NOW()
-			LEFT JOIN ai_invocation_contexts ac ON ac.id=j.ai_context_id AND ac.device_id=$1 AND ac.user_id=$2 AND ac.state='attached' AND ac.expires_at>NOW()
-			WHERE j.user_id=$2 AND j.assigned_device_id=$1 AND j.state='queued' AND (c.id IS NOT NULL OR ac.id IS NOT NULL)
-			ORDER BY j.created_at FOR UPDATE OF j SKIP LOCKED LIMIT 1)
-			UPDATE workflow_device_node_jobs j SET state='leased',leased_device_id=$1,lease_token_hash=$3,lease_expires_at=NOW()+INTERVAL '60 seconds',last_heartbeat_at=NOW()
-			FROM candidate c WHERE j.id=c.id RETURNING `+workflowDeviceJobUpdateColumns, deviceID, userID, TestingHashToken(token)), item)
+			WHERE workflow_device_node_jobs.input=EXCLUDED.input AND workflow_device_node_jobs.operation=EXCLUDED.operation AND workflow_device_node_jobs.scope_id=EXCLUDED.scope_id AND workflow_device_node_jobs.ai_context_id=EXCLUDED.ai_context_id AND workflow_device_node_jobs.assigned_device_id=EXCLUDED.assigned_device_id AND workflow_device_node_jobs.runtime_run_id=EXCLUDED.runtime_run_id AND workflow_device_node_jobs.required_capability=EXCLUDED.required_capability AND workflow_device_node_jobs.input_schema=EXCLUDED.input_schema AND workflow_device_node_jobs.output_schema=EXCLUDED.output_schema AND workflow_device_node_jobs.config=EXCLUDED.config
+			RETURNING `+workflowDeviceJobColumns, "devicejob_"+uuid.NewString(), invocationID, nodeID, attempt, userID, scopeID, operation, input, config, contextConfig, inputSchema, outputSchema, contextID, deviceID, deviceJobDeadline(ctx, contextExpiresAt, budgetDeadline), runtimeID, capability), item)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, "", ErrAgentJobNotFound
-	}
-	return item, token, err
-}
-
-func (db *Database) RenewWorkflowDeviceNodeJob(userID, deviceID, jobID, token string) (*WorkflowDeviceNodeJob, error) {
-	item := &WorkflowDeviceNodeJob{}
-	err := db.agentTx(userID, func(tx *sql.Tx) error {
-		return scanWorkflowDeviceJob(tx.QueryRow(`UPDATE workflow_device_node_jobs SET lease_expires_at=NOW()+INTERVAL '60 seconds',last_heartbeat_at=NOW()
-			WHERE id=$1 AND user_id=$2 AND leased_device_id=$3 AND lease_token_hash=$4 AND state='leased' AND lease_expires_at>NOW() RETURNING `+workflowDeviceJobColumns, jobID, userID, deviceID, TestingHashToken(token)), item)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrInvalidLease
-	}
-	return item, err
-}
-
-func (db *Database) FinishWorkflowDeviceNodeJob(userID, deviceID, jobID, token, state string, output json.RawMessage, errorCode string) (*WorkflowDeviceNodeJob, error) {
-	if state != "completed" && state != "failed" {
-		return nil, ErrInvalidJobState
-	}
-	item := &WorkflowDeviceNodeJob{}
-	err := db.agentTx(userID, func(tx *sql.Tx) error {
-		return scanWorkflowDeviceJob(tx.QueryRow(`UPDATE workflow_device_node_jobs SET state=$1,output=$2,error_code=NULLIF($3,''),completed_at=NOW(),lease_expires_at=NULL
-			WHERE id=$4 AND user_id=$5 AND leased_device_id=$6 AND lease_token_hash=$7 AND state='leased' AND lease_expires_at>NOW() RETURNING `+workflowDeviceJobColumns, state, output, errorCode, jobID, userID, deviceID, TestingHashToken(token)), item)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		// A duplicate completion is idempotent only for the same terminal state.
-		err = db.agentTx(userID, func(tx *sql.Tx) error {
-			return scanWorkflowDeviceJob(tx.QueryRow(`SELECT `+workflowDeviceJobColumns+` FROM workflow_device_node_jobs WHERE id=$1 AND user_id=$2 AND leased_device_id=$3 AND lease_token_hash=$4 AND state=$5`, jobID, userID, deviceID, TestingHashToken(token), state), item)
-		})
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrInvalidLease
+		err = ErrSpaceConflict
 	}
 	return item, err
 }

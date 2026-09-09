@@ -39,7 +39,6 @@ type mistyConversationAction struct {
 type mistyConversation struct {
 	ID            string                     `json:"id"`
 	Title         string                     `json:"title"`
-	AgentID       string                     `json:"agentId,omitempty"`
 	SpaceID       string                     `json:"spaceId,omitempty"`
 	Kind          string                     `json:"kind"`
 	OriginSurface string                     `json:"originSurface,omitempty"`

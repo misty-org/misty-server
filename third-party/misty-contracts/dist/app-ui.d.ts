@@ -24,6 +24,17 @@ export declare const MistyTerminalPreferencesSchema: z.ZodObject<{
     scrollback: z.ZodNumber;
 }, z.core.$strict>;
 export declare const MistyAppSettingsSchema: z.ZodObject<{
+    code: z.ZodOptional<z.ZodObject<{
+        autosaveDelayMs: z.ZodNumber;
+        fontFamily: z.ZodString;
+        fontSize: z.ZodNumber;
+        formatOnSave: z.ZodBoolean;
+        interfaceScale: z.ZodNumber;
+        lineNumbers: z.ZodBoolean;
+        tabSize: z.ZodNumber;
+        theme: z.ZodString;
+        wordWrap: z.ZodBoolean;
+    }, z.core.$strict>>;
     terminal: z.ZodOptional<z.ZodObject<{
         cursorBlink: z.ZodBoolean;
         cursorStyleIndex: z.ZodNumber;
@@ -40,6 +51,7 @@ export declare const MistyAppSettingsSchema: z.ZodObject<{
 export declare const mistyTerminalCommands: readonly ["terminal.clear", "terminal.search", "terminal.zoom_in", "terminal.zoom_out", "terminal.zoom_reset", "terminal.copy", "terminal.paste"];
 export declare const mistyPlannerCommands: readonly ["planner.create", "roadmap.create", "roadmap.copy", "roadmap.paste", "roadmap.duplicate", "roadmap.delete", "roadmap.undo", "roadmap.redo"];
 export declare const mistyBrowserCommands: readonly ["navigation.back", "navigation.forward", "navigation.refresh", "browser.annotation_undo", "browser.annotation_redo"];
+export declare const mistyCodeCommands: readonly ["code.add_cursor_above", "code.add_cursor_below", "code.apply_inline_ai", "code.code_actions", "code.command_palette", "code.document_symbols", "code.format_document", "code.go_to_definition", "code.harpoon", "code.inline_ai", "code.open_multibuffer_excerpt", "code.previous_file", "code.quick_open", "code.references", "code.rename", "code.save", "code.search_project", "code.select_all_occurrences", "code.select_next_occurrence", "code.show_hover", "code.toggle_explorer", "code.toggle_terminal", "code.undo_selection"];
 export declare const MistyAppCommandSchema: z.ZodEnum<{
     "terminal.clear": "terminal.clear";
     "terminal.search": "terminal.search";
@@ -61,16 +73,39 @@ export declare const MistyAppCommandSchema: z.ZodEnum<{
     "navigation.refresh": "navigation.refresh";
     "browser.annotation_undo": "browser.annotation_undo";
     "browser.annotation_redo": "browser.annotation_redo";
+    "code.add_cursor_above": "code.add_cursor_above";
+    "code.add_cursor_below": "code.add_cursor_below";
+    "code.apply_inline_ai": "code.apply_inline_ai";
+    "code.code_actions": "code.code_actions";
+    "code.command_palette": "code.command_palette";
+    "code.document_symbols": "code.document_symbols";
+    "code.format_document": "code.format_document";
+    "code.go_to_definition": "code.go_to_definition";
+    "code.harpoon": "code.harpoon";
+    "code.inline_ai": "code.inline_ai";
+    "code.open_multibuffer_excerpt": "code.open_multibuffer_excerpt";
+    "code.previous_file": "code.previous_file";
+    "code.quick_open": "code.quick_open";
+    "code.references": "code.references";
+    "code.rename": "code.rename";
+    "code.save": "code.save";
+    "code.search_project": "code.search_project";
+    "code.select_all_occurrences": "code.select_all_occurrences";
+    "code.select_next_occurrence": "code.select_next_occurrence";
+    "code.show_hover": "code.show_hover";
+    "code.toggle_explorer": "code.toggle_explorer";
+    "code.toggle_terminal": "code.toggle_terminal";
+    "code.undo_selection": "code.undo_selection";
 }>;
 export declare function commandsForApp(appId: string): readonly MistyAppCommand[];
 export declare const MistyWorkspaceOpenSchema: z.ZodObject<{
     route: z.ZodString;
     placement: z.ZodDefault<z.ZodEnum<{
-        tab: "tab";
+        down: "down";
+        up: "up";
         left: "left";
         right: "right";
-        up: "up";
-        down: "down";
+        tab: "tab";
     }>>;
     state: z.ZodOptional<z.ZodCustom<import("./workspace.js").MistyViewState, import("./workspace.js").MistyViewState>>;
     title: z.ZodOptional<z.ZodString>;
@@ -78,15 +113,21 @@ export declare const MistyWorkspaceOpenSchema: z.ZodObject<{
 }, z.core.$strict>;
 export type MistyWorkspaceOpen = z.input<typeof MistyWorkspaceOpenSchema>;
 export declare const mistyAppUiContracts: {
+    readonly "workspace.dirty.set": {
+        readonly params: z.ZodObject<{
+            dirty: z.ZodBoolean;
+        }, z.core.$strict>;
+        readonly result: z.ZodPipe<z.ZodUnion<readonly [z.ZodNull, z.ZodUndefined]>, z.ZodTransform<undefined, null | undefined>>;
+    };
     readonly "workspace.open": {
         readonly params: z.ZodObject<{
             route: z.ZodString;
             placement: z.ZodDefault<z.ZodEnum<{
-                tab: "tab";
+                down: "down";
+                up: "up";
                 left: "left";
                 right: "right";
-                up: "up";
-                down: "down";
+                tab: "tab";
             }>>;
             state: z.ZodOptional<z.ZodCustom<import("./workspace.js").MistyViewState, import("./workspace.js").MistyViewState>>;
             title: z.ZodOptional<z.ZodString>;
@@ -112,6 +153,17 @@ export declare const mistyAppUiContracts: {
     readonly "settings.snapshot": {
         readonly params: z.ZodObject<{}, z.core.$strict>;
         readonly result: z.ZodObject<{
+            code: z.ZodOptional<z.ZodObject<{
+                autosaveDelayMs: z.ZodNumber;
+                fontFamily: z.ZodString;
+                fontSize: z.ZodNumber;
+                formatOnSave: z.ZodBoolean;
+                interfaceScale: z.ZodNumber;
+                lineNumbers: z.ZodBoolean;
+                tabSize: z.ZodNumber;
+                theme: z.ZodString;
+                wordWrap: z.ZodBoolean;
+            }, z.core.$strict>>;
             terminal: z.ZodOptional<z.ZodObject<{
                 cursorBlink: z.ZodBoolean;
                 cursorStyleIndex: z.ZodNumber;
@@ -180,11 +232,11 @@ export declare const mistyAppUiContracts: {
             viewId: z.ZodString;
             targetViewId: z.ZodString;
             placement: z.ZodEnum<{
-                tab: "tab";
+                down: "down";
+                up: "up";
                 left: "left";
                 right: "right";
-                up: "up";
-                down: "down";
+                tab: "tab";
             }>;
         }, z.core.$strict>;
         readonly result: z.ZodPipe<z.ZodUnion<readonly [z.ZodNull, z.ZodUndefined]>, z.ZodTransform<undefined, null | undefined>>;

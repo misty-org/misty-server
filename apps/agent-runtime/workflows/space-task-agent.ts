@@ -1,6 +1,13 @@
+import { routineWaitAdapter } from "../src/routine-wait-adapter.js";
+import { routineAgentAdapter, type RoutineAgentControl } from "../src/routine-agent-adapter.js";
+import type { RoutineAgentResult } from "../src/routine-agent.js";
+import type { LanguageModelUsage } from "ai";
+import { executeRoutine } from "../src/routine-coordinator.js";
+import { MISTY_HARNESS_VERSION, type HarnessCheckpoint, type HarnessCompletion, type HarnessExecution } from "../src/harness.js";
+import { executePinnedCapability } from "../src/pinned-capability.js";
 import { WorkflowAgent } from "@ai-sdk/workflow";
-import { isStepCount, jsonSchema, tool, type StopCondition } from "ai";
-import { FatalError, getWorkflowMetadata, RetryableError } from "workflow";
+import { isStepCount, jsonSchema, tool, type StopCondition, type ModelMessage } from "ai";
+import { FatalError, getWorkflowMetadata, RetryableError, sleep } from "workflow";
 import { z } from "zod";
 import {
   controlPlaneRequest,
@@ -15,6 +22,13 @@ import {
 } from "../src/mcp-runtime.js";
 import { agentToolApprovalHook } from "../src/approval.js";
 import { agentDeviceHook } from "../src/device.js";
+import {
+  capabilityPage,
+  capabilityToolKey,
+} from "../src/capability-selection.js";
+import { continueToolExecution } from "../src/tool-execution.js";
+import { serialToolLifecycle } from "../src/serial-tool-lifecycle.js";
+import { accumulateModelUsage, modelTimeout, type ExecutionBudget } from "../src/model-budget.js";
 import type {
   MCPRunAccess,
   RuntimeToolContext,
@@ -22,74 +36,14 @@ import type {
 } from "../src/types.js";
 
 export interface SpaceTaskWorkflowInput {
+  adapterVersion?: typeof MISTY_HARNESS_VERSION;
   mistyRunId: string;
   controlPlaneURL: string;
 }
 
-const toolContextSchema = z.object({
-  mistyRunId: z.string().min(1),
-  runtimeRunId: z.string().min(1),
-  controlPlaneURL: z.string().url(),
-});
-
-const taskMutationFields = {
-  title: z.string().max(500).optional(),
-  notes: z.string().max(12_000).optional(),
-  status: z.enum(["todo", "in_progress", "done", "canceled"]).optional(),
-  priority: z.enum(["low", "medium", "high"]).optional(),
-  dueAt: z
-    .string()
-    .datetime({ offset: true })
-    .describe(
-      "Due time with the creator's local UTC offset from authoritative context; do not use Z unless the creator requested UTC.",
-    )
-    .optional(),
-  dueTimezone: z
-    .string()
-    .min(1)
-    .max(80)
-    .describe(
-      "IANA timezone from authoritative context, such as America/Los_Angeles.",
-    )
-    .optional(),
-  assigneeUserId: z.string().min(1).max(200).optional(),
-};
-
-export const taskCreateInputSchema = z.object({
-  ...taskMutationFields,
-  title: z.string().min(1).max(500),
-});
-
-const taskUpdateInputSchema = z.object({
-  ...taskMutationFields,
-  id: z.string().min(1),
-});
-
-const calendarMutationFields = {
-  title: z.string().min(1).max(240).optional(),
-  description: z.string().max(20_000).optional(),
-  location: z.string().max(1_000).optional(),
-  startsAt: z.string().datetime({ offset: true }).optional(),
-  endsAt: z.string().datetime({ offset: true }).optional(),
-  allDay: z.boolean().optional(),
-  timezone: z.string().min(1).max(80).optional(),
-  status: z.enum(["confirmed", "tentative", "canceled"]).optional(),
-};
-
-export const calendarCreateInputSchema = z.object({
-  ...calendarMutationFields,
-  title: z.string().min(1).max(240),
-  startsAt: z.string().datetime({ offset: true }),
-  endsAt: z.string().datetime({ offset: true }),
-});
-
-const calendarUpdateInputSchema = z.object({
-  ...calendarMutationFields,
-  id: z.string().min(1).max(200),
-});
-
 function rethrowStepError(error: unknown): never {
   if (error instanceof ControlPlaneError) {
+    if (error.code === "agent_model_turn_limit" || error.code === "agent_execution_time_limit") throw new FatalError(error.code);
     if (error.transient) {
       throw new RetryableError(
         "Misty's control plane is temporarily unavailable.",
@@ -115,6 +69,7 @@ export function recoverableToolError(error: unknown): {
   message: string;
 } | null {
   if (!(error instanceof ControlPlaneError)) return null;
+  if (error.code === "agent_model_turn_limit" || error.code === "agent_execution_time_limit") return null;
   if (![400, 409, 422].includes(error.status)) return null;
   return {
     code: error.code || "invalid_tool_input",
@@ -133,6 +88,12 @@ export function classifyRuntimeError(error: unknown): {
     error instanceof Error ? error.message : "Agent workflow failed";
   const normalized =
     `${error instanceof Error ? error.name : ""} ${message}`.toLowerCase();
+  if (normalized.includes("agent_model_turn_limit")) {
+    return { code: "agent_model_turn_limit", message: "This run reached its model-turn limit. Review its completed work before starting another request." };
+  }
+  if (normalized.includes("agent_execution_time_limit")) {
+    return { code: "agent_execution_time_limit", message: "This run used its execution-time allowance. Review its completed work before starting another request." };
+  }
   if (
     normalized.includes("timeout") ||
     normalized.includes("timed out") ||
@@ -176,6 +137,30 @@ function fallbackModels(primaryModel: string): string[] {
   return ["poolside/laguna-s-2.1", "google/gemini-3-flash"].filter(
     (model) => model !== primaryModel,
   );
+}
+
+export function stoppedAtModelTurnLimit(stepCount: number, finishReason: string): boolean {
+  return stepCount >= 20 && finishReason !== "stop";
+}
+
+export function unfinishedModelResult(
+  aborted: boolean,
+  stepCount: number,
+  finishReason: string,
+): { code: string; message: string } | null {
+  // WorkflowAgent can resolve an aborted stream with the last completed step's
+  // finish reason. A normal return (or earlier text) is not completion evidence.
+  if (aborted) {
+    return { code: "agent_runtime_interrupted", message: "This run stopped before finishing. Review its completed work before starting another request." };
+  }
+  if (stoppedAtModelTurnLimit(stepCount, finishReason)) {
+    return { code: "agent_model_turn_limit", message: "This run reached its model-turn limit before finishing. Review its completed work before starting another request." };
+  }
+  if (finishReason === "stop" && stepCount > 0) return null;
+  if (finishReason === "length") {
+    return { code: "agent_response_incomplete", message: "The model reached its response limit before finishing. Review the partial result before continuing." };
+  }
+  return { code: "agent_response_incomplete", message: "The model did not finish this request. Review its completed work before starting another request." };
 }
 
 export function classifyToolCompletion(toolNames: string[]): {
@@ -228,18 +213,12 @@ export function missingRequiredToolCalls(
 }
 
 export function incompleteRequiredToolText(toolNames: string[]): string {
-  const labels = toolNames
-    .slice(0, 4)
-    .map(humanToolActionLabel)
-    .join(", ");
+  const labels = toolNames.slice(0, 4).map(humanToolActionLabel).join(", ");
   return `I couldn't fully complete that request. The required ${labels || "action"} action did not finish.`;
 }
 
 export function confirmedActionFallbackText(toolNames: string[]): string {
-  const labels = toolNames
-    .slice(0, 4)
-    .map(humanToolActionLabel)
-    .join(", ");
+  const labels = toolNames.slice(0, 4).map(humanToolActionLabel).join(", ");
   return labels
     ? `Done — I completed the requested ${labels} action${toolNames.length === 1 ? "" : "s"}.`
     : "Done — I completed the requested action.";
@@ -269,8 +248,21 @@ function humanToolActionLabel(name: string): string {
 }
 
 export function unconfirmedToolResultReason(output: unknown): string {
+  if (output === undefined)
+    return "The requested action returned no confirmed result.";
   if (!output || typeof output !== "object") return "";
   const result = output as Record<string, unknown>;
+  if (result.status === "uncertain")
+    return "The action may have happened, but its outcome could not be verified.";
+  if (
+    [
+      "failure",
+      "approval_required",
+      "device_required",
+      "user_intervention_required",
+    ].includes(String(result.status))
+  )
+    return "The requested action has not completed.";
   if (result.denied === true) {
     return "The requested action was not approved.";
   }
@@ -318,6 +310,13 @@ export const stopOnRepeatedOrTerminalToolFailure: StopCondition<any> = ({
   const counts = new Map<string, number>();
   for (const step of steps) {
     for (const part of step.content) {
+      if (
+        part.type === "tool-result" &&
+        part.output &&
+        typeof part.output === "object" &&
+        ["uncertain", "user_intervention_required"].includes(String((part.output as Record<string, unknown>).status))
+      )
+        return true;
       if (part.type !== "tool-error") continue;
       const signature = toolFailureSignature(part.toolName, part.input);
       const count = (counts.get(signature) ?? 0) + 1;
@@ -327,6 +326,7 @@ export const stopOnRepeatedOrTerminalToolFailure: StopCondition<any> = ({
         message.includes("tool_unavailable") ||
         message.includes("permission_denied") ||
         message.includes("authorization_or_state_changed") ||
+        message.includes("agent_execution_time_limit") ||
         count >= 2
       ) {
         return true;
@@ -358,9 +358,56 @@ async function fetchContext(
     return await controlPlaneRequest<SpaceTaskContext>(
       identity,
       "context",
-      {},
+      { routine_protocol: 1, routine_agent_protocol: 1, routine_wait_protocol: 1 },
       `${identity.mistyRunId}:context`,
     );
+  } catch (error) {
+    rethrowStepError(error);
+  }
+}
+
+async function openRoutineWait(identity: RuntimeIdentity, stepId: string, until: string): Promise<unknown> {
+  "use step";
+  try {
+    return await controlPlaneRequest(identity, "routine-wait", {phase: "open", step_id: stepId, until}, `${identity.mistyRunId}:routine-wait:${stepId}:open`);
+  } catch (error) { rethrowStepError(error); }
+}
+async function resumeRoutineWait(identity: RuntimeIdentity, stepId: string, waitId: string): Promise<unknown> {
+  "use step";
+  try {
+    return await controlPlaneRequest(identity, "routine-wait", {phase: "resume", step_id: stepId, wait_id: waitId}, `${identity.mistyRunId}:routine-wait:${waitId}:resume`);
+  } catch (error) { rethrowStepError(error); }
+}
+
+async function openRoutineAgent(identity: RuntimeIdentity, stepId: string): Promise<Awaited<ReturnType<RoutineAgentControl["open"]>>> {
+  "use step";
+  try {
+    return await controlPlaneRequest(identity, "routine-agent", {phase: "open", step_id: stepId}, `${identity.mistyRunId}:routine-agent:${stepId}:open`);
+  } catch (error) { rethrowStepError(error); }
+}
+async function finishRoutineAgent(identity: RuntimeIdentity, stepId: string, result: RoutineAgentResult): Promise<unknown> {
+  "use step";
+  try {
+    return await controlPlaneRequest(identity, "routine-agent", {phase: "finish", step_id: stepId, result}, `${identity.mistyRunId}:routine-agent:${stepId}:finish`);
+  } catch (error) { rethrowStepError(error); }
+}
+async function beginRoutineModel(identity: RuntimeIdentity, nodeId: string): Promise<ExecutionBudget> {
+  "use step";
+  try {
+    return await controlPlaneRequest(identity, "routine-agent", {phase: "model_start", node_id: nodeId}, `${identity.mistyRunId}:${nodeId}:start`);
+  } catch (error) { rethrowStepError(error); }
+}
+async function finishRoutineModel(identity: RuntimeIdentity, nodeId: string, usage: LanguageModelUsage): Promise<void> {
+  "use step";
+  try {
+    await controlPlaneRequest(identity, "routine-agent", {phase: "model_finish", node_id: nodeId, usage}, `${identity.mistyRunId}:${nodeId}:finish`);
+  } catch (error) { rethrowStepError(error); }
+}
+
+async function fetchExecutionBudget(identity: RuntimeIdentity, turn: number): Promise<ExecutionBudget> {
+  "use step";
+  try {
+    return await controlPlaneRequest<ExecutionBudget>(identity, "budget", { begin: true }, `${identity.mistyRunId}:budget:${turn}`);
   } catch (error) {
     rethrowStepError(error);
   }
@@ -373,68 +420,40 @@ async function executeTool(
   input: unknown,
 ): Promise<unknown> {
   try {
-    const hookToken = `misty:${context.mistyRunId}:${callId}`;
-    const deviceHookToken = `misty-device:${context.mistyRunId}:${callId}`;
-    const response = await requestToolExecution(
-      context,
-      callId,
-      name,
-      input,
-      hookToken,
-      deviceHookToken,
-      `${context.mistyRunId}:tool:${callId}`,
-    );
-    if (response.tool_error) {
-      throw new Error(
-        `${response.tool_error.code}: ${response.tool_error.message}`,
-      );
-    }
-    if (response.device_wait) {
-      const device = await agentDeviceHook.create({ token: deviceHookToken });
-      if (!device.available)
-        return { unavailable: true, reason: "device_unavailable" };
-      const resumed = await requestToolExecution(
-        context,
-        callId,
-        name,
-        input,
-        hookToken,
-        deviceHookToken,
-        `${context.mistyRunId}:tool:${callId}:device-resumed`,
-      );
-      if (resumed.tool_error) {
-        throw new Error(
-          `${resumed.tool_error.code}: ${resumed.tool_error.message}`,
-        );
-      }
-      return resumed.result;
-    }
-    if (response.approval) {
-      const decision = await agentToolApprovalHook.create({ token: hookToken });
-      if (!decision.approved) {
-        return {
-          denied: true,
-          reason: "creator_denied",
-          approval_id: decision.approval_id,
-        };
-      }
-      const resumed = await requestToolExecution(
-        context,
-        callId,
-        name,
-        input,
-        hookToken,
-        deviceHookToken,
-        `${context.mistyRunId}:tool:${callId}:approved`,
-      );
-      if (resumed.tool_error) {
-        throw new Error(
-          `${resumed.tool_error.code}: ${resumed.tool_error.message}`,
-        );
-      }
-      return resumed.result;
-    }
-    return response.result;
+    const approvalToken = (attempt: number) =>
+      `misty:${context.mistyRunId}:${callId}:wait:${attempt}`;
+    const deviceToken = (attempt: number) =>
+      `misty-device:${context.mistyRunId}:${callId}:wait:${attempt}`;
+    return await continueToolExecution({
+      request: (attempt) =>
+        requestToolExecution(
+          context,
+          callId,
+          name,
+          input,
+          approvalToken(attempt),
+          deviceToken(attempt),
+          `${context.mistyRunId}:tool:${callId}`,
+        ),
+      approval: async (_approval, attempt) => {
+        const decision = await agentToolApprovalHook.create({
+          token: approvalToken(attempt),
+        });
+        return decision.approved;
+      },
+      intervention: async (attempt) => {
+        // Engine wake tokens are opaque. Go owns the separate user-action wait
+        // and requires a trusted user decision before sending this wake signal.
+        const decision = await agentDeviceHook.create({ token: deviceToken(attempt) });
+        return decision.available;
+      },
+      device: async (attempt) => {
+        const device = await agentDeviceHook.create({
+          token: deviceToken(attempt),
+        });
+        return device.available;
+      },
+    });
   } catch (error) {
     if (error instanceof ControlPlaneError) rethrowStepError(error);
     throw error;
@@ -453,6 +472,7 @@ async function requestToolExecution(
   result?: unknown;
   approval?: { id: string; state: string };
   device_wait?: boolean;
+  intervention_wait?: { id: string; action: string; reason: string };
   tool_error?: { code: string; message: string };
 }> {
   "use step";
@@ -462,7 +482,7 @@ async function requestToolExecution(
       access = await controlPlaneRequest<MCPRunAccess>(
         context,
         "mcp-token",
-        {},
+        { intervention_wait_version: 1 },
         `${context.mistyRunId}:mcp-token:${callId}`,
       );
     } catch (error) {
@@ -534,6 +554,7 @@ async function requestLegacyToolExecution(
   result?: unknown;
   approval?: { id: string; state: string };
   device_wait?: boolean;
+  intervention_wait?: { id: string; action: string; reason: string };
   tool_error?: { code: string; message: string };
 }> {
   return await controlPlaneRequest(
@@ -550,89 +571,6 @@ async function requestLegacyToolExecution(
   );
 }
 
-const nativeControlPlaneToolNames = new Set([
-  "context.get",
-  "weather.current",
-  "members.list",
-  "members.resolve",
-  "messages.search",
-  "messages.send",
-  "library.search",
-  "library.read",
-  "library.update",
-  "library.promote_attachment",
-  "notes.search",
-  "notes.read",
-  "notes.create",
-  "notes.update",
-  "drawings.list",
-  "drawings.read",
-  "drawings.create",
-  "drawings.apply",
-  "roadmaps.query",
-  "roadmaps.read",
-  "roadmaps.create",
-  "roadmaps.update",
-  "tasks.query",
-  "tasks.update_assigned",
-  "tasks.create",
-  "tasks.update",
-  "calendar.query",
-  "calendar.create",
-  "calendar.update",
-  "agents.delegate",
-  "agents.list",
-  "agents.status",
-  "memory.remember",
-  "memory.forget",
-  "browser.inspect",
-  "browser.navigate",
-  "browser.click",
-  "browser.downloads.list",
-  "task.activity.write",
-  "attached_files.read",
-]);
-
-function remoteMCPToolKey(name: string, index: number): string {
-  const slug = name
-    .replace(/^mcp\./, "")
-    .replace(/[^a-zA-Z0-9_-]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 42);
-  return `remote_${index}_${slug || "tool"}`;
-}
-
-export function selectActiveRuntimeToolKeys(
-  controlPlaneNames: Record<string, string>,
-  allowedToolNames: Iterable<string>,
-  catalog: { supported: boolean; advertisedToolNames: Iterable<string> },
-): string[] {
-  const allowed = new Set(allowedToolNames);
-  const advertised = new Set(catalog.advertisedToolNames);
-  return Object.keys(controlPlaneNames).filter((key) => {
-    const canonicalName = controlPlaneNames[key];
-    return (
-      canonicalName !== undefined &&
-      (allowed.has(canonicalName) || canonicalName.startsWith("mcp.")) &&
-      (!catalog.supported || advertised.has(canonicalName))
-    );
-  });
-}
-
-async function queryTasks(
-  input: {
-    query?: string;
-    status?: string;
-    priority?: "low" | "medium" | "high";
-    assigneeUserId?: string;
-    from?: string;
-    to?: string;
-  },
-  options: { context: RuntimeToolContext; toolCallId: string },
-): Promise<unknown> {
-  return executeTool(options.context, options.toolCallId, "tasks.query", input);
-}
-
 async function executeNamedTool(
   name: string,
   input: Record<string, unknown>,
@@ -641,53 +579,9 @@ async function executeNamedTool(
   return executeTool(options.context, options.toolCallId, name, input);
 }
 
-async function updateAssignedTask(
-  input: { status?: "in_progress" | "done" | "canceled"; notes?: string },
-  options: { context: RuntimeToolContext; toolCallId: string },
-): Promise<unknown> {
-  return executeTool(
-    options.context,
-    options.toolCallId,
-    "tasks.update_assigned",
-    input,
-  );
-}
-
-async function writeTaskActivity(
-  input: { kind: "progress" | "result"; message: string },
-  options: { context: RuntimeToolContext; toolCallId: string },
-): Promise<unknown> {
-  return executeTool(
-    options.context,
-    options.toolCallId,
-    "task.activity.write",
-    input,
-  );
-}
-
-async function readAttachedFiles(
-  input: Record<string, never>,
-  options: { context: RuntimeToolContext; toolCallId: string },
-): Promise<unknown> {
-  return executeTool(
-    options.context,
-    options.toolCallId,
-    "attached_files.read",
-    input,
-  );
-}
-
 async function checkpoint(
   identity: RuntimeIdentity,
-  event: {
-    node_id: string;
-    state: "running" | "completed" | "failed";
-    phase: string;
-    progress: number;
-    input?: Record<string, unknown>;
-    output?: Record<string, unknown>;
-    error_message?: string;
-  },
+  event: HarnessCheckpoint,
 ): Promise<void> {
   "use step";
   try {
@@ -704,20 +598,14 @@ async function checkpoint(
 
 async function complete(
   identity: RuntimeIdentity,
-  result: {
-    status: "success" | "incomplete" | "failed";
-    text: string;
-    usage?: Record<string, unknown>;
-    error_code?: string;
-    error_message?: string;
-  },
+  result: HarnessCompletion,
 ): Promise<void> {
   "use step";
   try {
     await controlPlaneRequest(
       identity,
       "complete",
-      result,
+      { ...result },
       `${identity.mistyRunId}:complete`,
     );
   } catch (error) {
@@ -773,14 +661,27 @@ function visibleErrorMessage(error: unknown): string {
 
 export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   "use workflow";
+  if (input.adapterVersion && input.adapterVersion !== MISTY_HARNESS_VERSION) throw new FatalError("harness_version_unavailable");
   const runtimeRunId = getWorkflowMetadata().workflowRunId;
   const identity: RuntimeIdentity = {
     mistyRunId: input.mistyRunId,
     runtimeRunId,
     controlPlaneURL: input.controlPlaneURL,
   };
+  const execution: HarnessExecution = {
+    executeCapability: (callId, name, input) => executeTool(identity, callId, name, input),
+    checkpoint: (event) => checkpoint(identity, event),
+    complete: (result) => complete(identity, result),
+  };
   await activateRuntime(identity);
-  const context = await fetchContext(identity);
+  let context: SpaceTaskContext;
+  try {
+    context = await fetchContext(identity);
+  } catch (error) {
+    const failure = classifyRuntimeError(error);
+    await execution.complete({ status: "failed", text: "", error_code: failure.code, error_message: failure.message });
+    throw error;
+  }
   const mcpCatalog = await discoverRemoteMCPTools(identity);
   const advertisedMCPTools = new Set(
     mcpCatalog.tools.map((descriptor) => descriptor.name),
@@ -789,7 +690,7 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     const missingAllowedTools = context.allowed_tools.filter(
       (name) => !advertisedMCPTools.has(name),
     );
-    await checkpoint(identity, {
+    await execution.checkpoint({
       node_id: "mcp:catalog",
       state: "completed",
       phase: "tools_ready",
@@ -800,470 +701,142 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       },
     });
   }
-  const remoteMCPDescriptors = mcpCatalog.tools.filter(
-    (descriptor) => !nativeControlPlaneToolNames.has(descriptor.name),
+  if (!mcpCatalog.supported) {
+    await execution.complete({
+      status: "failed",
+      text: "",
+      error_code: "capability_registry_unavailable",
+      error_message:
+        "This runtime requires the shared capability registry. Keep the pinned previous runtime available while upgrading.",
+    });
+    throw new FatalError("Misty's capability registry is unavailable.");
+  }
+  if (context.routine_execution !== undefined) {
+    try {
+      if (context.sdk_execution) throw new Error("conflicting_pinned_workloads");
+      const report = await executeRoutine(context.routine_execution, input.mistyRunId, advertisedMCPTools, {
+        wait: routineWaitAdapter({
+          open: (stepId, until) => openRoutineWait(identity, stepId, until),
+          resume: (stepId, waitId) => resumeRoutineWait(identity, stepId, waitId),
+          sleep,
+        }),
+        agent: routineAgentAdapter(mcpCatalog.tools, {
+          open: stepId => openRoutineAgent(identity, stepId),
+          finish: (stepId, result) => finishRoutineAgent(identity, stepId, result),
+          beginModel: nodeId => beginRoutineModel(identity, nodeId),
+          finishModel: (nodeId, usage) => finishRoutineModel(identity, nodeId, usage),
+          executeCapability: execution.executeCapability,
+        }),
+        executeCapability: execution.executeCapability,
+        beforeStep: async (id, index, activeSeconds) => {
+          const budget = await fetchExecutionBudget(identity, 100 + index);
+          if (budget.version !== 1 || !budget.active || !Number.isFinite(budget.remaining_ms) || budget.remaining_ms <= 0 || budget.remaining_ms > activeSeconds * 1000) throw new FatalError("routine_execution_budget_invalid");
+          await execution.checkpoint({ node_id: `routine:${id}`, state: "running", phase: "routine_step", progress: Math.min(90, 10 + index) });
+        },
+        checkpoint: (id, state, callId) => execution.checkpoint({
+          node_id: `routine:${id}`, state: state === "failed" || state === "uncertain" ? "failed" : "completed",
+          phase: `routine_${state}`, progress: 90, output: { step_id: id, state, ...(callId ? { call_id: callId } : {}) },
+        }),
+      });
+      await execution.complete({ status: report.state === "completed" ? "success" : report.state === "failed" ? "failed" : "incomplete",
+        text: report.state === "completed" ? "The routine finished its requested steps." : "The routine stopped with unfinished or partial work. Review its step history.",
+        ...(report.code ? { error_code: report.code, error_message: "Review the routine's completed steps before recovery." } : {}),
+      });
+      return report;
+    } catch (error) {
+      const failure = classifyRuntimeError(error);
+      await execution.complete({ status: "failed", text: "", error_code: failure.code, error_message: failure.message });
+      throw error;
+    }
+  }
+  if (context.sdk_execution) {
+    try {
+      await executePinnedCapability(
+        context.sdk_execution,
+        advertisedMCPTools,
+        execution.executeCapability,
+      );
+      // Go derives completion from its protected effect journal, including
+      // denial and uncertainty. A successful transport is not proof of an effect.
+      await execution.complete({ status: "success", text: "" });
+    } catch (error) {
+      const failure = classifyRuntimeError(error);
+      await execution.complete({
+        status: "failed",
+        text: "",
+        error_code: failure.code,
+        error_message: failure.message,
+      });
+    }
+    return;
+  }
+  const descriptors = mcpCatalog.tools;
+  const keyForName = new Map(
+    descriptors.map((descriptor, index) => [
+      descriptor.name,
+      capabilityToolKey(index),
+    ]),
   );
-  const sharedToolContext: RuntimeToolContext = identity;
-  const nativeTools = {
-    context_get: tool({
-      description:
-        "Get the authoritative current time, timezone, and Space identity for this run.",
-      inputSchema: z.object({}),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("context.get", input, options),
-    }),
-    weather_current: tool({
-      description:
-        "Get live current weather for a city or postal location. Use this instead of guessing current conditions.",
-      inputSchema: z.object({ location: z.string().min(1).max(240) }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("weather.current", input, options),
-    }),
-    members_list: tool({
-      description:
-        "List members of the current Space with stable user IDs and roles.",
-      inputSchema: z.object({}),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("members.list", input, options),
-    }),
-    members_resolve: tool({
-      description:
-        "Resolve a member name or email in the current Space. Never guess when multiple matches are returned.",
-      inputSchema: z.object({ query: z.string().min(1).max(320) }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("members.resolve", input, options),
-    }),
-    messages_search: tool({
-      description:
-        "Search messages visible to the creator in this run's Space.",
-      inputSchema: z.object({ query: z.string().max(500).optional() }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("messages.search", input, options),
-    }),
-    messages_send: tool({
-      description:
-        "Send a Misty-authored message privately to one resolved member or to the shared Space chat. Use auto only when the member's wording makes the audience unambiguous; otherwise ask before calling.",
-      inputSchema: z.object({
-        message: z.string().min(1).max(12_000),
-        audience: z.enum(["auto", "private", "space"]).optional(),
-        recipientUserId: z.string().min(1).max(200).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("messages.send", input, options),
-    }),
-    library_search: tool({
-      description:
-        "Search Library items visible to the creator in this run's Space.",
-      inputSchema: z.object({ query: z.string().max(500).optional() }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("library.search", input, options),
-    }),
-    library_read: tool({
-      description:
-        "Read metadata, caption, tags, and file facts for one visible Library item.",
-      inputSchema: z.object({ id: z.string().min(1).max(200) }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("library.read", input, options),
-    }),
-    library_update: tool({
-      description:
-        "Update the name, caption, tags, favorite, or hidden state of an identified Library item.",
-      inputSchema: z.object({
-        id: z.string().min(1).max(200),
-        displayName: z.string().min(1).max(255).optional(),
-        caption: z.string().max(4_000).optional(),
-        tags: z.array(z.string()).max(100).optional(),
-        favorite: z.boolean().optional(),
-        hidden: z.boolean().optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("library.update", input, options),
-    }),
-    library_promote_attachment: tool({
-      description:
-        "Save an identified Space message attachment into the current Space Library.",
-      inputSchema: z.object({ attachmentId: z.string().min(1).max(200) }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("library.promote_attachment", input, options),
-    }),
-    notes_search: tool({
-      description: "Search Notes visible in this run's Space.",
-      inputSchema: z.object({
-        query: z.string().max(500).optional(),
-        limit: z.number().int().min(1).max(50).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("notes.search", input, options),
-    }),
-    notes_read: tool({
-      description: "Read one Note visible in this run's Space.",
-      inputSchema: z.object({ id: z.string().min(1).max(200) }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("notes.read", input, options),
-    }),
-    notes_create: tool({
-      description:
-        "Create a native Note in this run's Space. When the user asks for written content, put the complete, final content in markdown in this call; never create a placeholder or partial draft. A successful result includes a content receipt for the accepted body.",
-      inputSchema: z.object({
-        title: z.string().min(1).max(500),
-        markdown: z.string().min(1).max(100_000),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("notes.create", input, options),
-    }),
-    notes_update: tool({
-      description: "Replace the title or Markdown body of an identified Note.",
-      inputSchema: z.object({
-        id: z.string().min(1).max(200),
-        title: z.string().min(1).max(500).optional(),
-        markdown: z.string().max(100_000).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("notes.update", input, options),
-    }),
-    drawings_list: tool({
-      description: "List collaborative Excalidraw drawings visible in this run's Space.",
-      inputSchema: z.object({
-        query: z.string().max(500).optional(),
-        limit: z.number().int().min(1).max(100).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("drawings.list", input, options),
-    }),
-    drawings_read: tool({
-      description: "Read one live Excalidraw scene and its current content hash.",
-      inputSchema: z.object({
-        drawing_id: z.string().min(1).max(200),
-        include_deleted: z.boolean().optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("drawings.read", input, options),
-    }),
-    drawings_create: tool({
-      description: "Create an empty collaborative Excalidraw drawing in this run's Space.",
-      inputSchema: z.object({ title: z.string().max(200).optional() }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("drawings.create", input, options),
-    }),
-    drawings_apply: tool({
-      description: "Create, edit, or delete elements in an identified Excalidraw drawing. Read first and pass its latest base_hash when editing an existing scene.",
-      inputSchema: z.object({
-        drawing_id: z.string().min(1).max(200),
-        base_hash: z.string().length(64).optional(),
-        mode: z.enum(["merge", "replace"]).optional(),
-        elements: z.array(z.object({
-          id: z.string().min(1).max(128),
-          type: z.enum(["rectangle", "diamond", "ellipse", "text", "line", "arrow", "freedraw", "image", "frame", "magicframe", "iframe", "embeddable"]).optional(),
-        }).catchall(z.unknown())).max(500).optional(),
-        delete_element_ids: z.array(z.string().min(1).max(128)).max(500).optional(),
-        scene: z.object({ viewBackgroundColor: z.string().max(100).optional() }).catchall(z.unknown()).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("drawings.apply", input, options),
-    }),
-    roadmaps_query: tool({
-      description: "List or search roadmaps visible in this run's Space.",
-      inputSchema: z.object({ query: z.string().max(500).optional() }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("roadmaps.query", input, options),
-    }),
-    roadmaps_read: tool({
-      description:
-        "Read one roadmap including its milestones, goals, nodes, and progress.",
-      inputSchema: z.object({ id: z.string().min(1).max(200) }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("roadmaps.read", input, options),
-    }),
-    roadmaps_create: tool({
-      description: "Create a roadmap in this run's Space.",
-      inputSchema: z.object({
-        name: z.string().min(1).max(160),
-        description: z.string().max(5_000).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("roadmaps.create", input, options),
-    }),
-    roadmaps_update: tool({
-      description: "Update an explicitly identified roadmap.",
-      inputSchema: z.object({
-        id: z.string().min(1).max(200),
-        name: z.string().min(1).max(160).optional(),
-        description: z.string().max(5_000).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("roadmaps.update", input, options),
-    }),
-    tasks_query: tool({
-      description:
-        "Query Tasks visible in this run's Space. Use from and to from authoritative timezone context for date-bounded questions such as due today or overdue.",
-      inputSchema: z.object({
-        query: z.string().max(500).optional(),
-        status: z.string().max(40).optional(),
-        priority: z.enum(["low", "medium", "high"]).optional(),
-        assigneeUserId: z.string().max(200).optional(),
-        from: z.string().datetime({ offset: true }).optional(),
-        to: z.string().datetime({ offset: true }).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: queryTasks,
-    }),
-    tasks_update_assigned: tool({
-      description:
-        "Update only the assigned Task. Explicitly set status to done only when all requested work is complete.",
-      inputSchema: z.object({
-        status: z.enum(["in_progress", "done", "canceled"]).optional(),
-        notes: z.string().max(12_000).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: updateAssignedTask,
-    }),
-    tasks_create: tool({
-      description:
-        "Create a task in this run's Space. Use todo for a new task. For due times, preserve the creator's wall-clock time using the UTC offset and IANA timezone from authoritative context.",
-      inputSchema: taskCreateInputSchema,
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("tasks.create", input, options),
-    }),
-    tasks_update: tool({
-      description: "Update an explicitly identified task in this run's Space.",
-      inputSchema: taskUpdateInputSchema,
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("tasks.update", input, options),
-    }),
-    calendar_query: tool({
-      description: "Query the current Space calendar.",
-      inputSchema: z.object({
-        from: z.string().datetime({ offset: true }).optional(),
-        to: z.string().datetime({ offset: true }).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("calendar.query", input, options),
-    }),
-    calendar_create: tool({
-      description:
-        "Create a native event in this run's Space calendar. Use authoritative context for the current date and timezone.",
-      inputSchema: calendarCreateInputSchema,
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("calendar.create", input, options),
-    }),
-    calendar_update: tool({
-      description:
-        "Update an explicitly identified native event in this run's Space calendar.",
-      inputSchema: calendarUpdateInputSchema,
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("calendar.update", input, options),
-    }),
-    agents_delegate: tool({
-      description: context.managed_misty
-        ? "Delegate bounded independent work to a hidden background worker. Misty remains responsible for the result."
-        : "Delegate bounded work to another companion Agent owned by the same creator in this Space.",
-      inputSchema: context.managed_misty
-        ? z.object({ prompt: z.string().min(1).max(16_000) })
-        : z.object({
-            prompt: z.string().min(1).max(16_000),
-            agent_id: z.string().optional(),
-            agent_name: z.string().optional(),
-          }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("agents.delegate", input, options),
-    }),
-    agents_list: tool({
-      description:
-        "List the creator's enabled companion Agents available in this Space.",
-      inputSchema: z.object({}),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("agents.list", input, options),
-    }),
-    agents_status: tool({
-      description:
-        "Check whether a creator-owned companion Agent is available or busy.",
-      inputSchema: z.object({
-        agentId: z.string().max(200).optional(),
-        agentName: z.string().max(200).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("agents.status", input, options),
-    }),
-    memory_remember: tool({
-      description:
-        "Remember a concise fact, preference, or standing instruction only when the user explicitly asks. Never store credentials, secrets, financial identifiers, health records, or inferred sensitive traits.",
-      inputSchema: z.object({
-        content: z.string().min(1).max(1_000),
-        kind: z.enum(["fact", "preference", "instruction"]),
-        scope: z.enum(["personal", "space"]),
-        reason: z.string().max(500).optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("memory.remember", input, options),
-    }),
-    memory_forget: tool({
-      description:
-        "Forget one remembered item only when the user explicitly asks. Use its exact ID from remembered context.",
-      inputSchema: z.object({ memoryId: z.string().min(1).max(200) }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("memory.forget", input, options),
-    }),
-    browser_inspect: tool({
-      description:
-        "Inspect untrusted page text and actionable element references in an attached browser tab.",
-      inputSchema: z.object({ scopeId: z.string().min(8).max(256) }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("browser.inspect", input, options),
-    }),
-    browser_navigate: tool({
-      description: "Navigate an attached browser tab to an HTTP or HTTPS URL.",
-      inputSchema: z.object({
-        scopeId: z.string().min(8).max(256),
-        url: z.string().url().max(4096),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("browser.navigate", input, options),
-    }),
-    browser_click: tool({
-      description:
-        "Click an element reference from the latest inspection of an attached browser tab.",
-      inputSchema: z.object({
-        scopeId: z.string().min(8).max(256),
-        elementRef: z.string().max(128),
-        expectDownload: z.boolean().optional(),
-      }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("browser.click", input, options),
-    }),
-    browser_downloads_list: tool({
-      description:
-        "List recent downloads associated with an attached browser tab.",
-      inputSchema: z.object({ scopeId: z.string().min(8).max(256) }),
-      contextSchema: toolContextSchema,
-      execute: (input, options) =>
-        executeNamedTool("browser.downloads.list", input, options),
-    }),
-    task_activity_write: tool({
-      description:
-        "Add a concise progress update or detailed result to the assigned Task's activity log.",
-      inputSchema: z.object({
-        kind: z.enum(["progress", "result"]),
-        message: z.string().min(1).max(12_000),
-      }),
-      contextSchema: toolContextSchema,
-      execute: writeTaskActivity,
-    }),
-    attached_files_read: tool({
-      description:
-        "Read only files explicitly attached to the assigned Task. This cannot browse arbitrary Space or Library content.",
-      inputSchema: z.object({}),
-      contextSchema: toolContextSchema,
-      execute: readAttachedFiles,
-    }),
-  };
-  const remoteTools = Object.fromEntries(
-    remoteMCPDescriptors.map((descriptor, index) => [
-      remoteMCPToolKey(descriptor.name, index),
+  let selectedNames = new Set(
+    capabilityPage(descriptors, context.prompt).items.map((item) => item.name),
+  );
+  // Required actions take priority in the initial working set. Discovery remains
+  // available on every turn and can expose any other admitted capability.
+  selectedNames = new Set(
+    [
+      ...(context.required_tools ?? []).filter((name) => keyForName.has(name)),
+      ...selectedNames,
+    ].slice(0, 31),
+  );
+  const capabilityTools = Object.fromEntries(
+    descriptors.map((descriptor, index) => [
+      capabilityToolKey(index),
       tool({
         description: descriptor.description,
         inputSchema: jsonSchema(
           descriptor.inputSchema as Parameters<typeof jsonSchema>[0],
         ),
-        contextSchema: toolContextSchema,
-        execute: (input, options) =>
-          executeNamedTool(
-            descriptor.name,
-            input as Record<string, unknown>,
-            options,
-          ),
+        execute: (value, options) =>
+          execution.executeCapability(options.toolCallId, descriptor.name, value),
       }),
     ]),
   );
-  const tools = { ...nativeTools, ...remoteTools };
-  const controlPlaneNames: Record<string, string> = {
-    context_get: "context.get",
-    weather_current: "weather.current",
-    members_list: "members.list",
-    members_resolve: "members.resolve",
-    messages_search: "messages.search",
-    messages_send: "messages.send",
-    library_search: "library.search",
-    library_read: "library.read",
-    library_update: "library.update",
-    library_promote_attachment: "library.promote_attachment",
-    notes_search: "notes.search",
-    notes_read: "notes.read",
-    notes_create: "notes.create",
-    notes_update: "notes.update",
-    drawings_list: "drawings.list",
-    drawings_read: "drawings.read",
-    drawings_create: "drawings.create",
-    drawings_apply: "drawings.apply",
-    roadmaps_query: "roadmaps.query",
-    roadmaps_read: "roadmaps.read",
-    roadmaps_create: "roadmaps.create",
-    roadmaps_update: "roadmaps.update",
-    tasks_query: "tasks.query",
-    tasks_update_assigned: "tasks.update_assigned",
-    tasks_create: "tasks.create",
-    tasks_update: "tasks.update",
-    calendar_query: "calendar.query",
-    calendar_create: "calendar.create",
-    calendar_update: "calendar.update",
-    agents_delegate: "agents.delegate",
-    agents_list: "agents.list",
-    agents_status: "agents.status",
-    memory_remember: "memory.remember",
-    memory_forget: "memory.forget",
-    browser_inspect: "browser.inspect",
-    browser_navigate: "browser.navigate",
-    browser_click: "browser.click",
-    browser_downloads_list: "browser.downloads.list",
-    task_activity_write: "task.activity.write",
-    attached_files_read: "attached_files.read",
+  const tools = {
+    ...capabilityTools,
+    misty_discover_capabilities: tool({
+      description:
+        "Search or page through every authorized capability. This activates the returned capabilities for your next turn. Use nextCursor to see further results; the initial working set is not the full catalog.",
+      inputSchema: z.object({
+        query: z.string().max(1000),
+        cursor: z.number().int().min(0).optional(),
+      }),
+      execute: async ({ query, cursor }) => {
+        const page = capabilityPage(descriptors, query, cursor);
+        selectedNames = new Set(page.items.map((item) => item.name));
+        return {
+          capabilities: page.items.map((item) => ({
+            name: item.name,
+            description: item.description,
+          })),
+          total: page.total,
+          nextCursor: page.nextCursor,
+        };
+      },
+    }),
   };
-  remoteMCPDescriptors.forEach((descriptor, index) => {
-    controlPlaneNames[remoteMCPToolKey(descriptor.name, index)] =
-      descriptor.name;
-  });
-  const activeTools = selectActiveRuntimeToolKeys(
-    controlPlaneNames,
-    context.allowed_tools,
-    {
-      supported: mcpCatalog.supported,
-      advertisedToolNames: advertisedMCPTools,
-    },
-  ) as Array<keyof typeof tools>;
+  const controlPlaneNames: Record<string, string> = Object.fromEntries(
+    descriptors.map((descriptor, index) => [
+      capabilityToolKey(index),
+      descriptor.name,
+    ]),
+  );
+  const activeToolKeys = () =>
+    [
+      "misty_discover_capabilities",
+      ...[...selectedNames]
+        .map((name) => keyForName.get(name)!)
+        .filter(Boolean),
+    ] as Array<keyof typeof tools>;
   const failedToolCalls = new Map<
     string,
     {
@@ -1280,59 +853,19 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     }
   >();
   const successfulToolCalls = new Set<string>();
+  const toolExecutionOrder = serialToolLifecycle();
+  let modelTurn = 0;
   const agent = new WorkflowAgent({
     id: "misty-space-task-agent",
     model: context.model_id,
-    instructions: `${context.system}\n\n${proactiveExecutionInstructions}`,
+    instructions: `${context.system}\n\n${proactiveExecutionInstructions}\nUse misty_discover_capabilities when the current working set lacks an action you need. Discovery results identify capabilities available on the next turn.`,
     tools,
-    toolsContext: {
-      context_get: sharedToolContext,
-      weather_current: sharedToolContext,
-      members_list: sharedToolContext,
-      members_resolve: sharedToolContext,
-      tasks_query: sharedToolContext,
-      messages_search: sharedToolContext,
-      messages_send: sharedToolContext,
-      library_search: sharedToolContext,
-      library_read: sharedToolContext,
-      library_update: sharedToolContext,
-      library_promote_attachment: sharedToolContext,
-      notes_search: sharedToolContext,
-      notes_read: sharedToolContext,
-      notes_create: sharedToolContext,
-      notes_update: sharedToolContext,
-      drawings_list: sharedToolContext,
-      drawings_read: sharedToolContext,
-      drawings_create: sharedToolContext,
-      drawings_apply: sharedToolContext,
-      roadmaps_query: sharedToolContext,
-      roadmaps_read: sharedToolContext,
-      roadmaps_create: sharedToolContext,
-      roadmaps_update: sharedToolContext,
-      tasks_update_assigned: sharedToolContext,
-      tasks_create: sharedToolContext,
-      tasks_update: sharedToolContext,
-      calendar_query: sharedToolContext,
-      calendar_create: sharedToolContext,
-      calendar_update: sharedToolContext,
-      agents_delegate: sharedToolContext,
-      agents_list: sharedToolContext,
-      agents_status: sharedToolContext,
-      memory_remember: sharedToolContext,
-      memory_forget: sharedToolContext,
-      browser_inspect: sharedToolContext,
-      browser_navigate: sharedToolContext,
-      browser_click: sharedToolContext,
-      browser_downloads_list: sharedToolContext,
-      task_activity_write: sharedToolContext,
-      attached_files_read: sharedToolContext,
-      ...Object.fromEntries(
-        Object.keys(remoteTools).map((name) => [name, sharedToolContext]),
-      ),
-    },
-    stopWhen: [isStepCount(12), stopOnRepeatedOrTerminalToolFailure],
+    prepareStep: () => ({ activeTools: activeToolKeys() }),
+    // One model call per stream lets the coordinator refresh the active-time
+    // deadline after durable tool waits. The aggregate loop below owns the cap.
+    stopWhen: isStepCount(1),
     maxRetries: 2,
-    maxOutputTokens: 2_200,
+    maxOutputTokens: 8_192,
     reasoning: context.reasoning_effort || undefined,
     telemetry: {
       isEnabled: true,
@@ -1341,33 +874,34 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       functionId: "misty.space-task-agent",
     },
     experimental_onStepStart: async ({ stepNumber }) => {
-      await checkpoint(identity, {
-        node_id: `model:${stepNumber + 1}`,
+      if (stepNumber !== 0) throw new FatalError("unexpected_model_step: the pinned adapter exceeded one model call");
+      await execution.checkpoint({
+        node_id: `model:${modelTurn + 1}`,
         state: "running",
         phase: "thinking",
-        progress: Math.min(85, 10 + stepNumber * 6),
+        progress: Math.min(85, 10 + modelTurn * 6),
       });
     },
-    onStepEnd: async ({ stepNumber, finishReason, usage, text }) => {
-      await checkpoint(identity, {
-        node_id: `model:${stepNumber + 1}`,
+    onStepEnd: async ({ finishReason, usage, text }) => {
+      await execution.checkpoint({
+        node_id: `model:${modelTurn + 1}`,
         state: "completed",
         phase: "working",
-        progress: Math.min(90, 15 + stepNumber * 6),
+        progress: Math.min(90, 15 + modelTurn * 6),
         // The control plane projects this model-owned text into the public SSE
         // stream for interactive invocations. Tool-only steps normally have no
         // text, while the final step supplies Markdown as it becomes durable.
         output: { finish_reason: finishReason, usage, text_delta: text },
       });
     },
-    onToolExecutionStart: async ({ toolCall }) => {
+    onToolExecutionStart: ({ toolCall }) => toolExecutionOrder.start(toolCall.toolCallId, async () => {
       const canonicalName =
         controlPlaneNames[toolCall.toolName] ?? toolCall.toolName;
       toolCallSignatures.set(toolCall.toolCallId, {
         signature: toolFailureSignature(canonicalName, toolCall.input),
         canonicalName,
       });
-      await checkpoint(identity, {
+      await execution.checkpoint({
         node_id: `tool:${toolCall.toolCallId}`,
         state: "running",
         phase: `using_${canonicalName.replaceAll(".", "_")}`,
@@ -1377,8 +911,8 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
             ? (toolCall.input as Record<string, unknown>)
             : {},
       });
-    },
-    onToolExecutionEnd: async (event) => {
+    }),
+    onToolExecutionEnd: (event) => toolExecutionOrder.finish(event.toolCall.toolCallId, async () => {
       const { toolCall, durationMs, success } = event;
       const unconfirmedReason = success
         ? unconfirmedToolResultReason(event.output)
@@ -1394,6 +928,9 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
         tracked?.signature ??
         toolFailureSignature(canonicalName, toolCall.input);
       if (!confirmed) {
+        // Stop queued calls from the same model response before releasing the
+        // current turn. The outer stop condition runs only after all calls.
+        toolExecutionOrder.stop(errorMessage);
         failedToolCalls.set(signature, {
           callId: toolCall.toolCallId,
           toolName: tracked?.canonicalName ?? canonicalName,
@@ -1401,9 +938,12 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
         });
       } else {
         failedToolCalls.delete(signature);
-        successfulToolCalls.add(tracked?.canonicalName ?? canonicalName);
+        const completedName = tracked?.canonicalName ?? canonicalName;
+        successfulToolCalls.add(completedName);
+        const semantic = descriptors.find((item) => item.name === completedName)?.capability;
+        if (semantic) successfulToolCalls.add(semantic);
       }
-      await checkpoint(identity, {
+      await execution.checkpoint({
         node_id: `tool:${toolCall.toolCallId}`,
         state: confirmed ? "completed" : "failed",
         phase: confirmed ? "working" : "tool_failed",
@@ -1415,27 +955,25 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
         },
         error_message: confirmed ? undefined : errorMessage,
       });
-    },
+    }),
   });
-  let result;
+  let result: Awaited<ReturnType<typeof agent.stream>> | undefined;
+  let streamAborted = false;
+  const legacyDeadline = Date.now() + 30 * 60_000;
   try {
     const shared = {
-      activeTools,
       providerOptions: {
         gateway: { models: fallbackModels(context.model_id) },
       },
-      // WorkflowAgent applies this inside its durable model step. The workflow
-      // coordinator does not expose AbortSignal and must not construct one.
-      timeout: 30 * 60_000,
+      onAbort: async () => { streamAborted = true; },
       runtimeContext: { mistyRunId: input.mistyRunId },
     };
     const images = [
       ...(context.attachments ?? []),
       ...(context.capture ? [context.capture] : []),
     ];
-    result = images.length
-      ? await agent.stream({
-          messages: [
+    let messages: ModelMessage[] = images.length
+      ? [
             {
               role: "user",
               content: [
@@ -1450,19 +988,46 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
                 ),
               ],
             },
-          ],
-          ...shared,
-        })
-      : await agent.stream({ prompt: context.prompt, ...shared });
+          ]
+      : [{ role: "user", content: context.prompt }];
+    for (; modelTurn < 20; modelTurn++) {
+      const budget = await fetchExecutionBudget(identity, modelTurn + 1);
+      const current = await agent.stream({ messages, ...shared, timeout: modelTimeout(budget, Date.now(), legacyDeadline) });
+      const steps = [...(result?.steps ?? []), ...current.steps];
+      result = { ...current, steps, totalUsage: accumulateModelUsage(result?.totalUsage, current.totalUsage) };
+      // WorkflowAgent returns the complete model transcript, including tool
+      // results. Reinject our fixed system instructions once on the next call.
+      messages = current.messages.filter((message) => message.role !== "system");
+      if (streamAborted || toolExecutionOrder.stoppedReason || current.finishReason !== "tool-calls" || current.steps.length !== 1 || await stopOnRepeatedOrTerminalToolFailure({ steps })) break;
+    }
+    if (!result) throw new Error("empty_agent_response");
   } catch (error) {
+    if (toolExecutionOrder.stoppedReason) {
+      const failures = [...failedToolCalls.values()];
+      const text = failures.length ? incompleteToolResultText(failures) : toolExecutionOrder.stoppedReason;
+      await execution.complete({
+        status: "incomplete", text, error_code: "tool_sequence_stopped",
+        error_message: toolExecutionOrder.stoppedReason,
+        usage: result?.totalUsage as unknown as Record<string, unknown> | undefined,
+      });
+      return { mistyRunId: input.mistyRunId, text, incomplete: true };
+    }
     const failure = classifyRuntimeError(error);
-    await complete(identity, {
+    await execution.complete({
       status: "failed",
       text: "",
       error_code: failure.code,
       error_message: failure.message,
+      usage: result?.totalUsage as unknown as Record<string, unknown> | undefined,
     });
     throw new FatalError(failure.message);
+  }
+  const unfinished = unfinishedModelResult(streamAborted, result.steps.length, result.finishReason);
+  // Existing tool failures below carry more useful details, unless the stream
+  // itself was interrupted or exhausted its model budget.
+  if (unfinished && (streamAborted || unfinished.code === "agent_model_turn_limit")) {
+    await execution.complete({ status: "incomplete", text: unfinished.message, usage: result.totalUsage as unknown as Record<string, unknown>, error_code: unfinished.code, error_message: unfinished.message });
+    return { mistyRunId: input.mistyRunId, text: unfinished.message, steps: result.steps.length, incomplete: true };
   }
   const text = finalText(result.steps);
   const unresolvedToolFailures = [...failedToolCalls.values()];
@@ -1470,7 +1035,7 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     const completion = classifyToolCompletion(
       unresolvedToolFailures.map((item) => item.toolName),
     );
-    await complete(identity, {
+    await execution.complete({
       status: completion.status,
       text: incompleteToolResultText(unresolvedToolFailures),
       usage: result.totalUsage as unknown as Record<string, unknown>,
@@ -1490,7 +1055,7 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   );
   if (missingRequiredTools.length > 0) {
     const incompleteText = incompleteRequiredToolText(missingRequiredTools);
-    await complete(identity, {
+    await execution.complete({
       status: "incomplete",
       text: incompleteText,
       usage: result.totalUsage as unknown as Record<string, unknown>,
@@ -1504,6 +1069,10 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       incomplete: true,
     };
   }
+  if (unfinished) {
+    await execution.complete({ status: "incomplete", text: unfinished.message, usage: result.totalUsage as unknown as Record<string, unknown>, error_code: unfinished.code, error_message: unfinished.message });
+    return { mistyRunId: input.mistyRunId, text: unfinished.message, steps: result.steps.length, incomplete: true };
+  }
   const completionText =
     text ||
     (context.required_tools?.length
@@ -1512,12 +1081,13 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   if (!completionText) {
     const incompleteText =
       "I couldn't fully complete that request because no final answer was produced.";
-    await complete(identity, {
+    await execution.complete({
       status: "incomplete",
       text: incompleteText,
       usage: result.totalUsage as unknown as Record<string, unknown>,
       error_code: "empty_agent_response",
-      error_message: "The agent produced neither a final answer nor a required confirmed action.",
+      error_message:
+        "The agent produced neither a final answer nor a required confirmed action.",
     });
     return {
       mistyRunId: input.mistyRunId,
@@ -1526,7 +1096,7 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       incomplete: true,
     };
   }
-  await complete(identity, {
+  await execution.complete({
     status: "success",
     text: completionText,
     usage: result.totalUsage as unknown as Record<string, unknown>,

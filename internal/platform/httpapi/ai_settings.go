@@ -61,31 +61,6 @@ func (s *AIService) Settings() http.HandlerFunc {
 	}
 }
 
-func (s *AIService) ActiveCompanionAgent() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		if r.Method != http.MethodPut {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		var body struct {
-			AgentID string `json:"agent_id"`
-		}
-		if decodeAIJSON(w, r, &body) != nil {
-			return
-		}
-		settings, err := s.database.UpdateActiveCompanionAgent(r.Context(), userID, "")
-		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"settings": settings})
-	}
-}
-
 func (s *AIService) SurfacePreference() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
@@ -97,9 +72,8 @@ func (s *AIService) SurfacePreference() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			PinnedAgentID string          `json:"pinned_agent_id"`
-			Proactive     bool            `json:"proactive_enabled"`
-			SavedActions  json.RawMessage `json:"saved_actions"`
+			Proactive    bool            `json:"proactive_enabled"`
+			SavedActions json.RawMessage `json:"saved_actions"`
 		}
 		if decodeAIJSON(w, r, &body) != nil {
 			return
@@ -110,7 +84,7 @@ func (s *AIService) SurfacePreference() http.HandlerFunc {
 			return
 		}
 		preference, err := s.database.UpsertAISurfacePreference(r.Context(), userID, db.AISurfacePreference{
-			SurfaceID: surfaceID, PinnedAgentID: "",
+			SurfaceID: surfaceID,
 			Proactive: body.Proactive, SavedActions: body.SavedActions,
 		})
 		if err != nil {

@@ -61,7 +61,6 @@ type aiInvocationInput struct {
 	ReasoningEffort       string                      `json:"reasoning_effort,omitempty"`
 	RequestedArtifactKind string                      `json:"requested_artifact_kind,omitempty"`
 	ConversationID        string                      `json:"conversation_id,omitempty"`
-	AgentID               string                      `json:"agent_id,omitempty"`
 	IdempotencyKey        string                      `json:"idempotency_key"`
 	Timezone              string                      `json:"timezone,omitempty"`
 }
@@ -145,12 +144,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_invocation", "message": err.Error()})
 			return
 		}
-		if body.AgentID != "" {
-			writeJSON(w, http.StatusGone, map[string]any{
-				"code": "custom_agents_retired", "message": "Misty is now the only assistant. Existing Agent tasks remain available as read-only history.",
-			})
-			return
-		}
+
 		if header := strings.TrimSpace(r.Header.Get("Idempotency-Key")); header != "" {
 			if body.IdempotencyKey != "" && body.IdempotencyKey != header {
 				http.Error(w, "idempotency key mismatch", http.StatusBadRequest)
@@ -187,7 +181,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		}
 		if conversationID != "" {
 			bound, boundErr := s.database.AgentConversationIdentity(r.Context(), userID, conversationID)
-			if boundErr != nil || bound.AgentID != "" || conversationSpaceChanged(bound.SpaceID, spaceID) {
+			if boundErr != nil || conversationSpaceChanged(bound.SpaceID, spaceID) {
 				writeJSON(w, http.StatusConflict, map[string]any{"code": "conversation_context_changed", "message": "Start a new Misty task for this Space."})
 				return
 			}
@@ -242,7 +236,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			return
 		}
 		if body.Mode == "companion" && conversationID != "" {
-			if err := s.database.BindCompanionConversation(r.Context(), userID, conversationID, body.AgentID, spaceID, modelID, body.SurfaceID, firstAIContextHref(body.Context), aiInvocationPrivacyBoundary(body.Context)); err != nil {
+			if err := s.database.BindAskSurfaceConversation(r.Context(), userID, conversationID, spaceID, modelID, body.SurfaceID, firstAIContextHref(body.Context), aiInvocationPrivacyBoundary(body.Context)); err != nil {
 				TestingWriteAIError(w, err)
 				return
 			}
@@ -261,7 +255,8 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		}
 		now := time.Now().UTC()
 		stored, created, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-			ID: "invocation_" + uuid.NewString(), UserID: userID, SpaceID: spaceID, ConversationID: conversationID,
+			DispatchRuntime: true,
+			ID:              "invocation_" + uuid.NewString(), UserID: userID, SpaceID: spaceID, ConversationID: conversationID,
 			SurfaceID: body.SurfaceID, Mode: body.Mode, Trigger: body.Trigger, State: "queued",
 			IdempotencyKey: body.IdempotencyKey, RequestPayload: requestPayload, ExpiresAt: now.Add(aiInvocationTTL),
 		})
@@ -278,28 +273,8 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			writeAIInvocationCreated(w, record)
 			return
 		}
-		if err := s.database.BindAIConversationAttachments(r.Context(), userID, conversationID, stored.ID, body.AttachmentIDs); err != nil {
-			s.invocations.fail(stored.ID, "Misty could not attach one of those images. Please remove it and try again.")
-			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_attachment", "message": err.Error()})
-			return
-		}
-		for _, deviceContext := range body.DeviceContexts {
-			if _, err := s.database.AttachAIInvocationContext(
-				r.Context(), userID, stored.ID, spaceID, deviceContext.DeviceID, deviceContext.Kind,
-				deviceContext.OpaqueRef, deviceContext.DisplayName, deviceContext.Capabilities, deviceContext.Metadata,
-			); err != nil {
-				s.invocations.fail(stored.ID, "Misty could not connect to its browser workspace. Please keep Misty open and try again.")
-				writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_device_context", "message": "Misty could not connect to that browser workspace."})
-				return
-			}
-		}
 		if modelFallbackNotice {
 			s.invocations.append(stored.ID, aiInvocationEvent{Type: "assistant.status", Text: "The previous model retired, so Misty switched this conversation to the frontier default.", Phase: "model_fallback"})
-		}
-		if _, err := s.agentRuntime.Start(r.Context(), record.ID); err != nil {
-			s.invocations.fail(record.ID, "Misty could not start the agent runtime. Please try again.")
-			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "agent_runtime_start_failed", "message": "Misty could not start the agent runtime."})
-			return
 		}
 		writeAIInvocationCreated(w, record)
 	}
@@ -360,7 +335,7 @@ func (s *AIService) InvocationEvents() http.HandlerFunc {
 			// Durable WorkflowAgent runs survive Go process restarts. A bound runtime
 			// will continue posting signed events, so reconnecting must not convert an
 			// active run into a failure merely because the in-memory hub was rebuilt.
-			if !aiInvocationTerminal(record.State) && stored.RuntimeRunID == "" && stored.AgentRunID == "" {
+			if !aiInvocationTerminal(record.State) && stored.State != "queued" && stored.RuntimeRunID == "" && stored.AgentRunID == "" {
 				s.invocations.fail(record.ID, "Misty was interrupted before finishing. Please retry the request.")
 			}
 		}
@@ -377,6 +352,13 @@ func (s *AIService) InvocationEvents() http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-cache, no-transform")
 		w.Header().Set("X-Accel-Buffering", "no")
 		for {
+			stored, refreshErr := s.database.AIInvocationByID(r.Context(), userID, invocationID)
+			if refreshErr != nil {
+				return
+			}
+			if _, refreshErr = s.invocations.restoreDurable(r.Context(), *stored); refreshErr != nil {
+				return
+			}
 			events, state, notify, found := s.invocations.events(userID, invocationID, cursor)
 			if !found {
 				http.Error(w, "invocation not found", http.StatusNotFound)
@@ -414,6 +396,14 @@ func (s *AIService) CancelInvocation() http.HandlerFunc {
 			http.Error(w, "invocation not found", http.StatusNotFound)
 			return
 		}
+		if stored.SurfaceID == "routine" {
+			if err := s.database.RequestRoutineCancellation(r.Context(), userID, stored.ID); err != nil {
+				writeSDKError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusAccepted, map[string]any{"runtime_cancel_pending": true, "message": "Stop requested. Confirmed and uncertain effects remain in history."})
+			return
+		}
 		if _, err := s.invocations.restoreDurable(r.Context(), *stored); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "load invocation stream"})
 			return
@@ -425,11 +415,16 @@ func (s *AIService) CancelInvocation() http.HandlerFunc {
 		} else if !aiInvocationTerminal(stored.State) && stored.RuntimeRunID != "" {
 			_ = s.agentRuntime.Cancel(r.Context(), stored.RuntimeRunID, stored.ID)
 		}
-		state, found := s.invocations.cancelForUser(userID, stored.ID)
-		if !found {
-			http.Error(w, "invocation not found", http.StatusNotFound)
-			return
+		if !aiInvocationTerminal(stored.State) {
+			if err := s.invocations.cancel(stored.ID); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Misty could not persist the stop request."})
+				return
+			}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"state": state})
+		state := stored.State
+		if !aiInvocationTerminal(state) {
+			state = "canceled"
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"state": state, "runtime_cancel_pending": !aiInvocationTerminal(stored.State) && stored.RuntimeRunID != "", "message": "Stop requested. Previously completed or uncertain actions remain in history."})
 	}
 }

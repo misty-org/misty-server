@@ -15,6 +15,7 @@ import (
 // already struggling; a queue depth that has been climbing for ten minutes
 // tells you why, and tells you before the requests start failing.
 func (s *Server) registerDomainGauges(registry *metrics.Registry) {
+
 	registry.WatchGauge(
 		"misty_db_connections_open",
 		"PostgreSQL connections currently open from this API process.",

@@ -1,6 +1,38 @@
 {
   "protocol": 2,
   "methods": {
+    "capabilities.providers.register": {
+      "verb": "POST",
+      "path": "/capabilities/providers"
+    },
+    "capabilities.providers.unregister": {
+      "verb": "DELETE",
+      "path": "/capabilities/providers/{providerID}"
+    },
+    "capabilities.providers.availability": {
+      "verb": "PUT",
+      "path": "/capabilities/providers/{providerID}/availability"
+    },
+    "capabilities.discover": {
+      "verb": "POST",
+      "path": "/capabilities/discover"
+    },
+    "capabilities.targets.resolve": {
+      "verb": "POST",
+      "path": "/capabilities/targets/resolve"
+    },
+    "capabilities.invoke": {
+      "verb": "POST",
+      "path": "/capabilities/invocations"
+    },
+    "capabilities.result": {
+      "verb": "GET",
+      "path": "/capabilities/invocations/{requestID}"
+    },
+    "capabilities.cancel": {
+      "verb": "POST",
+      "path": "/capabilities/invocations/{requestID}/cancel"
+    },
     "tasks.activity.list": {
       "verb": "GET",
       "path": "/spaces/{spaceID}/tasks/{taskID}/activity"

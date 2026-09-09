@@ -278,7 +278,6 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Post(prefix+"/complete", aiService.Complete())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/settings", aiService.Settings())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/settings", aiService.Settings())
-	s.Router.Put(prefix+"/settings/companion-agent", aiService.ActiveCompanionAgent())
 	s.Router.Get(prefix+"/memories", aiService.Memories())
 	s.Router.Delete(prefix+"/memories/{memoryID}", aiService.Memory())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/preferences/{surfaceID}", aiService.SurfacePreference())

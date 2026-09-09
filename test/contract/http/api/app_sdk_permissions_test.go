@@ -11,7 +11,7 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func TestSDKMethodsMatchOfficialAppCapabilities(t *testing.T) {
+func TestSDKMethodsMatchAppCapabilities(t *testing.T) {
 	placeholder := regexp.MustCompile(`\{([A-Za-z][A-Za-z0-9]*)\}`)
 	for name, method := range apprpc.Methods() {
 		t.Run(name, func(t *testing.T) {
@@ -29,6 +29,12 @@ func TestSDKMethodsMatchOfficialAppCapabilities(t *testing.T) {
 			params := map[string]string{}
 			for _, match := range placeholder.FindAllStringSubmatch(method.Path, -1) {
 				params[match[1]] = "object_1"
+				if match[1] == "requestID" {
+					params[match[1]] = "10000000-0000-4000-8000-000000000001"
+				}
+				if match[1] == "providerID" {
+					params[match[1]] = "example.habits/backend"
+				}
 			}
 			params["spaceID"] = "space_1"
 			target, err := apprpc.Resolve(apprpc.Request{Protocol: 2, Method: name, Params: apprpc.Params{Path: params}}, "space_1")
@@ -37,6 +43,9 @@ func TestSDKMethodsMatchOfficialAppCapabilities(t *testing.T) {
 			}
 			for _, prefix := range []string{"", "/api", "/v1"} {
 				session := db.AppRuntimeSession{AppID: appID, SpaceID: "space_1", Scopes: app.Scopes}
+				if strings.HasPrefix(name, "capabilities.") {
+					session = sdkContractCapabilitySession()
+				}
 				if !TestingAuthorizeAppRuntimeRequest(session, target.Verb, prefix+target.Path) {
 					t.Fatalf("catalog does not authorize %s %s", target.Verb, prefix+target.Path)
 				}

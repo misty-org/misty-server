@@ -24,16 +24,6 @@ func TestWorkflowMetadataSupportsMultipleCapabilitiesAndProtectsDestructiveActio
 	}
 }
 
-func TestStructuredCapabilityRoutingScore(t *testing.T) {
-	metadata := architectureMetadata()
-	words := TestingRoutingWords("Please organize the campaign folders")
-	organize := TestingRoutingScore(words, metadata.Capabilities[1])
-	summarize := TestingRoutingScore(words, metadata.Capabilities[0])
-	if organize <= summarize {
-		t.Fatalf("structured router scores organize=%d summarize=%d", organize, summarize)
-	}
-}
-
 func TestWorkflowCapabilityInputAndRuntimeBoundaryValidation(t *testing.T) {
 	capability := WorkflowCapability{Inputs: []WorkflowField{
 		{Name: "prompt", Type: "string", Required: true},

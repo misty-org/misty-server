@@ -140,7 +140,6 @@ func (s *SpacesService) syncGoogleCalendarSource(ctx context.Context, source *db
 	if err != nil {
 		return err
 	}
-	incremental := source.SyncToken != ""
 	syncToken, pageToken := source.SyncToken, ""
 	finished := false
 	for pages := 0; pages < 100; pages++ {
@@ -158,7 +157,7 @@ func (s *SpacesService) syncGoogleCalendarSource(ctx context.Context, source *db
 			if err := s.database.InvalidateSpaceCalendarEvents(ctx, source.ID, time.Now().UTC()); err != nil {
 				return err
 			}
-			syncToken, pageToken, incremental = "", "", false
+			syncToken, pageToken = "", ""
 			continue
 		}
 		if requestErr != nil {
@@ -180,11 +179,6 @@ func (s *SpacesService) syncGoogleCalendarSource(ctx context.Context, source *db
 			if timeErr != nil {
 				if event.Status == "cancelled" {
 					_ = s.database.MarkSpaceCalendarEventRemoved(ctx, source.ID, event.ID, time.Now().UTC())
-					if incremental {
-						raw, _ := json.Marshal(event)
-						fingerprint := sha256.Sum256(raw)
-						_, _ = s.ProcessNormalizedProviderEvent(ctx, source.SpaceID, "google", source.ExternalCalendarID, source.DisplayName, event.ID+":"+hex.EncodeToString(fingerprint[:8]), hex.EncodeToString(fingerprint[:]), event)
-					}
 					continue
 				}
 				return timeErr
@@ -215,10 +209,6 @@ func (s *SpacesService) syncGoogleCalendarSource(ctx context.Context, source *db
 			}
 			if err := s.database.UpsertSpaceCalendarEvent(ctx, db.SpaceCalendarEvent{SpaceID: source.SpaceID, SourceID: source.ID, ExternalEventID: event.ID, Fingerprint: hex.EncodeToString(fingerprint[:]), Title: event.Summary, Description: event.Description, Location: event.Location, MeetingURL: meetingURL, Organizer: event.Organizer, StartsAt: startsAt, EndsAt: endsAt, AllDay: allDay, Timezone: timezone, Status: status, ProviderCreatedAt: providerCreated, ProviderUpdatedAt: providerUpdated}); err != nil {
 				return err
-			}
-			if incremental {
-				eventID := event.ID + ":" + hex.EncodeToString(fingerprint[:8])
-				_, _ = s.ProcessNormalizedProviderEvent(ctx, source.SpaceID, "google", source.ExternalCalendarID, source.DisplayName, eventID, hex.EncodeToString(fingerprint[:]), event)
 			}
 		}
 		if page.NextPageToken != "" {

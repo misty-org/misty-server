@@ -119,7 +119,7 @@ func (db *Database) SpaceConversationMessages(ctx context.Context, userID, space
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT `+spaceMessageColumns+` FROM space_messages m
-			LEFT JOIN users u ON u.id=m.sender_user_id LEFT JOIN space_agents a ON a.id=m.sender_agent_id
+			LEFT JOIN users u ON u.id=m.sender_user_id LEFT JOIN misty_ask_identities a ON a.id=m.sender_agent_id
 			WHERE m.space_id=$1 AND m.conversation_id=$2 AND ($3=0 OR m.seq<$3) ORDER BY m.seq DESC LIMIT $4`, spaceID, conversationID, before, limit)
 		if err != nil {
 			return err

@@ -62,7 +62,6 @@ export declare const TaskQuerySchema: z.ZodObject<{
         low: "low";
     }>>;
     assignee_user_id: z.ZodOptional<z.ZodString>;
-    assignee_agent_id: z.ZodOptional<z.ZodString>;
     q: z.ZodOptional<z.ZodString>;
     due_from: z.ZodOptional<z.ZodISODateTime>;
     due_to: z.ZodOptional<z.ZodISODateTime>;
@@ -105,24 +104,12 @@ export declare const TaskCreateInputSchema: z.ZodObject<{
         low: "low";
     }>>;
     assignee_user_id: z.ZodOptional<z.ZodString>;
-    assignee_agent_id: z.ZodOptional<z.ZodString>;
     due_at: z.ZodOptional<z.ZodNullable<z.ZodISODateTime>>;
     due_timezone: z.ZodOptional<z.ZodString>;
     source_refs: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
         kind: z.ZodString;
         resource_id: z.ZodString;
     }, z.core.$loose>>>>;
-    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-        mode: z.ZodOptional<z.ZodString>;
-        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-            device_id: z.ZodString;
-            kind: z.ZodString;
-            opaque_ref: z.ZodString;
-            display_name: z.ZodOptional<z.ZodString>;
-            capabilities: z.ZodJSONSchema;
-            metadata: z.ZodOptional<z.ZodJSONSchema>;
-        }, z.core.$loose>>>>;
-    }, z.core.$loose>>>;
 }, z.core.$strict>;
 export declare const TaskUpdateInputSchema: z.ZodObject<{
     id: z.ZodOptional<z.ZodString>;
@@ -160,24 +147,12 @@ export declare const TaskUpdateInputSchema: z.ZodObject<{
         low: "low";
     }>>;
     assignee_user_id: z.ZodOptional<z.ZodString>;
-    assignee_agent_id: z.ZodOptional<z.ZodString>;
     due_at: z.ZodOptional<z.ZodNullable<z.ZodISODateTime>>;
     due_timezone: z.ZodOptional<z.ZodString>;
     source_refs: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
         kind: z.ZodString;
         resource_id: z.ZodString;
     }, z.core.$loose>>>>;
-    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-        mode: z.ZodOptional<z.ZodString>;
-        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-            device_id: z.ZodString;
-            kind: z.ZodString;
-            opaque_ref: z.ZodString;
-            display_name: z.ZodOptional<z.ZodString>;
-            capabilities: z.ZodJSONSchema;
-            metadata: z.ZodOptional<z.ZodJSONSchema>;
-        }, z.core.$loose>>>>;
-    }, z.core.$loose>>>;
 }, z.core.$loose>;
 export declare const CalendarCreateInputSchema: z.ZodObject<{
     title: z.ZodString;

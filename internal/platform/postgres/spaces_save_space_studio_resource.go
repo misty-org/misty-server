@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
 
 func (db *Database) SaveSpaceStudioResource(ctx context.Context, userID string, item SpaceStudioResource) (*SpaceStudioResource, error) {
@@ -18,7 +17,7 @@ func (db *Database) SaveSpaceStudioResource(ctx context.Context, userID string, 
 	} else if item.ID == "" {
 		item.ID = item.Kind + "_" + uuid.NewString()
 	}
-	if len([]rune(item.Name)) < 1 || len([]rune(item.Name)) > 80 || (item.Kind != "agent" && item.Kind != "workflow") {
+	if len([]rune(item.Name)) < 1 || len([]rune(item.Name)) > 80 || item.Kind != "workflow" {
 		return nil, ErrSpaceInvalid
 	}
 	if len(item.Definition) == 0 {
@@ -27,44 +26,6 @@ func (db *Database) SaveSpaceStudioResource(ctx context.Context, userID string, 
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpacePermissionTx(ctx, tx, userID, item.SpaceID, PermissionStudioManage); err != nil {
 			return err
-		}
-		if item.Kind == "agent" {
-			if len(item.AccessPolicy) == 0 {
-				item.AccessPolicy = json.RawMessage(`{"mode":"space","allowedUserIds":[]}`)
-			}
-			var access workflowv2.AgentAccessPolicy
-			if json.Unmarshal(item.AccessPolicy, &access) != nil || !validAgentAccess(access) {
-				return ErrSpaceInvalid
-			}
-			if item.Icon == "" {
-				item.Icon = "bot"
-			}
-			if item.Status == "" {
-				item.Status = "draft"
-			}
-			if item.RuntimeKind == "" {
-				item.RuntimeKind = "cloud"
-			}
-			if item.Version == 0 {
-				item.CreatorUserID = userID
-				return tx.QueryRowContext(ctx, `INSERT INTO space_agents(id,space_id,creator_user_id,name,description,icon,instructions,enabled,status,runtime_kind,schedules_enabled,active_workflow_version_id,access_policy,updated_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NULL,$12,$3) RETURNING version,created_at,updated_at`, item.ID, item.SpaceID, userID, item.Name, item.Description, item.Icon, item.Instructions, item.Enabled, item.Status, item.RuntimeKind, item.SchedulesEnabled, item.AccessPolicy).Scan(&item.Version, &item.CreatedAt, &item.UpdatedAt)
-			}
-			var creatorID string
-			if err := tx.QueryRowContext(ctx, `SELECT creator_user_id FROM space_agents WHERE id=$1 AND space_id=$2`, item.ID, item.SpaceID).Scan(&creatorID); err != nil {
-				return err
-			}
-			if creatorID != userID {
-				return ErrSpaceForbidden
-			}
-			result, err := tx.ExecContext(ctx, `UPDATE space_agents SET name=$1,description=$2,icon=$3,instructions=$4,enabled=$5,status=$6,schedules_enabled=$7,access_policy=$8,updated_by_user_id=$9,version=version+1,updated_at=NOW() WHERE id=$10 AND space_id=$11 AND version=$12`, item.Name, item.Description, item.Icon, item.Instructions, item.Enabled, item.Status, item.SchedulesEnabled, item.AccessPolicy, userID, item.ID, item.SpaceID, item.Version)
-			if err != nil {
-				return err
-			}
-			if n, _ := result.RowsAffected(); n == 0 {
-				return ErrSpaceConflict
-			}
-			item.Version++
-			return tx.QueryRowContext(ctx, `SELECT creator_user_id,runtime_kind,COALESCE(active_workflow_version_id,''),access_policy,created_at,updated_at FROM space_agents WHERE id=$1`, item.ID).Scan(&item.CreatorUserID, &item.RuntimeKind, &item.ActiveWorkflowVersionID, &item.AccessPolicy, &item.CreatedAt, &item.UpdatedAt)
 		}
 		if validateWorkflowV2Tx(ctx, tx, item.SpaceID, item.Definition) != nil {
 			return ErrSpaceInvalid
@@ -116,17 +77,6 @@ func (db *Database) SpaceStudioResourceByID(ctx context.Context, userID, spaceID
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionStudioView); err != nil {
 			return err
 		}
-		if kind == "agent" {
-			if err := tx.QueryRowContext(ctx, `SELECT id,space_id,creator_user_id,name,description,icon,instructions,enabled,status,runtime_kind,version,schedules_enabled,COALESCE(active_workflow_version_id,''),access_policy,created_at,updated_at FROM space_agents WHERE id=$1 AND space_id=$2`, id, spaceID).Scan(&out.ID, &out.SpaceID, &out.CreatorUserID, &out.Name, &out.Description, &out.Icon, &out.Instructions, &out.Enabled, &out.Status, &out.RuntimeKind, &out.Version, &out.SchedulesEnabled, &out.ActiveWorkflowVersionID, &out.AccessPolicy, &out.CreatedAt, &out.UpdatedAt); err != nil {
-				return err
-			}
-			if out.ActiveWorkflowVersionID != "" {
-				workflow, err := loadWorkflowVersionTx(ctx, tx, out.ActiveWorkflowVersionID)
-				out.ActiveWorkflow = workflow
-				return err
-			}
-			return nil
-		}
 		if kind != "workflow" {
 			return ErrSpaceInvalid
 		}
@@ -144,25 +94,6 @@ func (db *Database) SpaceStudioResourceByID(ctx context.Context, userID, spaceID
 		return nil, ErrSpaceNotFound
 	}
 	return out, err
-}
-
-func (db *Database) CreateSpaceRun(ctx context.Context, userID, spaceID, kind, resourceID, triggerKind, capabilityID string, input json.RawMessage) (*SpaceRun, error) {
-	if kind == "agent" {
-		sourceType := "direct"
-		if triggerKind == "mention" {
-			sourceType = "group_mention"
-		}
-		if triggerKind == "schedule" {
-			sourceType = "schedule"
-		}
-		if triggerKind == "test" {
-			sourceType = "studio_test"
-		}
-		return db.CreateAgentRun(ctx, AgentRunRequest{RequestingMemberID: userID, SpaceID: spaceID, AgentID: resourceID, SourceType: sourceType, CapabilityID: capabilityID, Input: input, TriggerKind: triggerKind})
-	}
-	// Workflows are immutable plans attached to an Agent. They never execute as
-	// standalone principals, including Studio tests.
-	return nil, ErrSpaceInvalid
 }
 
 func (db *Database) FinishSpaceRun(ctx context.Context, runID, state string, result json.RawMessage, errorCode string) (*SpaceRun, error) {
@@ -202,10 +133,8 @@ func (db *Database) DeleteSpaceStudioResource(ctx context.Context, userID, space
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionStudioManage); err != nil {
 			return err
 		}
-		table := "space_agents"
-		if kind == "workflow" {
-			table = "space_workflows"
-		} else if kind != "agent" {
+		table := "space_workflows"
+		if kind != "workflow" {
 			return ErrSpaceInvalid
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE space_run_approvals SET state='canceled',decided_by_user_id=$1,decided_at=NOW() WHERE state='pending' AND run_id IN (SELECT id FROM space_runs WHERE space_id=$2 AND resource_kind=$3 AND resource_id=$4 AND state IN ('queued','running','awaiting_approval','cooldown'))`, userID, spaceID, kind, id); err != nil {
@@ -224,18 +153,4 @@ func (db *Database) DeleteSpaceStudioResource(ctx context.Context, userID, space
 		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, kind+".deleted", id, map[string]any{})
 		return err
 	})
-}
-
-func (db *Database) SpaceAgentPrompt(ctx context.Context, userID, spaceID, agentID string) (string, string, error) {
-	var name, instructions string
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAgentsRun); err != nil {
-			return err
-		}
-		return tx.QueryRowContext(ctx, `SELECT name,instructions FROM space_agents WHERE id=$1 AND space_id=$2 AND enabled`, agentID, spaceID).Scan(&name, &instructions)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", ErrSpaceNotFound
-	}
-	return name, instructions, err
 }

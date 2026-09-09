@@ -103,9 +103,7 @@ func TestPrivateSpaceAgentSendsExactMessageThroughServerOwnedToolbox(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	personal, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{
-		Name: "Messenger", ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite",
-	})
+	personal, err := database.EnsureAskIdentity(ctx, owner.ID, "google/gemini-2.5-flash-lite")
 	if err != nil {
 		t.Fatal(err)
 	}

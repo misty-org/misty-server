@@ -16,14 +16,14 @@ type PersonalAgentWorkAvailability struct {
 func (db *Database) PersonalAgentWorkAvailability(ctx context.Context, ownerUserID, agentID string) (*PersonalAgentWorkAvailability, error) {
 	out := &PersonalAgentWorkAvailability{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM personal_agents WHERE id=$1 AND owner_user_id=$2 AND enabled AND deleted_at IS NULL)`, agentID, ownerUserID).Scan(&out.Busy); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM misty_ask_identities WHERE id=$1 AND owner_user_id=$2 AND enabled AND deleted_at IS NULL)`, agentID, ownerUserID).Scan(&out.Busy); err != nil {
 			return err
 		}
 		if !out.Busy {
 			return ErrPersonalAgentNotFound
 		}
 		out.Busy = false
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT state FROM space_runs WHERE agent_id=$1 AND owner_user_id=$2 AND state IN ('running','awaiting_approval','awaiting_device') ORDER BY created_at LIMIT 1),'')`, agentID, ownerUserID).Scan(&out.ActiveState); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT state FROM space_runs WHERE agent_id=$1 AND owner_user_id=$2 AND state IN ('running','awaiting_approval','awaiting_device','awaiting_intervention') ORDER BY created_at LIMIT 1),'')`, agentID, ownerUserID).Scan(&out.ActiveState); err != nil {
 			return err
 		}
 		out.Busy = out.ActiveState != ""

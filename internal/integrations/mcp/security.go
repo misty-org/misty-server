@@ -170,6 +170,14 @@ func newHTTPClient(endpoint, bearer string, limits Limits, resolver ipResolver, 
 	}, nil
 }
 
+// ValidateEndpointURL checks the stored endpoint shape without making a network
+// request. NewHTTPClient additionally rejects private DNS/IP destinations at
+// construction and again on every dial.
+func ValidateEndpointURL(raw string) error {
+	_, err := parseEndpoint(raw)
+	return err
+}
+
 func parseEndpoint(raw string) (*url.URL, error) {
 	target, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || target.Scheme != "https" || target.Hostname() == "" || target.User != nil || target.Fragment != "" || target.RawQuery != "" {

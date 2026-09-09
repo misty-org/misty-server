@@ -65,7 +65,7 @@ func (s *AIService) applySpaceContext(
 		return nil // Nothing the agent can see has changed since the last turn.
 	}
 
-	shared, err := buildAgentSharedSpaceContext(ctx, s.database, userID, bound.SpaceID, bound.AgentID, request.SpaceSection, revision, nil)
+	shared, err := buildAgentSharedSpaceContext(ctx, s.database, userID, bound.SpaceID, "", request.SpaceSection, revision, nil)
 	if err != nil {
 		return err
 	}

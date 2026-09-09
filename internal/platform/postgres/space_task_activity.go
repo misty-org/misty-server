@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -100,109 +99,4 @@ func (db *Database) SpaceTaskActivity(ctx context.Context, userID, spaceID, task
 		return rows.Err()
 	})
 	return items, err
-}
-
-func (db *Database) ClaimAssignedAgentTaskRun(ctx context.Context, userID string, task SpaceTask) (*SpaceRun, bool, error) {
-	if task.AssigneeAgentID == "" {
-		return nil, false, nil
-	}
-	out := &SpaceRun{}
-	claimed := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		membership, err := activePersonalAgentMembershipTx(ctx, tx, userID, task.SpaceID, task.AssigneeAgentID)
-		if err != nil {
-			return err
-		}
-		mode := membership.DefaultRunMode
-		if task.AgentRun != nil && strings.TrimSpace(task.AgentRun.Mode) != "" {
-			mode = strings.ToLower(strings.TrimSpace(task.AgentRun.Mode))
-		}
-		if !validAgentRunMode(mode) {
-			return ErrSpaceInvalid
-		}
-		contextReferences := []CreatorAgentContextReference{}
-		if task.AgentRun != nil {
-			contextReferences = task.AgentRun.ContextReferences
-		}
-		if contextReferences == nil {
-			contextReferences = []CreatorAgentContextReference{}
-		}
-		if len(contextReferences) > 8 {
-			return ErrSpaceInvalid
-		}
-		snapshot := mustJSON(map[string]any{"id": task.AssigneeAgentID, "version": membership.ApprovedVersion, "version_id": membership.ApprovedVersionID, "name": membership.Name, "instructions": membership.Instructions, "model_id": membership.ModelID, "reasoning_effort": membership.ReasoningEffort, "default_run_mode": membership.DefaultRunMode})
-		var assignmentExists bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_task_activity WHERE task_id=$1 AND kind='assigned'
-			AND actor_agent_id IS NULL AND metadata->>'agent_id'=$2 AND metadata->>'task_version'=$3)`, task.ID, task.AssigneeAgentID, strconv.FormatInt(task.Version, 10)).Scan(&assignmentExists); err != nil {
-			return err
-		}
-		if !assignmentExists {
-			return nil
-		}
-		envelope := mustJSON(map[string]any{
-			"trigger": "task_assignment", "task_id": task.ID, "assignment_task_version": task.Version,
-			"approved_agent_version_id": membership.ApprovedVersionID,
-			"allowed_tools":             []string{"tasks.query", "tasks.update_assigned", "task.activity.write", "attached_files.read"},
-			"approval_mode":             "explicit_assignment",
-		})
-		var existingID string
-		err = tx.QueryRowContext(ctx, `SELECT id FROM space_runs WHERE source_task_id=$1 AND agent_id=$2
-			AND action_envelope->>'assignment_task_version'=$3 LIMIT 1`, task.ID, task.AssigneeAgentID, strconv.FormatInt(task.Version, 10)).Scan(&existingID)
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		input := mustJSON(map[string]any{"task": task, "source_refs": task.SourceRefs})
-		out = &SpaceRun{
-			ID: "run_" + uuid.NewString(), SpaceID: task.SpaceID, ResourceKind: "agent", ResourceID: task.AssigneeAgentID,
-			InitiatedByUserID: userID, BillingUserID: userID, TriggerKind: "task_assignment", State: "queued", Input: input,
-			Result: json.RawMessage(`{}`), RequestingMemberID: userID, SourceType: "task", AgentID: task.AssigneeAgentID,
-			CapabilityID: "task_assignment", Outputs: json.RawMessage(`{}`), Artifacts: json.RawMessage(`[]`), Attempt: 1,
-			SourceTaskID: task.ID, ActionEnvelope: envelope,
-		}
-		err = scanSpaceRun(tx.QueryRowContext(ctx, `INSERT INTO space_runs(
-			id,space_id,resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,result,
-			requesting_member_id,source_type,agent_id,capability_id,outputs,artifacts,attempt,source_task_id,action_envelope,
-			owner_user_id,initial_run_mode,effective_run_mode,agent_version_id,agent_version_snapshot,context_bindings
-		) VALUES($1,$2,'agent',$3,$4,$4,'task_assignment','queued',$5,'{}'::jsonb,$4,'task',$3,'task_assignment','{}'::jsonb,'[]'::jsonb,1,$6,$7,$4,$8,$8,NULL,$9,$10)
-		ON CONFLICT DO NOTHING RETURNING `+spaceRunColumns, out.ID, task.SpaceID, task.AssigneeAgentID, userID, input, task.ID, envelope, mode, snapshot, mustJSON(contextReferences)), out)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		for _, ref := range contextReferences {
-			ref.Kind = strings.TrimSpace(ref.Kind)
-			ref.OpaqueRef = strings.TrimSpace(ref.OpaqueRef)
-			ref.DeviceID = strings.TrimSpace(ref.DeviceID)
-			capabilities, normalizeErr := normalizeDeviceAgentCapabilities(ref.Capabilities)
-			if normalizeErr != nil || (ref.Kind != "browser_tab" && ref.Kind != "project_root") || ref.OpaqueRef == "" || ref.DeviceID == "" {
-				return ErrSpaceInvalid
-			}
-			if len(ref.Metadata) == 0 {
-				ref.Metadata = json.RawMessage(`{}`)
-			}
-			var deviceExists bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL)`, ref.DeviceID, userID).Scan(&deviceExists); err != nil || !deviceExists {
-				return ErrDeviceNotFound
-			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO agent_run_contexts(id,run_id,owner_user_id,space_id,device_id,kind,opaque_ref,display_name,capabilities,metadata,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()+INTERVAL '24 hours')`, `context_`+uuid.NewString(), out.ID, userID, task.SpaceID, ref.DeviceID, ref.Kind, ref.OpaqueRef, ref.DisplayName, capabilities, ref.Metadata); err != nil {
-				return err
-			}
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO agent_run_jobs(run_id,space_id,task_id,agent_id)
-			VALUES($1,$2,$3,$4)`, out.ID, task.SpaceID, task.ID, task.AssigneeAgentID); err != nil {
-			return err
-		}
-		if _, err := insertTaskActivityTx(ctx, tx, SpaceTaskActivity{SpaceID: task.SpaceID, TaskID: task.ID, ActorKind: "agent", ActorAgentID: task.AssigneeAgentID, RunID: out.ID, Kind: "progress", Message: "Queued to work on this task", Metadata: mustJSON(map[string]any{"task_version": task.Version})}); err != nil {
-			return err
-		}
-		_, err = recordSpaceEventTx(ctx, tx, task.SpaceID, userID, "agent.run.queued", out.ID, map[string]any{"agent_id": task.AssigneeAgentID, "source_type": "task", "task_id": task.ID})
-		claimed = err == nil
-		return err
-	})
-	return out, claimed, err
 }

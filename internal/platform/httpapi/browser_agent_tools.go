@@ -8,6 +8,7 @@ import (
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/kannachi323/misty/server/internal/browseractions"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
@@ -64,35 +65,65 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 		)
 	}
 	if errors.Is(err, db.ErrDeviceNotFound) {
-		return nil, workflowv2.ErrDeviceUnavailable
+		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
 	}
 	if err != nil {
 		return nil, err
 	}
+	if job.State == "canceled" && job.ControlVersion == 2 && job.ExecutionStartedAt == nil {
+		job, err = s.database.RearmUnstartedBrowserJob(ctx, invocation.UserID, job)
+		if err != nil {
+			return nil, errors.Join(db.ErrAgentToolboxNotAttempted, err)
+		}
+	}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
-	timeout := time.NewTimer(5 * time.Minute)
+	timeout := time.NewTimer(time.Until(job.DeadlineAt))
 	defer timeout.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return s.stopBrowserDeviceTool(invocation.UserID, job.ID)
 		case <-timeout.C:
-			return nil, workflowv2.ErrDeviceUnavailable
+			return s.stopBrowserDeviceTool(invocation.UserID, job.ID)
 		case <-ticker.C:
 			current, lookupErr := s.database.WorkflowDeviceNodeJob(ctx, invocation.UserID, job.ID)
 			if lookupErr != nil {
-				return nil, lookupErr
+				return s.stopBrowserDeviceTool(invocation.UserID, job.ID)
 			}
 			switch current.State {
 			case "completed":
 				return current.Output, nil
-			case "failed", "canceled":
+			case "uncertain":
+				return nil, db.ErrAgentToolboxActionUnknown
+			case "canceled":
+				return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
+			case "failed":
+				if current.ErrorCode == "browser_snapshot_stale" {
+					return nil, browseractions.ErrStale
+				}
 				if current.ErrorCode == "device_unavailable" || current.ErrorCode == "browser_tab_closed" {
 					return nil, workflowv2.ErrDeviceUnavailable
 				}
 				return nil, errors.New("browser device tool failed: " + current.ErrorCode)
 			}
 		}
+	}
+}
+
+func (s *SpacesService) stopBrowserDeviceTool(userID, jobID string) (json.RawMessage, error) {
+	job, err := s.database.StopWorkflowDeviceNodeJob(userID, jobID)
+	if err != nil {
+		return nil, errors.Join(db.ErrAgentToolboxActionUnknown, err)
+	}
+	switch job.State {
+	case "completed":
+		return job.Output, nil
+	case "canceled":
+		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
+	case "failed":
+		return nil, errors.New("browser device tool failed: " + job.ErrorCode)
+	default:
+		return nil, db.ErrAgentToolboxActionUnknown
 	}
 }

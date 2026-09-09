@@ -89,8 +89,8 @@ func loadSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, conver
 		CASE WHEN cm.actor_kind='agent' THEN v.avatar ELSE NULL END,cm.joined_at
 		FROM space_conversation_members cm
 		LEFT JOIN users u ON u.id=cm.user_id
-		LEFT JOIN personal_agents pa ON pa.id=cm.agent_id
-		LEFT JOIN personal_agent_versions v ON v.agent_id=pa.id AND v.version=pa.version
+		LEFT JOIN misty_ask_identities pa ON pa.id=cm.agent_id
+		LEFT JOIN misty_ask_identity_versions v ON v.agent_id=pa.id AND v.version=pa.version
 		WHERE cm.conversation_id=$1 ORDER BY cm.actor_kind,u.name,v.name`
 	if conversation.VisibleToSpace {
 		query = `SELECT 'person',sm.user_id,'',u.name,u.email,NULL,sm.joined_at
@@ -326,42 +326,7 @@ func validateSpaceActorRefsTx(ctx context.Context, tx *sql.Tx, userID, spaceID s
 			}
 			continue
 		}
-		if _, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, ref.AgentID); err != nil {
-			return ErrSpaceInvalid
-		}
+		return ErrSpaceInvalid
 	}
 	return nil
-}
-
-// DirectAgentConversation returns the one ordinary private Space conversation
-// between the current person and an installed Agent, creating it atomically.
-func (db *Database) DirectAgentConversation(ctx context.Context, userID, spaceID, agentID string) (*SpaceConversation, error) {
-	out := &SpaceConversation{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
-			return err
-		}
-		membership, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID)
-		if err != nil {
-			return err
-		}
-		id := "space_conversation_" + uuid.NewString()
-		if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,kind,created_by_user_id,direct_user_id,direct_agent_id)
-			VALUES($1,$2,$3,'direct',$4,$4,$5)
-			ON CONFLICT(space_id,direct_user_id,direct_agent_id) WHERE kind='direct' AND direct_agent_id IS NOT NULL
-			DO UPDATE SET updated_at=space_conversations.updated_at
-			RETURNING id,space_id,title,kind,created_by_user_id,created_at,updated_at`, id, spaceID, membership.Name, userID, agentID).
-			Scan(&out.ID, &out.SpaceID, &out.Title, &out.Kind, &out.CreatedByUserID, &out.CreatedAt, &out.UpdatedAt); err != nil {
-			return err
-		}
-		out.Origin, out.IntegrationStatus, out.DirectUserID, out.DirectAgentID = "misty", "active", userID, agentID
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,user_id,actor_kind) VALUES($1,$2,'person') ON CONFLICT DO NOTHING`, out.ID, userID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,agent_id,actor_kind) VALUES($1,$2,'agent') ON CONFLICT DO NOTHING`, out.ID, agentID); err != nil {
-			return err
-		}
-		return loadSpaceConversationParticipantsTx(ctx, tx, out)
-	})
-	return out, err
 }

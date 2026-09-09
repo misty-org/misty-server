@@ -5,9 +5,28 @@ import {
   missingRequiredToolCalls,
   proactiveExecutionInstructions,
   unconfirmedToolResultReason,
+  stopOnRepeatedOrTerminalToolFailure,
 } from "../workflows/space-task-agent.js";
 
 describe("proactive natural-language execution", () => {
+  it("stops after an uncertain effect before the model can retry with another call ID", async () => {
+    expect(
+      await stopOnRepeatedOrTerminalToolFailure({
+        steps: [
+          {
+            content: [
+              {
+                type: "tool-result",
+                toolName: "mail_send",
+                toolCallId: "send-one",
+                output: { status: "uncertain" },
+              },
+            ],
+          },
+        ],
+      } as any),
+    ).toBe(true);
+  });
   it("requires complete generated artifacts before a write", () => {
     expect(proactiveExecutionInstructions).toContain(
       "compose the complete final content before the write",

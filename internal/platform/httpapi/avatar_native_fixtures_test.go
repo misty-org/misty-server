@@ -16,7 +16,7 @@ import (
 )
 
 func TestNativeAvatarPNGFixtures(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/migration/fixtures/avatar-png.json")
+	raw, err := os.ReadFile("../../../test/fixtures/compatibility/avatar-png.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestNativeAvatarPNGFixtures(t *testing.T) {
 func TestNativeAvatarFilesystemRoundTrip(t *testing.T) {
 	directory := os.Getenv("MISTY_TEST_AVATAR_DIRECTORY")
 	if directory == "" {
-		t.Skip("Run scripts/migration/check-avatar-storage.mjs for the disposable cross-runtime proof")
+		t.Skip("Archived cross-runtime integration proof; the Go fixture checks remain active")
 	}
 	if !strings.HasPrefix(filepath.Base(directory), "misty-avatar-compat-") {
 		t.Fatal("requires an explicitly disposable avatar compatibility directory")

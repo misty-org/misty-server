@@ -62,31 +62,3 @@ func TestSpaceAgentReadsUpdatesAndPromotesLibraryItems(t *testing.T) {
 		t.Fatalf("promoted attachment = %s, %v", promotedRaw, err)
 	}
 }
-
-func TestSpaceAgentListsCreatorCompanionsWithoutCrossSpaceDetails(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Companion Tool Owner", "companion-tool-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Companion Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{Name: "Scout", ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{Name: "Maker", ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite"}); err != nil {
-		t.Fatal(err)
-	}
-	listed, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, first.ID, "List my agents", "agents.list", json.RawMessage(`{}`))
-	if err != nil || !strings.Contains(string(listed), "Scout") || !strings.Contains(string(listed), "Maker") || strings.Contains(string(listed), "space_id") {
-		t.Fatalf("listed companions = %s, %v", listed, err)
-	}
-	status, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, first.ID, "Is Maker available?", "agents.status", json.RawMessage(`{"agentName":"Maker"}`))
-	if err != nil || !strings.Contains(string(status), `"busy":false`) {
-		t.Fatalf("companion status = %s, %v", status, err)
-	}
-}

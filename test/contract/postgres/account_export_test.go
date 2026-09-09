@@ -26,14 +26,11 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	_, err := fixture.database.CreatePersonalAgent(fixture.ctx, fixture.creator, PersonalAgent{
-		Name: "Portable Agent", Instructions: "Export this private behavior.",
-		ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite",
-	})
+	_, err := fixture.database.EnsureAskIdentity(fixture.ctx, fixture.creator, "google/gemini-2.5-flash-lite")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fixture.database.SetSpaceMemberPermission(fixture.ctx, fixture.owner, fixture.spaceID, fixture.creator, PermissionAgentsManage, "allow"); err != nil {
+	if err := fixture.database.SetSpaceMemberPermission(fixture.ctx, fixture.owner, fixture.spaceID, fixture.creator, PermissionAskRun, "allow"); err != nil {
 		t.Fatal(err)
 	}
 	digest := strings.Repeat("d", 64)

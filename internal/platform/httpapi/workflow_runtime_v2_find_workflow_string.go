@@ -1,14 +1,12 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
 
@@ -209,45 +207,4 @@ func safeGeneratedArtifactName(agentName, nodeID string) string {
 		node = "result"
 	}
 	return name + "-" + node + ".md"
-}
-
-func (s *SpacesService) changedFilesNode(ctx context.Context, run *db.SpaceRun, invocation workflowv2.Invocation) (json.RawMessage, error) {
-	if run.AgentInstanceID == "" || run.WorkflowVersionID == "" {
-		return nil, workflowv2.ErrOutputInvalid
-	}
-	var input map[string]any
-	if json.Unmarshal(invocation.Input, &input) != nil {
-		return nil, workflowv2.ErrOutputInvalid
-	}
-	rawItems := TestingFindWorkflowItems(input)
-	claimed := make([]any, 0, len(rawItems))
-	for _, raw := range rawItems {
-		item, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		eventID, _ := item["eventId"].(string)
-		if eventID == "" {
-			eventID, _ = item["event_id"].(string)
-		}
-		provider, _ := item["provider"].(string)
-		fingerprint, _ := item["fingerprint"].(string)
-		path, _ := item["relativePath"].(string)
-		provenance, _ := item["provenance"].(string)
-		if eventID == "" || provider == "" || provenance == "workflow_generated" || strings.HasPrefix(strings.TrimPrefix(path, "./"), ".summaries/") {
-			continue
-		}
-		ok, err := s.database.ClaimWorkflowEvent(ctx, run.AgentInstanceID, run.WorkflowVersionID, provider, eventID, fingerprint, run.ID)
-		if err == nil && !ok && run.TriggerKind == "retry" {
-			ok, err = s.database.ReclaimFailedWorkflowEvent(ctx, run.AgentInstanceID, run.WorkflowVersionID, provider, eventID, fingerprint, run.ID)
-		}
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			item["claimedByRunId"] = run.ID
-			claimed = append(claimed, item)
-		}
-	}
-	return TestingMustAPIRawJSON(map[string]any{"items": claimed, "claimed": len(claimed), "provenance": map[string]any{"instanceId": run.AgentInstanceID, "workflowVersionId": run.WorkflowVersionID}}), nil
 }

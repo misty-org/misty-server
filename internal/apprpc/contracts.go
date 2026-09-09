@@ -51,6 +51,7 @@ func (e *Error) Error() string { return e.Message }
 var placeholder = regexp.MustCompile(`\{([A-Za-z][A-Za-z0-9]*)\}`)
 var identifier = regexp.MustCompile(`^[A-Za-z0-9_-]{1,256}$`)
 var mailProviderIdentifier = regexp.MustCompile(`^[\x21-\x7e]{1,320}$`)
+var capabilityProviderIdentifier = regexp.MustCompile(`^[a-z][a-z0-9.-]+/[a-z][a-z0-9_-]*$`)
 var contract = loadContract()
 
 func loadContract() Contract {
@@ -83,7 +84,7 @@ func Resolve(request Request, spaceID string) (Target, error) {
 	if !exists {
 		return Target{}, &Error{"unsupported_method", "This SDK method is not supported."}
 	}
-	if !identifier.MatchString(spaceID) {
+	if strings.Contains(method.Path, "{spaceID}") && !identifier.MatchString(spaceID) {
 		return Target{}, &Error{"invalid_params", "A bound Space is required."}
 	}
 	if supplied := request.Params.Path["spaceID"]; supplied != "" && supplied != spaceID {
@@ -102,6 +103,9 @@ func Resolve(request Request, spaceID string) (Target, error) {
 			value = spaceID
 		}
 		valid := identifier.MatchString(value)
+		if strings.HasPrefix(request.Method, "capabilities.") && key == "providerID" {
+			valid = len(value) <= 240 && capabilityProviderIdentifier.MatchString(value)
+		}
 		if isMailProviderParameter(request.Method, key) {
 			valid = mailProviderIdentifier.MatchString(value) && value != "." && value != ".."
 		}

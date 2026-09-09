@@ -9,14 +9,14 @@ import (
 // Shared attribution remains intact during the retention window, but no Space
 // can invoke an Agent owned by an account that can no longer sign in.
 func disableAccountAgentsTx(ctx context.Context, tx *sql.Tx, userID string) error {
-	if _, err := tx.ExecContext(ctx, `UPDATE personal_agents SET enabled=FALSE,updated_at=NOW()
+	if _, err := tx.ExecContext(ctx, `UPDATE misty_ask_identities SET enabled=FALSE,updated_at=NOW()
 		WHERE owner_user_id=$1 AND deleted_at IS NULL`, userID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `WITH canceled AS (
 		UPDATE space_runs SET state='canceled',runtime_phase='canceled',error_code='account_disabled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
-		WHERE state IN ('queued','running','cooldown','awaiting_approval','awaiting_device') AND
-		(agent_id IN (SELECT id FROM personal_agents WHERE owner_user_id=$1) OR requesting_member_id=$1) RETURNING id
+		WHERE state IN ('queued','running','cooldown','awaiting_approval','awaiting_device','awaiting_intervention') AND
+		(agent_id IN (SELECT id FROM misty_ask_identities WHERE owner_user_id=$1) OR requesting_member_id=$1) RETURNING id
 	) UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW()
 	WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, userID); err != nil {
 		return err
@@ -37,16 +37,16 @@ func purgeAccountAgentsTx(ctx context.Context, tx *sql.Tx, userID string) error 
 	if err := disableAccountAgentsTx(ctx, tx, userID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM agent_conversations WHERE user_id=$1`, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM misty_ask_conversations WHERE user_id=$1`, userID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE personal_agent_versions SET
+	if _, err := tx.ExecContext(ctx, `UPDATE misty_ask_identity_versions SET
 		name='Deleted Agent',role='',description='',icon='',avatar='{"kind":"preset","preset_id":"bot","accent":"neutral"}'::jsonb,instructions='',model_mode='pinned',model_id='deleted',reasoning_effort='',
 		checksum_sha256=md5(id || ':deleted') || md5(agent_id || ':deleted')
-		WHERE agent_id IN (SELECT id FROM personal_agents WHERE owner_user_id=$1)`, userID); err != nil {
+		WHERE agent_id IN (SELECT id FROM misty_ask_identities WHERE owner_user_id=$1)`, userID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE personal_agents SET
+	if _, err := tx.ExecContext(ctx, `UPDATE misty_ask_identities SET
 		name='Deleted Agent',role='',description='',icon='',avatar='{"kind":"preset","preset_id":"bot","accent":"neutral"}'::jsonb,instructions='',model_mode='pinned',model_id='deleted',reasoning_effort='',
 		default_run_mode='auto',enabled=FALSE,
 		deleted_at=COALESCE(deleted_at,NOW()),updated_at=NOW()

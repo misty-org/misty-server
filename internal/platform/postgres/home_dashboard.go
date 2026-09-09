@@ -69,9 +69,9 @@ func emptyHomeDashboardSnapshot() HomeDashboardSnapshot {
 }
 
 func readHomeDashboardTx(ctx context.Context, tx *sql.Tx, userID, spaceID string, out *HomeDashboardSnapshot) error {
-	rows, err := tx.QueryContext(ctx, `SELECT activity_date::text,visit_count FROM user_home_activity
-		WHERE user_id=$1 AND space_id=$2 AND activity_date>=CURRENT_DATE-($3::int-1)
-		ORDER BY activity_date`, userID, spaceID, homeActivityRetentionDays)
+	rows, err := tx.QueryContext(ctx, `SELECT activity_date::text,SUM(visit_count) FROM user_home_activity
+		WHERE user_id=$1 AND activity_date>=CURRENT_DATE-($2::int-1)
+		GROUP BY activity_date ORDER BY activity_date`, userID, homeActivityRetentionDays)
 	if err != nil {
 		return err
 	}

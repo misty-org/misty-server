@@ -32,19 +32,29 @@ func scanAgentToolApproval(row scanner, out *AgentToolApproval) error {
 	return row.Scan(&out.ID, &out.RunID, &out.OwnerUserID, &out.ToolCallID, &out.ToolName, &out.Impact, &out.ArgumentsHash, &out.SignedCall, &out.HookToken, &out.Summary, &out.State, &out.ExpiresAt, &out.DecidedAt)
 }
 
-func (db *Database) RequireCreatorToolApproval(ctx context.Context, run *SpaceRun, callID, toolName, impact, argumentsHash, signedCall, hookToken, summary string) (*AgentToolApproval, bool, error) {
+func (db *Database) RequireCreatorToolApproval(ctx context.Context, run *SpaceRun, callID, toolName, impact, argumentsHash, signedCall, hookToken, summary string, reviews ...ProtectedSDKApproval) (*AgentToolApproval, bool, error) {
 	if run == nil || strings.TrimSpace(callID) == "" || strings.TrimSpace(hookToken) == "" {
 		return nil, false, ErrSpaceInvalid
 	}
 	out := &AgentToolApproval{}
 	allowed := false
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if _, err := activePersonalAgentMembershipTx(ctx, tx, run.OwnerUserID, run.SpaceID, run.AgentID); err != nil {
+		var currentState string
+		if err := tx.QueryRowContext(ctx, `SELECT state FROM space_runs WHERE id=$1 AND owner_user_id=$2 FOR UPDATE`, run.ID, run.OwnerUserID).Scan(&currentState); err != nil {
+			return err
+		}
+		if currentState != "running" && currentState != "awaiting_approval" {
+			return ErrSpaceConflict
+		}
+		if _, err := askExecutionContextTx(ctx, tx, run.OwnerUserID, run.SpaceID, run.AgentID); err != nil {
 			return err
 		}
 		if err := scanAgentToolApproval(tx.QueryRowContext(ctx, `SELECT `+agentToolApprovalColumns+` FROM agent_run_tool_approvals WHERE run_id=$1 AND tool_call_id=$2`, run.ID, callID), out); err == nil {
 			if out.ArgumentsHash != argumentsHash || out.ToolName != toolName || out.SignedCall != signedCall {
 				return ErrSpaceForbidden
+			}
+			if err := persistSDKApprovalReviewTx(ctx, tx, out, reviews); err != nil {
+				return err
 			}
 			if out.State == "approved" {
 				allowed = true
@@ -56,6 +66,9 @@ func (db *Database) RequireCreatorToolApproval(ctx context.Context, run *SpaceRu
 			return nil
 		} else if !errors.Is(err, sql.ErrNoRows) {
 			return err
+		}
+		if currentState != "running" {
+			return ErrSpaceConflict
 		}
 		out.ID = "approval_" + uuid.NewString()
 		out.RunID = run.ID
@@ -72,13 +85,19 @@ func (db *Database) RequireCreatorToolApproval(ctx context.Context, run *SpaceRu
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING `+agentToolApprovalColumns, out.ID, out.RunID, out.OwnerUserID, out.ToolCallID, out.ToolName, out.Impact, out.ArgumentsHash, out.SignedCall, out.HookToken, out.Summary), out); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='awaiting_approval',approval_state='pending',runtime_phase='awaiting_approval',updated_at=NOW() WHERE id=$1 AND state='running'`, run.ID)
+		if err := persistSDKApprovalReviewTx(ctx, tx, out, reviews); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='awaiting_approval',approval_state='pending',approval_wait_id=$2,runtime_phase='awaiting_approval',updated_at=NOW() WHERE id=$1 AND state='running'`, run.ID, out.ID)
 		return err
 	})
 	return out, allowed, err
 }
 
 func (db *Database) DecideCreatorToolApproval(ctx context.Context, ownerUserID, runID, approvalID string, approve bool) (*AgentToolApproval, error) {
+	if AppAuthorityFromContext(ctx) != nil {
+		return nil, ErrAppRuntimeForbidden
+	}
 	out := &AgentToolApproval{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `UPDATE agent_run_tool_approvals SET state='expired' WHERE id=$1 AND state='pending' AND expires_at<=NOW()`, approvalID); err != nil {
@@ -89,7 +108,7 @@ func (db *Database) DecideCreatorToolApproval(ctx context.Context, ownerUserID, 
 			state = "approved"
 		}
 		if err := scanAgentToolApproval(tx.QueryRowContext(ctx, `UPDATE agent_run_tool_approvals a SET state=$1,decided_by_user_id=$2,decided_at=NOW()
-			FROM space_runs r WHERE a.id=$3 AND a.run_id=$4 AND a.run_id=r.id AND a.owner_user_id=$2 AND r.owner_user_id=$2 AND a.state='pending' AND a.expires_at>NOW()
+			FROM space_runs r WHERE a.id=$3 AND a.run_id=$4 AND a.run_id=r.id AND a.owner_user_id=$2 AND r.owner_user_id=$2 AND a.state='pending' AND a.expires_at>NOW() AND r.state='awaiting_approval' AND r.approval_wait_id=a.id AND ($1<>'approved' OR a.tool_name NOT LIKE 'sdk.%' OR a.sdk_review_ciphertext IS NOT NULL)
 			RETURNING `+qualifiedAgentToolApprovalColumns("a"), state, ownerUserID, approvalID, runID), out); err != nil {
 			return err
 		}
@@ -98,10 +117,13 @@ func (db *Database) DecideCreatorToolApproval(ctx context.Context, ownerUserID, 
 			approvalState = "approved"
 		}
 		_, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='running',
-			effective_run_mode=CASE WHEN $1 THEN 'full' ELSE effective_run_mode END,
+			approval_wait_id=$1,
 			approval_state=$2,runtime_phase='approval_resume_pending',updated_at=NOW()
-			WHERE id=$3 AND owner_user_id=$4 AND state='awaiting_approval'`, approve, approvalState, runID, ownerUserID)
-		return err
+			WHERE id=$3 AND owner_user_id=$4 AND state='awaiting_approval'`, approvalID, approvalState, runID, ownerUserID)
+		if err != nil {
+			return err
+		}
+		return queueApprovalDeliveryTx(ctx, tx, out)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrSpaceForbidden
@@ -120,7 +142,7 @@ func (db *Database) CreatorToolApprovalResumesPending(ctx context.Context, limit
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `SELECT `+qualifiedAgentToolApprovalColumns("a")+` FROM agent_run_tool_approvals a
 			JOIN space_runs r ON r.id=a.run_id
-			WHERE a.state IN ('approved','denied') AND r.state='running' AND r.runtime_phase='approval_resume_pending'
+			WHERE a.state IN ('approved','denied') AND r.approval_wait_id=a.id AND r.state='running' AND r.runtime_phase='approval_resume_pending'
 			ORDER BY a.decided_at,a.id LIMIT $1`, limit)
 		if err != nil {
 			return err
@@ -142,7 +164,7 @@ func (db *Database) MarkCreatorToolApprovalResumed(ctx context.Context, runID, a
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `UPDATE space_runs r SET runtime_phase='working',runtime_heartbeat_at=NOW(),updated_at=NOW()
 			FROM agent_run_tool_approvals a WHERE r.id=$1 AND a.id=$2 AND a.run_id=r.id
-			  AND a.state IN ('approved','denied') AND r.state='running' AND r.runtime_phase='approval_resume_pending'`, runID, approvalID)
+			  AND a.state IN ('approved','denied') AND r.approval_wait_id=a.id AND r.state='running' AND r.runtime_phase='approval_resume_pending'`, runID, approvalID)
 		if err != nil {
 			return err
 		}
@@ -189,7 +211,7 @@ func (db *Database) ExpireCreatorToolApprovals(ctx context.Context, limit int) (
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT `+qualifiedAgentToolApprovalColumns("a")+` FROM agent_run_tool_approvals a
-			JOIN space_runs r ON r.id=a.run_id WHERE a.state='expired' AND r.state='awaiting_approval'
+			JOIN space_runs r ON r.id=a.run_id WHERE a.state='expired' AND r.approval_wait_id=a.id AND r.state='awaiting_approval'
 			ORDER BY a.expires_at,a.id LIMIT $1`, limit)
 		if err != nil {
 			return err
@@ -210,7 +232,7 @@ func (db *Database) ExpireCreatorToolApprovals(ctx context.Context, limit int) (
 func (db *Database) MarkExpiredCreatorToolApprovalResumed(ctx context.Context, runID, approvalID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `UPDATE space_runs r SET state='running',approval_state='expired',runtime_phase='working',runtime_heartbeat_at=NOW(),updated_at=NOW()
-			FROM agent_run_tool_approvals a WHERE r.id=$1 AND a.id=$2 AND a.run_id=r.id AND a.state='expired' AND r.state='awaiting_approval'`, runID, approvalID)
+			FROM agent_run_tool_approvals a WHERE r.id=$1 AND a.id=$2 AND a.run_id=r.id AND a.state='expired' AND r.approval_wait_id=a.id AND r.state='awaiting_approval'`, runID, approvalID)
 		if err != nil {
 			return err
 		}

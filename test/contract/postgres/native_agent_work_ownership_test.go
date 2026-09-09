@@ -19,17 +19,13 @@ func TestGoAgentSchedulerLeavesNativeOwnedJobsUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	queue := func(name string) *SpaceRun {
-		agent, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{Name: name, ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite"})
+		agent, err := database.EnsureAskIdentity(ctx, owner.ID, "google/gemini-2.5-flash-lite")
 		if err != nil {
 			t.Fatal(err)
 		}
-		task, err := database.CreateSpaceTask(ctx, owner.ID, SpaceTask{SpaceID: space.ID, Title: name, Status: "todo", AssigneeAgentID: agent.ID})
+		run, err := database.CreateCreatorAgentRun(ctx, owner.ID, space.ID, agent.ID, CreatorAgentRunInput{Instruction: name})
 		if err != nil {
 			t.Fatal(err)
-		}
-		run, claimed, err := database.ClaimAssignedAgentTaskRun(ctx, owner.ID, *task)
-		if err != nil || !claimed {
-			t.Fatalf("queue: claimed=%v err=%v", claimed, err)
 		}
 		return run
 	}

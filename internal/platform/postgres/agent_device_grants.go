@@ -30,7 +30,7 @@ type AgentDeviceGrant struct {
 var deviceAgentCapabilities = map[string]bool{
 	"files.read": true, "files.write": true, "files.list": true, "files.search": true, "files.copy": true, "files.move": true, "files.delete": true,
 	"project.patch": true, "project.diff": true, "project.status": true, "project.checks": true, "git.commit": true, "git.push": true, "terminal.execute": true,
-	"browser.inspect": true, "browser.navigate": true, "browser.click": true, "browser.type": true, "browser.select": true, "browser.scroll": true,
+	"browser.interact": true, "browser.inspect": true, "browser.navigate": true, "browser.click": true, "browser.type": true, "browser.select": true, "browser.scroll": true,
 	"browser.downloads.list": true, "browser.upload": true, "browser.confirm_high_risk": true,
 }
 
@@ -57,7 +57,7 @@ func normalizeDeviceAgentCapabilities(raw json.RawMessage) (json.RawMessage, err
 func (db *Database) AgentDeviceGrants(ctx context.Context, userID, spaceID, agentID string) ([]AgentDeviceGrant, error) {
 	items := []AgentDeviceGrant{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if _, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID); err != nil {
+		if _, err := askExecutionContextTx(ctx, tx, userID, spaceID, agentID); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT c.id,c.owner_user_id,r.agent_id,c.space_id,c.device_id,c.opaque_ref,c.capabilities,c.metadata,c.expires_at,
@@ -134,12 +134,16 @@ type AgentDeviceWait struct {
 }
 
 func (db *Database) AwaitAgentRunDevice(ctx context.Context, runID, runtimeRunID, hookToken string) error {
+	return db.AwaitAgentRunDeviceTarget(ctx, runID, runtimeRunID, hookToken, "", "")
+}
+
+func (db *Database) AwaitAgentRunDeviceTarget(ctx context.Context, runID, runtimeRunID, hookToken, scopeID, capability string) error {
 	if strings.TrimSpace(hookToken) == "" {
 		return ErrSpaceInvalid
 	}
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='awaiting_device',runtime_phase='awaiting_device',device_wait_hook_token=$3,
-			device_wait_expires_at=NOW()+INTERVAL '24 hours',updated_at=NOW() WHERE id=$1 AND runtime_run_id=$2 AND state='running'`, runID, runtimeRunID, hookToken)
+			device_wait_expires_at=NOW()+INTERVAL '24 hours',device_wait_scope_id=$4,device_wait_capability=$5,updated_at=NOW() WHERE id=$1 AND runtime_run_id=$2 AND state='running'`, runID, runtimeRunID, hookToken, scopeID, capability)
 		if err != nil {
 			return err
 		}
@@ -160,10 +164,14 @@ func (db *Database) AgentDeviceWaitsReady(ctx context.Context, limit int) ([]Age
 		rows, err := tx.QueryContext(ctx, `SELECT r.id,r.device_wait_hook_token,
 			EXISTS(SELECT 1 FROM agent_run_contexts c JOIN trusted_devices d ON d.id=c.device_id
 				WHERE c.run_id=r.id AND c.state='attached' AND c.expires_at>NOW() AND d.user_id=r.owner_user_id
+                AND r.device_wait_scope_id<>'' AND c.opaque_ref=r.device_wait_scope_id
+                AND r.device_wait_capability<>'' AND c.capabilities ? r.device_wait_capability
 				AND d.revoked_at IS NULL AND d.last_seen_at>NOW()-INTERVAL '90 seconds')
 			FROM space_runs r WHERE r.state='awaiting_device' AND r.device_wait_hook_token<>''
 			AND (r.device_wait_expires_at<=NOW() OR EXISTS(SELECT 1 FROM agent_run_contexts c JOIN trusted_devices d ON d.id=c.device_id
 				WHERE c.run_id=r.id AND c.state='attached' AND c.expires_at>NOW() AND d.user_id=r.owner_user_id
+                AND r.device_wait_scope_id<>'' AND c.opaque_ref=r.device_wait_scope_id
+                AND r.device_wait_capability<>'' AND c.capabilities ? r.device_wait_capability
 				AND d.revoked_at IS NULL AND d.last_seen_at>NOW()-INTERVAL '90 seconds'))
 			ORDER BY r.updated_at,r.id LIMIT $1`, limit)
 		if err != nil {
@@ -228,7 +236,7 @@ func (db *Database) AttachAgentRunContext(ctx context.Context, ownerUserID, runI
 	}
 	out := &AgentRunContext{ID: "context_" + uuid.NewString(), RunID: runID, OwnerUserID: ownerUserID, DeviceID: deviceID, Kind: kind, OpaqueRef: opaqueRef, DisplayName: displayName, Capabilities: capabilities, Metadata: metadata}
 	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, `SELECT r.space_id FROM space_runs r JOIN personal_agents a ON a.id=r.agent_id WHERE r.id=$1 AND r.owner_user_id=$2 AND a.owner_user_id=$2 AND r.state='queued'`, runID, ownerUserID).Scan(&out.SpaceID); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT r.space_id FROM space_runs r JOIN misty_ask_identities a ON a.id=r.agent_id WHERE r.id=$1 AND r.owner_user_id=$2 AND a.owner_user_id=$2 AND r.state='queued'`, runID, ownerUserID).Scan(&out.SpaceID); err != nil {
 			return ErrSpaceForbidden
 		}
 		var online bool

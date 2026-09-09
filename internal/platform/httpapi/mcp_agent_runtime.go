@@ -76,12 +76,19 @@ func (s *SpacesService) executeMCPAgentTool(ctx context.Context, run *db.SpaceRu
 	started := time.Now()
 	var resultJSON json.RawMessage
 	resultJSON, callErr := s.database.JournalAgentToolboxAction(ctx, db.AgentToolboxAction{
-		IdempotencyKey: idempotencyKey, UserID: run.RequestingMemberID, SpaceID: run.SpaceID,
+		IdempotencyKey: idempotencyKey, RequireSettledRun: source == "space_conversation", UserID: run.RequestingMemberID, SpaceID: run.SpaceID,
 		AgentID: run.AgentID, RunID: run.ID, ToolName: item.StableName,
 		AuditEvent: "mcp.tool.execute", Risk: serveragent.RiskWrite, Source: source,
 		Request: tool.Arguments, RedactPayload: true,
+		ProtectResult: func(value json.RawMessage) ([]byte, error) { return s.protectAgentEffectResult(idempotencyKey, value) },
+		RestoreResult: func(value []byte) (json.RawMessage, error) { return s.restoreAgentEffectResult(idempotencyKey, value) },
 	}, func() (json.RawMessage, error) {
-		result, remoteErr := s.mcpConnectorClient.CallTool(ctx, item.EndpointURL, bearer, item.RemoteName, tool.Arguments)
+		executionCtx, cancel, err := boundedAgentExecutionContext(ctx, s.database, run.RequestingMemberID, run.ID)
+		if err != nil {
+			return nil, err
+		}
+		defer cancel()
+		result, remoteErr := s.mcpConnectorClient.CallTool(executionCtx, item.EndpointURL, bearer, item.RemoteName, tool.Arguments)
 		if remoteErr != nil {
 			return nil, remoteErr
 		}

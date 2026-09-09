@@ -7,20 +7,30 @@ import { controlPlaneRequest } from "./control-plane.js";
 import { ControlPlaneError } from "./control-plane-error.js";
 import { classifyMCPTransportError } from "./mcp-errors.js";
 import { resolveMCPEndpoint } from "./mcp-endpoint.js";
-import type { MCPRunAccess, MCPRemoteTool, RuntimeToolContext } from "./types.js";
+import type {
+  MCPRunAccess,
+  MCPRemoteTool,
+  RuntimeToolContext,
+} from "./types.js";
+import { collectToolPages } from "./tool-discovery.js";
 
 function rethrowMCPError(error: unknown): never {
   if (error instanceof ControlPlaneError) {
     if (error.transient) {
-      throw new RetryableError("Misty's control plane is temporarily unavailable.", {
-        retryAfter: error.status === 429 ? 5_000 : 1_000,
-      });
+      throw new RetryableError(
+        "Misty's control plane is temporarily unavailable.",
+        {
+          retryAfter: error.status === 429 ? 5_000 : 1_000,
+        },
+      );
     }
     throw new FatalError("Misty's authorization or run state changed.");
   }
   const failure = classifyMCPTransportError(error);
   if (failure.transient) {
-    throw new RetryableError(failure.message, { retryAfter: failure.retryAfterMs });
+    throw new RetryableError(failure.message, {
+      retryAfter: failure.retryAfterMs,
+    });
   }
   if (failure.recognized) throw new FatalError(failure.message);
   throw error;
@@ -38,6 +48,7 @@ export async function requestMCPToolExecution(
   result?: unknown;
   approval?: { id: string; state: string };
   device_wait?: boolean;
+  intervention_wait?: { id: string; action: string; reason: string };
   tool_error?: { code: string; message: string };
 }> {
   if (
@@ -48,10 +59,7 @@ export async function requestMCPToolExecution(
   ) {
     throw new Error("Misty returned invalid MCP access credentials");
   }
-  const endpoint = resolveMCPEndpoint(
-    context.controlPlaneURL,
-    access.mcp_path,
-  );
+  const endpoint = resolveMCPEndpoint(context.controlPlaneURL, access.mcp_path);
   const client = new MCPClient(
     { name: "misty-vercel-agent-runtime", version: "1.0.0" },
     { versionNegotiation: { mode: "auto" } },
@@ -71,11 +79,16 @@ export async function requestMCPToolExecution(
       },
     });
     const meta = response._meta as Record<string, unknown> | undefined;
+    const waitCount = Number(Boolean(meta?.["misty/approval"])) + Number(meta?.["misty/device_wait"] === true) + Number(Boolean(meta?.["misty/intervention_wait"]));
+    if (waitCount > 1 || (waitCount > 0 && (response.isError || response.structuredContent !== undefined))) {
+      return {tool_error:{code:"invalid_tool_outcome",message:"The tool returned contradictory wait or completion outcomes."}};
+    }
     if (meta?.["misty/approval"]) {
       return {
         approval: meta["misty/approval"] as { id: string; state: string },
       };
     }
+    if (meta?.["misty/intervention_wait"]) return { intervention_wait: meta["misty/intervention_wait"] as {id:string;action:string;reason:string} };
     if (meta?.["misty/device_wait"] === true) return { device_wait: true };
     if (response.isError) {
       const detail = response.content
@@ -97,7 +110,13 @@ export async function requestMCPToolExecution(
       return { result: response.structuredContent };
     }
     const text = response.content.find((item) => item.type === "text");
-    if (!text || text.type !== "text" || !text.text) return { result: {} };
+    if (!text || text.type !== "text" || !text.text)
+      return {
+        tool_error: {
+          code: "missing_tool_result",
+          message: "The provider returned no execution result.",
+        },
+      };
     try {
       return { result: JSON.parse(text.text) as unknown };
     } catch {
@@ -117,7 +136,7 @@ export async function discoverRemoteMCPTools(
     access = await controlPlaneRequest<MCPRunAccess>(
       context,
       "mcp-token",
-      {},
+      { intervention_wait_version: 1 },
       `${context.mistyRunId}:mcp-list`,
     );
   } catch (error) {
@@ -147,11 +166,14 @@ export async function discoverRemoteMCPTools(
   );
   try {
     await client.connect(transport);
-    const result = await client.listTools();
+    const tools = await collectToolPages((cursor) =>
+      client.listTools(cursor ? { cursor } : undefined),
+    );
     return {
       supported: true,
-      tools: result.tools.slice(0, 100).map((item) => ({
+      tools: tools.map((item) => ({
         name: item.name,
+        capability: item.name.startsWith("sdk.") && typeof item._meta?.["misty/capability"] === "string" ? item._meta["misty/capability"] as string : undefined,
         description: (item.description || item.title || item.name).slice(
           0,
           2_000,

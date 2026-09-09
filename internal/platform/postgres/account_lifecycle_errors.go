@@ -108,11 +108,7 @@ func (db *Database) BeginAccountDeletion(
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE space_agents SET schedules_enabled=FALSE
-			WHERE creator_user_id=$1`, userID); err != nil {
-			return err
-		}
+
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE space_workflows SET schedules_enabled=FALSE
 			WHERE creator_user_id=$1`, userID); err != nil {

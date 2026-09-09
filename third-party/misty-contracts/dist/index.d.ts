@@ -1,4 +1,5 @@
 export * from "./models.js";
+export * from "./capabilities.js";
 export * from "./requests.js";
 export * from "./server.js";
 export * from "./terminal.js";
@@ -20,3 +21,11 @@ export * from "./file-transfers.js";
 export * from "./workspace.js";
 export * from "./file-editing.js";
 export * from "./file-preview.js";
+export * from "./file-host.js";
+export * from "./library.js";
+export * from "./social.js";
+export * from "./agents.js";
+export * from "./code-controls.js";
+export * from "./communications-capabilities.js";
+export * from "./routines.js";
+export * from "./task-capabilities.js";

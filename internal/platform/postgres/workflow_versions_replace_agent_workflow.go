@@ -12,28 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func (db *Database) ReplaceAgentWorkflow(ctx context.Context, userID, spaceID, agentID, versionID string) (*SpaceStudioResource, error) {
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionStudioManage); err != nil {
-			return err
-		}
-		result, err := tx.ExecContext(ctx, `UPDATE space_agents a SET active_workflow_version_id=$1,updated_by_user_id=$2,version=version+1,updated_at=NOW()
-			WHERE a.id=$3 AND a.space_id=$4 AND EXISTS(SELECT 1 FROM space_workflow_versions v WHERE v.id=$1 AND v.space_id=a.space_id)`, versionID, userID, agentID, spaceID)
-		if err != nil {
-			return err
-		}
-		if changed, _ := result.RowsAffected(); changed == 0 {
-			return ErrSpaceNotFound
-		}
-		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "agent.workflow.replaced", agentID, map[string]string{"workflow_version_id": versionID})
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return db.SpaceStudioResourceByID(ctx, userID, spaceID, "agent", agentID)
-}
-
 func (db *Database) SpaceIntegrations(ctx context.Context, userID, spaceID string) ([]SpaceIntegration, error) {
 	items := []SpaceIntegration{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
@@ -84,7 +62,7 @@ func (db *Database) SaveSpaceIntegration(ctx context.Context, userID string, ite
 	}
 	permissions := mustJSON(item.GrantedPermissions)
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, item.SpaceID, PermissionAgentsRun); err != nil {
+		if err := requireSpacePermissionTx(ctx, tx, userID, item.SpaceID, PermissionAskRun); err != nil {
 			return err
 		}
 		return tx.QueryRowContext(ctx, `INSERT INTO space_integrations(id,space_id,provider,display_name,credential_reference,granted_permissions,status,connected_by_user_id)

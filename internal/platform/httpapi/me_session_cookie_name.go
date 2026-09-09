@@ -40,6 +40,7 @@ func sessionUserID(r *http.Request, database *db.Database) (string, error) {
 	if !TestingAuthorizeAppRuntimeRequest(*appSession, r.Method, r.URL.Path) {
 		return "", db.ErrAppRuntimeForbidden
 	}
+	*r = *r.WithContext(db.WithAppExecutionAuthority(r.Context(), *appSession))
 	return appSession.UserID, nil
 }
 

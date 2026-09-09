@@ -14,7 +14,7 @@ import (
 )
 
 func TestNodeAndGoSelfHostProofCompatibility(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/migration/fixtures/self-host-proofs.json")
+	raw, err := os.ReadFile("../../../test/fixtures/compatibility/self-host-proofs.json")
 	if err != nil {
 		t.Fatal(err)
 	}

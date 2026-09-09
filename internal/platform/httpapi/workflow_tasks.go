@@ -91,7 +91,6 @@ func (s *SpacesService) createTaskNode(ctx context.Context, run *db.SpaceRun, ag
 	if err != nil {
 		return nil, err
 	}
-	_, _ = s.ProcessSpaceTaskEvent(ctx, *created, "created")
 	return TestingMustAPIRawJSON(map[string]any{"task": created}), nil
 }
 
@@ -109,7 +108,6 @@ func (s *SpacesService) updateTaskNode(ctx context.Context, run *db.SpaceRun, in
 	if err != nil {
 		return nil, err
 	}
-	_, _ = s.ProcessSpaceTaskEvent(ctx, *updated, "updated")
 	return TestingMustAPIRawJSON(map[string]any{"task": updated}), nil
 }
 

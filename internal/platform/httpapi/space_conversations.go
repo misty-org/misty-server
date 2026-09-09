@@ -98,14 +98,13 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Content          []db.MessageSpan          `json:"content"`
-			FileNodeIDs      []string                  `json:"file_node_ids"`
-			AttachmentIDs    []string                  `json:"attachment_ids"`
-			LibraryItemIDs   []string                  `json:"library_item_ids"`
-			ReplyToMessageID string                    `json:"reply_to_message_id"`
-			ClientNonce      string                    `json:"client_nonce"`
-			AgentInvocations []explicitAgentInvocation `json:"agent_invocations"`
-			InputModality    string                    `json:"input_modality"`
+			Content          []db.MessageSpan `json:"content"`
+			FileNodeIDs      []string         `json:"file_node_ids"`
+			AttachmentIDs    []string         `json:"attachment_ids"`
+			LibraryItemIDs   []string         `json:"library_item_ids"`
+			ReplyToMessageID string           `json:"reply_to_message_id"`
+			ClientNonce      string           `json:"client_nonce"`
+			InputModality    string           `json:"input_modality"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -116,22 +115,6 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 		} else if socialErr == db.ErrSpaceForbidden || (socialErr != nil && socialErr != db.ErrSpaceNotFound) {
 			writeSpaceError(w, socialErr)
 			return
-		}
-		directAgentID, err := s.database.DirectConversationAgentID(r.Context(), userID, spaceID, conversationID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if directAgentID != "" {
-			allowed, permissionErr := s.database.EffectiveAgentSpacePermission(r.Context(), userID, spaceID, directAgentID, db.PermissionMessagesWrite)
-			if permissionErr != nil {
-				writeSpaceError(w, permissionErr)
-				return
-			}
-			if !allowed {
-				writeSpaceError(w, db.ErrSpaceForbidden)
-				return
-			}
 		}
 		message, _, err := s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
 		if err != nil {
@@ -144,18 +127,7 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 				return
 			}
 		}
-		if directAgentID != "" && len(body.AgentInvocations) == 0 {
-			body.AgentInvocations = []explicitAgentInvocation{{AgentID: directAgentID}}
-		}
-		sourceType := "mention"
-		if directAgentID != "" {
-			sourceType = "direct"
-		}
-		triggers := s.queueExplicitAgentInvocations(r.Context(), userID, spaceID, conversationID, message.ID, sourceType, body.InputModality, body.AgentInvocations, body.Content)
-		if directAgentID == "" && len(body.AgentInvocations) == 0 {
-			_ = s.database.QueueSpaceActionSuggestionAnalysis(r.Context(), userID, spaceID, conversationID, message.ID)
-		}
-		writeJSON(w, http.StatusCreated, map[string]any{"message": message, "triggered_runs": triggers})
+		writeJSON(w, http.StatusCreated, map[string]any{"message": message})
 	}
 }
 
@@ -173,7 +145,6 @@ func (s *SpacesService) ConversationMessage() http.HandlerFunc {
 				writeSpaceError(w, err)
 				return
 			}
-			_ = s.database.InvalidateSpaceActionSuggestionsForMessage(r.Context(), spaceID, conversationID, messageID)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -189,7 +160,6 @@ func (s *SpacesService) ConversationMessage() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		_ = s.database.InvalidateSpaceActionSuggestionsForMessage(r.Context(), spaceID, conversationID, messageID)
 		writeJSON(w, http.StatusOK, message)
 	}
 }

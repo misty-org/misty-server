@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -78,71 +77,12 @@ func scanPersonalAgentRunSummary(row scanner, out *PersonalAgentRunSummary) erro
 		&out.ApprovalState, &out.ParentRunID, &out.DelegationDepth, &out.ContextBindings)
 }
 
-func (db *Database) PersonalAgentActivity(ctx context.Context, userID, agentID, before string, limit int) (*PersonalAgentActivityPage, error) {
-	if limit < 1 || limit > 100 {
-		limit = 30
-	}
-	out := &PersonalAgentActivityPage{AgentID: agentID, WorkState: "ready", Runs: []PersonalAgentRunSummary{}}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var owner bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM personal_agents WHERE id=$1 AND owner_user_id=$2 AND deleted_at IS NULL)`, agentID, userID).Scan(&owner); err != nil {
-			return err
-		}
-		if !owner {
-			return ErrPersonalAgentNotFound
-		}
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_run_jobs j JOIN space_runs r ON r.id=j.run_id
-			WHERE j.agent_id=$1 AND j.state='queued' AND EXISTS(SELECT 1 FROM space_members m WHERE m.space_id=r.space_id AND m.user_id=$2)`, agentID, userID).Scan(&out.QueueCount); err != nil {
-			return err
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT `+personalAgentRunSummaryColumns+`
-			FROM space_runs r JOIN spaces s ON s.id=r.space_id LEFT JOIN space_tasks t ON t.id=r.source_task_id
-			WHERE r.agent_id=$1 AND r.owner_user_id=$2
-			  AND EXISTS(SELECT 1 FROM space_members m WHERE m.space_id=r.space_id AND m.user_id=$2)
-			  AND ($3='' OR r.created_at<to_timestamp($3::double precision / 1000000))
-			ORDER BY r.created_at DESC,r.id DESC LIMIT $4`, agentID, userID, before, limit+1)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item PersonalAgentRunSummary
-			if err := scanPersonalAgentRunSummary(rows, &item); err != nil {
-				return err
-			}
-			out.Runs = append(out.Runs, item)
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		if len(out.Runs) > limit {
-			last := out.Runs[limit-1]
-			out.NextCursor = strconv.FormatInt(last.CreatedAt.UnixMicro(), 10)
-			out.Runs = out.Runs[:limit]
-		}
-		for index := range out.Runs {
-			item := &out.Runs[index]
-			if item.State == "running" || item.State == "awaiting_approval" || item.State == "awaiting_device" {
-				out.ActiveRun, out.WorkState = item, item.State
-				break
-			}
-		}
-		if out.ActiveRun == nil && out.QueueCount > 0 {
-			out.WorkState = "queued"
-		} else if out.ActiveRun == nil && len(out.Runs) > 0 && (out.Runs[0].State == "failed" || out.Runs[0].State == "completed_with_errors") {
-			out.WorkState = "failed"
-		}
-		return nil
-	})
-	return out, err
-}
-
 func (db *Database) PersonalAgentRunDetailForOwner(ctx context.Context, userID, runID string) (*PersonalAgentRunDetail, error) {
 	out := &PersonalAgentRunDetail{Steps: []WorkflowRunStep{}, Activity: []SpaceTaskActivity{}, Approvals: []AgentToolApproval{}}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := scanPersonalAgentRunSummary(tx.QueryRowContext(ctx, `SELECT `+personalAgentRunSummaryColumns+`
 			FROM space_runs r JOIN spaces s ON s.id=r.space_id LEFT JOIN space_tasks t ON t.id=r.source_task_id
-			JOIN personal_agents a ON a.id=r.agent_id
+			JOIN misty_ask_identities a ON a.id=r.agent_id
 			WHERE r.id=$1 AND a.owner_user_id=$2 AND a.deleted_at IS NULL
 			  AND EXISTS(SELECT 1 FROM space_members m WHERE m.space_id=r.space_id AND m.user_id=$2)`, runID, userID), &out.Summary); err != nil {
 			return err
@@ -335,7 +275,7 @@ func (db *Database) CancelPersonalAgentTaskRunForOwner(ctx context.Context, user
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs r
 			WHERE r.id=$1
-			AND EXISTS(SELECT 1 FROM personal_agents a WHERE a.id=r.agent_id AND a.owner_user_id=$2 AND a.deleted_at IS NULL)
+			AND EXISTS(SELECT 1 FROM misty_ask_identities a WHERE a.id=r.agent_id AND a.owner_user_id=$2 AND a.deleted_at IS NULL)
 			AND EXISTS(SELECT 1 FROM space_members m WHERE m.space_id=r.space_id AND m.user_id=$2)
 			FOR UPDATE`, runID, userID), out); err != nil {
 			return err
@@ -343,11 +283,16 @@ func (db *Database) CancelPersonalAgentTaskRunForOwner(ctx context.Context, user
 		if out.State == "canceled" {
 			return nil
 		}
-		if out.State != "queued" && out.State != "running" && out.State != "awaiting_approval" && out.State != "awaiting_device" {
+		if out.State != "queued" && out.State != "running" && out.State != "awaiting_approval" && out.State != "awaiting_device" && out.State != "awaiting_intervention" {
 			return ErrSpaceConflict
 		}
 		if err := scanSpaceRun(tx.QueryRowContext(ctx, `UPDATE space_runs SET state='canceled',runtime_phase='canceled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW() WHERE id=$1 RETURNING `+spaceRunColumns, runID), out); err != nil {
 			return err
+		}
+		if out.RuntimeRunID != "" {
+			if err := queueAgentContinuationTx(ctx, tx, userID, runID, "runtime.cancel", out.RuntimeRunID, AgentContinuation{RuntimeID: out.RuntimeRunID}); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW() WHERE run_id=$1 AND state IN ('queued','leased','dispatched')`, runID); err != nil {
 			return err
@@ -376,7 +321,7 @@ func (db *Database) RetryPersonalAgentTaskRunForOwner(ctx context.Context, userI
 		previous := &SpaceRun{}
 		if err := scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs r
 			WHERE r.id=$1
-			AND EXISTS(SELECT 1 FROM personal_agents a WHERE a.id=r.agent_id AND a.owner_user_id=$2 AND a.deleted_at IS NULL)
+			AND EXISTS(SELECT 1 FROM misty_ask_identities a WHERE a.id=r.agent_id AND a.owner_user_id=$2 AND a.deleted_at IS NULL)
 			AND EXISTS(SELECT 1 FROM space_members m WHERE m.space_id=r.space_id AND m.user_id=$2)
 			FOR UPDATE`, runID, userID), previous); err != nil {
 			return err
@@ -390,7 +335,7 @@ func (db *Database) RetryPersonalAgentTaskRunForOwner(ctx context.Context, userI
 		if previous.State != "failed" && previous.State != "canceled" && previous.State != "completed_with_errors" && !legacyFailedTools {
 			return ErrSpaceConflict
 		}
-		if _, err := activePersonalAgentMembershipTx(ctx, tx, userID, previous.SpaceID, previous.AgentID); err != nil {
+		if _, err := askExecutionContextTx(ctx, tx, userID, previous.SpaceID, previous.AgentID); err != nil {
 			return err
 		}
 		var task *SpaceTask

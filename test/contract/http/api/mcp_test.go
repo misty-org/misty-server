@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
@@ -47,15 +48,11 @@ func TestMCPConnectionDiscoveryAndManagedRuntimeContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, err := database.CreatePersonalAgent(t.Context(), owner.ID, db.PersonalAgent{Name: "MCP Agent", ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite"})
+	agent, err := database.EnsureAskIdentity(t.Context(), owner.ID, "google/gemini-2.5-flash-lite")
 	if err != nil {
 		t.Fatal(err)
 	}
 	space, err := database.CreateSpace(t.Context(), owner.ID, "MCP Runtime")
-	if err != nil {
-		t.Fatal(err)
-	}
-	direct, err := database.DirectAgentConversation(t.Context(), owner.ID, space.ID, agent.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,11 +141,17 @@ func TestMCPConnectionDiscoveryAndManagedRuntimeContract(t *testing.T) {
 	fake.mu.Lock()
 	callCount := fake.calls
 	fake.mu.Unlock()
-	if err != nil || callCount != 1 || string(replayed) != `{}` {
+	if err != nil || callCount != 1 || !strings.Contains(string(replayed), `"provider":"mcp"`) || !strings.Contains(string(replayed), `"ok"`) {
 		t.Fatalf("MCP retry result=%s remote calls=%d err=%v", replayed, callCount, err)
 	}
-	approvalRun, err := database.CreatePersonalAgentSpaceRun(t.Context(), owner.ID, space.ID, agent.ID, direct.ID, "direct", "direct", json.RawMessage(`{"prompt":"use MCP"}`), json.RawMessage(`{"allowed_tools":[]}`))
+	approvalRun, err := database.CreateCreatorAgentRun(t.Context(), owner.ID, space.ID, agent.ID, db.CreatorAgentRunInput{Instruction: "use MCP"})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if jobs, err := database.ClaimPersonalAgentTaskRunJobs(t.Context(), "mcp-test", 1, time.Minute); err != nil || len(jobs) != 1 {
+		t.Fatalf("claim MCP run: %v %v", jobs, err)
+	}
+	if _, err := database.ActivatePersonalAgentTaskRuntime(t.Context(), approvalRun.ID, "test", "mcp-test"); err != nil {
 		t.Fatal(err)
 	}
 	approvalRequest := serveragent.ToolRequest{ID: "approval-call", Name: echoName, Arguments: json.RawMessage(`{"message":"review me"}`)}

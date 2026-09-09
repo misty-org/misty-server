@@ -8,8 +8,8 @@ export declare const ConnectedAccountSchema: z.ZodObject<{
     granted_scopes: z.ZodNullable<z.ZodArray<z.ZodString>>;
     status: z.ZodEnum<{
         active: "active";
-        needs_attention: "needs_attention";
         revoked: "revoked";
+        needs_attention: "needs_attention";
     }>;
     last_error_code: z.ZodOptional<z.ZodString>;
     expires_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
@@ -44,8 +44,8 @@ export declare const mistyConnectionContracts: {
                 granted_scopes: z.ZodNullable<z.ZodArray<z.ZodString>>;
                 status: z.ZodEnum<{
                     active: "active";
-                    needs_attention: "needs_attention";
                     revoked: "revoked";
+                    needs_attention: "needs_attention";
                 }>;
                 last_error_code: z.ZodOptional<z.ZodString>;
                 expires_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;

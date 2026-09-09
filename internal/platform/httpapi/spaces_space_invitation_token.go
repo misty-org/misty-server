@@ -153,14 +153,13 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Content          []db.MessageSpan          `json:"content"`
-			FileNodeIDs      []string                  `json:"file_node_ids"`
-			AttachmentIDs    []string                  `json:"attachment_ids"`
-			LibraryItemIDs   []string                  `json:"library_item_ids"`
-			ReplyToMessageID string                    `json:"reply_to_message_id"`
-			ClientNonce      string                    `json:"client_nonce"`
-			AgentInvocations []explicitAgentInvocation `json:"agent_invocations"`
-			InputModality    string                    `json:"input_modality"`
+			Content          []db.MessageSpan `json:"content"`
+			FileNodeIDs      []string         `json:"file_node_ids"`
+			AttachmentIDs    []string         `json:"attachment_ids"`
+			LibraryItemIDs   []string         `json:"library_item_ids"`
+			ReplyToMessageID string           `json:"reply_to_message_id"`
+			ClientNonce      string           `json:"client_nonce"`
+			InputModality    string           `json:"input_modality"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -170,11 +169,7 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		triggers := s.queueExplicitAgentInvocations(r.Context(), userID, spaceID, "", message.ID, "mention", body.InputModality, body.AgentInvocations, body.Content)
-		if len(body.AgentInvocations) == 0 {
-			_ = s.database.QueueSpaceActionSuggestionAnalysis(r.Context(), userID, spaceID, "", message.ID)
-		}
-		writeJSON(w, http.StatusCreated, map[string]any{"message": message, "triggered_runs": triggers})
+		writeJSON(w, http.StatusCreated, map[string]any{"message": message})
 	}
 }
 
@@ -214,21 +209,6 @@ func spaceRunFailureDetails(err error) (string, string, string) {
 		return "invalid_request", "", "The run input or workflow definition is invalid."
 	default:
 		return "run_failed", "", "The run could not start. Try again or inspect its details in Studio."
-	}
-}
-
-func (s *SpacesService) ChatAgents() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		items, err := s.database.SpaceChatAgents(r.Context(), userID, chi.URLParam(r, "spaceID"))
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"agents": items})
 	}
 }
 

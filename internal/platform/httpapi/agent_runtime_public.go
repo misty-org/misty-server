@@ -3,28 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
-
-func (s *SpacesService) PersonalAgentActivity() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, err := sessionUserID(r, s.database)
-		if err != nil || userID == "" {
-			writeAgentRuntimeSessionError(w, err)
-			return
-		}
-		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		page, err := s.database.PersonalAgentActivity(r.Context(), userID, chi.URLParam(r, "agentID"), strings.TrimSpace(r.URL.Query().Get("cursor")), limit)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, page)
-	}
-}
 
 func (s *SpacesService) DecidePersonalAgentRunApproval() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -46,15 +27,7 @@ func (s *SpacesService) DecidePersonalAgentRunApproval() http.HandlerFunc {
 			writeAgentError(w, err)
 			return
 		}
-		if err := s.agentRuntime.ResumeApproval(r.Context(), item.HookToken, item.RunID, item.ID, approved); err != nil {
-			writeJSON(w, http.StatusAccepted, map[string]any{"approval": item, "runtime_resume_pending": true})
-			return
-		}
-		if err := s.database.MarkCreatorToolApprovalResumed(r.Context(), item.RunID, item.ID); err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"approval": item, "runtime_resume_pending": false})
+		writeJSON(w, http.StatusAccepted, map[string]any{"approval": item, "runtime_resume_pending": true})
 	}
 }
 

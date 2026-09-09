@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
+	"time"
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	"github.com/kannachi323/misty/server/internal/agenttools"
@@ -38,6 +40,9 @@ func TestingAIInvocationRequestedSpaceTools(prompt, previousUserPrompt, previous
 }
 
 func TestingResolveAIInvocationSpaceToolNames(ctx context.Context, database *db.Database, userID, spaceID, invocationID, prompt string) ([]string, error) {
+	if err := testingAdmitToolInvocation(ctx, database, userID, spaceID, invocationID, prompt); err != nil {
+		return nil, err
+	}
 	_, _, manifest, err := resolveAIInvocationSpaceToolbox(ctx, database, spaceConversationToolActor{
 		userID: userID, spaceID: spaceID, runID: invocationID,
 	}, prompt, "", "")
@@ -45,6 +50,9 @@ func TestingResolveAIInvocationSpaceToolNames(ctx context.Context, database *db.
 }
 
 func TestingResolveAIInvocationSpaceToolNamesWithConversation(ctx context.Context, database *db.Database, userID, spaceID, conversationID, invocationID, prompt string) ([]string, error) {
+	if err := testingAdmitToolInvocation(ctx, database, userID, spaceID, invocationID, prompt); err != nil {
+		return nil, err
+	}
 	_, _, manifest, err := resolveAIInvocationSpaceToolbox(ctx, database, spaceConversationToolActor{
 		userID: userID, spaceID: spaceID, runID: invocationID, sessionID: conversationID,
 	}, prompt, "", "")
@@ -56,6 +64,9 @@ func TestingExecuteAIInvocationSpaceTool(ctx context.Context, database *db.Datab
 }
 
 func TestingExecuteAIInvocationSpaceToolWithConversation(ctx context.Context, database *db.Database, userID, spaceID, conversationID, invocationID, prompt, name string, arguments json.RawMessage) (json.RawMessage, error) {
+	if err := testingAdmitToolInvocation(ctx, database, userID, spaceID, invocationID, prompt); err != nil {
+		return nil, err
+	}
 	toolbox, invocation, manifest, err := resolveAIInvocationSpaceToolbox(ctx, database, spaceConversationToolActor{
 		userID: userID, spaceID: spaceID, runID: invocationID, sessionID: conversationID,
 	}, prompt, "", "")
@@ -127,6 +138,9 @@ func aiInvocationBrowserGrants(ctx context.Context, database *db.Database, userI
 		}
 		labels = append(labels, label+" (scopeId "+item.OpaqueRef+")")
 	}
+	if capabilities["browser.inspect"] {
+		capabilities["browser.request_user_action"] = true
+	}
 	return labels, capabilities
 }
 
@@ -146,4 +160,18 @@ func agentManifestHasTool(manifest serveragent.ToolManifest, name string) bool {
 		}
 	}
 	return false
+}
+
+// Test adapters use admitted identities just like the public invocation path.
+func testingAdmitToolInvocation(ctx context.Context, database *db.Database, userID, spaceID, id, prompt string) error {
+	if database == nil || id == "" {
+		return nil
+	}
+	if _, err := database.AIInvocationByID(ctx, userID, id); err == nil {
+		return nil
+	} else if !errors.Is(err, db.ErrSpaceNotFound) {
+		return err
+	}
+	_, _, err := database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{ID: id, UserID: userID, SpaceID: spaceID, SurfaceID: "notes", Mode: "quick", Trigger: "selection", State: "running", IdempotencyKey: id, RequestPayload: TestingMustAPIRawJSON(map[string]any{"prompt": prompt}), ExpiresAt: time.Now().Add(time.Hour)})
+	return err
 }

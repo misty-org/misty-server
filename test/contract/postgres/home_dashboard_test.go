@@ -46,6 +46,25 @@ func TestHomeDashboardPersistsPerAccountActivityAndRecentApps(t *testing.T) {
 		t.Fatalf("recent apps = %#v", snapshot.RecentApps)
 	}
 
+	otherSpace, err := database.CreateSpace(ctx, owner.ID, "Other Home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	yesterday := time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02")
+	if _, err := database.RecordHomeVisit(ctx, owner.ID, otherSpace.ID, yesterday); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.RecordHomeVisit(ctx, owner.ID, otherSpace.ID, dateKey); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = database.HomeDashboard(ctx, owner.ID, space.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Activity[yesterday] != 1 || snapshot.Activity[dateKey] != 3 {
+		t.Fatalf("account history should combine Spaces: %#v", snapshot.Activity)
+	}
+
 	outsider, err := database.CreateUser("Home Outsider", "home-outsider@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)

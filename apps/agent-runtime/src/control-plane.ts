@@ -35,8 +35,12 @@ export function controlPlaneURL(callbackURL?: string): string {
 export async function controlPlaneRequest<T>(
   identity: RuntimeIdentity,
   action:
+    | "start-receipt"
     | "activate"
     | "context"
+    | "budget"
+    | "routine-agent"
+    | "routine-wait"
     | "mcp-token"
     | "tools"
     | "events"

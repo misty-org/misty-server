@@ -12,7 +12,7 @@ func companionToolImpact(name string) string {
 	if strings.HasPrefix(name, "mcp.") {
 		return "dangerous"
 	}
-	if strings.HasSuffix(name, ".query") || strings.HasSuffix(name, ".search") || strings.HasSuffix(name, ".read") || name == "browser.inspect" || name == "browser.downloads.list" {
+	if strings.HasSuffix(name, ".query") || strings.HasSuffix(name, ".search") || strings.HasSuffix(name, ".read") || name == "browser.inspect" || name == "browser.request_user_action" || name == "browser.downloads.list" {
 		return "observe"
 	}
 	if strings.HasPrefix(name, "provider.") && strings.HasSuffix(name, ".write") {
@@ -21,7 +21,7 @@ func companionToolImpact(name string) string {
 	switch name {
 	case "messages.send", "git.commit", "project.publish", "connections.write":
 		return "consequential"
-	case "git.push", "files.delete", "members.update", "members.remove", "browser.click", "browser.confirm_high_risk", "terminal.execute_unsandboxed":
+	case "git.push", "files.delete", "members.update", "members.remove", "browser.click", "browser.interact", "browser.confirm_high_risk", "terminal.execute_unsandboxed":
 		return "dangerous"
 	default:
 		return "routine"
@@ -85,6 +85,8 @@ func companionToolApprovalSummary(name string, arguments json.RawMessage) string
 		return "Save the selected attachment to the Space Library"
 	case toolboxAgentsDelegate:
 		return "Ask " + stringValue("agent_name", "agent_id") + " to help with this work"
+	case "browser.interact":
+		return "Perform the selected interaction in the attached browser tab"
 	case "browser.click":
 		return "Click the selected element in the attached browser tab"
 	}

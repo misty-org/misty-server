@@ -184,7 +184,7 @@ func (db *Database) RevokeMCPRemoteConnection(ctx context.Context, userID, conne
 		if changed, _ := result.RowsAffected(); changed != 1 {
 			return ErrSpaceNotFound
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE personal_agent_mcp_tools SET enabled=FALSE,updated_at=NOW() WHERE connection_id=$1`, connectionID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE misty_ask_mcp_tools SET enabled=FALSE,updated_at=NOW() WHERE connection_id=$1`, connectionID); err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE mcp_remote_tools SET removed_at=COALESCE(removed_at,NOW()),updated_at=NOW() WHERE connection_id=$1`, connectionID)

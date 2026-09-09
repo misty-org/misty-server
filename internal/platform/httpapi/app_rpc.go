@@ -16,14 +16,16 @@ func OfficialAppRPC(database *db.Database, router http.Handler, prefix string) h
 			if !ok {
 				return apprpc.Identity{}, false
 			}
-			member, err := database.IsSpaceMember(r.Context(), session.UserID, session.SpaceID)
-			if err != nil {
-				writeOfficialAppError(w, err)
-				return apprpc.Identity{}, false
-			}
-			if !member {
-				writeJSON(w, http.StatusForbidden, map[string]string{"code": "app_runtime_forbidden"})
-				return apprpc.Identity{}, false
+			if session.SpaceID != "" {
+				member, err := database.IsSpaceMember(r.Context(), session.UserID, session.SpaceID)
+				if err != nil {
+					writeOfficialAppError(w, err)
+					return apprpc.Identity{}, false
+				}
+				if !member {
+					writeJSON(w, http.StatusForbidden, map[string]string{"code": "app_runtime_forbidden"})
+					return apprpc.Identity{}, false
+				}
 			}
 			return apprpc.Identity{AppID: session.AppID, AccountID: session.UserID, SpaceID: session.SpaceID, Scopes: session.Scopes}, true
 		},

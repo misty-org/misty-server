@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"time"
@@ -57,7 +59,8 @@ func TestingExecuteSpaceConversationTool(ctx context.Context, database *db.Datab
 		UserID: userID, SpaceID: spaceID, AgentID: agentID, Source: "space_conversation", Trigger: "message", OriginalInput: prompt,
 		SessionID: "testing:" + userID + ":" + spaceID, ExplicitTools: map[string]bool{name: true},
 	}
-	return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, serveragent.ToolRequest{Name: name, Arguments: arguments})
+	digest := sha256.Sum256([]byte(prompt + "\x00" + name + "\x00" + string(arguments)))
+	return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, serveragent.ToolRequest{ID: "test-" + hex.EncodeToString(digest[:]), Name: name, Arguments: arguments})
 }
 
 type spaceConversationToolActor struct {
@@ -89,9 +92,6 @@ func executeSpaceConversationTool(ctx context.Context, database *db.Database, ac
 		return result, err
 	}
 	if result, handled, err := executeAgentLibraryTool(ctx, database, actor, tool); handled {
-		return result, err
-	}
-	if result, handled, err := executeCompanionReadTool(ctx, database, actor, tool); handled {
 		return result, err
 	}
 	if tool.Name == toolboxContextGet {
@@ -484,7 +484,7 @@ func resolveAgentMembers(members []db.SpaceMember, query string) []db.SpaceMembe
 	return partial
 }
 
-func (s *SpacesService) explicitMessageFileContext(ctx context.Context, userID string, membership *db.SpaceAgentMembership, spaceID string, attachmentIDs, libraryItemIDs []string) (string, string, []workflowv2.ContentRef) {
+func (s *SpacesService) explicitMessageFileContext(ctx context.Context, userID string, membership *db.AskExecutionContext, spaceID string, attachmentIDs, libraryItemIDs []string) (string, string, []workflowv2.ContentRef) {
 	refs := make([]explicitTaskSourceRef, 0, len(attachmentIDs)+len(libraryItemIDs))
 	for _, id := range attachmentIDs {
 		refs = append(refs, explicitTaskSourceRef{Kind: "chat_attachment", ResourceID: id})

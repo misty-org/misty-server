@@ -64,17 +64,6 @@ func (s *SpacesService) executeWorkflowV2(ctx context.Context, run *db.SpaceRun,
 				return nil
 			}
 		},
-		ItemCheckpoint: func(itemCtx context.Context, _ string, item json.RawMessage, result workflowv2.ExecutionResult, itemErr error) error {
-			provider, eventID := TestingWorkflowEventIdentity(item)
-			if provider == "" || eventID == "" {
-				return nil
-			}
-			state := "completed"
-			if itemErr != nil || result.State != workflowv2.RunCompleted {
-				state = "failed"
-			}
-			return s.database.FinishWorkflowEventClaim(itemCtx, run.AgentInstanceID, run.WorkflowVersionID, provider, eventID, run.ID, state)
-		},
 	}
 	// Bind the authorized tool catalog after registration so Agent-task nodes
 	// use the same concrete providers, journaling, and permission context.

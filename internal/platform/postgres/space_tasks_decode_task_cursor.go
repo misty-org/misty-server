@@ -64,7 +64,7 @@ func (db *Database) CreateSpaceTask(ctx context.Context, actorUserID string, ite
 			}
 		}
 		if item.AssigneeAgentID != "" {
-			if _, err := activePersonalAgentMembershipTx(ctx, tx, actorUserID, item.SpaceID, item.AssigneeAgentID); err != nil {
+			if _, err := askExecutionContextTx(ctx, tx, actorUserID, item.SpaceID, item.AssigneeAgentID); err != nil {
 				return ErrSpaceInvalid
 			}
 			if item.Status == "todo" {
@@ -74,8 +74,7 @@ func (db *Database) CreateSpaceTask(ctx context.Context, actorUserID string, ite
 		if item.CreatedByAgentID != "" {
 			var allowed bool
 			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-				SELECT 1 FROM space_agents WHERE id=$1 AND space_id=$2
-				UNION ALL SELECT 1 FROM personal_agents a JOIN space_members m ON m.user_id=a.owner_user_id AND m.space_id=$2 WHERE a.id=$1 AND a.enabled AND a.deleted_at IS NULL
+				SELECT 1 FROM misty_ask_identities a JOIN space_members m ON m.user_id=a.owner_user_id AND m.space_id=$2 WHERE a.id=$1 AND a.enabled AND a.deleted_at IS NULL
 			)`, item.CreatedByAgentID, item.SpaceID).Scan(&allowed); err != nil || !allowed {
 				return ErrSpaceInvalid
 			}
@@ -153,7 +152,7 @@ func (db *Database) UpdateSpaceTask(ctx context.Context, actorUserID string, ite
 			}
 		}
 		if item.AssigneeAgentID != "" {
-			if _, err := activePersonalAgentMembershipTx(ctx, tx, actorUserID, item.SpaceID, item.AssigneeAgentID); err != nil {
+			if _, err := askExecutionContextTx(ctx, tx, actorUserID, item.SpaceID, item.AssigneeAgentID); err != nil {
 				return ErrSpaceInvalid
 			}
 		}
@@ -175,7 +174,7 @@ func (db *Database) UpdateSpaceTask(ctx context.Context, actorUserID string, ite
 			if _, err := tx.ExecContext(ctx, `WITH canceled AS (
 				UPDATE space_runs SET state='canceled',runtime_phase='canceled',error_code='task_unassigned',
 					canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
-				WHERE source_task_id=$1 AND agent_id=$2 AND state IN ('queued','running','cooldown','awaiting_approval','awaiting_device')
+				WHERE source_task_id=$1 AND agent_id=$2 AND state IN ('queued','running','cooldown','awaiting_approval','awaiting_device','awaiting_intervention')
 				RETURNING id
 			) UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW()
 			WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, item.ID, previousAgentID); err != nil {

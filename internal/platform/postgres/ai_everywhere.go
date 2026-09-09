@@ -52,7 +52,6 @@ type AIUserSettings struct {
 	Enabled                bool      `json:"enabled"`
 	CursorCompanionEnabled bool      `json:"cursor_companion_enabled"`
 	MemoryEnabled          bool      `json:"memory_enabled"`
-	ActiveCompanionAgentID string    `json:"active_companion_agent_id,omitempty"`
 	RetentionDays          int       `json:"retention_days"`
 	PurgeState             string    `json:"purge_state"`
 	DisabledAt             time.Time `json:"disabled_at,omitempty"`
@@ -61,7 +60,6 @@ type AIUserSettings struct {
 
 type AISurfacePreference struct {
 	SurfaceID                string          `json:"surface_id"`
-	PinnedAgentID            string          `json:"pinned_agent_id,omitempty"`
 	Proactive                bool            `json:"proactive_enabled"`
 	ProactiveCooldownMinutes int             `json:"proactive_cooldown_minutes"`
 	ProactiveSnoozedUntil    *time.Time      `json:"proactive_snoozed_until,omitempty"`
@@ -77,8 +75,8 @@ func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettin
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		var disabledAt sql.NullTime
 		err := tx.QueryRowContext(ctx, `
-			SELECT enabled,cursor_companion_enabled,memory_enabled,COALESCE(active_companion_agent_id,''),retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
-		`, userID).Scan(&settings.Enabled, &settings.CursorCompanionEnabled, &settings.MemoryEnabled, &settings.ActiveCompanionAgentID, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
+			SELECT enabled,cursor_companion_enabled,memory_enabled,retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
+		`, userID).Scan(&settings.Enabled, &settings.CursorCompanionEnabled, &settings.MemoryEnabled, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -86,7 +84,7 @@ func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettin
 			settings.DisabledAt = disabledAt.Time
 		}
 		rows, err := tx.QueryContext(ctx, `
-			SELECT surface_id,COALESCE(pinned_agent_id,''),proactive_enabled,proactive_cooldown_minutes,
+			SELECT surface_id,proactive_enabled,proactive_cooldown_minutes,
 				proactive_snoozed_until,proactive_last_shown_at,proactive_dismissed_at,saved_actions,updated_at
 			FROM ai_surface_preferences WHERE user_id=$1 ORDER BY surface_id
 		`, userID)
@@ -96,7 +94,7 @@ func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettin
 		defer rows.Close()
 		for rows.Next() {
 			var item AISurfacePreference
-			if err := rows.Scan(&item.SurfaceID, &item.PinnedAgentID, &item.Proactive, &item.ProactiveCooldownMinutes,
+			if err := rows.Scan(&item.SurfaceID, &item.Proactive, &item.ProactiveCooldownMinutes,
 				&item.ProactiveSnoozedUntil, &item.ProactiveLastShownAt, &item.ProactiveDismissedAt,
 				&item.SavedActions, &item.UpdatedAt); err != nil {
 				return err
@@ -106,29 +104,6 @@ func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettin
 		return rows.Err()
 	})
 	return settings, preferences, err
-}
-
-func (db *Database) UpdateActiveCompanionAgent(ctx context.Context, userID, agentID string) (AIUserSettings, error) {
-	agentID = strings.TrimSpace(agentID)
-	if agentID != "" {
-		personal, err := db.PersonalAgentByID(ctx, userID, agentID)
-		if err != nil || !personal.Enabled {
-			return AIUserSettings{}, ErrPersonalAgentNotFound
-		}
-	}
-	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `
-			INSERT INTO ai_user_settings(user_id,active_companion_agent_id)
-			VALUES($1,NULLIF($2,''))
-			ON CONFLICT(user_id) DO UPDATE SET active_companion_agent_id=EXCLUDED.active_companion_agent_id,updated_at=NOW()
-		`, userID, agentID)
-		return err
-	})
-	if err != nil {
-		return AIUserSettings{}, err
-	}
-	settings, _, err := db.AISettings(ctx, userID)
-	return settings, err
 }
 
 func (db *Database) UpdateAISettings(ctx context.Context, userID string, enabled bool, retentionDays int, cursorCompanionEnabled, memoryEnabled bool) (AIUserSettings, error) {
@@ -154,7 +129,7 @@ func (db *Database) UpdateAISettings(ctx context.Context, userID string, enabled
 			_, err := tx.ExecContext(ctx, `DELETE FROM ai_cleanup_jobs WHERE user_id=$1 AND state IN ('queued','failed','verified')`, userID)
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET state='canceled',canceled_at=NOW(),updated_at=NOW() WHERE user_id=$1 AND state IN ('queued','running','awaiting_approval')`, userID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET state='canceled',canceled_at=NOW(),updated_at=NOW() WHERE user_id=$1 AND state IN ('queued','running','awaiting_approval','awaiting_device','awaiting_intervention','awaiting_timer')`, userID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM ai_retrieval_documents WHERE owner_user_id=$1`, userID); err != nil {
@@ -347,21 +322,14 @@ func (db *Database) UpsertAISurfacePreference(ctx context.Context, userID string
 	}
 	out := AISurfacePreference{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		if preference.PinnedAgentID != "" {
-			var allowed bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM personal_agents WHERE id=$1 AND owner_user_id=$2 AND enabled AND deleted_at IS NULL)`, preference.PinnedAgentID, userID).Scan(&allowed); err != nil || !allowed {
-				return ErrSpaceInvalid
-			}
-		}
 		return tx.QueryRowContext(ctx, `
-			INSERT INTO ai_surface_preferences(user_id,surface_id,pinned_agent_id,proactive_enabled,saved_actions)
-			VALUES($1,$2,NULLIF($3,''),$4,$5)
-			ON CONFLICT(user_id,surface_id) DO UPDATE SET pinned_agent_id=EXCLUDED.pinned_agent_id,
-				proactive_enabled=EXCLUDED.proactive_enabled,saved_actions=EXCLUDED.saved_actions,updated_at=NOW()
-			RETURNING surface_id,COALESCE(pinned_agent_id,''),proactive_enabled,proactive_cooldown_minutes,
+			INSERT INTO ai_surface_preferences(user_id,surface_id,proactive_enabled,saved_actions)
+			VALUES($1,$2,$3,$4)
+			ON CONFLICT(user_id,surface_id) DO UPDATE SET proactive_enabled=EXCLUDED.proactive_enabled,saved_actions=EXCLUDED.saved_actions,updated_at=NOW()
+			RETURNING surface_id,proactive_enabled,proactive_cooldown_minutes,
 				proactive_snoozed_until,proactive_last_shown_at,proactive_dismissed_at,saved_actions,updated_at
-		`, userID, preference.SurfaceID, preference.PinnedAgentID, preference.Proactive, preference.SavedActions).Scan(
-			&out.SurfaceID, &out.PinnedAgentID, &out.Proactive, &out.ProactiveCooldownMinutes,
+		`, userID, preference.SurfaceID, preference.Proactive, preference.SavedActions).Scan(
+			&out.SurfaceID, &out.Proactive, &out.ProactiveCooldownMinutes,
 			&out.ProactiveSnoozedUntil, &out.ProactiveLastShownAt, &out.ProactiveDismissedAt,
 			&out.SavedActions, &out.UpdatedAt,
 		)

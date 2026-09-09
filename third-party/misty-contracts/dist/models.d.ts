@@ -82,18 +82,6 @@ export declare const CreatorAgentContextReferenceSchema: z.ZodObject<{
     metadata: z.ZodOptional<z.ZodJSONSchema>;
 }, z.core.$loose>;
 export type CreatorAgentContextReference = z.output<typeof CreatorAgentContextReferenceSchema>;
-export declare const SpaceTaskAgentRunInputSchema: z.ZodObject<{
-    mode: z.ZodOptional<z.ZodString>;
-    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-        device_id: z.ZodString;
-        kind: z.ZodString;
-        opaque_ref: z.ZodString;
-        display_name: z.ZodOptional<z.ZodString>;
-        capabilities: z.ZodJSONSchema;
-        metadata: z.ZodOptional<z.ZodJSONSchema>;
-    }, z.core.$loose>>>>;
-}, z.core.$loose>;
-export type SpaceTaskAgentRunInput = z.output<typeof SpaceTaskAgentRunInputSchema>;
 export declare const SpaceTaskSchema: z.ZodObject<{
     id: z.ZodString;
     space_id: z.ZodString;
@@ -105,18 +93,6 @@ export declare const SpaceTaskSchema: z.ZodObject<{
     priority: z.ZodString;
     rank: z.ZodNumber;
     assignee_user_id: z.ZodOptional<z.ZodString>;
-    assignee_agent_id: z.ZodOptional<z.ZodString>;
-    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-        mode: z.ZodOptional<z.ZodString>;
-        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-            device_id: z.ZodString;
-            kind: z.ZodString;
-            opaque_ref: z.ZodString;
-            display_name: z.ZodOptional<z.ZodString>;
-            capabilities: z.ZodJSONSchema;
-            metadata: z.ZodOptional<z.ZodJSONSchema>;
-        }, z.core.$loose>>>>;
-    }, z.core.$loose>>>;
     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     due_timezone: z.ZodString;
     source_refs: z.ZodJSONSchema;
@@ -148,18 +124,6 @@ export declare const SpaceTaskPageSchema: z.ZodObject<{
         priority: z.ZodString;
         rank: z.ZodNumber;
         assignee_user_id: z.ZodOptional<z.ZodString>;
-        assignee_agent_id: z.ZodOptional<z.ZodString>;
-        agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-            mode: z.ZodOptional<z.ZodString>;
-            context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                device_id: z.ZodString;
-                kind: z.ZodString;
-                opaque_ref: z.ZodString;
-                display_name: z.ZodOptional<z.ZodString>;
-                capabilities: z.ZodJSONSchema;
-                metadata: z.ZodOptional<z.ZodJSONSchema>;
-            }, z.core.$loose>>>>;
-        }, z.core.$loose>>>;
         due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
         due_timezone: z.ZodString;
         source_refs: z.ZodJSONSchema;
@@ -276,18 +240,6 @@ export declare const SpaceRoadmapGoalSchema: z.ZodObject<{
         priority: z.ZodString;
         rank: z.ZodNumber;
         assignee_user_id: z.ZodOptional<z.ZodString>;
-        assignee_agent_id: z.ZodOptional<z.ZodString>;
-        agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-            mode: z.ZodOptional<z.ZodString>;
-            context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                device_id: z.ZodString;
-                kind: z.ZodString;
-                opaque_ref: z.ZodString;
-                display_name: z.ZodOptional<z.ZodString>;
-                capabilities: z.ZodJSONSchema;
-                metadata: z.ZodOptional<z.ZodJSONSchema>;
-            }, z.core.$loose>>>>;
-        }, z.core.$loose>>>;
         due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
         due_timezone: z.ZodString;
         source_refs: z.ZodJSONSchema;
@@ -433,18 +385,6 @@ export declare const SpaceRoadmapSnapshotSchema: z.ZodObject<{
             priority: z.ZodString;
             rank: z.ZodNumber;
             assignee_user_id: z.ZodOptional<z.ZodString>;
-            assignee_agent_id: z.ZodOptional<z.ZodString>;
-            agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                mode: z.ZodOptional<z.ZodString>;
-                context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                    device_id: z.ZodString;
-                    kind: z.ZodString;
-                    opaque_ref: z.ZodString;
-                    display_name: z.ZodOptional<z.ZodString>;
-                    capabilities: z.ZodJSONSchema;
-                    metadata: z.ZodOptional<z.ZodJSONSchema>;
-                }, z.core.$loose>>>>;
-            }, z.core.$loose>>>;
             due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
             due_timezone: z.ZodString;
             source_refs: z.ZodJSONSchema;
@@ -534,30 +474,6 @@ export declare const JournalTicketSchema: z.ZodObject<{
     expires_at: z.ZodString;
 }, z.core.$loose>;
 export type JournalTicket = z.output<typeof JournalTicketSchema>;
-export declare const SpaceAgentMembershipSchema: z.ZodObject<{
-    id: z.ZodString;
-    space_id: z.ZodString;
-    agent_id: z.ZodString;
-    owner_user_id: z.ZodString;
-    can_control: z.ZodBoolean;
-    name: z.ZodString;
-    description: z.ZodString;
-    icon: z.ZodString;
-    avatar: z.ZodJSONSchema;
-    instructions: z.ZodOptional<z.ZodString>;
-    model_id: z.ZodOptional<z.ZodString>;
-    reasoning_effort: z.ZodOptional<z.ZodString>;
-    default_run_mode: z.ZodString;
-    enabled: z.ZodBoolean;
-    version: z.ZodNumber;
-    created_at: z.ZodString;
-    updated_at: z.ZodString;
-    work_state: z.ZodString;
-    attention_count: z.ZodNumber;
-    last_activity_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
-    current_task_id: z.ZodOptional<z.ZodString>;
-}, z.core.$loose>;
-export type SpaceAgentMembership = z.output<typeof SpaceAgentMembershipSchema>;
 export declare const SpaceTaskActivitySchema: z.ZodObject<{
     id: z.ZodString;
     space_id: z.ZodString;
@@ -584,18 +500,6 @@ export declare const SpaceTaskMoveResultSchema: z.ZodObject<{
         priority: z.ZodString;
         rank: z.ZodNumber;
         assignee_user_id: z.ZodOptional<z.ZodString>;
-        assignee_agent_id: z.ZodOptional<z.ZodString>;
-        agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-            mode: z.ZodOptional<z.ZodString>;
-            context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                device_id: z.ZodString;
-                kind: z.ZodString;
-                opaque_ref: z.ZodString;
-                display_name: z.ZodOptional<z.ZodString>;
-                capabilities: z.ZodJSONSchema;
-                metadata: z.ZodOptional<z.ZodJSONSchema>;
-            }, z.core.$loose>>>>;
-        }, z.core.$loose>>>;
         due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
         due_timezone: z.ZodString;
         source_refs: z.ZodJSONSchema;
@@ -625,18 +529,6 @@ export declare const SpaceTaskMoveResultSchema: z.ZodObject<{
         priority: z.ZodString;
         rank: z.ZodNumber;
         assignee_user_id: z.ZodOptional<z.ZodString>;
-        assignee_agent_id: z.ZodOptional<z.ZodString>;
-        agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-            mode: z.ZodOptional<z.ZodString>;
-            context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                device_id: z.ZodString;
-                kind: z.ZodString;
-                opaque_ref: z.ZodString;
-                display_name: z.ZodOptional<z.ZodString>;
-                capabilities: z.ZodJSONSchema;
-                metadata: z.ZodOptional<z.ZodJSONSchema>;
-            }, z.core.$loose>>>>;
-        }, z.core.$loose>>>;
         due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
         due_timezone: z.ZodString;
         source_refs: z.ZodJSONSchema;

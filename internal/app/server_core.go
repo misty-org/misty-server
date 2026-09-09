@@ -80,7 +80,7 @@ func CreateServer() (*Server, error) {
 	}
 	usageMeter := appbilling.NewCreditMeter(s.Database)
 	s.AIAgent = serveragent.NewService(
-		// The embodied companion and Agents both use agent_conversations as their
+		// The embodied companion and Agents both use misty_ask_conversations as their
 		// durable task-thread store. Keeping the runtime wired to the database is
 		// also required before an invocation can bind its surface metadata.
 		serveragent.NewSessionStoreWithPersistence(0, s.Database),

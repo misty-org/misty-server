@@ -42,6 +42,9 @@ func validAgentRunMode(mode string) bool { return mode == "ask" || mode == "auto
 // It deliberately proves ownership and Space membership in the same transaction
 // that snapshots the Agent and queues its durable work.
 func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spaceID, agentID string, input CreatorAgentRunInput) (*SpaceRun, error) {
+	if err := db.ValidateAppExecutionAuthority(ctx, AppAuthorityFromContext(ctx), ownerUserID, spaceID, "ai.write"); err != nil {
+		return nil, err
+	}
 	input.Instruction = strings.TrimSpace(input.Instruction)
 	input.Mode = strings.ToLower(strings.TrimSpace(input.Mode))
 	input.ConversationTarget = strings.TrimSpace(input.ConversationTarget)
@@ -86,7 +89,7 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, ownerUserID); err != nil {
 			return err
 		}
-		if err := requireSpacePermissionTx(ctx, tx, ownerUserID, spaceID, PermissionAgentsRun); err != nil {
+		if err := requireSpacePermissionTx(ctx, tx, ownerUserID, spaceID, PermissionAskRun); err != nil {
 			return err
 		}
 		if input.ContextNoteID != "" {
@@ -108,8 +111,8 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 		var systemManaged bool
 		var version int64
 		if err := tx.QueryRowContext(ctx, `SELECT a.name,a.instructions,a.model_id,a.reasoning_effort,a.default_run_mode,a.system_managed,a.version,v.id
-			FROM personal_agents a JOIN personal_agent_versions v ON v.agent_id=a.id AND v.version=a.version
-			WHERE a.id=$1 AND a.owner_user_id=$2 AND a.enabled AND a.deleted_at IS NULL`, agentID, ownerUserID).
+			FROM misty_ask_identities a JOIN misty_ask_identity_versions v ON v.agent_id=a.id AND v.version=a.version
+			WHERE a.id=$1 AND a.owner_user_id=$2 AND a.enabled AND a.system_managed AND a.deleted_at IS NULL`, agentID, ownerUserID).
 			Scan(&name, &instructions, &modelID, &effort, &defaultMode, &systemManaged, &version, &versionID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrPersonalAgentNotFound
@@ -156,6 +159,36 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 			"ai_invocation_id": input.AIInvocationID, "ai_conversation_id": input.AIConversationID,
 			"ai_idempotency_key": input.AIIdempotencyKey,
 		})
+		boundInput, bindErr := bindAppAuthority(ctx, runInput)
+		if bindErr != nil {
+			return bindErr
+		}
+		runInput = boundInput
+		if input.ParentRunID != "" || input.AIInvocationID != "" {
+			// A delegated or invocation-linked child cannot shed its source app ceiling.
+			var parentInput json.RawMessage
+			var parentErr error
+			if input.ParentRunID != "" {
+				parentErr = tx.QueryRowContext(ctx, `SELECT input FROM space_runs WHERE id=$1 AND owner_user_id=$2 AND space_id=$3`, input.ParentRunID, ownerUserID, spaceID).Scan(&parentInput)
+			} else {
+				parentErr = tx.QueryRowContext(ctx, `SELECT request_payload FROM ai_invocations WHERE id=$1 AND user_id=$2 AND space_id=$3`, input.AIInvocationID, ownerUserID, spaceID).Scan(&parentInput)
+			}
+			if parentErr != nil {
+				return parentErr
+			}
+			authority, err := AppAuthorityFromPayload(parentInput)
+			if err != nil {
+				return err
+			}
+			if authority != nil {
+				var values map[string]any
+				if json.Unmarshal(runInput, &values) != nil {
+					return ErrSpaceInvalid
+				}
+				values["_misty_authority"] = authority
+				runInput = mustJSON(values)
+			}
+		}
 		trigger := "direct_instruction"
 		if input.ParentRunID != "" {
 			trigger = "delegated"
@@ -168,6 +201,13 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 			VALUES($1,$2,'agent',$3,$4,$4,$5,'queued',$6,'{}'::jsonb,$4,NULLIF($7,''),$8,$3,'companion','{}'::jsonb,'[]'::jsonb,NULL,NULLIF($9,''),
 			1,'everyone',NULL,$4,$10,$10,$11,NULLIF($12,''),$13,$14,'{}'::jsonb) RETURNING `+spaceRunColumns,
 			out.ID, spaceID, agentID, ownerUserID, trigger, runInput, input.ConversationTarget, input.SourceType, input.SourceMessageID, mode, snapshot, input.ParentRunID, depth, contextBindings), out); err != nil {
+			return err
+		}
+		pinParentID := input.ParentRunID
+		if pinParentID == "" {
+			pinParentID = input.AIInvocationID
+		}
+		if err := pinAgentSDKCapabilitiesTx(ctx, tx, out.ID, ownerUserID, spaceID, pinParentID, runInput); err != nil {
 			return err
 		}
 		for _, ref := range input.ContextReferences {

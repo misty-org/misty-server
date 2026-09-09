@@ -217,6 +217,9 @@ func (s *AIService) CompleteArtifact() http.HandlerFunc {
 }
 
 func validateAIInvocationInput(body *aiInvocationInput) error {
+	if mixedAIContextSpaces(body.Context) {
+		return errors.New("choose one originating Space")
+	}
 	body.Mode = strings.TrimSpace(body.Mode)
 	body.SurfaceID = strings.TrimSpace(body.SurfaceID)
 	body.Trigger = strings.TrimSpace(body.Trigger)

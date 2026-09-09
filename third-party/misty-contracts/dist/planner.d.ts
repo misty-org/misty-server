@@ -65,18 +65,6 @@ export declare const mistyPlannerContracts: {
                 priority: z.ZodString;
                 rank: z.ZodNumber;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
-                agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                    mode: z.ZodOptional<z.ZodString>;
-                    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                        device_id: z.ZodString;
-                        kind: z.ZodString;
-                        opaque_ref: z.ZodString;
-                        display_name: z.ZodOptional<z.ZodString>;
-                        capabilities: z.ZodJSONSchema;
-                        metadata: z.ZodOptional<z.ZodJSONSchema>;
-                    }, z.core.$loose>>>>;
-                }, z.core.$loose>>>;
                 due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                 due_timezone: z.ZodString;
                 source_refs: z.ZodJSONSchema;
@@ -106,18 +94,6 @@ export declare const mistyPlannerContracts: {
                 priority: z.ZodString;
                 rank: z.ZodNumber;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
-                agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                    mode: z.ZodOptional<z.ZodString>;
-                    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                        device_id: z.ZodString;
-                        kind: z.ZodString;
-                        opaque_ref: z.ZodString;
-                        display_name: z.ZodOptional<z.ZodString>;
-                        capabilities: z.ZodJSONSchema;
-                        metadata: z.ZodOptional<z.ZodJSONSchema>;
-                    }, z.core.$loose>>>>;
-                }, z.core.$loose>>>;
                 due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                 due_timezone: z.ZodString;
                 source_refs: z.ZodJSONSchema;
@@ -291,18 +267,6 @@ export declare const mistyPlannerContracts: {
                 priority: z.ZodString;
                 rank: z.ZodNumber;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
-                agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                    mode: z.ZodOptional<z.ZodString>;
-                    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                        device_id: z.ZodString;
-                        kind: z.ZodString;
-                        opaque_ref: z.ZodString;
-                        display_name: z.ZodOptional<z.ZodString>;
-                        capabilities: z.ZodJSONSchema;
-                        metadata: z.ZodOptional<z.ZodJSONSchema>;
-                    }, z.core.$loose>>>>;
-                }, z.core.$loose>>>;
                 due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                 due_timezone: z.ZodString;
                 source_refs: z.ZodJSONSchema;
@@ -631,18 +595,6 @@ export declare const mistyPlannerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -701,18 +653,6 @@ export declare const mistyPlannerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -774,18 +714,6 @@ export declare const mistyPlannerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -841,18 +769,6 @@ export declare const mistyPlannerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -1208,18 +1124,6 @@ export declare const mistyPlannerContracts: {
                         priority: z.ZodString;
                         rank: z.ZodNumber;
                         assignee_user_id: z.ZodOptional<z.ZodString>;
-                        assignee_agent_id: z.ZodOptional<z.ZodString>;
-                        agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                            mode: z.ZodOptional<z.ZodString>;
-                            context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                                device_id: z.ZodString;
-                                kind: z.ZodString;
-                                opaque_ref: z.ZodString;
-                                display_name: z.ZodOptional<z.ZodString>;
-                                capabilities: z.ZodJSONSchema;
-                                metadata: z.ZodOptional<z.ZodJSONSchema>;
-                            }, z.core.$loose>>>>;
-                        }, z.core.$loose>>>;
                         due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                         due_timezone: z.ZodString;
                         source_refs: z.ZodJSONSchema;

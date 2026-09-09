@@ -192,7 +192,7 @@ func SelfHostedFeatureGate(next http.Handler) http.Handler {
 				return
 			}
 		}
-		if strings.Contains(path, "/integrations/") || strings.Contains(path, "/provider-resources") || strings.Contains(path, "/agents/") {
+		if strings.Contains(path, "/integrations/") || strings.Contains(path, "/agents/") {
 			writeJSON(w, http.StatusNotImplemented, map[string]string{"code": "feature_unavailable_self_hosted"})
 			return
 		}

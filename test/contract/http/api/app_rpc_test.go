@@ -19,6 +19,12 @@ func TestSDKServerMethodsHaveAnAuthorizedAppAndStaySpaceBound(t *testing.T) {
 					key := strings.Trim(part, "{}")
 					if key != "spaceID" {
 						path[key] = "resource_1"
+						if key == "requestID" {
+							path[key] = "10000000-0000-4000-8000-000000000001"
+						}
+						if key == "providerID" {
+							path[key] = "example.habits/backend"
+						}
 					}
 				}
 			}
@@ -42,9 +48,25 @@ func TestSDKServerMethodsHaveAnAuthorizedAppAndStaySpaceBound(t *testing.T) {
 					t.Errorf("%s ran without a permission grant", app.ID)
 				}
 			}
+			if strings.HasPrefix(name, "capabilities.") {
+				// SDK lifecycle permissions belong to a reviewed independent
+				// installation; they are not implied by a catalog app's grants.
+				independent := sdkContractCapabilitySession()
+				if TestingAuthorizeAppRuntimeRequest(independent, target.Verb, target.Path) {
+					authorized = true
+				}
+				independent.Scopes = nil
+				if TestingAuthorizeAppRuntimeRequest(independent, target.Verb, target.Path) {
+					t.Fatal("SDK method escaped its installed scope ceiling")
+				}
+			}
 			if !authorized {
-				t.Fatal("No catalog App can use this SDK method")
+				t.Fatal("No appropriately scoped App can use this SDK method")
 			}
 		})
 	}
+}
+
+func sdkContractCapabilitySession() db.AppRuntimeSession {
+	return db.AppRuntimeSession{AppID: "example.habits", Scopes: []string{"capabilities.providers.write", "capabilities.read", "capabilities.invoke"}}
 }

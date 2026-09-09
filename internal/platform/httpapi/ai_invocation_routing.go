@@ -87,13 +87,21 @@ func aiConciseSummary(value string) string {
 	return clean
 }
 
+// A request can carry references from several Spaces. Those references do not
+// authorize picking whichever happens to be first.
 func firstAIContextSpace(context []aiContextReference) string {
+	spaceID := ""
 	for _, reference := range context {
-		if value := strings.TrimSpace(reference.SpaceID); value != "" {
-			return value
+		value := strings.TrimSpace(reference.SpaceID)
+		if value == "" {
+			continue
 		}
+		if spaceID != "" && spaceID != value {
+			return ""
+		}
+		spaceID = value
 	}
-	return ""
+	return spaceID
 }
 
 func firstAIContextHref(context []aiContextReference) string {
@@ -139,4 +147,19 @@ func aiSelectionCitation(body aiInvocationInput) *aiCitation {
 		}
 	}
 	return nil
+}
+
+func mixedAIContextSpaces(refs []aiContextReference) bool {
+	var space string
+	for _, ref := range refs {
+		id := strings.TrimSpace(ref.SpaceID)
+		if id == "" {
+			continue
+		}
+		if space != "" && space != id {
+			return true
+		}
+		space = id
+	}
+	return false
 }

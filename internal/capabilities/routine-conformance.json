@@ -1,0 +1,1230 @@
+[
+  {
+    "name": "defaults",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        }
+      ]
+    },
+    "accepted": true,
+    "normalized": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "description": "",
+      "trigger": {
+        "kind": "manual"
+      },
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          },
+          "allowPartial": false
+        }
+      ],
+      "budget": {
+        "modelTurns": 20,
+        "activeSeconds": 1800
+      }
+    }
+  },
+  {
+    "name": "prior_reference",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        },
+        {
+          "id": "save",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "reference",
+            "source": {
+              "kind": "step",
+              "stepId": "read"
+            },
+            "path": []
+          }
+        }
+      ]
+    },
+    "accepted": true,
+    "normalized": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "description": "",
+      "trigger": {
+        "kind": "manual"
+      },
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          },
+          "allowPartial": false
+        },
+        {
+          "id": "save",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "reference",
+            "source": {
+              "kind": "step",
+              "stepId": "read"
+            },
+            "path": []
+          },
+          "allowPartial": false
+        }
+      ],
+      "budget": {
+        "modelTurns": 20,
+        "activeSeconds": 1800
+      }
+    }
+  },
+  {
+    "name": "forward_reference",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "reference",
+            "source": {
+              "kind": "step",
+              "stepId": "future"
+            },
+            "path": []
+          }
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "duplicate_step",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        },
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "literal_is_data",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {
+              "kind": "reference",
+              "source": {
+                "kind": "step",
+                "stepId": "future"
+              },
+              "path": []
+            }
+          }
+        }
+      ]
+    },
+    "accepted": true,
+    "normalized": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "description": "",
+      "trigger": {
+        "kind": "manual"
+      },
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {
+              "kind": "reference",
+              "source": {
+                "kind": "step",
+                "stepId": "future"
+              },
+              "path": []
+            }
+          },
+          "allowPartial": false
+        }
+      ],
+      "budget": {
+        "modelTurns": 20,
+        "activeSeconds": 1800
+      }
+    }
+  },
+  {
+    "name": "missing_property_condition",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          },
+          "when": {
+            "kind": "exists",
+            "reference": {
+              "kind": "reference",
+              "source": {
+                "kind": "trigger"
+              },
+              "path": [
+                "available"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "accepted": true,
+    "normalized": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "description": "",
+      "trigger": {
+        "kind": "manual"
+      },
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "when": {
+            "kind": "exists",
+            "reference": {
+              "kind": "reference",
+              "source": {
+                "kind": "trigger"
+              },
+              "path": [
+                "available"
+              ]
+            }
+          },
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          },
+          "allowPartial": false
+        }
+      ],
+      "budget": {
+        "modelTurns": 20,
+        "activeSeconds": 1800
+      }
+    }
+  },
+  {
+    "name": "oversized_fields",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "object",
+            "fields": {
+              "field0": {
+                "kind": "literal",
+                "value": 0
+              },
+              "field1": {
+                "kind": "literal",
+                "value": 1
+              },
+              "field2": {
+                "kind": "literal",
+                "value": 2
+              },
+              "field3": {
+                "kind": "literal",
+                "value": 3
+              },
+              "field4": {
+                "kind": "literal",
+                "value": 4
+              },
+              "field5": {
+                "kind": "literal",
+                "value": 5
+              },
+              "field6": {
+                "kind": "literal",
+                "value": 6
+              },
+              "field7": {
+                "kind": "literal",
+                "value": 7
+              },
+              "field8": {
+                "kind": "literal",
+                "value": 8
+              },
+              "field9": {
+                "kind": "literal",
+                "value": 9
+              },
+              "field10": {
+                "kind": "literal",
+                "value": 10
+              },
+              "field11": {
+                "kind": "literal",
+                "value": 11
+              },
+              "field12": {
+                "kind": "literal",
+                "value": 12
+              },
+              "field13": {
+                "kind": "literal",
+                "value": 13
+              },
+              "field14": {
+                "kind": "literal",
+                "value": 14
+              },
+              "field15": {
+                "kind": "literal",
+                "value": 15
+              },
+              "field16": {
+                "kind": "literal",
+                "value": 16
+              },
+              "field17": {
+                "kind": "literal",
+                "value": 17
+              },
+              "field18": {
+                "kind": "literal",
+                "value": 18
+              },
+              "field19": {
+                "kind": "literal",
+                "value": 19
+              },
+              "field20": {
+                "kind": "literal",
+                "value": 20
+              },
+              "field21": {
+                "kind": "literal",
+                "value": 21
+              },
+              "field22": {
+                "kind": "literal",
+                "value": 22
+              },
+              "field23": {
+                "kind": "literal",
+                "value": 23
+              },
+              "field24": {
+                "kind": "literal",
+                "value": 24
+              },
+              "field25": {
+                "kind": "literal",
+                "value": 25
+              },
+              "field26": {
+                "kind": "literal",
+                "value": 26
+              },
+              "field27": {
+                "kind": "literal",
+                "value": 27
+              },
+              "field28": {
+                "kind": "literal",
+                "value": 28
+              },
+              "field29": {
+                "kind": "literal",
+                "value": 29
+              },
+              "field30": {
+                "kind": "literal",
+                "value": 30
+              },
+              "field31": {
+                "kind": "literal",
+                "value": 31
+              },
+              "field32": {
+                "kind": "literal",
+                "value": 32
+              },
+              "field33": {
+                "kind": "literal",
+                "value": 33
+              },
+              "field34": {
+                "kind": "literal",
+                "value": 34
+              },
+              "field35": {
+                "kind": "literal",
+                "value": 35
+              },
+              "field36": {
+                "kind": "literal",
+                "value": 36
+              },
+              "field37": {
+                "kind": "literal",
+                "value": 37
+              },
+              "field38": {
+                "kind": "literal",
+                "value": 38
+              },
+              "field39": {
+                "kind": "literal",
+                "value": 39
+              },
+              "field40": {
+                "kind": "literal",
+                "value": 40
+              },
+              "field41": {
+                "kind": "literal",
+                "value": 41
+              },
+              "field42": {
+                "kind": "literal",
+                "value": 42
+              },
+              "field43": {
+                "kind": "literal",
+                "value": 43
+              },
+              "field44": {
+                "kind": "literal",
+                "value": 44
+              },
+              "field45": {
+                "kind": "literal",
+                "value": 45
+              },
+              "field46": {
+                "kind": "literal",
+                "value": 46
+              },
+              "field47": {
+                "kind": "literal",
+                "value": 47
+              },
+              "field48": {
+                "kind": "literal",
+                "value": 48
+              },
+              "field49": {
+                "kind": "literal",
+                "value": 49
+              },
+              "field50": {
+                "kind": "literal",
+                "value": 50
+              },
+              "field51": {
+                "kind": "literal",
+                "value": 51
+              },
+              "field52": {
+                "kind": "literal",
+                "value": 52
+              },
+              "field53": {
+                "kind": "literal",
+                "value": 53
+              },
+              "field54": {
+                "kind": "literal",
+                "value": 54
+              },
+              "field55": {
+                "kind": "literal",
+                "value": 55
+              },
+              "field56": {
+                "kind": "literal",
+                "value": 56
+              },
+              "field57": {
+                "kind": "literal",
+                "value": 57
+              },
+              "field58": {
+                "kind": "literal",
+                "value": 58
+              },
+              "field59": {
+                "kind": "literal",
+                "value": 59
+              },
+              "field60": {
+                "kind": "literal",
+                "value": 60
+              },
+              "field61": {
+                "kind": "literal",
+                "value": 61
+              },
+              "field62": {
+                "kind": "literal",
+                "value": 62
+              },
+              "field63": {
+                "kind": "literal",
+                "value": 63
+              },
+              "field64": {
+                "kind": "literal",
+                "value": 64
+              },
+              "field65": {
+                "kind": "literal",
+                "value": 65
+              },
+              "field66": {
+                "kind": "literal",
+                "value": 66
+              },
+              "field67": {
+                "kind": "literal",
+                "value": 67
+              },
+              "field68": {
+                "kind": "literal",
+                "value": 68
+              },
+              "field69": {
+                "kind": "literal",
+                "value": 69
+              },
+              "field70": {
+                "kind": "literal",
+                "value": 70
+              },
+              "field71": {
+                "kind": "literal",
+                "value": 71
+              },
+              "field72": {
+                "kind": "literal",
+                "value": 72
+              },
+              "field73": {
+                "kind": "literal",
+                "value": 73
+              },
+              "field74": {
+                "kind": "literal",
+                "value": 74
+              },
+              "field75": {
+                "kind": "literal",
+                "value": 75
+              },
+              "field76": {
+                "kind": "literal",
+                "value": 76
+              },
+              "field77": {
+                "kind": "literal",
+                "value": 77
+              },
+              "field78": {
+                "kind": "literal",
+                "value": 78
+              },
+              "field79": {
+                "kind": "literal",
+                "value": 79
+              },
+              "field80": {
+                "kind": "literal",
+                "value": 80
+              },
+              "field81": {
+                "kind": "literal",
+                "value": 81
+              },
+              "field82": {
+                "kind": "literal",
+                "value": 82
+              },
+              "field83": {
+                "kind": "literal",
+                "value": 83
+              },
+              "field84": {
+                "kind": "literal",
+                "value": 84
+              },
+              "field85": {
+                "kind": "literal",
+                "value": 85
+              },
+              "field86": {
+                "kind": "literal",
+                "value": 86
+              },
+              "field87": {
+                "kind": "literal",
+                "value": 87
+              },
+              "field88": {
+                "kind": "literal",
+                "value": 88
+              },
+              "field89": {
+                "kind": "literal",
+                "value": 89
+              },
+              "field90": {
+                "kind": "literal",
+                "value": 90
+              },
+              "field91": {
+                "kind": "literal",
+                "value": 91
+              },
+              "field92": {
+                "kind": "literal",
+                "value": 92
+              },
+              "field93": {
+                "kind": "literal",
+                "value": 93
+              },
+              "field94": {
+                "kind": "literal",
+                "value": 94
+              },
+              "field95": {
+                "kind": "literal",
+                "value": 95
+              },
+              "field96": {
+                "kind": "literal",
+                "value": 96
+              },
+              "field97": {
+                "kind": "literal",
+                "value": 97
+              },
+              "field98": {
+                "kind": "literal",
+                "value": 98
+              },
+              "field99": {
+                "kind": "literal",
+                "value": 99
+              },
+              "field100": {
+                "kind": "literal",
+                "value": 100
+              }
+            }
+          }
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "bad_path",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "reference",
+            "source": {
+              "kind": "step",
+              "stepId": "read"
+            },
+            "path": [
+              "constructor"
+            ]
+          }
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "agent_budget",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {
+        "modelTurns": 1
+      },
+      "steps": [
+        {
+          "id": "summarize",
+          "label": "Summarize",
+          "kind": "agent",
+          "prompt": {
+            "kind": "literal",
+            "value": "Summarize"
+          },
+          "actions": [
+            {
+              "capability": "habits.list",
+              "capabilityVersion": 1,
+              "providerId": "example.habits/backend",
+              "providerVersion": 1,
+              "targetId": "10000000-0000-4000-8000-000000000001",
+              "targetRevision": 1
+            }
+          ],
+          "maxTurns": 2,
+          "outputSchema": {
+            "type": "object"
+          }
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "app_event_defaults",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "app_event",
+        "event": "journal.note.changed"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        }
+      ]
+    },
+    "accepted": true,
+    "normalized": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "description": "",
+      "trigger": {
+        "kind": "app_event",
+        "event": "journal.note.changed",
+        "resourceIds": []
+      },
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          },
+          "allowPartial": false
+        }
+      ],
+      "budget": {
+        "modelTurns": 20,
+        "activeSeconds": 1800
+      }
+    }
+  },
+  {
+    "name": "timezone",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "schedule",
+        "timezone": "America/Los_Angeles",
+        "daysOfWeek": [
+          1,
+          2,
+          3
+        ],
+        "times": [
+          {
+            "hour": 9,
+            "minute": 0
+          }
+        ]
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        }
+      ]
+    },
+    "accepted": true,
+    "normalized": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "description": "",
+      "trigger": {
+        "kind": "schedule",
+        "timezone": "America/Los_Angeles",
+        "daysOfWeek": [
+          1,
+          2,
+          3
+        ],
+        "times": [
+          {
+            "hour": 9,
+            "minute": 0
+          }
+        ]
+      },
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          },
+          "allowPartial": false
+        }
+      ],
+      "budget": {
+        "modelTurns": 20,
+        "activeSeconds": 1800
+      }
+    }
+  },
+  {
+    "name": "bad_timezone",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "schedule",
+        "timezone": "Local",
+        "daysOfWeek": [
+          1
+        ],
+        "times": [
+          {
+            "hour": 9,
+            "minute": 0
+          }
+        ]
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "duplicate_schedule",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "schedule",
+        "timezone": "UTC",
+        "daysOfWeek": [
+          1,
+          1
+        ],
+        "times": [
+          {
+            "hour": 9,
+            "minute": 0
+          }
+        ]
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        }
+      ]
+    },
+    "accepted": false
+  },
+  {
+    "name": "unknown_field",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        }
+      ],
+      "enabled": true
+    },
+    "accepted": false
+  },
+  {
+    "name": "null_default",
+    "input": {
+      "protocol": 1,
+      "name": "Daily habits",
+      "trigger": {
+        "kind": "manual"
+      },
+      "budget": {},
+      "steps": [
+        {
+          "id": "read",
+          "label": "Read habits",
+          "kind": "capability",
+          "action": {
+            "capability": "habits.list",
+            "capabilityVersion": 1,
+            "providerId": "example.habits/backend",
+            "providerVersion": 1,
+            "targetId": "10000000-0000-4000-8000-000000000001",
+            "targetRevision": 1
+          },
+          "input": {
+            "kind": "literal",
+            "value": {}
+          }
+        }
+      ],
+      "description": null
+    },
+    "accepted": false
+  }
+]

@@ -50,7 +50,6 @@ func Run() {
 		WorkerFunc(func(ctx context.Context) { runLibraryRenditionProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runLibraryIntelligenceProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
-		WorkerFunc(func(ctx context.Context) { runActionSuggestionProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runSocialDeliveryProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { server.Spaces.RunDiscordSocialGateway(ctx) }),
 		WorkerFunc(func(ctx context.Context) { runAIEmbeddingProcessing(ctx, server) }),
@@ -160,27 +159,6 @@ func runAIEmbeddingProcessing(ctx context.Context, server *Server) {
 			return
 		case <-ticker.C:
 			process()
-		}
-	}
-}
-
-func runActionSuggestionProcessing(ctx context.Context, server *Server) {
-	if server.Spaces == nil {
-		return
-	}
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if _, err := server.Spaces.ProcessActionSuggestionJobs(ctx, 4); err != nil {
-				log.Printf("Action suggestion processing failed: %v", err)
-			}
-			if _, err := server.Spaces.ProcessConversationFollowUps(ctx, 10); err != nil {
-				log.Printf("Conversation follow-up processing failed: %v", err)
-			}
 		}
 	}
 }
@@ -362,11 +340,6 @@ func runAgentRetention(ctx context.Context, server *Server) {
 				}
 				if _, err := server.Library.PurgeExpiredRenditions(ctx, 20); err != nil {
 					log.Printf("Library rendition purge failed: %v", err)
-				}
-			}
-			if server.Spaces != nil {
-				if _, err := server.Spaces.ProcessDueAgentWorkflows(ctx, time.Now().UTC(), 100); err != nil {
-					log.Printf("Agent workflow schedule processing failed: %v", err)
 				}
 			}
 			if _, err := server.Database.PurgeExpiredNotes(ctx, 100); err != nil {

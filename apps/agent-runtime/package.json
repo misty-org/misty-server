@@ -9,10 +9,12 @@
     "start": "node .output/server/index.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "world:setup": "bootstrap"
+    "world:setup": "bootstrap",
+    "postinstall": "node scripts/patch-workflow-schema.mjs"
   },
   "dependencies": {
     "@ai-sdk/workflow": "1.0.67",
+    "@misty/contracts": "file:../../third-party/misty-contracts",
     "@misty/mcp-client-runtime": "file:./vendor/mcp-client-runtime",
     "@modelcontextprotocol/client": "^2.0.0",
     "@opentelemetry/api": "1.9.1",
@@ -20,6 +22,7 @@
     "@workflow/world-postgres": "4.3.3",
     "@workflow/world-vercel": "4.6.2",
     "ai": "7.0.66",
+    "ajv-formats": "3.0.1",
     "express": "5.2.1",
     "nitro": "3.0.260610-beta",
     "workflow": "4.8.3",

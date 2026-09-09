@@ -38,12 +38,15 @@ type App struct {
 	Name               string          `json:"name"`
 	Publisher          string          `json:"publisher"`
 	Description        string          `json:"description"`
+	About              string          `json:"about,omitempty"`
+	RepositoryURL      string          `json:"repository_url,omitempty"`
 	Version            string          `json:"version"`
 	PermissionVersion  int             `json:"permission_version"`
 	MinimumHost        int             `json:"minimum_host_protocol"`
 	MinimumHostVersion string          `json:"minimum_host_version,omitempty"`
 	Official           bool            `json:"official"`
 	AgeRating          string          `json:"age_rating"`
+	RequiresApps       []string        `json:"requires_apps,omitempty"`
 	Scopes             []string        `json:"scopes"`
 	Desktop            PlatformRuntime `json:"desktop"`
 	Mobile             PlatformRuntime `json:"mobile"`
@@ -64,8 +67,8 @@ const generatedCatalog = `{
       "name": "Social",
       "publisher": "Misty",
       "description": "Conversations with people and agents in a Space.",
-      "version": "1.1.0",
-      "permission_version": 3,
+      "version": "1.2.0-beta.1",
+      "permission_version": 5,
       "minimum_host_protocol": 2,
       "official": true,
       "age_rating": "4+",
@@ -85,20 +88,28 @@ const generatedCatalog = `{
         "agents.read",
         "agents.write",
         "roadmaps.read",
-        "clipboard.write"
+        "clipboard.write",
+        "browser.navigate",
+        "browser.inspect",
+        "browser.interact",
+        "storage.read",
+        "storage.write",
+        "links.open"
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/chat/1.1.0/desktop.zip",
-        "sha256": "591c49ca9f00f04877f4d06758f3b67900b897a751df1602a7cf86c02a6129bb",
-        "signature": "glcPI3djyOOZt0K1uMMOmFFa2Oh/SFMH14eQQ81ZwnY3aM+6s+n2hewidu8orC4zcRLWQdU5fSZwKqBV2hyBCw==",
+        "entry": "https://apps.mistysys.com/official-apps/chat/1.2.0-beta.1/desktop.zip",
+        "sha256": "8c9a83077accade71c7afb3f497e6f557f362475856f0818866d6831bd570c09",
+        "signature": "gN3mmnGbl++xNO3oWb3gJWYlk+/W0Ed2SJOS0L2wbJuTGGBX5FryZsaAxjWmq47ADc0WRYtHLRzK9Q3Et/ALAQ==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 1476313,
-        "additional_storage_bytes": 5230215
+        "download_bytes": 1673678,
+        "additional_storage_bytes": 5548919
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "about": "Keep conversations with people and agents together in your Space. Connect supported social apps and keep their websites alongside your work.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/chat"
     },
     {
       "id": "journal",
@@ -107,8 +118,8 @@ const generatedCatalog = `{
       "name": "Journal",
       "publisher": "Misty",
       "description": "Notes and drawings for ideas worth keeping.",
-      "version": "1.1.0",
-      "permission_version": 3,
+      "version": "1.1.0-beta.2",
+      "permission_version": 6,
       "minimum_host_protocol": 2,
       "official": true,
       "age_rating": "4+",
@@ -131,20 +142,27 @@ const generatedCatalog = `{
         "profile.read",
         "spaces.read",
         "storage.read",
-        "storage.write"
+        "storage.write",
+        "network.fetch",
+        "browser.navigate",
+        "browser.inspect",
+        "browser.interact"
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/journal/1.1.0/desktop.zip",
-        "sha256": "b6f1eba2a41fcc6c69fa3683afe3e68f3eeafb006c1df1c30643bb8017fe540b",
-        "signature": "hP3QNaZy2EVkqurMZBrzAbS6VZElfhitnvhmllV+9At1a2uwOiMU8SqS8rGJc0todWF696xAJtAR1qoJImz6AA==",
+        "entry": "https://apps.mistysys.com/official-apps/journal/1.1.0-beta.2/desktop.zip",
+        "sha256": "8a3c2d944de6d522993dff43596b00695d8223b1f3008a9cd04fcf9a163aa577",
+        "signature": "L9T1lkccsWRfpuljkrkU/eocZSdNMgvxritORSkkqAZXJnFmRrgB45YeFWKlurH0w9Qt58SEtYG82V8lFN60Dg==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 15386467,
-        "additional_storage_bytes": 25535465
+        "download_bytes": 2612321,
+        "additional_storage_bytes": 8722930
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "minimum_host_version": "0.1.0-beta.1",
+      "about": "Write notes, collect ideas, and create drawings in your Space. Keep your thinking close to the conversations and projects it belongs to.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/journal"
     },
     {
       "id": "planner",
@@ -154,7 +172,7 @@ const generatedCatalog = `{
       "publisher": "Misty",
       "description": "Tasks, agenda, and roadmaps for work in motion.",
       "version": "1.1.0",
-      "permission_version": 4,
+      "permission_version": 6,
       "minimum_host_protocol": 2,
       "official": true,
       "age_rating": "4+",
@@ -174,7 +192,10 @@ const generatedCatalog = `{
         "storage.write",
         "navigation.write",
         "links.open",
-        "ai.use"
+        "ai.use",
+        "browser.navigate",
+        "browser.inspect",
+        "browser.interact"
       ],
       "desktop": {
         "runtime": "downloaded",
@@ -187,7 +208,9 @@ const generatedCatalog = `{
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "about": "Organize tasks, plan your agenda, and track roadmaps in your Space. Connect supported planning apps alongside your work.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/planner"
     },
     {
       "id": "library",
@@ -197,7 +220,7 @@ const generatedCatalog = `{
       "publisher": "Misty",
       "description": "Curated resources shared with a Space.",
       "version": "1.1.0",
-      "permission_version": 3,
+      "permission_version": 4,
       "minimum_host_protocol": 2,
       "official": true,
       "age_rating": "4+",
@@ -214,7 +237,13 @@ const generatedCatalog = `{
         "ai.write",
         "navigation.write",
         "activity.write",
-        "clipboard.write"
+        "clipboard.write",
+        "links.open",
+        "browser.navigate",
+        "browser.inspect",
+        "browser.interact",
+        "storage.read",
+        "storage.write"
       ],
       "desktop": {
         "runtime": "downloaded",
@@ -227,7 +256,9 @@ const generatedCatalog = `{
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "about": "Keep shared files and resources organized in your Space. Browse collections and find the material your team needs.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/library"
     },
     {
       "id": "inbox",
@@ -236,8 +267,8 @@ const generatedCatalog = `{
       "name": "Inbox",
       "publisher": "Misty",
       "description": "Updates and conversations that need attention.",
-      "version": "1.1.0",
-      "permission_version": 3,
+      "version": "1.2.0-beta.1",
+      "permission_version": 5,
       "minimum_host_protocol": 2,
       "official": true,
       "age_rating": "4+",
@@ -257,20 +288,25 @@ const generatedCatalog = `{
         "navigation.write",
         "spaces.read",
         "storage.read",
-        "storage.write"
+        "storage.write",
+        "browser.navigate",
+        "browser.inspect",
+        "browser.interact"
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/inbox/1.1.0/desktop.zip",
-        "sha256": "a0e238d51e408427c4d2d9a4dc5c14991965bdcf39a82ffc8de630ea9a61cc4e",
-        "signature": "PDJccV0gyua36S42WMgYJnhqCpFMwLYwTLJWjdO0zi28rKb/1qUiEZc6D4KriX1ZnQt/BZgB2m61ydABRQxsAw==",
+        "entry": "https://apps.mistysys.com/official-apps/inbox/1.2.0-beta.1/desktop.zip",
+        "sha256": "0f085d79d2295497c19aede9e6dce8ae49e9ad336332ba6f3837fe4d8bfd9eec",
+        "signature": "8EBkQ2/KP8pVuT2e0rz2OB5EIt2tMU8jxEwwQAv1Y1CMTETZfKPegCn9ls0nBI2WwFQPORuCgWNN/CxKIi/LDw==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 245445,
-        "additional_storage_bytes": 952443
+        "download_bytes": 441242,
+        "additional_storage_bytes": 1270600
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "about": "Bring your connected mail accounts into one workspace. Open provider websites and use supported mail connections to work with your messages.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/inbox"
     },
     {
       "id": "agents",
@@ -315,7 +351,9 @@ const generatedCatalog = `{
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "about": "Create and manage AI collaborators for your work. Configure their tools, conversations, and automations from one place.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/agents"
     },
     {
       "id": "files",
@@ -355,7 +393,9 @@ const generatedCatalog = `{
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "about": "Browse local files and connected storage, organize folders, and manage transfers alongside your other work.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/files"
     },
     {
       "id": "browser",
@@ -364,8 +404,8 @@ const generatedCatalog = `{
       "name": "Browser",
       "publisher": "Misty",
       "description": "Research beside your work.",
-      "version": "1.1.0",
-      "permission_version": 2,
+      "version": "1.2.0-beta.1",
+      "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
       "age_rating": "4+",
@@ -377,20 +417,24 @@ const generatedCatalog = `{
         "clipboard.write",
         "links.open",
         "navigation.write",
-        "ai.use"
+        "ai.use",
+        "storage.read",
+        "storage.write"
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/browser/1.1.0/desktop.zip",
-        "sha256": "2578ab5b6c856eee46d3cdfb07326f434de7d1d401188461a34b2e9033ba6d4f",
-        "signature": "AWRNHaNivqkfHQ/YK2Xnq1zLDAWh47kEId9+wl2DaLqqmOsZocnHCv4g3t69xa3EgHmhRoTNFSrJhj1PA+zqBw==",
+        "entry": "https://apps.mistysys.com/official-apps/browser/1.2.0-beta.1/desktop.zip",
+        "sha256": "382c97d0f129f8e45ef102ed2afdabe124194ab3f6edaa3b7bbe643d79ce530a",
+        "signature": "/I/KZpu3vpvHZIlk/HgHRg7lWwOGn0jTrGnRY64TEiF311uKIFjOqeQqfR/S0IrmEFXcuHHbjFB1MWbHwQFGBg==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 174022,
-        "additional_storage_bytes": 722980
+        "download_bytes": 174580,
+        "additional_storage_bytes": 724895
       },
       "mobile": {
         "runtime": "embedded"
-      }
+      },
+      "about": "Browse websites alongside your work. Keep pages open in tabs and bring useful page context into conversations with Misty.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/browser"
     },
     {
       "id": "code",
@@ -424,7 +468,9 @@ const generatedCatalog = `{
       },
       "mobile": {
         "runtime": "unsupported"
-      }
+      },
+      "about": "Work on projects in an integrated editor. Browse project files and use development tools without leaving your workspace.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/code"
     },
     {
       "id": "terminal",
@@ -456,7 +502,9 @@ const generatedCatalog = `{
       },
       "mobile": {
         "runtime": "unsupported"
-      }
+      },
+      "about": "Run commands and work with command-line tools inside Misty. Keep terminal sessions alongside your files and projects.",
+      "repository_url": "https://github.com/misty-org/misty-apps/tree/main/apps/terminal"
     }
   ],
   "signing": {
@@ -483,6 +531,7 @@ func All() []App {
 	result := make([]App, len(officialApps))
 	copy(result, officialApps)
 	for index := range result {
+		result[index].RequiresApps = append([]string(nil), result[index].RequiresApps...)
 		result[index].Scopes = append([]string(nil), result[index].Scopes...)
 	}
 	return result
@@ -492,6 +541,7 @@ func Find(id string) (App, bool) {
 	id = strings.TrimSpace(strings.ToLower(id))
 	for _, candidate := range officialApps {
 		if candidate.ID == id {
+			candidate.RequiresApps = append([]string(nil), candidate.RequiresApps...)
 			candidate.Scopes = append([]string(nil), candidate.Scopes...)
 			return candidate, true
 		}

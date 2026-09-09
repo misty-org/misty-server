@@ -8,16 +8,35 @@ import { ControlPlaneError } from "../src/control-plane-error.js";
 import {
   classifyMCPTransportError,
   classifyRuntimeError,
+  stoppedAtModelTurnLimit,
   classifyToolCompletion,
   incompleteToolResultText,
   recoverableToolError,
-  selectActiveRuntimeToolKeys,
   stopOnRepeatedOrTerminalToolFailure,
-  taskCreateInputSchema,
   toolFailureSignature,
 } from "../workflows/space-task-agent.js";
 
 describe("runtime error classification", () => {
+  it("does not treat tool calls at the step limit as a finished answer", () => {
+    expect(stoppedAtModelTurnLimit(20, "tool-calls")).toBe(true);
+    expect(stoppedAtModelTurnLimit(20, "length")).toBe(true);
+    expect(stoppedAtModelTurnLimit(20, "stop")).toBe(false);
+    expect(stoppedAtModelTurnLimit(19, "tool-calls")).toBe(false);
+  });
+  it("stops on a durable model budget limit instead of retrying it as invalid input", () => {
+    const error = new ControlPlaneError(422, "agent_model_turn_limit", "agent_model_turn_limit");
+    expect(error.transient).toBe(false);
+    expect(recoverableToolError(error)).toBeNull();
+    expect(classifyRuntimeError(error).code).toBe("agent_model_turn_limit");
+    expect(classifyRuntimeError(new Error("agent_model_turn_limit")).code).toBe("agent_model_turn_limit");
+  });
+  it("treats execution-time exhaustion as a terminal budget outcome", async () => {
+    const error = new ControlPlaneError(422, "agent_execution_time_limit", "agent_execution_time_limit");
+    expect(error.transient).toBe(false);
+    expect(recoverableToolError(error)).toBeNull();
+    expect(classifyRuntimeError(error).code).toBe("agent_execution_time_limit");
+    expect(await stopOnRepeatedOrTerminalToolFailure({ steps: [{ content: [{ type: "tool-error", toolName: "notes.create", input: {}, error }] }] } as never)).toBe(true);
+  });
   it("retries only transient control-plane responses", () => {
     expect(new ControlPlaneError(503, "unavailable").transient).toBe(true);
     expect(new ControlPlaneError(429, "limited").transient).toBe(true);
@@ -133,32 +152,6 @@ describe("runtime error classification", () => {
 });
 
 describe("tool completion classification", () => {
-  it("uses the MCP catalog as the production tool availability authority", () => {
-    const names = {
-      context_get: "context.get",
-      weather_current: "weather.current",
-    };
-    const allowed = ["context.get", "weather.current"];
-    expect(
-      selectActiveRuntimeToolKeys(names, allowed, {
-        supported: true,
-        advertisedToolNames: ["context.get"],
-      }),
-    ).toEqual(["context_get"]);
-    expect(
-      selectActiveRuntimeToolKeys(names, allowed, {
-        supported: true,
-        advertisedToolNames: allowed,
-      }),
-    ).toEqual(["context_get", "weather_current"]);
-    expect(
-      selectActiveRuntimeToolKeys(names, allowed, {
-        supported: false,
-        advertisedToolNames: [],
-      }),
-    ).toEqual(["context_get", "weather_current"]);
-  });
-
   it("does not report success after a failed tool action", () => {
     expect(classifyToolCompletion(["tasks_create", "tasks_create"])).toEqual({
       status: "incomplete",
@@ -173,28 +166,6 @@ describe("tool completion classification", () => {
     expect(visible).toContain("couldn't fully complete");
     expect(visible).toContain("tasks create");
     expect(visible).not.toContain("success");
-  });
-
-  it("only offers task statuses accepted by Misty", () => {
-    expect(
-      taskCreateInputSchema.safeParse({ title: "Algebra", status: "pending" })
-        .success,
-    ).toBe(false);
-    expect(
-      taskCreateInputSchema.safeParse({
-        title: "Algebra",
-        status: "todo",
-        dueAt: "2026-08-19T05:00:00Z",
-        dueTimezone: "America/Los_Angeles",
-        assigneeUserId: "user_melissa",
-      }).success,
-    ).toBe(true);
-    expect(
-      taskCreateInputSchema.safeParse({
-        title: "Algebra",
-        dueAt: "2024-11-21T19:00:00",
-      }).success,
-    ).toBe(false);
   });
 
   it("uses stable call signatures and stops poisoned tool loops", async () => {

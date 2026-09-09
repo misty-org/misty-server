@@ -46,6 +46,7 @@ type SpacesService struct {
 	figmaProviderFactory     FigmaProviderFactory
 	mcpConnectorClient       mcpintegration.ConnectorClient
 	managedActivepieces      ManagedActivepiecesClient
+	sdkBackendClientFactory  func(string, string) (*http.Client, error)
 }
 
 func (s *SpacesService) TestingSetFigmaProviderFactory(factory FigmaProviderFactory) {
@@ -59,6 +60,7 @@ func (s *SpacesService) figmaProvider(token string) FigmaProvider {
 }
 
 func (s *SpacesService) SetAgentRuntime(config AgentRuntimeConfig) {
+	config.database = s.database
 	s.agentRuntime = config
 }
 

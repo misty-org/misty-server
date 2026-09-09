@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/google/uuid"
 	"strings"
 	"time"
 )
@@ -33,7 +34,7 @@ func (db *Database) ValidatePersonalAgentTaskRun(ctx context.Context, userID, ru
 		if !active {
 			return ErrSpaceForbidden
 		}
-		_, err := activePersonalAgentMembershipTx(ctx, tx, userID, spaceID, agentID)
+		_, err := askExecutionContextTx(ctx, tx, userID, spaceID, agentID)
 		return err
 	})
 }
@@ -196,11 +197,11 @@ func (db *Database) MarkPersonalAgentTaskRunDispatched(ctx context.Context, runI
 	return out, err
 }
 
-func (db *Database) ValidatePersonalAgentTaskRuntime(ctx context.Context, runID, runtimeRunID string) (*SpaceRun, *SpaceTask, error) {
+func (db *Database) ValidatePersonalAgentTaskRuntime(ctx context.Context, runID, runtimeRunID string, allowIntervention ...bool) (*SpaceRun, *SpaceTask, error) {
 	run := &SpaceRun{}
 	task := &SpaceTask{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs r WHERE r.id=$1 AND r.runtime_run_id=$2 AND r.state='running'`, runID, runtimeRunID), run); err != nil {
+		if err := scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs r WHERE r.id=$1 AND r.runtime_run_id=$2 AND (r.state='running' OR ($3 AND r.state='awaiting_intervention'))`, runID, runtimeRunID, len(allowIntervention) > 0 && allowIntervention[0]), run); err != nil {
 			return err
 		}
 		if run.SourceTaskID != "" {
@@ -213,7 +214,7 @@ func (db *Database) ValidatePersonalAgentTaskRuntime(ctx context.Context, runID,
 				return ErrSpaceForbidden
 			}
 		}
-		_, err := activePersonalAgentMembershipTx(ctx, tx, run.OwnerUserID, run.SpaceID, run.AgentID)
+		_, err := askExecutionContextTx(ctx, tx, run.OwnerUserID, run.SpaceID, run.AgentID)
 		return err
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -229,7 +230,7 @@ func (db *Database) RenewPersonalAgentTaskRunLease(ctx context.Context, runID, w
 	active := false
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `UPDATE agent_run_jobs j SET lease_expires_at=$1,updated_at=NOW()
-			FROM space_runs r,space_tasks t,personal_agents a
+			FROM space_runs r,space_tasks t,misty_ask_identities a
 			WHERE j.run_id=$2 AND j.lease_owner=$3 AND j.state='leased' AND r.id=j.run_id AND r.state='running'
 			  AND t.id=j.task_id AND t.assignee_agent_id=j.agent_id AND t.archived_at IS NULL
 			  AND a.id=j.agent_id AND a.owner_user_id=r.owner_user_id AND a.enabled AND a.deleted_at IS NULL
@@ -323,84 +324,76 @@ func (db *Database) PersonalAgentTaskRunJobState(ctx context.Context, runID stri
 	return state, attempt, err
 }
 
-// ReconcileStalePersonalAgentTaskRuns recovers workflows that were accepted by
-// the runtime but stopped heartbeating before a terminal callback reached Go.
-// Clearing the runtime binding also makes any late callback from the abandoned
-// workflow fail authorization before it can produce another side effect.
+// ReconcileStalePersonalAgentTaskRuns preserves the pinned runtime. A missed
+// heartbeat is never permission to restart the prompt and repeat its effects.
 func (db *Database) ReconcileStalePersonalAgentTaskRuns(ctx context.Context, staleBefore time.Time, limit int) (int, error) {
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
-	reconciled := 0
+	count := 0
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT j.run_id,j.space_id,j.task_id,j.agent_id,j.attempt
-			FROM agent_run_jobs j JOIN space_runs r ON r.id=j.run_id
-			WHERE j.state='dispatched' AND r.execution_owner='go' AND r.state='running'
-			  AND COALESCE(r.runtime_heartbeat_at,r.updated_at)<$1
-			ORDER BY COALESCE(r.runtime_heartbeat_at,r.updated_at),j.created_at
-			FOR UPDATE OF j,r SKIP LOCKED LIMIT $2`, staleBefore, limit)
+		rows, err := tx.QueryContext(ctx, `SELECT r.id,r.owner_user_id,r.runtime_run_id FROM agent_run_jobs j JOIN space_runs r ON r.id=j.run_id
+   WHERE j.state='dispatched' AND r.execution_owner='go' AND r.state IN ('running','awaiting_approval','awaiting_device','awaiting_intervention') AND r.runtime_run_id<>''
+    AND COALESCE(r.runtime_heartbeat_at,r.updated_at)<$1
+   ORDER BY COALESCE(r.runtime_heartbeat_at,r.updated_at) FOR UPDATE OF j,r SKIP LOCKED LIMIT $2`, staleBefore, limit)
 		if err != nil {
 			return err
 		}
-		type staleRun struct {
-			runID, spaceID, taskID, agentID string
-			attempt                         int
-		}
-		items := []staleRun{}
+		type item struct{ runID, userID, runtimeID string }
+		items := []item{}
 		for rows.Next() {
-			var item staleRun
-			var taskID sql.NullString
-			if err := rows.Scan(&item.runID, &item.spaceID, &taskID, &item.agentID, &item.attempt); err != nil {
+			var i item
+			if err := rows.Scan(&i.runID, &i.userID, &i.runtimeID); err != nil {
 				rows.Close()
 				return err
 			}
-			item.taskID = taskID.String
-			items = append(items, item)
+			items = append(items, i)
 		}
-		if err := rows.Close(); err != nil {
+		if err := rows.Err(); err != nil {
+			rows.Close()
 			return err
 		}
-		for _, item := range items {
-			if err := releasePersonalAgentRuntimeReservationsTx(ctx, tx, item.runID); err != nil {
+		rows.Close()
+		for _, i := range items {
+			if err := queueAgentContinuationTx(ctx, tx, i.userID, i.runID, "runtime.reconcile", i.runtimeID+":"+uuid.NewString(), AgentContinuation{RuntimeID: i.runtimeID}); err != nil {
 				return err
 			}
-			if item.attempt < 3 {
-				if _, err := tx.ExecContext(ctx, `UPDATE agent_run_jobs SET state='queued',available_at=NOW(),
-					lease_owner=NULL,lease_expires_at=NULL,last_error_code='runtime_heartbeat_stale',
-					last_error_message='The Agent runtime stopped reporting progress',updated_at=NOW() WHERE run_id=$1`, item.runID); err != nil {
-					return err
-				}
-				if _, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='queued',runtime_run_id='',runtime_phase='recovering',
-					runtime_heartbeat_at=NULL,next_retry_at=NOW(),error_code='runtime_heartbeat_stale',
-					error_message='The Agent runtime stopped reporting progress',updated_at=NOW() WHERE id=$1`, item.runID); err != nil {
-					return err
-				}
-				if item.taskID != "" {
-					if _, err := insertTaskActivityTx(ctx, tx, SpaceTaskActivity{SpaceID: item.spaceID, TaskID: item.taskID, ActorKind: "agent", ActorAgentID: item.agentID,
-						RunID: item.runID, Kind: "status", Message: "Agent runtime was interrupted and will recover", Metadata: mustJSON(map[string]any{"reason": "runtime_heartbeat_stale", "attempt": item.attempt})}); err != nil {
-						return err
-					}
-				}
-			} else {
-				failure := mustJSON(map[string]any{"message": "The Agent runtime stopped reporting progress", "error_code": "runtime_heartbeat_stale"})
-				if _, err := tx.ExecContext(ctx, `UPDATE agent_run_jobs SET state='failed',completed_at=NOW(),
-					last_error_code='runtime_heartbeat_stale',last_error_message='The Agent runtime stopped reporting progress',updated_at=NOW() WHERE run_id=$1`, item.runID); err != nil {
-					return err
-				}
-				if _, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='failed',runtime_phase='needs_attention',result=$2,outputs=$2,
-					error_code='runtime_heartbeat_stale',error_message='The Agent runtime stopped reporting progress',completed_at=NOW(),updated_at=NOW() WHERE id=$1`, item.runID, failure); err != nil {
-					return err
-				}
-				if item.taskID != "" {
-					if _, err := insertTaskActivityTx(ctx, tx, SpaceTaskActivity{SpaceID: item.spaceID, TaskID: item.taskID, ActorKind: "agent", ActorAgentID: item.agentID,
-						RunID: item.runID, Kind: "failure", Message: "Agent work needs attention because the runtime stopped responding", Metadata: mustJSON(map[string]any{"reason": "runtime_heartbeat_stale", "runtime_final": true})}); err != nil {
-						return err
-					}
-				}
+			if _, err := tx.ExecContext(ctx, `UPDATE space_runs SET runtime_phase=CASE WHEN state='running' THEN 'recovering' ELSE runtime_phase END,runtime_heartbeat_at=NOW(),updated_at=NOW() WHERE id=$1`, i.runID); err != nil {
+				return err
 			}
-			reconciled++
+			count++
 		}
 		return nil
 	})
-	return reconciled, err
+	return count, err
+}
+
+func (db *Database) RecordAgentRuntimeStatus(ctx context.Context, runID, runtimeID, status string) error {
+	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		switch status {
+		case "pending", "running":
+			_, err := tx.ExecContext(ctx, `UPDATE space_runs SET runtime_heartbeat_at=NOW(),runtime_phase=CASE WHEN runtime_phase='recovering' THEN 'working' ELSE runtime_phase END,updated_at=NOW()
+    WHERE id=$1 AND runtime_run_id=$2 AND state IN ('running','awaiting_approval','awaiting_device','awaiting_intervention')`, runID, runtimeID)
+			return err
+		case "completed", "failed", "cancelled", "missing":
+			// The durable completion callback, not a model's final text or workflow exit,
+			// is authoritative for successful completion. Preserve all existing outputs.
+			result, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='failed',runtime_phase='needs_attention',
+    error_code='runtime_reconciliation_required',error_message='The pinned runtime stopped without a confirmed completion. Review completed and uncertain actions before recovery.',
+    completed_at=NOW(),updated_at=NOW() WHERE id=$1 AND runtime_run_id=$2 AND state IN ('running','awaiting_approval','awaiting_device','awaiting_intervention')`, runID, runtimeID)
+			if err != nil {
+				return err
+			}
+			n, err := result.RowsAffected()
+			if err != nil || n == 0 {
+				return err
+			}
+			if _, err = tx.ExecContext(ctx, `UPDATE agent_run_jobs SET state='failed',completed_at=NOW(),updated_at=NOW() WHERE run_id=$1 AND state='dispatched'`, runID); err != nil {
+				return err
+			}
+			return releasePersonalAgentRuntimeReservationsTx(ctx, tx, runID)
+		default:
+			return ErrSpaceInvalid
+		}
+	})
 }

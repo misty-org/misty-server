@@ -58,7 +58,7 @@ func (s *SpacesService) executeWorkflowNodeV2(ctx context.Context, run *db.Space
 		case "calendar_query":
 			return s.calendarQueryNode(ctx, run, invocation)
 		case "changed_files":
-			return s.changedFilesNode(ctx, run, invocation)
+			return nil, workflowv2.ErrProviderMissing
 		case "read_content":
 			prepared, err := s.prepareContentInvocation(ctx, run, invocation)
 			if err != nil {
@@ -135,9 +135,6 @@ func (s *SpacesService) executeWorkflowNodeV2(ctx context.Context, run *db.Space
 		case "notify_private":
 			eventID, err := s.database.NotifyWorkflowResult(ctx, run.ID, invocation.NodeID, invocation.Input)
 			return TestingMustAPIRawJSON(map[string]any{"notified": err == nil, "eventId": eventID}), err
-		case "memory_write":
-			id, err := s.database.WriteAgentMemoryEvent(ctx, run.AgentInstanceID, "workflow", invocation.Input)
-			return TestingMustAPIRawJSON(map[string]any{"written": err == nil, "memoryEventId": id}), err
 		case "create_task":
 			return s.createTaskNode(ctx, run, agent, invocation)
 		case "update_task":
@@ -223,7 +220,7 @@ func (s *SpacesService) executeWorkflowNodeV2(ctx context.Context, run *db.Space
 			return nil, workflowv2.ErrAwaitingApproval
 		}
 	}
-	if descriptor.Risk == workflowv2.RiskWrite && descriptor.Kind != "notify_private" && descriptor.Kind != "memory_write" {
+	if descriptor.Risk == workflowv2.RiskWrite && descriptor.Kind != "notify_private" {
 		var config struct {
 			Provider     string `json:"provider"`
 			ConnectionID string `json:"connectionId"`
@@ -240,26 +237,13 @@ func (s *SpacesService) executeWorkflowNodeV2(ctx context.Context, run *db.Space
 				}
 			}
 		}
-		if config.ConnectionID == "" && config.Provider != "" {
-			config.ConnectionID, _ = s.database.ResolveAgentProviderConnection(ctx, run.RequestingMemberID, run.SpaceID, run.AgentInstanceID, config.Provider)
+		approvalInput := TestingWorkflowApprovalEnvelope(run, descriptor.Kind, config.Provider, config.ConnectionID, config.Destination, invocation.Input)
+		approved, approvalErr := s.database.EnsureWorkflowNodeApproval(ctx, run.ID, invocation.NodeID, descriptor.Kind, approvalInput)
+		if approvalErr != nil {
+			return nil, approvalErr
 		}
-		authorized := false
-		if config.Provider != "slack" && config.Provider != "discord" && descriptor.Kind != "update_task" {
-			var authErr error
-			authorized, authErr = s.database.WorkflowWritePreauthorized(ctx, run.RequestingMemberID, run.AgentInstanceID, run.WorkflowVersionID, invocation.NodeID, config.Provider, config.ConnectionID, config.Destination)
-			if authErr != nil {
-				return nil, authErr
-			}
-		}
-		if !authorized {
-			approvalInput := TestingWorkflowApprovalEnvelope(run, descriptor.Kind, config.Provider, config.ConnectionID, config.Destination, invocation.Input)
-			approved, approvalErr := s.database.EnsureWorkflowNodeApproval(ctx, run.ID, invocation.NodeID, descriptor.Kind, approvalInput)
-			if approvalErr != nil {
-				return nil, approvalErr
-			}
-			if !approved {
-				return nil, workflowv2.ErrAwaitingApproval
-			}
+		if !approved {
+			return nil, workflowv2.ErrAwaitingApproval
 		}
 	}
 	resourceKey, fingerprint := TestingWorkflowResourceIdentity(invocation.Config, invocation.Input)

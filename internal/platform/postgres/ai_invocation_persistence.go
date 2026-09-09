@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type AIInvocationRecord struct {
+	DispatchRuntime    bool
 	ID                 string
 	UserID             string
 	SpaceID            string
@@ -32,9 +34,31 @@ type AIInvocationRecord struct {
 // CreateAIInvocationRecord makes the database idempotency journal the durable
 // authority. The returned boolean is false when a retry found the existing row.
 func (db *Database) CreateAIInvocationRecord(ctx context.Context, record AIInvocationRecord) (AIInvocationRecord, bool, error) {
+	bound, bindErr := bindAppAuthority(ctx, record.RequestPayload)
+	if bindErr != nil {
+		return AIInvocationRecord{}, false, bindErr
+	}
+	record.RequestPayload = bound
+	if err := db.ValidateAppExecutionAuthority(ctx, AppAuthorityFromContext(ctx), record.UserID, record.SpaceID, "ai.write"); err != nil {
+		return AIInvocationRecord{}, false, err
+	}
+	var stored AIInvocationRecord
+	var created bool
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(record.UserID), func(tx *sql.Tx) error {
+		var err error
+		stored, created, err = createAIInvocationRecordTx(ctx, tx, record)
+		return err
+	})
+	return stored, created, err
+}
+
+// Shared by ordinary AI requests and deterministic SDK admissions. The caller
+// can commit its pinned request metadata in this same transaction.
+func createAIInvocationRecordTx(ctx context.Context, tx *sql.Tx, record AIInvocationRecord) (AIInvocationRecord, bool, error) {
 	stored := AIInvocationRecord{}
 	created := false
-	err := db.TestingWithRLSContext(ctx, userRLSSettings(record.UserID), func(tx *sql.Tx) error {
+	err := func() error {
+
 		if record.SpaceID != "" {
 			var member bool
 			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_members WHERE space_id=$1 AND user_id=$2)`, record.SpaceID, record.UserID).Scan(&member); err != nil {
@@ -66,8 +90,21 @@ func (db *Database) CreateAIInvocationRecord(ctx context.Context, record AIInvoc
 			&stored.RuntimeKind, &stored.RuntimeRunID, &stored.AgentRunID, &stored.RuntimeHeartbeatAt, &stored.ExpiresAt, &stored.CreatedAt, &stored.UpdatedAt, &inserted,
 		)
 		created = inserted
+		if err == nil && created && record.SurfaceID != "sdk" && record.SurfaceID != "routine" {
+			if pinErr := pinAgentSDKCapabilitiesTx(ctx, tx, stored.ID, stored.UserID, stored.SpaceID, "", stored.RequestPayload); pinErr != nil {
+				return pinErr
+			}
+		}
+		if err == nil && created && record.DispatchRuntime {
+			// Admission and dispatch intent commit together. Service context applies
+			// only to the private delivery row; invocation ownership was checked above.
+			if _, setErr := tx.ExecContext(ctx, `SELECT set_config('app.rls_mode','service',true)`); setErr != nil {
+				return setErr
+			}
+			_, err = tx.ExecContext(ctx, `INSERT INTO agent_runtime_deliveries(id,user_id,run_id,operation) VALUES($1,$2,$3,'invocation.start')`, "start:"+stored.ID, stored.UserID, stored.ID)
+		}
 		return err
-	})
+	}()
 	return stored, created, err
 }
 
@@ -136,7 +173,7 @@ func (db *Database) ValidateAIInvocationRuntime(ctx context.Context, invocationI
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `SELECT id,user_id,COALESCE(space_id,''),COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
 			runtime_kind,runtime_run_id,COALESCE(agent_run_id,''),runtime_heartbeat_at,expires_at,created_at,updated_at
-			FROM ai_invocations WHERE id=$1 AND runtime_run_id=$2 AND state IN ('running','awaiting_approval')`, invocationID, runtimeRunID).Scan(
+			FROM ai_invocations WHERE id=$1 AND runtime_run_id=$2 AND state IN ('running','awaiting_approval','awaiting_device','awaiting_intervention','awaiting_timer')`, invocationID, runtimeRunID).Scan(
 			&out.ID, &out.UserID, &out.SpaceID, &out.ConversationID, &out.SurfaceID, &out.Mode, &out.Trigger, &out.State, &out.IdempotencyKey, &out.RequestPayload,
 			&out.RuntimeKind, &out.RuntimeRunID, &out.AgentRunID, &out.RuntimeHeartbeatAt, &out.ExpiresAt, &out.CreatedAt, &out.UpdatedAt)
 	})
@@ -164,7 +201,7 @@ func (db *Database) AIInvocationRuntimeRecord(ctx context.Context, invocationID,
 func (db *Database) TouchAIInvocationRuntime(ctx context.Context, invocationID, runtimeRunID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET runtime_heartbeat_at=NOW(),updated_at=NOW()
-			WHERE id=$1 AND runtime_run_id=$2 AND state IN ('running','awaiting_approval')`, invocationID, runtimeRunID)
+			WHERE id=$1 AND runtime_run_id=$2 AND state IN ('running','awaiting_approval','awaiting_device','awaiting_intervention','awaiting_timer')`, invocationID, runtimeRunID)
 		if err != nil {
 			return err
 		}
@@ -177,28 +214,11 @@ func (db *Database) TouchAIInvocationRuntime(ctx context.Context, invocationID, 
 }
 
 func (db *Database) AppendAIInvocationEvent(ctx context.Context, userID, invocationID string, sequence int64, eventType string, payload json.RawMessage, state string) error {
-	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO ai_invocation_events(invocation_id,sequence,event_type,payload)
-			SELECT $1,$2,$3,$4 FROM ai_invocations WHERE id=$1 AND user_id=$5
-			ON CONFLICT(invocation_id,sequence) DO NOTHING
-		`, invocationID, sequence, eventType, payload, userID); err != nil {
-			return err
-		}
-		result, err := tx.ExecContext(ctx, `
-			UPDATE ai_invocations SET state=$1,updated_at=NOW(),
-				canceled_at=CASE WHEN $1='canceled' THEN NOW() ELSE canceled_at END
-			WHERE id=$2 AND user_id=$3
-		`, state, invocationID, userID)
-		if err != nil {
-			return err
-		}
-		rows, err := result.RowsAffected()
-		if err == nil && rows == 0 {
-			return ErrSpaceNotFound
-		}
-		return err
-	})
+	if sequence < 1 {
+		return ErrSpaceInvalid
+	}
+	_, err := db.CommitAIInvocationEvent(ctx, userID, invocationID, "compat:"+strconv.FormatInt(sequence, 10), eventType, payload, state)
+	return err
 }
 
 type AIInvocationEventRecord struct {

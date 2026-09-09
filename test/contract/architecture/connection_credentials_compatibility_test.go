@@ -11,7 +11,7 @@ import (
 )
 
 func TestNodeAndGoConnectionCredentialCompatibility(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/migration/fixtures/connection-credentials.json")
+	raw, err := os.ReadFile("../../../test/fixtures/compatibility/connection-credentials.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestNodeAndGoConnectionCredentialCompatibility(t *testing.T) {
 }
 
 func TestNodeAndGoLegacyProviderCredentialCompatibility(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/migration/fixtures/legacy-provider-credentials.json")
+	raw, err := os.ReadFile("../../../test/fixtures/compatibility/legacy-provider-credentials.json")
 	if err != nil {
 		t.Fatal(err)
 	}

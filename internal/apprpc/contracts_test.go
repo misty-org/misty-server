@@ -104,6 +104,22 @@ func TestDispatchPreservesDomainChecksBodyCancellationAndResponse(t *testing.T) 
 
 type testContextKey struct{}
 
+func TestCapabilityAccountMethodsPreserveOwnedProviderIdentity(t *testing.T) {
+	target, err := Resolve(Request{Protocol: 2, Method: "capabilities.discover", Params: Params{Body: json.RawMessage(`{"limit":50}`)}}, "")
+	if err != nil || target.Path != "/capabilities/discover" {
+		t.Fatalf("account discovery: %#v %v", target, err)
+	}
+	target, err = Resolve(Request{Protocol: 2, Method: "capabilities.providers.unregister", Params: Params{Path: map[string]string{"providerID": "example.habits/backend"}}}, "")
+	if err != nil || target.Path != "/capabilities/providers/example.habits%2Fbackend" {
+		t.Fatalf("provider identity: %#v %v", target, err)
+	}
+	for _, invalid := range []string{"example.habits/../secret", "example.habits/backend/extra", "example.habits%2fbackend"} {
+		if _, err := Resolve(Request{Protocol: 2, Method: "capabilities.providers.unregister", Params: Params{Path: map[string]string{"providerID": invalid}}}, ""); err == nil {
+			t.Fatalf("accepted provider traversal %s", invalid)
+		}
+	}
+}
+
 func TestDeniedMethodNeverReachesDomainHandler(t *testing.T) {
 	dispatched := false
 	handler := Handler{Prefix: "/v1", Dispatch: http.HandlerFunc(func(http.ResponseWriter, *http.Request) { dispatched = true }),

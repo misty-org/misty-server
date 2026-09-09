@@ -42,11 +42,11 @@ func (db *Database) RecordAIProactiveEvent(ctx context.Context, userID, surfaceI
 				proactive_snoozed_until=$3::timestamptz+INTERVAL '7 days',updated_at=NOW()
 				WHERE user_id=$1 AND surface_id=$2 AND proactive_enabled`
 		}
-		query += ` RETURNING surface_id,COALESCE(pinned_agent_id,''),proactive_enabled,
+		query += ` RETURNING surface_id,proactive_enabled,
 			proactive_cooldown_minutes,proactive_snoozed_until,proactive_last_shown_at,
 			proactive_dismissed_at,saved_actions,updated_at`
 		err := tx.QueryRowContext(ctx, query, arguments...).Scan(
-			&out.SurfaceID, &out.PinnedAgentID, &out.Proactive, &out.ProactiveCooldownMinutes,
+			&out.SurfaceID, &out.Proactive, &out.ProactiveCooldownMinutes,
 			&out.ProactiveSnoozedUntil, &out.ProactiveLastShownAt, &out.ProactiveDismissedAt,
 			&out.SavedActions, &out.UpdatedAt,
 		)

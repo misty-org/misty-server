@@ -20,13 +20,6 @@ type explicitTaskSourceRef struct {
 	Version     any    `json:"version,omitempty"`
 }
 
-func (s *SpacesService) queueAssignedPersonalAgent(ctx context.Context, userID string, task *db.SpaceTask) {
-	if task == nil || task.AssigneeAgentID == "" {
-		return
-	}
-	_, _, _ = s.database.ClaimAssignedAgentTaskRun(ctx, userID, *task)
-}
-
 func (s *SpacesService) resolveAssignedTaskToolbox(ctx context.Context, run *db.SpaceRun) (*agenttools.Registry, agenttools.Invocation, serveragent.ToolManifest, error) {
 	registrations := []agenttools.Registration{
 		agenttools.Registration{Descriptor: assignedTasksQueryToolDescriptor(), Handler: func(toolCtx context.Context, _ agenttools.Invocation, tool serveragent.ToolRequest) (json.RawMessage, error) {
@@ -45,7 +38,7 @@ func (s *SpacesService) resolveAssignedTaskToolbox(ctx context.Context, run *db.
 	requested := []string{toolboxTasksQuery, "tasks.update_assigned", "task.activity.write", "attached_files.read"}
 	if contexts, contextErr := s.database.AgentRunDeviceGrants(ctx, run.OwnerUserID, run.ID); contextErr == nil {
 		for _, descriptor := range browserToolDescriptors() {
-			if !activeBrowserCapability(contexts, descriptor.Name) {
+			if !activeBrowserRuntimeCapability(contexts, descriptor.Name) {
 				continue
 			}
 			registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: func(toolCtx context.Context, _ agenttools.Invocation, tool serveragent.ToolRequest) (json.RawMessage, error) {
@@ -108,6 +101,9 @@ func assignedTaskActivityToolDescriptor() agenttools.Descriptor {
 
 func authorizePersonalAgentTaskTool(database *db.Database) agenttools.Authorizer {
 	return func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor) (bool, error) {
+		if allowed, err := authorizeAppRuntimeTool(ctx, database, invocation, descriptor); err != nil || !allowed {
+			return false, err
+		}
 		if strings.HasPrefix(descriptor.Name, "mcp.") {
 			return authorizeMCPAgentTool(ctx, database, invocation, descriptor)
 		}

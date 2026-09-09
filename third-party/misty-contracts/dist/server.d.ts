@@ -54,29 +54,6 @@ export declare const mistyServerContracts: {
                 joined_at: z.ZodString;
                 read_message_seq: z.ZodNumber;
             }, z.core.$loose>>>;
-            agents: z.ZodNullable<z.ZodArray<z.ZodObject<{
-                id: z.ZodString;
-                space_id: z.ZodString;
-                agent_id: z.ZodString;
-                owner_user_id: z.ZodString;
-                can_control: z.ZodBoolean;
-                name: z.ZodString;
-                description: z.ZodString;
-                icon: z.ZodString;
-                avatar: z.ZodJSONSchema;
-                instructions: z.ZodOptional<z.ZodString>;
-                model_id: z.ZodOptional<z.ZodString>;
-                reasoning_effort: z.ZodOptional<z.ZodString>;
-                default_run_mode: z.ZodString;
-                enabled: z.ZodBoolean;
-                version: z.ZodNumber;
-                created_at: z.ZodString;
-                updated_at: z.ZodString;
-                work_state: z.ZodString;
-                attention_count: z.ZodNumber;
-                last_activity_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
-                current_task_id: z.ZodOptional<z.ZodString>;
-            }, z.core.$loose>>>;
         }, z.core.$loose>;
     };
     readonly "notes.list": {
@@ -439,7 +416,6 @@ export declare const mistyServerContracts: {
                     low: "low";
                 }>>;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
                 q: z.ZodOptional<z.ZodString>;
                 due_from: z.ZodOptional<z.ZodISODateTime>;
                 due_to: z.ZodOptional<z.ZodISODateTime>;
@@ -471,18 +447,6 @@ export declare const mistyServerContracts: {
                 priority: z.ZodString;
                 rank: z.ZodNumber;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
-                agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                    mode: z.ZodOptional<z.ZodString>;
-                    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                        device_id: z.ZodString;
-                        kind: z.ZodString;
-                        opaque_ref: z.ZodString;
-                        display_name: z.ZodOptional<z.ZodString>;
-                        capabilities: z.ZodJSONSchema;
-                        metadata: z.ZodOptional<z.ZodJSONSchema>;
-                    }, z.core.$loose>>>>;
-                }, z.core.$loose>>>;
                 due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                 due_timezone: z.ZodString;
                 source_refs: z.ZodJSONSchema;
@@ -526,24 +490,12 @@ export declare const mistyServerContracts: {
                     low: "low";
                 }>>;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
                 due_at: z.ZodOptional<z.ZodNullable<z.ZodISODateTime>>;
                 due_timezone: z.ZodOptional<z.ZodString>;
                 source_refs: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
                     kind: z.ZodString;
                     resource_id: z.ZodString;
                 }, z.core.$loose>>>>;
-                agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                    mode: z.ZodOptional<z.ZodString>;
-                    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                        device_id: z.ZodString;
-                        kind: z.ZodString;
-                        opaque_ref: z.ZodString;
-                        display_name: z.ZodOptional<z.ZodString>;
-                        capabilities: z.ZodJSONSchema;
-                        metadata: z.ZodOptional<z.ZodJSONSchema>;
-                    }, z.core.$loose>>>>;
-                }, z.core.$loose>>>;
             }, z.core.$strict>;
             path: z.ZodOptional<z.ZodObject<{
                 spaceID: z.ZodOptional<z.ZodString>;
@@ -560,18 +512,6 @@ export declare const mistyServerContracts: {
             priority: z.ZodString;
             rank: z.ZodNumber;
             assignee_user_id: z.ZodOptional<z.ZodString>;
-            assignee_agent_id: z.ZodOptional<z.ZodString>;
-            agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                mode: z.ZodOptional<z.ZodString>;
-                context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                    device_id: z.ZodString;
-                    kind: z.ZodString;
-                    opaque_ref: z.ZodString;
-                    display_name: z.ZodOptional<z.ZodString>;
-                    capabilities: z.ZodJSONSchema;
-                    metadata: z.ZodOptional<z.ZodJSONSchema>;
-                }, z.core.$loose>>>>;
-            }, z.core.$loose>>>;
             due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
             due_timezone: z.ZodString;
             source_refs: z.ZodJSONSchema;
@@ -635,24 +575,12 @@ export declare const mistyServerContracts: {
                     low: "low";
                 }>>;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
                 due_at: z.ZodOptional<z.ZodNullable<z.ZodISODateTime>>;
                 due_timezone: z.ZodOptional<z.ZodString>;
                 source_refs: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
                     kind: z.ZodString;
                     resource_id: z.ZodString;
                 }, z.core.$loose>>>>;
-                agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                    mode: z.ZodOptional<z.ZodString>;
-                    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                        device_id: z.ZodString;
-                        kind: z.ZodString;
-                        opaque_ref: z.ZodString;
-                        display_name: z.ZodOptional<z.ZodString>;
-                        capabilities: z.ZodJSONSchema;
-                        metadata: z.ZodOptional<z.ZodJSONSchema>;
-                    }, z.core.$loose>>>>;
-                }, z.core.$loose>>>;
             }, z.core.$loose>;
         }, z.core.$strict>;
         readonly result: z.ZodObject<{
@@ -666,18 +594,6 @@ export declare const mistyServerContracts: {
             priority: z.ZodString;
             rank: z.ZodNumber;
             assignee_user_id: z.ZodOptional<z.ZodString>;
-            assignee_agent_id: z.ZodOptional<z.ZodString>;
-            agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                mode: z.ZodOptional<z.ZodString>;
-                context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                    device_id: z.ZodString;
-                    kind: z.ZodString;
-                    opaque_ref: z.ZodString;
-                    display_name: z.ZodOptional<z.ZodString>;
-                    capabilities: z.ZodJSONSchema;
-                    metadata: z.ZodOptional<z.ZodJSONSchema>;
-                }, z.core.$loose>>>>;
-            }, z.core.$loose>>>;
             due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
             due_timezone: z.ZodString;
             source_refs: z.ZodJSONSchema;
@@ -720,18 +636,6 @@ export declare const mistyServerContracts: {
             priority: z.ZodString;
             rank: z.ZodNumber;
             assignee_user_id: z.ZodOptional<z.ZodString>;
-            assignee_agent_id: z.ZodOptional<z.ZodString>;
-            agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                mode: z.ZodOptional<z.ZodString>;
-                context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                    device_id: z.ZodString;
-                    kind: z.ZodString;
-                    opaque_ref: z.ZodString;
-                    display_name: z.ZodOptional<z.ZodString>;
-                    capabilities: z.ZodJSONSchema;
-                    metadata: z.ZodOptional<z.ZodJSONSchema>;
-                }, z.core.$loose>>>>;
-            }, z.core.$loose>>>;
             due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
             due_timezone: z.ZodString;
             source_refs: z.ZodJSONSchema;
@@ -846,18 +750,6 @@ export declare const mistyServerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -1013,18 +905,6 @@ export declare const mistyServerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -1831,8 +1711,8 @@ export declare const mistyServerContracts: {
                 granted_scopes: z.ZodNullable<z.ZodArray<z.ZodString>>;
                 status: z.ZodEnum<{
                     active: "active";
-                    needs_attention: "needs_attention";
                     revoked: "revoked";
+                    needs_attention: "needs_attention";
                 }>;
                 last_error_code: z.ZodOptional<z.ZodString>;
                 expires_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
@@ -1939,8 +1819,8 @@ export declare const mistyServerContracts: {
             body: z.ZodObject<{
                 filename: z.ZodString;
                 mime_type: z.ZodEnum<{
-                    "image/png": "image/png";
                     "image/jpeg": "image/jpeg";
+                    "image/png": "image/png";
                     "image/webp": "image/webp";
                     "image/gif": "image/gif";
                     "image/avif": "image/avif";
@@ -1981,8 +1861,8 @@ export declare const mistyServerContracts: {
             note_asset: z.ZodObject<{
                 id: z.ZodString;
                 mime_type: z.ZodEnum<{
-                    "image/png": "image/png";
                     "image/jpeg": "image/jpeg";
+                    "image/png": "image/png";
                     "image/webp": "image/webp";
                     "image/gif": "image/gif";
                     "image/avif": "image/avif";
@@ -2010,8 +1890,8 @@ export declare const mistyServerContracts: {
             expires_at: z.ZodISODateTime;
             filename: z.ZodString;
             mime_type: z.ZodEnum<{
-                "image/png": "image/png";
                 "image/jpeg": "image/jpeg";
+                "image/png": "image/png";
                 "image/webp": "image/webp";
                 "image/gif": "image/gif";
                 "image/avif": "image/avif";
@@ -2034,8 +1914,8 @@ export declare const mistyServerContracts: {
             body: z.ZodObject<{
                 filename: z.ZodString;
                 mime_type: z.ZodEnum<{
-                    "image/png": "image/png";
                     "image/jpeg": "image/jpeg";
+                    "image/png": "image/png";
                     "image/webp": "image/webp";
                     "image/gif": "image/gif";
                     "image/avif": "image/avif";
@@ -2077,8 +1957,8 @@ export declare const mistyServerContracts: {
             drawing_asset: z.ZodObject<{
                 id: z.ZodString;
                 mime_type: z.ZodEnum<{
-                    "image/png": "image/png";
                     "image/jpeg": "image/jpeg";
+                    "image/png": "image/png";
                     "image/webp": "image/webp";
                     "image/gif": "image/gif";
                     "image/avif": "image/avif";
@@ -2107,8 +1987,8 @@ export declare const mistyServerContracts: {
             expires_at: z.ZodISODateTime;
             filename: z.ZodString;
             mime_type: z.ZodEnum<{
-                "image/png": "image/png";
                 "image/jpeg": "image/jpeg";
+                "image/png": "image/png";
                 "image/webp": "image/webp";
                 "image/gif": "image/gif";
                 "image/avif": "image/avif";
@@ -2176,18 +2056,6 @@ export declare const mistyServerContracts: {
                 priority: z.ZodString;
                 rank: z.ZodNumber;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
-                agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                    mode: z.ZodOptional<z.ZodString>;
-                    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                        device_id: z.ZodString;
-                        kind: z.ZodString;
-                        opaque_ref: z.ZodString;
-                        display_name: z.ZodOptional<z.ZodString>;
-                        capabilities: z.ZodJSONSchema;
-                        metadata: z.ZodOptional<z.ZodJSONSchema>;
-                    }, z.core.$loose>>>>;
-                }, z.core.$loose>>>;
                 due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                 due_timezone: z.ZodString;
                 source_refs: z.ZodJSONSchema;
@@ -2217,18 +2085,6 @@ export declare const mistyServerContracts: {
                 priority: z.ZodString;
                 rank: z.ZodNumber;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
-                agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                    mode: z.ZodOptional<z.ZodString>;
-                    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                        device_id: z.ZodString;
-                        kind: z.ZodString;
-                        opaque_ref: z.ZodString;
-                        display_name: z.ZodOptional<z.ZodString>;
-                        capabilities: z.ZodJSONSchema;
-                        metadata: z.ZodOptional<z.ZodJSONSchema>;
-                    }, z.core.$loose>>>>;
-                }, z.core.$loose>>>;
                 due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                 due_timezone: z.ZodString;
                 source_refs: z.ZodJSONSchema;
@@ -2402,18 +2258,6 @@ export declare const mistyServerContracts: {
                 priority: z.ZodString;
                 rank: z.ZodNumber;
                 assignee_user_id: z.ZodOptional<z.ZodString>;
-                assignee_agent_id: z.ZodOptional<z.ZodString>;
-                agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                    mode: z.ZodOptional<z.ZodString>;
-                    context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                        device_id: z.ZodString;
-                        kind: z.ZodString;
-                        opaque_ref: z.ZodString;
-                        display_name: z.ZodOptional<z.ZodString>;
-                        capabilities: z.ZodJSONSchema;
-                        metadata: z.ZodOptional<z.ZodJSONSchema>;
-                    }, z.core.$loose>>>>;
-                }, z.core.$loose>>>;
                 due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                 due_timezone: z.ZodString;
                 source_refs: z.ZodJSONSchema;
@@ -2742,18 +2586,6 @@ export declare const mistyServerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -2812,18 +2644,6 @@ export declare const mistyServerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -2885,18 +2705,6 @@ export declare const mistyServerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -2952,18 +2760,6 @@ export declare const mistyServerContracts: {
                     priority: z.ZodString;
                     rank: z.ZodNumber;
                     assignee_user_id: z.ZodOptional<z.ZodString>;
-                    assignee_agent_id: z.ZodOptional<z.ZodString>;
-                    agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                        mode: z.ZodOptional<z.ZodString>;
-                        context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                            device_id: z.ZodString;
-                            kind: z.ZodString;
-                            opaque_ref: z.ZodString;
-                            display_name: z.ZodOptional<z.ZodString>;
-                            capabilities: z.ZodJSONSchema;
-                            metadata: z.ZodOptional<z.ZodJSONSchema>;
-                        }, z.core.$loose>>>>;
-                    }, z.core.$loose>>>;
                     due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                     due_timezone: z.ZodString;
                     source_refs: z.ZodJSONSchema;
@@ -3319,18 +3115,6 @@ export declare const mistyServerContracts: {
                         priority: z.ZodString;
                         rank: z.ZodNumber;
                         assignee_user_id: z.ZodOptional<z.ZodString>;
-                        assignee_agent_id: z.ZodOptional<z.ZodString>;
-                        agent_run: z.ZodOptional<z.ZodNullable<z.ZodObject<{
-                            mode: z.ZodOptional<z.ZodString>;
-                            context_references: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
-                                device_id: z.ZodString;
-                                kind: z.ZodString;
-                                opaque_ref: z.ZodString;
-                                display_name: z.ZodOptional<z.ZodString>;
-                                capabilities: z.ZodJSONSchema;
-                                metadata: z.ZodOptional<z.ZodJSONSchema>;
-                            }, z.core.$loose>>>>;
-                        }, z.core.$loose>>>;
                         due_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                         due_timezone: z.ZodString;
                         source_refs: z.ZodJSONSchema;
@@ -3382,6 +3166,401 @@ export declare const mistyServerContracts: {
             graph_version: z.ZodNumber;
         }, z.core.$loose>;
     };
+    readonly "capabilities.providers.register": {
+        readonly verb: "POST";
+        readonly path: "/capabilities/providers";
+        readonly params: z.ZodObject<{
+            body: z.ZodObject<{
+                manifestDigest: z.ZodString;
+                provider: z.ZodObject<{
+                    id: z.ZodString;
+                    version: z.ZodNumber;
+                    label: z.ZodString;
+                    route: z.ZodDiscriminatedUnion<[z.ZodObject<{
+                        kind: z.ZodLiteral<"server">;
+                        adapter: z.ZodString;
+                    }, z.core.$strict>, z.ZodObject<{
+                        kind: z.ZodLiteral<"native">;
+                        adapter: z.ZodString;
+                    }, z.core.$strict>, z.ZodObject<{
+                        kind: z.ZodLiteral<"browser">;
+                        adapter: z.ZodOptional<z.ZodString>;
+                        adapterVersion: z.ZodOptional<z.ZodNumber>;
+                        origins: z.ZodArray<z.ZodString>;
+                        hints: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                    }, z.core.$strict>, z.ZodObject<{
+                        kind: z.ZodLiteral<"backend">;
+                        connectionId: z.ZodString;
+                    }, z.core.$strict>, z.ZodObject<{
+                        kind: z.ZodLiteral<"view">;
+                        instanceId: z.ZodString;
+                    }, z.core.$strict>], "kind">;
+                    capabilities: z.ZodArray<z.ZodObject<{
+                        name: z.ZodString;
+                        version: z.ZodNumber;
+                        description: z.ZodString;
+                        inputSchema: z.ZodPreprocess<z.ZodRecord<z.ZodString, z.ZodJSONSchema>>;
+                        outputSchema: z.ZodPreprocess<z.ZodRecord<z.ZodString, z.ZodJSONSchema>>;
+                        requiredScopes: z.ZodArray<z.ZodString>;
+                        effects: z.ZodObject<{
+                            kind: z.ZodEnum<{
+                                read: "read";
+                                write: "write";
+                                send: "send";
+                                execute: "execute";
+                                destructive: "destructive";
+                            }>;
+                            incidental: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                            approval: z.ZodEnum<{
+                                interactive: "interactive";
+                                none: "none";
+                                scoped: "scoped";
+                            }>;
+                            retry: z.ZodEnum<{
+                                never: "never";
+                                read_only: "read_only";
+                                idempotent: "idempotent";
+                                reconcile: "reconcile";
+                            }>;
+                        }, z.core.$strict>;
+                    }, z.core.$strict>>;
+                }, z.core.$strict>;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            provider: z.ZodObject<{
+                id: z.ZodString;
+                version: z.ZodNumber;
+                label: z.ZodString;
+                route: z.ZodDiscriminatedUnion<[z.ZodObject<{
+                    kind: z.ZodLiteral<"server">;
+                    adapter: z.ZodString;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"native">;
+                    adapter: z.ZodString;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"browser">;
+                    adapter: z.ZodOptional<z.ZodString>;
+                    adapterVersion: z.ZodOptional<z.ZodNumber>;
+                    origins: z.ZodArray<z.ZodString>;
+                    hints: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"backend">;
+                    connectionId: z.ZodString;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"view">;
+                    instanceId: z.ZodString;
+                }, z.core.$strict>], "kind">;
+                capabilities: z.ZodArray<z.ZodObject<{
+                    name: z.ZodString;
+                    version: z.ZodNumber;
+                    description: z.ZodString;
+                    inputSchema: z.ZodPreprocess<z.ZodRecord<z.ZodString, z.ZodJSONSchema>>;
+                    outputSchema: z.ZodPreprocess<z.ZodRecord<z.ZodString, z.ZodJSONSchema>>;
+                    requiredScopes: z.ZodArray<z.ZodString>;
+                    effects: z.ZodObject<{
+                        kind: z.ZodEnum<{
+                            read: "read";
+                            write: "write";
+                            send: "send";
+                            execute: "execute";
+                            destructive: "destructive";
+                        }>;
+                        incidental: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                        approval: z.ZodEnum<{
+                            interactive: "interactive";
+                            none: "none";
+                            scoped: "scoped";
+                        }>;
+                        retry: z.ZodEnum<{
+                            never: "never";
+                            read_only: "read_only";
+                            idempotent: "idempotent";
+                            reconcile: "reconcile";
+                        }>;
+                    }, z.core.$strict>;
+                }, z.core.$strict>>;
+            }, z.core.$strict>;
+            availability: z.ZodObject<{
+                state: z.ZodEnum<{
+                    available: "available";
+                    device_required: "device_required";
+                    authentication_required: "authentication_required";
+                    account_confirmation_required: "account_confirmation_required";
+                    view_closed: "view_closed";
+                    unavailable: "unavailable";
+                    revoked: "revoked";
+                }>;
+                observedAt: z.ZodISODateTime;
+                reason: z.ZodOptional<z.ZodString>;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+    };
+    readonly "capabilities.providers.unregister": {
+        readonly verb: "DELETE";
+        readonly path: "/capabilities/providers/{providerID}";
+        readonly params: z.ZodObject<{
+            path: z.ZodObject<{
+                providerID: z.ZodString;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodUndefined;
+    };
+    readonly "capabilities.providers.availability": {
+        readonly verb: "PUT";
+        readonly path: "/capabilities/providers/{providerID}/availability";
+        readonly params: z.ZodObject<{
+            path: z.ZodObject<{
+                providerID: z.ZodString;
+            }, z.core.$strict>;
+            body: z.ZodObject<{
+                state: z.ZodEnum<{
+                    available: "available";
+                    device_required: "device_required";
+                    authentication_required: "authentication_required";
+                    account_confirmation_required: "account_confirmation_required";
+                    view_closed: "view_closed";
+                    unavailable: "unavailable";
+                    revoked: "revoked";
+                }>;
+                observedAt: z.ZodISODateTime;
+                reason: z.ZodOptional<z.ZodString>;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodUndefined;
+    };
+    readonly "capabilities.discover": {
+        readonly verb: "POST";
+        readonly path: "/capabilities/discover";
+        readonly params: z.ZodObject<{
+            body: z.ZodObject<{
+                capability: z.ZodOptional<z.ZodString>;
+                targetId: z.ZodOptional<z.ZodString>;
+                cursor: z.ZodOptional<z.ZodString>;
+                limit: z.ZodDefault<z.ZodNumber>;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            providers: z.ZodArray<z.ZodObject<{
+                id: z.ZodString;
+                version: z.ZodNumber;
+                label: z.ZodString;
+                route: z.ZodDiscriminatedUnion<[z.ZodObject<{
+                    kind: z.ZodLiteral<"server">;
+                    adapter: z.ZodString;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"native">;
+                    adapter: z.ZodString;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"browser">;
+                    adapter: z.ZodOptional<z.ZodString>;
+                    adapterVersion: z.ZodOptional<z.ZodNumber>;
+                    origins: z.ZodArray<z.ZodString>;
+                    hints: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"backend">;
+                    connectionId: z.ZodString;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"view">;
+                    instanceId: z.ZodString;
+                }, z.core.$strict>], "kind">;
+                capabilities: z.ZodArray<z.ZodObject<{
+                    name: z.ZodString;
+                    version: z.ZodNumber;
+                    description: z.ZodString;
+                    inputSchema: z.ZodPreprocess<z.ZodRecord<z.ZodString, z.ZodJSONSchema>>;
+                    outputSchema: z.ZodPreprocess<z.ZodRecord<z.ZodString, z.ZodJSONSchema>>;
+                    requiredScopes: z.ZodArray<z.ZodString>;
+                    effects: z.ZodObject<{
+                        kind: z.ZodEnum<{
+                            read: "read";
+                            write: "write";
+                            send: "send";
+                            execute: "execute";
+                            destructive: "destructive";
+                        }>;
+                        incidental: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                        approval: z.ZodEnum<{
+                            interactive: "interactive";
+                            none: "none";
+                            scoped: "scoped";
+                        }>;
+                        retry: z.ZodEnum<{
+                            never: "never";
+                            read_only: "read_only";
+                            idempotent: "idempotent";
+                            reconcile: "reconcile";
+                        }>;
+                    }, z.core.$strict>;
+                }, z.core.$strict>>;
+            }, z.core.$strict>>;
+            nextCursor: z.ZodNullable<z.ZodString>;
+        }, z.core.$strict>;
+    };
+    readonly "capabilities.targets.resolve": {
+        readonly verb: "POST";
+        readonly path: "/capabilities/targets/resolve";
+        readonly params: z.ZodObject<{
+            body: z.ZodObject<{
+                capability: z.ZodString;
+                targetId: z.ZodOptional<z.ZodString>;
+                contextId: z.ZodOptional<z.ZodString>;
+                spaceId: z.ZodOptional<z.ZodString>;
+                providerId: z.ZodOptional<z.ZodString>;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            targets: z.ZodArray<z.ZodObject<{
+                id: z.ZodString;
+                revision: z.ZodNumber;
+                appId: z.ZodString;
+                providerId: z.ZodString;
+                providerVersion: z.ZodNumber;
+                spaceId: z.ZodOptional<z.ZodString>;
+                label: z.ZodString;
+                binding: z.ZodDiscriminatedUnion<[z.ZodObject<{
+                    kind: z.ZodLiteral<"resource">;
+                    resourceId: z.ZodString;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"browser">;
+                    deviceId: z.ZodString;
+                    profileId: z.ZodString;
+                    accountBindingId: z.ZodString;
+                    origins: z.ZodArray<z.ZodString>;
+                    contextId: z.ZodOptional<z.ZodString>;
+                    scopeId: z.ZodOptional<z.ZodString>;
+                    accountIdentity: z.ZodOptional<z.ZodString>;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"native">;
+                    deviceId: z.ZodString;
+                    resourceHandle: z.ZodString;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"backend">;
+                    connectionId: z.ZodString;
+                }, z.core.$strict>, z.ZodObject<{
+                    kind: z.ZodLiteral<"view">;
+                    deviceId: z.ZodString;
+                    instanceId: z.ZodString;
+                }, z.core.$strict>], "kind">;
+            }, z.core.$strict>>;
+        }, z.core.$strict>;
+    };
+    readonly "capabilities.invoke": {
+        readonly verb: "POST";
+        readonly path: "/capabilities/invocations";
+        readonly params: z.ZodObject<{
+            body: z.ZodObject<{
+                requestId: z.ZodString;
+                capability: z.ZodString;
+                capabilityVersion: z.ZodNumber;
+                providerId: z.ZodString;
+                providerVersion: z.ZodNumber;
+                targetId: z.ZodString;
+                targetRevision: z.ZodNumber;
+                input: z.ZodJSONSchema;
+                deadline: z.ZodISODateTime;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            requestId: z.ZodString;
+            runId: z.ZodString;
+        }, z.core.$strict>;
+    };
+    readonly "capabilities.result": {
+        readonly verb: "GET";
+        readonly path: "/capabilities/invocations/{requestID}";
+        readonly params: z.ZodObject<{
+            path: z.ZodObject<{
+                requestID: z.ZodString;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodObject<{
+            requestId: z.ZodString;
+            state: z.ZodEnum<{
+                failed: "failed";
+                uncertain: "uncertain";
+                queued: "queued";
+                running: "running";
+                waiting: "waiting";
+                completed: "completed";
+                cancelled: "cancelled";
+            }>;
+            outcome: z.ZodNullable<z.ZodDiscriminatedUnion<[z.ZodObject<{
+                status: z.ZodLiteral<"success">;
+                result: z.ZodJSONSchema;
+                evidence: z.ZodArray<z.ZodObject<{
+                    targetId: z.ZodString;
+                    observedAt: z.ZodISODateTime;
+                    kind: z.ZodEnum<{
+                        browser: "browser";
+                        provider: "provider";
+                        resource: "resource";
+                        command: "command";
+                    }>;
+                    reference: z.ZodString;
+                    revision: z.ZodOptional<z.ZodString>;
+                    excerpt: z.ZodOptional<z.ZodString>;
+                }, z.core.$strict>>;
+                partial: z.ZodBoolean;
+            }, z.core.$strict>, z.ZodObject<{
+                status: z.ZodLiteral<"failure">;
+                code: z.ZodString;
+                message: z.ZodString;
+                retryable: z.ZodBoolean;
+            }, z.core.$strict>, z.ZodObject<{
+                approvalId: z.ZodString;
+                waitId: z.ZodString;
+                expiresAt: z.ZodISODateTime;
+                reason: z.ZodString;
+                status: z.ZodLiteral<"approval_required">;
+            }, z.core.$strict>, z.ZodObject<{
+                deviceId: z.ZodString;
+                waitId: z.ZodString;
+                expiresAt: z.ZodISODateTime;
+                reason: z.ZodString;
+                status: z.ZodLiteral<"device_required">;
+            }, z.core.$strict>, z.ZodObject<{
+                action: z.ZodEnum<{
+                    sign_in: "sign_in";
+                    account_confirmation: "account_confirmation";
+                    challenge: "challenge";
+                    open_target: "open_target";
+                    review: "review";
+                }>;
+                waitId: z.ZodString;
+                expiresAt: z.ZodISODateTime;
+                reason: z.ZodString;
+                status: z.ZodLiteral<"user_intervention_required">;
+            }, z.core.$strict>, z.ZodObject<{
+                status: z.ZodLiteral<"uncertain">;
+                effectId: z.ZodString;
+                reason: z.ZodString;
+                evidence: z.ZodArray<z.ZodObject<{
+                    targetId: z.ZodString;
+                    observedAt: z.ZodISODateTime;
+                    kind: z.ZodEnum<{
+                        browser: "browser";
+                        provider: "provider";
+                        resource: "resource";
+                        command: "command";
+                    }>;
+                    reference: z.ZodString;
+                    revision: z.ZodOptional<z.ZodString>;
+                    excerpt: z.ZodOptional<z.ZodString>;
+                }, z.core.$strict>>;
+            }, z.core.$strict>], "status">>;
+        }, z.core.$strict>;
+    };
+    readonly "capabilities.cancel": {
+        readonly verb: "POST";
+        readonly path: "/capabilities/invocations/{requestID}/cancel";
+        readonly params: z.ZodObject<{
+            path: z.ZodObject<{
+                requestID: z.ZodString;
+            }, z.core.$strict>;
+        }, z.core.$strict>;
+        readonly result: z.ZodUndefined;
+    };
 };
 export type MistyServerMethod = keyof typeof mistyServerContracts;
 export type MistyMethodParams<M extends MistyServerMethod> = z.input<(typeof mistyServerContracts)[M]["params"]>;
@@ -3401,693 +3580,44 @@ export declare const AppRpcEnvelopeSchema: z.ZodObject<{
 }, z.core.$strict>;
 export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string): {
     protocol: 2;
-    method: "spaces.get" | "spaces.members.list" | "notes.list" | "notes.get" | "notes.create" | "notes.update" | "notes.archive" | "notes.delete" | "notes.backlinks" | "notes.collaboration.ticket" | "drawings.list" | "drawings.get" | "drawings.create" | "drawings.update" | "drawings.delete" | "drawings.collaboration.ticket" | "tasks.list" | "tasks.create" | "tasks.update" | "tasks.delete" | "roadmaps.list" | "roadmaps.get" | "roadmaps.create" | "roadmaps.update" | "calendar.events.list" | "calendar.events.create" | "calendar.events.update" | "calendar.events.delete" | "mail.accounts.list" | "mail.folders.list" | "mail.threads.list" | "mail.threads.get" | "mail.threads.action" | "mail.drafts.create" | "mail.drafts.update" | "mail.drafts.send" | "connections.list" | "connections.remove" | "connections.authorize" | "integrations.list" | "integrations.bind" | "notes.assets.reserve" | "notes.assets.finalize" | "notes.assets.download" | "drawings.assets.reserve" | "drawings.assets.finalize" | "drawings.assets.download" | "tasks.activity.list" | "tasks.move" | "agenda.list" | "calendar.sources.list" | "calendar.sources.create" | "calendar.sources.delete" | "calendar.google.calendars" | "calendar.sync" | "roadmaps.delete" | "roadmaps.nodeDefinitions.list" | "roadmaps.nodeDefinitions.create" | "roadmaps.nodeDefinitions.update" | "roadmaps.nodeDefinitions.delete" | "roadmaps.milestones.create" | "roadmaps.milestones.update" | "roadmaps.milestones.delete" | "roadmaps.goals.create" | "roadmaps.goals.update" | "roadmaps.goals.delete" | "roadmaps.goals.setTasks" | "roadmaps.nodes.create" | "roadmaps.nodes.update" | "roadmaps.nodes.delete" | "roadmaps.edges.create" | "roadmaps.edges.update" | "roadmaps.edges.delete" | "roadmaps.layout.update";
+    method: "spaces.get" | "spaces.members.list" | "notes.list" | "notes.get" | "notes.create" | "notes.update" | "notes.archive" | "notes.delete" | "notes.backlinks" | "notes.collaboration.ticket" | "drawings.list" | "drawings.get" | "drawings.create" | "drawings.update" | "drawings.delete" | "drawings.collaboration.ticket" | "tasks.list" | "tasks.create" | "tasks.update" | "tasks.delete" | "roadmaps.list" | "roadmaps.get" | "roadmaps.create" | "roadmaps.update" | "calendar.events.list" | "calendar.events.create" | "calendar.events.update" | "calendar.events.delete" | "mail.accounts.list" | "mail.folders.list" | "mail.threads.list" | "mail.threads.get" | "mail.threads.action" | "mail.drafts.create" | "mail.drafts.update" | "mail.drafts.send" | "connections.list" | "connections.remove" | "connections.authorize" | "integrations.list" | "integrations.bind" | "notes.assets.reserve" | "notes.assets.finalize" | "notes.assets.download" | "drawings.assets.reserve" | "drawings.assets.finalize" | "drawings.assets.download" | "tasks.activity.list" | "tasks.move" | "agenda.list" | "calendar.sources.list" | "calendar.sources.create" | "calendar.sources.delete" | "calendar.google.calendars" | "calendar.sync" | "roadmaps.delete" | "roadmaps.nodeDefinitions.list" | "roadmaps.nodeDefinitions.create" | "roadmaps.nodeDefinitions.update" | "roadmaps.nodeDefinitions.delete" | "roadmaps.milestones.create" | "roadmaps.milestones.update" | "roadmaps.milestones.delete" | "roadmaps.goals.create" | "roadmaps.goals.update" | "roadmaps.goals.delete" | "roadmaps.goals.setTasks" | "roadmaps.nodes.create" | "roadmaps.nodes.update" | "roadmaps.nodes.delete" | "roadmaps.edges.create" | "roadmaps.edges.update" | "roadmaps.edges.delete" | "roadmaps.layout.update" | "capabilities.providers.register" | "capabilities.providers.unregister" | "capabilities.providers.availability" | "capabilities.discover" | "capabilities.targets.resolve" | "capabilities.invoke" | "capabilities.result" | "capabilities.cancel";
     params: {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             title?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             shared_tags?: string[] | null | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             archived: boolean;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             title?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             title?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query?: {
             status?: "todo" | "in_progress" | "done" | "canceled" | undefined;
             priority?: "high" | "medium" | "low" | undefined;
             assignee_user_id?: string | undefined;
-            assignee_agent_id?: string | undefined;
             q?: string | undefined;
             due_from?: string | undefined;
             due_to?: string | undefined;
@@ -4097,86 +3627,13 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             include_archived?: boolean | "true" | "false" | undefined;
         } | undefined;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             title: string;
             notes?: string | undefined;
             status?: "" | "todo" | "in_progress" | "done" | "canceled" | undefined;
             priority?: "" | "high" | "medium" | "low" | undefined;
             assignee_user_id?: string | undefined;
-            assignee_agent_id?: string | undefined;
             due_at?: string | null | undefined;
             due_timezone?: string | undefined;
             source_refs?: {
@@ -4184,94 +3641,9 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
                 kind: string;
                 resource_id: string;
             }[] | null | undefined;
-            agent_run?: {
-                [x: string]: unknown;
-                mode?: string | undefined;
-                context_references?: {
-                    [x: string]: unknown;
-                    device_id: string;
-                    kind: string;
-                    opaque_ref: string;
-                    capabilities: z.core.util.JSONType;
-                    display_name?: string | undefined;
-                    metadata?: z.core.util.JSONType | undefined;
-                }[] | null | undefined;
-            } | null | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             version: number;
@@ -4298,7 +3670,6 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             status?: "" | "todo" | "in_progress" | "done" | "canceled" | undefined;
             priority?: "" | "high" | "medium" | "low" | undefined;
             assignee_user_id?: string | undefined;
-            assignee_agent_id?: string | undefined;
             due_at?: string | null | undefined;
             due_timezone?: string | undefined;
             source_refs?: {
@@ -4306,480 +3677,35 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
                 kind: string;
                 resource_id: string;
             }[] | null | undefined;
-            agent_run?: {
-                [x: string]: unknown;
-                mode?: string | undefined;
-                context_references?: {
-                    [x: string]: unknown;
-                    device_id: string;
-                    kind: string;
-                    opaque_ref: string;
-                    capabilities: z.core.util.JSONType;
-                    display_name?: string | undefined;
-                    metadata?: z.core.util.JSONType | undefined;
-                }[] | null | undefined;
-            } | null | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             version: string | number;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             name: string;
             description?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             name: string;
             expected_version: number;
             description?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             from: string;
             to: string;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             title: string;
             starts_at: string;
@@ -4790,79 +3716,7 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             timezone?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             version: number;
@@ -4895,233 +3749,17 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             timezone?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             version: string | number;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             connection_id: string;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             connection_id: string;
             folder_id?: string | undefined;
@@ -5130,156 +3768,12 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             page_size?: number | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             connection_id: string;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             connection_id: string;
             read?: boolean | undefined;
@@ -5287,79 +3781,7 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             starred?: boolean | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             connection_id: string;
             to: {
@@ -5390,79 +3812,7 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             }[] | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             connection_id: string;
             to: {
@@ -5493,1076 +3843,68 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             }[] | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             connection_id: string;
             authoring_source: "user" | "ai";
             confirmed: true;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             capabilities: string[];
             return_to: string;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             connection_id: string;
             capability: "calendar_read" | "calendar_write";
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             filename: string;
-            mime_type: "image/png" | "image/jpeg" | "image/webp" | "image/gif" | "image/avif" | "image/bmp" | "image/x-icon" | "image/vnd.microsoft.icon";
+            mime_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "image/avif" | "image/bmp" | "image/x-icon" | "image/vnd.microsoft.icon";
             byte_size: number;
             sha256: string;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             filename: string;
-            mime_type: "image/png" | "image/jpeg" | "image/webp" | "image/gif" | "image/avif" | "image/bmp" | "image/x-icon" | "image/vnd.microsoft.icon";
+            mime_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "image/avif" | "image/bmp" | "image/x-icon" | "image/vnd.microsoft.icon";
             byte_size: number;
             sha256: string;
             file_id: string;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             version: number;
             status: "todo" | "in_progress" | "done" | "canceled";
             before_task_id?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             from: string;
             to: string;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             integration_id: string;
             external_calendar_id: string;
@@ -6570,384 +3912,24 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             timezone?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             integration_id: string;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             source_id?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             expected_version: string | number;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             name: string;
@@ -6965,79 +3947,7 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             updated_at?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             name: string;
@@ -7056,156 +3966,12 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             updated_at?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             expected_version: string | number;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             expected_version: number;
@@ -7228,79 +3994,7 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             updated_at?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             expected_version: number;
@@ -7323,156 +4017,12 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             updated_at?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             expected_version: string | number;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             expected_version: number;
@@ -7511,20 +4061,6 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
                 created_at: string;
                 updated_at: string;
                 assignee_user_id?: string | undefined;
-                assignee_agent_id?: string | undefined;
-                agent_run?: {
-                    [x: string]: unknown;
-                    mode?: string | undefined;
-                    context_references?: {
-                        [x: string]: unknown;
-                        device_id: string;
-                        kind: string;
-                        opaque_ref: string;
-                        capabilities: z.core.util.JSONType;
-                        display_name?: string | undefined;
-                        metadata?: z.core.util.JSONType | undefined;
-                    }[] | null | undefined;
-                } | null | undefined;
                 due_at?: string | null | undefined;
                 created_by_user_id?: string | undefined;
                 created_by_agent_id?: string | undefined;
@@ -7541,79 +4077,7 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             updated_at?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             expected_version: number;
@@ -7652,20 +4116,6 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
                 created_at: string;
                 updated_at: string;
                 assignee_user_id?: string | undefined;
-                assignee_agent_id?: string | undefined;
-                agent_run?: {
-                    [x: string]: unknown;
-                    mode?: string | undefined;
-                    context_references?: {
-                        [x: string]: unknown;
-                        device_id: string;
-                        kind: string;
-                        opaque_ref: string;
-                        capabilities: z.core.util.JSONType;
-                        display_name?: string | undefined;
-                        metadata?: z.core.util.JSONType | undefined;
-                    }[] | null | undefined;
-                } | null | undefined;
                 due_at?: string | null | undefined;
                 created_by_user_id?: string | undefined;
                 created_by_agent_id?: string | undefined;
@@ -7683,234 +4133,18 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             complete_manually?: boolean | null | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             expected_version: string | number;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             expected_version: number;
             task_ids: string[] | null;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             expected_version: number;
@@ -7932,79 +4166,7 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             updated_at?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             expected_version: number;
@@ -8026,156 +4188,12 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             updated_at?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             expected_version: string | number;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             expected_version: number;
@@ -8201,79 +4219,7 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             updated_at?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             [x: string]: unknown;
             expected_version: number;
@@ -8299,156 +4245,12 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
             updated_at?: string | undefined;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         query: {
             expected_version: string | number;
         };
     } | {
-        path: {
-            spaceID: string;
-        } | {
-            spaceID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-        } | {
-            spaceID: string;
-            taskID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-        } | {
-            spaceID: string;
-            eventID: string;
-        } | {
-            spaceID: string;
-            threadID: string;
-        } | {
-            spaceID: string;
-            draftID: string;
-        } | {
-            spaceID: string;
-            connectionID: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            provider: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            noteID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            uploadID: string;
-        } | {
-            spaceID: string;
-            drawingID: string;
-            assetID: string;
-        } | {
-            spaceID: string;
-            sourceID: string;
-        } | {
-            spaceID: string;
-            definitionID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            milestoneID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            goalID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            nodeID: string;
-        } | {
-            spaceID: string;
-            roadmapID: string;
-            edgeID: string;
-        };
+        path: Record<string, string | undefined>;
         body: {
             expected_version: number;
             milestones?: {
@@ -8508,20 +4310,6 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
                     created_at: string;
                     updated_at: string;
                     assignee_user_id?: string | undefined;
-                    assignee_agent_id?: string | undefined;
-                    agent_run?: {
-                        [x: string]: unknown;
-                        mode?: string | undefined;
-                        context_references?: {
-                            [x: string]: unknown;
-                            device_id: string;
-                            kind: string;
-                            opaque_ref: string;
-                            capabilities: z.core.util.JSONType;
-                            display_name?: string | undefined;
-                            metadata?: z.core.util.JSONType | undefined;
-                        }[] | null | undefined;
-                    } | null | undefined;
                     due_at?: string | null | undefined;
                     created_by_user_id?: string | undefined;
                     created_by_agent_id?: string | undefined;
@@ -8557,5 +4345,91 @@ export declare function parseAppRpcRequest(value: unknown, boundSpaceId: string)
                 updated_at?: string | undefined;
             }[] | null | undefined;
         };
+    } | {
+        path: Record<string, string | undefined>;
+        body: {
+            manifestDigest: string;
+            provider: {
+                id: string;
+                version: number;
+                label: string;
+                route: {
+                    kind: "server";
+                    adapter: string;
+                } | {
+                    kind: "native";
+                    adapter: string;
+                } | {
+                    kind: "browser";
+                    origins: string[];
+                    adapter?: string | undefined;
+                    adapterVersion?: number | undefined;
+                    hints?: string[] | undefined;
+                } | {
+                    kind: "backend";
+                    connectionId: string;
+                } | {
+                    kind: "view";
+                    instanceId: string;
+                };
+                capabilities: {
+                    name: string;
+                    version: number;
+                    description: string;
+                    inputSchema: unknown;
+                    outputSchema: unknown;
+                    requiredScopes: string[];
+                    effects: {
+                        kind: "read" | "write" | "send" | "execute" | "destructive";
+                        approval: "interactive" | "none" | "scoped";
+                        retry: "never" | "read_only" | "idempotent" | "reconcile";
+                        incidental?: string[] | undefined;
+                    };
+                }[];
+            };
+        };
+    } | {
+        path: Record<string, string | undefined>;
+    } | {
+        path: Record<string, string | undefined>;
+        body: {
+            state: "available" | "device_required" | "authentication_required" | "account_confirmation_required" | "view_closed" | "unavailable" | "revoked";
+            observedAt: string;
+            reason?: string | undefined;
+        };
+    } | {
+        path: Record<string, string | undefined>;
+        body: {
+            capability?: string | undefined;
+            targetId?: string | undefined;
+            cursor?: string | undefined;
+            limit?: number | undefined;
+        };
+    } | {
+        path: Record<string, string | undefined>;
+        body: {
+            capability: string;
+            targetId?: string | undefined;
+            contextId?: string | undefined;
+            spaceId?: string | undefined;
+            providerId?: string | undefined;
+        };
+    } | {
+        path: Record<string, string | undefined>;
+        body: {
+            requestId: string;
+            capability: string;
+            capabilityVersion: number;
+            providerId: string;
+            providerVersion: number;
+            targetId: string;
+            targetRevision: number;
+            input: z.core.util.JSONType;
+            deadline: string;
+        };
+    } | {
+        path: Record<string, string | undefined>;
+    } | {
+        path: Record<string, string | undefined>;
     };
 };

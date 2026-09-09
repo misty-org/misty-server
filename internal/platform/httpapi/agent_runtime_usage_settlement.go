@@ -18,11 +18,17 @@ func aiInvocationRuntimeUsageKey(invocationID string) string {
 	return "agent-runtime:" + invocationID + ":model:aggregate"
 }
 
-func (s *SpacesService) meterPersonalAgentRuntimeModel(ctx context.Context, run *db.SpaceRun, _ string, state workflowv2.StepState, _ json.RawMessage) error {
-	if s.usageMeter == nil || state != workflowv2.StepRunning {
+func (s *SpacesService) meterPersonalAgentRuntimeModel(ctx context.Context, run *db.SpaceRun, nodeID string, state workflowv2.StepState, _ json.RawMessage) error {
+	if state != workflowv2.StepRunning {
 		return nil
 	}
-	membership, err := s.database.SpaceAgentMembership(ctx, run.RequestingMemberID, run.SpaceID, run.AgentID)
+	if err := s.database.ReserveAgentModelTurn(ctx, run.OwnerUserID, run.ID, run.RuntimeRunID, nodeID); err != nil {
+		return err
+	}
+	if s.usageMeter == nil {
+		return nil
+	}
+	membership, err := s.database.AskExecutionContext(ctx, run.RequestingMemberID, run.SpaceID, run.AgentID)
 	if err != nil {
 		return err
 	}
@@ -39,7 +45,7 @@ func (s *SpacesService) settlePersonalAgentRuntimeUsage(ctx context.Context, run
 	if s.usageMeter == nil || run == nil {
 		return nil
 	}
-	membership, err := s.database.SpaceAgentMembership(ctx, run.RequestingMemberID, run.SpaceID, run.AgentID)
+	membership, err := s.database.AskExecutionContext(ctx, run.RequestingMemberID, run.SpaceID, run.AgentID)
 	if err != nil {
 		return err
 	}
@@ -64,8 +70,14 @@ func (s *SpacesService) settlePersonalAgentRuntimeUsage(ctx context.Context, run
 	return err
 }
 
-func (s *SpacesService) meterAIInvocationRuntimeModel(_ context.Context, record *db.AIInvocationRecord, _ string, state string, _ json.RawMessage) error {
-	if s.usageMeter == nil || record == nil || state != "running" {
+func (s *SpacesService) meterAIInvocationRuntimeModel(ctx context.Context, record *db.AIInvocationRecord, nodeID string, state string, _ json.RawMessage) error {
+	if record == nil || state != "running" {
+		return nil
+	}
+	if err := s.database.ReserveAgentModelTurn(ctx, record.UserID, record.ID, record.RuntimeRunID, nodeID); err != nil {
+		return err
+	}
+	if s.usageMeter == nil {
 		return nil
 	}
 	modelID := aiInvocationMeteredModel(record)

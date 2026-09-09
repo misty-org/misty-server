@@ -17,7 +17,7 @@ func (s *SpacesService) executeOrdinaryAgentTool(ctx context.Context, run *db.Sp
 	if strings.HasPrefix(tool.Name, "mcp.") {
 		return s.executeMCPAgentTool(ctx, run, tool, true, canonicalAgentToolSource)
 	}
-	if tool.Name == toolboxContextGet || tool.Name == toolboxMembersList || tool.Name == toolboxMembersResolve || tool.Name == toolboxAgentsList || tool.Name == toolboxAgentsStatus || strings.HasPrefix(tool.Name, "notes.") || strings.HasPrefix(tool.Name, "drawings.") || strings.HasPrefix(tool.Name, "roadmaps.") || tool.Name == toolboxLibraryRead || tool.Name == toolboxLibraryUpdate || tool.Name == toolboxLibraryPromoteAttachment || tool.Name == toolboxCalendarCreate || tool.Name == toolboxCalendarUpdate {
+	if tool.Name == toolboxContextGet || tool.Name == toolboxMembersList || tool.Name == toolboxMembersResolve || strings.HasPrefix(tool.Name, "notes.") || strings.HasPrefix(tool.Name, "drawings.") || strings.HasPrefix(tool.Name, "roadmaps.") || tool.Name == toolboxLibraryRead || tool.Name == toolboxLibraryUpdate || tool.Name == toolboxLibraryPromoteAttachment || tool.Name == toolboxCalendarCreate || tool.Name == toolboxCalendarUpdate {
 		return executeSpaceConversationTool(ctx, s.database, spaceConversationToolActor{
 			userID: run.RequestingMemberID, spaceID: run.SpaceID, agentID: run.AgentID, runID: run.ID,
 			conversationID: run.ScopeConversationID,
@@ -265,59 +265,5 @@ func (s *SpacesService) WorkflowVersions() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusCreated, item)
-	}
-}
-
-func (s *SpacesService) AgentVersions() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID, agentID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "agentID")
-		if r.Method == http.MethodGet {
-			items, err := s.database.PublishedAgentVersions(r.Context(), userID, spaceID, agentID)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"versions": items})
-			return
-		}
-		var body struct {
-			Workflows []db.AgentVersionWorkflow `json:"workflows"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		item, err := s.database.PublishAgentVersion(r.Context(), userID, spaceID, agentID, body.Workflows)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, item)
-	}
-}
-
-func (s *SpacesService) AgentInstance() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID, agentID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "agentID")
-		instance, err := s.database.EnsureAgentInstance(r.Context(), userID, spaceID, agentID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if r.Method == http.MethodPost {
-			instance, err = s.database.UpdateAgentInstance(r.Context(), userID, instance.ID)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-		}
-		writeJSON(w, http.StatusOK, instance)
 	}
 }

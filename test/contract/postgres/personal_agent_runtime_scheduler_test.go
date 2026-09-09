@@ -21,22 +21,30 @@ func TestPersonalAgentRuntimeIsFIFOAndSingleActivePerAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	createAgent := func(name string) *PersonalAgent {
-		agent, createErr := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{Name: name, ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite"})
-		if createErr != nil {
-			t.Fatal(createErr)
-		}
-		return agent
+	other, err := database.CreateUser("Other Ask", "other-scheduler@example.invalid", "password123")
+	if err != nil {
+		t.Fatal(err)
 	}
-	firstAgent, secondAgent := createAgent("First Runtime Agent"), createAgent("Second Runtime Agent")
-	queue := func(agent *PersonalAgent, title string) *SpaceRun {
-		task, createErr := database.CreateSpaceTask(ctx, owner.ID, SpaceTask{SpaceID: space.ID, Title: title, Status: "todo", AssigneeAgentID: agent.ID})
-		if createErr != nil {
-			t.Fatal(createErr)
+	otherSpace, err := database.CreateSpace(ctx, other.ID, "Other Ask")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstAgent, err := database.EnsureAskIdentity(ctx, owner.ID, "google/gemini-2.5-flash-lite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondAgent, err := database.EnsureAskIdentity(ctx, other.ID, "google/gemini-2.5-flash-lite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue := func(agent *AskIdentity, title string) *SpaceRun {
+		spaceID := space.ID
+		if agent.ID == secondAgent.ID {
+			spaceID = otherSpace.ID
 		}
-		run, claimed, createErr := database.ClaimAssignedAgentTaskRun(ctx, owner.ID, *task)
-		if createErr != nil || !claimed {
-			t.Fatalf("queue %q = %#v, claimed:%v, err:%v", title, run, claimed, createErr)
+		run, err := database.CreateCreatorAgentRun(ctx, agent.OwnerUserID, spaceID, agent.ID, CreatorAgentRunInput{Instruction: title})
+		if err != nil {
+			t.Fatal(err)
 		}
 		return run
 	}
@@ -99,17 +107,13 @@ func TestPersonalAgentRuntimeCancelAndRetryAreOwnerScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, err := database.CreatePersonalAgent(ctx, owner.ID, PersonalAgent{Name: "Cancelable Agent", ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite"})
+	agent, err := database.EnsureAskIdentity(ctx, owner.ID, "google/gemini-2.5-flash-lite")
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err := database.CreateSpaceTask(ctx, owner.ID, SpaceTask{SpaceID: space.ID, Title: "Cancelable task", Status: "todo", AssigneeAgentID: agent.ID})
+	run, err := database.CreateCreatorAgentRun(ctx, owner.ID, space.ID, agent.ID, CreatorAgentRunInput{Instruction: "Cancelable task"})
 	if err != nil {
 		t.Fatal(err)
-	}
-	run, claimed, err := database.ClaimAssignedAgentTaskRun(ctx, owner.ID, *task)
-	if err != nil || !claimed {
-		t.Fatalf("assignment run = %#v, %v, %v", run, claimed, err)
 	}
 	jobs, err := database.ClaimPersonalAgentTaskRunJobs(ctx, "cancel-worker", 1, time.Minute)
 	if err != nil || len(jobs) != 1 {

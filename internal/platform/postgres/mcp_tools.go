@@ -71,7 +71,7 @@ func (db *Database) SaveMCPDiscovery(ctx context.Context, userID string, snapsho
 				return err
 			}
 			if (previousFingerprint != "" && previousFingerprint != item.SchemaFingerprint) || item.SchemaStatus != "valid" {
-				if _, err := tx.ExecContext(ctx, `UPDATE personal_agent_mcp_tools SET enabled=FALSE,updated_at=NOW() WHERE remote_tool_id=$1`, item.ID); err != nil {
+				if _, err := tx.ExecContext(ctx, `UPDATE misty_ask_mcp_tools SET enabled=FALSE,updated_at=NOW() WHERE remote_tool_id=$1`, item.ID); err != nil {
 					return err
 				}
 			}
@@ -80,7 +80,7 @@ func (db *Database) SaveMCPDiscovery(ctx context.Context, userID string, snapsho
 		if _, err := tx.ExecContext(ctx, `UPDATE mcp_remote_tools SET removed_at=NOW(),updated_at=NOW() WHERE connection_id=$1 AND removed_at IS NULL AND NOT(id=ANY($2))`, snapshot.ConnectionID, pqStringArray(seen)); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE personal_agent_mcp_tools SET enabled=FALSE,updated_at=NOW() WHERE connection_id=$1 AND remote_tool_id IN (SELECT id FROM mcp_remote_tools WHERE connection_id=$1 AND removed_at IS NOT NULL)`, snapshot.ConnectionID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE misty_ask_mcp_tools SET enabled=FALSE,updated_at=NOW() WHERE connection_id=$1 AND remote_tool_id IN (SELECT id FROM mcp_remote_tools WHERE connection_id=$1 AND removed_at IS NOT NULL)`, snapshot.ConnectionID); err != nil {
 			return err
 		}
 		return tx.QueryRowContext(ctx, `INSERT INTO mcp_discovery_snapshots(id,connection_id,protocol_version,server_name,server_version,catalog_fingerprint,tool_count,status,error_code)

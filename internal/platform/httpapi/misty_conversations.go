@@ -91,7 +91,6 @@ func (s *AIService) AIConversations() http.HandlerFunc {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		agentID := strings.TrimSpace(r.URL.Query().Get("agent_id"))
 		summaries, err := s.database.ListAgentSessions(r.Context(), userID)
 		if err != nil {
 			TestingWriteAIError(w, err)
@@ -99,9 +98,6 @@ func (s *AIService) AIConversations() http.HandlerFunc {
 		}
 		items := []mistyConversation{}
 		for _, summary := range summaries {
-			if summary.ConversationKind != "companion_task" || summary.PersonalAgentID != agentID {
-				continue
-			}
 			conversation, conversationErr := s.mistyConversationFromSummary(r, userID, summary)
 			if conversationErr == nil {
 				items = append(items, conversation)
@@ -253,7 +249,6 @@ func (s *AIService) MistyConversationTurn() http.HandlerFunc {
 			Mode     string                  `json:"mode"`
 			Prompt   string                  `json:"prompt"`
 			Context  []mistyContextReference `json:"context"`
-			AgentID  string                  `json:"agent_id,omitempty"`
 			Timezone string                  `json:"timezone,omitempty"`
 		}
 		if err := decodeAIJSON(w, r, &body); err != nil {
@@ -266,7 +261,7 @@ func (s *AIService) MistyConversationTurn() http.HandlerFunc {
 			return
 		}
 		if body.Mode == "action" {
-			s.mistyActionProposal(w, r, userID, conversationID, body.Prompt, body.AgentID)
+			s.mistyActionProposal(w, r, userID, conversationID, body.Prompt)
 			return
 		}
 		if body.Mode != "ask" {
@@ -335,7 +330,7 @@ func (s *AIService) MistyConversationTurn() http.HandlerFunc {
 	}
 }
 
-func (s *AIService) mistyActionProposal(w http.ResponseWriter, r *http.Request, userID, conversationID, prompt, agentID string) {
+func (s *AIService) mistyActionProposal(w http.ResponseWriter, r *http.Request, userID, conversationID, prompt string) {
 	readOnly := mistyReadOnlyAction(prompt)
 	title := "Review this action"
 	risk := "write"
@@ -351,7 +346,6 @@ func (s *AIService) mistyActionProposal(w http.ResponseWriter, r *http.Request, 
 		"action": map[string]any{
 			"id": proposalID, "title": title, "summary": summary, "prompt": prompt,
 			"risk": risk, "state": "proposed", "requiresConfirmation": !readOnly,
-			"agentId": strings.TrimSpace(agentID),
 		},
 	})
 }
@@ -439,7 +433,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 			modelID = agent.FrontierDefaultModelID()
 		}
 		return mistyConversation{
-			ID: summary.ID, Title: cleanMistyTitle(summary.Title), AgentID: summary.PersonalAgentID,
+			ID: summary.ID, Title: cleanMistyTitle(summary.Title),
 			SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
 			OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, Reasoning: summary.ReasoningEffort,
 			CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -473,7 +467,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 		modelID = agent.FrontierDefaultModelID()
 	}
 	return mistyConversation{
-		ID: summary.ID, Title: cleanMistyTitle(summary.Title), AgentID: summary.PersonalAgentID,
+		ID: summary.ID, Title: cleanMistyTitle(summary.Title),
 		SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
 		OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, Reasoning: summary.ReasoningEffort,
 		CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),

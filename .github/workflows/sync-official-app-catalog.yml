@@ -43,16 +43,13 @@ jobs:
             internal/appcatalog/catalog.go \
             .store-source/apps/catalog.json
           gofmt -w internal/appcatalog/catalog.go
-          node scripts/migration/sync-app-catalog.mjs .store-source/apps/catalog.json
-          npm ci
-          npm run check
           go test ./test/contract/appcatalog ./test/contract/http/api \
             -run '^(TestOfficial|TestFinishOnboarding|TestAppRuntime)' -count=1
       - name: Open the catalog update pull request
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if git diff --quiet -- internal/appcatalog/catalog.go apps/api/src/modules/official-apps/catalog.generated.ts; then
+          if git diff --quiet -- internal/appcatalog/catalog.go; then
             echo "Server catalog already matches $STORE_TAG."
             exit 0
           fi
@@ -61,11 +58,11 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git fetch origin "$branch" || true
           git checkout -B "$branch"
-          git add internal/appcatalog/catalog.go apps/api/src/modules/official-apps/catalog.generated.ts
+          git add internal/appcatalog/catalog.go
           git commit -m "Sync official apps from $STORE_TAG"
           git push --force-with-lease origin "$branch"
           gh pr view "$branch" >/dev/null 2>&1 || gh pr create \
             --base main \
             --head "$branch" \
             --title "Sync production official apps from $STORE_TAG" \
-            --body "Updates the Go and TypeScript server catalogs from the reviewed Misty Store release $STORE_TAG. Native type checks, unit tests and build, plus Go catalog and selected HTTP contract tests, passed before this pull request was created."
+            --body "Updates the Go server catalog from the reviewed Misty Store release $STORE_TAG. Go catalog and selected HTTP contract tests passed before this pull request was created."

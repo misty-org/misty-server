@@ -3,35 +3,10 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 )
-
-func (db *Database) ResolveAgentProviderConnection(ctx context.Context, userID, spaceID, instanceID, provider string) (string, error) {
-	var connectionID string
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var bindings []byte
-		if err := tx.QueryRowContext(ctx, `SELECT connection_bindings FROM space_agent_instances WHERE id=$1 AND user_id=$2 AND space_id=$3`, instanceID, userID, spaceID).Scan(&bindings); err != nil {
-			return err
-		}
-		var values map[string]string
-		if json.Unmarshal(bindings, &values) != nil || values[provider] == "" {
-			return ErrSpaceNotFound
-		}
-		connectionID = values[provider]
-		var valid bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_integrations WHERE id=$1 AND connected_by_user_id=$2 AND space_id=$3 AND provider=$4 AND status='active')`, connectionID, userID, spaceID, provider).Scan(&valid); err != nil {
-			return err
-		}
-		if !valid {
-			return ErrSpaceNotFound
-		}
-		return nil
-	})
-	return connectionID, err
-}
 
 type ProviderOAuthState struct {
 	UserID             string

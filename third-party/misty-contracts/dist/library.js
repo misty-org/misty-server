@@ -1,0 +1,13 @@
+import { z } from "zod";
+export const libraryOperations = ["libraryItems", "reauthenticateLibrary", "libraryFacets", "semanticLibrarySearch", "libraryDiscovery", "libraryPins", "setLibraryPins", "libraryImportHistory", "discoveryItems", "updateMemoryPreference", "mergeDuplicates", "bulkLibraryItems", "duplicateLibraryItems", "libraryUsage", "agentUsage", "libraryAssetStacks", "createLibraryAssetStack", "updateLibraryAssetStack", "deleteLibraryAssetStack", "updateLibraryItem", "trashLibraryItem", "restoreLibraryItem", "setLibraryProviderImport", "promoteAttachment", "sharedReferences", "revokeLibraryGrant", "albums", "albumFolders", "createAlbumFolder", "updateAlbumFolder", "deleteAlbumFolder", "createAlbum", "organizeAlbum", "updateAlbum", "deleteAlbum", "albumItems", "addAlbumItems", "reorderAlbumItems", "groups", "createGroup", "groupItems", "peoplePolicy", "updatePeoplePolicy", "people", "createPerson", "updatePerson", "deletePerson", "personItems", "addPersonItems", "removePersonItems", "mergePeople", "editVersions", "createEditVersion", "renderEditVersion", "selectEditVersion", "deleteEditVersion"];
+export const libraryReadOperations = ["sharedReferenceContent", "libraryContent", "libraryOriginalContent", "libraryPreview", "libraryOriginalPreview"];
+const args = z.array(z.json()).max(12);
+const bytes = z.instanceof(ArrayBuffer).refine(value => value.byteLength <= 128 * 1024 * 1024, "The first-pass Library transfer limit is 128 MB.");
+export const mistyLibraryContracts = {
+    "library.copyFiles": { params: z.strictObject({ files: z.array(z.strictObject({ name: z.string().min(1).max(1024).refine(name => !/[\\/]/.test(name)), bytes })).min(1).max(100) }), result: z.void() },
+    "library.perform": { params: z.strictObject({ operation: z.enum(libraryOperations), args }), result: z.json().or(z.undefined()) },
+    "library.read": { params: z.strictObject({ operation: z.enum(libraryReadOperations), args }), result: z.strictObject({ bytes, mimeType: z.string().max(255) }) },
+    "library.upload": { params: z.strictObject({ bytes, name: z.string().min(1).max(1024), mimeType: z.string().max(255), purpose: z.enum(["library", "attachment"]), conversationId: z.string().max(256).optional(), replace: z.strictObject({ itemId: z.string().min(1).max(256), itemVersion: z.number().int() }).optional() }), result: z.json() },
+};
+export const isMistyLibraryMethod = (method) => Object.hasOwn(mistyLibraryContracts, method);
+//# sourceMappingURL=library.js.map

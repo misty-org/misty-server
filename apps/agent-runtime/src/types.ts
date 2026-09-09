@@ -1,4 +1,6 @@
 export interface SpaceTaskContext {
+ routine_execution?: import("@misty/contracts").MistyRoutineExecution;
+ sdk_execution?: import("./pinned-capability.js").PinnedCapabilityExecution;
   run_id: string;
   agent_id: string;
   space_id: string;
@@ -63,6 +65,8 @@ export interface MCPRunAccess {
 }
 
 export interface MCPRemoteTool {
+  /** Semantic identity supplied by the trusted Misty registry, never page content. */
+  capability?: string;
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;

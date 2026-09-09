@@ -225,7 +225,7 @@ func ownedMistyMemoryConversationTx(ctx context.Context, tx *sql.Tx, userID, con
 		return "", nil
 	}
 	var owned string
-	err := tx.QueryRowContext(ctx, `SELECT id FROM agent_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL`, conversationID, userID).Scan(&owned)
+	err := tx.QueryRowContext(ctx, `SELECT id FROM misty_ask_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL`, conversationID, userID).Scan(&owned)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrSpaceInvalid
 	}

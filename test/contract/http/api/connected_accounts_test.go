@@ -50,9 +50,16 @@ func TestConnectedAccountOAuthRejectsUnknownCapabilities(t *testing.T) {
 }
 
 func TestConnectedAccountCallbackURLAndIncrementalConsent(t *testing.T) {
+	// Test the fallback independently of the developer's configured public URL.
+	t.Setenv("MISTY_PUBLIC_API_URL", "")
 	request := httptest.NewRequest("POST", "http://localhost:8080/api/connections/google/authorize", nil)
 	if got, want := TestingConnectedAccountCallbackURL(request, "google"), "http://localhost:8080/api/oauth/connections/google/callback"; got != want {
 		t.Fatalf("callback URL = %q, want %q", got, want)
+	}
+	t.Setenv("MISTY_PUBLIC_API_URL", "https://api.example.test/v1")
+	request.Header.Set("X-Forwarded-Host", "untrusted.example")
+	if got := TestingConnectedAccountCallbackURL(request, "google"); got != "https://api.example.test/v1/oauth/connections/google/callback" {
+		t.Fatalf("configured callback followed a caller header: %q", got)
 	}
 	definition := TestingConnectedAccountOAuthCatalog["google"]
 	_, scopes, _ := TestingConnectedAccountRequestedScopes(definition, []string{"mail", "mail"})

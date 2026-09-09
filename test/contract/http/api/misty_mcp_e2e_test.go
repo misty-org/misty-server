@@ -62,7 +62,7 @@ func TestManagedMistyMCPNegotiatesWithOfficialGoSDK(t *testing.T) {
 	if _, err := database.SetMCPConnectionHealth(t.Context(), owner.ID, connection.ID, "active", "", true); err != nil {
 		t.Fatal(err)
 	}
-	misty, err := database.EnsureManagedMistyAgent(t.Context(), owner.ID, serveragent.InitialSelectedModelID)
+	misty, err := database.EnsureAskIdentity(t.Context(), owner.ID, serveragent.InitialSelectedModelID)
 	if err != nil {
 		t.Fatal(err)
 	}

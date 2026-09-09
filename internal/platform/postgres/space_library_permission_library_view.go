@@ -23,8 +23,7 @@ const (
 	PermissionStorageViewOwn     = "storage.view_own_usage"
 	PermissionStudioView         = "studio.view"
 	PermissionStudioManage       = "studio.manage"
-	PermissionAgentsRun          = "agents.run"
-	PermissionAgentsManage       = "agents.manage"
+	PermissionAskRun             = "ask.run"
 	PermissionTasksView          = "tasks.view"
 	PermissionTasksManage        = "tasks.manage"
 	PermissionIntegrationsManage = "integrations.manage"
@@ -104,8 +103,7 @@ var configurableSpacePermissions = []string{
 	PermissionLibraryView, PermissionLibraryUpload, PermissionAttachmentUpload,
 	PermissionLibraryAdd, PermissionLibraryEdit, PermissionLibraryDownload,
 	PermissionLibraryImport, PermissionStorageViewOwn, PermissionStorageViewMembers,
-	PermissionStorageManage, PermissionStudioView, PermissionStudioManage, PermissionAgentsRun,
-	PermissionAgentsManage,
+	PermissionStorageManage, PermissionStudioView, PermissionStudioManage, PermissionAskRun,
 	PermissionTasksView, PermissionTasksManage, PermissionIntegrationsManage,
 }
 

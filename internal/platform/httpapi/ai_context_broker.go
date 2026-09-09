@@ -161,6 +161,9 @@ func (broker aiContextBroker) resolve(ctx context.Context, userID string, refere
 	resolved := make([]aiResolvedContext, 0, len(references))
 	seen := map[string]bool{}
 	for _, reference := range references {
+		if err := authorizeAppContextReference(ctx, broker.database, userID, reference); err != nil {
+			return nil, err
+		}
 		reference.Kind = strings.ToLower(strings.TrimSpace(reference.Kind))
 		reference.ID = strings.TrimSpace(reference.ID)
 		if reference.Kind == "" || reference.ID == "" {

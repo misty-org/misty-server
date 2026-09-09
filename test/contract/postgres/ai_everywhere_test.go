@@ -163,7 +163,7 @@ func TestAIConversationTurnsExposeOriginalPromptAndDurableOutcome(t *testing.T) 
 	if err := database.CreateAgentSession(ctx, conversationID, owner.ID, state, now.Add(time.Hour), now.Add(24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.BindCompanionConversation(ctx, owner.ID, conversationID, "", "", "test-model", "home", "/home", "private"); err != nil {
+	if err := database.BindAskSurfaceConversation(ctx, owner.ID, conversationID, "", "test-model", "home", "/home", "private"); err != nil {
 		t.Fatal(err)
 	}
 	if _, created, err := database.CreateAIInvocationRecord(ctx, AIInvocationRecord{

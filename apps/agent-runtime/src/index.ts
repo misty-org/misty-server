@@ -1,9 +1,7 @@
 import express, { type Request } from "express";
-import { getRun, start } from "workflow/api";
-import { runSpaceTaskAgent } from "../workflows/space-task-agent.js";
+import { vercelHarness as harness } from "./vercel-harness.js";
+import { MISTY_HARNESS_VERSION } from "./harness.js";
 import { controlPlaneURL } from "./control-plane.js";
-import { agentToolApprovalHook } from "./approval.js";
-import { agentDeviceHook } from "./device.js";
 import {
   decodeControlSecret,
   signatureHeaders,
@@ -46,7 +44,7 @@ function authorized(request: RawRequest): boolean {
 }
 
 app.get("/health", (_request, response) =>
-  response.json({ ok: true, runtime: "misty-agent-runtime" }),
+  response.json({ ok: true, runtime: "misty-agent-runtime", adapter_version: harness.version }),
 );
 
 app.post("/v1/runs", async (request: RawRequest, response) => {
@@ -65,19 +63,39 @@ app.post("/v1/runs", async (request: RawRequest, response) => {
   // authorization/data record owns the run; it does not change execution.
   if (!/^(?:run|invocation)_[0-9a-f-]{36}$/.test(runId))
     return response.status(400).json({ code: "invalid_run_id" });
+  const adapterVersion = request.body?.adapter_version ?? MISTY_HARNESS_VERSION;
+  if (adapterVersion !== harness.version) return response.status(409).json({ code: "harness_version_unavailable" });
   try {
-    const run = await start(runSpaceTaskAgent, [
-      { mistyRunId: runId, controlPlaneURL: controlPlaneURL(callbackURL) },
-    ]);
-    return response.status(202).json({ runtime_run_id: run.runId });
+    const run = await harness.start({ mistyRunId: runId, controlPlaneURL: controlPlaneURL(callbackURL), adapterVersion });
+    return response.status(202).json({ runtime_run_id: run.runtimeRunId, adapter_version: harness.version });
   } catch (error) {
     reportRuntimeRouteError("workflow start", error);
+    const unconfirmed = error instanceof Error && error.message.startsWith("workflow_start_unconfirmed:");
     return response.status(503).json({
-      code: "workflow_start_failed",
-      message: "Misty could not start this work. Please try again shortly.",
+      code: unconfirmed ? "workflow_start_unconfirmed" : "workflow_start_failed",
+      message: unconfirmed
+        ? "The original workflow start is not yet confirmed. Misty will not submit a duplicate."
+        : "Misty could not confirm the workflow start.",
     });
   }
 });
+
+app.post(
+  "/v1/runs/:runtimeRunId/status",
+  async (request: RawRequest, response) => {
+    if (!authorized(request))
+      return response.status(401).json({ code: "unauthorized" });
+    const id = request.params.runtimeRunId;
+    if (typeof id !== "string" || !id)
+      return response.status(400).json({ code: "invalid_runtime_run_id" });
+    try {
+      return response.json({ status: await harness.status(id) });
+    } catch (error) {
+      reportRuntimeRouteError("workflow status", error);
+      return response.status(503).json({ code: "workflow_status_unavailable" });
+    }
+  },
+);
 
 app.post(
   "/v1/runs/:runtimeRunId/cancel",
@@ -92,7 +110,7 @@ app.post(
     if (!runtimeRunId)
       return response.status(400).json({ code: "invalid_runtime_run_id" });
     try {
-      await getRun(runtimeRunId).cancel();
+      await harness.cancel(runtimeRunId);
       return response.json({ canceled: true });
     } catch (error) {
       reportRuntimeRouteError("workflow cancellation", error);
@@ -120,10 +138,7 @@ app.post("/v1/approvals/:hookToken", async (request: RawRequest, response) => {
     return response.status(400).json({ code: "invalid_approval_resume" });
   }
   try {
-    await agentToolApprovalHook.resume(hookToken, {
-      approved: request.body.approved,
-      approval_id: request.body.approval_id,
-    });
+    await harness.resume({ kind: "approval", token: hookToken, approved: request.body.approved, approvalId: request.body.approval_id });
     return response.json({ resumed: true });
   } catch (error) {
     reportRuntimeRouteError("approval resumption", error);
@@ -146,9 +161,7 @@ app.post("/v1/devices/:hookToken", async (request: RawRequest, response) => {
     return response.status(400).json({ code: "invalid_device_resume" });
   }
   try {
-    await agentDeviceHook.resume(hookToken, {
-      available: request.body.available,
-    });
+    await harness.resume({ kind: "device", token: hookToken, available: request.body.available });
     return response.json({ resumed: true });
   } catch (error) {
     reportRuntimeRouteError("device resumption", error);

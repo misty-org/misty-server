@@ -7,7 +7,7 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
-          include: ["apps/{api,payments}/src/**/*.test.ts", "packages/**/*.test.ts"],
+          include: ["apps/payments/src/**/*.test.ts", "packages/**/*.test.ts"],
           exclude: ["**/*.integration.test.ts"],
           restoreMocks: true,
         },
@@ -16,7 +16,7 @@ export default defineConfig({
         test: {
           name: "integration",
           environment: "node",
-          include: ["apps/{api,payments}/src/**/*.integration.test.ts", "packages/**/*.integration.test.ts"],
+          include: ["apps/payments/src/**/*.integration.test.ts", "packages/**/*.integration.test.ts"],
           fileParallelism: false,
           testTimeout: 15000,
         },

@@ -25,7 +25,6 @@ func TestAgentRoutesRequireAuthentication(t *testing.T) {
 	}
 	for _, path := range []string{
 		"/api/devices",
-		"/api/agents",
 		"/api/spaces/space-1/tasks",
 		"/api/spaces/space-1/calendar/events",
 		"/api/ai/models",
@@ -53,12 +52,17 @@ func TestCustomAgentMutationAndInvocationRoutesAreAbsent(t *testing.T) {
 		path   string
 		want   int
 	}{
-		{http.MethodPost, "/api/agents", http.StatusMethodNotAllowed},
-		{http.MethodPatch, "/api/agents/personal-1", http.StatusMethodNotAllowed},
-		{http.MethodDelete, "/api/agents/personal-1", http.StatusMethodNotAllowed},
-		{http.MethodPut, "/api/agents/personal-1/avatar", http.StatusMethodNotAllowed},
-		{http.MethodPost, "/api/spaces/space-1/agents/personal-1/runs", http.StatusMethodNotAllowed},
-		{http.MethodPost, "/api/agents/delegate", http.StatusMethodNotAllowed},
+		{http.MethodGet, "/api/agents", http.StatusNotFound},
+		{http.MethodGet, "/api/spaces/space-1/agents", http.StatusNotFound},
+		{http.MethodPost, "/api/spaces/space-1/agents", http.StatusNotFound},
+		{http.MethodGet, "/api/spaces/space-1/chat-agents", http.StatusNotFound},
+		{http.MethodPut, "/api/settings/companion-agent", http.StatusNotFound},
+		{http.MethodPost, "/api/agents", http.StatusNotFound},
+		{http.MethodPatch, "/api/agents/personal-1", http.StatusNotFound},
+		{http.MethodDelete, "/api/agents/personal-1", http.StatusNotFound},
+		{http.MethodPut, "/api/agents/personal-1/avatar", http.StatusNotFound},
+		{http.MethodPost, "/api/spaces/space-1/agents/personal-1/runs", http.StatusNotFound},
+		{http.MethodPost, "/api/agents/delegate", http.StatusNotFound},
 		{http.MethodPut, "/api/agents/personal-1/mcp-tools", http.StatusNotFound},
 		{http.MethodGet, "/api/agents/personal-1/mcp-executions", http.StatusNotFound},
 		{http.MethodPost, "/api/agent-voice/speech", http.StatusNotFound},

@@ -32,7 +32,6 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 		var body struct {
 			Prompt         string               `json:"prompt"`
 			SpaceID        string               `json:"space_id,omitempty"`
-			AgentID        string               `json:"agent_id,omitempty"`
 			CapabilityID   string               `json:"capability_id,omitempty"`
 			InvocationID   string               `json:"invocation_id,omitempty"`
 			ConversationID string               `json:"conversation_id,omitempty"`
@@ -64,6 +63,11 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 			return
 		}
 		resolved, err := (aiContextBroker{database: s.database}).resolve(r.Context(), userID, body.Context)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		space, err := s.managedMistyRunSpace(r.Context(), userID, strings.TrimSpace(body.SpaceID), body.Context)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
@@ -105,14 +109,9 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 				return
 			}
 		}
-		space, err := s.managedMistyRunSpace(r.Context(), userID, strings.TrimSpace(body.SpaceID), body.Context)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
 		if conversationID != "" {
 			bound, boundErr := s.database.AgentConversationIdentity(r.Context(), userID, conversationID)
-			if boundErr != nil || bound.AgentID != "" || conversationSpaceChanged(bound.SpaceID, space.ID) {
+			if boundErr != nil || conversationSpaceChanged(bound.SpaceID, space.ID) {
 				writeJSON(w, http.StatusConflict, map[string]any{"code": "conversation_context_changed", "message": "Start a new conversation to work in a different Space."})
 				return
 			}
@@ -123,7 +122,7 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 				}
 			}
 		}
-		misty, err := s.database.EnsureManagedMistyAgent(r.Context(), userID, serveragent.InitialSelectedModelID)
+		misty, err := s.database.EnsureAskIdentity(r.Context(), userID, serveragent.InitialSelectedModelID)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
@@ -171,6 +170,9 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 }
 
 func (s *SpacesService) managedMistyRunSpace(ctx context.Context, userID, requestedSpaceID string, references []aiContextReference) (*db.Space, error) {
+	if mixedAIContextSpaces(references) {
+		return nil, db.ErrSpaceInvalid
+	}
 	spaceID := strings.TrimSpace(requestedSpaceID)
 	if spaceID == "" {
 		spaceID = firstAIContextSpace(references)
@@ -180,20 +182,10 @@ func (s *SpacesService) managedMistyRunSpace(ctx context.Context, userID, reques
 		if err != nil {
 			return nil, err
 		}
-		if !space.Permissions[db.PermissionAgentsRun] {
+		if !space.Permissions[db.PermissionAskRun] {
 			return nil, db.ErrSpaceForbidden
 		}
 		return space, nil
 	}
-	spaces, err := s.database.ListSpaces(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	for i := range spaces {
-		if !spaces[i].Permissions[db.PermissionAgentsRun] {
-			continue
-		}
-		return &spaces[i], nil
-	}
-	return nil, db.ErrSpaceForbidden
+	return nil, db.ErrSpaceInvalid
 }

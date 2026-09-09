@@ -10,26 +10,26 @@ import (
 	"github.com/google/uuid"
 )
 
-// EnsureManagedMistyAgent returns the single server-managed runtime identity
+// EnsureAskIdentity returns the single server-managed runtime identity
 // behind the user-facing Misty. The identity is implementation detail: users
 // cannot configure its model, instructions, permissions, or run mode.
-func (db *Database) EnsureManagedMistyAgent(ctx context.Context, userID, modelID string) (*PersonalAgent, error) {
+func (db *Database) EnsureAskIdentity(ctx context.Context, userID, modelID string) (*AskIdentity, error) {
 	userID, modelID = strings.TrimSpace(userID), strings.TrimSpace(modelID)
 	if userID == "" || modelID == "" {
 		return nil, ErrSpaceInvalid
 	}
-	out := &PersonalAgent{}
+	out := &AskIdentity{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		// Serialize lazy creation without relying on a read-then-insert race.
 		var lockResult any
 		if err := tx.QueryRowContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "managed-misty:"+userID).Scan(&lockResult); err != nil {
 			return err
 		}
-		err := scanPersonalAgent(tx.QueryRowContext(ctx, `SELECT `+personalAgentColumns+` FROM personal_agents
+		err := scanPersonalAgent(tx.QueryRowContext(ctx, `SELECT `+personalAgentColumns+` FROM misty_ask_identities
 			WHERE owner_user_id=$1 AND system_managed AND deleted_at IS NULL`, userID), out)
 		if err == nil {
 			if !out.Enabled || out.ModelID != modelID || out.Name != "Misty" || out.DefaultRunMode != "auto" {
-				if err := scanPersonalAgent(tx.QueryRowContext(ctx, `UPDATE personal_agents SET name='Misty',role='Assistant',description=$1,
+				if err := scanPersonalAgent(tx.QueryRowContext(ctx, `UPDATE misty_ask_identities SET name='Misty',role='Assistant',description=$1,
 					instructions=$2,model_mode='pinned',model_id=$3,reasoning_effort='',default_run_mode='auto',enabled=TRUE,
 					version=version+1,updated_at=NOW() WHERE id=$4 RETURNING `+personalAgentColumns,
 					managedMistyDescription, managedMistyInstructions, modelID, out.ID), out); err != nil {
@@ -46,7 +46,7 @@ func (db *Database) EnsureManagedMistyAgent(ctx context.Context, userID, modelID
 		}
 		avatar, _ := json.Marshal(map[string]any{"kind": "preset", "preset_id": "misty", "accent": "blue"})
 		out.ID = "personal_misty_" + uuid.NewString()
-		if err := scanPersonalAgent(tx.QueryRowContext(ctx, `INSERT INTO personal_agents(
+		if err := scanPersonalAgent(tx.QueryRowContext(ctx, `INSERT INTO misty_ask_identities(
 			id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,
 			default_run_mode,voice_id,enabled,system_managed)
 			VALUES($1,$2,'Misty','Assistant',$3,'misty',$4,$5,'pinned',$6,'','auto','alloy',TRUE,TRUE)
@@ -89,7 +89,7 @@ func syncManagedMistyMCPToolsTx(ctx context.Context, tx *sql.Tx, userID, agentID
 		return err
 	}
 	for _, item := range tools {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO personal_agent_mcp_tools(
+		if _, err := tx.ExecContext(ctx, `INSERT INTO misty_ask_mcp_tools(
 			id,owner_user_id,agent_id,connection_id,remote_tool_id,stable_name,schema_fingerprint,enabled)
 			VALUES($1,$2,$3,$4,$5,$6,$7,TRUE)
 			ON CONFLICT(agent_id,connection_id,remote_tool_id) DO UPDATE SET

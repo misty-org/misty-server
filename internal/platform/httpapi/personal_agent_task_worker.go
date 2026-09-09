@@ -10,37 +10,35 @@ import (
 )
 
 func (s *SpacesService) ProcessAssignedPersonalAgentRuns(ctx context.Context, workerID string, limit int) (int, error) {
+	if _, err := s.ProcessAgentRuntimeDeliveries(ctx, limit); err != nil {
+		return 0, err
+	}
 	decided, err := s.database.CreatorToolApprovalResumesPending(ctx, 20)
 	if err != nil {
 		return 0, err
 	}
-	for index := range decided {
-		approval := &decided[index]
-		if s.agentRuntime.ResumeApproval(ctx, approval.HookToken, approval.RunID, approval.ID, approval.State == "approved") == nil {
-			_ = s.database.MarkCreatorToolApprovalResumed(ctx, approval.RunID, approval.ID)
+	for _, approval := range decided {
+		if err := s.database.QueueAgentApprovalResume(ctx, approval.ID); err != nil {
+			return 0, err
 		}
 	}
 	expired, err := s.database.ExpireCreatorToolApprovals(ctx, 20)
 	if err != nil {
 		return 0, err
 	}
-	for index := range expired {
-		approval := &expired[index]
-		if s.agentRuntime.ResumeApproval(ctx, approval.HookToken, approval.RunID, approval.ID, false) == nil {
-			_ = s.database.MarkExpiredCreatorToolApprovalResumed(ctx, approval.RunID, approval.ID)
+	for _, approval := range expired {
+		if err := s.database.QueueAgentApprovalResume(ctx, approval.ID); err != nil {
+			return 0, err
 		}
 	}
 	deviceWaits, err := s.database.AgentDeviceWaitsReady(ctx, 20)
 	if err != nil {
 		return 0, err
 	}
-	for index := range deviceWaits {
-		wait := &deviceWaits[index]
-		if beginErr := s.database.BeginAgentDeviceResume(ctx, wait.RunID, wait.Available); beginErr != nil {
-			continue
+	for _, wait := range deviceWaits {
+		if err := s.database.QueueAgentDeviceResume(ctx, wait); err != nil && !errors.Is(err, db.ErrSpaceConflict) {
+			return 0, err
 		}
-		resumeErr := s.agentRuntime.ResumeDevice(ctx, wait.HookToken, wait.RunID, wait.Available)
-		_ = s.database.FinishAgentDeviceResume(ctx, wait.RunID, resumeErr == nil)
 	}
 	if _, err := s.database.ReconcileStalePersonalAgentTaskRuns(ctx, time.Now().UTC().Add(-12*time.Minute), 20); err != nil {
 		return 0, err
@@ -62,7 +60,12 @@ func (s *SpacesService) ProcessAssignedPersonalAgentRuns(ctx context.Context, wo
 			continue
 		}
 		message := strings.TrimSpace(dispatchErr.Error())
-		requeued, jobErr := s.database.FailPersonalAgentTaskRunJob(ctx, job.Run.ID, workerID, "agent_runtime_dispatch_failed", message, true)
+		code := "agent_runtime_dispatch_failed"
+		if errors.Is(dispatchErr, errAgentRuntimeStartUnconfirmed) {
+			code = "workflow_start_unconfirmed"
+			message = "The original workflow start is unconfirmed. Misty will recover its existing identity if available and will not submit duplicate work."
+		}
+		requeued, jobErr := s.database.FailPersonalAgentTaskRunJob(ctx, job.Run.ID, workerID, code, message, true)
 		if errors.Is(jobErr, db.ErrSpaceConflict) {
 			state, _, stateErr := s.database.PersonalAgentTaskRunJobState(ctx, job.Run.ID)
 			if stateErr == nil && state == "dispatched" {

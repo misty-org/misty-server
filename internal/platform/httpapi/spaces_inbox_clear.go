@@ -3,10 +3,8 @@ package api
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"net"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
@@ -76,43 +74,6 @@ func (s *SpacesService) DeleteStudioResource(kind string) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
-func (s *SpacesService) RunStudioResource(kind string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID, resourceID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "resourceID")
-		var body struct {
-			Prompt       string          `json:"prompt"`
-			CapabilityID string          `json:"capability_id"`
-			Input        json.RawMessage `json:"input"`
-		}
-		if r.ContentLength > 0 && decodeJSON(w, r, &body) != nil {
-			return
-		}
-		input := body.Input
-		if len(input) == 0 {
-			input, _ = json.Marshal(map[string]string{"prompt": strings.TrimSpace(body.Prompt)})
-		}
-		run, err := s.database.CreateSpaceRun(r.Context(), userID, spaceID, kind, resourceID, "test", body.CapabilityID, input)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if run.State == "awaiting_approval" {
-			writeJSON(w, http.StatusAccepted, run)
-			return
-		}
-		finished, err := s.executeCanonicalAgentRun(r, run, body.Prompt)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, finished)
 	}
 }
 

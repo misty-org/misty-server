@@ -29,18 +29,6 @@ type WorkflowRunStep struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
-func (db *Database) WorkflowWritePreauthorized(ctx context.Context, userID, instanceID, workflowVersionID, nodeID, provider, connectionID, destination string) (bool, error) {
-	var allowed bool
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT EXISTS(
-			SELECT 1 FROM space_agent_instance_workflows w JOIN space_agent_instances i ON i.id=w.instance_id,
-			LATERAL jsonb_array_elements(COALESCE(w.consent->'preauthorizedWrites','[]'::jsonb)) grant
-			WHERE w.instance_id=$1 AND w.workflow_version_id=$2 AND w.enabled AND w.consent->>'granted'='true' AND i.user_id=$3
-			AND grant->>'nodeId'=$4 AND COALESCE(grant->>'provider','')=$5 AND COALESCE(grant->>'connectionId','')=$6 AND COALESCE(grant->>'destination','')=$7)`, instanceID, workflowVersionID, userID, nodeID, provider, connectionID, destination).Scan(&allowed)
-	})
-	return allowed, err
-}
-
 func (db *Database) WorkflowRunSteps(ctx context.Context, userID, runID string) ([]WorkflowRunStep, error) {
 	items := []WorkflowRunStep{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
@@ -146,21 +134,6 @@ func (db *Database) NotifyWorkflowResult(ctx context.Context, runID, nodeID stri
 	return eventID, err
 }
 
-func (db *Database) WriteAgentMemoryEvent(ctx context.Context, instanceID, kind string, data json.RawMessage) (int64, error) {
-	if kind != "user" && kind != "agent" && kind != "tool" && kind != "workflow" && kind != "compaction" || len(data) == 0 {
-		return 0, ErrSpaceInvalid
-	}
-	var id int64
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `INSERT INTO space_agent_memory_events(instance_id,kind,data)
-			SELECT id,$2,$3 FROM space_agent_instances WHERE id=$1 AND user_id=misty_rls_user_id() RETURNING id`, instanceID, kind, data).Scan(&id)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrSpaceNotFound
-	}
-	return id, err
-}
-
 func (db *Database) CheckpointWorkflowStep(ctx context.Context, runID string, event workflowv2.StepEvent) error {
 	input, output := event.Input, event.Output
 	if len(input) == 0 {
@@ -218,67 +191,91 @@ func (db *Database) JournalWorkflowAction(ctx context.Context, runID, nodeID, id
 	if len(request) == 0 {
 		request = json.RawMessage(`{}`)
 	}
+	if runID == "" || nodeID == "" || idempotencyKey == "" || execute == nil || !json.Valid(request) {
+		return nil, ErrSpaceInvalid
+	}
 	var existing json.RawMessage
+	claimed := false
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var state string
-		err := tx.QueryRowContext(ctx, `SELECT state,result FROM space_workflow_action_journal WHERE idempotency_key=$1`, idempotencyKey).Scan(&state, &existing)
-		if err == nil && state == "completed" {
-			return nil
-		}
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		inserted, err := tx.ExecContext(ctx, `INSERT INTO space_workflow_action_journal(idempotency_key,run_id,node_id,provider,risk,state,request)
+   VALUES($1,$2,$3,$4,$5,'started',$6) ON CONFLICT DO NOTHING`, idempotencyKey, runID, nodeID, provider, risk, request)
+		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO space_workflow_action_journal(idempotency_key,run_id,node_id,provider,risk,state,request) VALUES($1,$2,$3,$4,$5,'started',$6) ON CONFLICT(idempotency_key) DO UPDATE SET state='started',request=EXCLUDED.request,updated_at=NOW()`, idempotencyKey, runID, nodeID, provider, risk, request)
-		return err
-	})
-	if err != nil || existing != nil {
-		return existing, err
-	}
-	result, executeErr := execute()
-	if len(result) == 0 {
-		result = json.RawMessage(`{}`)
-	}
-	state, code := "completed", ""
-	if executeErr != nil {
-		state, code = "failed", workflowErrorCode(executeErr)
-	}
-	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE space_workflow_action_journal SET state=$1,result=$2,error_code=NULLIF($3,''),updated_at=NOW() WHERE idempotency_key=$4`, state, result, code, idempotencyKey)
-		return err
+		n, err := inserted.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n == 1 {
+			claimed = true
+			return nil
+		}
+		var state, existingRun, existingNode, existingProvider, existingRisk string
+		var same bool
+		if err := tx.QueryRowContext(ctx, `SELECT state,result,run_id,node_id,provider,risk,request=$2::jsonb FROM space_workflow_action_journal WHERE idempotency_key=$1 FOR UPDATE`, idempotencyKey, request).Scan(&state, &existing, &existingRun, &existingNode, &existingProvider, &existingRisk, &same); err != nil {
+			return err
+		}
+		if existingRun != runID || existingNode != nodeID || existingProvider != provider || existingRisk != string(risk) || !same {
+			return ErrSpaceConflict
+		}
+		switch state {
+		case "completed":
+			return nil
+		case "started":
+			return ErrAgentToolboxActionInProgress
+		case "unknown":
+			return ErrAgentToolboxActionUnknown
+		case "failed":
+			if risk != workflowv2.RiskRead {
+				return ErrAgentToolboxActionUnknown
+			}
+			_, err := tx.ExecContext(ctx, `UPDATE space_workflow_action_journal SET state='started',updated_at=NOW() WHERE idempotency_key=$1`, idempotencyKey)
+			claimed = err == nil
+			return err
+		default:
+			return ErrSpaceConflict
+		}
 	})
 	if err != nil {
 		return nil, err
 	}
+	if !claimed {
+		return existing, nil
+	}
+	result, executeErr := execute()
+	if len(result) == 0 || !json.Valid(result) {
+		result = json.RawMessage(`{}`)
+		if executeErr == nil {
+			executeErr = workflowv2.ErrOutputInvalid
+		}
+	}
+	state, code := "completed", ""
+	if executeErr != nil {
+		state, code = "failed", workflowErrorCode(executeErr)
+		if risk != workflowv2.RiskRead {
+			state, code = "unknown", "tool_outcome_unknown"
+		}
+	}
+	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	err = db.TestingSpaceTx(finishCtx, func(tx *sql.Tx) error {
+		updated, err := tx.ExecContext(finishCtx, `UPDATE space_workflow_action_journal SET state=$1,result=$2,error_code=NULLIF($3,''),updated_at=NOW() WHERE idempotency_key=$4 AND state='started'`, state, result, code, idempotencyKey)
+		if err != nil {
+			return err
+		}
+		n, err := updated.RowsAffected()
+		if err == nil && n != 1 {
+			return ErrAgentToolboxActionUnknown
+		}
+		return err
+	})
+	if err != nil {
+		return nil, errors.Join(ErrAgentToolboxActionUnknown, err)
+	}
+	if state == "unknown" {
+		return nil, errors.Join(ErrAgentToolboxActionUnknown, executeErr)
+	}
 	return result, executeErr
-}
-
-func (db *Database) ClaimWorkflowEvent(ctx context.Context, instanceID, workflowVersionID, provider, eventID, fingerprint, runID string) (bool, error) {
-	claimed := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `INSERT INTO space_workflow_event_claims(instance_id,workflow_version_id,provider,event_id,fingerprint,run_id,state) VALUES($1,$2,$3,$4,$5,NULLIF($6,''),'claimed') ON CONFLICT DO NOTHING`, instanceID, workflowVersionID, provider, eventID, fingerprint, runID)
-		if err != nil {
-			return err
-		}
-		count, _ := result.RowsAffected()
-		claimed = count == 1
-		return nil
-	})
-	return claimed, err
-}
-
-func (db *Database) ReclaimFailedWorkflowEvent(ctx context.Context, instanceID, workflowVersionID, provider, eventID, fingerprint, runID string) (bool, error) {
-	claimed := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE space_workflow_event_claims SET state='claimed',fingerprint=$1,run_id=NULLIF($2,''),updated_at=NOW()
-			WHERE instance_id=$3 AND workflow_version_id=$4 AND provider=$5 AND event_id=$6 AND state='failed'`, fingerprint, runID, instanceID, workflowVersionID, provider, eventID)
-		if err != nil {
-			return err
-		}
-		count, _ := result.RowsAffected()
-		claimed = count == 1
-		return nil
-	})
-	return claimed, err
 }
 
 func (db *Database) AcquireWorkflowResourceLease(ctx context.Context, runID, nodeID, resourceKey, fingerprint string, duration time.Duration) (bool, error) {

@@ -1,8 +1,13 @@
 package api
 
-import "time"
+import (
+	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"time"
+)
 
 type preparedAIInvocationRuntime struct {
+	sdkRequest         *db.SDKInvocationRecord
+	routineExecution   *db.RoutineExecution
 	body               aiInvocationInput
 	resolved           []aiResolvedContext
 	spaceID            string

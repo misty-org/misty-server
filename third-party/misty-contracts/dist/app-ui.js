@@ -1,3 +1,4 @@
+import { MistyEditorPreferencesSchema } from "./code-controls.js";
 import { mistyWorkspaceContracts, MistyViewStateSchema, MistyViewTitleSchema, MistyViewPlacementSchema } from "./workspace.js";
 import { z } from "zod";
 const label = z
@@ -17,6 +18,7 @@ export const MistyTerminalPreferencesSchema = z.strictObject({
     scrollback: z.number().int().min(1000).max(500000),
 });
 export const MistyAppSettingsSchema = z.strictObject({
+    code: MistyEditorPreferencesSchema.optional(),
     terminal: MistyTerminalPreferencesSchema.optional(),
     browser: z.strictObject({
         homeUrl: z.string().max(8192),
@@ -47,19 +49,26 @@ export const mistyBrowserCommands = [
     "navigation.back", "navigation.forward", "navigation.refresh",
     "browser.annotation_undo", "browser.annotation_redo",
 ];
+export const mistyCodeCommands = ["code.add_cursor_above", "code.add_cursor_below", "code.apply_inline_ai", "code.code_actions", "code.command_palette", "code.document_symbols", "code.format_document", "code.go_to_definition", "code.harpoon", "code.inline_ai", "code.open_multibuffer_excerpt", "code.previous_file", "code.quick_open", "code.references", "code.rename", "code.save", "code.search_project", "code.select_all_occurrences", "code.select_next_occurrence", "code.show_hover", "code.toggle_explorer", "code.toggle_terminal", "code.undo_selection"];
 export const MistyAppCommandSchema = z.enum([
     ...mistyTerminalCommands,
     ...mistyPlannerCommands,
     ...mistyBrowserCommands,
+    ...mistyCodeCommands,
 ]);
 export function commandsForApp(appId) {
     switch (appId) {
+        case "code":
+            return mistyCodeCommands;
         case "terminal":
             return mistyTerminalCommands;
         case "planner":
             return mistyPlannerCommands;
         case "browser":
             return mistyBrowserCommands;
+        case "chat":
+        case "inbox":
+            return ["navigation.back", "navigation.forward", "navigation.refresh"];
         default:
             return [];
     }
@@ -77,6 +86,7 @@ const voidResult = z
     .transform(() => undefined);
 export const mistyAppUiContracts = {
     ...mistyWorkspaceContracts,
+    "workspace.dirty.set": { params: z.strictObject({ dirty: z.boolean() }), result: voidResult },
     "workspace.open": {
         params: MistyWorkspaceOpenSchema,
         result: z.strictObject({ viewId: label }),

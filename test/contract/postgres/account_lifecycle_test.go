@@ -38,17 +38,12 @@ func TestAccountDeletionBlocksOwnersAndAnonymizesMembersAfterRetention(t *testin
 	if _, err := database.RespondToSpaceInvite(ctx, member.ID, invite.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.SetSpaceMemberPermission(ctx, owner.ID, space.ID, member.ID, PermissionAgentsManage, "allow"); err != nil {
+
+	if err := database.SetSpaceMemberPermission(ctx, owner.ID, space.ID, member.ID, PermissionAskRun, "allow"); err != nil {
 		t.Fatal(err)
 	}
-	agent, err := database.CreatePersonalAgent(ctx, member.ID, PersonalAgent{
-		Name: "Private deletion Agent", Instructions: "Sensitive owner instructions",
-		ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite",
-	})
+	agent, err := database.EnsureAskIdentity(ctx, member.ID, "google/gemini-2.5-flash-lite")
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := database.AppendPersonalAgentMemory(ctx, member.ID, space.ID, agent.ID, "private prompt", "private response"); err != nil {
 		t.Fatal(err)
 	}
 	conversationID := "conversation_87654321-4321-4321-4321-210987654321"
@@ -88,7 +83,7 @@ func TestAccountDeletionBlocksOwnersAndAnonymizesMembersAfterRetention(t *testin
 		t.Fatalf("pending user remained login-visible = %#v, %v", user, err)
 	}
 	var agentEnabled bool
-	if err := database.Conn.QueryRow(`SELECT enabled FROM personal_agents WHERE id=$1`, agent.ID).Scan(&agentEnabled); err != nil {
+	if err := database.Conn.QueryRow(`SELECT enabled FROM misty_ask_identities WHERE id=$1`, agent.ID).Scan(&agentEnabled); err != nil {
 		t.Fatal(err)
 	}
 	if agentEnabled {
@@ -131,14 +126,14 @@ func TestAccountDeletionBlocksOwnersAndAnonymizesMembersAfterRetention(t *testin
 		t.Fatalf("anonymized user = state:%q name:%q email:%q", state, name, email)
 	}
 	var agentName, instructions, versionInstructions string
-	if err := database.Conn.QueryRow(`SELECT name,instructions FROM personal_agents WHERE id=$1`, agent.ID).Scan(&agentName, &instructions); err != nil {
+	if err := database.Conn.QueryRow(`SELECT name,instructions FROM misty_ask_identities WHERE id=$1`, agent.ID).Scan(&agentName, &instructions); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.Conn.QueryRow(`SELECT instructions FROM personal_agent_versions WHERE agent_id=$1 LIMIT 1`, agent.ID).Scan(&versionInstructions); err != nil {
+	if err := database.Conn.QueryRow(`SELECT instructions FROM misty_ask_identity_versions WHERE agent_id=$1 LIMIT 1`, agent.ID).Scan(&versionInstructions); err != nil {
 		t.Fatal(err)
 	}
 	var privateRows int
-	if err := database.Conn.QueryRow(`SELECT COUNT(*) FROM agent_conversations WHERE user_id=$1`, member.ID).Scan(&privateRows); err != nil {
+	if err := database.Conn.QueryRow(`SELECT COUNT(*) FROM misty_ask_conversations WHERE user_id=$1`, member.ID).Scan(&privateRows); err != nil {
 		t.Fatal(err)
 	}
 	if agentName != "Deleted Agent" || instructions != "" || versionInstructions != "" || privateRows != 0 {

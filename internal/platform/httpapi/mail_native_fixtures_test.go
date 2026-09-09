@@ -12,7 +12,7 @@ import (
 )
 
 func TestNativeMailThreadFixtures(t *testing.T) {
-	const path = "../../../docs/migration/fixtures/mail-threads.json"
+	const path = "../../../test/fixtures/compatibility/mail-threads.json"
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

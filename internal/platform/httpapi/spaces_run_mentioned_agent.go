@@ -15,25 +15,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (s *SpacesService) runMentionedAgent(ctx context.Context, billingUserID, spaceID, conversationID, agentID, sourceMessageID, triggerKind string, content []db.MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string) (*db.SpaceMessage, string, error) {
-	return s.runMentionedAgentAtDepth(ctx, billingUserID, spaceID, conversationID, agentID, sourceMessageID, triggerKind, content, fileNodeIDs, attachmentIDs, libraryItemIDs, 0)
-}
-
-func (s *SpacesService) runMentionedAgentAtDepth(ctx context.Context, billingUserID, spaceID, conversationID, agentID, sourceMessageID, triggerKind string, content []db.MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, delegationDepth int) (*db.SpaceMessage, string, error) {
-	if _, err := s.database.PersonalAgentForSpace(ctx, billingUserID, spaceID, agentID); err != nil {
-		return nil, "", err
-	}
-	instruction := strings.TrimSpace(renderMessageText(content))
-	if instruction == "" {
-		return nil, "", db.ErrSpaceInvalid
-	}
-	run, err := s.database.CreateCreatorAgentRun(ctx, billingUserID, spaceID, agentID, db.CreatorAgentRunInput{Instruction: instruction, ConversationTarget: conversationID})
-	if err != nil {
-		return nil, "", err
-	}
-	return nil, run.ID, nil
-}
-
 // agentClarificationContext returns only the immediately preceding Agent/user
 // exchange. Older chat is deliberately ignored so a completed write request
 // cannot grant a later, unrelated message write capabilities.
@@ -184,7 +165,6 @@ func (s *SpacesService) Message() http.HandlerFunc {
 				writeSpaceError(w, err)
 				return
 			}
-			_ = s.database.InvalidateSpaceActionSuggestionsForMessage(r.Context(), spaceID, "", messageID)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -200,7 +180,6 @@ func (s *SpacesService) Message() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		_ = s.database.InvalidateSpaceActionSuggestionsForMessage(r.Context(), spaceID, "", messageID)
 		writeJSON(w, http.StatusOK, message)
 	}
 }

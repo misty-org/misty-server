@@ -16,18 +16,20 @@ import (
 )
 
 type agentRuntimeToolCall struct {
-	RuntimeRunID      string
-	CallID            string
-	Name              string
-	Arguments         json.RawMessage
-	ApprovalHookToken string
-	DeviceHookToken   string
+	SupportsIntervention bool
+	RuntimeRunID         string
+	CallID               string
+	Name                 string
+	Arguments            json.RawMessage
+	ApprovalHookToken    string
+	DeviceHookToken      string
 }
 
 type agentRuntimeToolOutcome struct {
-	Result     json.RawMessage
-	Approval   any
-	DeviceWait bool
+	Result          json.RawMessage
+	ProviderOutcome json.RawMessage
+	Approval        any
+	DeviceWait      bool
 }
 
 func managedMistyRun(run *db.SpaceRun) bool {
@@ -46,39 +48,17 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 		return toolbox, invocation, authorizePersonalAgentTaskTool(s.database), err
 	}
 
-	personalAgent, err := s.database.PersonalAgentByID(ctx, run.OwnerUserID, run.AgentID)
-	if err != nil {
+	if _, err := s.database.AskIdentityByID(ctx, run.OwnerUserID, run.AgentID); err != nil {
 		return nil, agenttools.Invocation{}, nil, err
 	}
 	delegationHandler := func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
 		var input struct {
-			Prompt    string `json:"prompt"`
-			AgentID   string `json:"agent_id"`
-			AgentName string `json:"agent_name"`
+			Prompt string `json:"prompt"`
 		}
 		if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.Prompt) == "" {
 			return nil, db.ErrSpaceInvalid
 		}
-		targetID := strings.TrimSpace(input.AgentID)
-		if personalAgent.SystemManaged {
-			targetID = run.AgentID
-		} else if targetID == "" {
-			agents, err := s.database.AccessiblePersonalAgents(ctx, run.OwnerUserID, run.SpaceID)
-			if err != nil {
-				return nil, err
-			}
-			for _, agent := range agents {
-				if strings.EqualFold(agent.Name, strings.TrimSpace(input.AgentName)) {
-					if targetID != "" {
-						return nil, db.ErrSpaceConflict
-					}
-					targetID = agent.ID
-				}
-			}
-		}
-		if targetID == "" {
-			return nil, db.ErrPersonalAgentNotFound
-		}
+		targetID := run.AgentID
 		child, err := s.database.CreateCreatorAgentRun(ctx, run.OwnerUserID, run.SpaceID, targetID, db.CreatorAgentRunInput{
 			Instruction: input.Prompt,
 			Mode:        run.InitialRunMode,
@@ -87,10 +67,7 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 		if err != nil {
 			return nil, err
 		}
-		if personalAgent.SystemManaged {
-			return TestingMustAPIRawJSON(map[string]any{"run_id": child.ID, "state": child.State, "worker": "background"}), nil
-		}
-		return TestingMustAPIRawJSON(map[string]any{"run_id": child.ID, "state": child.State, "agent_id": child.AgentID}), nil
+		return TestingMustAPIRawJSON(map[string]any{"run_id": child.ID, "state": child.State, "worker": "background"}), nil
 	}
 
 	browserTabs := []string{}
@@ -98,7 +75,7 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 	if contexts, err := s.database.AgentRunDeviceGrants(ctx, run.OwnerUserID, run.ID); err == nil {
 		browserTabs = activeBrowserGrantTabs(contexts)
 		for _, descriptor := range browserToolDescriptors() {
-			browserCapabilities[descriptor.Name] = activeBrowserCapability(contexts, descriptor.Name)
+			browserCapabilities[descriptor.Name] = activeBrowserRuntimeCapability(contexts, descriptor.Name)
 		}
 	}
 	providers := s.companionRunProviders(ctx, run)
@@ -109,6 +86,11 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 		return s.executeMCPAgentTool(toolCtx, run, tool, false, "space_conversation")
 	}
 	mcpRegistrations, _ := s.appendPersonalAgentMCPTools(ctx, run.OwnerUserID, run.AgentID, nil, nil, mcpHandler)
+	sdkRegistrations, err := s.agentSDKRegistrations(ctx, run)
+	if err != nil {
+		return nil, agenttools.Invocation{}, nil, err
+	}
+	mcpRegistrations = append(mcpRegistrations, sdkRegistrations...)
 	toolbox := spaceAgentToolboxWithBrowserProvidersAndExtra(s.database, browserTabs, browserCapabilities, providers, providerHandler, mcpRegistrations, delegationHandler)
 	names := make([]string, 0, len(toolbox.Descriptors()))
 	explicit := map[string]bool{}
@@ -139,6 +121,12 @@ func (s *SpacesService) executePersonalAgentRuntimeTool(ctx context.Context, run
 	if run == nil || strings.TrimSpace(call.CallID) == "" || len(call.CallID) > 200 || len(call.Arguments) == 0 {
 		return agentRuntimeToolOutcome{}, db.ErrSpaceInvalid
 	}
+	if strings.HasPrefix(call.Name, "sdk.") {
+		return s.executeConversationalSDKTool(ctx, run, call)
+	}
+	if call.Name == "browser.request_user_action" && !call.SupportsIntervention {
+		return agentRuntimeToolOutcome{}, db.ErrSpaceForbidden
+	}
 	impact := companionToolImpact(call.Name)
 	if companionToolNeedsApproval(run.EffectiveRunMode, impact) {
 		digest := sha256.Sum256(call.Arguments)
@@ -159,15 +147,34 @@ func (s *SpacesService) executePersonalAgentRuntimeTool(ctx context.Context, run
 		}
 	}
 
+	ctx = withAgentExecutionRuntime(ctx, call.RuntimeRunID)
 	toolbox, invocation, authorize, err := s.resolvePersonalAgentRuntimeToolbox(ctx, run)
 	if err != nil {
 		return agentRuntimeToolOutcome{}, err
 	}
+	if call.Name == "browser.request_user_action" {
+		manifest, err := toolbox.Resolve(ctx, invocation, []string{call.Name}, authorize)
+		if err != nil {
+			return agentRuntimeToolOutcome{}, err
+		}
+		if len(manifest.Tools) != 1 {
+			return agentRuntimeToolOutcome{}, agenttools.ErrCapabilityDenied
+		}
+		result, err := s.requestAIUserAction(ctx, run.OwnerUserID, run.ID, call)
+		return agentRuntimeToolOutcome{Result: result}, err
+	}
 	result, err := toolbox.ExecuteWithMiddleware(ctx, invocation, serveragent.ToolRequest{
 		ID: call.CallID, Name: call.Name, Arguments: call.Arguments,
 	}, authorize, agentToolboxExecutionJournal(s.database))
+	if errors.Is(err, db.ErrAgentToolboxActionUnknown) {
+		return agentRuntimeToolOutcome{Result: TestingMustAPIRawJSON(map[string]any{"status": "uncertain", "effect_id": call.CallID, "reason": "The action may have completed. Its outcome must be reconciled before retrying."})}, nil
+	}
 	if errors.Is(err, workflowv2.ErrDeviceUnavailable) {
-		if waitErr := s.database.AwaitAgentRunDevice(ctx, run.ID, call.RuntimeRunID, call.DeviceHookToken); waitErr != nil {
+		var target struct {
+			ScopeID string `json:"scopeId"`
+		}
+		_ = json.Unmarshal(call.Arguments, &target)
+		if waitErr := s.database.AwaitAgentRunDeviceTarget(ctx, run.ID, call.RuntimeRunID, call.DeviceHookToken, target.ScopeID, call.Name); waitErr != nil {
 			return agentRuntimeToolOutcome{}, waitErr
 		}
 		return agentRuntimeToolOutcome{DeviceWait: true}, nil
@@ -177,4 +184,13 @@ func (s *SpacesService) executePersonalAgentRuntimeTool(ctx context.Context, run
 	}
 	_ = s.database.TouchPersonalAgentTaskRuntime(ctx, run.ID, call.RuntimeRunID, "used_"+strings.ReplaceAll(call.Name, ".", "_"), 15)
 	return agentRuntimeToolOutcome{Result: result}, nil
+}
+
+// User-action waits require the same attached browser read authority. Their
+// implementation is only exposed through the negotiated durable runtime.
+func activeBrowserRuntimeCapability(grants []db.AgentDeviceGrant, name string) bool {
+	if name == "browser.request_user_action" {
+		name = "browser.inspect"
+	}
+	return activeBrowserCapability(grants, name)
 }

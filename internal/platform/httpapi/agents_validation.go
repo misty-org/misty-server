@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -27,11 +26,9 @@ const (
 	deviceSignedBodyLimit  = 2 << 20
 )
 
-// AgentsService now exposes trusted-device identity and exact v2 workflow
-// node leases only. Shared Agent definitions and runs live in SpacesService.
+// AgentsService exposes trusted-device identity, jobs and voice for global Ask.
 type AgentsService struct {
 	database         *db.Database
-	avatarStore      LibraryObjectStore
 	connectedDevices ConnectedDevicesConfig
 	voiceAnalyzer    *serveragent.SmartLibraryAnalyzer
 }
@@ -40,46 +37,8 @@ func NewAgentsService(database *db.Database) *AgentsService {
 	return &AgentsService{database: database}
 }
 
-// SetAvatarStore installs the same durable object store used by member avatars.
-// Agent avatar objects are immutable because an approved Space version can stay
-// pinned after the owner changes the Agent's core identity.
-func (s *AgentsService) SetAvatarStore(store LibraryObjectStore) {
-	s.avatarStore = store
-}
-
 func (s *AgentsService) SetVoiceAnalyzer(analyzer *serveragent.SmartLibraryAnalyzer) {
 	s.voiceAnalyzer = analyzer
-}
-
-func (s *AgentsService) PersonalAgents() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		items, err := s.database.ListPersonalAgents(r.Context(), userID)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"agents": items})
-	}
-}
-
-func (s *AgentsService) PersonalAgent() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		agentID := strings.TrimSpace(chi.URLParam(r, "agentID"))
-		item, err := s.database.PersonalAgentByID(r.Context(), userID, agentID)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, item)
-	}
 }
 
 func (s *AgentsService) ClaimWorkflowNodeJob() http.HandlerFunc {
@@ -89,7 +48,20 @@ func (s *AgentsService) ClaimWorkflowNodeJob() http.HandlerFunc {
 			return
 		}
 		deviceID := chi.URLParam(r, "deviceID")
-		job, token, err := s.database.ClaimWorkflowDeviceNodeJob(userID, deviceID, time.Minute)
+		// Older hosts can drain legacy jobs but cannot claim begin-aware work.
+		body := struct {
+			ProtocolVersion int `json:"protocolVersion"`
+		}{ProtocolVersion: 1}
+		if r.ContentLength != 0 && decodeAIJSON(w, r, &body) != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if body.ProtocolVersion != 1 && body.ProtocolVersion != 2 {
+			http.Error(w, "unsupported device protocol", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		job, token, err := s.database.ClaimWorkflowDeviceNodeJob(userID, deviceID, time.Minute, body.ProtocolVersion)
 		if errors.Is(err, db.ErrAgentJobNotFound) {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -120,7 +92,10 @@ func (s *AgentsService) WorkflowNodeLeaseAction(action string) http.HandlerFunc 
 		}
 		var job *db.WorkflowDeviceNodeJob
 		var err error
+		w.Header().Set("Cache-Control", "no-store")
 		switch action {
+		case "begin":
+			job, err = s.database.BeginWorkflowDeviceNodeJob(userID, deviceID, jobID, body.LeaseToken)
 		case "renew":
 			job, err = s.database.RenewWorkflowDeviceNodeJob(userID, deviceID, jobID, body.LeaseToken)
 		case "complete":
@@ -135,12 +110,16 @@ func (s *AgentsService) WorkflowNodeLeaseAction(action string) http.HandlerFunc 
 				return
 			}
 			job, err = s.database.FinishWorkflowDeviceNodeJob(userID, deviceID, jobID, body.LeaseToken, "completed", body.Output, "")
-		case "fail":
+		case "fail", "uncertain":
 			if !validText(body.ErrorCode, 1, 120) {
 				http.Error(w, "invalid request", http.StatusBadRequest)
 				return
 			}
-			job, err = s.database.FinishWorkflowDeviceNodeJob(userID, deviceID, jobID, body.LeaseToken, "failed", nil, body.ErrorCode)
+			state := "failed"
+			if action == "uncertain" {
+				state = "uncertain"
+			}
+			job, err = s.database.FinishWorkflowDeviceNodeJob(userID, deviceID, jobID, body.LeaseToken, state, nil, body.ErrorCode)
 		default:
 			http.Error(w, "unsupported action", http.StatusBadRequest)
 			return

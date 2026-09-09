@@ -5,11 +5,11 @@ export type MistyViewState = null | boolean | number | string | MistyViewState[]
 export declare const MistyViewStateSchema: z.ZodCustom<MistyViewState, MistyViewState>;
 export declare const MistyViewTitleSchema: z.ZodString;
 export declare const MistyViewPlacementSchema: z.ZodEnum<{
-    tab: "tab";
+    down: "down";
+    up: "up";
     left: "left";
     right: "right";
-    up: "up";
-    down: "down";
+    tab: "tab";
 }>;
 export declare const MistyWorkspaceViewSchema: z.ZodObject<{
     viewId: z.ZodString;
@@ -44,11 +44,11 @@ export declare const MistyWorkspacePlaceSchema: z.ZodObject<{
     viewId: z.ZodString;
     targetViewId: z.ZodString;
     placement: z.ZodEnum<{
-        tab: "tab";
+        down: "down";
+        up: "up";
         left: "left";
         right: "right";
-        up: "up";
-        down: "down";
+        tab: "tab";
     }>;
 }, z.core.$strict>;
 export declare const mistyWorkspaceContracts: {
@@ -94,11 +94,11 @@ export declare const mistyWorkspaceContracts: {
             viewId: z.ZodString;
             targetViewId: z.ZodString;
             placement: z.ZodEnum<{
-                tab: "tab";
+                down: "down";
+                up: "up";
                 left: "left";
                 right: "right";
-                up: "up";
-                down: "down";
+                tab: "tab";
             }>;
         }, z.core.$strict>;
         readonly result: z.ZodPipe<z.ZodUnion<readonly [z.ZodNull, z.ZodUndefined]>, z.ZodTransform<undefined, null | undefined>>;

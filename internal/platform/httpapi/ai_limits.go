@@ -28,7 +28,10 @@ func (s *AIService) SetMetrics(registry *platformmetrics.Registry) { s.metrics =
 func (s *AIService) SetEmbeddingAnalyzer(analyzer *agent.SmartLibraryAnalyzer) {
 	s.analyzer = analyzer
 }
-func (s *AIService) SetAgentRuntime(config AgentRuntimeConfig) { s.agentRuntime = config }
+func (s *AIService) SetAgentRuntime(config AgentRuntimeConfig) {
+	config.database = s.database
+	s.agentRuntime = config
+}
 
 func (s *AIService) SetAttachmentStore(store LibraryObjectStore) {
 	s.attachmentStore = store

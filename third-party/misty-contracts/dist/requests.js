@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SpaceTaskSchema, SpaceCalendarEventSchema, SpaceTaskAgentRunInputSchema, } from "./models.js";
+import { SpaceTaskSchema, SpaceCalendarEventSchema, } from "./models.js";
 export const IdentifierSchema = z.string().regex(/^[A-Za-z0-9_-]{1,256}$/);
 export const SpacePathSchema = z.strictObject({
     spaceID: IdentifierSchema.optional(),
@@ -35,7 +35,6 @@ export const TaskQuerySchema = z.strictObject({
     status: z.enum(["todo", "in_progress", "done", "canceled"]).optional(),
     priority: z.enum(["high", "medium", "low"]).optional(),
     assignee_user_id: z.string().optional(),
-    assignee_agent_id: z.string().optional(),
     q: z.string().optional(),
     due_from: timestamp.optional(),
     due_to: timestamp.optional(),
@@ -62,14 +61,12 @@ export const TaskCreateInputSchema = z.strictObject({
     status: z.enum(["todo", "in_progress", "done", "canceled", ""]).optional(),
     priority: z.enum(["high", "medium", "low", ""]).optional(),
     assignee_user_id: z.string().optional(),
-    assignee_agent_id: z.string().optional(),
     due_at: timestamp.nullable().optional(),
     due_timezone: z.string().optional(),
     source_refs: z
         .array(z.looseObject({ kind: z.string(), resource_id: z.string() }))
         .nullable()
         .optional(),
-    agent_run: SpaceTaskAgentRunInputSchema.nullable().optional(),
 });
 // Existing clients send the complete current task/event on PATCH. Preserve those fields.
 export const TaskUpdateInputSchema = SpaceTaskSchema.partial().extend({

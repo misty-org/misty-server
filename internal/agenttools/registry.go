@@ -8,8 +8,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/capabilities"
 )
 
 type ApprovalPolicy string
@@ -38,6 +39,7 @@ var (
 )
 
 type Descriptor struct {
+	ProviderBinding    *ProviderBinding
 	Name               string
 	Version            int
 	Description        string
@@ -90,8 +92,10 @@ type Registration struct {
 }
 
 type registeredTool struct {
-	descriptor Descriptor
-	handler    Handler
+	descriptor   Descriptor
+	handler      Handler
+	inputSchema  *jsonschema.Resolved
+	outputSchema *jsonschema.Resolved
 }
 
 type Registry struct {
@@ -103,7 +107,7 @@ type Registry struct {
 func New(registrations ...Registration) (*Registry, error) {
 	registry := &Registry{tools: map[string]registeredTool{}, aliases: map[string]string{}}
 	for _, registration := range registrations {
-		descriptor := normalizeDescriptor(registration.Descriptor)
+		descriptor := normalizeDescriptor(cloneDescriptor(registration.Descriptor))
 		if err := validateRegistration(descriptor, registration.Handler); err != nil {
 			return nil, err
 		}
@@ -113,7 +117,15 @@ func New(registrations ...Registration) (*Registry, error) {
 		if _, exists := registry.aliases[descriptor.Name]; exists {
 			return nil, fmt.Errorf("%w: tool conflicts with alias %s", ErrInvalidRegistration, descriptor.Name)
 		}
-		registry.tools[descriptor.Name] = registeredTool{descriptor: descriptor, handler: registration.Handler}
+		input, err := compileToolSchema(descriptor.InputSchema)
+		if err != nil {
+			return nil, fmt.Errorf("%w: input schema for %s: %v", ErrInvalidRegistration, descriptor.Name, err)
+		}
+		output, err := compileToolSchema(descriptor.OutputSchema)
+		if err != nil {
+			return nil, fmt.Errorf("%w: output schema for %s: %v", ErrInvalidRegistration, descriptor.Name, err)
+		}
+		registry.tools[descriptor.Name] = registeredTool{descriptor: descriptor, handler: registration.Handler, inputSchema: input, outputSchema: output}
 		registry.ordered = append(registry.ordered, descriptor.Name)
 		for _, alias := range descriptor.Aliases {
 			if _, exists := registry.tools[alias]; exists {
@@ -190,7 +202,11 @@ func (r *Registry) ExecuteWithMiddleware(ctx context.Context, invocation Invocat
 	if len(request.Arguments) == 0 {
 		request.Arguments = json.RawMessage(`{}`)
 	}
-	if len(request.Arguments) > 256<<10 || !matchesSchema(tool.descriptor.InputSchema, request.Arguments) {
+	inputLimit := 256 << 10
+	if tool.descriptor.ProviderBinding != nil {
+		inputLimit = 512 << 10
+	}
+	if len(request.Arguments) > inputLimit || !matchesSchema(tool.inputSchema, request.Arguments) {
 		return nil, ErrArgumentsInvalid
 	}
 	request.Name = canonicalName
@@ -199,7 +215,7 @@ func (r *Registry) ExecuteWithMiddleware(ctx context.Context, invocation Invocat
 		if executeErr != nil {
 			return nil, executeErr
 		}
-		if len(result) > serveragent.MaxToolResultBytes || !matchesSchema(tool.descriptor.OutputSchema, result) {
+		if len(result) > serveragent.MaxToolResultBytes || !matchesSchema(tool.outputSchema, result) {
 			return nil, ErrResultInvalid
 		}
 		return result, nil
@@ -213,21 +229,23 @@ func (r *Registry) ExecuteWithMiddleware(ctx context.Context, invocation Invocat
 	if err != nil {
 		return nil, err
 	}
-	if len(result) > serveragent.MaxToolResultBytes || !matchesSchema(tool.descriptor.OutputSchema, result) {
+	if len(result) > serveragent.MaxToolResultBytes || !matchesSchema(tool.outputSchema, result) {
 		return nil, ErrResultInvalid
 	}
 	return result, nil
 }
 
-func matchesSchema(rawSchema, value json.RawMessage) bool {
-	if !json.Valid(value) {
-		return false
+// Compile once at registration. The same JSON Schema semantics apply to built-in
+// tools and independent SDK providers; the legacy graph validator is not extended.
+func compileToolSchema(raw json.RawMessage) (*jsonschema.Resolved, error) {
+	if len(raw) == 0 {
+		raw = json.RawMessage(`{}`)
 	}
-	var schema workflowv2.JSONSchema
-	if len(rawSchema) > 0 && json.Unmarshal(rawSchema, &schema) != nil {
-		return false
-	}
-	return workflowv2.ValidateJSON(schema, value) == nil
+	return capabilities.CompileSchema(raw)
+}
+func matchesSchema(schema *jsonschema.Resolved, raw json.RawMessage) bool {
+	var value any
+	return schema != nil && json.Unmarshal(raw, &value) == nil && schema.Validate(value) == nil
 }
 
 func (r *Registry) lookup(name string) (registeredTool, string, bool) {
@@ -371,6 +389,12 @@ func validateRegistration(descriptor Descriptor, handler Handler) error {
 }
 
 func cloneDescriptor(descriptor Descriptor) Descriptor {
+	if descriptor.ProviderBinding != nil {
+		binding := *descriptor.ProviderBinding
+		binding.RequiredScopes = append([]string{}, binding.RequiredScopes...)
+		descriptor.ProviderBinding = &binding
+	}
+
 	descriptor.InputSchema = append(json.RawMessage(nil), descriptor.InputSchema...)
 	descriptor.OutputSchema = append(json.RawMessage(nil), descriptor.OutputSchema...)
 	descriptor.Aliases = append([]string(nil), descriptor.Aliases...)

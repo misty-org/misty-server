@@ -2,6 +2,9 @@ package db
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -18,8 +21,8 @@ type mcpPostgresFixture struct {
 	database      *Database
 	owner         *User
 	attacker      *User
-	agent         *PersonalAgent
-	attackerAgent *PersonalAgent
+	agent         *AskIdentity
+	attackerAgent *AskIdentity
 	connection    *MCPRemoteConnection
 	attackerConn  *MCPRemoteConnection
 	tool          MCPRemoteTool
@@ -39,10 +42,8 @@ func setupMCPPostgres(t *testing.T) mcpPostgresFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	createAgent := func(user *User, name string) *PersonalAgent {
-		agent, createErr := database.CreatePersonalAgent(ctx, user.ID, PersonalAgent{
-			Name: name, ModelMode: "pinned", ModelID: "google/gemini-2.5-flash-lite",
-		})
+	createAgent := func(user *User, name string) *AskIdentity {
+		agent, createErr := database.EnsureAskIdentity(ctx, user.ID, "google/gemini-2.5-flash-lite")
 		if createErr != nil {
 			t.Fatal(createErr)
 		}
@@ -107,7 +108,7 @@ func TestMCPBindingsEnforceOwnershipRLSAndCompositeToolProvenance(t *testing.T) 
 	}
 
 	err = fixture.database.TestingWithRLSContext(ctx, TestingServiceRLSSettings(), func(tx *sql.Tx) error {
-		_, insertErr := tx.ExecContext(ctx, `INSERT INTO personal_agent_mcp_tools
+		_, insertErr := tx.ExecContext(ctx, `INSERT INTO misty_ask_mcp_tools
 			(id,owner_user_id,agent_id,connection_id,remote_tool_id,stable_name,enabled)
 			VALUES($1,$2,$3,$4,$5,$6,TRUE)`, "bad_mcp_binding_"+uuid.NewString(), fixture.owner.ID,
 			fixture.agent.ID, fixture.connection.ID, fixture.attackerTool.ID, "mcp.bad.echo")
@@ -117,7 +118,7 @@ func TestMCPBindingsEnforceOwnershipRLSAndCompositeToolProvenance(t *testing.T) 
 		t.Fatal("composite provenance accepted a remote tool from another connection")
 	}
 
-	tables := []string{"mcp_remote_connections", "mcp_discovery_snapshots", "mcp_remote_tools", "personal_agent_mcp_tools", "mcp_tool_execution_audit"}
+	tables := []string{"mcp_remote_connections", "mcp_discovery_snapshots", "mcp_remote_tools", "misty_ask_mcp_tools", "mcp_tool_execution_audit"}
 	err = fixture.database.TestingWithRLSContext(ctx, map[string]string{
 		"app.rls_mode": "user", "app.current_user_id": fixture.attacker.ID,
 	}, func(tx *sql.Tx) error {
@@ -223,12 +224,30 @@ func TestMCPExecutionAuditIsContentFreeIdempotentAndComposite(t *testing.T) {
 func TestMCPRedactedActionJournalPreventsDuplicateRemoteWrites(t *testing.T) {
 	fixture := setupMCPPostgres(t)
 	ctx := context.Background()
+	block, err := aes.NewCipher(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		t.Fatal(err)
+	}
 	action := AgentToolboxAction{
 		IdempotencyKey: "mcp:" + fixture.agent.ID + ":call-1",
 		UserID:         fixture.owner.ID, AgentID: fixture.agent.ID, RunID: "run-1",
 		ToolName: fixture.tool.StableName, AuditEvent: "mcp.tool.execute",
 		Risk: "write", Source: "personal_agent", Request: json.RawMessage(`{"secret":"must-not-persist"}`),
 		RedactPayload: true,
+		ProtectResult: func(value json.RawMessage) ([]byte, error) {
+			nonce := make([]byte, aead.NonceSize())
+			if _, err := rand.Read(nonce); err != nil {
+				return nil, err
+			}
+			return aead.Seal(nonce, nonce, value, nil), nil
+		},
+		RestoreResult: func(value []byte) (json.RawMessage, error) {
+			return aead.Open(nil, value[:aead.NonceSize()], value[aead.NonceSize():], nil)
+		},
 	}
 	executions := 0
 	execute := func() (json.RawMessage, error) {
@@ -240,7 +259,7 @@ func TestMCPRedactedActionJournalPreventsDuplicateRemoteWrites(t *testing.T) {
 		t.Fatalf("first result=%s executions=%d err=%v", first, executions, err)
 	}
 	replayed, err := fixture.database.JournalAgentToolboxAction(ctx, action, execute)
-	if err != nil || executions != 1 || string(replayed) != `{}` {
+	if err != nil || executions != 1 || !strings.Contains(string(replayed), "write-1") {
 		t.Fatalf("replay result=%s executions=%d err=%v", replayed, executions, err)
 	}
 	var request, result string
@@ -264,7 +283,7 @@ func TestMCPRedactedActionJournalPreventsDuplicateRemoteWrites(t *testing.T) {
 		failures++
 		return nil, nil
 	})
-	if !errors.Is(err, ErrAgentToolboxActionTerminal) || failures != 1 {
+	if !errors.Is(err, ErrAgentToolboxActionUnknown) || failures != 1 {
 		t.Fatalf("failed action was retried: attempts=%d err=%v", failures, err)
 	}
 }

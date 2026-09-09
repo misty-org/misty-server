@@ -15,10 +15,10 @@ import (
 )
 
 func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, realtime *api.RealtimeService) {
+
 	s.Router.MethodFunc(http.MethodGet, prefix+"/webhooks/social/instagram", spaces.InstagramSocialWebhook())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/webhooks/social/instagram", spaces.InstagramSocialWebhook())
 	s.mountMCPRoutes(prefix, spaces)
-	s.Router.Get(prefix+"/agents/{agentID}/activity", spaces.PersonalAgentActivity())
 	s.Router.Get(prefix+"/agent-runs/{runID}", spaces.PersonalAgentRunDetail())
 	s.Router.Post(prefix+"/agent-runs/{runID}/cancel", spaces.CancelPersonalAgentRun())
 	s.Router.Post(prefix+"/agent-runs/{runID}/retry", spaces.RetryPersonalAgentRun())
@@ -84,10 +84,7 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/roadmaps/{roadmapID}/edges/{edgeID}", spaces.SpaceRoadmapEdges())
 	s.Router.Patch(prefix+"/spaces/{spaceID}/roadmaps/{roadmapID}/layout", spaces.SpaceRoadmapLayout())
 	s.Router.Get(prefix+"/spaces/{spaceID}/members", spaces.Members())
-	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/agents", spaces.SpaceAgentMemberships())
-	s.Router.Get(prefix+"/spaces/{spaceID}/agents/{agentID}/toolbox", spaces.SpaceAgentToolbox())
 	s.Router.Post(prefix+"/ai/runs", spaces.AIRuns())
-	s.Router.Get(prefix+"/spaces/{spaceID}/agents/{agentID}/runs", spaces.AgentRunHistory())
 	s.Router.Get(prefix+"/spaces/{spaceID}/members/{userID}/avatar", spaces.MemberAvatar())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/members/{userID}/permissions", spaces.MemberPermissions())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/members/{userID}/permissions", spaces.MemberPermissions())
@@ -127,17 +124,6 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}", spaces.ConversationMessageReaction())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}", spaces.ConversationMessageReaction())
 	s.Router.Post(prefix+"/spaces/{spaceID}/conversations/{conversationID}/read", spaces.MarkConversationRead())
-	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/action-suggestion-settings", spaces.ActionSuggestionSettings())
-	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/action-suggestion-settings", spaces.ActionSuggestionSettings())
-	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/conversations/{conversationID}/action-suggestion-veto", spaces.ConversationSuggestionVeto())
-	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/conversations/{conversationID}/action-suggestion-veto", spaces.ConversationSuggestionVeto())
-	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/conversations/{conversationID}/action-suggestion-veto", spaces.ConversationSuggestionVeto())
-	s.Router.Get(prefix+"/spaces/{spaceID}/action-suggestions", spaces.ActionSuggestions())
-	s.Router.Get(prefix+"/spaces/{spaceID}/action-suggestions/{batchID}/review", spaces.ActionSuggestionReview())
-	s.Router.Post(prefix+"/spaces/{spaceID}/action-suggestions/{batchID}/dismiss", spaces.DismissActionSuggestion())
-	s.Router.Post(prefix+"/spaces/{spaceID}/action-suggestions/{batchID}/accept", spaces.AcceptActionSuggestion())
-	s.Router.Post(prefix+"/spaces/{spaceID}/conversation-follow-ups/{followUpID}/cancel", spaces.CancelConversationFollowUp())
-	s.Router.Post(prefix+"/spaces/{spaceID}/conversation-follow-ups/{followUpID}/opt-out", spaces.OptOutConversationFollowUp())
 	s.Router.Post(prefix+"/spaces/{spaceID}/resources/{resourceKind}/{resourceID}/share-with-space", spaces.ShareResourceWithSpace())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/tasks", spaces.SpaceTasks())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/tasks", spaces.SpaceTasks())
@@ -177,11 +163,6 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/studio/workflows/{workflowID}/versions", spaces.WorkflowVersions())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/studio/workflows/{workflowID}/versions", spaces.WorkflowVersions())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/integrations", spaces.SpaceIntegrations())
-	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/integrations/{integrationID}/resources", spaces.AvailableProviderResources())
-	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/integrations/{integrationID}/resources", spaces.AvailableProviderResources())
-	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/provider-resources", spaces.ProviderSharedResources())
-	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/provider-resources", spaces.ProviderSharedResources())
-	s.Router.Delete(prefix+"/spaces/{spaceID}/provider-resources/{resourceID}", spaces.ProviderSharedResource())
 	// Connections are created only through branded OAuth/install flows. The
 	// legacy PUT route is intentionally not mounted because callers must never
 	// supply their own credential/vault reference.
@@ -192,9 +173,6 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.Delete(prefix+"/integrations/{integrationID}", spaces.DeleteProviderIntegration())
 	s.Router.Post(prefix+"/spaces/{spaceID}/integrations/{provider}/bind", spaces.BindConnectedAccountToSpaceProvider())
 	s.Router.Get(prefix+"/runs/{runID}", spaces.RunDetail())
-	s.Router.Post(prefix+"/runs/{runID}/approval", spaces.RunDecision())
-	s.Router.Post(prefix+"/runs/{runID}/cancel", spaces.RunCancel())
-	s.Router.Post(prefix+"/runs/{runID}/retry", spaces.RunRetry())
 	s.Router.Post(prefix+"/realtime/tickets", realtime.Ticket())
 	s.Router.Get(prefix+"/realtime", realtime.Connect())
 }
@@ -240,9 +218,6 @@ func (s *Server) CleanupExpiredJournalAssets(
 }
 
 func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
-	s.Router.Get(prefix+"/agents", service.PersonalAgents())
-	s.Router.Get(prefix+"/agents/{agentID}", service.PersonalAgent())
-	s.Router.Get(prefix+"/agents/{agentID}/avatar", service.PersonalAgentAvatar())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/agent-voice/transcriptions", service.AgentVoiceTranscription())
 	deviceJobsEnabled := serverFeatureEnabled("MISTY_DEVICE_JOBS_ENABLED")
 	connectedDevicesEnabled := serverConnectedDevicesConfigured()
@@ -270,6 +245,8 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 		return
 	}
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/claim", service.DeviceAuthenticated(service.ClaimWorkflowNodeJob()))
+	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/begin", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("begin")))
+	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/uncertain", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("uncertain")))
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/lease", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("renew")))
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/complete", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("complete")))
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/fail", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("fail")))

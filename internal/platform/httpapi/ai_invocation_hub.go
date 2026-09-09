@@ -29,42 +29,67 @@ func (hub *aiInvocationHub) create(userID, conversationID, idempotencyKey string
 	return record, false
 }
 
-func (hub *aiInvocationHub) append(id string, event aiInvocationEvent) {
+func (hub *aiInvocationHub) append(id string, event aiInvocationEvent) error {
+	return hub.appendReceipt(id, event, "event:"+uuid.NewString())
+}
+
+func (hub *aiInvocationHub) appendReceipt(id string, event aiInvocationEvent, receipt string) error {
 	hub.mu.Lock()
 	record := hub.invocations[id]
-	if record == nil || aiInvocationTerminal(record.State) {
+	if record == nil {
 		hub.mu.Unlock()
-		return
+		return db.ErrSpaceNotFound
 	}
-	event.ID = strconv.Itoa(len(record.Events) + 1)
-	record.Events = append(record.Events, event)
-	if event.State != "" {
-		record.State = event.State
-	} else if event.Type == "invocation.started" {
-		record.State = "running"
+	if hub.database == nil {
+		defer hub.mu.Unlock()
+		if aiInvocationTerminal(record.State) {
+			return nil
+		}
+		event.ID = strconv.Itoa(len(record.Events) + 1)
+		record.Events = append(record.Events, event)
+		if event.State != "" {
+			record.State = event.State
+		} else if event.Type == "invocation.started" {
+			record.State = "running"
+		}
+		close(record.Notify)
+		record.Notify = make(chan struct{})
+		return nil
 	}
-	close(record.Notify)
-	record.Notify = make(chan struct{})
 	userID := record.OwnerUserID
-	state := record.State
-	sequence := len(record.Events)
 	database := hub.database
 	hub.mu.Unlock()
-	if database != nil {
-		payload, err := json.Marshal(event)
-		if err == nil {
-			err = database.AppendAIInvocationEvent(context.Background(), userID, id, int64(sequence), event.Type, payload, state)
-		}
-		if err != nil {
-			log.Printf("persist AI invocation event %s/%d: %v", id, sequence, err)
-		}
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return err
 	}
+	state := event.State
+	if state == "" && event.Type == "invocation.started" {
+		state = "running"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err = database.CommitAIInvocationEvent(ctx, userID, id, receipt, event.Type, payload, state); err != nil {
+		return err
+	}
+	stored, err := database.AIInvocationByID(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	_, err = hub.restoreDurable(ctx, *stored)
+	return err
 }
 
 func (hub *aiInvocationHub) restore(stored db.AIInvocationRecord, events []aiInvocationEvent) *aiInvocationRecord {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
 	if existing := hub.invocations[stored.ID]; existing != nil {
+		if len(events) > len(existing.Events) || (len(events) == len(existing.Events) && stored.State != existing.State && !aiInvocationTerminal(existing.State)) {
+			existing.Events = append([]aiInvocationEvent(nil), events...)
+			existing.State = stored.State
+			close(existing.Notify)
+			existing.Notify = make(chan struct{})
+		}
 		return existing
 	}
 	record := &aiInvocationRecord{
@@ -81,12 +106,6 @@ func (hub *aiInvocationHub) restore(stored db.AIInvocationRecord, events []aiInv
 // resumed workflow can append more events. This keeps event sequence numbers
 // monotonic across Go server restarts.
 func (hub *aiInvocationHub) restoreDurable(ctx context.Context, stored db.AIInvocationRecord) (*aiInvocationRecord, error) {
-	hub.mu.Lock()
-	if existing := hub.invocations[stored.ID]; existing != nil {
-		hub.mu.Unlock()
-		return existing, nil
-	}
-	hub.mu.Unlock()
 	if hub.database == nil {
 		return hub.restore(stored, nil), nil
 	}
@@ -111,14 +130,14 @@ func (hub *aiInvocationHub) restoreDurable(ctx context.Context, stored db.AIInvo
 	return hub.restore(stored, events), nil
 }
 
-func (hub *aiInvocationHub) complete(id string) {
-	hub.append(id, aiInvocationEvent{Type: "invocation.completed", State: "completed"})
+func (hub *aiInvocationHub) complete(id string) error {
+	return hub.append(id, aiInvocationEvent{Type: "invocation.completed", State: "completed"})
 }
-func (hub *aiInvocationHub) fail(id, message string) {
-	hub.append(id, aiInvocationEvent{Type: "invocation.failed", State: "failed", Error: message})
+func (hub *aiInvocationHub) fail(id, message string) error {
+	return hub.append(id, aiInvocationEvent{Type: "invocation.failed", State: "failed", Error: message})
 }
-func (hub *aiInvocationHub) cancel(id string) {
-	hub.append(id, aiInvocationEvent{Type: "invocation.canceled", State: "canceled"})
+func (hub *aiInvocationHub) cancel(id string) error {
+	return hub.append(id, aiInvocationEvent{Type: "invocation.canceled", State: "canceled"})
 }
 
 func (hub *aiInvocationHub) events(userID, id string, cursor int) ([]aiInvocationEvent, string, <-chan struct{}, bool) {
@@ -151,7 +170,9 @@ func (hub *aiInvocationHub) cancelForUser(userID, id string) (string, bool) {
 		return state, true
 	}
 	hub.mu.Unlock()
-	hub.cancel(record.ID)
+	if err := hub.cancel(record.ID); err != nil {
+		return "", false
+	}
 	return "canceled", true
 }
 

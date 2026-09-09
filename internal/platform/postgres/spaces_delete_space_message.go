@@ -96,7 +96,7 @@ func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, b
 			return err
 		}
 		if enforceMembership {
-			if _, err := activePersonalAgentMembershipTx(ctx, tx, billingUserID, spaceID, agentID); err != nil {
+			if _, err := askExecutionContextTx(ctx, tx, billingUserID, spaceID, agentID); err != nil {
 				return err
 			}
 		}
@@ -124,7 +124,7 @@ func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, b
 		if senderKind == "system" {
 			out.SenderName = "Misty"
 		} else {
-			if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT name FROM personal_agents WHERE id=$1),'Former agent')`, agentID).Scan(&out.SenderName); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT name FROM misty_ask_identities WHERE id=$1),'Former agent')`, agentID).Scan(&out.SenderName); err != nil {
 				return err
 			}
 		}

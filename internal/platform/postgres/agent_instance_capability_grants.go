@@ -1,10 +1,7 @@
 package db
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"sort"
 	"strings"
 )
@@ -77,48 +74,4 @@ func AgentCapabilityGranted(raw json.RawMessage, capability, risk string) bool {
 		}
 	}
 	return false
-}
-
-func (db *Database) AgentInstanceCapabilityAllowed(ctx context.Context, userID, instanceID, capability, risk string) (bool, error) {
-	var raw json.RawMessage
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT capability_grants FROM space_agent_instances WHERE id=$1 AND user_id=$2`, instanceID, userID).Scan(&raw)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, ErrSpaceNotFound
-	}
-	return err == nil && AgentCapabilityGranted(raw, capability, risk), err
-}
-
-func (db *Database) UpdateAgentInstanceCapabilityGrants(ctx context.Context, userID, instanceID string, grants json.RawMessage) (*AgentInstanceRecord, error) {
-	normalized, err := normalizeAgentCapabilityGrants(grants)
-	if err != nil {
-		return nil, err
-	}
-	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var spaceID, agentID string
-		if lookupErr := tx.QueryRowContext(ctx, `SELECT space_id,agent_id FROM space_agent_instances WHERE id=$1 AND user_id=$2 FOR UPDATE`, instanceID, userID).Scan(&spaceID, &agentID); lookupErr != nil {
-			if errors.Is(lookupErr, sql.ErrNoRows) {
-				return ErrSpaceNotFound
-			}
-			return lookupErr
-		}
-		result, updateErr := tx.ExecContext(ctx, `UPDATE space_agent_instances SET capability_grants=$1,updated_at=NOW() WHERE id=$2 AND user_id=$3`, normalized, instanceID, userID)
-		if updateErr != nil {
-			return updateErr
-		}
-		changed, updateErr := result.RowsAffected()
-		if updateErr != nil {
-			return updateErr
-		}
-		if changed != 1 {
-			return ErrSpaceNotFound
-		}
-		_, updateErr = recordSpaceEventTx(ctx, tx, spaceID, userID, "agent.instance.capabilities.updated", agentID, map[string]any{"instance_id": instanceID, "grants": json.RawMessage(normalized)})
-		return updateErr
-	})
-	if err != nil {
-		return nil, err
-	}
-	return db.agentInstanceByID(ctx, userID, instanceID)
 }

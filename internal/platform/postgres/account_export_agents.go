@@ -65,15 +65,14 @@ type AccountExportAgentEvent struct {
 }
 
 type AccountExportAgentConversation struct {
-	ID              string                    `json:"id"`
-	PersonalAgentID string                    `json:"agent_id,omitempty"`
-	SpaceID         string                    `json:"space_id,omitempty"`
-	ModelID         string                    `json:"model_id,omitempty"`
-	State           json.RawMessage           `json:"state"`
-	Events          []AccountExportAgentEvent `json:"events"`
-	CreatedAt       time.Time                 `json:"created_at"`
-	UpdatedAt       time.Time                 `json:"updated_at"`
-	DeletedAt       *time.Time                `json:"deleted_at,omitempty"`
+	ID        string                    `json:"id"`
+	SpaceID   string                    `json:"space_id,omitempty"`
+	ModelID   string                    `json:"model_id,omitempty"`
+	State     json.RawMessage           `json:"state"`
+	Events    []AccountExportAgentEvent `json:"events"`
+	CreatedAt time.Time                 `json:"created_at"`
+	UpdatedAt time.Time                 `json:"updated_at"`
+	DeletedAt *time.Time                `json:"deleted_at,omitempty"`
 }
 
 type AccountExportAgentMemory struct {
@@ -93,7 +92,7 @@ func appendAccountAgentExport(ctx context.Context, tx *sql.Tx, userID string, ou
 func exportOwnedAgents(ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport) error {
 	rows, err := tx.QueryContext(ctx, `SELECT id,name,role,description,icon,avatar,instructions,model_mode,model_id,
 		reasoning_effort,default_run_mode,enabled,version,created_at,updated_at,deleted_at
-		FROM personal_agents WHERE owner_user_id=$1 ORDER BY created_at`, userID)
+		FROM misty_ask_identities WHERE owner_user_id=$1 ORDER BY created_at`, userID)
 	if err != nil {
 		return err
 	}
@@ -123,7 +122,7 @@ func exportOwnedAgents(ctx context.Context, tx *sql.Tx, userID string, out *Acco
 
 func exportAgentVersionsAndMemberships(ctx context.Context, tx *sql.Tx, agent *AccountExportAgent) error {
 	versions, err := tx.QueryContext(ctx, `SELECT id,version,name,role,description,icon,avatar,instructions,model_mode,model_id,
-		reasoning_effort,default_run_mode,checksum_sha256,created_at FROM personal_agent_versions WHERE agent_id=$1 ORDER BY version`, agent.ID)
+		reasoning_effort,default_run_mode,checksum_sha256,created_at FROM misty_ask_identity_versions WHERE agent_id=$1 ORDER BY version`, agent.ID)
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,7 @@
 useDefault = true
 
 # Public compatibility fixtures use an explicitly documented test-only signing key.
-[[allowlists]]
+[allowlist]
 description = "Synthetic self-host compatibility tokens"
 condition = "AND"
 paths = ['''docs/migration/fixtures/self-host-proofs\.json$''']

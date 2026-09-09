@@ -10,7 +10,7 @@ failed=false
 reported=false
 
 while IFS= read -r -d '' file; do
-  if head -n 10 "$file" | grep -Eq '^// Code generated .* DO NOT EDIT\\.$'; then
+  if head -n 10 "$file" | grep -Eq '^// Code generated .* DO NOT EDIT\.$'; then
     continue
   fi
 

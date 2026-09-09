@@ -2,6 +2,7 @@ package db
 
 import (
 	"encoding/json"
+	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"os"
 	"reflect"
 	"testing"
@@ -21,7 +22,7 @@ func TestNativeOnboardingFingerprintAndTemplateCompatibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, fixture := range fixtures {
-		actual, err := onboardingFingerprint(fixture.Name, fixture.Apps)
+		actual, err := TestingOnboardingFingerprint(fixture.Name, fixture.Apps)
 		if err != nil {
 			t.Fatal(err)
 		}

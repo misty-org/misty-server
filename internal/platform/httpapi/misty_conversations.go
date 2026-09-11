@@ -260,6 +260,15 @@ func (s *AIService) MistyConversationTurn() http.HandlerFunc {
 			http.Error(w, "conversation and prompt are required", http.StatusBadRequest)
 			return
 		}
+		conversation, accessErr := s.database.AgentConversationIdentity(r.Context(), userID, conversationID)
+		if accessErr != nil {
+			writeSpaceError(w, accessErr)
+			return
+		}
+		if err := s.database.RequireSpaceApp(r.Context(), userID, conversation.SpaceID, "agents"); err != nil {
+			writeSpaceError(w, err)
+			return
+		}
 		if body.Mode == "action" {
 			s.mistyActionProposal(w, r, userID, conversationID, body.Prompt)
 			return

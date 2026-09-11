@@ -52,12 +52,16 @@ type aiContextBroker struct{ database *db.Database }
 // collaborative records owned by their domain services. It is deliberately a
 // broker method (rather than a global scan followed by filtering): membership,
 // audience and lifecycle checks happen before a candidate can be ranked.
-func (broker aiContextBroker) retrieveAccount(ctx context.Context, userID, query string, embedding []float64, limit int) ([]aiResolvedContext, error) {
+func (broker aiContextBroker) retrieveAccount(ctx context.Context, userID, query string, embedding []float64, limit int, spaceIDs ...string) ([]aiResolvedContext, error) {
+	spaceID := ""
+	if len(spaceIDs) > 0 {
+		spaceID = spaceIDs[0]
+	}
 	query = strings.TrimSpace(query)
 	if query == "" || limit <= 0 {
 		return nil, nil
 	}
-	indexed, indexErr := broker.database.SearchAIRetrieval(ctx, userID, query, embedding, limit)
+	indexed, indexErr := broker.database.SearchAIRetrieval(ctx, userID, query, embedding, limit, spaceID)
 	if indexErr != nil {
 		return nil, indexErr
 	}
@@ -81,6 +85,9 @@ func (broker aiContextBroker) retrieveAccount(ctx context.Context, userID, query
 	}
 	candidates := []candidate{}
 	for _, space := range spaces {
+		if spaceID != "" && space.ID != spaceID {
+			continue
+		}
 		if space.Permissions[db.PermissionTasksView] {
 			tasks, taskErr := broker.database.SpaceTasks(ctx, userID, space.ID, db.SpaceTaskQuery{Search: query, Sort: "updated", Limit: 8})
 			if taskErr == nil {
@@ -409,6 +416,14 @@ func (broker aiContextBroker) resolveOne(ctx context.Context, userID string, ref
 		}, true, nil
 	case "agent.artifact":
 		return broker.resolveAgentArtifact(ctx, userID, reference)
+	case "workspace.scope":
+		// A container is a frozen list of source identities, not an eager read.
+		// Each source still passes the normal permission checks when read by a tool.
+		encoded, ok := reference.Metadata["members"].(string)
+		if !ok || !json.Valid([]byte(encoded)) || len(encoded) > 64<<10 {
+			return aiResolvedContext{}, false, errors.New("workspace scope is too large")
+		}
+		return aiResolvedContext{Label: "attached workspace search scope", Content: "Search only these attached source references. Contents have not been loaded: " + string(encoded), Citation: aiCitation{ID: reference.ID, Kind: reference.Kind, Title: reference.Title}}, true, nil
 	case "route", "space":
 		// Route labels are useful orientation, but never evidence that content was read.
 		return aiResolvedContext{}, false, nil

@@ -17,6 +17,7 @@ var ErrSDKTargetClarification = errors.New("Choose a Space and an unambiguous de
 
 // SDKBackendConnection never crosses the public discovery/result boundary.
 type SDKBackendConnection struct {
+	SpaceID          string `json:"-"`
 	UserID           string `json:"-"`
 	AppID            string `json:"-"`
 	ID               string `json:"-"`
@@ -33,25 +34,26 @@ type SDKBoundCapability struct {
 	Connection  SDKBackendConnection `json:"-"`
 }
 
-func sdkInstalledProviderTx(ctx context.Context, tx *sql.Tx, userID, providerID string, version int, requireRegistered bool) (cap.Provider, string, time.Time, error) {
+func sdkInstalledProviderTx(ctx context.Context, tx *sql.Tx, userID, spaceID, providerID string, version int, requireRegistered bool) (cap.Provider, string, time.Time, error) {
 	if provider, official := cap.OfficialBrowserProvider(providerID, version); official {
-		return sdkOfficialBrowserProviderTx(ctx, tx, userID, provider)
+		return sdkOfficialBrowserProviderTx(ctx, tx, userID, spaceID, provider)
 	}
 	if providerID == cap.PlannerProviderID {
-		return sdkPlannerProviderTx(ctx, tx, userID, version)
+		return sdkPlannerProviderTx(ctx, tx, userID, spaceID, version)
 	}
 	var provider cap.Provider
 	var raw []byte
 	var appVersion string
 	var installedAt time.Time
-	query := `SELECT v.definition,i.installed_version,i.installed_at FROM sdk_provider_versions v JOIN user_app_installations i ON i.user_id=v.user_id AND i.app_id=v.app_id JOIN sdk_app_manifest_versions m ON m.user_id=i.user_id AND m.app_id=i.app_id AND m.app_version=i.installed_version
-  WHERE v.user_id=$1 AND v.provider_id=$2 AND v.version=$3 AND i.state='installed'
-  AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.document::jsonb->'capabilities'->'providers') p WHERE p->>'id'=v.provider_id AND (p->>'version')::int=v.version)`
+	query := `SELECT p.value,i.installed_version,i.installed_at FROM space_app_installations i
+ CROSS JOIN LATERAL jsonb_array_elements((i.release_metadata->>'document')::jsonb->'capabilities'->'providers') p(value)
+ WHERE i.space_id=$4 AND i.state='installed' AND p.value->>'id'=$2 AND (p.value->>'version')::int=$3
+ AND EXISTS(SELECT 1 FROM space_members WHERE space_id=$4 AND user_id=$1)`
 	if requireRegistered {
-		query += ` AND EXISTS(SELECT 1 FROM sdk_provider_registrations r WHERE r.user_id=v.user_id AND r.provider_id=v.provider_id AND r.version=v.version AND r.enabled AND r.reported_state<>'revoked' AND r.app_version=i.installed_version AND r.installed_at=i.installed_at)`
+		query += ` AND EXISTS(SELECT 1 FROM sdk_provider_registrations r WHERE r.user_id=$1 AND r.space_id=i.space_id AND r.provider_id=$2 AND r.version=$3 AND r.enabled AND r.reported_state<>'revoked' AND r.app_version=i.installed_version AND r.installed_at=i.installed_at)`
 	}
 	query += ` FOR SHARE OF i`
-	err := tx.QueryRowContext(ctx, query, userID, providerID, version).Scan(&raw, &appVersion, &installedAt)
+	err := tx.QueryRowContext(ctx, query, userID, providerID, version, spaceID).Scan(&raw, &appVersion, &installedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return provider, "", installedAt, ErrSDKProviderUnavailable
 	}
@@ -77,7 +79,7 @@ func (db *Database) ConfigureSDKBackendConnection(ctx context.Context, userID st
 			return err
 		}
 		var declared bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM user_app_installations i JOIN sdk_app_manifest_versions m ON m.user_id=i.user_id AND m.app_id=i.app_id AND m.app_version=i.installed_version WHERE i.user_id=$1 AND i.app_id=$2 AND i.state='installed' AND EXISTS(SELECT 1 FROM jsonb_array_elements(m.document::jsonb->'capabilities'->'providers') p WHERE p->'route'->>'kind'='backend' AND p->'route'->>'connectionId'=$3))`, userID, connection.AppID, connection.ID).Scan(&declared); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_app_installations i JOIN space_members m ON m.space_id=i.space_id WHERE m.user_id=$1 AND i.app_id=$2 AND i.space_id=$4 AND i.state='installed' AND EXISTS(SELECT 1 FROM jsonb_array_elements((i.release_metadata->>'document')::jsonb->'capabilities'->'providers') p WHERE p->'route'->>'kind'='backend' AND p->'route'->>'connectionId'=$3))`, userID, connection.AppID, connection.ID, connection.SpaceID).Scan(&declared); err != nil {
 			return err
 		}
 		if !declared {
@@ -129,7 +131,7 @@ func (db *Database) ConfigureSDKTarget(ctx context.Context, userID string, reque
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "sdk:target:"+userID+":"+request.TargetID); err != nil {
 			return err
 		}
-		provider, appVersion, installedAt, err := sdkInstalledProviderTx(ctx, tx, userID, request.ProviderID, request.ProviderVersion, true)
+		provider, appVersion, installedAt, err := sdkInstalledProviderTx(ctx, tx, userID, request.SpaceID, request.ProviderID, request.ProviderVersion, true)
 		if err != nil {
 			return err
 		}
@@ -163,7 +165,7 @@ func (db *Database) ConfigureSDKTarget(ctx context.Context, userID string, reque
 		}
 		for _, appID := range request.CallerApps {
 			var exists bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM user_app_installations WHERE user_id=$1 AND app_id=$2 AND state='installed')`, userID, appID).Scan(&exists); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_app_installations WHERE space_id=$1 AND app_id=$2 AND state='installed')`, request.SpaceID, appID).Scan(&exists); err != nil {
 				return err
 			}
 			if !exists {
@@ -296,7 +298,7 @@ func resolveSDKBoundCapabilityWithAvailabilityTx(ctx context.Context, tx *sql.Tx
 		if !slices.Contains(allowedCaps, name) {
 			return ErrAppRuntimeForbidden
 		}
-		provider, currentVersion, currentInstall, err := sdkInstalledProviderTx(ctx, tx, userID, providerID, providerVersion, true)
+		provider, currentVersion, currentInstall, err := sdkInstalledProviderTx(ctx, tx, userID, result.Target.SpaceID, providerID, providerVersion, true)
 		if err != nil {
 			return err
 		}
@@ -306,7 +308,7 @@ func resolveSDKBoundCapabilityWithAvailabilityTx(ctx context.Context, tx *sql.Tx
 		_, officialBrowser := cap.OfficialBrowserProvider(provider.ID, provider.Version)
 		if provider.ID != cap.PlannerProviderID && !officialBrowser {
 			var availability string
-			if err := tx.QueryRowContext(ctx, `SELECT reported_state FROM sdk_provider_registrations WHERE user_id=$1 AND provider_id=$2 AND version=$3 AND enabled FOR SHARE`, userID, providerID, providerVersion).Scan(&availability); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT reported_state FROM sdk_provider_registrations WHERE user_id=$1 AND provider_id=$2 AND version=$3 AND space_id=$4 AND enabled FOR SHARE`, userID, providerID, providerVersion, result.Target.SpaceID).Scan(&availability); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrSDKProviderUnavailable
 				}
@@ -356,7 +358,7 @@ func resolveSDKBoundCapabilityWithAvailabilityTx(ctx context.Context, tx *sql.Tx
 			return err
 		}
 		var grantedJSON []byte
-		if err := tx.QueryRowContext(ctx, `SELECT granted_scopes FROM user_app_installations WHERE user_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, userID, result.Target.AppID).Scan(&grantedJSON); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT granted_scopes FROM space_app_installations WHERE space_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, result.Target.SpaceID, result.Target.AppID).Scan(&grantedJSON); err != nil {
 			return err
 		}
 		var grants []string
@@ -368,12 +370,12 @@ func resolveSDKBoundCapabilityWithAvailabilityTx(ctx context.Context, tx *sql.Tx
 			return ErrAppRuntimeForbidden
 		}
 		if a := AppAuthorityFromContext(ctx); a != nil {
-			if a.UserID != userID || a.SpaceID != "" && a.SpaceID != result.Target.SpaceID || !slices.Contains(allowedApps, a.AppID) || !cap.HasScopes(a.Scopes, result.Definition.RequiredScopes) {
+			if a.UserID != userID || (a.SpaceID == "" || a.SpaceID != result.Target.SpaceID) || !slices.Contains(allowedApps, a.AppID) || !cap.HasScopes(a.Scopes, result.Definition.RequiredScopes) {
 				return ErrAppRuntimeForbidden
 			}
 			var raw []byte
 			var generation int64
-			if err := tx.QueryRowContext(ctx, `SELECT granted_scopes,authority_generation FROM user_app_installations WHERE user_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, userID, a.AppID).Scan(&raw, &generation); errors.Is(err, sql.ErrNoRows) {
+			if err := tx.QueryRowContext(ctx, `SELECT granted_scopes,authority_generation FROM space_app_installations WHERE space_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, a.SpaceID, a.AppID).Scan(&raw, &generation); errors.Is(err, sql.ErrNoRows) {
 				return ErrAppRuntimeForbidden
 			} else if err != nil {
 				return err

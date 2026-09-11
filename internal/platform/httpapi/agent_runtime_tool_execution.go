@@ -43,6 +43,9 @@ func managedMistyRun(run *db.SpaceRun) bool {
 }
 
 func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, run *db.SpaceRun) (*agenttools.Registry, agenttools.Invocation, agenttools.Authorizer, error) {
+	if err := s.database.RequireSpaceApp(ctx, run.OwnerUserID, run.SpaceID, "agents"); err != nil {
+		return nil, agenttools.Invocation{}, nil, err
+	}
 	if run.SourceTaskID != "" {
 		toolbox, invocation, _, err := s.resolveAssignedTaskToolbox(ctx, run)
 		return toolbox, invocation, authorizePersonalAgentTaskTool(s.database), err

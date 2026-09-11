@@ -22,18 +22,22 @@ import (
 const connectedDeviceTicketLifetime = 5 * time.Minute
 
 type connectedDeviceTicketClaims struct {
-	Issuer           string   `json:"iss"`
-	Audience         string   `json:"aud"`
-	JTI              string   `json:"jti"`
-	PairID           string   `json:"pairId"`
-	SourceDeviceID   string   `json:"sourceDeviceId"`
-	SourceEndpointID string   `json:"sourceEndpointId"`
-	TargetDeviceID   string   `json:"targetDeviceId"`
-	TargetEndpointID string   `json:"targetEndpointId"`
-	ProtocolVersion  string   `json:"protocolVersion"`
-	Permissions      []string `json:"permissions"`
-	IssuedAt         int64    `json:"iat"`
-	Expires          int64    `json:"exp"`
+	SpaceID             string   `json:"spaceId,omitempty"`
+	AppID               string   `json:"appId,omitempty"`
+	InstalledVersion    string   `json:"installedVersion,omitempty"`
+	AuthorityGeneration int64    `json:"authorityGeneration,omitempty"`
+	Issuer              string   `json:"iss"`
+	Audience            string   `json:"aud"`
+	JTI                 string   `json:"jti"`
+	PairID              string   `json:"pairId"`
+	SourceDeviceID      string   `json:"sourceDeviceId"`
+	SourceEndpointID    string   `json:"sourceEndpointId"`
+	TargetDeviceID      string   `json:"targetDeviceId"`
+	TargetEndpointID    string   `json:"targetEndpointId"`
+	ProtocolVersion     string   `json:"protocolVersion"`
+	Permissions         []string `json:"permissions"`
+	IssuedAt            int64    `json:"iat"`
+	Expires             int64    `json:"exp"`
 }
 
 func (s *AgentsService) SetConnectedDevices(config ConnectedDevicesConfig) {

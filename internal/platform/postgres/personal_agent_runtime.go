@@ -280,6 +280,9 @@ func (db *Database) CancelPersonalAgentTaskRunForOwner(ctx context.Context, user
 			FOR UPDATE`, runID, userID), out); err != nil {
 			return err
 		}
+		if err := cancelMistyChildrenTx(ctx, tx, userID, runID); err != nil {
+			return err
+		}
 		if out.State == "canceled" {
 			return nil
 		}

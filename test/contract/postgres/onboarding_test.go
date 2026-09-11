@@ -27,7 +27,7 @@ func TestFinishOnboardingCreatesDefaultSpaceAndAppsAtomically(t *testing.T) {
 	if completion.Space == nil || !completion.Space.IsDefault || completion.Space.OwnerUserID != user.ID {
 		t.Fatalf("onboarding Space = %#v", completion.Space)
 	}
-	if len(completion.Apps) != 2 || completion.Apps[0].State != "installed" || !completion.Apps[0].Pinned {
+	if len(completion.Apps) != 2 || completion.Apps[0].State != "installed" || completion.Apps[0].SpaceID != completion.Space.ID {
 		t.Fatalf("onboarding apps = %#v", completion.Apps)
 	}
 

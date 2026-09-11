@@ -130,6 +130,9 @@ func (db *Database) SetSpaceNoteArchived(ctx context.Context, userID, noteID str
 			noteID).Scan(&creatorUserID, &spaceID, &lifecycle); err != nil {
 			return ErrSpaceNotFound
 		}
+		if err := requireSpaceAppTx(ctx, tx, spaceID, "journal"); err != nil {
+			return err
+		}
 		role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
 		if err != nil || (userID != creatorUserID && role != "owner") {
 			return ErrSpaceNotFound

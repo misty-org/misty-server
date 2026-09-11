@@ -91,6 +91,9 @@ func (db *Database) CreateSpaceDrawing(
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, creatorUserID); err != nil {
 			return err
 		}
+		if err := requireSpaceAppTx(ctx, tx, spaceID, "journal"); err != nil {
+			return err
+		}
 		if err := tx.QueryRowContext(ctx,
 			`INSERT INTO space_drawings(id,space_id,creator_user_id,title)
 			 VALUES($1,$2,$3,$4) RETURNING created_at,updated_at`,
@@ -121,6 +124,9 @@ func (db *Database) AccessibleSpaceDrawings(
 	drawings := []SpaceDrawing{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
+			return err
+		}
+		if err := requireSpaceAppTx(ctx, tx, spaceID, "journal"); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx,
@@ -193,6 +199,9 @@ func drawingAccessForTx(
 		if err != nil || !visible {
 			return DrawingAccess{}, err
 		}
+	}
+	if err := requireSpaceAppTx(ctx, tx, spaceID, "journal"); err != nil {
+		return DrawingAccess{}, err
 	}
 	memberRole, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
 	if errors.Is(err, ErrSpaceForbidden) || lifecycle != DrawingLifecycleActive {

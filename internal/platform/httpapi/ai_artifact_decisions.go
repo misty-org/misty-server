@@ -41,6 +41,22 @@ func (s *AIService) DecideArtifact() http.HandlerFunc {
 				return
 			}
 		}
+		if body.Decision != "reject" {
+			artifact := s.invocations.artifactForUser(userID, artifactID)
+			if artifact == nil {
+				http.NotFound(w, r)
+				return
+			}
+			invocation, err := s.database.AIInvocationByID(r.Context(), userID, artifact.InvocationID)
+			if err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+			if err := s.database.RequireSpaceApp(r.Context(), userID, invocation.SpaceID, "agents"); err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+		}
 		if body.Decision == "accept" && len(body.Operations) > 0 {
 			artifact := s.invocations.artifactForUser(userID, artifactID)
 			if artifact == nil || artifact.Kind != "task_set" || s.invocations.reviseTaskSetArtifact(userID, artifactID, body.Operations) != nil {

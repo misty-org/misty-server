@@ -70,15 +70,25 @@ func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *
 	if err != nil {
 		return nil, db.ErrSpaceInvalid
 	}
+	if err := s.database.RequireSpaceApp(ctx, record.UserID, record.SpaceID, "agents"); err != nil {
+		return nil, err
+	}
 	now := time.Now().In(location)
 	broker := aiContextBroker{database: s.database}
 	resolved, err := broker.resolve(ctx, record.UserID, body.Context)
 	if err != nil {
 		return nil, err
 	}
-	if db.AppAuthorityFromContext(ctx) == nil && (body.SurfaceID == "home" || body.SurfaceID == "activity" || body.SurfaceID == "global") && shouldRetrieveAccountContext(body.Prompt) {
+	hasWorkspaceScope := false
+	for _, reference := range body.Context {
+		if reference.Kind == "workspace.scope" {
+			hasWorkspaceScope = true
+			break
+		}
+	}
+	if !hasWorkspaceScope && db.AppAuthorityFromContext(ctx) == nil && (body.SurfaceID == "home" || body.SurfaceID == "activity" || body.SurfaceID == "global") && shouldRetrieveAccountContext(body.Prompt) {
 		embedding, _ := s.globalSearchQueryEmbedding(ctx, record.UserID, body.Prompt)
-		retrieved, retrieveErr := broker.retrieveAccount(ctx, record.UserID, body.Prompt, embedding, 4)
+		retrieved, retrieveErr := broker.retrieveAccount(ctx, record.UserID, body.Prompt, embedding, 4, record.SpaceID)
 		if retrieveErr != nil {
 			return nil, retrieveErr
 		}

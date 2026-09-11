@@ -14,8 +14,13 @@ import (
 )
 
 func TestDeviceExecutionControls(t *testing.T) {
-	database, _, user, _ := sdkInvocationFixture(t)
+	database := openTestDatabase(t)
 	ctx := t.Context()
+	owner, err := database.CreateUser("Device owner", "device-owner@example.com", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := owner.ID
 	space := createTestSpace(t, database, ctx, user, "Device controls")
 	invocation, _, err := database.CreateAIInvocationRecord(ctx, AIInvocationRecord{ID: "invocation_controls", UserID: user, SpaceID: space.ID, SurfaceID: "settings", Mode: "quick", Trigger: "message", State: "queued", IdempotencyKey: "controls", RequestPayload: json.RawMessage(`{}`), ExpiresAt: time.Now().Add(time.Hour)})
 	if err != nil {
@@ -48,6 +53,9 @@ func TestDeviceExecutionControls(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if job.SpaceID != space.ID {
+			t.Fatalf("claim lost originating Space: %q", job.SpaceID)
+		}
 		return job, token
 	}
 	queued := queue("first")
@@ -72,7 +80,7 @@ func TestDeviceExecutionControls(t *testing.T) {
 		t.Fatalf("old token began execution: %v", err)
 	}
 	begun, err := database.BeginWorkflowDeviceNodeJob(user, device.ID, job.ID, newToken)
-	if err != nil || begun.State != "executing" || begun.ExecutionStartedAt == nil {
+	if err != nil || begun.SpaceID != space.ID || begun.State != "executing" || begun.ExecutionStartedAt == nil {
 		t.Fatalf("begin: %#v %v", begun, err)
 	}
 	if _, err = database.Conn.Exec(`UPDATE workflow_device_node_jobs SET lease_expires_at=NOW()-INTERVAL '1 second' WHERE id=$1`, job.ID); err != nil {

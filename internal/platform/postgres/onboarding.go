@@ -16,6 +16,7 @@ import (
 var ErrOnboardingAlreadyComplete = errors.New("account onboarding is already complete")
 
 type AppInstallSpec struct {
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
 	ID                string
 	Version           string
 	PermissionVersion int
@@ -23,8 +24,8 @@ type AppInstallSpec struct {
 }
 
 type OnboardingCompletion struct {
-	Space *Space                `json:"space"`
-	Apps  []UserAppInstallation `json:"apps"`
+	Space *Space                 `json:"space"`
+	Apps  []SpaceAppInstallation `json:"apps"`
 }
 
 func (db *Database) FinishOnboarding(
@@ -103,14 +104,11 @@ func (db *Database) FinishOnboarding(
 			return err
 		}
 		for _, item := range apps {
-			encodedScopes, err := json.Marshal(item.Scopes)
-			if err != nil {
-				return err
-			}
-			if _, err := installUserAppTx(ctx, tx, userID, item.ID, item.Version, item.PermissionVersion, encodedScopes); err != nil {
+			if _, err := installSpaceAppTx(ctx, tx, userID, spaceID, item, item.Metadata); err != nil {
 				return err
 			}
 		}
+
 		_, err = tx.ExecContext(ctx, `INSERT INTO onboarding_completions(user_id,request_fingerprint,space_id)
 			VALUES($1,$2,$3)`, userID, fingerprint, spaceID)
 		return err
@@ -122,7 +120,7 @@ func (db *Database) FinishOnboarding(
 	if err != nil {
 		return nil, err
 	}
-	installedApps, err := db.UserApps(ctx, userID)
+	installedApps, err := db.SpaceApps(ctx, userID, spaceID)
 	if err != nil {
 		return nil, err
 	}

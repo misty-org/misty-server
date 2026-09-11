@@ -72,6 +72,10 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
+		if err := s.database.RequireSpaceApp(r.Context(), userID, space.ID, "agents"); err != nil {
+			writeSpaceError(w, err)
+			return
+		}
 		delegatedPrompt := aiContextPrompt(body.Prompt, resolved, nil, body.Context)
 		invocationID := strings.TrimSpace(body.InvocationID)
 		conversationID := strings.TrimSpace(body.ConversationID)

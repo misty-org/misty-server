@@ -285,6 +285,7 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Get(prefix+"/recaps", aiService.Recaps())
 	s.Router.Put(prefix+"/recaps/{surfaceID}", aiService.Recap())
 	s.Router.Post(prefix+"/recaps/{surfaceID}/seen", aiService.RecapSeen())
+	s.Router.Get(prefix+"/activity", aiService.MistyActivity())
 	s.Router.Post(prefix+"/invocations", aiService.CreateInvocation())
 	s.Router.Get(prefix+"/invocations/{invocationID}/events", aiService.InvocationEvents())
 	s.Router.Post(prefix+"/invocations/{invocationID}/cancel", aiService.CancelInvocation())

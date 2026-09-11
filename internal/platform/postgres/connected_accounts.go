@@ -46,10 +46,20 @@ func scanConnectedAccount(row interface{ Scan(...any) error }, item *ConnectedAc
 
 func (db *Database) ConnectedAccounts(ctx context.Context, userID string) ([]ConnectedAccount, error) {
 	items := []ConnectedAccount{}
+	spaceID, appID := "", ""
+	if authority := AppAuthorityFromContext(ctx); authority != nil {
+		if authority.UserID != userID || authority.SpaceID == "" {
+			return nil, ErrAppRuntimeForbidden
+		}
+		spaceID, appID = authority.SpaceID, authority.AppID
+	}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		if err := validateAppExecutionAuthorityTx(ctx, tx, AppAuthorityFromContext(ctx), userID, spaceID); err != nil {
+			return err
+		}
 		rows, err := tx.QueryContext(ctx, `SELECT `+connectedAccountColumns+`
-			FROM connected_accounts WHERE user_id=$1 AND revoked_at IS NULL
-			ORDER BY provider,account_display,id`, userID)
+			FROM connected_accounts WHERE user_id=$1 AND revoked_at IS NULL AND ($2='' OR EXISTS(SELECT 1 FROM space_app_connections selected WHERE selected.user_id=connected_accounts.user_id AND selected.space_id=$2 AND selected.app_id=$3 AND selected.connection_id=connected_accounts.id))
+			ORDER BY provider,account_display,id`, userID, spaceID, appID)
 		if err != nil {
 			return err
 		}
@@ -68,9 +78,19 @@ func (db *Database) ConnectedAccounts(ctx context.Context, userID string) ([]Con
 
 func (db *Database) ConnectedAccount(ctx context.Context, userID, id string) (*ConnectedAccount, error) {
 	item := &ConnectedAccount{}
+	spaceID, appID := "", ""
+	if authority := AppAuthorityFromContext(ctx); authority != nil {
+		if authority.UserID != userID || authority.SpaceID == "" {
+			return nil, ErrAppRuntimeForbidden
+		}
+		spaceID, appID = authority.SpaceID, authority.AppID
+	}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		if err := validateAppExecutionAuthorityTx(ctx, tx, AppAuthorityFromContext(ctx), userID, spaceID); err != nil {
+			return err
+		}
 		return scanConnectedAccount(tx.QueryRowContext(ctx, `SELECT `+connectedAccountColumns+`
-			FROM connected_accounts WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`, id, userID), item)
+			FROM connected_accounts WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND ($3='' OR EXISTS(SELECT 1 FROM space_app_connections selected WHERE selected.user_id=connected_accounts.user_id AND selected.space_id=$3 AND selected.app_id=$4 AND selected.connection_id=connected_accounts.id))`, id, userID, spaceID, appID), item)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound
@@ -80,10 +100,20 @@ func (db *Database) ConnectedAccount(ctx context.Context, userID, id string) (*C
 
 func (db *Database) ConnectedAccountByIdentity(ctx context.Context, userID, provider, accountID string) (*ConnectedAccount, error) {
 	item := &ConnectedAccount{}
+	spaceID, appID := "", ""
+	if authority := AppAuthorityFromContext(ctx); authority != nil {
+		if authority.UserID != userID || authority.SpaceID == "" {
+			return nil, ErrAppRuntimeForbidden
+		}
+		spaceID, appID = authority.SpaceID, authority.AppID
+	}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		if err := validateAppExecutionAuthorityTx(ctx, tx, AppAuthorityFromContext(ctx), userID, spaceID); err != nil {
+			return err
+		}
 		return scanConnectedAccount(tx.QueryRowContext(ctx, `SELECT `+connectedAccountColumns+`
-			FROM connected_accounts WHERE user_id=$1 AND provider=$2 AND account_id=$3`,
-			userID, provider, accountID), item)
+			FROM connected_accounts WHERE user_id=$1 AND provider=$2 AND account_id=$3 AND ($4='' OR EXISTS(SELECT 1 FROM space_app_connections selected WHERE selected.user_id=connected_accounts.user_id AND selected.space_id=$4 AND selected.app_id=$5 AND selected.connection_id=connected_accounts.id))`,
+			userID, provider, accountID, spaceID, appID), item)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound

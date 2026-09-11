@@ -230,6 +230,8 @@ func (s *SpacesService) MemberAvatar() http.HandlerFunc {
 
 func writeSpaceError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, db.ErrAppNotInstalled), errors.Is(err, db.ErrAppRuntimeForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "space_app_unavailable", "message": "The owning app is not available in this Space."})
 	case errors.Is(err, db.ErrSpaceNotFound), errors.Is(err, db.ErrSpaceInviteNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
 	case errors.Is(err, db.ErrPersonalAgentNotFound):
@@ -304,16 +306,23 @@ func (s *SpacesService) Spaces() http.HandlerFunc {
 				"owner_storage": storage})
 		case http.MethodPost:
 			var body struct {
-				Name                 string   `json:"name"`
-				TemplateID           string   `json:"template_id"`
-				IntegrationProviders []string `json:"integration_providers"`
+				Name                 string         `json:"name"`
+				TemplateID           string         `json:"template_id"`
+				IntegrationProviders []string       `json:"integration_providers"`
+				AppIDs               []string       `json:"app_ids"`
+				AppPermissions       map[string]int `json:"app_permissions"`
 			}
 			if decodeJSON(w, r, &body) != nil {
 				return
 			}
+			selectedApps, err := reviewedSpaceApps(body.AppIDs, body.AppPermissions)
+			if err != nil {
+				writeSpaceError(w, err)
+				return
+			}
 			result, err := s.database.CreateSpaceWithTemplateIdempotent(
 				r.Context(), userID, body.Name, body.TemplateID, body.IntegrationProviders,
-				r.Header.Get("Idempotency-Key"),
+				r.Header.Get("Idempotency-Key"), selectedApps...,
 			)
 			if err != nil {
 				writeSpaceError(w, err)

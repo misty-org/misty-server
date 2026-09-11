@@ -102,7 +102,7 @@ func (db *Database) ValidateAppExecutionAuthority(ctx context.Context, authority
 		return nil
 	}
 	// Reject malformed principals before opening a connection, as before.
-	if authority.Generation <= 0 || authority.UserID != userID || (authority.SpaceID != "" && authority.SpaceID != spaceID) {
+	if authority.Generation <= 0 || authority.UserID != userID || (authority.SpaceID == "" || authority.SpaceID != spaceID) {
 		return ErrAppRuntimeForbidden
 	}
 	for _, scope := range scopes {
@@ -125,7 +125,7 @@ func validateAppExecutionAuthorityTx(ctx context.Context, tx *sql.Tx, authority 
 	if authority == nil {
 		return nil
 	}
-	if authority.Generation <= 0 || authority.UserID != userID || (authority.SpaceID != "" && authority.SpaceID != spaceID) {
+	if authority.Generation <= 0 || authority.UserID != userID || (authority.SpaceID == "" || authority.SpaceID != spaceID) {
 		return ErrAppRuntimeForbidden
 	}
 	contains := func(values []string, key string) bool {
@@ -141,9 +141,12 @@ func validateAppExecutionAuthorityTx(ctx context.Context, tx *sql.Tx, authority 
 			return ErrAppRuntimeForbidden
 		}
 	}
+	if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
+		return ErrAppRuntimeForbidden
+	}
 	var raw []byte
 	var generation int64
-	err := tx.QueryRowContext(ctx, `SELECT granted_scopes,authority_generation FROM user_app_installations WHERE user_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, userID, authority.AppID).Scan(&raw, &generation)
+	err := tx.QueryRowContext(ctx, `SELECT granted_scopes,authority_generation FROM space_app_installations WHERE space_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, spaceID, authority.AppID).Scan(&raw, &generation)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrAppRuntimeForbidden
 	}

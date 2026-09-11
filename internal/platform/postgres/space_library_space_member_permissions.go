@@ -173,6 +173,23 @@ func fixedMemberPermission(permission string) bool {
 }
 
 func requireSpacePermissionTx(ctx context.Context, tx *sql.Tx, userID, spaceID, permission string) error {
+	appID := ""
+	switch permission {
+	case PermissionTasksView, PermissionTasksManage:
+		appID = "planner"
+	case PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload:
+		appID = "chat"
+	case PermissionLibraryView, PermissionLibraryUpload, PermissionLibraryAdd, PermissionLibraryEdit, PermissionLibraryDownload, PermissionLibraryImport:
+		appID = "library"
+	case PermissionStudioView, PermissionStudioManage:
+		appID = "agents"
+	}
+	if appID != "" {
+		if err := requireSpaceAppTx(ctx, tx, spaceID, appID); err != nil {
+			return err
+		}
+	}
+
 	allowed, err := hasSpacePermissionTx(ctx, tx, userID, spaceID, permission)
 	if err != nil {
 		return err

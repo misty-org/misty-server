@@ -71,7 +71,7 @@ func (db *Database) AdmitSDKInvocation(ctx context.Context, userID string, reque
 		if a != nil {
 			var scopesRaw []byte
 			var generation int64
-			if err := tx.QueryRowContext(ctx, `SELECT granted_scopes,authority_generation FROM user_app_installations WHERE user_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, userID, a.AppID).Scan(&scopesRaw, &generation); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT granted_scopes,authority_generation FROM space_app_installations WHERE space_id=$1 AND app_id=$2 AND state='installed' FOR SHARE`, a.SpaceID, a.AppID).Scan(&scopesRaw, &generation); err != nil {
 				return err
 			}
 			var scopes []string

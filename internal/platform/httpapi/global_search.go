@@ -98,7 +98,15 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 		for _, space := range spaces {
 			spaceNames[space.ID] = space.Name
 		}
-		embedding, semanticUsed := s.globalSearchQueryEmbedding(r.Context(), userID, query)
+		var embedding []float64
+		semanticUsed := false
+		if r.URL.Query().Get("assist") == "1" {
+			if err := s.database.RequireSpaceApp(r.Context(), userID, strings.TrimSpace(r.URL.Query().Get("space_id")), "agents"); err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+			embedding, semanticUsed = s.globalSearchQueryEmbedding(r.Context(), userID, query)
+		}
 		indexed, indexErr := s.database.SearchAIRetrieval(r.Context(), userID, query, embedding, 100)
 		if indexErr != nil {
 			indexed = nil

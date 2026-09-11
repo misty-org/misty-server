@@ -3,8 +3,8 @@
 package appcatalog
 
 import (
-	"crypto/sha256"
 	"encoding/json"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 )
@@ -14,42 +14,42 @@ const HostProtocolVersion = 2
 type Runtime string
 
 const (
-	RuntimeDownloaded  Runtime = "downloaded"
-	RuntimeHosted      Runtime = "hosted"
-	RuntimeEmbedded    Runtime = "embedded"
+	RuntimeDownloaded Runtime = "downloaded"
+	RuntimeHosted Runtime = "hosted"
+	RuntimeEmbedded Runtime = "embedded"
 	RuntimeUnsupported Runtime = "unsupported"
 )
 
 type PlatformRuntime struct {
-	Runtime                Runtime `json:"runtime"`
-	Entry                  string  `json:"entry,omitempty"`
-	SHA256                 string  `json:"sha256,omitempty"`
-	StyleSHA256            string  `json:"style_sha256,omitempty"`
-	Signature              string  `json:"signature,omitempty"`
-	SignatureKeyID         string  `json:"signature_key_id,omitempty"`
-	DownloadBytes          int64   `json:"download_bytes,omitempty"`
-	AdditionalStorageBytes int64   `json:"additional_storage_bytes,omitempty"`
+	Runtime Runtime `json:"runtime"`
+	Entry string `json:"entry,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
+	StyleSHA256 string `json:"style_sha256,omitempty"`
+	Signature string `json:"signature,omitempty"`
+	SignatureKeyID string `json:"signature_key_id,omitempty"`
+	DownloadBytes int64 `json:"download_bytes,omitempty"`
+	AdditionalStorageBytes int64 `json:"additional_storage_bytes,omitempty"`
 }
 
 type App struct {
-	ID                 string          `json:"id"`
-	AppID              string          `json:"app_id,omitempty"`
-	Slug               string          `json:"slug,omitempty"`
-	Name               string          `json:"name"`
-	Publisher          string          `json:"publisher"`
-	Description        string          `json:"description"`
-	About              string          `json:"about,omitempty"`
-	RepositoryURL      string          `json:"repository_url,omitempty"`
-	Version            string          `json:"version"`
-	PermissionVersion  int             `json:"permission_version"`
-	MinimumHost        int             `json:"minimum_host_protocol"`
-	MinimumHostVersion string          `json:"minimum_host_version,omitempty"`
-	Official           bool            `json:"official"`
-	AgeRating          string          `json:"age_rating"`
-	RequiresApps       []string        `json:"requires_apps,omitempty"`
-	Scopes             []string        `json:"scopes"`
-	Desktop            PlatformRuntime `json:"desktop"`
-	Mobile             PlatformRuntime `json:"mobile"`
+	ID string `json:"id"`
+	AppID string `json:"app_id,omitempty"`
+	Slug string `json:"slug,omitempty"`
+	Name string `json:"name"`
+	Publisher string `json:"publisher"`
+	Description string `json:"description"`
+	About string `json:"about,omitempty"`
+	RepositoryURL string `json:"repository_url,omitempty"`
+	Version string `json:"version"`
+	PermissionVersion int `json:"permission_version"`
+	MinimumHost int `json:"minimum_host_protocol"`
+	MinimumHostVersion string `json:"minimum_host_version,omitempty"`
+	Official bool `json:"official"`
+	AgeRating string `json:"age_rating"`
+	RequiresApps []string `json:"requires_apps,omitempty"`
+	Scopes []string `json:"scopes"`
+	Desktop PlatformRuntime `json:"desktop"`
+	Mobile PlatformRuntime `json:"mobile"`
 }
 
 type catalogDocument struct {
@@ -118,7 +118,7 @@ const generatedCatalog = `{
       "name": "Journal",
       "publisher": "Misty",
       "description": "Notes and drawings for ideas worth keeping.",
-      "version": "1.1.0-beta.2",
+      "version": "1.1.0-beta.3",
       "permission_version": 6,
       "minimum_host_protocol": 2,
       "official": true,
@@ -150,12 +150,12 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/journal/1.1.0-beta.2/desktop.zip",
-        "sha256": "8a3c2d944de6d522993dff43596b00695d8223b1f3008a9cd04fcf9a163aa577",
-        "signature": "L9T1lkccsWRfpuljkrkU/eocZSdNMgvxritORSkkqAZXJnFmRrgB45YeFWKlurH0w9Qt58SEtYG82V8lFN60Dg==",
+        "entry": "https://apps.mistysys.com/official-apps/journal/1.1.0-beta.3/desktop.zip",
+        "sha256": "1eb8189e4fcc38885e2ab820a0103394fa09d8fed0d3ea938e4f75cf28204d93",
+        "signature": "zwsun0j6S158pGJoV8gqjqcw4rqadwWGvkA34U80JcRFR37hk1KoJy+1/XjFuRPVsOl78LvFjY2dNUOca9CYAQ==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 2612321,
-        "additional_storage_bytes": 8722930
+        "download_bytes": 2922759,
+        "additional_storage_bytes": 9388826
       },
       "mobile": {
         "runtime": "embedded"
@@ -219,7 +219,7 @@ const generatedCatalog = `{
       "name": "Library",
       "publisher": "Misty",
       "description": "Curated resources shared with a Space.",
-      "version": "1.1.0",
+      "version": "1.1.4",
       "permission_version": 4,
       "minimum_host_protocol": 2,
       "official": true,
@@ -247,12 +247,12 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/library/1.1.0/desktop.zip",
-        "sha256": "1d87e9e4ebfbb9621518a20c08f8d7b143c373b9851554eea83db333b5246ea1",
-        "signature": "LDLX9pYqJRvjAvmi+0kDLFqYJB0jnsG1xB3pi4rvB/SJWG9tytwvFesACfnHniJvwGxAtZhYIeykLZpEL0z/Bg==",
+        "entry": "https://apps.mistysys.com/official-apps/library/1.1.4/desktop.zip",
+        "sha256": "20e68817dd88cc316f182dca5ba60cde6da2a4ea11648e97b8a5a58e4039e11f",
+        "signature": "InqFcKQhVSKtvuLb4nldTYiVm8htv7grifSoxE+8lfhkBDHTG4cmkAjLWkGhLr2VD6wwi0d/hj+EW27CLEA8Ag==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 1485426,
-        "additional_storage_bytes": 5273048
+        "download_bytes": 4368021,
+        "additional_storage_bytes": 11161665
       },
       "mobile": {
         "runtime": "embedded"
@@ -315,8 +315,8 @@ const generatedCatalog = `{
       "name": "Agents",
       "publisher": "Misty",
       "description": "Create and manage AI collaborators.",
-      "version": "1.1.0",
-      "permission_version": 3,
+      "version": "1.1.1",
+      "permission_version": 4,
       "minimum_host_protocol": 2,
       "official": true,
       "age_rating": "4+",
@@ -326,6 +326,7 @@ const generatedCatalog = `{
         "agents.write",
         "profile.read",
         "ai.read",
+        "ai.use",
         "ai.write",
         "mcp.read",
         "mcp.write",
@@ -342,12 +343,12 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/agents/1.1.0/desktop.zip",
-        "sha256": "75ff7f9d63987bbbb954c1f09934f8960786a682a61468988e6cecf79e083f8a",
-        "signature": "a+UZQ/1aKAWtmu7B8Ud01oSmhbrN/abKyxvTo2U5ni73OLoROGIB28QzVLBcr2cnq2AtFC5oTpKvRLzAREQuBg==",
+        "entry": "https://apps.mistysys.com/official-apps/agents/1.1.1/desktop.zip",
+        "sha256": "b868a333e7dac56fd05fcc8afecbdc10ead2906810a1f914bf8d7620159956e9",
+        "signature": "5YvXh7jL7Cy8gMzeRLJnRIjDO2+1yWJgZFq1gbqPtEvqTElXKMTleYpdcpYoYXIc6yMO7RlWNF+okVXesGaSBA==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 415669,
-        "additional_storage_bytes": 1450694
+        "download_bytes": 192084,
+        "additional_storage_bytes": 785232
       },
       "mobile": {
         "runtime": "embedded"
@@ -362,7 +363,7 @@ const generatedCatalog = `{
       "name": "Files",
       "publisher": "Misty",
       "description": "Browse local and connected files, and manage file transfers.",
-      "version": "1.1.0",
+      "version": "1.1.11",
       "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
@@ -384,12 +385,12 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/files/1.1.0/desktop.zip",
-        "sha256": "3e8ac7aca7c5a0b001d44cc1422f2044bdd63b4b90c6805b138d2d8fd85fe0d3",
-        "signature": "cX6imbQDvBRwZoI8h/GZD+BM5vkTgzuyJ+LnWdbDpzXPLQtj9rlKuqqMlcLDNg7gRsHVFW8hDC02M3lcQXGEBQ==",
+        "entry": "https://apps.mistysys.com/official-apps/files/1.1.11/desktop.zip",
+        "sha256": "55cb7b3038655fe8cd3fa2cfac061f5325dccd3d2355fc51f846633e3441ddb4",
+        "signature": "LIi+CYZyoue+fjcMwyvMObXAM0C21S/jQj3E0ZVyRT8pCk2L139V4TChIVfxw+vrS4SrJ/YmLSC8isrCkHVsBQ==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 1487472,
-        "additional_storage_bytes": 5279959
+        "download_bytes": 14153260,
+        "additional_storage_bytes": 31711763
       },
       "mobile": {
         "runtime": "embedded"
@@ -443,7 +444,7 @@ const generatedCatalog = `{
       "name": "Code",
       "publisher": "Misty",
       "description": "A focused development workspace.",
-      "version": "1.1.0",
+      "version": "1.1.2",
       "permission_version": 3,
       "minimum_host_protocol": 2,
       "official": true,
@@ -459,12 +460,12 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/code/1.1.0/desktop.zip",
-        "sha256": "9d2dadccfa54e88d4d087835ba0d323c8fee055728d36c50b33024cb4fdaf1ec",
-        "signature": "epZAhXracJAgpG/LdkrA981VOILpuipQqghhOlkfJfTk6yty/y4StZuf2MiyyhfI1+Xpljxk415b4L0reEaEAQ==",
+        "entry": "https://apps.mistysys.com/official-apps/code/1.1.2/desktop.zip",
+        "sha256": "5eccda79744851870577e3c3b04ac2b9b611e53a4e0dbaa950020b2774ce1b6a",
+        "signature": "aO23MW+sGuPwAf15WQPl16pszbm1P3C+CBBRnuXln6mGewmHeg3V//p8S4BLx3ZG9X9JoTOtVcNIibDG+J52CQ==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 794393,
-        "additional_storage_bytes": 2552615
+        "download_bytes": 1732091,
+        "additional_storage_bytes": 4470910
       },
       "mobile": {
         "runtime": "unsupported"
@@ -479,7 +480,7 @@ const generatedCatalog = `{
       "name": "Terminal",
       "publisher": "Misty",
       "description": "Command-line tools inside the workspace.",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "permission_version": 2,
       "minimum_host_protocol": 2,
       "official": true,
@@ -493,12 +494,12 @@ const generatedCatalog = `{
       ],
       "desktop": {
         "runtime": "downloaded",
-        "entry": "https://apps.mistysys.com/official-apps/terminal/1.1.0/desktop.zip",
-        "sha256": "98bd7b22e8c4a7e4b11d116c04209dd5bdd5ebd4f1eb281857ca07ffabff9eea",
-        "signature": "5P+0kdHcfl5F+zU2/G44CgvBd8defOq9tVNxOeIY/51cNvEaikg+LCNTY1xZvs7i+zYDR4IMfSTNJ9lyI8f6CQ==",
+        "entry": "https://apps.mistysys.com/official-apps/terminal/1.1.1/desktop.zip",
+        "sha256": "d7cc163cea553be432eb30bfba1f1578381c0fdf225058cc7ce6673e478dc90d",
+        "signature": "FrCBEn0pECTfzKl4ykOiKCWZzKnhhKDXtG1lcz6RhyMF1pMyV0xqDCmDvP2RTeAAy222WJVf2jMi4kajDTvLCA==",
         "signature_key_id": "misty-development-2026-01",
-        "download_bytes": 242021,
-        "additional_storage_bytes": 875518
+        "download_bytes": 896823,
+        "additional_storage_bytes": 2240405
       },
       "mobile": {
         "runtime": "unsupported"
@@ -523,9 +524,7 @@ func mustCatalogApps() []App {
 	return document.Apps
 }
 
-func Digest() string {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.TrimSpace(generatedCatalog))))
-}
+func Digest() string { return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.TrimSpace(generatedCatalog)))) }
 
 func All() []App {
 	result := make([]App, len(officialApps))

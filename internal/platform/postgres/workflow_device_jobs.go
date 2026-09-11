@@ -11,6 +11,7 @@ import (
 )
 
 type WorkflowDeviceNodeJob struct {
+	SpaceID            string          `json:"spaceId"`
 	ID                 string          `json:"id"`
 	RunID              string          `json:"runId"`
 	NodeID             string          `json:"nodeId"`

@@ -19,7 +19,7 @@ func (db *Database) QueueDueSocialScheduledMessages(ctx context.Context, limit i
 	}
 	count := 0
 	err := db.TestingWithRLSContext(ctx, TestingServiceRLSSettings(), func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT s.id,s.space_id,s.binding_id,s.conversation_id,s.authority_id,s.created_by_user_id,s.content FROM social_scheduled_messages s JOIN social_send_authorities a ON a.id=s.authority_id WHERE s.status='scheduled' AND s.scheduled_at<=NOW() AND a.allow_scheduled AND a.revoked_at IS NULL ORDER BY s.scheduled_at FOR UPDATE OF s SKIP LOCKED LIMIT $1`, limit)
+		rows, err := tx.QueryContext(ctx, `SELECT s.id,s.space_id,s.binding_id,s.conversation_id,s.authority_id,s.created_by_user_id,s.content FROM social_scheduled_messages s JOIN social_send_authorities a ON a.id=s.authority_id WHERE s.status='scheduled' AND EXISTS(SELECT 1 FROM space_app_installations i WHERE i.space_id=s.space_id AND i.app_id='chat' AND i.state='installed') AND s.scheduled_at<=NOW() AND a.allow_scheduled AND a.revoked_at IS NULL ORDER BY s.scheduled_at FOR UPDATE OF s SKIP LOCKED LIMIT $1`, limit)
 		if err != nil {
 			return err
 		}
@@ -102,7 +102,7 @@ func (db *Database) ClaimSocialOutboundCommands(ctx context.Context, workerID st
 	}
 	items := []SocialOutboundDelivery{}
 	err := db.TestingWithRLSContext(ctx, TestingServiceRLSSettings(), func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `WITH ready AS (SELECT id FROM social_outbound_commands WHERE state='queued' AND available_at<=NOW() AND (lease_expires_at IS NULL OR lease_expires_at<NOW()) ORDER BY available_at,created_at FOR UPDATE SKIP LOCKED LIMIT $1), claimed AS (UPDATE social_outbound_commands c SET state='sending',attempts=attempts+1,lease_expires_at=NOW()+INTERVAL '60 seconds',updated_at=NOW() FROM ready WHERE c.id=ready.id RETURNING c.*) SELECT c.id,c.space_id,c.binding_id,c.conversation_id,COALESCE(c.authority_id,''),COALESCE(c.requested_by_user_id,''),c.source_kind,c.content,c.idempotency_key,c.state,c.attempts,c.available_at,c.lease_expires_at,c.provider_receipt,c.last_error_code,c.created_at,c.updated_at,b.provider,b.external_resource_id,b.external_parent_id,b.connection_id,b.connected_by_user_id FROM claimed c JOIN social_bindings b ON b.id=c.binding_id WHERE b.status='active' AND b.disabled_at IS NULL`, limit)
+		rows, err := tx.QueryContext(ctx, `WITH ready AS (SELECT id FROM social_outbound_commands WHERE state='queued' AND EXISTS(SELECT 1 FROM space_app_installations i WHERE i.space_id=social_outbound_commands.space_id AND i.app_id='chat' AND i.state='installed') AND available_at<=NOW() AND (lease_expires_at IS NULL OR lease_expires_at<NOW()) ORDER BY available_at,created_at FOR UPDATE SKIP LOCKED LIMIT $1), claimed AS (UPDATE social_outbound_commands c SET state='sending',attempts=attempts+1,lease_expires_at=NOW()+INTERVAL '60 seconds',updated_at=NOW() FROM ready WHERE c.id=ready.id RETURNING c.*) SELECT c.id,c.space_id,c.binding_id,c.conversation_id,COALESCE(c.authority_id,''),COALESCE(c.requested_by_user_id,''),c.source_kind,c.content,c.idempotency_key,c.state,c.attempts,c.available_at,c.lease_expires_at,c.provider_receipt,c.last_error_code,c.created_at,c.updated_at,b.provider,b.external_resource_id,b.external_parent_id,b.connection_id,b.connected_by_user_id FROM claimed c JOIN social_bindings b ON b.id=c.binding_id WHERE b.status='active' AND b.disabled_at IS NULL`, limit)
 		if err != nil {
 			return err
 		}
@@ -138,13 +138,26 @@ func (db *Database) FailSocialOutboundCommand(ctx context.Context, id, errorCode
 			state = "queued"
 			delay = time.Minute
 		}
-		_, err := tx.ExecContext(ctx, `UPDATE social_outbound_commands SET state=$2,last_error_code=$3,available_at=NOW()+$4::interval,lease_expires_at=NULL,updated_at=NOW() WHERE id=$1`, id, state, errorCode, delay.String())
+		_, err := tx.ExecContext(ctx, `UPDATE social_outbound_commands SET state=$2,last_error_code=$3,available_at=NOW()+$4::interval,lease_expires_at=NULL,updated_at=NOW() WHERE id=$1 AND state<>'cancelled'`, id, state, errorCode, delay.String())
 		if err != nil {
 			return err
 		}
 		if !retry {
-			_, err = tx.ExecContext(ctx, `UPDATE social_scheduled_messages SET status='failed',last_error_code=$2,updated_at=NOW() WHERE outbound_command_id=$1`, id, errorCode)
+			_, err = tx.ExecContext(ctx, `UPDATE social_scheduled_messages SET status='failed',last_error_code=$2,updated_at=NOW() WHERE outbound_command_id=$1 AND status<>'cancelled'`, id, errorCode)
 		}
 		return err
+	})
+}
+
+func (db *Database) ValidateSocialOutboundDelivery(ctx context.Context, id string) error {
+	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		var live bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM social_outbound_commands c JOIN space_app_installations i ON i.space_id=c.space_id AND i.app_id='chat' JOIN space_members m ON m.space_id=c.space_id AND m.user_id=c.requested_by_user_id WHERE c.id=$1 AND c.state='sending' AND i.state='installed')`, id).Scan(&live); err != nil {
+			return err
+		}
+		if !live {
+			return ErrAppRuntimeForbidden
+		}
+		return nil
 	})
 }

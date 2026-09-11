@@ -12,15 +12,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 var (
-	ErrAgentNotFound       = errors.New("Space Agent not found")
-	ErrDeviceNotFound      = errors.New("trusted device not found")
-	ErrDeviceRequestReplay = errors.New("trusted device request was already used")
-	ErrAgentJobNotFound    = errors.New("workflow device node job not found")
-	ErrInvalidJobState     = errors.New("invalid workflow device node state")
-	ErrInvalidLease        = errors.New("invalid or expired workflow device node lease")
+	ErrAgentNotFound          = errors.New("Space Agent not found")
+	ErrDeviceNotFound         = errors.New("trusted device not found")
+	ErrDeviceIdentityConflict = errors.New("device endpoint is registered to another signing identity")
+	ErrDeviceRequestReplay    = errors.New("trusted device request was already used")
+	ErrAgentJobNotFound       = errors.New("workflow device node job not found")
+	ErrInvalidJobState        = errors.New("invalid workflow device node state")
+	ErrInvalidLease           = errors.New("invalid or expired workflow device node lease")
 )
 
 type TrustedDevice struct {
@@ -54,6 +56,13 @@ func (db *Database) RegisterTrustedDevice(userID, name, publicKey, platform, end
 			RETURNING id,user_id,name,public_key,key_algorithm,capabilities,platform,COALESCE(p2p_endpoint_id,''),device_protocol_versions,last_seen_at,revoked_at,created_at,updated_at`,
 			"device_"+uuid.NewString(), userID, name, publicKey, platform, endpointID, protocolVersions, capabilities), device)
 	})
+	// Endpoint identity is not proof of possession of the registered signing
+	// key. Preserve that device (and its grants), even for a same-account retry.
+	// Let the unique index arbitrate concurrent inserts/updates atomically.
+	var conflict *pq.Error
+	if errors.As(err, &conflict) && conflict.Code == "23505" && conflict.Constraint == "trusted_devices_user_p2p_endpoint_idx" {
+		return nil, ErrDeviceIdentityConflict
+	}
 	return device, err
 }
 

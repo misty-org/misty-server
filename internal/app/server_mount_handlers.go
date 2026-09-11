@@ -21,8 +21,9 @@ func (s *Server) MountHandlers() error {
 		AllowedHeaders:   allowedCORSRequestHeaders,
 		AllowCredentials: true,
 		// The client must be able to read the marker that distinguishes a signed
-		// download descriptor from a proxied file body.
-		ExposedHeaders: []string{"X-Misty-Signed-Download", "X-Request-ID"},
+		// download descriptor from a proxied file body, and the retry delay on
+		// rate-limit responses emitted before routing.
+		ExposedHeaders: []string{"X-Misty-Signed-Download", "X-Request-ID", "Retry-After"},
 		MaxAge:         300,
 	}))
 	s.Router.Use(TestingRequestObservabilityMiddleware)
@@ -124,14 +125,20 @@ func (s *Server) MountHandlers() error {
 		s.Router.Get(prefix+"/apps/release", api.OfficialAppRelease)
 		s.Router.Get(prefix+"/apps", api.OfficialApps(s.Database))
 		s.Router.Get(prefix+"/apps/{appID}", api.OfficialApp(s.Database))
-		s.Router.Get(prefix+"/me/apps", api.MyOfficialApps(s.Database))
-		s.Router.MethodFunc(http.MethodPut, prefix+"/me/apps/{appID}", api.MyOfficialApp(s.Database))
-		s.Router.MethodFunc(http.MethodPatch, prefix+"/me/apps/{appID}", api.MyOfficialApp(s.Database))
-		s.Router.MethodFunc(http.MethodDelete, prefix+"/me/apps/{appID}", api.MyOfficialApp(s.Database))
-		s.Router.Post(prefix+"/me/apps/{appID}/sessions", api.CreateOfficialAppSession(s.Database))
-		s.Router.Post(prefix+"/me/sdk-apps/install", api.InstallSDKApp(s.Database))
-		s.Router.Post(prefix+"/me/sdk-apps/{appID}/sessions", api.CreateSDKAppSession(s.Database))
-		s.Router.Delete(prefix+"/me/sdk-apps/{appID}", api.UninstallSDKApp(s.Database))
+		s.Router.Get(prefix+"/me/space-templates", api.PersonalSpaceTemplates(s.Database))
+		s.Router.Post(prefix+"/me/space-templates", api.PersonalSpaceTemplates(s.Database))
+		s.Router.Put(prefix+"/me/space-templates/{templateID}", api.PersonalSpaceTemplates(s.Database))
+		s.Router.Delete(prefix+"/me/space-templates/{templateID}", api.PersonalSpaceTemplates(s.Database))
+		s.Router.Get(prefix+"/spaces/{spaceID}/apps", api.MyOfficialApps(s.Database))
+		s.Router.Get(prefix+"/spaces/{spaceID}/apps/{appID}/personal-connections", s.Spaces.SpaceAppConnections())
+		s.Router.Put(prefix+"/spaces/{spaceID}/apps/{appID}/personal-connections", s.Spaces.SpaceAppConnections())
+		s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/apps/{appID}", api.MyOfficialApp(s.Database))
+		s.Router.Put(prefix+"/spaces/{spaceID}/apps/order", api.ReorderSpaceApps(s.Database))
+		s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/apps/{appID}", api.MyOfficialApp(s.Database))
+		s.Router.Post(prefix+"/spaces/{spaceID}/apps/{appID}/sessions", api.CreateOfficialAppSession(s.Database))
+		s.Router.Post(prefix+"/spaces/{spaceID}/apps/sdk-install", api.InstallSDKApp(s.Database))
+		s.Router.Post(prefix+"/spaces/{spaceID}/apps/{appID}/sdk-sessions", api.CreateSDKAppSession(s.Database))
+		s.Router.Delete(prefix+"/spaces/{spaceID}/apps/{appID}/sdk-install", api.UninstallSDKApp(s.Database))
 		s.Router.Post(prefix+"/capabilities/providers", api.RegisterSDKProvider(s.Database))
 		s.Router.Delete(prefix+"/capabilities/providers/{providerID}", api.SDKProviderLifecycle(s.Database))
 		s.Router.Put(prefix+"/capabilities/providers/{providerID}/availability", api.SDKProviderLifecycle(s.Database))
@@ -155,8 +162,8 @@ func (s *Server) MountHandlers() error {
 		s.Router.Get(prefix+"/me/capability-approvals/{approvalID}", s.Spaces.SDKCapabilityApprovalReview())
 		s.Router.Post(prefix+"/me/sdk-runs/{runID}/approvals/{approvalID}", s.Spaces.SDKCapabilityApproval())
 
-		s.Router.Put(prefix+"/me/sdk-apps/{appID}/connections/{connectionID}", s.Spaces.SDKBackendConnectionControl())
-		s.Router.Delete(prefix+"/me/sdk-apps/{appID}/connections/{connectionID}", s.Spaces.SDKBackendConnectionControl())
+		s.Router.Put(prefix+"/spaces/{spaceID}/apps/{appID}/connections/{connectionID}", s.Spaces.SDKBackendConnectionControl())
+		s.Router.Delete(prefix+"/spaces/{spaceID}/apps/{appID}/connections/{connectionID}", s.Spaces.SDKBackendConnectionControl())
 
 		s.Router.Get(prefix+"/app-runtime/session", api.OfficialAppRuntimeSession(s.Database))
 		s.Router.Post(prefix+"/app-runtime/rpc", api.OfficialAppRPC(s.Database, s.Router, prefix))

@@ -13,6 +13,7 @@ type SpaceTemplateSeedSummary struct {
 }
 
 type SpaceTemplate struct {
+	AppIDs                  []string                 `json:"app_ids"`
 	ID                      string                   `json:"id"`
 	Name                    string                   `json:"name"`
 	Description             string                   `json:"description"`
@@ -80,8 +81,22 @@ var builtInSpaceTemplates = []templateDefinition{
 }
 
 func init() {
+	builtInSpaceTemplates = append(builtInSpaceTemplates, templateDefinition{SpaceTemplate: SpaceTemplate{ID: "family", Name: "Family", Description: "Keep family plans and important material together.", Version: 1}, NoteTitle: "Family notes", NoteMarkdown: "# Family notes\n", Collections: []string{"Important documents"}})
+
 	for index := range builtInSpaceTemplates {
 		template := &builtInSpaceTemplates[index]
+		switch template.ID {
+		case "blank":
+			template.AppIDs = []string{}
+		case "family":
+			template.AppIDs = []string{"chat", "planner", "journal", "library"}
+		case "startup":
+			template.AppIDs = []string{"chat", "inbox", "journal", "planner", "library"}
+		case "game-development":
+			template.AppIDs = []string{"chat", "journal", "planner", "library", "files", "code", "terminal"}
+		default:
+			template.AppIDs = []string{"chat", "journal", "planner", "library"}
+		}
 		template.SeedSummary = SpaceTemplateSeedSummary{
 			TaskCount: len(template.Tasks), NoteCount: boolCount(template.NoteTitle != ""),
 			CollectionCount: len(template.Collections),

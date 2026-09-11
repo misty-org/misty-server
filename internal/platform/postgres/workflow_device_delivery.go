@@ -91,6 +91,10 @@ func (db *Database) ClaimWorkflowDeviceNodeJob(userID, deviceID string, lease ti
 			if err != nil {
 				return err
 			}
+			if err := loadDeviceJobSpace(tx, claimed); err != nil {
+				return err
+			}
+
 			item = claimed
 			return nil
 		}
@@ -140,12 +144,15 @@ func (db *Database) advanceWorkflowDeviceLease(userID, deviceID, jobID, token st
 			_, err := tx.Exec(`UPDATE workflow_device_node_jobs SET cancel_requested_at=COALESCE(cancel_requested_at,NOW()) WHERE id=$1 AND state IN ('leased','executing')`, jobID)
 			return err
 		}
-		return scanWorkflowDeviceJob(tx.QueryRow(`UPDATE workflow_device_node_jobs SET
+		if err := scanWorkflowDeviceJob(tx.QueryRow(`UPDATE workflow_device_node_jobs SET
    state=CASE WHEN $5 THEN 'executing' ELSE state END,
    execution_started_at=CASE WHEN $5 THEN COALESCE(execution_started_at,NOW()) ELSE execution_started_at END,
    lease_expires_at=LEAST(deadline_at,NOW()+INTERVAL '60 seconds'),last_heartbeat_at=NOW()
    WHERE id=$1 AND user_id=$2 AND leased_device_id=$3 AND lease_token_hash=$4 AND state IN ('leased','executing') AND deadline_at>NOW() AND lease_expires_at>NOW() AND cancel_requested_at IS NULL
-   RETURNING `+workflowDeviceJobColumns, jobID, userID, deviceID, TestingHashToken(token), begin), item)
+   RETURNING `+workflowDeviceJobColumns, jobID, userID, deviceID, TestingHashToken(token), begin), item); err != nil {
+			return err
+		}
+		return loadDeviceJobSpace(tx, item)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrInvalidLease
@@ -244,4 +251,13 @@ func (db *Database) RearmUnstartedBrowserJob(ctx context.Context, userID string,
 		err = ErrSpaceConflict
 	}
 	return result, err
+}
+
+// Hydrate delivery context from the authoritative run, never the client's active Space.
+func loadDeviceJobSpace(tx *sql.Tx, job *WorkflowDeviceNodeJob) error {
+	query := `SELECT COALESCE(space_id,'') FROM space_runs WHERE id=$1 AND owner_user_id=$2`
+	if strings.HasPrefix(job.RunID, "invocation_") {
+		query = `SELECT COALESCE(space_id,'') FROM ai_invocations WHERE id=$1 AND user_id=$2`
+	}
+	return tx.QueryRow(query, job.RunID, job.UserID).Scan(&job.SpaceID)
 }

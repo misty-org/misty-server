@@ -38,7 +38,11 @@ func (db *Database) PendingAIEmbeddingChunks(ctx context.Context, limit int) ([]
 		rows, err := tx.QueryContext(ctx, `
 			SELECT c.document_id,c.ordinal,c.content,c.content_hash
 			FROM ai_retrieval_chunks c JOIN ai_retrieval_documents d ON d.id=c.document_id
-			WHERE d.lifecycle_state='active' AND c.embedding IS NULL
+			WHERE d.lifecycle_state='active'
+ AND (d.space_id IS NULL OR EXISTS(SELECT 1 FROM space_app_installations installed_app
+ WHERE installed_app.space_id=d.space_id AND installed_app.state='installed' AND installed_app.app_id=CASE d.source_kind
+ WHEN 'note' THEN 'journal' WHEN 'drawing' THEN 'journal' WHEN 'task' THEN 'planner' WHEN 'calendar' THEN 'planner'
+ WHEN 'roadmap' THEN 'planner' WHEN 'message' THEN 'chat' WHEN 'library' THEN 'library' ELSE d.source_kind END)) AND c.embedding IS NULL
 			ORDER BY c.updated_at,c.document_id,c.ordinal LIMIT $1
 		`, limit)
 		if err != nil {
@@ -70,7 +74,11 @@ func (db *Database) CompleteAIEmbeddingChunk(ctx context.Context, chunk AIEmbedd
 	})
 }
 
-func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string, embedding []float64, limit int) ([]AIRetrievalHit, error) {
+func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string, embedding []float64, limit int, spaceIDs ...string) ([]AIRetrievalHit, error) {
+	spaceID := ""
+	if len(spaceIDs) > 0 {
+		spaceID = spaceIDs[0]
+	}
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return []AIRetrievalHit{}, nil
@@ -90,7 +98,11 @@ func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string,
 					ts_rank_cd(c.lexical,q.value) lexical_score,
 					CASE WHEN c.embedding IS NULL THEN 0 ELSE (1-(c.embedding <=> $2::vector)) END semantic_score
 				FROM ai_retrieval_documents d JOIN ai_retrieval_chunks c ON c.document_id=d.id CROSS JOIN lexical_query q
-				WHERE d.lifecycle_state='active'
+				WHERE d.lifecycle_state='active' AND ($5='' OR d.space_id=$5)
+ AND (d.space_id IS NULL OR EXISTS(SELECT 1 FROM space_app_installations installed_app
+ WHERE installed_app.space_id=d.space_id AND installed_app.state='installed' AND installed_app.app_id=CASE d.source_kind
+ WHEN 'note' THEN 'journal' WHEN 'drawing' THEN 'journal' WHEN 'task' THEN 'planner' WHEN 'calendar' THEN 'planner'
+ WHEN 'roadmap' THEN 'planner' WHEN 'message' THEN 'chat' WHEN 'library' THEN 'library' ELSE d.source_kind END))
 				  AND (
 				    (d.privacy_class='private' AND d.owner_user_id=$4) OR
 				    (d.privacy_class IN ('shared','provider')
@@ -105,14 +117,18 @@ func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string,
 				  )
 				  AND (c.lexical @@ q.value OR c.embedding IS NOT NULL)
 				ORDER BY score DESC,d.updated_at DESC,d.id,c.ordinal LIMIT $3
-			`, query, aiVectorLiteral(embedding), limit, userID)
+			`, query, aiVectorLiteral(embedding), limit, userID, spaceID)
 		} else {
 			rows, err = tx.QueryContext(ctx, `
 				WITH lexical_query AS (SELECT plainto_tsquery('simple',$1) value)
 				SELECT d.id,d.source_kind,d.source_id,COALESCE(d.space_id,''),d.source_revision,d.title,d.href,c.content,
 					ts_rank_cd(c.lexical,q.value) score,ts_rank_cd(c.lexical,q.value) lexical_score,0::float8 semantic_score
 				FROM ai_retrieval_documents d JOIN ai_retrieval_chunks c ON c.document_id=d.id CROSS JOIN lexical_query q
-				WHERE d.lifecycle_state='active'
+				WHERE d.lifecycle_state='active' AND ($4='' OR d.space_id=$4)
+ AND (d.space_id IS NULL OR EXISTS(SELECT 1 FROM space_app_installations installed_app
+ WHERE installed_app.space_id=d.space_id AND installed_app.state='installed' AND installed_app.app_id=CASE d.source_kind
+ WHEN 'note' THEN 'journal' WHEN 'drawing' THEN 'journal' WHEN 'task' THEN 'planner' WHEN 'calendar' THEN 'planner'
+ WHEN 'roadmap' THEN 'planner' WHEN 'message' THEN 'chat' WHEN 'library' THEN 'library' ELSE d.source_kind END))
 				  AND (
 				    (d.privacy_class='private' AND d.owner_user_id=$3) OR
 				    (d.privacy_class IN ('shared','provider')
@@ -127,7 +143,7 @@ func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string,
 				  )
 				  AND c.lexical @@ q.value
 				ORDER BY score DESC,d.updated_at DESC,d.id,c.ordinal LIMIT $2
-			`, query, limit, userID)
+			`, query, limit, userID, spaceID)
 		}
 		if err != nil {
 			return err
@@ -158,6 +174,10 @@ func (db *Database) RecentAIRetrieval(ctx context.Context, userID string, limit 
 			SELECT d.id,d.source_kind,d.source_id,COALESCE(d.space_id,''),d.source_revision,d.title,d.href,c.content,0::float8,0::float8,0::float8
 			FROM ai_retrieval_documents d JOIN ai_retrieval_chunks c ON c.document_id=d.id
 			WHERE d.lifecycle_state='active'
+ AND (d.space_id IS NULL OR EXISTS(SELECT 1 FROM space_app_installations installed_app
+ WHERE installed_app.space_id=d.space_id AND installed_app.state='installed' AND installed_app.app_id=CASE d.source_kind
+ WHEN 'note' THEN 'journal' WHEN 'drawing' THEN 'journal' WHEN 'task' THEN 'planner' WHEN 'calendar' THEN 'planner'
+ WHEN 'roadmap' THEN 'planner' WHEN 'message' THEN 'chat' WHEN 'library' THEN 'library' ELSE d.source_kind END))
 			  AND (
 			    (d.privacy_class='private' AND d.owner_user_id=$2) OR
 			    (d.privacy_class IN ('shared','provider')

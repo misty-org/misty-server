@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kannachi323/misty/server/internal/appcatalog"
@@ -50,85 +49,74 @@ func MyOfficialApps(database *db.Database) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		items, err := database.UserApps(r.Context(), userID)
+		items, err := database.SpaceApps(r.Context(), userID, chi.URLParam(r, "spaceID"))
 		if err != nil {
-			writeOfficialAppError(w, err)
+			writeSpaceError(w, err)
 			return
 		}
-		visible := items[:0]
-		for _, item := range items {
-			if _, exists := appcatalog.Find(item.AppID); exists {
-				visible = append(visible, item)
-			}
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"apps": visible})
+		writeJSON(w, http.StatusOK, map[string]any{"apps": items})
 	}
 }
-
 func MyOfficialApp(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, database)
 		if !ok {
 			return
 		}
-		catalogApp, exists := appcatalog.Find(chi.URLParam(r, "appID"))
-		if !exists {
-			writeJSON(w, http.StatusNotFound, map[string]string{"code": "app_not_found"})
+		spaceID, appID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "appID")
+		if r.Method == http.MethodDelete {
+			item, err := database.RemoveSpaceApp(r.Context(), userID, spaceID, appID)
+			if err != nil {
+				writeOfficialAppError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, item)
 			return
 		}
-		switch r.Method {
-		case http.MethodPut:
-			var body struct {
-				PermissionVersion int `json:"permission_version"`
-			}
-			if decodeJSON(w, r, &body) != nil {
-				return
-			}
-			if body.PermissionVersion != catalogApp.PermissionVersion {
-				writeJSON(w, http.StatusConflict, map[string]string{
-					"code": "app_permissions_changed", "message": "Review the app's current permissions before installing.",
-				})
-				return
-			}
-			item, err := database.InstallUserApp(r.Context(), userID, catalogApp.ID, catalogApp.Version, catalogApp.PermissionVersion, catalogApp.Scopes)
-			if err != nil {
-				writeOfficialAppError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, item)
-		case http.MethodPatch:
-			var body struct {
-				Pinned *bool `json:"pinned"`
-			}
-			if decodeJSON(w, r, &body) != nil {
-				return
-			}
-			if body.Pinned == nil {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_request"})
-				return
-			}
-			item, err := database.SetUserAppPinned(r.Context(), userID, catalogApp.ID, *body.Pinned)
-			if err != nil {
-				writeOfficialAppError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, item)
-		case http.MethodDelete:
-			item, err := database.UninstallUserApp(r.Context(), userID, catalogApp.ID, time.Now())
-			if err != nil {
-				writeOfficialAppError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, item)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		app, exists := appcatalog.Find(appID)
+		if !exists {
+			writeOfficialAppError(w, db.ErrAppNotFound)
+			return
 		}
+		var body struct {
+			PermissionVersion int `json:"permission_version"`
+		}
+		if decodeJSON(w, r, &body) != nil {
+			return
+		}
+		if body.PermissionVersion != app.PermissionVersion {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "app_permissions_changed"})
+			return
+		}
+		metadata, _ := json.Marshal(app)
+		item, err := database.InstallSpaceApp(r.Context(), userID, spaceID, db.AppInstallSpec{ID: app.ID, Version: app.Version, PermissionVersion: app.PermissionVersion, Scopes: app.Scopes}, metadata)
+		if err != nil {
+			writeOfficialAppError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+	}
+}
+func ReorderSpaceApps(database *db.Database) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := authenticatedUser(w, r, database)
+		if !ok {
+			return
+		}
+		var body struct {
+			AppIDs []string `json:"app_ids"`
+		}
+		if decodeJSON(w, r, &body) != nil {
+			return
+		}
+		if err := database.ReorderSpaceApps(r.Context(), userID, chi.URLParam(r, "spaceID"), body.AppIDs); err != nil {
+			writeOfficialAppError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
-// CreateOfficialAppSession remains available for a future catalog App that is
-// intentionally isolated. Host-embedded Apps use the normal account request
-// path and must never mint a parallel restricted credential.
 func CreateOfficialAppSession(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, database)
@@ -159,7 +147,7 @@ func CreateOfficialAppSession(database *db.Database) http.HandlerFunc {
 			return
 		}
 		session, err := database.CreateAppRuntimeSession(
-			r.Context(), userID, catalogApp.ID, security.HashToken(token), body.SpaceID, db.AppRuntimeSessionTTL,
+			r.Context(), userID, catalogApp.ID, security.HashToken(token), chi.URLParam(r, "spaceID"), db.AppRuntimeSessionTTL,
 		)
 		if err != nil {
 			writeOfficialAppError(w, err)
@@ -167,7 +155,7 @@ func CreateOfficialAppSession(database *db.Database) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"token": token, "app_id": session.AppID, "space_id": session.SpaceID,
-			"scopes": session.Scopes, "expires_at": session.ExpiresAt,
+			"scopes": session.Scopes, "expires_at": session.ExpiresAt, "authority_generation": session.AuthorityGeneration,
 			"sdk_base_url": "/v1/app-runtime",
 		})
 	}
@@ -256,6 +244,10 @@ func OfficialAppPersonalRecord(database *db.Database) http.HandlerFunc {
 
 func writeOfficialAppError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, db.ErrLibraryForbidden), errors.Is(err, db.ErrSpaceNotFound):
+		writeSpaceError(w, err)
+	case errors.Is(err, db.ErrAppDependencies), errors.Is(err, db.ErrSpaceConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "app_conflict", "message": err.Error()})
 	case errors.Is(err, db.ErrAppNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "app_not_installed"})
 	case errors.Is(err, db.ErrAppNotInstalled):

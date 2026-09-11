@@ -1,70 +1,24 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 
 	agent "github.com/kannachi323/misty/server/internal/agents"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
+// Legacy unscoped completion cannot bypass Misty's Space admission.
 func (s *AIService) Complete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
+		if _, ok := s.requireUser(w, r); !ok {
 			return
 		}
-		var body struct {
-			Prompt   string `json:"prompt"`
-			Timezone string `json:"timezone,omitempty"`
-		}
-		if err := decodeAIJSON(w, r, &body); err != nil {
-			http.Error(w, "invalid request", http.StatusBadRequest)
-			return
-		}
-		input := aiInvocationInput{
-			Mode: "drawer", SurfaceID: "global", Trigger: "explicit", Prompt: strings.TrimSpace(body.Prompt),
-			IdempotencyKey: "ai-complete:" + uuid.NewString(), Timezone: body.Timezone,
-		}
-		if err := validateAIInvocationInput(&input); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_invocation", "message": err.Error()})
-			return
-		}
-		if !s.agentRuntime.Enabled() {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "agent_runtime_unavailable", "message": "Misty's agent runtime is not configured."})
-			return
-		}
-		payload, _ := json.Marshal(input)
-		now := time.Now().UTC()
-		stored, _, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-			ID: "invocation_" + uuid.NewString(), UserID: userID, SurfaceID: "global", Mode: "drawer", Trigger: "explicit",
-			State: "queued", IdempotencyKey: input.IdempotencyKey, RequestPayload: payload, ExpiresAt: now.Add(aiInvocationTTL),
-		})
-		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		if _, err := s.invocations.restoreDurable(r.Context(), stored); err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		if _, err := s.agentRuntime.Start(r.Context(), stored.ID); err != nil {
-			s.invocations.fail(stored.ID, "Misty could not start the agent runtime. Please try again.")
-			TestingWriteAIError(w, err)
-			return
-		}
-		text, _, err := s.awaitAIInvocationAnswer(r, userID, stored.ID)
-		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"text": text, "model": agent.InitialSelectedModelID})
+		writeJSON(w, http.StatusGone, map[string]string{"code": "misty_handoff_required", "message": "Start a Space-scoped Misty invocation through /ai/invocations."})
 	}
 }
 

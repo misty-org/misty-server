@@ -99,6 +99,9 @@ func (s *SpacesService) ProcessSocialDelivery(ctx context.Context, limit int) (i
 			_ = s.database.FailSocialOutboundCommand(ctx, command.ID, "provider_not_configured", false)
 			continue
 		}
+		if err := s.database.ValidateSocialOutboundDelivery(ctx, command.ID); err != nil {
+			continue
+		}
 		receipt, sendErr := adapter.Send(ctx, token, outbound)
 		if sendErr != nil {
 			_ = s.database.FailSocialOutboundCommand(ctx, command.ID, "provider_send_failed", command.Attempts < 4)

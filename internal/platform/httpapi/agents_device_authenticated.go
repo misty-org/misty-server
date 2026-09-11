@@ -167,6 +167,8 @@ func writeAgentResult(w http.ResponseWriter, value any, err error, status int) {
 func writeAgentError(w http.ResponseWriter, err error) {
 	var invalidRequest serveragent.ErrInvalidRequest
 	switch {
+	case errors.Is(err, db.ErrDeviceIdentityConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "device_identity_conflict", "message": "This device endpoint is already registered with a different signing key. Restore the original device identity or set up a new device identity before trying again."})
 	case errors.Is(err, db.ErrAgentModelTurnLimit):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_turn_limit", "message": "This run reached its model-turn limit. Review its completed work before starting another request."})
 	case errors.Is(err, db.ErrAgentExecutionTimeLimit):

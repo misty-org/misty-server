@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/kannachi323/misty/server/internal/appcatalog"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
@@ -15,20 +14,17 @@ func FinishOnboarding(database *db.Database) http.HandlerFunc {
 			return
 		}
 		var body struct {
-			SpaceName string   `json:"space_name"`
-			AppIDs    []string `json:"app_ids"`
+			SpaceName      string         `json:"space_name"`
+			AppIDs         []string       `json:"app_ids"`
+			AppPermissions map[string]int `json:"app_permissions"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		// Every account starts with the five Apps that define Misty's default
-		// workspace. Additional Apps are acquired later from Discover.
-		catalogApps := appcatalog.Defaults()
-		installSpecs := make([]db.AppInstallSpec, 0, len(catalogApps))
-		for _, item := range catalogApps {
-			installSpecs = append(installSpecs, db.AppInstallSpec{
-				ID: item.ID, Version: item.Version, PermissionVersion: item.PermissionVersion, Scopes: item.Scopes,
-			})
+		installSpecs, err := reviewedSpaceApps(body.AppIDs, body.AppPermissions)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
 		}
 		completion, err := database.FinishOnboarding(r.Context(), userID, body.SpaceName, installSpecs)
 		if err != nil {

@@ -74,7 +74,7 @@ func (s *SpacesService) SDKBackendConnectionControl() http.HandlerFunc {
 			writeSDKError(w, err)
 			return
 		}
-		revision, err := s.database.ConfigureSDKBackendConnection(r.Context(), userID, db.SDKBackendConnection{UserID: userID, AppID: appID, ID: connectionID, EndpointURL: body.EndpointURL, BearerCiphertext: encrypted, KeyVersion: int(s.keyVer)}, body.ExpectedRevision)
+		revision, err := s.database.ConfigureSDKBackendConnection(r.Context(), userID, db.SDKBackendConnection{SpaceID: chi.URLParam(r,"spaceID"),UserID: userID, AppID: appID, ID: connectionID, EndpointURL: body.EndpointURL, BearerCiphertext: encrypted, KeyVersion: int(s.keyVer)}, body.ExpectedRevision)
 		if err != nil {
 			writeSDKError(w, err)
 			return

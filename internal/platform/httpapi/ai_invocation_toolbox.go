@@ -26,7 +26,7 @@ func previousAIConversationExchange(turns []db.AIConversationTurnRecord, current
 
 func aiInvocationRequestedSpaceTools(prompt, previousUserPrompt, previousAgentReply string) []string {
 	requested := []string{
-		toolboxContextGet, toolboxMembersList, toolboxMembersResolve,
+		toolboxAgentsDelegate, toolboxContextGet, toolboxMembersList, toolboxMembersResolve,
 		toolboxMessagesSearch, toolboxLibrarySearch, toolboxLibraryRead,
 		toolboxTasksQuery, "calendar.query", toolboxNotesSearch, toolboxNotesRead,
 		toolboxDrawingsList, toolboxDrawingsRead, toolboxRoadmapsQuery, toolboxRoadmapsRead,
@@ -93,7 +93,24 @@ func resolveAIInvocationSpaceToolbox(ctx context.Context, database *db.Database,
 		}
 	}
 	browserTabs, browserCapabilities := aiInvocationBrowserGrants(ctx, database, actor.userID, actor.runID)
-	toolbox := spaceAgentToolboxWithBrowser(database, browserTabs, browserCapabilities)
+	delegation := func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		var input struct {
+			Prompt string `json:"prompt"`
+		}
+		if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.Prompt) == "" {
+			return nil, db.ErrSpaceInvalid
+		}
+		identity, err := database.EnsureAskIdentity(ctx, actor.userID, serveragent.InitialSelectedModelID)
+		if err != nil {
+			return nil, err
+		}
+		child, err := database.CreateCreatorAgentRun(ctx, actor.userID, actor.spaceID, identity.ID, db.CreatorAgentRunInput{Instruction: input.Prompt, Mode: "auto", ParentInvocationID: actor.runID, AIConversationID: actor.sessionID})
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(map[string]any{"run_id": child.ID, "state": child.State, "worker": "background"})
+	}
+	toolbox := spaceAgentToolboxWithBrowser(database, browserTabs, browserCapabilities, delegation)
 	for _, descriptor := range browserToolDescriptors() {
 		if browserCapabilities[descriptor.Name] {
 			requested = append(requested, descriptor.Name)

@@ -172,6 +172,25 @@ func TestCORSAllowsAppOrigins(t *testing.T) {
 		}
 	}
 
+	// Exhaust a route budget in-process; the rejection occurs before routing.
+	for i := 0; i < 121; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/api/cors-rate-limit-test", nil)
+		req.Header.Set("Origin", "http://127.0.0.1:5173")
+		rec := httptest.NewRecorder()
+		server.Router.ServeHTTP(rec, req)
+		if i == 120 {
+			if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+				t.Fatalf("expected rate limit with retry delay: %d %v", rec.Code, rec.Header())
+			}
+			if !strings.Contains(strings.ToLower(strings.Join(rec.Header().Values("Access-Control-Expose-Headers"), ",")), "retry-after") {
+				t.Fatalf("browser cannot read retry delay: %v", rec.Header())
+			}
+			if rec.Header().Get("Access-Control-Allow-Origin") != "http://127.0.0.1:5173" {
+				t.Fatal("rate limit lost allowed origin")
+			}
+		}
+	}
+
 	req := httptest.NewRequest(http.MethodOptions, "/api/spaces", nil)
 	req.Header.Set("Origin", "http://127.0.0.1:5173")
 	req.Header.Set("Access-Control-Request-Method", "POST")

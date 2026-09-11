@@ -12,6 +12,7 @@ import (
 )
 
 type CreatorAgentRunInput struct {
+	ParentInvocationID string                         `json:"-"`
 	Instruction        string                         `json:"instruction"`
 	Mode               string                         `json:"mode,omitempty"`
 	ConversationTarget string                         `json:"conversation_target,omitempty"`
@@ -86,6 +87,9 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 	contextBindings := mustJSON(input.ContextReferences)
 	out := &SpaceRun{ID: "run_" + uuid.NewString()}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireSpaceAppTx(ctx, tx, spaceID, "agents"); err != nil {
+			return err
+		}
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, ownerUserID); err != nil {
 			return err
 		}
@@ -130,7 +134,7 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 		if input.ParentRunID != "" {
 			var parentOwner, parentSpace, parentAgent, parentMode string
 			var parentDepth int
-			if err := tx.QueryRowContext(ctx, `SELECT owner_user_id,space_id,agent_id,initial_run_mode,delegation_depth FROM space_runs WHERE id=$1 AND state IN ('queued','running','awaiting_approval','awaiting_device')`, input.ParentRunID).
+			if err := tx.QueryRowContext(ctx, `SELECT owner_user_id,space_id,agent_id,initial_run_mode,delegation_depth FROM space_runs WHERE id=$1 AND state IN ('queued','running','awaiting_approval','awaiting_device') FOR UPDATE`, input.ParentRunID).
 				Scan(&parentOwner, &parentSpace, &parentAgent, &parentMode, &parentDepth); err != nil {
 				return ErrSpaceForbidden
 			}
@@ -152,26 +156,56 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 			}
 			depth = parentDepth + 1
 		}
+		if input.ParentInvocationID != "" {
+			if input.ParentRunID != "" || !systemManaged {
+				return ErrSpaceForbidden
+			}
+			var owner, space string
+			if err := tx.QueryRowContext(ctx, `SELECT user_id,space_id FROM ai_invocations WHERE id=$1 AND state='running' FOR UPDATE`, input.ParentInvocationID).Scan(&owner, &space); err != nil {
+				return ErrSpaceForbidden
+			}
+			if owner != ownerUserID || space != spaceID {
+				return ErrSpaceForbidden
+			}
+			if err := requireSpaceAppTx(ctx, tx, spaceID, "agents"); err != nil {
+				return err
+			}
+			var count int
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM space_runs WHERE input->>'parent_invocation_id'=$1`, input.ParentInvocationID).Scan(&count); err != nil {
+				return err
+			}
+			if count >= 3 {
+				return ErrSpaceConflict
+			}
+			if runModeRank(mode) > runModeRank(defaultMode) {
+				mode = defaultMode
+			}
+			depth = 1
+		}
 		snapshot := mustJSON(map[string]any{"id": agentID, "version": version, "version_id": versionID, "name": name, "instructions": instructions, "model_id": modelID, "reasoning_effort": effort, "default_run_mode": defaultMode, "system_managed": systemManaged})
 		runInput := mustJSON(map[string]any{
 			"instruction": input.Instruction, "conversation_target": input.ConversationTarget,
 			"input_modality": input.InputModality, "timezone": input.Timezone,
 			"ai_invocation_id": input.AIInvocationID, "ai_conversation_id": input.AIConversationID,
-			"ai_idempotency_key": input.AIIdempotencyKey,
+			"ai_idempotency_key": input.AIIdempotencyKey, "parent_invocation_id": input.ParentInvocationID,
 		})
 		boundInput, bindErr := bindAppAuthority(ctx, runInput)
 		if bindErr != nil {
 			return bindErr
 		}
 		runInput = boundInput
-		if input.ParentRunID != "" || input.AIInvocationID != "" {
+		if input.ParentRunID != "" || input.AIInvocationID != "" || input.ParentInvocationID != "" {
 			// A delegated or invocation-linked child cannot shed its source app ceiling.
 			var parentInput json.RawMessage
 			var parentErr error
 			if input.ParentRunID != "" {
 				parentErr = tx.QueryRowContext(ctx, `SELECT input FROM space_runs WHERE id=$1 AND owner_user_id=$2 AND space_id=$3`, input.ParentRunID, ownerUserID, spaceID).Scan(&parentInput)
 			} else {
-				parentErr = tx.QueryRowContext(ctx, `SELECT request_payload FROM ai_invocations WHERE id=$1 AND user_id=$2 AND space_id=$3`, input.AIInvocationID, ownerUserID, spaceID).Scan(&parentInput)
+				parentInvocationID := input.AIInvocationID
+				if parentInvocationID == "" {
+					parentInvocationID = input.ParentInvocationID
+				}
+				parentErr = tx.QueryRowContext(ctx, `SELECT request_payload FROM ai_invocations WHERE id=$1 AND user_id=$2 AND space_id=$3`, parentInvocationID, ownerUserID, spaceID).Scan(&parentInput)
 			}
 			if parentErr != nil {
 				return parentErr
@@ -190,7 +224,7 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 			}
 		}
 		trigger := "direct_instruction"
-		if input.ParentRunID != "" {
+		if input.ParentRunID != "" || input.ParentInvocationID != "" {
 			trigger = "delegated"
 		}
 		if err := scanSpaceRun(tx.QueryRowContext(ctx, `INSERT INTO space_runs(
@@ -206,6 +240,9 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 		pinParentID := input.ParentRunID
 		if pinParentID == "" {
 			pinParentID = input.AIInvocationID
+			if pinParentID == "" {
+				pinParentID = input.ParentInvocationID
+			}
 		}
 		if err := pinAgentSDKCapabilitiesTx(ctx, tx, out.ID, ownerUserID, spaceID, pinParentID, runInput); err != nil {
 			return err

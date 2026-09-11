@@ -200,6 +200,14 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 				modelFallbackNotice = true
 			}
 		}
+		if spaceID == "" {
+			writeJSON(w, http.StatusForbidden, map[string]any{"code": "agents_space_required", "message": "Select a Space with Agents enabled to use Misty."})
+			return
+		}
+		if err := s.database.RequireSpaceApp(r.Context(), userID, spaceID, "agents"); err != nil {
+			writeSpaceError(w, err)
+			return
+		}
 		if err := validateAIInvocationDeviceContexts(body.Context, body.DeviceContexts, spaceID); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_device_context", "message": err.Error()})
 			return
@@ -406,6 +414,10 @@ func (s *AIService) CancelInvocation() http.HandlerFunc {
 		}
 		if _, err := s.invocations.restoreDurable(r.Context(), *stored); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "load invocation stream"})
+			return
+		}
+		if err := s.database.CancelMistyInvocationChildren(r.Context(), userID, stored.ID); err != nil {
+			writeSpaceError(w, err)
 			return
 		}
 		if !aiInvocationTerminal(stored.State) && stored.AgentRunID != "" {

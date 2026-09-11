@@ -17,6 +17,7 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 	userID, name, templateID string,
 	providers []string,
 	idempotencyKey string,
+	selectedApps ...AppInstallSpec,
 ) (*CreateSpaceResult, error) {
 	name, err := normalizeSpaceName(name)
 	if err != nil {
@@ -24,12 +25,34 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 	}
 	template, ok := TestingTemplateByID(templateID)
 	if !ok {
-		return nil, ErrSpaceInvalid
+		template, err = db.personalTemplateDefinition(ctx, userID, templateID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	providers, err = TestingNormalizeSetupProviders(providers)
 	if err != nil {
 		return nil, err
 	}
+	copyTemplate := *template
+	selected := map[string]bool{}
+	for _, app := range selectedApps {
+		if selected[app.ID] {
+			return nil, ErrSpaceInvalid
+		}
+		selected[app.ID] = true
+	}
+	if !selected["planner"] {
+		copyTemplate.Tasks = nil
+	}
+	if !selected["journal"] {
+		copyTemplate.NoteTitle = ""
+		copyTemplate.NoteMarkdown = ""
+	}
+	if !selected["library"] {
+		copyTemplate.Collections = nil
+	}
+	template = &copyTemplate
 	result := &CreateSpaceResult{
 		Space: Space{
 			ID: "space_" + uuid.NewString(), SecurityDomainID: "sd_" + uuid.NewString(),
@@ -42,10 +65,11 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 		return nil, ErrSpaceInvalid
 	}
 	fingerprintInput, _ := json.Marshal(struct {
-		Name      string   `json:"name"`
-		Template  string   `json:"template"`
-		Providers []string `json:"providers"`
-	}{Name: name, Template: template.ID, Providers: providers})
+		Name      string           `json:"name"`
+		Template  string           `json:"template"`
+		Providers []string         `json:"providers"`
+		Apps      []AppInstallSpec `json:"apps"`
+	}{Name: name, Template: template.ID, Providers: providers, Apps: selectedApps})
 	fingerprintDigest := sha256.Sum256(fingerprintInput)
 	fingerprint := hex.EncodeToString(fingerprintDigest[:])
 	existingSpaceID := ""
@@ -95,6 +119,11 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 		}
 		for _, provider := range providers {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO space_setup_integrations(space_id,provider) VALUES($1,$2)`, result.Space.ID, provider); err != nil {
+				return err
+			}
+		}
+		for _, app := range selectedApps {
+			if _, err := installSpaceAppTx(ctx, tx, userID, result.Space.ID, app, app.Metadata); err != nil {
 				return err
 			}
 		}

@@ -99,6 +99,7 @@ func UploadPurposePermission(purpose string) (string, bool) {
 }
 
 var configurableSpacePermissions = []string{
+	PermissionAppsManage,
 	PermissionMessagesRead, PermissionMessagesWrite,
 	PermissionLibraryView, PermissionLibraryUpload, PermissionAttachmentUpload,
 	PermissionLibraryAdd, PermissionLibraryEdit, PermissionLibraryDownload,

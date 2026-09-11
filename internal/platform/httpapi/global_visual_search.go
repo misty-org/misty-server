@@ -19,12 +19,17 @@ func (s *SpacesService) GlobalVisualSearch() http.HandlerFunc {
 			return
 		}
 		var body struct {
+			SpaceID      string `json:"space_id"`
 			AttachmentID string `json:"attachment_id"`
 			Query        string `json:"query"`
 			Limit        int    `json:"limit"`
 		}
 		if decodeAIJSON(w, r, &body) != nil || strings.TrimSpace(body.AttachmentID) == "" || len([]rune(body.Query)) > 256 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_visual_query"})
+			return
+		}
+		if err := s.database.RequireSpaceApp(r.Context(), userID, strings.TrimSpace(body.SpaceID), "agents"); err != nil {
+			writeSpaceError(w, err)
 			return
 		}
 		attachment, err := s.database.AIConversationAttachment(r.Context(), userID, body.AttachmentID)

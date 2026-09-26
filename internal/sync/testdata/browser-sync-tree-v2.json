@@ -1,0 +1,48 @@
+{
+  "_comment": "Public tree-protocol v2 signing vectors. Keep identical in src-tauri/crates/browser-sync/tests/fixtures/tree-v2.json and server/internal/sync/testdata/browser-sync-tree-v2.json.",
+  "workspace_id": "01951d32-40ac-7000-8000-000000000001",
+  "tree_id": "01951d32-40ac-7000-8000-000000000002",
+  "operation_id": "01951d32-40ac-7000-8000-000000000003",
+  "device_id": "01951d32-40ac-7000-8000-000000000002",
+  "device_counter": 5,
+  "key_epoch": 1,
+  "base_tree_version": 9,
+  "merkle_root": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+  "manifest": {
+    "upserts": [
+      [
+        "01951d32-40ac-7000-8000-000000000002",
+        "",
+        "aGFzaA=="
+      ],
+      [
+        "01951d32-40ac-7000-8000-000000000005",
+        "01951d32-40ac-7000-8000-000000000002",
+        "aGFzaDI="
+      ]
+    ],
+    "slots": [
+      [
+        "01951d32-40ac-7000-8000-000000000005",
+        "2",
+        ""
+      ]
+    ],
+    "deletes": [
+      "01951d32-40ac-7000-8000-000000000006"
+    ],
+    "blob_refs": [
+      "BwcH"
+    ]
+  },
+  "op_signing_bytes": "[\"misty.sync.tree-op.v2\",\"01951d32-40ac-7000-8000-000000000001\",\"01951d32-40ac-7000-8000-000000000002\",\"01951d32-40ac-7000-8000-000000000003\",\"01951d32-40ac-7000-8000-000000000002\",5,1,9,10,\"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\",[[\"01951d32-40ac-7000-8000-000000000002\",\"\",\"aGFzaA==\"],[\"01951d32-40ac-7000-8000-000000000005\",\"01951d32-40ac-7000-8000-000000000002\",\"aGFzaDI=\"]],[[\"01951d32-40ac-7000-8000-000000000005\",\"2\",\"\"]],[\"01951d32-40ac-7000-8000-000000000006\"],[\"BwcH\"]]",
+  "claim": {
+    "workspace_id": "01951d32-40ac-7000-8000-000000000001",
+    "tree_id": "01951d32-40ac-7000-8000-000000000002",
+    "operation_id": "01951d32-40ac-7000-8000-000000000003",
+    "device_id": "01951d32-40ac-7000-8000-000000000004",
+    "device_counter": 6,
+    "key_epoch": 1
+  },
+  "claim_signing_bytes": "[\"misty.sync.tree-claim.v2\",\"01951d32-40ac-7000-8000-000000000001\",\"01951d32-40ac-7000-8000-000000000002\",\"01951d32-40ac-7000-8000-000000000003\",\"01951d32-40ac-7000-8000-000000000004\",6,1]"
+}

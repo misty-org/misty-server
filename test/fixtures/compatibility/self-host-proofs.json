@@ -1,0 +1,12 @@
+{
+  "description": "Public test-only key/secret; never provision these values in a deployment.",
+  "expiresAt": "2026-09-06T12:00:00.000Z",
+  "goToken": "eyJhbGciOiJFZERTQSIsImtpZCI6Im1pZ3JhdGlvbi10ZXN0LW9ubHkiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJsaWNlbnNlXzFZRFgyeHRpNHpFYUNsYkhUMk1pcGtxY2FHSHNzTTRZRloySjJGbGpfcm8iLCJzdGF0dXMiOiJlbGlnaWJsZSIsImlhdCI6MTc4ODYwOTYwMCwiZXhwIjoxNzg4Njk2MDAwLCJqdGkiOiJlbnRpdGxlbWVudF9nby1jb21wYXRpYmlsaXR5LWZpeHR1cmUiLCJzY2hlbWFfdmVyc2lvbiI6MSwiaXNzIjoibWlzdHktaG9zdGVkIiwiYXVkIjoibWlzdHktc2VsZi1ob3N0ZWQifQ.gMP-aQ06fWz0JrQoc4ZGrEqEDduR2fCUhrg1ZEZ9k1g5458n5Eqkim63ZtES0EXyn3oDtGpw-Jwq2WQ3TMJKAA",
+  "keyId": "migration-test-only",
+  "nodeToken": "eyJhbGciOiJFZERTQSIsImtpZCI6Im1pZ3JhdGlvbi10ZXN0LW9ubHkiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJsaWNlbnNlXzFZRFgyeHRpNHpFYUNsYkhUMk1pcGtxY2FHSHNzTTRZRloySjJGbGpfcm8iLCJzdGF0dXMiOiJlbGlnaWJsZSIsInNjaGVtYV92ZXJzaW9uIjoxLCJpc3MiOiJtaXN0eS1ob3N0ZWQiLCJhdWQiOiJtaXN0eS1zZWxmLWhvc3RlZCIsImlhdCI6MTc4ODYwOTYwMCwiZXhwIjoxNzg4Njk2MDAwLCJqdGkiOiJlbnRpdGxlbWVudF8yNTRhYzJkOS0zNzFjLTQ2NTAtOGVjMC0yYWQ1YTJiY2Q5YTYifQ.GHPAIuuUySxHvPPQdJp0KB5RIX7uhiOl4D9k0RESx3Z2ooNLYpK9avLioRQTTgN-xEaQ3-iZIOy5T8GXrSOOAA",
+  "now": "2026-09-05T12:00:00.000Z",
+  "publicKey": "GX9rI+FshTLGq8g4+s1ep4m+DHaykgM0A5v6iz02jWE=",
+  "subject": "license_1YDX2xti4zEaClbHT2MipkqcaGHssM4YFZ2J2Flj_ro",
+  "subjectSecret": "R0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0c=",
+  "userId": "migration-test-user"
+}

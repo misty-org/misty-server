@@ -1,0 +1,242 @@
+name: misty-server
+
+x-api-image: &api-image
+  image: ${MISTY_API_IMAGE:-misty-server:local}
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_MIGRATION_USER:-misty}
+      POSTGRES_PASSWORD: ${DB_MIGRATION_PASSWORD:-misty}
+      POSTGRES_DB: ${DB_NAME:-misty_server}
+      MISTY_APP_DB_USER: ${DB_USER:-misty_app}
+      MISTY_APP_DB_PASSWORD: ${DB_PASSWORD:-misty}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5435}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/docker/postgres-init-app-role.sh:/docker-entrypoint-initdb.d/10-misty-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    networks: [database, edge]
+
+  setup:
+    image: misty-server-setup-dev:local
+    build:
+      context: .
+      dockerfile: scripts/docker/setup.Dockerfile
+      additional_contexts:
+        api: service:misty-api
+        agent: service:agent-runtime
+    logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
+    restart: "no"
+    env_file:
+      - path: .env/dev/integrations/cloudflare.env
+        required: true
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${DB_NAME:-misty_server}
+      PGUSER: ${DB_MIGRATION_USER:-misty}
+      PGPASSWORD: ${DB_MIGRATION_PASSWORD:-misty}
+      MISTY_APP_DB_USER: ${DB_USER:-misty_app}
+      MISTY_APP_DB_PASSWORD: ${DB_PASSWORD:-misty}
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: >-
+        host=postgres port=5432
+        user=${DB_MIGRATION_USER:-misty}
+        password=${DB_MIGRATION_PASSWORD:-misty}
+        dbname=${DB_NAME:-misty_server}
+        sslmode=disable
+      GOOSE_MIGRATION_DIR: /app/migrations
+      AGENT_RUNTIME_DB_PASSWORD: ${AGENT_RUNTIME_DB_PASSWORD:-workflow}
+      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
+      WORKFLOW_POSTGRES_URL: postgres://workflow:${AGENT_RUNTIME_DB_PASSWORD:-workflow}@postgres:5432/workflow
+      MISTY_CLOUDFLARE_WORKER_NAME: ${MISTY_CLOUDFLARE_WORKER_NAME:-misty-journal-collab-dev}
+      MISTY_DEV_API_ORIGIN: ${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}
+    volumes:
+      - ./apps/journal-collab:/workspace:ro
+      - dev_runtime:/run/misty
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [database, edge]
+
+  agent-runtime:
+    image: misty-agent-runtime-dev:local
+    build:
+      context: .
+      dockerfile: apps/agent-runtime/Dockerfile
+      target: runtime
+    logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
+      WORKFLOW_POSTGRES_URL: postgres://workflow:${AGENT_RUNTIME_DB_PASSWORD:-workflow}@postgres:5432/workflow
+      MISTY_INTERNAL_API_BASE: http://misty-api:8080
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/health >/dev/null"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    networks: [edge, database]
+
+  misty-api:
+    <<: *api-image
+    container_name: misty-api
+    logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
+    restart: unless-stopped
+    env_file:
+      - path: .env/dev/runtime.env
+        required: true
+      - path: .env/dev/database.env
+        required: true
+      - path: .env/dev/storage.env
+        required: true
+      - path: .env/dev/observability.env
+        required: true
+      - path: .env/dev/integrations/ai.env
+        required: true
+      - path: .env/dev/integrations/discord.env
+        required: true
+      - path: .env/dev/integrations/dropbox.env
+        required: true
+      - path: .env/dev/integrations/email.env
+        required: true
+      - path: .env/dev/integrations/figma.env
+        required: true
+      - path: .env/dev/integrations/github.env
+        required: true
+      - path: .env/dev/integrations/instagram.env
+        required: true
+      - path: .env/dev/integrations/google.env
+        required: true
+      - path: .env/dev/integrations/microsoft.env
+        required: true
+      - path: .env/dev/integrations/notion.env
+        required: true
+      - path: .env/dev/integrations/slack.env
+        required: true
+      - path: .env/dev/integrations/billing.env
+        required: true
+      - path: .env/dev/crypto/documents.env
+        required: true
+      - path: .env/dev/crypto/journal.env
+        required: true
+      - path: .env/dev/crypto/devices.env
+        required: true
+      - path: .env/dev/crypto/spaces.env
+        required: true
+      - path: .env/dev/crypto/services.env
+        required: true
+    environment:
+      PORT: "8080"
+      # The API stays publicly reachable for callbacks, while the development
+      # website runs only on localhost through Vite.
+      MISTY_PUBLIC_API_URL: "${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}/v1"
+      MISTY_ALLOWED_ORIGINS: "${MISTY_DEV_ALLOWED_ORIGINS:-tauri://localhost,http://tauri.localhost,https://tauri.localhost,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174}"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-misty_app}
+      DB_PASSWORD: ${DB_PASSWORD:-misty}
+      DB_NAME: ${DB_NAME:-misty_server}
+      DB_MIGRATION_USER: ""
+      DB_MIGRATION_PASSWORD: ""
+      CLOUDFLARE_API_TOKEN: ""
+      PARTYKIT_HOST: ${MISTY_CLOUDFLARE_WORKER_HOST:?run misty setup cloudflare}
+      MISTY_JOURNAL_SERVER_ENV_FILE: /run/misty/journal-server.env
+      MISTY_AGENT_RUNTIME_URL: http://agent-runtime:3000
+      MISTY_SDK_EXECUTION_ENABLED: ${MISTY_SDK_EXECUTION_ENABLED:-false}
+      MISTY_DEVICE_JOBS_ENABLED: ${MISTY_SDK_EXECUTION_ENABLED:-false}
+      MISTY_AGENT_RUNTIME_INTERNAL_API_URL: http://misty-api:8080
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
+    volumes:
+      - dev_runtime:/run/misty:ro
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+        restart: true
+      agent-runtime:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    entrypoint: ["/bin/sh", "/usr/local/bin/misty-dev-api-entrypoint"]
+    ports:
+      - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"
+    networks: [edge, database]
+
+  tunnel:
+    image: misty-cloudflared-dev:local
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM cloudflare/cloudflared:2026.7.3@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf AS cloudflared
+
+        FROM alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
+
+        RUN apk add --no-cache ca-certificates
+
+        COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+
+        ENTRYPOINT ["/usr/local/bin/cloudflared"]
+
+    logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
+    restart: unless-stopped
+
+    env_file:
+      - path: .env/dev/integrations/cloudflare.env
+        required: true
+
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        export TUNNEL_TOKEN="$${CLOUDFLARE_TUNNEL_TOKEN}"
+        unset CLOUDFLARE_TUNNEL_TOKEN
+        exec /usr/local/bin/cloudflared tunnel --no-autoupdate --protocol http2 --metrics 0.0.0.0:20241 run
+
+    depends_on:
+      misty-api:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1:20241/metrics | grep -Eq '^cloudflared_tunnel_ha_connections [1-9][0-9]*(\\.[0-9]+)?$'"
+        ]
+      interval: 15s
+      timeout: 7s
+      retries: 3
+      start_period: 10s
+
+    networks:
+      - edge
+
+volumes:
+  pgdata:
+  dev_runtime:
+
+networks:
+  edge:
+  database:
+    internal: true

@@ -1,0 +1,172 @@
+[
+  {
+    "name": "complete-rgba",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4AWP8DwQMQMDEAAUAPfgEADYYS7QAAAAASUVORK5CYII=",
+    "status": 200
+  },
+  {
+    "name": "header-color-0-depth-1",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQAAAABazTCJ",
+    "status": 200
+  },
+  {
+    "name": "header-color-0-depth-2",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAgAAAAAdbUpZ",
+    "status": 200
+  },
+  {
+    "name": "header-color-0-depth-4",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACBAAAAACSLb/5",
+    "status": 200
+  },
+  {
+    "name": "header-color-0-depth-8",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4",
+    "status": 200
+  },
+  {
+    "name": "header-color-0-depth-16",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACEAAAAAAHTY67",
+    "status": 200
+  },
+  {
+    "name": "header-color-2-depth-8",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91Jpz",
+    "status": 200
+  },
+  {
+    "name": "header-color-2-depth-16",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACEAIAAACtREYw",
+    "status": 200
+  },
+  {
+    "name": "header-color-4-depth-8",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAQAAADYv8Wv",
+    "status": 200
+  },
+  {
+    "name": "header-color-4-depth-16",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACEAQAAACILxns",
+    "status": 200
+  },
+  {
+    "name": "header-color-6-depth-8",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0k",
+    "status": 200
+  },
+  {
+    "name": "header-color-6-depth-16",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACEAYAAAAiJtFn",
+    "status": 200
+  },
+  {
+    "name": "palette-1",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQMAAABIeJ9nAAAAA1BMVEUAAACnej3aAAAAAElEQVQ1rwYe",
+    "status": 200
+  },
+  {
+    "name": "palette-2",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAgMAAAAP2OW3AAAAA1BMVEUAAACnej3aAAAAAElEQVQ1rwYe",
+    "status": 200
+  },
+  {
+    "name": "palette-4",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACBAMAAACAmBAXAAAAA1BMVEUAAACnej3aAAAAAElEQVQ1rwYe",
+    "status": 200
+  },
+  {
+    "name": "palette-8",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAMAAABFaP0WAAAAA1BMVEUAAACnej3aAAAAAElEQVQ1rwYe",
+    "status": 200
+  },
+  {
+    "name": "palette-alpha-extended",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQMAAABIeJ9nAAAAA1BMVEUAAACnej3aAAAABHRSTlP/////bShGeQ==",
+    "status": 200
+  },
+  {
+    "name": "interlaced-header",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACEAYAAAFVIeHx",
+    "status": 200
+  },
+  {
+    "name": "maximum-dimensions",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAEAAAABAACAYAAADyoyQX",
+    "status": 200
+  },
+  {
+    "name": "zero-width",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAAAAAACCAYAAAB2Q90Z",
+    "status": 400
+  },
+  {
+    "name": "too-wide",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAEAEAAAACCAYAAAA3d3Ls",
+    "status": 400
+  },
+  {
+    "name": "too-tall",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAABABCAYAAACT/ONE",
+    "status": 400
+  },
+  {
+    "name": "wrong-color-depth",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQYAAAB/pm9V",
+    "status": 400
+  },
+  {
+    "name": "wrong-interlace",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAAKcuGwI",
+    "status": 400
+  },
+  {
+    "name": "palette-missing",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAMAAABFaP0W",
+    "status": 400
+  },
+  {
+    "name": "palette-invalid-size",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQMAAABIeJ9nAAAACVBMVEUAAAAAAAAAAACDY+nAAAAAAElEQVQ1rwYe",
+    "status": 400
+  },
+  {
+    "name": "bad-header-crc",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0l",
+    "status": 400
+  },
+  {
+    "name": "truncated",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAI=",
+    "status": 400
+  },
+  {
+    "name": "non-png",
+    "base64": "bm90IGFuIGltYWdl",
+    "status": 400
+  },
+  {
+    "name": "empty",
+    "base64": "",
+    "status": 413
+  },
+  {
+    "name": "high-bit-header-name",
+    "base64": "iVBORw0KGgoAAAANyUhEUgAAAAIAAAACCAYAAADIOsbM",
+    "status": 400
+  },
+  {
+    "name": "high-bit-idat-name",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAMAAABFaP0WAAAAA1BMVEUAAACnej3aAAAAAMlEQVTY9rAl",
+    "status": 400
+  },
+  {
+    "name": "unknown-before-header",
+    "base64": "iVBORw0KGgoAAAAIbWlzdG1ldGFkYXRhfLZECwAAAA1JSERSAAAAAgAAAAIIBgAAAHK2DSQ=",
+    "status": 200
+  },
+  {
+    "name": "indexed-idat-header-only",
+    "base64": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAMAAABFaP0WAAAAA1BMVEUAAACnej3aAAAAAElEQVQ=",
+    "status": 200
+  }
+]

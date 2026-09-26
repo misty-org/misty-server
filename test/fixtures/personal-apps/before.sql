@@ -1,0 +1,11 @@
+BEGIN;
+SELECT set_config('app.rls_mode','service',true);
+INSERT INTO users(id,email,password_hash,name,license_id,username) VALUES('migration_owner','migration-owner@example.invalid','fixture','Owner','migration_license_owner','migrationowner'),('migration_member','migration-member@example.invalid','fixture','Member','migration_license_member','migrationmember');
+INSERT INTO licenses(id,user_id,tier,status,license_device) VALUES('migration_license_owner','migration_owner','basic','active',''),('migration_license_member','migration_member','basic','active','');
+INSERT INTO security_domains(id,kind,owner_user_id,space_id) VALUES('migration_sd_one','space','migration_owner','migration_space_one'),('migration_sd_two','space','migration_owner','migration_space_two');
+INSERT INTO spaces(id,owner_user_id,name,security_domain_id) VALUES('migration_space_one','migration_owner','One','migration_sd_one'),('migration_space_two','migration_owner','Two','migration_sd_two');
+INSERT INTO space_members(space_id,user_id,role) VALUES('migration_space_one','migration_owner','owner'),('migration_space_two','migration_owner','owner'),('migration_space_one','migration_member','member');
+INSERT INTO space_app_installations(space_id,app_id,installed_version,permission_version,granted_scopes,pin_rank,installed_by) VALUES('migration_space_one','example','1',1,'["storage.read","notes.read"]',1024,'migration_owner'),('migration_space_two','example','1',1,'["storage.read"]',1024,'migration_owner');
+INSERT INTO app_personal_records(user_id,space_id,app_id,record_key,data,updated_at) VALUES('migration_owner','migration_space_one','example','same-key','{"value":"older"}','2026-01-01'),('migration_owner','migration_space_two','example','same-key','{"value":"newer"}','2026-02-01'),('migration_member','migration_space_one','example','private','{"value":"member-only"}','2026-01-01');
+INSERT INTO app_runtime_sessions(token_hash,user_id,app_id,space_id,scopes,expires_at,authority_generation) VALUES(repeat('e',64),'migration_member','example','migration_space_one','["notes.read"]',NOW()+INTERVAL '1 minute',1);
+COMMIT;

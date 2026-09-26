@@ -1,0 +1,3376 @@
+[
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 9,
+    "registration": "s.Router.Get(prefix+\"/figma/teams/{teamID}/projects\", spaces.FigmaProjects())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 10,
+    "registration": "s.Router.Get(prefix+\"/figma/projects/{projectID}/files\", spaces.FigmaProjectFiles())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 11,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/drawings/figma/bindings\", spaces.FigmaBindings())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 12,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/drawings/figma/bindings\", spaces.FigmaBindings())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 13,
+    "registration": "s.Router.Delete(prefix+\"/spaces/{spaceID}/drawings/figma/bindings/{bindingID}\", spaces.FigmaBinding())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 14,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/drawings/figma/bindings/{bindingID}/sync\", spaces.SyncFigmaBinding())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 15,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/drawings/figma/bindings/{bindingID}/reconcile-webhooks\", spaces.ReconcileFigmaWebhooks())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 16,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/drawings/figma/bindings/{bindingID}/records\", spaces.FigmaBindingRecords())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 17,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/drawings/figma/bindings/{bindingID}/context\", spaces.FigmaBindingContext())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 18,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/drawings/figma/bindings/{bindingID}/comments\", spaces.FigmaComments())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_figma_routes.go",
+    "line": 19,
+    "registration": "s.Router.Post(prefix+\"/provider-callbacks/figma\", spaces.FigmaWebhook())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 20,
+    "registration": "s.Router.Use(cors.Handler(cors.Options{",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 31,
+    "registration": "s.Router.Use(api.CookieCSRFProtection(TestingIsAllowedCORSOrigin))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 32,
+    "registration": "s.Router.Use(TestingRequestObservabilityMiddleware)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 33,
+    "registration": "s.Router.Use(middleware.Recoverer)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 42,
+    "registration": "s.Router.Use(abuseGuard.Middleware)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 43,
+    "registration": "s.Router.Use(api.NewAPIRateLimiter().WithAbuseGuard(abuseGuard).Middleware)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 46,
+    "registration": "s.Router.Use(s.Metrics.Middleware)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 50,
+    "registration": "s.Router.Use(api.SelfHostedFeatureGate)",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 51,
+    "registration": "s.Router.Use(api.SelfHostedEntitlementMiddleware(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 96,
+    "registration": "s.Router.Get(prefix+\"/health\", healthHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 97,
+    "registration": "s.Router.Get(prefix+\"/instance\", instanceHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 98,
+    "registration": "s.Router.Post(prefix+\"/register\", registerHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 99,
+    "registration": "s.Router.Post(prefix+\"/self-host/bootstrap\", api.SelfHostBootstrap(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 100,
+    "registration": "s.Router.Post(prefix+\"/self-host/enroll\", api.SelfHostEnroll(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 101,
+    "registration": "s.Router.Post(prefix+\"/self-host/invitations\", api.SelfHostInvitation(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 102,
+    "registration": "s.Router.Delete(prefix+\"/self-host/invitations/{invitationID}\", api.SelfHostInvitation(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 113,
+    "registration": "s.Router.Post(prefix+\"/self-host/entitlement\", api.RenewSelfHostEntitlement(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 103,
+    "registration": "s.Router.Post(prefix+\"/login\", loginHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 104,
+    "registration": "s.Router.Post(prefix+\"/logout\", logoutHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 105,
+    "registration": "s.Router.Post(prefix+\"/auth/refresh\", api.RefreshSession(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 106,
+    "registration": "s.Router.Post(prefix+\"/auth/forgot\", forgotPasswordHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 107,
+    "registration": "s.Router.Get(prefix+\"/auth/reset/start\", startResetHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 108,
+    "registration": "s.Router.Get(prefix+\"/auth/reset/validate\", validateResetTokenHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 109,
+    "registration": "s.Router.Post(prefix+\"/auth/reset\", resetPasswordHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 110,
+    "registration": "s.Router.Post(prefix+\"/auth/handoff\", mintHandoffHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 111,
+    "registration": "s.Router.Get(prefix+\"/auth/handoff/start\", startHandoffHandler)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 112,
+    "registration": "s.Router.Post(prefix+\"/onboarding/finish\", api.FinishOnboarding(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 124,
+    "registration": "s.Router.Post(prefix+\"/waitlist\", waitlistJoinHandler)",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 113,
+    "registration": "s.Router.Get(prefix+\"/me\", api.GetMe(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 114,
+    "registration": "s.Router.Get(prefix+\"/sync/workspace\", browserSync.Workspace())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 115,
+    "registration": "s.Router.Post(prefix+\"/sync/workspace\", browserSync.Workspace())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 116,
+    "registration": "s.Router.Get(prefix+\"/sync/devices\", browserSync.Devices())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 117,
+    "registration": "s.Router.Post(prefix+\"/sync/devices\", browserSync.Devices())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 118,
+    "registration": "s.Router.Post(prefix+\"/sync/control\", browserSync.ControlDevice())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 119,
+    "registration": "s.Router.Post(prefix+\"/sync/ticket\", browserSync.Ticket())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 120,
+    "registration": "s.Router.Get(prefix+\"/sync/ws\", browserSync.Connect())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 121,
+    "registration": "s.Router.Put(prefix+\"/me/profile\", api.UpdateProfile(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 122,
+    "registration": "s.Router.Post(prefix+\"/me/export\", s.Spaces.AccountExportManifest())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 123,
+    "registration": "s.Router.Post(prefix+\"/me/deletion\", s.Spaces.BeginAccountDeletion())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 124,
+    "registration": "s.Router.Post(prefix+\"/account/deletion/status\", s.Spaces.AccountDeletionStatus())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 125,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/me/avatar\", api.UserAvatar(s.Database, s.LibraryStore))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 126,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/me/avatar\", api.UserAvatar(s.Database, s.LibraryStore))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 127,
+    "registration": "s.Router.Put(prefix+\"/me/device\", api.UpdateDevice(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 128,
+    "registration": "s.Router.Get(prefix+\"/me/settings\", api.GetSettings(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 129,
+    "registration": "s.Router.Put(prefix+\"/me/settings\", api.UpdateSettings(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 142,
+    "registration": "s.Router.Get(prefix+\"/apps/release\", api.OfficialAppRelease)",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 143,
+    "registration": "s.Router.Get(prefix+\"/apps\", api.OfficialApps(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 144,
+    "registration": "s.Router.Get(prefix+\"/apps/{appID}\", api.OfficialApp(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 130,
+    "registration": "s.Router.Get(prefix+\"/me/space-templates\", api.PersonalSpaceTemplates(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 131,
+    "registration": "s.Router.Post(prefix+\"/me/space-templates\", api.PersonalSpaceTemplates(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 132,
+    "registration": "s.Router.Put(prefix+\"/me/space-templates/{templateID}\", api.PersonalSpaceTemplates(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 133,
+    "registration": "s.Router.Delete(prefix+\"/me/space-templates/{templateID}\", api.PersonalSpaceTemplates(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 149,
+    "registration": "s.Router.Get(prefix+\"/me/apps\", api.MyOfficialApps(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 150,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/me/apps/{appID}\", api.MyOfficialApp(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 151,
+    "registration": "s.Router.Put(prefix+\"/me/apps/order\", api.ReorderSpaceApps(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 152,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/me/apps/{appID}\", api.MyOfficialApp(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 153,
+    "registration": "s.Router.Post(prefix+\"/me/apps/{appID}/sessions\", api.CreateOfficialAppSession(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 154,
+    "registration": "s.Router.Post(prefix+\"/me/apps/sdk-install\", api.InstallSDKApp(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 155,
+    "registration": "s.Router.Post(prefix+\"/me/apps/{appID}/sdk-sessions\", api.CreateSDKAppSession(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 156,
+    "registration": "s.Router.Delete(prefix+\"/me/apps/{appID}/sdk-install\", api.UninstallSDKApp(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 157,
+    "registration": "s.Router.Post(prefix+\"/capabilities/providers\", api.RegisterSDKProvider(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 158,
+    "registration": "s.Router.Delete(prefix+\"/capabilities/providers/{providerID}\", api.SDKProviderLifecycle(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 159,
+    "registration": "s.Router.Put(prefix+\"/capabilities/providers/{providerID}/availability\", api.SDKProviderLifecycle(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 160,
+    "registration": "s.Router.Post(prefix+\"/capabilities/discover\", api.DiscoverSDKProviders(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 161,
+    "registration": "s.Router.Post(prefix+\"/me/sdk-targets\", api.ConfigureSDKTarget(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 162,
+    "registration": "s.Router.Get(prefix+\"/me/sdk-targets\", api.SDKTargetControlList(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 163,
+    "registration": "s.Router.Get(prefix+\"/me/routines\", api.RoutineDraftList(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 164,
+    "registration": "s.Router.Get(prefix+\"/me/routines/{routineID}\", api.RoutineDraftControl(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 165,
+    "registration": "s.Router.Put(prefix+\"/me/routines/{routineID}\", api.RoutineDraftControl(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 166,
+    "registration": "s.Router.Post(prefix+\"/me/routines/{routineID}/runs\", s.Spaces.RoutineManualRun())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 167,
+    "registration": "s.Router.Get(prefix+\"/me/routine-runs/{runID}\", s.Spaces.RoutineRunControl())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 168,
+    "registration": "s.Router.Post(prefix+\"/me/routine-runs/{runID}/cancel\", s.Spaces.RoutineRunControl())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 169,
+    "registration": "s.Router.Delete(prefix+\"/me/sdk-targets/{targetID}\", api.RevokeSDKTarget(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 170,
+    "registration": "s.Router.Post(prefix+\"/capabilities/targets/resolve\", api.ResolveSDKTargets(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 171,
+    "registration": "s.Router.Post(prefix+\"/capabilities/invocations\", s.Spaces.InvokeSDKCapability())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 172,
+    "registration": "s.Router.Get(prefix+\"/capabilities/invocations/{requestID}\", s.Spaces.SDKCapabilityResult())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 173,
+    "registration": "s.Router.Post(prefix+\"/capabilities/invocations/{requestID}/cancel\", s.Spaces.CancelSDKCapability())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 174,
+    "registration": "s.Router.Get(prefix+\"/me/capability-approvals\", s.Spaces.SDKCapabilityApprovals())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 137,
+    "registration": "s.Router.Get(prefix+\"/me/agent-interventions\", s.Spaces.AIUserInterventionControl())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 138,
+    "registration": "s.Router.Post(prefix+\"/me/agent-interventions/{waitID}\", s.Spaces.AIUserInterventionControl())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 177,
+    "registration": "s.Router.Get(prefix+\"/me/capability-approvals/{approvalID}\", s.Spaces.SDKCapabilityApprovalReview())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 178,
+    "registration": "s.Router.Post(prefix+\"/me/sdk-runs/{runID}/approvals/{approvalID}\", s.Spaces.SDKCapabilityApproval())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 180,
+    "registration": "s.Router.Put(prefix+\"/me/apps/{appID}/connections/{connectionID}\", s.Spaces.SDKBackendConnectionControl())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 181,
+    "registration": "s.Router.Delete(prefix+\"/me/apps/{appID}/connections/{connectionID}\", s.Spaces.SDKBackendConnectionControl())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 183,
+    "registration": "s.Router.Get(prefix+\"/app-runtime/session\", api.OfficialAppRuntimeSession(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 184,
+    "registration": "s.Router.Post(prefix+\"/app-runtime/rpc\", api.OfficialAppRPC(s.Database, s.Router, prefix))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 185,
+    "registration": "s.Router.Get(prefix+\"/app-runtime/records\", api.OfficialAppPersonalRecords(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 186,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/app-runtime/records/{recordKey}\", api.OfficialAppPersonalRecord(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 187,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/app-runtime/records/{recordKey}\", api.OfficialAppPersonalRecord(s.Database))",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 140,
+    "registration": "s.Router.Get(prefix+\"/me/home\", api.HomeDashboard(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 141,
+    "registration": "s.Router.Post(prefix+\"/me/home/visits\", api.RecordHomeVisit(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 142,
+    "registration": "s.Router.Post(prefix+\"/me/home/apps\", api.RecordHomeAppActivity(s.Database))",
+    "disposition": "retire",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 143,
+    "registration": "s.Router.Put(prefix+\"/me/telemetry\", api.UpdateTelemetryPreferences(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 192,
+    "registration": "s.Router.Post(prefix+\"/billing/trial/start\", api.StartPersonalTrial(s.Database))",
+    "disposition": "removed",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 193,
+    "registration": "s.Router.Post(prefix+\"/billing/self-host-entitlement\", entitlementHandler)",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 144,
+    "registration": "s.Router.Post(prefix+\"/billing/checkout-session\", api.CreateCheckoutSession(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 195,
+    "registration": "s.Router.Post(prefix+\"/billing/credit-checkout-session\", api.CreateCreditCheckoutSession(s.Database))",
+    "disposition": "removed",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 145,
+    "registration": "s.Router.Post(prefix+\"/billing/portal-session\", api.CreatePortalSession(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 146,
+    "registration": "s.Router.Get(prefix+\"/billing/usage\", api.GetBillingUsage(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 167,
+    "registration": "s.Router.Get(\"/metrics\", s.Metrics.Handler(token))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 169,
+    "registration": "s.Router.MethodFunc(http.MethodGet, \"/internal/self-host/collaboration/{resourceType}/{resourceID}\", api.SelfHostCollaborationState(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 170,
+    "registration": "s.Router.MethodFunc(http.MethodPut, \"/internal/self-host/collaboration/{resourceType}/{resourceID}\", api.SelfHostCollaborationState(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 171,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, \"/internal/self-host/collaboration/{resourceType}/{resourceID}\", api.SelfHostCollaborationState(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 172,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/activate\", s.Spaces.AgentRuntimeActivate())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 173,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/start-receipt\", s.Spaces.AgentRuntimeStartReceipt())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 225,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/routine-wait\", s.Spaces.AgentRuntimeRoutineWait())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 226,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/routine-agent\", s.Spaces.AgentRuntimeRoutineAgent())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 174,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/budget\", s.Spaces.AgentRuntimeExecutionBudget())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 175,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/context\", s.Spaces.AgentRuntimeContext())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 176,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/mcp-token\", s.Spaces.AgentRuntimeMCPAccess())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 177,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/tools\", s.Spaces.AgentRuntimeTool())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 178,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/events\", s.Spaces.AgentRuntimeEvent())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 179,
+    "registration": "s.Router.Post(\"/internal/agent-runtime/runs/{runID}/complete\", s.Spaces.AgentRuntimeComplete())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 180,
+    "registration": "s.Router.Post(\"/mcp\", s.Spaces.MistyMCP().ServeHTTP)",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 242,
+    "registration": "s.Router.Post(s.StripeWebhookPath, api.StripeWebhookWithService(envconfig.Getenv(\"STRIPE_WEBHOOK_SECRET\"), appbilling.NewStripeService(s.Database, appbilling.WithTelemetry(s.Telemetry))))",
+    "disposition": "removed",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 186,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/search/spaces\", library.GlobalSemanticSearch())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 187,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library\", library.Items())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 188,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/facets\", library.Facets())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 189,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/search/semantic\", library.SemanticSearch())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 190,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/discovery\", library.Discovery())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 191,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/discovery/{kind}/{groupID}/items\", library.DiscoveryItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 192,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/library/discovery/memory/{memoryID}\", library.MemoryPreference())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 193,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/pins\", library.PinnedCollections())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 194,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/library/pins\", library.PinnedCollections())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 195,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/duplicates/merge\", library.MergeDuplicates())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 196,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/exports/download\", library.ExportItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 197,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/imports\", library.ImportItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 198,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/imports/history\", library.ImportHistory())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 199,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/shared\", library.SharedReferences())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 200,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/shared\", library.SharedReferences())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 201,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/shared/{referenceID}/download\", library.SharedReferenceDownload())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 202,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/library/grants/{grantID}\", library.RevokeGrant())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 203,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/usage\", library.Usage())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 204,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/reauthenticate\", library.Reauthenticate())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 205,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/asset-stacks\", library.AssetStacks())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 206,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/asset-stacks\", library.AssetStacks())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 207,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/library/asset-stacks/{stackID}\", library.AssetStack())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 208,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/library/asset-stacks/{stackID}\", library.AssetStack())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 209,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/uploads\", library.InitiateUpload())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 210,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/library/uploads/{uploadID}/content\", library.UploadContent())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 211,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/uploads/{uploadID}/finalize\", library.FinalizeUpload())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 212,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/items/bulk\", library.BulkItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 213,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/items/duplicate\", library.DuplicateItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 214,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/items/{itemID}\", library.Item())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 215,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/library/items/{itemID}\", library.Item())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 216,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/items/{itemID}/provider-import\", library.ProviderImportProvenance())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 217,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/items/{itemID}/download\", library.DownloadItem())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 218,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/items/{itemID}/preview\", library.PreviewItem())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 219,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/items/{itemID}/trash\", library.TrashItem())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 220,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/items/{itemID}/restore\", library.RestoreItem())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 221,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/attachments/{attachmentID}/download\", library.DownloadAttachment())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 222,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/attachments/{attachmentID}/promote\", library.PromoteAttachment())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 223,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/albums\", library.Albums())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 224,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/albums\", library.Albums())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 225,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/albums/{albumID}\", library.Album())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 226,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/library/albums/{albumID}\", library.Album())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 227,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/library/albums/{albumID}\", library.Album())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 228,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/library/albums/{albumID}/organization\", library.OrganizeAlbum())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 229,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/albums/{albumID}/order\", library.ReorderAlbumItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 230,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/albums/{albumID}/items\", library.AlbumItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 231,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/albums/{albumID}/items\", library.AlbumItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 232,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/library/albums/{albumID}/items/{itemID}\", library.AlbumItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 233,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/album-folders\", library.AlbumFolders())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 234,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/album-folders\", library.AlbumFolders())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 235,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/library/album-folders/{folderID}\", library.AlbumFolder())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 236,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/library/album-folders/{folderID}\", library.AlbumFolder())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 237,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/groups\", library.Groups())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 238,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/groups\", library.Groups())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 239,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/groups/{groupID}/items\", library.GroupItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 240,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/people/policy\", library.PeoplePolicy())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 241,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/library/people/policy\", library.PeoplePolicy())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 242,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/people\", library.People())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 243,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/people\", library.People())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 244,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/people/merge\", library.MergePeople())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 245,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/people/{personID}\", library.Person())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 246,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/library/people/{personID}\", library.Person())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 247,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/library/people/{personID}\", library.Person())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 248,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/people/{personID}/items\", library.PersonItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 249,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/people/{personID}/items\", library.PersonItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 250,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/library/people/{personID}/items\", library.PersonItems())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 251,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/library/items/{itemID}/versions\", library.EditVersions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 252,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/items/{itemID}/versions\", library.EditVersions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 253,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/library/items/{itemID}/versions/current\", library.SelectEditVersion())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 254,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/library/items/{itemID}/versions/{editID}/render\", library.RenderEditVersion())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_handlers.go",
+    "line": 255,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/library/items/{itemID}/versions/{editID}\", library.DeleteEditVersion())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 19,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/webhooks/social/instagram\", spaces.InstagramSocialWebhook())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 20,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/webhooks/social/instagram\", spaces.InstagramSocialWebhook())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 22,
+    "registration": "s.Router.Get(prefix+\"/agent-runs/{runID}\", spaces.PersonalAgentRunDetail())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 23,
+    "registration": "s.Router.Post(prefix+\"/agent-runs/{runID}/cancel\", spaces.CancelPersonalAgentRun())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 24,
+    "registration": "s.Router.Post(prefix+\"/agent-runs/{runID}/retry\", spaces.RetryPersonalAgentRun())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 25,
+    "registration": "s.Router.Post(prefix+\"/agent-runs/{runID}/approvals/{approvalID}\", spaces.DecidePersonalAgentRunApproval())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 26,
+    "registration": "s.Router.Post(prefix+\"/agent-runs/{runID}/contexts\", spaces.AttachPersonalAgentRunContext())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 27,
+    "registration": "s.Router.Get(prefix+\"/search/global\", spaces.GlobalSearch())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 28,
+    "registration": "s.Router.Post(prefix+\"/search/global/visual\", spaces.GlobalVisualSearch())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 29,
+    "registration": "s.Router.Get(prefix+\"/connections\", spaces.ConnectedAccounts())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 30,
+    "registration": "s.Router.Post(prefix+\"/connections/{provider}/authorize\", spaces.BeginConnectedAccountAuthorization())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 31,
+    "registration": "s.Router.Get(prefix+\"/oauth/connections/{provider}/callback\", spaces.ConnectedAccountAuthorizationCallback())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 32,
+    "registration": "s.Router.Delete(prefix+\"/connections/{connectionID}\", spaces.DeleteConnectedAccount())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 33,
+    "registration": "s.Router.Get(prefix+\"/connections/{connectionID}/social/resources\", spaces.SocialResources())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 34,
+    "registration": "s.Router.Get(prefix+\"/mail/accounts\", spaces.MailAccounts())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 35,
+    "registration": "s.Router.Get(prefix+\"/mail/folders\", spaces.MailFolders())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 36,
+    "registration": "s.Router.Get(prefix+\"/mail/threads\", spaces.MailThreads())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 37,
+    "registration": "s.Router.Get(prefix+\"/mail/threads/{threadID}\", spaces.MailThread())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 38,
+    "registration": "s.Router.Post(prefix+\"/mail/threads/{threadID}/actions\", spaces.MailThreadActions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 39,
+    "registration": "s.Router.Post(prefix+\"/mail/drafts\", spaces.MailDrafts())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 40,
+    "registration": "s.Router.Put(prefix+\"/mail/drafts/{draftID}\", spaces.MailDraft())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 41,
+    "registration": "s.Router.Post(prefix+\"/mail/drafts/{draftID}/send\", spaces.MailSendDraft())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 42,
+    "registration": "s.Router.Get(prefix+\"/cloud/connections\", spaces.CloudConnections())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 43,
+    "registration": "s.Router.Post(prefix+\"/cloud/connections/{provider}/authorize\", spaces.BeginCloudAuthorization())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 44,
+    "registration": "s.Router.Get(prefix+\"/oauth/cloud/{provider}/callback\", spaces.CloudAuthorizationCallback())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 45,
+    "registration": "s.Router.Post(prefix+\"/cloud/connections/bind\", spaces.BindConnectedAccountCloudConnection())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 46,
+    "registration": "s.Router.Post(prefix+\"/cloud/connections/{connectionID}/handoff\", spaces.CloudConnectionHandoff())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 49,
+    "registration": "s.Router.Get(prefix+\"/cloud/connections/{connectionID}/token\", spaces.CloudConnectionToken())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 50,
+    "registration": "s.Router.Post(prefix+\"/cloud/handoffs/redeem\", spaces.RedeemCloudConnectionHandoff())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 51,
+    "registration": "s.Router.Delete(prefix+\"/cloud/connections/{connectionID}\", spaces.DeleteCloudConnection())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 52,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces\", spaces.Spaces())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 53,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces\", spaces.Spaces())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 54,
+    "registration": "s.Router.Get(prefix+\"/space-templates\", spaces.SpaceTemplates())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 55,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/setup\", spaces.SpaceSetup())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 56,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/setup\", spaces.SpaceSetup())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 57,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}\", spaces.Space())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 58,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}\", spaces.Space())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 59,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}\", spaces.Space())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 60,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/home\", api.HomeDashboard(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 61,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/home/visits\", api.RecordHomeVisit(s.Database))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 62,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/agenda\", spaces.SpaceAgenda())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 63,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/roadmap-node-definitions\", spaces.SpaceRoadmapNodeDefinitions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 64,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/roadmap-node-definitions\", spaces.SpaceRoadmapNodeDefinitions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 65,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/roadmap-node-definitions/{definitionID}\", spaces.SpaceRoadmapNodeDefinition())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 66,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/roadmap-node-definitions/{definitionID}\", spaces.SpaceRoadmapNodeDefinition())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 67,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/roadmaps\", spaces.SpaceRoadmaps())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 68,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/roadmaps\", spaces.SpaceRoadmaps())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 69,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}\", spaces.SpaceRoadmap())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 70,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}\", spaces.SpaceRoadmap())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 71,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}\", spaces.SpaceRoadmap())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 72,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/milestones\", spaces.SpaceRoadmapMilestones())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 73,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/milestones/{milestoneID}\", spaces.SpaceRoadmapMilestone())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 74,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/milestones/{milestoneID}\", spaces.SpaceRoadmapMilestone())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 75,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/goals\", spaces.SpaceRoadmapGoals())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 76,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}\", spaces.SpaceRoadmapGoal())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 77,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}\", spaces.SpaceRoadmapGoal())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 78,
+    "registration": "s.Router.Put(prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}/tasks\", spaces.SpaceRoadmapGoalTasks())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 79,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/nodes\", spaces.SpaceRoadmapNodes())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 80,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}\", spaces.SpaceRoadmapNode())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 81,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}\", spaces.SpaceRoadmapNode())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 82,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/edges\", spaces.SpaceRoadmapEdges())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 83,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/edges/{edgeID}\", spaces.SpaceRoadmapEdges())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 84,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/edges/{edgeID}\", spaces.SpaceRoadmapEdges())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 85,
+    "registration": "s.Router.Patch(prefix+\"/spaces/{spaceID}/roadmaps/{roadmapID}/layout\", spaces.SpaceRoadmapLayout())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 86,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/members\", spaces.Members())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 87,
+    "registration": "s.Router.Post(prefix+\"/ai/runs\", spaces.AIRuns())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 88,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/members/{userID}/avatar\", spaces.MemberAvatar())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 89,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/members/{userID}/permissions\", spaces.MemberPermissions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 90,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/members/{userID}/permissions\", spaces.MemberPermissions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 91,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/invitations\", spaces.Invite())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 92,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/invitations\", spaces.Invite())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 93,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/invitations/{inviteID}/resend\", spaces.SpaceInvitationItem())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 94,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/invitations/{inviteID}\", spaces.SpaceInvitationItem())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 95,
+    "registration": "s.Router.Post(prefix+\"/spaces/invitations/{inviteID}/accept\", spaces.RespondInvite(true))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 96,
+    "registration": "s.Router.Post(prefix+\"/spaces/invitations/{inviteID}/decline\", spaces.RespondInvite(false))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 97,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/space-invitations/{token}\", spaces.SpaceInvitationToken())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 98,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/space-invitations/{token}\", spaces.SpaceInvitationToken())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 99,
+    "registration": "s.Router.Delete(prefix+\"/spaces/{spaceID}/members/{userID}\", spaces.RemoveMember())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 100,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/leave\", spaces.LeaveSpace())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 101,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/transfer\", spaces.TransferOwner())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 102,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/messages\", spaces.Messages())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 103,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/messages\", spaces.Messages())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 104,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/messages\", spaces.Messages())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 105,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/conversations\", spaces.Conversations())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 106,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/conversations\", spaces.Conversations())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 107,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/social/providers\", spaces.SocialProviders())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 108,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/social/bindings\", spaces.SocialBindings())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 109,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/social/bindings\", spaces.SocialBindings())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 110,
+    "registration": "s.Router.Delete(prefix+\"/spaces/{spaceID}/social/bindings/{bindingID}\", spaces.SocialBinding())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 111,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/social/authorities\", spaces.SocialSendAuthorities())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 112,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/social/authorities\", spaces.SocialSendAuthorities())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 113,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/social/automation-rules\", spaces.SocialAutomationRules())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 114,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/social/automation-rules\", spaces.SocialAutomationRules())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 113,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/social/scheduled-messages\", spaces.SocialScheduledMessages())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 114,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/social/scheduled-messages\", spaces.SocialScheduledMessages())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 115,
+    "registration": "s.Router.Delete(prefix+\"/spaces/{spaceID}/social/scheduled-messages/{scheduledID}\", spaces.SocialScheduledMessage())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 116,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/conversations/{conversationID}\", spaces.Conversation())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 117,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/conversations/{conversationID}\", spaces.Conversation())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 118,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/conversations/{conversationID}/messages\", spaces.ConversationMessages())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 119,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/conversations/{conversationID}/messages\", spaces.ConversationMessages())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 120,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}\", spaces.ConversationMessage())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 121,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}\", spaces.ConversationMessage())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 122,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}\", spaces.ConversationMessageReaction())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 123,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}\", spaces.ConversationMessageReaction())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 124,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/conversations/{conversationID}/read\", spaces.MarkConversationRead())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 125,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/resources/{resourceKind}/{resourceID}/share-with-space\", spaces.ShareResourceWithSpace())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 126,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/tasks\", spaces.SpaceTasks())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 127,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/tasks\", spaces.SpaceTasks())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 128,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/tasks/{taskID}\", spaces.SpaceTask())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 129,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/tasks/{taskID}\", spaces.SpaceTask())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 130,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/tasks/{taskID}/activity\", spaces.SpaceTaskActivity())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 131,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/tasks/{taskID}/move\", spaces.MoveSpaceTask())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 135,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/calendar/events\", spaces.SpaceCalendar())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 136,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/calendar/events\", spaces.SpaceCalendar())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 137,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/calendar/events/{eventID}\", spaces.SpaceNativeCalendarEvent())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 138,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/calendar/events/{eventID}\", spaces.SpaceNativeCalendarEvent())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 139,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/calendar/sources\", spaces.SpaceCalendarSources())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 140,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/calendar/sources\", spaces.SpaceCalendarSources())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 141,
+    "registration": "s.Router.Delete(prefix+\"/spaces/{spaceID}/calendar/sources/{sourceID}\", spaces.SpaceCalendarSource())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 142,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/calendar/google/calendars\", spaces.AvailableGoogleCalendars())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 143,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/calendar/sync\", spaces.SyncCalendarTasks())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 144,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/messages/{messageID}\", spaces.Message())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 145,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/messages/{messageID}\", spaces.Message())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 146,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/messages/{messageID}/reactions/{emoji}\", spaces.MessageReaction())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 147,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/messages/{messageID}/reactions/{emoji}\", spaces.MessageReaction())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 148,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/read\", spaces.MarkRead())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 149,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/nodes\", spaces.Nodes())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 150,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/nodes\", spaces.Nodes())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 151,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/spaces/{spaceID}/nodes/{nodeID}\", spaces.Node())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 152,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/nodes/{nodeID}\", spaces.Node())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 153,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/nodes/{nodeID}/resolve\", spaces.ResolveTicket())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 154,
+    "registration": "s.Router.Get(prefix+\"/spaces/resolve/{ticket}\", spaces.Resolve())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 155,
+    "registration": "s.Router.Get(prefix+\"/activity/inbox\", spaces.Inbox())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 156,
+    "registration": "s.Router.Post(prefix+\"/activity/inbox/seen\", spaces.InboxSeen())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 157,
+    "registration": "s.Router.Post(prefix+\"/activity/inbox/clear\", spaces.InboxClear())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 158,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/studio/workflows\", spaces.StudioResources(\"workflow\"))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 159,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/studio/workflows\", spaces.StudioResources(\"workflow\"))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 160,
+    "registration": "s.Router.Delete(prefix+\"/spaces/{spaceID}/studio/workflows/{resourceID}\", spaces.DeleteStudioResource(\"workflow\"))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 161,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/studio/workflows/{workflowID}/versions\", spaces.WorkflowVersions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 162,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/studio/workflows/{workflowID}/versions\", spaces.WorkflowVersions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 163,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/integrations\", spaces.SpaceIntegrations())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 167,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/integrations/{provider}/authorize\", spaces.BeginProviderAuthorization())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 168,
+    "registration": "s.Router.Get(prefix+\"/oauth/providers/{provider}/callback\", spaces.ProviderAuthorizationCallback())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 169,
+    "registration": "s.Router.Post(prefix+\"/provider-callbacks/google/calendar\", spaces.GoogleCalendarCallback())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 171,
+    "registration": "s.Router.Delete(prefix+\"/integrations/{integrationID}\", spaces.DeleteProviderIntegration())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 172,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/integrations/{provider}/bind\", spaces.BindConnectedAccountToSpaceProvider())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 173,
+    "registration": "s.Router.Get(prefix+\"/runs/{runID}\", spaces.RunDetail())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 174,
+    "registration": "s.Router.Post(prefix+\"/realtime/tickets\", realtime.Ticket())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 175,
+    "registration": "s.Router.Get(prefix+\"/realtime\", realtime.Connect())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 219,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/agent-voice/transcriptions\", service.AgentVoiceTranscription())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 220,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/agent-voice/speech\", service.AgentVoiceSpeech())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 226,
+    "registration": "s.Router.Post(prefix+\"/devices\", service.RegisterDevice())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 227,
+    "registration": "s.Router.Get(prefix+\"/devices\", service.ListDevices())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 228,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/heartbeat\", service.DeviceAuthenticated(service.HeartbeatDevice()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 229,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/revoke\", service.RevokeDevice())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 231,
+    "registration": "s.Router.Get(prefix+\"/devices/peer-ticket-keys\", service.ConnectedDeviceTicketKeys())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 232,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/pairing-sessions\", service.DeviceAuthenticated(service.CreateDevicePairing()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 233,
+    "registration": "s.Router.Get(prefix+\"/devices/{deviceID}/pairing-sessions/{sessionID}\", service.DeviceAuthenticated(service.DevicePairingStatus()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 234,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/pairing-sessions/{sessionID}/confirm\", service.DeviceAuthenticated(service.ConfirmDevicePairing()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 235,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/pairing/redeem\", service.DeviceAuthenticated(service.RedeemDevicePairing()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 236,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/apps/files/presence\", service.DeviceAuthenticated(service.UpdateSpaceConnectedDevicePresence()))",
+    "disposition": "retire",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 237,
+    "registration": "s.Router.Get(prefix+\"/devices/{deviceID}/apps/files/peers\", service.DeviceAuthenticated(service.ListSpaceConnectedDevicePeers()))",
+    "disposition": "retire",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 238,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/apps/files/peer-tickets\", service.DeviceAuthenticated(service.IssueSpaceConnectedDeviceTicket()))",
+    "disposition": "retire",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 239,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/presence\", service.DeviceAuthenticated(service.UpdateConnectedDevicePresence()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 240,
+    "registration": "s.Router.Get(prefix+\"/devices/{deviceID}/peers\", service.DeviceAuthenticated(service.ListConnectedDevicePeers()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 241,
+    "registration": "s.Router.Put(prefix+\"/devices/{deviceID}/pairs/{pairID}/name\", service.DeviceAuthenticated(service.RenameConnectedDevicePeer()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 242,
+    "registration": "s.Router.Put(prefix+\"/devices/{deviceID}/pairs/{pairID}/clipboard-consent\", service.DeviceAuthenticated(service.ConnectedDeviceClipboardConsent()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 243,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/pairs/{pairID}/revoke\", service.DeviceAuthenticated(service.RevokeConnectedDevicePair()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 244,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/peer-tickets\", service.DeviceAuthenticated(service.IssueConnectedDeviceTicket()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 249,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/workflow-node-jobs/claim\", service.DeviceAuthenticated(service.ClaimWorkflowNodeJob()))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 250,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/workflow-node-jobs/{jobID}/begin\", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction(\"begin\")))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 251,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/workflow-node-jobs/{jobID}/uncertain\", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction(\"uncertain\")))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 252,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/workflow-node-jobs/{jobID}/lease\", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction(\"renew\")))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 253,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/workflow-node-jobs/{jobID}/complete\", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction(\"complete\")))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_spaces_routes.go",
+    "line": 254,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/workflow-node-jobs/{jobID}/fail\", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction(\"fail\")))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 10,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/integrations/github/install\", spaces.BeginGitHubAppInstall())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 11,
+    "registration": "s.Router.Get(prefix+\"/oauth/github/app/callback\", spaces.GitHubAppInstallCallback())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 12,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/integrations/github/installations\", spaces.GitHubInstallations())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 13,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/integrations/github/installations/{installationID}\", spaces.GitHubInstallations())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 14,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/integrations/github/installations/{installationID}/repositories\", spaces.GitHubInstallationRepositories())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 15,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/code/github/workspaces\", spaces.GitHubCodeWorkspaces())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 16,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/code/github/workspaces\", spaces.GitHubCodeWorkspaces())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 17,
+    "registration": "s.Router.Delete(prefix+\"/spaces/{spaceID}/code/github/workspaces/{workspaceID}\", spaces.GitHubCodeWorkspace())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 18,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/code/github/workspaces/{workspaceID}/sync\", spaces.SyncGitHubCodeWorkspace())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 19,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/code/github/workspaces/{workspaceID}/records\", spaces.GitHubCodeWorkspaceRecords())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 20,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/code/github/workspaces/{workspaceID}/actions\", spaces.GitHubCodeWorkspaceActions())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 21,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/code/github/workspaces/{workspaceID}/credential-handoff\", spaces.GitHubCredentialHandoff())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 22,
+    "registration": "s.Router.Post(prefix+\"/native/github/credential-handoffs/redeem\", spaces.RedeemGitHubCredentialHandoff())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_github_code_routes.go",
+    "line": 23,
+    "registration": "s.Router.Post(prefix+\"/provider-callbacks/github\", spaces.GitHubWebhook())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 18,
+    "registration": "s.Router.MethodFunc(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 18,
+    "registration": "s.Router.MethodFunc(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 18,
+    "registration": "s.Router.MethodFunc(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 18,
+    "registration": "s.Router.MethodFunc(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 18,
+    "registration": "s.Router.MethodFunc(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 43,
+    "registration": "s.Router.Post(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 18,
+    "registration": "s.Router.MethodFunc(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 18,
+    "registration": "s.Router.MethodFunc(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 43,
+    "registration": "s.Router.Post(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 64,
+    "registration": "s.Router.Get(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 68,
+    "registration": "s.Router.Delete(",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 77,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/notes\", spaces.SpaceNotes())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 78,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/notes\", spaces.SpaceNotes())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 79,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/notes/{noteID}\", spaces.SpaceNote())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 80,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/spaces/{spaceID}/notes/{noteID}\", spaces.SpaceNote())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 83,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/notes/{noteID}\", spaces.SpaceNote())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 84,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/spaces/{spaceID}/notes/{noteID}/metadata\", spaces.SpaceNoteMetadata())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 85,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/notes/{noteID}/backlinks\", spaces.SpaceNoteBacklinks())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 86,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/internal/journal/note-projections\", spaces.JournalNoteProjection())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 87,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/notes/{noteID}/collaboration-ticket\", spaces.SpaceNoteCollaborationTicket())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 94,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/spaces/{spaceID}/notes/{noteID}/assets\", s.Library.SpaceNoteAssets())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 95,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/spaces/{spaceID}/notes/{noteID}/assets/uploads\", s.Library.SpaceNoteAssets())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 96,
+    "registration": "s.Router.Post(prefix+\"/spaces/{spaceID}/notes/{noteID}/assets/uploads/{uploadID}/finalize\", s.Library.FinalizeUpload())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 97,
+    "registration": "s.Router.Get(prefix+\"/spaces/{spaceID}/notes/{noteID}/assets/{assetID}/download\", s.Library.SpaceNoteAssetDownload())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 98,
+    "registration": "s.Router.Delete(prefix+\"/spaces/{spaceID}/notes/{noteID}/assets/{assetID}\", s.Library.SpaceNoteAsset())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 191,
+    "registration": "s.Router.Post(prefix+\"/chunks\", service.IndexChunk())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 192,
+    "registration": "s.Router.Post(prefix+\"/search\", service.Search())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 193,
+    "registration": "s.Router.Get(prefix+\"/status\", service.Status())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 194,
+    "registration": "s.Router.Delete(prefix+\"/assets/{assetID}\", service.DeleteAsset())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 195,
+    "registration": "s.Router.Delete(prefix+\"/devices/{deviceID}\", service.DeleteDevice())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 196,
+    "registration": "s.Router.Post(prefix+\"/devices/{deviceID}/adopt-legacy\", service.AdoptLegacyDevice())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 200,
+    "registration": "s.Router.Post(prefix+\"/search\", service.GlobalSearch())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 201,
+    "registration": "s.Router.Get(prefix+\"/index-status\", service.IndexStatus())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 202,
+    "registration": "s.Router.Post(prefix+\"/reindex\", service.PlanReindex())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 203,
+    "registration": "s.Router.Post(prefix+\"/reindex/{jobID}/complete\", service.CompleteReindex())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 204,
+    "registration": "s.Router.Post(prefix+\"/folders\", service.RegisterFolder())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 205,
+    "registration": "s.Router.Post(prefix+\"/folders/{folderID}/preflight\", service.Preflight())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 206,
+    "registration": "s.Router.Post(prefix+\"/folders/{folderID}/sample\", service.CreateSample())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 207,
+    "registration": "s.Router.Post(prefix+\"/folders/{folderID}/sample/approve\", service.Approve(\"sample\"))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 208,
+    "registration": "s.Router.Post(prefix+\"/folders/{folderID}/approve\", service.Approve(\"full\"))",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 209,
+    "registration": "s.Router.Get(prefix+\"/folders/{folderID}/progress\", service.Progress())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 210,
+    "registration": "s.Router.Get(prefix+\"/folders/{folderID}/results\", service.Results())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 211,
+    "registration": "s.Router.Put(prefix+\"/folders/{folderID}/assets/{assetID}/tags\", service.SetAssetTags())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 212,
+    "registration": "s.Router.Post(prefix+\"/folders/{folderID}/rescan\", service.Rescan())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 213,
+    "registration": "s.Router.Post(prefix+\"/folders/{folderID}/search\", service.Search())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 214,
+    "registration": "s.Router.Delete(prefix+\"/folders/{folderID}\", service.Delete())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 277,
+    "registration": "s.Router.Get(prefix+\"/status\", aiService.Status())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 278,
+    "registration": "s.Router.Get(prefix+\"/models\", aiService.FrontierModels())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 279,
+    "registration": "s.Router.Post(prefix+\"/complete\", aiService.Complete())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 280,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/settings\", aiService.Settings())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 281,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/settings\", aiService.Settings())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 282,
+    "registration": "s.Router.Get(prefix+\"/memories\", aiService.Memories())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 283,
+    "registration": "s.Router.Delete(prefix+\"/memories/{memoryID}\", aiService.Memory())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 284,
+    "registration": "s.Router.Put(prefix+\"/memories/{memoryID}\", aiService.Memory())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 285,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/preferences/{surfaceID}\", aiService.SurfacePreference())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 286,
+    "registration": "s.Router.Post(prefix+\"/preferences/{surfaceID}/proactive-events\", aiService.ProactiveEvent())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 287,
+    "registration": "s.Router.Get(prefix+\"/recaps\", aiService.Recaps())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 288,
+    "registration": "s.Router.Put(prefix+\"/recaps/{surfaceID}\", aiService.Recap())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 289,
+    "registration": "s.Router.Post(prefix+\"/recaps/{surfaceID}/seen\", aiService.RecapSeen())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 290,
+    "registration": "s.Router.Get(prefix+\"/activity\", aiService.MistyActivity())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 291,
+    "registration": "s.Router.Post(prefix+\"/invocations\", aiService.CreateInvocation())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 292,
+    "registration": "s.Router.Get(prefix+\"/invocations/{invocationID}/events\", aiService.InvocationEvents())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 293,
+    "registration": "s.Router.Post(prefix+\"/invocations/{invocationID}/cancel\", aiService.CancelInvocation())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 294,
+    "registration": "s.Router.Post(prefix+\"/invocations/{invocationID}/feedback\", aiService.InvocationFeedback())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 295,
+    "registration": "s.Router.Post(prefix+\"/artifacts/{artifactID}/decision\", aiService.DecideArtifact())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 296,
+    "registration": "s.Router.Post(prefix+\"/artifacts/{artifactID}/completion\", aiService.CompleteArtifact())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 297,
+    "registration": "s.Router.Get(prefix+\"/conversations\", aiService.AIConversations())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 298,
+    "registration": "s.Router.Get(prefix+\"/conversations/{conversationID}\", aiService.AIConversation())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 302,
+    "registration": "s.Router.Get(prefix+\"/misty/events\", aiService.AccountEvents())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 303,
+    "registration": "s.Router.Post(prefix+\"/misty/agent-followup\", aiService.AgentFollowup())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 304,
+    "registration": "s.Router.Post(prefix+\"/misty/agent-execution\", aiService.AgentExecutionLease())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 305,
+    "registration": "s.Router.Delete(prefix+\"/misty/agent-execution/{taskID}\", aiService.AgentExecutionLease())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 306,
+    "registration": "s.Router.Get(prefix+\"/misty/agents\", aiService.PersonalAgents())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 307,
+    "registration": "s.Router.Post(prefix+\"/misty/agents\", aiService.PersonalAgents())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 308,
+    "registration": "s.Router.Put(prefix+\"/misty/agents/{agentID}\", aiService.PersonalAgent())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 309,
+    "registration": "s.Router.Delete(prefix+\"/misty/agents/{agentID}\", aiService.PersonalAgent())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 310,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/misty/conversations\", aiService.MistyConversations())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 311,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/misty/conversations\", aiService.MistyConversations())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 312,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/misty/conversations/{conversationID}\", aiService.MistyConversation())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 313,
+    "registration": "s.Router.MethodFunc(http.MethodPatch, prefix+\"/misty/conversations/{conversationID}\", aiService.MistyConversation())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 314,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/misty/conversations/{conversationID}/turns\", aiService.MistyConversationTurn())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 315,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/misty/attachments\", aiService.MistyAttachments())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 316,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/misty/attachments/{attachmentID}/finalize\", aiService.MistyAttachment())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 317,
+    "registration": "s.Router.MethodFunc(http.MethodDelete, prefix+\"/misty/attachments/{attachmentID}\", aiService.MistyAttachment())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 318,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/misty/attachments/{attachmentID}/content\", aiService.MistyAttachmentContent())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_drawing_routes.go",
+    "line": 319,
+    "registration": "s.Router.MethodFunc(http.MethodPut, prefix+\"/misty/attachments/{attachmentID}/content\", aiService.MistyAttachmentContent())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 10,
+    "registration": "s.Router.MethodFunc(http.MethodGet, prefix+\"/mcp/connections\", spaces.MCPConnections())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 11,
+    "registration": "s.Router.MethodFunc(http.MethodPost, prefix+\"/mcp/connections\", spaces.MCPConnections())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 12,
+    "registration": "s.Router.Get(prefix+\"/mcp/connections/{connectionID}\", spaces.MCPConnection())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 13,
+    "registration": "s.Router.Delete(prefix+\"/mcp/connections/{connectionID}\", spaces.MCPConnection())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 14,
+    "registration": "s.Router.Post(prefix+\"/mcp/connections/{connectionID}/test\", spaces.TestMCPConnection())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 15,
+    "registration": "s.Router.Post(prefix+\"/mcp/connections/{connectionID}/discover\", spaces.DiscoverMCPConnection())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 16,
+    "registration": "s.Router.Get(prefix+\"/mcp/connections/{connectionID}/tools\", spaces.MCPConnectionTools())",
+    "disposition": "review-and-retain",
+    "registration_present": true
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 17,
+    "registration": "s.Router.Post(prefix+\"/mcp/oauth/activepieces/authorize\", spaces.BeginActivepiecesAuthorization())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 18,
+    "registration": "s.Router.Get(prefix+\"/oauth/mcp/activepieces/callback\", spaces.ActivepiecesAuthorizationCallback())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 19,
+    "registration": "s.Router.Get(prefix+\"/automations/flows\", spaces.ActivepiecesFlows())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  },
+  {
+    "source": "server/internal/app/server_mount_mcp_routes.go",
+    "line": 20,
+    "registration": "s.Router.Post(prefix+\"/automations/tools/{toolName}\", spaces.ActivepiecesTool())",
+    "disposition": "registration-removed-or-replaced",
+    "registration_present": false
+  }
+]

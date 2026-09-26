@@ -1,0 +1,47 @@
+{
+  "account_id": "fixture-account",
+  "challenge": "test-challenge-0123456789-abcdefghij",
+  "connection_signature": "1yNt7WXUgk6qqLiT305YuNNsqG2YLiCX1ealDoFJRfsy1ajDrKQlcDt/WsOZKlkjqK8xwUeyc5yj4sNtouw2DA==",
+  "connection_signing_bytes": "[\"misty.sync.connect.v1\",\"01951d32-40ac-7000-8000-000000000001\",\"01951d32-40ac-7000-8000-000000000002\",\"test-challenge-0123456789-abcdefghij\"]",
+  "deployment": "https://sync.example.test",
+  "device_key": {
+    "ciphertext": "zmwKQazwN3Qnd7jOCZqusTF1bCScEuGfhqBZTUeriEdFjMAtyVY9lLlit2rXsKIc",
+    "nonce": "0UzdAAoNXjT9nJHV",
+    "version": 1
+  },
+  "grant": {
+    "device_id": "01951d32-40ac-7000-8000-000000000002",
+    "key_epoch": 1,
+    "public_key": "PoQrWBzLOW6KOoqZg7dzcUh6hFi3ux8CBHS72zjDVjA=",
+    "signature": "xfPWSsYnyoWKpIz8kRa5i0teCiU4yoN1LxOG5VItkLg0zzp3ioAplXjBmmoYlynpgrk+HEQS9dOjTuEQmx8MDg==",
+    "workspace_id": "01951d32-40ac-7000-8000-000000000001"
+  },
+  "grant_signing_bytes": "[\"misty.sync.device.v1\",\"01951d32-40ac-7000-8000-000000000001\",\"01951d32-40ac-7000-8000-000000000002\",1,\"PoQrWBzLOW6KOoqZg7dzcUh6hFi3ux8CBHS72zjDVjA=\"]",
+  "key_envelope": {
+    "ciphertext": "DUfNMWuC6xSyEJand4QZZNzpLlOPq7/NW++n5hdBJVlMj1PV1HVyNFyl83+rqOya",
+    "kdf": "argon2id-m65536-t3-p1",
+    "nonce": "SF8/zsPfigEpA5k2",
+    "salt": "eRQ80NiIEqNZ365d7k/t+Q==",
+    "version": 1
+  },
+  "mutation": {
+    "device_counter": 1,
+    "device_id": "01951d32-40ac-7000-8000-000000000002",
+    "envelope": {
+      "ciphertext": "kPPuWXB2y+2guHQ6WhXrdbvSaJLoYX6W1cM6zzG1iuIeV9FNamnNLNQ5rnUCjftNkLS/bwaYu/oBH0ntG8BrGA==",
+      "nonce": "lIIs1ijcl+FgCdx7",
+      "version": 1
+    },
+    "key_epoch": 1,
+    "operation_id": "01951d32-40ac-7000-8000-000000000003",
+    "signature": "pS+AE2G3FArU95sdhjPvtplS5ToGDckUA+BeAG/GyaT/iMRlXTc9i5JleZYU+E3uHx87ZkboIHXcLdRrFK2sDg==",
+    "workspace_id": "01951d32-40ac-7000-8000-000000000001"
+  },
+  "mutation_signing_bytes": "[\"misty.sync.mutation.v1\",\"01951d32-40ac-7000-8000-000000000001\",\"01951d32-40ac-7000-8000-000000000003\",\"01951d32-40ac-7000-8000-000000000002\",1,1,1,\"lIIs1ijcl+FgCdx7\",\"kPPuWXB2y+2guHQ6WhXrdbvSaJLoYX6W1cM6zzG1iuIeV9FNamnNLNQ5rnUCjftNkLS/bwaYu/oBH0ntG8BrGA==\"]",
+  "password": "public test password, never use this",
+  "plaintext": "{\"kind\":\"fixture\",\"cookie\":\"not-a-real-session\"}",
+  "root_public_key": "wlmyRV3PEb3ISJK4bXlOjKjs/NVe6v0hpgsRGp5h8rA=",
+  "sync_secret": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+  "warning": "Public test credentials. Not a real account or session.",
+  "workspace_id": "01951d32-40ac-7000-8000-000000000001"
+}

@@ -1,0 +1,5 @@
+package db
+
+func scanSpaceRun(scanner interface{ Scan(...any) error }, out *SpaceRun) error {
+	return scanner.Scan(&out.ID, &out.SpaceID, &out.ResourceKind, &out.ResourceID, &out.InitiatedByUserID, &out.BillingUserID, &out.TriggerKind, &out.State, &out.Input, &out.Result, &out.ErrorCode, &out.CreatedAt, &out.CompletedAt, &out.RequestingMemberID, &out.SourceConversationID, &out.SourceType, &out.AgentID, &out.WorkflowIdentifier, &out.WorkflowVersionID, &out.WorkflowVersion, &out.CapabilityID, &out.Progress, &out.Outputs, &out.Artifacts, &out.ErrorMessage, &out.RetryOfRunID, &out.CanceledAt, &out.UpdatedAt, &out.AgentInstanceID, &out.AgentVersionID, &out.Attempt, &out.NextRetryAt, &out.SourceTaskID, &out.ActionEnvelope, &out.ConversationScopeKind, &out.ScopeConversationID, &out.SourceMessageID, &out.RuntimeKind, &out.RuntimeRunID, &out.RuntimePhase, &out.RuntimeHeartbeatAt, &out.OwnerUserID, &out.InitialRunMode, &out.EffectiveRunMode, &out.AgentVersionSnapshot, &out.ApprovalState, &out.ParentRunID, &out.DelegationDepth, &out.ContextBindings, &out.DeviceWaitHookToken, &out.DeviceWaitExpiresAt)
+}

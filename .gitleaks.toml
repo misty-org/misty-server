@@ -1,0 +1,46 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public cross-language fixtures signed with a documented test-only key"
+condition = "AND"
+paths = ['''(?:test/fixtures/compatibility|docs/migration/fixtures)/self-host-proofs\.json$''']
+regexTarget = "line"
+regexes = ['''"(?:goToken|nodeToken)"''']
+
+[[allowlists]]
+description = "Historical provider selector; this literal is not an OAuth token"
+condition = "AND"
+paths = ['''internal/platform/httpapi/cloud_connections_cloud_authorization_callback\.go$''']
+regexTarget = "line"
+regexes = ['''accountProvider = "dropbox"''']
+
+[[allowlists]]
+description = "Deterministic collaboration test secret"
+condition = "AND"
+paths = ['''self\-host/collab/control\.test\.mjs$''']
+regexes = ['''internal\-secret\-that\-is\-at\-least\-32\-bytes''']
+
+[[allowlists]]
+description = "Deterministic server collaboration test secret"
+condition = "AND"
+paths = ['''server/self\-host/collab/control\.test\.mjs$''']
+regexes = ['''internal\-secret\-that\-is\-at\-least\-32\-bytes''']
+
+[[allowlists]]
+description = "Clipboard cache key assertions, not credentials"
+condition = "AND"
+paths = ['''src\-tauri/src/core/clipboard/cache\.rs$''']
+regexes = ['''IMG_0481\.jpeg''']
+
+[[allowlists]]
+description = "Legacy command identifiers, not credentials"
+condition = "AND"
+paths = ['''proxy/core/setup/default/commands\.msy$''']
+regexes = ['''CmdOrCtrl\+Shift\+N''', '''CmdOrCtrl\+Shift\+Y''']
+
+[[allowlists]]
+description = "xxHash read expressions, not credentials"
+condition = "AND"
+paths = ['''vendor/xxhash/xxhash\.h$''']
+regexes = ['''_mm512_srli_epi64''']

@@ -1,0 +1,141 @@
+[
+  {
+    "id": "blank",
+    "name": "Blank Space",
+    "description": "Start with a clean Space.",
+    "version": 1,
+    "recommended_integrations": [],
+    "seed_summary": {
+      "task_count": 0,
+      "note_count": 0,
+      "collection_count": 0
+    },
+    "app_ids": []
+  },
+  {
+    "id": "student-project",
+    "name": "Student Project",
+    "description": "Organize a class project from brief to delivery.",
+    "version": 1,
+    "recommended_integrations": [
+      "google",
+      "notion"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 3
+    },
+    "app_ids": [
+      "chat",
+      "journal",
+      "planner",
+      "library"
+    ]
+  },
+  {
+    "id": "startup",
+    "name": "Startup",
+    "description": "Keep an early team aligned around customers and outcomes.",
+    "version": 1,
+    "recommended_integrations": [
+      "google",
+      "notion"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 3
+    },
+    "app_ids": [
+      "chat",
+      "inbox",
+      "journal",
+      "planner",
+      "library"
+    ]
+  },
+  {
+    "id": "research",
+    "name": "Research",
+    "description": "Collect sources, coordinate work, and track outputs.",
+    "version": 1,
+    "recommended_integrations": [
+      "google",
+      "notion"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 3
+    },
+    "app_ids": [
+      "chat",
+      "journal",
+      "planner",
+      "library"
+    ]
+  },
+  {
+    "id": "game-development",
+    "name": "Game Development",
+    "description": "Coordinate a small game team around the next playable build.",
+    "version": 1,
+    "recommended_integrations": [
+      "discord"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 3
+    },
+    "app_ids": [
+      "chat",
+      "journal",
+      "planner",
+      "library",
+      "files",
+      "code",
+      "terminal"
+    ]
+  },
+  {
+    "id": "creative-team",
+    "name": "Creative Team",
+    "description": "Move a shared brief through review and delivery.",
+    "version": 1,
+    "recommended_integrations": [
+      "discord",
+      "notion"
+    ],
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 4
+    },
+    "app_ids": [
+      "chat",
+      "journal",
+      "planner",
+      "library"
+    ]
+  },
+  {
+    "id": "family",
+    "name": "Family",
+    "description": "Keep family plans and important material together.",
+    "version": 1,
+    "recommended_integrations": [],
+    "seed_summary": {
+      "task_count": 0,
+      "note_count": 1,
+      "collection_count": 1
+    },
+    "app_ids": [
+      "chat",
+      "planner",
+      "journal",
+      "library"
+    ]
+  }
+]

@@ -1,0 +1,311 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type CreatorAgentRunInput struct {
+	ParentInvocationID string                         `json:"-"`
+	Instruction        string                         `json:"instruction"`
+	Mode               string                         `json:"mode,omitempty"`
+	ConversationTarget string                         `json:"conversation_target,omitempty"`
+	ContextReferences  []CreatorAgentContextReference `json:"context_references,omitempty"`
+	ParentRunID        string                         `json:"parent_run_id,omitempty"`
+	SourceMessageID    string                         `json:"source_message_id,omitempty"`
+	SourceType         string                         `json:"source_type,omitempty"`
+	InputModality      string                         `json:"input_modality,omitempty"`
+	Timezone           string                         `json:"timezone,omitempty"`
+	ContextNoteID      string                         `json:"context_note_id,omitempty"`
+	AIInvocationID     string                         `json:"-"`
+	AIConversationID   string                         `json:"-"`
+	AIIdempotencyKey   string                         `json:"-"`
+}
+
+type CreatorAgentContextReference struct {
+	DeviceID     string          `json:"device_id"`
+	Kind         string          `json:"kind"`
+	OpaqueRef    string          `json:"opaque_ref"`
+	DisplayName  string          `json:"display_name,omitempty"`
+	Capabilities json.RawMessage `json:"capabilities"`
+	Metadata     json.RawMessage `json:"metadata,omitempty"`
+}
+
+func validAgentRunMode(mode string) bool { return mode == "ask" || mode == "auto" || mode == "full" }
+
+// CreateCreatorAgentRun is the canonical entry point for direct instructions.
+// It proves account ownership in the same transaction
+// that snapshots the Agent and queues its durable work.
+func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spaceID, agentID string, input CreatorAgentRunInput) (*SpaceRun, error) {
+	spaceID = "" // Retained argument for older callers; content destinations are independent.
+	if err := db.ValidateAppExecutionAuthority(ctx, AppAuthorityFromContext(ctx), ownerUserID, spaceID, "ai.write"); err != nil {
+		return nil, err
+	}
+	input.Instruction = strings.TrimSpace(input.Instruction)
+	input.Mode = strings.ToLower(strings.TrimSpace(input.Mode))
+	input.ConversationTarget = strings.TrimSpace(input.ConversationTarget)
+	input.SourceMessageID = strings.TrimSpace(input.SourceMessageID)
+	input.SourceType = strings.TrimSpace(input.SourceType)
+	input.InputModality = strings.ToLower(strings.TrimSpace(input.InputModality))
+	input.Timezone = strings.TrimSpace(input.Timezone)
+	input.ContextNoteID = strings.TrimSpace(input.ContextNoteID)
+	input.AIInvocationID = strings.TrimSpace(input.AIInvocationID)
+	input.AIConversationID = strings.TrimSpace(input.AIConversationID)
+	input.AIIdempotencyKey = strings.TrimSpace(input.AIIdempotencyKey)
+	if input.Instruction == "" || len([]rune(input.Instruction)) > 32_000 {
+		return nil, ErrSpaceInvalid
+	}
+	if len(input.AIIdempotencyKey) > 200 {
+		return nil, ErrSpaceInvalid
+	}
+	if len(input.ContextReferences) > 8 {
+		return nil, ErrSpaceInvalid
+	}
+	if input.ContextReferences == nil {
+		input.ContextReferences = []CreatorAgentContextReference{}
+	}
+	if input.SourceType == "" {
+		input.SourceType = "direct"
+	}
+	if input.InputModality == "" {
+		input.InputModality = "text"
+	}
+	if input.Timezone == "" {
+		input.Timezone = "UTC"
+	}
+	if (input.SourceType != "direct" && input.SourceType != "mention") || (input.InputModality != "text" && input.InputModality != "voice") {
+		return nil, ErrSpaceInvalid
+	}
+	if _, err := time.LoadLocation(input.Timezone); err != nil {
+		return nil, ErrSpaceInvalid
+	}
+	contextBindings := mustJSON(input.ContextReferences)
+	out := &SpaceRun{ID: "run_" + uuid.NewString()}
+	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		if input.ContextNoteID != "" {
+			access, err := noteAccessForTx(ctx, tx, ownerUserID, input.ContextNoteID)
+			if err != nil || !access.CanView {
+				return ErrSpaceNotFound
+			}
+
+		}
+		if input.ConversationTarget != "" {
+			var destination string
+			if err := tx.QueryRowContext(ctx, `SELECT space_id FROM space_conversations WHERE id=$1`, input.ConversationTarget).Scan(&destination); err != nil {
+				return err
+			}
+			if err := requireSpaceConversationMemberTx(ctx, tx, ownerUserID, destination, input.ConversationTarget); err != nil {
+				return err
+			}
+		}
+		var name, instructions, modelID, effort, defaultMode, versionID string
+		var systemManaged bool
+		var version int64
+		if err := tx.QueryRowContext(ctx, `SELECT a.name,a.instructions,a.model_id,a.reasoning_effort,a.default_run_mode,a.system_managed,a.version,v.id
+			FROM misty_ask_identities a JOIN misty_ask_identity_versions v ON v.agent_id=a.id AND v.version=a.version
+			WHERE a.id=$1 AND a.owner_user_id=$2 AND a.enabled AND a.deleted_at IS NULL`, agentID, ownerUserID).
+			Scan(&name, &instructions, &modelID, &effort, &defaultMode, &systemManaged, &version, &versionID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrPersonalAgentNotFound
+			}
+			return err
+		}
+		mode := input.Mode
+		if mode == "" {
+			mode = defaultMode
+		}
+		if !validAgentRunMode(mode) {
+			return ErrSpaceInvalid
+		}
+		depth := 0
+		if input.ParentRunID != "" {
+			var parentOwner, parentAgent, parentMode string
+			var parentDepth int
+			if err := tx.QueryRowContext(ctx, `SELECT owner_user_id,agent_id,initial_run_mode,delegation_depth FROM space_runs WHERE id=$1 AND state IN ('queued','running','awaiting_approval','awaiting_device') FOR UPDATE`, input.ParentRunID).
+				Scan(&parentOwner, &parentAgent, &parentMode, &parentDepth); err != nil {
+				return ErrSpaceForbidden
+			}
+			if parentOwner != ownerUserID || (parentAgent == agentID && !systemManaged) || parentDepth >= 2 {
+				return ErrSpaceForbidden
+			}
+			if runModeRank(mode) > runModeRank(defaultMode) {
+				mode = defaultMode
+			}
+			if runModeRank(mode) > runModeRank(parentMode) {
+				mode = parentMode
+			}
+			var childCount int
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM space_runs WHERE parent_run_id=$1`, input.ParentRunID).Scan(&childCount); err != nil {
+				return err
+			}
+			if childCount >= 3 {
+				return ErrSpaceConflict
+			}
+			depth = parentDepth + 1
+		}
+		if input.ParentInvocationID != "" {
+			if input.ParentRunID != "" || !systemManaged {
+				return ErrSpaceForbidden
+			}
+			var owner string
+			if err := tx.QueryRowContext(ctx, `SELECT user_id FROM ai_invocations WHERE id=$1 AND state='running' FOR UPDATE`, input.ParentInvocationID).Scan(&owner); err != nil {
+				return ErrSpaceForbidden
+			}
+			if owner != ownerUserID {
+				return ErrSpaceForbidden
+			}
+			var count int
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM space_runs WHERE input->>'parent_invocation_id'=$1`, input.ParentInvocationID).Scan(&count); err != nil {
+				return err
+			}
+			if count >= 3 {
+				return ErrSpaceConflict
+			}
+			if runModeRank(mode) > runModeRank(defaultMode) {
+				mode = defaultMode
+			}
+			depth = 1
+		}
+		snapshot := mustJSON(map[string]any{"id": agentID, "version": version, "version_id": versionID, "name": name, "instructions": instructions, "model_id": modelID, "reasoning_effort": effort, "default_run_mode": defaultMode, "system_managed": systemManaged})
+		runInput := mustJSON(map[string]any{
+			"instruction": input.Instruction, "conversation_target": input.ConversationTarget,
+			"input_modality": input.InputModality, "timezone": input.Timezone,
+			"ai_invocation_id": input.AIInvocationID, "ai_conversation_id": input.AIConversationID,
+			"ai_idempotency_key": input.AIIdempotencyKey, "parent_invocation_id": input.ParentInvocationID,
+		})
+		boundInput, bindErr := bindAppAuthority(ctx, runInput)
+		if bindErr != nil {
+			return bindErr
+		}
+		runInput = boundInput
+		if input.ParentRunID != "" || input.AIInvocationID != "" || input.ParentInvocationID != "" {
+			// A delegated or invocation-linked child cannot shed its source app ceiling.
+			var parentInput json.RawMessage
+			var parentErr error
+			if input.ParentRunID != "" {
+				parentErr = tx.QueryRowContext(ctx, `SELECT input FROM space_runs WHERE id=$1 AND owner_user_id=$2`, input.ParentRunID, ownerUserID).Scan(&parentInput)
+			} else {
+				parentInvocationID := input.AIInvocationID
+				if parentInvocationID == "" {
+					parentInvocationID = input.ParentInvocationID
+				}
+				parentErr = tx.QueryRowContext(ctx, `SELECT request_payload FROM ai_invocations WHERE id=$1 AND user_id=$2`, parentInvocationID, ownerUserID).Scan(&parentInput)
+			}
+			if parentErr != nil {
+				return parentErr
+			}
+			authority, err := AppAuthorityFromPayload(parentInput)
+			if err != nil {
+				return err
+			}
+			if authority != nil {
+				var values map[string]any
+				if json.Unmarshal(runInput, &values) != nil {
+					return ErrSpaceInvalid
+				}
+				values["_misty_authority"] = authority
+				runInput = mustJSON(values)
+			}
+		}
+		trigger := "direct_instruction"
+		if input.ParentRunID != "" || input.ParentInvocationID != "" {
+			trigger = "delegated"
+		}
+		if err := scanSpaceRun(tx.QueryRowContext(ctx, `INSERT INTO space_runs(
+			id,space_id,resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,result,
+			requesting_member_id,source_conversation_id,source_type,agent_id,capability_id,outputs,artifacts,agent_version_id,source_message_id,
+			attempt,conversation_scope_kind,scope_conversation_id,owner_user_id,initial_run_mode,effective_run_mode,
+			agent_version_snapshot,parent_run_id,delegation_depth,context_bindings,action_envelope)
+			VALUES($1,NULLIF($2,''),'agent',$3,$4,$4,$5,'queued',$6,'{}'::jsonb,$4,NULLIF($7,''),$8,$3,'companion','{}'::jsonb,'[]'::jsonb,NULL,NULLIF($9,''),
+			1,'everyone',NULL,$4,$10,$10,$11,NULLIF($12,''),$13,$14,'{}'::jsonb) RETURNING `+spaceRunColumns,
+			out.ID, spaceID, agentID, ownerUserID, trigger, runInput, input.ConversationTarget, input.SourceType, input.SourceMessageID, mode, snapshot, input.ParentRunID, depth, contextBindings), out); err != nil {
+			return err
+		}
+		pinParentID := input.ParentRunID
+		if pinParentID == "" {
+			pinParentID = input.AIInvocationID
+			if pinParentID == "" {
+				pinParentID = input.ParentInvocationID
+			}
+		}
+		if err := pinAgentSDKCapabilitiesTx(ctx, tx, out.ID, ownerUserID, spaceID, pinParentID, runInput); err != nil {
+			return err
+		}
+		for _, ref := range input.ContextReferences {
+			ref.Kind = strings.TrimSpace(ref.Kind)
+			ref.OpaqueRef = strings.TrimSpace(ref.OpaqueRef)
+			ref.DeviceID = strings.TrimSpace(ref.DeviceID)
+			ref.DisplayName = strings.TrimSpace(ref.DisplayName)
+			capabilities, normalizeErr := normalizeDeviceAgentCapabilities(ref.Capabilities)
+			if normalizeErr != nil || (ref.Kind != "browser_tab" && ref.Kind != "project_root") || ref.OpaqueRef == "" || ref.DeviceID == "" {
+				return ErrSpaceInvalid
+			}
+			if len(ref.Metadata) == 0 {
+				ref.Metadata = json.RawMessage(`{}`)
+			}
+			var metadata map[string]any
+			if json.Unmarshal(ref.Metadata, &metadata) != nil {
+				return ErrSpaceInvalid
+			}
+			var deviceExists bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL)`, ref.DeviceID, ownerUserID).Scan(&deviceExists); err != nil || !deviceExists {
+				return ErrDeviceNotFound
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO agent_run_contexts(id,run_id,owner_user_id,space_id,device_id,kind,opaque_ref,display_name,capabilities,metadata,expires_at)
+				VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10,NOW()+INTERVAL '24 hours')`, `context_`+uuid.NewString(), out.ID, ownerUserID, spaceID, ref.DeviceID, ref.Kind, ref.OpaqueRef, ref.DisplayName, capabilities, ref.Metadata); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO agent_run_jobs(run_id,space_id,task_id,agent_id,trigger_kind) VALUES($1,NULLIF($2,''),NULL,$3,$4)`, out.ID, spaceID, agentID, trigger); err != nil {
+			return err
+		}
+		// Account event notifications are emitted by the run table trigger.
+		return nil
+	})
+	if err != nil && input.AIIdempotencyKey != "" {
+		var existing SpaceRun
+		lookupErr := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+			return scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs
+				WHERE owner_user_id=$1 AND input->>'ai_idempotency_key'=$2 AND trigger_kind='direct_instruction'
+				ORDER BY created_at LIMIT 1`, ownerUserID, input.AIIdempotencyKey), &existing)
+		})
+		if lookupErr == nil {
+			existing.IdempotentReplay = true
+			return &existing, nil
+		}
+	}
+	if err != nil && input.SourceMessageID != "" {
+		// A duplicate HTTP delivery may lose the unique-index race above. Resolve
+		// it to the already queued run so callers observe idempotent success.
+		var existing SpaceRun
+		lookupErr := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+			return scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs
+				WHERE source_message_id=$1 AND agent_id=$2 AND owner_user_id=$3 AND trigger_kind='direct_instruction'
+				ORDER BY created_at LIMIT 1`, input.SourceMessageID, agentID, ownerUserID), &existing)
+		})
+		if lookupErr == nil {
+			existing.IdempotentReplay = true
+			return &existing, nil
+		}
+	}
+	return out, err
+}
+
+func runModeRank(mode string) int {
+	switch mode {
+	case "ask":
+		return 0
+	case "auto":
+		return 1
+	case "full":
+		return 2
+	default:
+		return -1
+	}
+}

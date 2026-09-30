@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
@@ -18,14 +19,14 @@ import (
 )
 
 type BrowserSyncService struct {
-	database *db.Database
-	store    *Store
-	trees    *treeCache
-	restore  RestoreCompleter
+	database   *db.Database
+	store      *Store
+	workspaces workspaceCaches
+	restore    RestoreCompleter
 }
 
 func NewBrowserSyncService(database *db.Database) *BrowserSyncService {
-	return &BrowserSyncService{database: database, store: NewStore(database.Conn), trees: newTreeCache(64 << 20)}
+	return &BrowserSyncService{database: database, store: NewStore(database.Conn), workspaces: newWorkspaceCaches(256 << 20)}
 }
 
 func syncErrorCode(err error) (string, int) {
@@ -35,7 +36,7 @@ func syncErrorCode(err error) (string, int) {
 	case errors.Is(err, ErrSyncForbidden):
 		return "sync_device_forbidden", 403
 	case errors.Is(err, ErrSyncExists):
-		return "sync_workspace_exists", 409
+		return "sync_vault_exists", 409
 	case errors.Is(err, ErrSyncEpoch):
 		return "sync_key_epoch_changed", 409
 	case errors.Is(err, ErrSyncCounterGap):
@@ -46,10 +47,10 @@ func syncErrorCode(err error) (string, int) {
 		return "sync_operation_compacted", 409
 	case errors.Is(err, ErrSyncCursor):
 		return "sync_cursor_invalid", 409
-	case errors.Is(err, ErrSyncTreeMode):
-		return "sync_tree_mode", 426
-	case errors.Is(err, ErrSyncTreeSnapshot):
-		return "sync_tree_snapshot_required", 409
+	case errors.Is(err, ErrSyncWorkspaceMode):
+		return "sync_workspace_mode", 426
+	case errors.Is(err, ErrSyncWorkspaceSnapshot):
+		return "sync_workspace_snapshot_required", 409
 	default:
 		return "sync_unavailable", 503
 	}
@@ -78,19 +79,19 @@ func (s *BrowserSyncService) user(w http.ResponseWriter, r *http.Request) (strin
 	}
 	return user, true
 }
-func (s *BrowserSyncService) Workspace() http.HandlerFunc {
+func (s *BrowserSyncService) Vault() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, ok := s.user(w, r)
 		if !ok {
 			return
 		}
 		if r.Method == http.MethodGet {
-			workspace, err := s.store.BrowserSyncWorkspace(r.Context(), user)
+			vault, err := s.store.BrowserSyncVault(r.Context(), user)
 			if err != nil {
 				writeSyncError(w, err)
 				return
 			}
-			transport.WriteJSON(w, 200, map[string]any{"workspace": workspace})
+			transport.WriteJSON(w, 200, map[string]any{"vault": vault})
 			return
 		}
 		var body struct {
@@ -102,11 +103,11 @@ func (s *BrowserSyncService) Workspace() http.HandlerFunc {
 			writeSyncError(w, err)
 			return
 		}
-		if err := s.store.CreateBrowserSyncWorkspace(r.Context(), user, body.RootPublicKey, body.KeyEnvelope, body.Device); err != nil {
+		if err := s.store.CreateBrowserSyncVault(r.Context(), user, body.RootPublicKey, body.KeyEnvelope, body.Device); err != nil {
 			writeSyncError(w, err)
 			return
 		}
-		transport.WriteJSON(w, 201, map[string]string{"workspace_id": body.Device.WorkspaceID})
+		transport.WriteJSON(w, 201, map[string]string{"vault_id": body.Device.VaultID})
 	}
 }
 func (s *BrowserSyncService) Devices() http.HandlerFunc {
@@ -116,16 +117,16 @@ func (s *BrowserSyncService) Devices() http.HandlerFunc {
 			return
 		}
 		if r.Method == http.MethodGet {
-			workspace, err := s.store.BrowserSyncWorkspace(r.Context(), user)
+			vault, err := s.store.BrowserSyncVault(r.Context(), user)
 			if err != nil {
 				writeSyncError(w, err)
 				return
 			}
-			if workspace == nil {
+			if vault == nil {
 				writeSyncError(w, ErrSyncForbidden)
 				return
 			}
-			devices, err := s.store.BrowserSyncDevices(r.Context(), user, workspace.WorkspaceID)
+			devices, err := s.store.BrowserSyncDevices(r.Context(), user, vault.VaultID)
 			if err != nil {
 				writeSyncError(w, err)
 				return
@@ -142,7 +143,7 @@ func (s *BrowserSyncService) Devices() http.HandlerFunc {
 			writeSyncError(w, err)
 			return
 		}
-		_ = s.store.NotifyBrowserSyncPresence(r.Context(), SyncConnectionIdentity{UserID: user, WorkspaceID: body.WorkspaceID})
+		_ = s.store.NotifyBrowserSyncPresence(r.Context(), SyncConnectionIdentity{UserID: user, VaultID: body.VaultID})
 		transport.WriteJSON(w, 201, map[string]string{"device_id": body.DeviceID})
 	}
 }
@@ -153,7 +154,7 @@ func (s *BrowserSyncService) Ticket() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			WorkspaceID     string `json:"workspace_id"`
+			VaultID         string `json:"vault_id"`
 			DeviceID        string `json:"device_id"`
 			ProtocolVersion int    `json:"protocol_version"`
 		}
@@ -161,13 +162,13 @@ func (s *BrowserSyncService) Ticket() http.HandlerFunc {
 			writeSyncError(w, err)
 			return
 		}
-		if body.ProtocolVersion != 1 && body.ProtocolVersion != 2 {
+		if body.ProtocolVersion != 1 && body.ProtocolVersion != syncWorkspaceProtocol {
 			transport.WriteJSON(w, 426, map[string]string{"code": "sync_protocol_unsupported"})
 			return
 		}
-		// A tree-protocol workspace no longer accepts legacy clients.
+		// A workspace-protocol vault no longer accepts legacy clients.
 		if body.ProtocolVersion == 1 {
-			if mode, err := s.store.BrowserSyncTreeMode(r.Context(), user, body.WorkspaceID); err == nil && mode {
+			if mode, err := s.store.BrowserSyncWorkspaceMode(r.Context(), user, body.VaultID); err == nil && mode {
 				transport.WriteJSON(w, 426, map[string]string{"code": "sync_protocol_unsupported"})
 				return
 			}
@@ -177,7 +178,7 @@ func (s *BrowserSyncService) Ticket() http.HandlerFunc {
 			writeSyncError(w, err)
 			return
 		}
-		if err = s.store.CreateBrowserSyncTicket(r.Context(), user, body.WorkspaceID, body.DeviceID, security.HashToken(token)); err != nil {
+		if err = s.store.CreateBrowserSyncTicket(r.Context(), user, body.VaultID, body.DeviceID, security.HashToken(token)); err != nil {
 			writeSyncError(w, err)
 			return
 		}
@@ -185,8 +186,8 @@ func (s *BrowserSyncService) Ticket() http.HandlerFunc {
 	}
 }
 
-func syncConnectionProof(workspace, device, challenge string) []byte {
-	raw, _ := json.Marshal([]any{"misty.sync.connect.v1", workspace, device, challenge})
+func syncConnectionProof(vault, device, challenge string) []byte {
+	raw, _ := json.Marshal([]any{"misty.sync.connect.v1", vault, device, challenge})
 	return raw
 }
 
@@ -204,15 +205,18 @@ type syncClientFrame struct {
 	Ready           bool          `json:"ready,omitempty"`
 	ActiveEpoch     string        `json:"active_epoch,omitempty"`
 	Activation      *SyncMutation `json:"activation,omitempty"`
-	// Tree protocol (v2) fields.
-	RequestID  string         `json:"request_id,omitempty"`
-	TreeOp     *SyncTreeOp    `json:"tree_op,omitempty"`
-	Claim      *SyncTreeClaim `json:"claim,omitempty"`
-	TreeID     string         `json:"tree_id,omitempty"`
-	TabNodeID  string         `json:"tab_node_id,omitempty"`
-	Slot       int16          `json:"slot,omitempty"`
-	Blob       *SyncBlob      `json:"blob,omitempty"`
-	BlobHashes [][]byte       `json:"blob_hashes,omitempty"`
+	// Workspace protocol (v2) fields.
+	RequestID   string              `json:"request_id,omitempty"`
+	WorkspaceOp *SyncWorkspaceOp    `json:"workspace_op,omitempty"`
+	Claim       *SyncWorkspaceClaim `json:"claim,omitempty"`
+	WorkspaceID string              `json:"workspace_id,omitempty"`
+	ViewNodeID  string              `json:"view_node_id,omitempty"`
+	Slot        int16               `json:"slot,omitempty"`
+	Blob        *SyncBlob           `json:"blob,omitempty"`
+	BlobHashes  [][]byte            `json:"blob_hashes,omitempty"`
+	// Cold-tier records: `After` is the pull cursor.
+	Collection string            `json:"collection,omitempty"`
+	Writes     []SyncRecordWrite `json:"writes,omitempty"`
 }
 
 func (s *BrowserSyncService) Connect() http.HandlerFunc {
@@ -225,7 +229,7 @@ func (s *BrowserSyncService) Connect() http.HandlerFunc {
 		}
 		token := r.URL.Query().Get("ticket")
 		protocol := r.URL.Query().Get("protocol")
-		if protocol != "" && protocol != "1" && protocol != "2" {
+		if protocol != "" && protocol != "1" && protocol != strconv.Itoa(syncWorkspaceProtocol) {
 			transport.WriteJSON(w, 426, map[string]string{"code": "sync_protocol_unsupported"})
 			return
 		}
@@ -239,9 +243,9 @@ func (s *BrowserSyncService) Connect() http.HandlerFunc {
 			return
 		}
 		version := 1
-		if protocol == "2" {
-			version = 2
-		} else if mode, err := s.store.BrowserSyncTreeMode(r.Context(), identity.UserID, identity.WorkspaceID); err != nil {
+		if protocol == strconv.Itoa(syncWorkspaceProtocol) {
+			version = syncWorkspaceProtocol
+		} else if mode, err := s.store.BrowserSyncWorkspaceMode(r.Context(), identity.UserID, identity.VaultID); err != nil {
 			writeSyncError(w, err)
 			return
 		} else if mode {
@@ -268,14 +272,14 @@ func (s *BrowserSyncService) Connect() http.HandlerFunc {
 			return
 		}
 		var auth syncClientFrame
-		if decodeSync(bytes.NewReader(raw), &auth) != nil || auth.Type != "authenticate" || auth.After < 0 || auth.After > SyncMaxCounter || len(identity.PublicKey) != ed25519.PublicKeySize || !ed25519.Verify(identity.PublicKey, syncConnectionProof(identity.WorkspaceID, identity.DeviceID, challenge), auth.Signature) {
+		if decodeSync(bytes.NewReader(raw), &auth) != nil || auth.Type != "authenticate" || auth.After < 0 || auth.After > SyncMaxCounter || len(identity.PublicKey) != ed25519.PublicKeySize || !ed25519.Verify(identity.PublicKey, syncConnectionProof(identity.VaultID, identity.DeviceID, challenge), auth.Signature) {
 			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Device proof required"), time.Now().Add(time.Second))
 			return
 		}
-		if version == 2 {
-			// The first tree-protocol connection turns away legacy clients, which
-			// would otherwise keep publishing the old shared workspace.
-			if s.store.EnableBrowserSyncTreeMode(r.Context(), identity.UserID, identity.WorkspaceID) != nil {
+		if version == syncWorkspaceProtocol {
+			// The first workspace-protocol connection turns away legacy clients, which
+			// would otherwise keep publishing the old shared vault.
+			if s.store.EnableBrowserSyncWorkspaceMode(r.Context(), identity.UserID, identity.VaultID) != nil {
 				return
 			}
 		}

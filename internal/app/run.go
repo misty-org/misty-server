@@ -250,6 +250,9 @@ func runAgentRetention(ctx context.Context, server *Server) {
 				if _, err := server.AI.ProcessDueAIRecaps(ctx, time.Now().UTC(), 25); err != nil {
 					log.Printf("AI recurring briefing processing failed: %v", err)
 				}
+				if _, err := server.AI.ProcessDueScheduledTasks(ctx, time.Now().UTC(), 25); err != nil {
+					log.Printf("Scheduled task processing failed: %v", err)
+				}
 			}
 			if _, err := server.CleanupExpiredLibraryData(ctx, 100); err != nil {
 				log.Printf("Library reservation cleanup failed: %v", err)

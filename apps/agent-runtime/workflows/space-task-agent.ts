@@ -1,10 +1,21 @@
 import { modelTurnLimit } from "../src/model-budget.js";
+import { InstanceModel } from "../src/instance-model.js";
+import { companionImageParts } from "../src/companion-images.js";
 import { requiresBrowserReinspection } from "../src/browser-reinspection.js";
-import type { LanguageModelUsage } from "ai";
 import { MISTY_HARNESS_VERSION, type HarnessCheckpoint, type HarnessCompletion, type HarnessExecution } from "../src/harness.js";
 import { executePinnedCapability } from "../src/pinned-capability.js";
 import { WorkflowAgent } from "@ai-sdk/workflow";
-import { isStepCount, jsonSchema, tool, type StopCondition, type ModelMessage } from "ai";
+import {
+  isStepCount,
+  jsonSchema,
+  tool,
+  type FilePart,
+  type ImagePart,
+  type ModelMessage,
+  type StopCondition,
+  type TextPart,
+  type ToolSet,
+} from "ai";
 import { FatalError, getWorkflowMetadata, RetryableError } from "workflow";
 import { z } from "zod";
 import {
@@ -303,7 +314,7 @@ function errorText(error: unknown): string {
   }
 }
 
-export const stopOnRepeatedOrTerminalToolFailure: StopCondition<any> = ({
+export const stopOnRepeatedOrTerminalToolFailure: StopCondition<ToolSet> = ({
   steps,
 }) => {
   const counts = new Map<string, number>();
@@ -530,14 +541,6 @@ async function requestLegacyToolExecution(
     },
     idempotencyKey,
   );
-}
-
-async function executeNamedTool(
-  name: string,
-  input: Record<string, unknown>,
-  options: { context: RuntimeToolContext; toolCallId: string },
-): Promise<unknown> {
-  return executeTool(options.context, options.toolCallId, name, input);
 }
 
 async function checkpoint(
@@ -779,7 +782,7 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   );
   let browserInspectionRequired = false;
   const reinspectionFailures = new Set<string>();
-  const activeToolKeys = () => browserInspectionRequired
+  const activeToolKeys = () => context.companion_explanation ? [] : browserInspectionRequired
     ? [keyForName.get("browser.inspect")!].filter(Boolean) as Array<keyof typeof tools>
     :
     [
@@ -808,9 +811,9 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   let modelTurn = 0;
   const agent = new WorkflowAgent({
     id: "misty-space-task-agent",
-    model: context.model_id,
-    instructions: `${context.system}\n\n${proactiveExecutionInstructions}\nUse misty_discover_capabilities when the current working set lacks an action you need. Discovery results identify capabilities available on the next turn.`,
-    tools,
+    model: new InstanceModel(context.model_id),
+    instructions: context.companion_explanation ? context.system : `${context.system}\n\n${proactiveExecutionInstructions}\nUse misty_discover_capabilities when the current working set lacks an action you need. Discovery results identify capabilities available on the next turn.`,
+    tools: context.companion_explanation ? {} : tools,
     prepareStep: () => ({ activeTools: activeToolKeys() }),
     // One model call per stream lets the coordinator refresh the active-time
     // deadline after durable tool waits. The aggregate loop below owns the cap.
@@ -938,16 +941,16 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     };
     const images = [
       ...(context.attachments ?? []),
-      ...(context.display_captures ?? []),
       ...(context.capture ? [context.capture] : []),
     ];
-    let messages: ModelMessage[] = images.length
+    let messages: ModelMessage[] = images.length || context.display_captures?.length
       ? [
             {
               role: "user",
               content: [
                 { type: "text", text: context.prompt + "\nSupplied task files (use these IDs for upload):\n" + (context.attachments ?? []).map(file => JSON.stringify({attachmentId:file.id,name:file.name,mimeType:file.mime_type})).join("\n") },
-                ...images.flatMap<import("ai").TextPart | import("ai").ImagePart | import("ai").FilePart>(
+                ...companionImageParts(context.display_captures),
+                ...images.flatMap<TextPart | ImagePart | FilePart>(
                   (image) =>
                     image.mime_type === "text/plain"
                       ? {type:"text" as const,text:`Attachment ${image.name}:\n${Buffer.from(image.data_url.split(",")[1]??"","base64").toString("utf8")}`}

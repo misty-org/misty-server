@@ -25,7 +25,7 @@ func TestAgentToolboxRejectsDuplicateNamesAndAliases(t *testing.T) {
 	}
 }
 
-func TestAgentToolboxFiltersExplicitIntentAndReauthorizesExecution(t *testing.T) {
+func TestAgentToolboxExposesOwnedToolsAndReauthorizesExecution(t *testing.T) {
 	executions := 0
 	registry := agenttools.MustNew(agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
@@ -43,7 +43,7 @@ func TestAgentToolboxFiltersExplicitIntentAndReauthorizesExecution(t *testing.T)
 	}
 
 	manifest, err := registry.Resolve(context.Background(), agenttools.Invocation{}, []string{"spaces.rename"}, authorize)
-	if err != nil || len(manifest.Tools) != 0 {
+	if err != nil || len(manifest.Tools) != 1 {
 		t.Fatalf("implicit manifest = %#v, %v", manifest, err)
 	}
 	invocation := agenttools.Invocation{ExplicitTools: map[string]bool{"spaces.rename": true}}
@@ -74,7 +74,7 @@ func TestAgentToolboxAliasesExecuteCanonicalHandler(t *testing.T) {
 	}
 }
 
-func TestAgentToolboxUsesSourceApprovalAndDelegatesDurableApproval(t *testing.T) {
+func TestAgentToolboxIgnoresLegacyApprovalModes(t *testing.T) {
 	executions := 0
 	registry := agenttools.MustNew(agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
@@ -91,7 +91,7 @@ func TestAgentToolboxUsesSourceApprovalAndDelegatesDurableApproval(t *testing.T)
 
 	conversation := agenttools.Invocation{Source: "space_conversation"}
 	manifest, err := registry.Resolve(context.Background(), conversation, []string{"tasks.update"}, nil)
-	if err != nil || len(manifest.Tools) != 0 {
+	if err != nil || len(manifest.Tools) != 1 {
 		t.Fatalf("implicit conversation manifest = %#v, %v", manifest, err)
 	}
 	canonical := agenttools.Invocation{Source: "canonical_run"}
@@ -100,12 +100,12 @@ func TestAgentToolboxUsesSourceApprovalAndDelegatesDurableApproval(t *testing.T)
 		t.Fatalf("canonical manifest = %#v, %v", manifest, err)
 	}
 	_, err = registry.Execute(context.Background(), canonical, serveragent.ToolRequest{Name: "tasks.update", Arguments: json.RawMessage(`{}`)}, nil)
-	if !errors.Is(err, agenttools.ErrApprovalRequired) || executions != 0 {
-		t.Fatalf("interactive execution error = %v, executions = %d", err, executions)
+	if err != nil || executions != 1 {
+		t.Fatalf("autonomous execution error = %v, executions = %d", err, executions)
 	}
 	canonical.DelegatedApproval = true
 	_, err = registry.Execute(context.Background(), canonical, serveragent.ToolRequest{Name: "tasks.update", Arguments: json.RawMessage(`{}`)}, nil)
-	if err != nil || executions != 1 {
+	if err != nil || executions != 2 {
 		t.Fatalf("delegated execution error = %v, executions = %d", err, executions)
 	}
 }

@@ -1,7 +1,8 @@
+import type { PinnedCapabilityExecution } from "./pinned-capability.js";
 export interface SpaceTaskContext {
  /** Only retained to reject stale routine submissions. */
  routine_execution?: unknown;
- sdk_execution?: import("./pinned-capability.js").PinnedCapabilityExecution;
+ sdk_execution?: PinnedCapabilityExecution;
   run_id: string;
   agent_id: string;
   space_id: string;
@@ -24,7 +25,8 @@ export interface SpaceTaskContext {
   };
   attached_sources: unknown[];
   companion_mode?: "team" | "auto";
-  display_captures?: Array<NonNullable<SpaceTaskContext["capture"]> & { screen: string; primary: boolean }>;
+  companion_explanation?: boolean;
+  display_captures?: Array<NonNullable<SpaceTaskContext["capture"]> & { screen: string; primary: boolean; captured_at?: number; display_id?: number; source?: string }>;
   capture?: {
     id: string;
     name: string;

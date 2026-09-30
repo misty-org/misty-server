@@ -46,7 +46,7 @@ func TestBuildAndClearPasswordResetCookie(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	TestingClearPasswordResetCookie(rec)
+	TestingClearPasswordResetCookie(rec, true)
 	resp := rec.Result()
 	defer resp.Body.Close()
 
@@ -54,6 +54,9 @@ func TestBuildAndClearPasswordResetCookie(t *testing.T) {
 	for _, cleared := range resp.Cookies() {
 		if cleared.Name == TestingPasswordResetCookieName {
 			found = true
+			if !cleared.Secure || !cleared.HttpOnly || cleared.Value != "" {
+				t.Fatal("cleared cookie must retain secure flags and contain no token")
+			}
 			if cleared.MaxAge != -1 {
 				t.Fatalf("cleared cookie MaxAge = %d, want -1", cleared.MaxAge)
 			}

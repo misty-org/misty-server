@@ -174,3 +174,22 @@ func TestPersistedAdmissionCanCompleteDuringServiceOutage(t *testing.T) {
 func (s *memoryDurable) BeginAdmission(context.Context, Request) error               { return nil }
 func (s *memoryDurable) AbandonedAdmissions(context.Context, int) ([]Request, error) { return nil, nil }
 func (s *memoryDurable) AdmissionRecovered(context.Context, Request) error           { return nil }
+
+func TestDockerBillingHTTPIsLimitedToDevelopmentHost(t *testing.T) {
+	const secret = "local-billing-test-secret-000000000000"
+	for _, tc := range []struct {
+		url         string
+		development bool
+		allowed     bool
+	}{
+		{"http://host.docker.internal:8091/adapter", true, true},
+		{"http://host.docker.internal:8091/adapter", false, false},
+		{"http://billing.example/adapter", true, false},
+		{"http://host.docker.internal.evil.example/adapter", true, false},
+	} {
+		_, err := New(Config{Mode: "http", URL: tc.url, Secret: secret, AllowDockerHostHTTP: tc.development})
+		if (err == nil) != tc.allowed {
+			t.Fatalf("url %s dev=%v: %v", tc.url, tc.development, err)
+		}
+	}
+}

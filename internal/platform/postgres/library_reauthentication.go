@@ -17,7 +17,7 @@ func (db *Database) VerifyUserPassword(ctx context.Context, userID, password str
 	}
 	var hash string
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id=$1`, userID).Scan(&hash)
+		return tx.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id=$1 AND provider='misty' AND lifecycle_state='active'`, userID).Scan(&hash)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil

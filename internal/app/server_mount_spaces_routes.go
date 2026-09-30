@@ -218,6 +218,8 @@ func (s *Server) CleanupExpiredJournalAssets(
 func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 	s.Router.MethodFunc(http.MethodPost, prefix+"/agent-voice/transcriptions", service.AgentVoiceTranscription())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/agent-voice/speech", service.AgentVoiceSpeech())
+	s.Router.Post(prefix+"/agent-voice/realtime/ticket", service.AgentVoiceRealtimeTicket())
+	s.Router.Get(prefix+"/agent-voice/realtime", service.AgentVoiceRealtimeConnect())
 	deviceJobsEnabled := serverFeatureEnabled("MISTY_DEVICE_JOBS_ENABLED")
 	connectedDevicesEnabled := serverConnectedDevicesConfigured()
 	if !deviceJobsEnabled && !connectedDevicesEnabled {

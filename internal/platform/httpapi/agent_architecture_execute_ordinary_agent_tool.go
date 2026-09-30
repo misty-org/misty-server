@@ -46,15 +46,6 @@ func (s *SpacesService) executeOrdinaryAgentTool(ctx context.Context, run *db.Sp
 			IdempotencyKey: "chat:" + run.ID + ":" + tool.ID,
 			UserID:         run.RequestingMemberID, SpaceID: run.SpaceID, Input: tool.Arguments,
 		}
-		approved, err := s.database.EnsureWorkflowNodeApproval(
-			ctx, run.ID, invocation.NodeID, tool.Name, tool.Arguments,
-		)
-		if err != nil {
-			return nil, err
-		}
-		if !approved {
-			return nil, workflowv2.ErrAwaitingApproval
-		}
 		return s.database.JournalWorkflowAction(
 			ctx, run.ID, invocation.NodeID, invocation.IdempotencyKey,
 			"space_messages", workflowv2.RiskWrite, tool.Arguments,
@@ -83,13 +74,6 @@ func (s *SpacesService) executeOrdinaryAgentTool(ctx context.Context, run *db.Sp
 		case "calendar.query":
 			return s.calendarQueryNode(ctx, run, invocation)
 		case "tasks.create", "tasks.update":
-			approved, err := s.database.EnsureWorkflowNodeApproval(ctx, run.ID, invocation.NodeID, tool.Name, tool.Arguments)
-			if err != nil {
-				return nil, err
-			}
-			if !approved {
-				return nil, workflowv2.ErrAwaitingApproval
-			}
 			return s.database.JournalWorkflowAction(ctx, run.ID, invocation.NodeID, invocation.IdempotencyKey, "space_tasks", workflowv2.RiskWrite, tool.Arguments, func() (json.RawMessage, error) {
 				if tool.Name == "tasks.create" {
 					return s.createTaskNode(ctx, run, &db.SpaceStudioResource{ID: run.AgentID}, invocation)
@@ -115,14 +99,6 @@ func (s *SpacesService) executeOrdinaryAgentTool(ctx context.Context, run *db.Sp
 		}
 		if operation != "write" || !providerSupportsWrite(provider) {
 			return nil, workflowv2.ErrCapabilityDenied
-		}
-		approvalInput := TestingWorkflowApprovalEnvelope(run, "provider."+provider+".write", provider, TestingFindWorkflowString(config, "connectionId", "connection_id"), TestingFindWorkflowString(config, "destination", "channel", "channelId", "channel_id"), tool.Arguments)
-		approved, approvalErr := s.database.EnsureWorkflowNodeApproval(ctx, run.ID, invocation.NodeID, "provider."+provider+".write", approvalInput)
-		if approvalErr != nil {
-			return nil, approvalErr
-		}
-		if !approved {
-			return nil, workflowv2.ErrAwaitingApproval
 		}
 		return s.database.JournalWorkflowAction(ctx, run.ID, invocation.NodeID, invocation.IdempotencyKey, provider, workflowv2.RiskWrite, tool.Arguments, func() (json.RawMessage, error) { return s.providerWriteNode(ctx, run, invocation) })
 	}

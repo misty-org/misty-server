@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/browseractions"
 	cap "github.com/kannachi323/misty/server/internal/capabilities"
@@ -24,7 +23,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// These tests cross actual admission, runtime MCP dispatch, encrypted reviews,
+// These tests cross actual admission, runtime MCP dispatch, autonomous execution,
 // effect journaling and leased device jobs. Only the device's website is a fixture.
 func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 	for _, scenario := range []string{"gmail", "outlook", "todoist", "planner", "gmail/lost", "gmail/stale", "gmail/account", "gmail/recipients", "gmail/content", "gmail/cancel", "gmail/disconnected", "gmail/unconfirmed", "todoist/destination", "gmail/global", "todoist/global", "planner/global", "gmail/read", "outlook/read", "gmail/draft", "outlook/draft", "gmail/login"} {
@@ -205,6 +204,7 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 				defer stop()
 				done := make(chan error, 1)
 				go func() {
+					inspections := 0
 					page := browseractions.Page{URL: origin + "/#thread/1", Interactive: []browseractions.Element{{Ref: "commit", Role: "button", Name: "Send"}}}
 					page.Target.ScopeID = binding.ScopeID
 					page.Target.ProfileID = binding.ProfileID
@@ -276,6 +276,10 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 							}
 							page.DocumentID = uuid.NewString()
 							output, _ = json.Marshal(page)
+							inspections++
+							if inspections == 1 {
+								changed.Store(true)
+							}
 						case "browser.interact":
 							var input struct{ Action struct{ Kind, Text string } }
 							if json.Unmarshal(job.Input, &input) != nil || input.Action.Kind != "fill" || page.Semantic.Draft == nil {
@@ -332,6 +336,16 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 			var args map[string]any
 			_ = json.Unmarshal(input, &args)
 			params := &mcp.CallToolParams{Name: toolName, Arguments: args, Meta: mcp.Meta{"misty/call_id": callID, "misty/approval_hook_token": "pilot-review", "misty/device_hook_token": "pilot-device-wait"}}
+			if mode == "cancel" {
+				if err := database.CancelMistyInvocationChildren(ctx, user.ID, admitted.InvocationID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "disconnected" {
+				if err := database.RevokeTrustedDevice(user.ID, device.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
 			pending, err := mcpSession.CallTool(ctx, params)
 			if mode == "login" {
 				raw, _ := json.Marshal(pending)
@@ -360,44 +374,7 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 				return
 			}
 
-			if err != nil || pending.IsError || pending.Meta["misty/approval"] == nil {
-				t.Fatalf("review required: %#v %v", pending, err)
-			}
-			if writes.Load() != 0 {
-				t.Fatal("committed before review")
-			}
-			approvals, err := database.AgentPendingBrowserApprovals(ctx, user.ID, "", 20)
-			if err != nil || len(approvals.Approvals) != 1 {
-				t.Fatalf("approval inventory: %#v %v", approvals, err)
-			}
-			router := chi.NewRouter()
-			router.Get("/me/agent-approvals/{approvalID}", service.AgentBrowserApprovalReview())
-			router.Post("/me/agent-invocations/{runID}/approvals/{approvalID}", service.AgentBrowserApprovalDecision())
-			bearer := newConversationTestBearerToken(t, database, user.ID)
-			review := performConversationRequest(t, router, http.MethodGet, "/me/agent-approvals/"+approvals.Approvals[0].ID, bearer, nil)
-			expected := "Discuss the email"
-			if capability == "inbox.send" {
-				expected = draft.Text
-			}
-			if review.Code != 200 || !strings.Contains(review.Body.String(), expected) {
-				t.Fatalf("missing exact review body: %d %s", review.Code, review.Body.String())
-			}
-			decision := performConversationRequest(t, router, http.MethodPost, "/me/agent-invocations/"+db.SDKPublicRunID(record.ID)+"/approvals/"+approvals.Approvals[0].ID, bearer, map[string]bool{"approved": true})
-			if decision.Code != 204 {
-				t.Fatalf("approval: %s", decision.Body.String())
-			}
-			changed.Store(true)
-			if mode == "cancel" {
-				if err := database.CancelMistyInvocationChildren(ctx, user.ID, admitted.InvocationID); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if mode == "disconnected" {
-				if err := database.RevokeTrustedDevice(user.ID, device.ID); err != nil {
-					t.Fatal(err)
-				}
-			}
-			result, err := mcpSession.CallTool(ctx, params)
+			result := pending
 			invalidated := mode == "account" || mode == "recipients" || mode == "content" || mode == "destination" || mode == "cancel" || mode == "disconnected"
 			if invalidated {
 				if err == nil && !result.IsError {
@@ -406,12 +383,7 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 				if writes.Load() != 0 {
 					t.Fatal("write after invalidation")
 				}
-				if mode == "account" || mode == "recipients" || mode == "content" || mode == "destination" {
-					approval, _, err := database.SDKApprovalReview(ctx, user.ID, approvals.Approvals[0].ID)
-					if err != nil || approval.State != "expired" {
-						t.Fatalf("review not retired: %#v %v", approval, err)
-					}
-				}
+
 				return
 			}
 			if mode == "unconfirmed" {
@@ -427,7 +399,7 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 			}
 			if err != nil || result.IsError {
 				raw, _ := json.Marshal(result)
-				t.Fatalf("approved execution: %s %v", raw, err)
+				t.Fatalf("autonomous execution: %s %v", raw, err)
 			}
 			replay, err := mcpSession.CallTool(ctx, params)
 			if err != nil || replay.IsError {

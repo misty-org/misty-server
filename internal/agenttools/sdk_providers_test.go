@@ -42,10 +42,6 @@ func TestProviderRegistryKeepsTargetsDistinctAndEnforcesPolicyAndSchemas(t *test
 	}
 	invocation := Invocation{UserID: "owner"}
 	call := serveragent.ToolRequest{ID: "effect", Name: first.Descriptor.Name, Arguments: json.RawMessage(`{"count":1}`)}
-	if _, err := registry.Execute(context.Background(), invocation, call, nil); !errors.Is(err, ErrApprovalRequired) || calls != 0 {
-		t.Fatalf("scoped manifest bypassed approval: %v", err)
-	}
-	invocation.ApprovedTools = map[string]bool{call.Name: true}
 	call.Arguments = json.RawMessage(`{"count":0}`)
 	if _, err := registry.Execute(context.Background(), invocation, call, nil); !errors.Is(err, ErrArgumentsInvalid) || calls != 0 {
 		t.Fatalf("schema constraint not enforced: %v", err)
@@ -55,7 +51,7 @@ func TestProviderRegistryKeepsTargetsDistinctAndEnforcesPolicyAndSchemas(t *test
 		t.Fatalf("authorizer bypassed: %v", err)
 	}
 	if _, err := registry.Execute(context.Background(), invocation, call, nil); err != nil || calls != 1 {
-		t.Fatalf("approved call: %v", err)
+		t.Fatalf("autonomous call: %v", err)
 	}
 	reply = json.RawMessage(`{"recorded":false}`)
 	if _, err := registry.Execute(context.Background(), invocation, call, nil); !errors.Is(err, ErrResultInvalid) {

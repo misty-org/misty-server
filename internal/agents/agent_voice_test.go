@@ -5,10 +5,28 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+func TestAgentSpeechFailurePreservesStatusWithoutProviderBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "private provider diagnostic", http.StatusNotFound)
+	}))
+	defer server.Close()
+	t.Setenv("AI_GATEWAY_EMBEDDING_BASE_URL", server.URL)
+	analyzer := &SmartLibraryAnalyzer{APIKey: "test", Client: server.Client()}
+	_, _, _, err := analyzer.GenerateAgentSpeechWithUsage(context.Background(), "Synthetic fixture", "alloy")
+	var providerError *SpeechProviderError
+	if !errors.As(err, &providerError) || providerError.Status != http.StatusNotFound {
+		t.Fatalf("missing routing metadata: %v", err)
+	}
+	if err.Error() != "AI Gateway speech status 404" {
+		t.Fatalf("unexpected public error: %v", err)
+	}
+}
 
 func TestAgentSpeechMetersGeneratedSamplesAndReturnsPlayableWAV(t *testing.T) {
 	pcm := make([]byte, 48000)

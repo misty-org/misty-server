@@ -195,12 +195,17 @@ func (db *Database) CompleteAccountDeletion(
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID); err != nil {
 			return err
 		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM library_lock_credentials WHERE user_id=$1`, userID); err != nil {
+			return err
+		}
 		if err := purgeAccountAgentsTx(ctx, tx, userID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE users
-			SET name='Deleted user',username=$1,email=$2,password_hash=$3,
+			SET name='Deleted user',username=$1,email=$2,
+			    password_hash=CASE WHEN provider='google' THEN '' ELSE $3 END,
+			    provider_subject=NULL,
 			    email_updates_enabled=FALSE,analytics_enabled=FALSE,
 			    error_reporting_enabled=FALSE,avatar_version=0,
 			    lifecycle_state='deleted',anonymized_at=NOW()

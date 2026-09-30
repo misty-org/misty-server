@@ -287,6 +287,11 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Get(prefix+"/recaps", aiService.Recaps())
 	s.Router.Put(prefix+"/recaps/{surfaceID}", aiService.Recap())
 	s.Router.Post(prefix+"/recaps/{surfaceID}/seen", aiService.RecapSeen())
+	s.Router.MethodFunc(http.MethodGet, prefix+"/scheduled-tasks", aiService.ScheduledTasks())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/scheduled-tasks", aiService.ScheduledTasks())
+	s.Router.MethodFunc(http.MethodPut, prefix+"/scheduled-tasks/{taskID}", aiService.ScheduledTask())
+	s.Router.MethodFunc(http.MethodDelete, prefix+"/scheduled-tasks/{taskID}", aiService.ScheduledTask())
+	s.Router.Post(prefix+"/scheduled-tasks/{taskID}/run", aiService.RunScheduledTask())
 	s.Router.Get(prefix+"/activity", aiService.MistyActivity())
 	s.Router.Post(prefix+"/invocations", aiService.CreateInvocation())
 	s.Router.Get(prefix+"/invocations/{invocationID}/events", aiService.InvocationEvents())
@@ -299,6 +304,8 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 }
 
 func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {
+	s.Router.Post(prefix+"/settings/preferences", aiService.AccountPreferences())
+	s.Router.Patch(prefix+"/settings/preferences", aiService.AccountPreferences())
 	s.Router.Get(prefix+"/settings/profiles", aiService.SettingsProfiles())
 	s.Router.Post(prefix+"/settings/profiles", aiService.SettingsProfiles())
 	s.Router.Get(prefix+"/settings/profiles/{profileID}", aiService.SettingsProfiles())

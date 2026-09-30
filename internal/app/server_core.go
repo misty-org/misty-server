@@ -39,6 +39,9 @@ type Server struct {
 }
 
 func CreateServer() (*Server, error) {
+	if _, err := envconfig.AgentModel(); err != nil {
+		return nil, fmt.Errorf("validate agent model configuration: %w", err)
+	}
 	if err := TestingValidateProductionEnvironment(); err != nil {
 		return nil, fmt.Errorf("validate production environment: %w", err)
 	}

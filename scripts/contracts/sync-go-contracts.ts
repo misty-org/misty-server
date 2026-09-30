@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { readFile, writeFile } from "node:fs/promises";
-import { mistyInboxCapabilities, mistySocialCapabilities } from "../../../src/shared/contracts/communications-capabilities.ts";
-import { mistyTaskCapabilities } from "../../../src/shared/contracts/task-capabilities.ts";
-import { MistyBrowserInteractionSchema } from "../../../src/shared/contracts/browser.ts";
+import { mistyInboxCapabilities, mistySocialCapabilities } from "../../../src/shared/schemas/communications-capabilities.ts";
+import { mistyTaskCapabilities } from "../../../src/shared/schemas/task-capabilities.ts";
+import { MistyBrowserInteractionSchema } from "../../../src/shared/schemas/browser.ts";
 
 // Reserve Misty-owned semantic definitions before any provider can
 // claim them. This is the same internal contract data, not a second handwritten tool catalog.

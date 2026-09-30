@@ -18,7 +18,7 @@ func TestBrowserSyncControlRequestReachesSocketAndRequiresTargetSignature(t *tes
 	root, rootKey, _ := ed25519.GenerateKey(rand.Reader)
 	grant, key := socketTestGrant(uuid.NewString(), rootKey)
 	wrapper := SyncKeyEnvelope{Version: 1, KDF: "argon2id-m65536-t3-p1", Salt: base64.StdEncoding.EncodeToString(make([]byte, 16)), Nonce: base64.StdEncoding.EncodeToString(make([]byte, 12)), Ciphertext: base64.StdEncoding.EncodeToString(make([]byte, 32))}
-	if err := NewStore(database.Conn).CreateBrowserSyncWorkspace(ctx, "owner", root, wrapper, grant); err != nil {
+	if err := NewStore(database.Conn).CreateBrowserSyncVault(ctx, "owner", root, wrapper, grant); err != nil {
 		t.Fatal(err)
 	}
 	version := 1
@@ -43,9 +43,9 @@ func TestBrowserSyncControlRequestReachesSocketAndRequiresTargetSignature(t *tes
 	if len(devices) != 1 || devices[0].ActivationRequest == nil || *devices[0].ActivationRequest != request {
 		t.Fatalf("missing control request: %+v", devices)
 	}
-	workspace, err := NewStore(database.Conn).BrowserSyncWorkspace(ctx, "owner")
-	if err != nil || workspace.HeadSequence != 0 {
-		t.Fatal("request changed workspace before target signed it")
+	vault, err := NewStore(database.Conn).BrowserSyncVault(ctx, "owner")
+	if err != nil || vault.HeadSequence != 0 {
+		t.Fatal("request changed vault before target signed it")
 	}
 	activation := socketTestMutation(grant, key, 1)
 	activation.OperationID = request
@@ -58,7 +58,7 @@ func TestBrowserSyncControlRequestReachesSocketAndRequiresTargetSignature(t *tes
 	if err = json.Unmarshal(ack["receipt"], &receipt); err != nil || receipt.Sequence != 1 || receipt.Discarded {
 		t.Fatalf("activation rejected: %+v %v", receipt, err)
 	}
-	presence, err := NewStore(database.Conn).BrowserSyncPresence(ctx, "owner", grant.WorkspaceID)
+	presence, err := NewStore(database.Conn).BrowserSyncPresence(ctx, "owner", grant.VaultID)
 	if err != nil || len(presence) != 1 || !presence[0].Active {
 		t.Fatalf("active device not confirmed: %+v %v", presence, err)
 	}
@@ -80,7 +80,7 @@ func TestBrowserSyncControlRequestReachesSocketAndRequiresTargetSignature(t *tes
 	if len(devices) != 1 || devices[0].FullSync {
 		t.Fatal("independent policy did not reach connected device")
 	}
-	presence, err = NewStore(database.Conn).BrowserSyncPresence(ctx, "owner", grant.WorkspaceID)
+	presence, err = NewStore(database.Conn).BrowserSyncPresence(ctx, "owner", grant.VaultID)
 	if err != nil || !presence[0].Online {
 		t.Fatal("turning Full sync off disconnected presence")
 	}

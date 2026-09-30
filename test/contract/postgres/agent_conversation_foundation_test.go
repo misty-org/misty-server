@@ -60,9 +60,13 @@ func TestMistyConversationFocusCarriesTaskTargetAcrossTurns(t *testing.T) {
 	if err := database.ClearAIConversationFocus(ctx, owner.ID, conversationID, space.ID, "task"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := database.AIConversationFocusByKind(ctx, owner.ID, conversationID, space.ID, "task"); !errors.Is(err, ErrSpaceNotFound) {
+		t.Fatalf("cleared task focus still exists: %v", err)
+	}
+	// Focus supplies context; permissions determine the discoverable tool catalog.
 	names, err = api.TestingResolveAIInvocationSpaceToolNamesWithConversation(ctx, database, owner.ID, space.ID, conversationID, "invocation_no_focus", followup)
-	if err != nil || slices.Contains(names, "tasks.update") {
-		t.Fatalf("ungrounded follow-up tools = %v, err = %v", names, err)
+	if err != nil || !slices.Contains(names, "tasks.update") {
+		t.Fatalf("available tools without focus = %v, err = %v", names, err)
 	}
 	if err := database.UpsertAIConversationPendingAction(ctx, AIConversationPendingAction{
 		UserID: owner.ID, ConversationID: conversationID, SpaceID: space.ID, Intent: "tasks.update",
@@ -113,7 +117,7 @@ func TestMistyConversationFocusCarriesTaskTargetAcrossTurns(t *testing.T) {
 		t.Fatal(err)
 	}
 	names, err = api.TestingResolveAIInvocationSpaceToolNamesWithConversation(ctx, database, owner.ID, space.ID, conversationID, "invocation_cross_tool_answer", "The note")
-	if err != nil || !slices.Contains(names, "notes.update") || slices.Contains(names, "tasks.update") {
+	if err != nil || !slices.Contains(names, "notes.update") || !slices.Contains(names, "tasks.update") {
 		t.Fatalf("cross-tool clarification answer tools = %v, err = %v", names, err)
 	}
 }

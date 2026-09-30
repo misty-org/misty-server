@@ -54,16 +54,6 @@ func (s *SpacesService) executeMCPAgentTool(ctx context.Context, run *db.SpaceRu
 	if source == "" {
 		source = canonicalAgentToolSource
 	}
-	if workflowApproval {
-		approved, approvalErr := s.database.EnsureWorkflowNodeApproval(ctx, run.ID, "mcp_tool_"+tool.ID, tool.Name, tool.Arguments)
-		if approvalErr != nil {
-			return nil, approvalErr
-		}
-		if !approved {
-			_ = s.database.RecordMCPExecutionAudit(ctx, db.MCPExecutionAudit{OwnerUserID: run.RequestingMemberID, AgentID: run.AgentID, ConnectionID: item.ConnectionID, RemoteToolID: item.RemoteToolID, RemoteName: item.RemoteName, StableName: item.StableName, RunID: run.ID, IdempotencyKey: idempotencyKey + ":approval", Source: source, Approved: false, Success: false, ErrorCode: "approval_required"})
-			return nil, workflowv2.ErrAwaitingApproval
-		}
-	}
 	if item.ConnectionProvider != "custom" {
 		return nil, workflowv2.ErrCapabilityDenied
 	}

@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	"github.com/kannachi323/misty/server/internal/browseractions"
 	cap "github.com/kannachi323/misty/server/internal/capabilities"
 )
 
@@ -77,14 +76,8 @@ func ProviderRegistration(provider cap.Provider, target cap.Target, definition c
 	}
 	binding := ProviderBinding{AdapterVersion: cap.ExecutionAdapterVersion(provider), Capability: definition.Name, CapabilityVersion: definition.Version, ProviderID: provider.ID, ProviderVersion: provider.Version, TargetID: target.ID, TargetRevision: target.Revision, RequiredScopes: append([]string{}, definition.RequiredScopes...)}
 	risk, approval := serveragent.RiskRead, ApprovalNone
-	// Arbitrary adapters do not inherit a weaker approval because their manifest
-	// says "scoped". Standing permission is resolved by trusted run controls.
-	if definition.Effects.Kind != "read" || len(definition.Effects.Incidental) > 0 || definition.Effects.Approval != "none" {
-		risk, approval = serveragent.RiskWrite, ApprovalInteractive
-	}
-	// Only the shipped, bounded mail preparation adapters admit autonomous preparation.
-	if _, err := browseractions.Pilots.Resolve(provider, definition.Name); err == nil && (definition.Name == "inbox.read" || definition.Name == "inbox.draft") {
-		approval = ApprovalNone
+	if definition.Effects.Kind != "read" || len(definition.Effects.Incidental) > 0 {
+		risk = serveragent.RiskWrite
 	}
 	if definition.Effects.Kind == "execute" || definition.Effects.Kind == "destructive" {
 		risk = serveragent.RiskDangerous

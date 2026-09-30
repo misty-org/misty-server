@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math/rand/v2"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,9 +34,9 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 	_ = s.store.NotifyBrowserSyncPresence(ctx, identity)
 	outgoing := make(chan any, 32)
 	resume := make(chan int64, 1)
-	var watches chan treeWatch
-	if version == 2 {
-		watches = make(chan treeWatch, 8)
+	var watches chan workspaceWatch
+	if version == syncWorkspaceProtocol {
+		watches = make(chan workspaceWatch, 8)
 	}
 	done := make(chan struct{})
 	send := func(frame any) bool {
@@ -65,14 +66,14 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 		if err := s.store.BrowserSyncHeartbeat(bounded, identity, connectionID, applied, ready, activeEpoch); err != nil {
 			return err
 		}
-		if version == 2 {
+		if version == syncWorkspaceProtocol {
 			if err := s.store.TouchBrowserSyncDriver(bounded, identity); err != nil {
 				return err
 			}
 		}
 		return conn.SetReadDeadline(time.Now().Add(45 * time.Second))
 	}
-	conn.SetReadLimit(SyncTreeMaxOpBytes*4/3 + 64<<10)
+	conn.SetReadLimit(SyncWorkspaceMaxOpBytes*4/3 + 64<<10)
 	_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
 	conn.SetPongHandler(func(string) error { return heartbeat() })
 	windowStart := time.Now()
@@ -95,9 +96,9 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 			send(map[string]any{"type": "error", "code": "invalid_sync_frame"})
 			continue
 		}
-		if version == 2 && isTreeFrame(frame.Type) {
+		if version == syncWorkspaceProtocol && isWorkspaceFrame(frame.Type) {
 			bounded, stop := context.WithTimeout(ctx, 10*time.Second)
-			ok := s.handleTreeFrame(bounded, identity, frame, send, watches)
+			ok := s.handleWorkspaceFrame(bounded, identity, frame, send, watches)
 			stop()
 			if !ok {
 				return
@@ -106,7 +107,7 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 		}
 		switch frame.Type {
 		case "publish":
-			if frame.Mutation == nil || frame.Mutation.WorkspaceID != identity.WorkspaceID || frame.Mutation.DeviceID != identity.DeviceID {
+			if frame.Mutation == nil || frame.Mutation.VaultID != identity.VaultID || frame.Mutation.DeviceID != identity.DeviceID {
 				send(map[string]any{"type": "error", "code": "sync_device_forbidden"})
 				continue
 			}
@@ -136,7 +137,7 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 			}
 			if frame.Activation != nil {
 				m := frame.Activation
-				if m.WorkspaceID != identity.WorkspaceID || m.DeviceID != identity.DeviceID {
+				if m.VaultID != identity.VaultID || m.DeviceID != identity.DeviceID {
 					send(map[string]any{"type": "error", "code": "sync_device_forbidden"})
 					continue
 				}
@@ -172,31 +173,31 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 	}
 }
 
-func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocket.Conn, identity SyncConnectionIdentity, connectionID string, cursor int64, events <-chan db.AccountEvent, outgoing <-chan any, resume <-chan int64, watches <-chan treeWatch) {
+func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocket.Conn, identity SyncConnectionIdentity, connectionID string, cursor int64, events <-chan db.AccountEvent, outgoing <-chan any, resume <-chan int64, watches <-chan workspaceWatch) {
 	write := func(value any) error {
 		if err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
 			return err
 		}
 		return conn.WriteJSON(value)
 	}
-	workspace, err := s.store.BrowserSyncWorkspace(ctx, identity.UserID)
-	if err != nil || workspace == nil {
+	vault, err := s.store.BrowserSyncVault(ctx, identity.UserID)
+	if err != nil || vault == nil {
 		return
 	}
-	welcome := map[string]any{"type": "welcome", "workspace": workspace, "connection_id": connectionID}
+	welcome := map[string]any{"type": "welcome", "vault": vault, "connection_id": connectionID}
 	if watches != nil {
-		welcome["protocol_version"] = 2
+		welcome["protocol_version"] = syncWorkspaceProtocol
 	}
 	if write(welcome) != nil {
 		return
 	}
-	trees := &treePusher{service: s, identity: identity, write: write, watched: map[string]int64{}}
-	var lastTrees []byte
+	workspaces := &workspacePusher{service: s, identity: identity, write: write, watched: map[string]int64{}}
+	var lastWorkspaces []byte
 	var lastDevices, lastPresence []byte
 	presence := func() error {
 		bounded, stop := context.WithTimeout(ctx, 5*time.Second)
 		defer stop()
-		devices, err := s.store.BrowserSyncDevices(bounded, identity.UserID, identity.WorkspaceID)
+		devices, err := s.store.BrowserSyncDevices(bounded, identity.UserID, identity.VaultID)
 		if err != nil {
 			return err
 		}
@@ -216,7 +217,7 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 			}
 			lastDevices = raw
 		}
-		online, err := s.store.BrowserSyncPresence(bounded, identity.UserID, identity.WorkspaceID)
+		online, err := s.store.BrowserSyncPresence(bounded, identity.UserID, identity.VaultID)
 		if err != nil {
 			return err
 		}
@@ -230,16 +231,16 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 		if watches == nil {
 			return nil
 		}
-		roster, err := s.store.BrowserSyncTrees(bounded, identity.UserID, identity.WorkspaceID)
+		roster, err := s.store.BrowserSyncWorkspaces(bounded, identity.UserID, identity.VaultID)
 		if err != nil {
 			return err
 		}
 		raw, _ = json.Marshal(roster)
-		if !bytes.Equal(raw, lastTrees) {
-			if err = write(map[string]any{"type": "trees", "trees": roster}); err != nil {
+		if !bytes.Equal(raw, lastWorkspaces) {
+			if err = write(map[string]any{"type": "workspaces", "workspaces": roster}); err != nil {
 				return err
 			}
-			lastTrees = raw
+			lastWorkspaces = raw
 		}
 		return nil
 	}
@@ -253,7 +254,7 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 		}
 		for {
 			bounded, stop := context.WithTimeout(ctx, 5*time.Second)
-			page, err := s.store.ReplayBrowserSync(bounded, identity.UserID, identity.WorkspaceID, identity.DeviceID, cursor, 200)
+			page, err := s.store.ReplayBrowserSync(bounded, identity.UserID, identity.VaultID, identity.DeviceID, cursor, 200)
 			stop()
 			if err != nil {
 				return err
@@ -284,11 +285,13 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 	}
 	ping := time.NewTicker(15 * time.Second)
 	defer ping.Stop()
-	// Hints can be dropped. Bounded reconciliation makes durability independent
-	// of LISTEN delivery or another server instance's in-memory subscriber state.
-	reconcile := time.NewTicker(5 * time.Second)
+	// Hints can be dropped. A slow safety check makes durability independent
+	// of LISTEN delivery without polling the database from every connection:
+	// changes arrive by push. Both timers are spread so a restart or a deploy
+	// never lines every connection up on the same second.
+	reconcile := time.NewTicker(jittered(60*time.Second, 0.25))
 	defer reconcile.Stop()
-	expiry := time.NewTimer(10 * time.Minute)
+	expiry := time.NewTimer(jittered(10*time.Minute, 0.5))
 	defer expiry.Stop()
 	for {
 		select {
@@ -308,12 +311,12 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 				return
 			}
 		case w := <-watches:
-			if trees.watch(ctx, w) != nil {
+			if workspaces.watch(ctx, w) != nil {
 				return
 			}
 		case event := <-events:
 			if event.Topic == "reset" || event.Topic == "browser-sync" {
-				if replay() != nil || trees.refresh(ctx) != nil {
+				if replay() != nil || workspaces.refresh(ctx) != nil {
 					return
 				}
 			}
@@ -322,6 +325,9 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 					return
 				}
 			}
+			// Every other topic, including "browser-records" (a cold collection
+			// moved; the client pulls it when it wants), is a content-free hint
+			// that older clients safely ignore.
 			if event.Topic != "browser-sync" && event.Topic != "browser-presence" {
 				event.UserID = ""
 				if write(map[string]any{"type": "account_event", "event": event}) != nil {
@@ -329,7 +335,7 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 				}
 			}
 		case <-reconcile.C:
-			if replay() != nil || trees.refresh(ctx) != nil {
+			if replay() != nil || workspaces.refresh(ctx) != nil {
 				return
 			}
 			if blocked && presence() != nil {
@@ -341,4 +347,9 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 			}
 		}
 	}
+}
+
+// jittered spreads d uniformly across ±spread of itself.
+func jittered(d time.Duration, spread float64) time.Duration {
+	return time.Duration(float64(d) * (1 - spread + 2*spread*rand.Float64()))
 }

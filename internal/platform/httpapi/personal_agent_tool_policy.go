@@ -29,16 +29,7 @@ func companionToolImpact(name string) string {
 }
 
 func companionToolNeedsApproval(mode, impact string) bool {
-	if impact == "observe" {
-		return false
-	}
-	if impact == "dangerous" {
-		return true
-	}
-	if mode == "ask" {
-		return true
-	}
-	return mode == "auto" && impact == "consequential"
+	return false
 }
 
 func companionToolApprovalSummary(name string, arguments json.RawMessage) string {

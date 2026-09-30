@@ -13,9 +13,9 @@ func TestBrowserSyncRustConnectionFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	var f struct {
-		WorkspaceID string `json:"workspace_id"`
-		Challenge   string `json:"challenge"`
-		Grant       struct {
+		VaultID   string `json:"vault_id"`
+		Challenge string `json:"challenge"`
+		Grant     struct {
 			DeviceID  string `json:"device_id"`
 			PublicKey []byte `json:"public_key"`
 		} `json:"grant"`
@@ -25,7 +25,7 @@ func TestBrowserSyncRustConnectionFixture(t *testing.T) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		t.Fatal(err)
 	}
-	proof := syncConnectionProof(f.WorkspaceID, f.Grant.DeviceID, f.Challenge)
+	proof := syncConnectionProof(f.VaultID, f.Grant.DeviceID, f.Challenge)
 	if string(proof) != f.ConnectionSigningBytes || !ed25519.Verify(f.Grant.PublicKey, proof, f.ConnectionSignature) {
 		t.Fatal("Rust connection proof does not match the Go protocol")
 	}

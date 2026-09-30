@@ -11,7 +11,9 @@ import (
 
 func TestAccountEventIsolationAndOverflow(t *testing.T) {
 	a, b := make(chan AccountEvent, 1), make(chan AccountEvent, 1)
-	hub := accountEventHub{subs: map[chan AccountEvent]string{a: "a", b: "b"}}
+	hub := accountEventHub{}
+	hub.subscribe(a, "a")
+	hub.subscribe(b, "b")
 	hub.publish(AccountEvent{UserID: "a", Topic: "runs", ID: "private"})
 	if len(b) != 0 {
 		t.Fatal("cross-account event")

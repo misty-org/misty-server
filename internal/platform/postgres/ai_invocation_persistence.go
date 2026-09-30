@@ -258,6 +258,8 @@ type AIConversationTurnRecord struct {
 	ResultDrawingID string
 	CreatedAt       time.Time
 	ReplyAt         time.Time
+	// Trigger is what started the turn, such as "scheduled_task"; empty for typed turns.
+	Trigger string
 }
 
 func (db *Database) AIConversationTurns(ctx context.Context, userID, conversationID string) ([]AIConversationTurnRecord, error) {
@@ -277,7 +279,8 @@ func (db *Database) AIConversationTurns(ctx context.Context, userID, conversatio
 				COALESCE(drawing.result->>'space_id',''),
 				COALESCE(drawing.result->>'id',''),
 				invocation.created_at,
-				COALESCE(reply.created_at,failure.created_at,status.created_at,invocation.updated_at)
+				COALESCE(reply.created_at,failure.created_at,status.created_at,invocation.updated_at),
+				COALESCE(invocation.request_payload->>'trigger','')
 			FROM ai_invocations AS invocation
 			LEFT JOIN space_runs AS run ON run.id=invocation.agent_run_id
 			LEFT JOIN LATERAL (
@@ -317,7 +320,7 @@ func (db *Database) AIConversationTurns(ctx context.Context, userID, conversatio
 				&item.InvocationID, &item.Prompt, &item.State, &item.Reply,
 				&item.Status, &item.Failure, &item.AgentRunID, &item.AgentState,
 				&item.AgentProgress, &item.AgentError, &item.ResultSpaceID,
-				&item.ResultDrawingID, &item.CreatedAt, &item.ReplyAt,
+				&item.ResultDrawingID, &item.CreatedAt, &item.ReplyAt, &item.Trigger,
 			); err != nil {
 				return err
 			}

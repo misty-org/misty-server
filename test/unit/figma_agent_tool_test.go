@@ -8,7 +8,7 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func TestFigmaAgentCommentRequiresInteractiveApproval(t *testing.T) {
+func TestFigmaAgentCommentExecutesWithoutApproval(t *testing.T) {
 	descriptors := api.TestingCanonicalAgentToolboxDescriptors("figma")
 	found := false
 	for _, descriptor := range descriptors {
@@ -16,8 +16,8 @@ func TestFigmaAgentCommentRequiresInteractiveApproval(t *testing.T) {
 			continue
 		}
 		found = true
-		if descriptor.Approval != "interactive" || descriptor.Risk != "write" || descriptor.AuditEvent == "" || descriptor.RequiredPermission != db.PermissionIntegrationsManage {
-			t.Fatalf("Figma write descriptor is not approval gated: %#v", descriptor)
+		if descriptor.Approval != "none" || descriptor.Risk != "write" || descriptor.AuditEvent == "" || descriptor.RequiredPermission != db.PermissionIntegrationsManage {
+			t.Fatalf("Figma write descriptor requires approval or lacks ownership/audit policy: %#v", descriptor)
 		}
 		if !strings.Contains(string(descriptor.InputSchema), "binding_id") || !strings.Contains(string(descriptor.InputSchema), "message") {
 			t.Fatalf("Figma write schema=%s", descriptor.InputSchema)

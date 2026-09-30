@@ -52,8 +52,7 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 	}
 	if s.aiInvocations != nil {
 		if strings.HasPrefix(body.NodeID, "tool:") {
-			toolName := strings.TrimPrefix(body.Phase, "using_")
-			toolName = strings.ReplaceAll(toolName, "_", ".")
+			toolName := runtimeCheckpointToolName(body.Phase, body.Output)
 			eventType := "tool.completed"
 			if body.State == "running" {
 				eventType = "tool.started"
@@ -81,6 +80,18 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"accepted": true})
+}
+
+// Terminal checkpoints change phase to working/tool_failed; output retains the
+// canonical tool identity. Do not expose raw tool results in the event stream.
+func runtimeCheckpointToolName(phase string, output json.RawMessage) string {
+	var metadata struct {
+		Tool string `json:"tool"`
+	}
+	if json.Unmarshal(output, &metadata) == nil && strings.TrimSpace(metadata.Tool) != "" {
+		return metadata.Tool
+	}
+	return strings.ReplaceAll(strings.TrimPrefix(phase, "using_"), "_", ".")
 }
 
 func (s *SpacesService) agentRuntimeCompleteAIInvocation(w http.ResponseWriter, r *http.Request) {

@@ -16,7 +16,6 @@ type PlanEntitlements struct {
 	PersonalStorageLimitBytes       int64 `json:"personal_storage_limit_bytes"`
 	SpaceStorageLimitBytes          int64 `json:"space_storage_limit_bytes"`
 	PersonalWeeklyHostedAIAllowance int64 `json:"personal_ai_limit"`
-	SpaceWeeklyHostedAIAllowance    int64 `json:"space_ai_limit"`
 
 	// Compatibility fields retained for clients that have not yet adopted the
 	// explicit personal-vs-Space entitlement names. SpaceLimit now means owned
@@ -41,16 +40,17 @@ func NormalizePlan(tier Tier) Tier {
 }
 
 // Resource ceilings are customer-visible adapter results. The public server
-// supplies no commercial defaults. Disabled self-hosting has no plan restriction.
-func unrestrictedEntitlements() PlanEntitlements {
-	return PlanEntitlements{Plan: TierBasic, MaxOwnedSpaces: 2147483647, SpaceLimit: 2147483647, PersonalStorageLimitBytes: 9007199254740991, SpaceStorageLimitBytes: 9007199254740991, StorageLimitBytes: 9007199254740991, UnlimitedSpaces: true, UnlimitedCollaborators: true, UnlimitedAgentDefinitions: true, BillingAvailable: true}
+// supplies no paid-plan defaults. Independent servers receive a finite storage
+// ceiling; hosted deployments always use their billing service.
+func selfHostedEntitlements() PlanEntitlements {
+	return PlanEntitlements{Plan: TierBasic, MaxOwnedSpaces: 2147483647, SpaceLimit: 2147483647, PersonalStorageLimitBytes: 2_000_000_000, SpaceStorageLimitBytes: 2_000_000_000, StorageLimitBytes: 2_000_000_000, UnlimitedSpaces: true, UnlimitedCollaborators: true, UnlimitedAgentDefinitions: true, BillingAvailable: true}
 }
 func entitlementsForUserTx(ctx context.Context, _ *sql.Tx, userID string, _ time.Time) (PlanEntitlements, error) {
 	adapter, err := envconfig.BillingAdapter()
 	if err != nil {
 		return PlanEntitlements{}, err
 	}
-	limits := unrestrictedEntitlements()
+	limits := selfHostedEntitlements()
 	if !adapter.Enabled() {
 		return limits, nil
 	}
@@ -58,18 +58,16 @@ func entitlementsForUserTx(ctx context.Context, _ *sql.Tx, userID string, _ time
 	defer cancel()
 	decision, err := adapter.Do(readCtx, "summary", billingadapter.Request{Version: 1, AccountID: userID, Operation: "customer.summary", OperationID: "summary", Key: "summary"})
 	if err != nil {
-		limits.BillingAvailable = false
-		return limits, nil
+		return PlanEntitlements{}, billingadapter.ErrUnavailable
 	}
 	var response struct {
 		Entitlements *PlanEntitlements `json:"entitlements"`
 	}
 	if err = json.Unmarshal(decision.Summary, &response); err != nil || response.Entitlements == nil {
-		limits.BillingAvailable = false
-		return limits, nil
+		return PlanEntitlements{}, billingadapter.ErrUnavailable
 	}
 	limits = *response.Entitlements
-	if limits.MaxOwnedSpaces < 0 || limits.PersonalStorageLimitBytes < 0 || limits.SpaceStorageLimitBytes < 0 {
+	if limits.MaxOwnedSpaces < 0 || limits.PersonalStorageLimitBytes < 0 || limits.SpaceStorageLimitBytes < 0 || limits.PersonalStorageLimitBytes >= 9007199254740991 || limits.SpaceStorageLimitBytes >= 9007199254740991 {
 		return PlanEntitlements{}, billingadapter.ErrUnavailable
 	}
 	limits.BillingAvailable = true

@@ -370,14 +370,18 @@ func (s *SpaceLibraryService) Reauthenticate() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		valid, err := s.database.VerifyUserPassword(r.Context(), userID, body.Password)
+		valid, err := s.database.VerifyLibraryPassword(r.Context(), userID, body.Password)
+		if errors.Is(err, db.ErrLibraryPasswordNotSet) {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "library_password_not_set", "message": err.Error()})
+			return
+		}
 		if err != nil {
 			writeLibraryError(w, err)
 			return
 		}
 		if !valid {
 			_ = s.database.RecordLibraryReauthenticationDenied(r.Context(), userID, chi.URLParam(r, "spaceID"), body.Scope)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "reauthentication_failed"})
+			writeJSON(w, http.StatusForbidden, map[string]string{"code": "library_password_incorrect", "message": "Incorrect library password."})
 			return
 		}
 		token, err := security.GenerateSecureToken()

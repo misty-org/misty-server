@@ -18,6 +18,8 @@ type User struct {
 	Name                string
 	Username            string
 	Email               string
+	Provider            string
+	ProviderSubject     string
 	AvatarVersion       int64
 	EmailUpdatesEnabled bool
 	CreatedAt           time.Time
@@ -42,21 +44,25 @@ func (db Store) CreateUserWithUsername(name, username, email, password string) (
 }
 
 func (db Store) createUser(name, username, email, password string) (*User, error) {
-	normalizedEmail := NormalizeEmail(email)
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
+	return db.createIdentity(name, username, email, string(hash), "misty", "")
+}
+
+func (db Store) createIdentity(name, username, email, hash, provider, subject string) (*User, error) {
+	normalizedEmail := NormalizeEmail(email)
 
 	id := uuid.New().String()
 	now := time.Now()
 	licenseID := uuid.New().String()
 
-	err = db.Transaction(context.Background(), RegistrationScope(id, licenseID, normalizedEmail), func(tx *sql.Tx) error {
+	err := db.Transaction(context.Background(), RegistrationScope(id, licenseID, normalizedEmail), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(
 			context.Background(),
-			`INSERT INTO users (id, license_id, name, username, email, password_hash) VALUES ($1, $2, $3, $4, $5, $6)`,
-			id, licenseID, name, username, normalizedEmail, hash,
+			`INSERT INTO users (id, license_id, name, username, email, password_hash, provider, provider_subject) VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8,''))`,
+			id, licenseID, name, username, normalizedEmail, hash, provider, subject,
 		)
 		if err != nil {
 			return err
@@ -70,11 +76,14 @@ func (db Store) createUser(name, username, email, password string) (*User, error
 		if errors.As(err, &pqError) && pqError.Constraint == "users_username_unique_idx" {
 			return nil, ErrUsernameTaken
 		}
+		if errors.As(err, &pqError) && (pqError.Constraint == "users_email_key" || pqError.Constraint == "users_email_normalized_unique_idx") {
+			return nil, ErrEmailTaken
+		}
 		log.Println("Failed to create user:", err)
 		return nil, err
 	}
 
-	return &User{ID: id, LicenseID: licenseID, Name: name, Username: username, Email: normalizedEmail, CreatedAt: now}, nil
+	return &User{ID: id, LicenseID: licenseID, Name: name, Username: username, Email: normalizedEmail, Provider: provider, ProviderSubject: subject, CreatedAt: now}, nil
 }
 
 func (db Store) GetUserByEmail(email string) (*User, string, error) {
@@ -85,10 +94,10 @@ func (db Store) GetUserByEmail(email string) (*User, string, error) {
 	err := db.Transaction(context.Background(), AnonymousScope(normalizedEmail), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(
 			context.Background(),
-			`SELECT id, license_id, name, username, email, password_hash, created_at
+			`SELECT id, license_id, name, username, email, password_hash, created_at, provider, COALESCE(provider_subject,'')
 			 FROM users WHERE LOWER(email)=$1 AND lifecycle_state='active'`,
 			normalizedEmail,
-		).Scan(&u.ID, &u.LicenseID, &u.Name, &u.Username, &u.Email, &hash, &u.CreatedAt)
+		).Scan(&u.ID, &u.LicenseID, &u.Name, &u.Username, &u.Email, &hash, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -160,10 +169,10 @@ func (db Store) GetUserByID(id string) (*User, error) {
 		return tx.QueryRowContext(
 			context.Background(),
 			`SELECT id, license_id, name, username, email, avatar_version,
-			        email_updates_enabled, created_at
+			        email_updates_enabled, created_at, provider, COALESCE(provider_subject,'')
 			 FROM users WHERE id=$1 AND lifecycle_state='active'`,
 			id,
-		).Scan(&u.ID, &u.LicenseID, &u.Name, &u.Username, &u.Email, &u.AvatarVersion, &u.EmailUpdatesEnabled, &u.CreatedAt)
+		).Scan(&u.ID, &u.LicenseID, &u.Name, &u.Username, &u.Email, &u.AvatarVersion, &u.EmailUpdatesEnabled, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

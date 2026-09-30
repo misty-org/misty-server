@@ -17,7 +17,7 @@ func TestingValidateProductionEnvironment() error {
 	if !strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production") {
 		return nil
 	}
-	selfHosted := !strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_DEPLOYMENT_MODE")), "hosted")
+	selfHosted := envconfig.DeploymentMode() == "self_hosted"
 
 	var required []string
 	if selfHosted {

@@ -55,10 +55,10 @@ func TestBrowserSyncNativeWorkerAgainstGo(t *testing.T) {
 	mux.HandleFunc("POST /auth/refresh", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	})
-	mux.Handle("GET /sync/workspace", one.Workspace())
-	mux.HandleFunc("POST /sync/workspace", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /sync/vault", one.Vault())
+	mux.HandleFunc("POST /sync/vault", func(w http.ResponseWriter, r *http.Request) {
 		response := httptest.NewRecorder()
-		one.Workspace()(response, r)
+		one.Vault()(response, r)
 		if response.Code == http.StatusCreated && droppedBootstrap.CompareAndSwap(false, true) {
 			// The transaction committed, but the native device never receives its
 			// acknowledgment. Its next connection must recover the same identity.
@@ -128,8 +128,8 @@ func TestBrowserSyncNativeWorkerAgainstGo(t *testing.T) {
 	if !strings.Contains(string(output), "native_protocol_fixture_ok") {
 		t.Fatal("native fixture did not finish")
 	}
-	workspace, err := NewStore(database.Conn).BrowserSyncWorkspace(context.Background(), "owner")
-	if err != nil || workspace == nil || workspace.HeadSequence != 9 {
+	vault, err := NewStore(database.Conn).BrowserSyncVault(context.Background(), "owner")
+	if err != nil || vault == nil || vault.HeadSequence != 9 {
 		t.Fatalf("unexpected durable head: %v", err)
 	}
 	var count int
@@ -143,7 +143,7 @@ func TestBrowserSyncNativeWorkerAgainstGo(t *testing.T) {
 	if !droppedBootstrap.Load() {
 		t.Fatal("fixture did not interrupt committed bootstrap")
 	}
-	devices, err := NewStore(database.Conn).BrowserSyncDevices(context.Background(), "owner", workspace.WorkspaceID)
+	devices, err := NewStore(database.Conn).BrowserSyncDevices(context.Background(), "owner", vault.VaultID)
 	if err != nil || len(devices) != 2 {
 		t.Fatalf("enrollment allocated duplicate identities: %v", err)
 	}
@@ -152,12 +152,12 @@ func TestBrowserSyncNativeWorkerAgainstGo(t *testing.T) {
 	}
 }
 
-// TestBrowserSyncNativeTreesAgainstGo runs two real native workers through
-// publish, claim, displacement and take-back on the tree protocol.
-func TestBrowserSyncNativeTreesAgainstGo(t *testing.T) {
-	binary := os.Getenv("MISTY_BROWSER_SYNC_TREE_FIXTURE")
+// TestBrowserSyncNativeWorkspacesAgainstGo runs two real native workers through
+// publish, claim, displacement and take-back on the workspace protocol.
+func TestBrowserSyncNativeWorkspacesAgainstGo(t *testing.T) {
+	binary := os.Getenv("MISTY_BROWSER_SYNC_WORKSPACE_FIXTURE")
 	if binary == "" {
-		t.Skip("requires the built Rust live_tree_fixture example")
+		t.Skip("requires the built Rust live_workspace_fixture example")
 	}
 	database, _ := browserSocketTestDatabase(t)
 	t.Setenv("MISTY_AUTH_SIGNING_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{23}, 32)))
@@ -172,8 +172,8 @@ func TestBrowserSyncNativeTreesAgainstGo(t *testing.T) {
 	service := NewBrowserSyncService(database)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /auth/refresh", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusUnauthorized) })
-	mux.Handle("GET /sync/workspace", service.Workspace())
-	mux.Handle("POST /sync/workspace", service.Workspace())
+	mux.Handle("GET /sync/vault", service.Vault())
+	mux.Handle("POST /sync/vault", service.Vault())
 	mux.Handle("GET /sync/devices", service.Devices())
 	mux.Handle("POST /sync/devices", service.Devices())
 	mux.Handle("POST /sync/control", service.ControlDevice())
@@ -186,7 +186,7 @@ func TestBrowserSyncNativeTreesAgainstGo(t *testing.T) {
 	command := exec.CommandContext(ctx, binary)
 	command.Env = append(os.Environ(), "MISTY_SYNC_FIXTURE_BASE="+server.URL, "MISTY_SYNC_FIXTURE_COOKIE="+accounts.SessionCookieName+"="+cookie)
 	output, err := command.CombinedOutput()
-	if err != nil || !strings.Contains(string(output), "native_tree_fixture_ok") {
-		t.Fatalf("native tree fixture: %v\n%s", err, output)
+	if err != nil || !strings.Contains(string(output), "native_workspace_fixture_ok") {
+		t.Fatalf("native workspace fixture: %v\n%s", err, output)
 	}
 }

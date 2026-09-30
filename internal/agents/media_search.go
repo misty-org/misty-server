@@ -97,6 +97,13 @@ func (a *SmartLibraryAnalyzer) GenerateAgentSpeech(ctx context.Context, text, vo
 	return audio, mime, err
 }
 
+// SpeechProviderError contains only safe routing metadata, never provider response bodies.
+type SpeechProviderError struct{ Status int }
+
+func (e *SpeechProviderError) Error() string {
+	return fmt.Sprintf("AI Gateway speech status %d", e.Status)
+}
+
 func (a *SmartLibraryAnalyzer) GenerateAgentSpeechWithUsage(ctx context.Context, text, voice string) ([]byte, string, AgentVoiceUsage, error) {
 	text = strings.TrimSpace(text)
 	voice = strings.TrimSpace(voice)
@@ -134,7 +141,7 @@ func (a *SmartLibraryAnalyzer) GenerateAgentSpeechWithUsage(ctx context.Context,
 		return nil, "", AgentVoiceUsage{}, errors.New("speech response too large or incomplete")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, "", AgentVoiceUsage{}, fmt.Errorf("AI Gateway speech status %d: %s", response.StatusCode, strings.TrimSpace(string(raw[:min(len(raw), 256)])))
+		return nil, "", AgentVoiceUsage{}, &SpeechProviderError{Status: response.StatusCode}
 	}
 	var decoded struct {
 		Audio string `json:"audio"`

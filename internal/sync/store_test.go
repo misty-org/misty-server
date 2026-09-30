@@ -26,14 +26,14 @@ func syncTestKeyEnvelope() SyncKeyEnvelope {
 	e := syncTestEnvelope()
 	return SyncKeyEnvelope{e.Version, "argon2id-m65536-t3-p1", base64.StdEncoding.EncodeToString(make([]byte, 16)), e.Nonce, e.Ciphertext}
 }
-func syncTestGrant(workspace string, root ed25519.PrivateKey) (SyncDeviceGrant, ed25519.PrivateKey) {
+func syncTestGrant(vault string, root ed25519.PrivateKey) (SyncDeviceGrant, ed25519.PrivateKey) {
 	pub, key, _ := ed25519.GenerateKey(rand.Reader)
-	g := SyncDeviceGrant{WorkspaceID: workspace, DeviceID: uuid.NewString(), KeyEpoch: 1, PublicKey: pub}
+	g := SyncDeviceGrant{VaultID: vault, DeviceID: uuid.NewString(), KeyEpoch: 1, PublicKey: pub}
 	g.Signature = ed25519.Sign(root, g.SigningBytes())
 	return g, key
 }
 func syncTestMutation(g SyncDeviceGrant, key ed25519.PrivateKey, counter int64) SyncMutation {
-	m := SyncMutation{WorkspaceID: g.WorkspaceID, OperationID: uuid.NewString(), DeviceID: g.DeviceID, DeviceCounter: counter, KeyEpoch: 1, Envelope: syncTestEnvelope()}
+	m := SyncMutation{VaultID: g.VaultID, OperationID: uuid.NewString(), DeviceID: g.DeviceID, DeviceCounter: counter, KeyEpoch: 1, Envelope: syncTestEnvelope()}
 	m.Signature = ed25519.Sign(key, m.SigningBytes())
 	return m
 }
@@ -120,16 +120,35 @@ func syncTestDatabase(t *testing.T) (*Store, string) {
 	if _, err = conn.Exec(strings.Split(string(activeMigration), "-- +goose Down")[0] + "\n" + strings.Split(string(controlsMigration), "-- +goose Down")[0]); err != nil {
 		t.Fatal(err)
 	}
-	// The tree migration is schema-qualified for production; tests run it in
+	// The workspace migration is schema-qualified for production; tests run it in
 	// their disposable schema.
-	treesMigration, err := os.ReadFile("../platform/postgres/migrations/20270926000000_browser_sync_trees.sql")
+	workspacesMigration, err := os.ReadFile("../platform/postgres/migrations/20270926000000_browser_sync_trees.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = conn.Exec(strings.ReplaceAll(strings.Split(string(treesMigration), "-- +goose Down")[0], "public.", "")); err != nil {
+	if _, err = conn.Exec(strings.ReplaceAll(strings.Split(string(workspacesMigration), "-- +goose Down")[0], "public.", "")); err != nil {
 		t.Fatal(err)
 	}
+	applyLaterMigrations(t, conn, "../platform/postgres/migrations")
 	return &Store{Conn: conn}, scoped
+}
+
+// applyLaterMigrations adds the collections tier (and the per-device flag the
+// device list reads), then the vault/workspace naming, to a disposable test
+// schema.
+func applyLaterMigrations(t *testing.T, conn *sql.DB, dir string) {
+	t.Helper()
+	for _, name := range []string{"20270929000000_browser_sync_records.sql", "20270930000000_browser_sync_names.sql"} {
+		raw, err := os.ReadFile(dir + "/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		up := strings.Split(string(raw), "-- +goose Down")[0]
+		up = strings.NewReplacer("public.", "", "-- +goose StatementBegin", "", "-- +goose StatementEnd", "").Replace(up)
+		if _, err = conn.Exec(up); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
 }
 
 func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
@@ -137,13 +156,13 @@ func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
 	ctx := context.Background()
 	root, rootKey, _ := ed25519.GenerateKey(rand.Reader)
 	a, keyA := syncTestGrant(uuid.NewString(), rootKey)
-	if err := database.CreateBrowserSyncWorkspace(ctx, "owner", root, syncTestKeyEnvelope(), a); err != nil {
+	if err := database.CreateBrowserSyncVault(ctx, "owner", root, syncTestKeyEnvelope(), a); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.CreateBrowserSyncWorkspace(ctx, "owner", root, syncTestKeyEnvelope(), a); !errors.Is(err, ErrSyncExists) {
+	if err := database.CreateBrowserSyncVault(ctx, "owner", root, syncTestKeyEnvelope(), a); !errors.Is(err, ErrSyncExists) {
 		t.Fatalf("bootstrap overwrite: %v", err)
 	}
-	b, keyB := syncTestGrant(a.WorkspaceID, rootKey)
+	b, keyB := syncTestGrant(a.VaultID, rootKey)
 	if err := database.EnrollBrowserSyncDevice(ctx, "other", b); !errors.Is(err, ErrSyncForbidden) {
 		t.Fatalf("cross-account enrollment: %v", err)
 	}
@@ -153,7 +172,7 @@ func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
 	if err := database.EnrollBrowserSyncDevice(ctx, "owner", b); err != nil {
 		t.Fatalf("enrollment retry: %v", err)
 	}
-	replacement, _ := syncTestGrant(a.WorkspaceID, rootKey)
+	replacement, _ := syncTestGrant(a.VaultID, rootKey)
 	replacement.DeviceID = b.DeviceID
 	replacement.Signature = ed25519.Sign(rootKey, replacement.SigningBytes())
 	if err := database.EnrollBrowserSyncDevice(ctx, "owner", replacement); !errors.Is(err, ErrSyncForbidden) {
@@ -193,7 +212,7 @@ func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
 				t.Fatal("unexpected reconnect")
 			}
 			var e transport.AccountEvent
-			if json.Unmarshal([]byte(n.Extra), &e) != nil || e.UserID != "owner" || e.Topic != "browser-sync" || e.ID != a.WorkspaceID || strings.Contains(n.Extra, "ciphertext") {
+			if json.Unmarshal([]byte(n.Extra), &e) != nil || e.UserID != "owner" || e.Topic != "browser-sync" || e.ID != a.VaultID || strings.Contains(n.Extra, "ciphertext") {
 				t.Fatalf("bad notification: %s", n.Extra)
 			}
 		case <-time.After(2 * time.Second):
@@ -229,14 +248,14 @@ func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
 	if _, err := database.PublishBrowserSync(ctx, "owner", oldEpoch); !errors.Is(err, ErrSyncEpoch) {
 		t.Fatalf("wrong epoch accepted: %v", err)
 	}
-	replay, err := database.ReplayBrowserSync(ctx, "owner", a.WorkspaceID, a.DeviceID, 0, 200)
+	replay, err := database.ReplayBrowserSync(ctx, "owner", a.VaultID, a.DeviceID, 0, 200)
 	if err != nil || replay.HeadSequence != 2 || replay.CheckpointRequired || len(replay.Events) != 2 {
 		t.Fatalf("bad replay: %+v %v", replay, err)
 	}
-	if _, err = database.ReplayBrowserSync(ctx, "other", a.WorkspaceID, a.DeviceID, 0, 200); !errors.Is(err, ErrSyncForbidden) {
+	if _, err = database.ReplayBrowserSync(ctx, "other", a.VaultID, a.DeviceID, 0, 200); !errors.Is(err, ErrSyncForbidden) {
 		t.Fatalf("cross-account replay: %v", err)
 	}
-	if _, err = database.ReplayBrowserSync(ctx, "owner", a.WorkspaceID, a.DeviceID, 3, 200); !errors.Is(err, ErrSyncCursor) {
+	if _, err = database.ReplayBrowserSync(ctx, "owner", a.VaultID, a.DeviceID, 3, 200); !errors.Is(err, ErrSyncCursor) {
 		t.Fatalf("future cursor accepted: %v", err)
 	}
 	// Force a mid-transaction failure after the event insert to verify atomicity.
@@ -247,7 +266,7 @@ func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
 	if _, err = database.PublishBrowserSync(ctx, "owner", next); err == nil {
 		t.Fatal("failure injection did not abort")
 	}
-	w, err := database.BrowserSyncWorkspace(ctx, "owner")
+	w, err := database.BrowserSyncVault(ctx, "owner")
 	if err != nil || w.HeadSequence != 2 {
 		t.Fatal("failed commit advanced head")
 	}
@@ -273,7 +292,7 @@ func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
 	if _, err = database.PublishBrowserSync(ctx, "owner", syncTestMutation(b, keyB, 2)); !errors.Is(err, ErrSyncForbidden) {
 		t.Fatalf("revoked writer accepted: %v", err)
 	}
-	if _, err = database.ReplayBrowserSync(ctx, "owner", a.WorkspaceID, b.DeviceID, 0, 200); !errors.Is(err, ErrSyncForbidden) {
+	if _, err = database.ReplayBrowserSync(ctx, "owner", a.VaultID, b.DeviceID, 0, 200); !errors.Is(err, ErrSyncForbidden) {
 		t.Fatalf("revoked reader accepted: %v", err)
 	}
 	if err = database.EnrollBrowserSyncDevice(ctx, "owner", b); !errors.Is(err, ErrSyncForbidden) {
@@ -288,7 +307,7 @@ func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
 	if _, err = database.Conn.Exec(`DELETE FROM browser_sync_events WHERE sequence=1`); err != nil {
 		t.Fatal(err)
 	}
-	replay, err = database.ReplayBrowserSync(ctx, "owner", a.WorkspaceID, a.DeviceID, 0, 200)
+	replay, err = database.ReplayBrowserSync(ctx, "owner", a.VaultID, a.DeviceID, 0, 200)
 	if err != nil || !replay.CheckpointRequired || len(replay.Events) != 0 {
 		t.Fatalf("compaction gap was not detected: %+v %v", replay, err)
 	}
@@ -299,10 +318,10 @@ func TestBrowserSyncActiveHeartbeatHandoff(t *testing.T) {
 	ctx := context.Background()
 	root, rootKey, _ := ed25519.GenerateKey(rand.Reader)
 	a, keyA := syncTestGrant(uuid.NewString(), rootKey)
-	if err := database.CreateBrowserSyncWorkspace(ctx, "owner", root, syncTestKeyEnvelope(), a); err != nil {
+	if err := database.CreateBrowserSyncVault(ctx, "owner", root, syncTestKeyEnvelope(), a); err != nil {
 		t.Fatal(err)
 	}
-	b, keyB := syncTestGrant(a.WorkspaceID, rootKey)
+	b, keyB := syncTestGrant(a.VaultID, rootKey)
 	if err := database.EnrollBrowserSyncDevice(ctx, "owner", b); err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +340,7 @@ func TestBrowserSyncActiveHeartbeatHandoff(t *testing.T) {
 	publish(claimA, SyncPublishOptions{Activate: true}, 1, false)
 	publish(claimB, SyncPublishOptions{Activate: true}, 2, false)
 	// A delayed renewal and retried claim from A must not steal back control.
-	identity := SyncConnectionIdentity{UserID: "owner", WorkspaceID: a.WorkspaceID, DeviceID: a.DeviceID}
+	identity := SyncConnectionIdentity{UserID: "owner", VaultID: a.VaultID, DeviceID: a.DeviceID}
 	if err := database.BrowserSyncHeartbeat(ctx, identity, uuid.NewString(), 2, true, claimA.OperationID); err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +361,7 @@ func TestBrowserSyncActiveHeartbeatHandoff(t *testing.T) {
 	if count != 5 {
 		t.Fatalf("stale updates entered replay: %d events", count)
 	}
-	presence, err := database.BrowserSyncPresence(ctx, "owner", a.WorkspaceID)
+	presence, err := database.BrowserSyncPresence(ctx, "owner", a.VaultID)
 	if err != nil {
 		t.Fatal(err)
 	}

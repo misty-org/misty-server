@@ -17,6 +17,12 @@ func (db *Database) accountStore() accounts.Store {
 
 var ErrInvalidUsername = accounts.ErrInvalidUsername
 var ErrUsernameTaken = accounts.ErrUsernameTaken
+var ErrEmailTaken = accounts.ErrEmailTaken
+var ErrProviderConflict = accounts.ErrProviderConflict
+
+func (db *Database) GoogleUser(name, email, subject string) (*User, error) {
+	return db.accountStore().GoogleUser(name, email, subject)
+}
 
 type User = accounts.User
 type UserSettings = accounts.UserSettings

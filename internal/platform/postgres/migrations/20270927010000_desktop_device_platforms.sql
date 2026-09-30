@@ -1,3 +1,4 @@
+-- +goose Up
 UPDATE public.trusted_devices
 SET platform = 'unknown'
 WHERE platform NOT IN ('macos', 'windows', 'linux', 'unknown');

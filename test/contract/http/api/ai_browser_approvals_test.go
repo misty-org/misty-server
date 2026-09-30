@@ -14,14 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func TestAIInvocationBrowserApprovalResumesExactAction(t *testing.T) {
+func TestAIInvocationBrowserAutonomyPreservesDeviceWaitAndExactEffect(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	owner, err := database.CreateUser("Browser reviewer", uniqueTestEmail("browser-approval"), "password123")
 	if err != nil {
@@ -122,15 +121,6 @@ func TestAIInvocationBrowserApprovalResumesExactAction(t *testing.T) {
 	}
 	snapshot := json.RawMessage(`{"documentId":"` + document + `","url":"https://example.org/form","title":"Personal form","text":"A form","interactive":[{"ref":"ref-save","name":"Save <script>page hint</script>"}],"truncated":false}`)
 	execute(&mcp.CallToolParams{Name: "browser.inspect", Arguments: map[string]any{"scopeId": scope}, Meta: mcp.Meta{"misty/call_id": "inspect-first"}}, "browser.inspect", snapshot)
-	router := chi.NewRouter()
-	router.Get("/me/agent-approvals/{approvalID}", service.AgentBrowserApprovalReview())
-	router.Post("/me/agent-invocations/{runID}/approvals/{approvalID}", service.AgentBrowserApprovalDecision())
-	account := newConversationTestBearerToken(t, database, owner.ID)
-	other, err := database.CreateUser("Other reviewer", uniqueTestEmail("other-browser-review"), "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	otherToken := newConversationTestBearerToken(t, database, other.ID)
 	for index, operation := range []string{"browser.click", "browser.interact"} {
 		if index > 0 {
 			fresh := uuid.NewString()
@@ -144,53 +134,6 @@ func TestAIInvocationBrowserApprovalResumesExactAction(t *testing.T) {
 		}
 		callID := operation + "-exact"
 		params := &mcp.CallToolParams{Name: operation, Arguments: args, Meta: mcp.Meta{"misty/call_id": callID, "misty/approval_hook_token": callID + "-hook"}}
-		pending, err := session.CallTool(t.Context(), params)
-		if err != nil || pending.IsError || pending.Meta["misty/approval"] == nil {
-			t.Fatalf("missing %s approval: %#v %v", operation, pending, err)
-		}
-		raw, _ := json.Marshal(pending.Meta["misty/approval"])
-		var approval struct {
-			ID string `json:"id"`
-		}
-		if json.Unmarshal(raw, &approval) != nil || approval.ID == "" {
-			t.Fatalf("invalid review: %s", raw)
-		}
-		repeated, err := session.CallTool(t.Context(), params)
-		repeatRaw, _ := json.Marshal(repeated.Meta["misty/approval"])
-		if err != nil || repeated.IsError || !strings.Contains(string(repeatRaw), approval.ID) {
-			t.Fatalf("pending replay changed approval: %s %v", repeatRaw, err)
-		}
-		if job, _, err := database.ClaimWorkflowDeviceNodeJob(owner.ID, device.ID, time.Minute, 2); !errors.Is(err, db.ErrAgentJobNotFound) {
-			t.Fatalf("dispatched without approval: %#v %v", job, err)
-		}
-		reviewPath := "/me/agent-approvals/" + approval.ID
-		response := performConversationRequest(t, router, http.MethodGet, reviewPath, account, nil)
-		var reviewed struct {
-			Review struct {
-				Kind         string         `json:"kind"`
-				PageURL      string         `json:"pageUrl"`
-				ElementLabel string         `json:"elementLabel"`
-				Input        map[string]any `json:"input"`
-			} `json:"review"`
-		}
-		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &reviewed) != nil || reviewed.Review.Kind != "browser" || reviewed.Review.PageURL != "https://example.org/form" || reviewed.Review.ElementLabel != "Save <script>page hint</script>" || reviewed.Review.Input["scopeId"] != scope {
-			t.Fatalf("wrong review: %d %s", response.Code, response.Body.String())
-		}
-		for _, deniedToken := range []string{token, otherToken} {
-			denied := performConversationRequest(t, router, http.MethodGet, reviewPath, deniedToken, nil)
-			if denied.Code != 401 && denied.Code != 403 {
-				t.Fatalf("unauthorized review: %d %s", denied.Code, denied.Body.String())
-			}
-		}
-		decisionPath := "/me/agent-invocations/" + strings.TrimPrefix(id, "invocation_") + "/approvals/" + approval.ID
-		self := performConversationRequest(t, router, http.MethodPost, decisionPath, token, map[string]any{"approved": true})
-		if self.Code != 401 && self.Code != 403 {
-			t.Fatalf("self approval: %d %s", self.Code, self.Body.String())
-		}
-		decision := performConversationRequest(t, router, http.MethodPost, decisionPath, account, map[string]any{"approved": true})
-		if decision.Code != http.StatusNoContent {
-			t.Fatalf("approval: %d %s", decision.Code, decision.Body.String())
-		}
 		if index == 0 {
 			online := func(value bool) {
 				t.Helper()
@@ -251,7 +194,7 @@ func TestAIInvocationBrowserApprovalResumesExactAction(t *testing.T) {
 				t.Fatalf("authorized device blocked: %v %v", allowed, err)
 			}
 			// The device can sleep again after its resume was queued. The second wait
-			// retains the original approved effect and survives a late first receipt.
+			// retains the original effect and survives a late first receipt.
 			online(false)
 			waitForDevice("offline-second")
 			if err := database.FinishAgentContinuation(t.Context(), delivery, old); err != nil {
@@ -276,7 +219,7 @@ func TestAIInvocationBrowserApprovalResumesExactAction(t *testing.T) {
 			args["elementRef"] = "another-control"
 			changed, err := session.CallTool(t.Context(), params)
 			if err == nil && !changed.IsError {
-				t.Fatalf("changed approved action accepted: %#v", changed)
+				t.Fatalf("changed effect accepted: %#v", changed)
 			}
 		}
 	}

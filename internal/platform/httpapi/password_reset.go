@@ -104,7 +104,7 @@ func (s *PasswordResetService) Reset() http.HandlerFunc {
 		err = s.database.ResetPasswordWithToken(security.HashToken(token), body.NewPassword, s.now())
 		switch {
 		case errors.Is(err, db.ErrPasswordResetTokenInvalid):
-			TestingClearPasswordResetCookie(w)
+			TestingClearPasswordResetCookie(w, TestingIsSecureRequest(r))
 			http.Error(w, "invalid or expired reset token", http.StatusBadRequest)
 			return
 		case err != nil:
@@ -112,7 +112,7 @@ func (s *PasswordResetService) Reset() http.HandlerFunc {
 			return
 		}
 
-		TestingClearPasswordResetCookie(w)
+		TestingClearPasswordResetCookie(w, TestingIsSecureRequest(r))
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
@@ -128,7 +128,7 @@ func (s *PasswordResetService) Validate() http.HandlerFunc {
 		err = s.database.ValidatePasswordResetToken(security.HashToken(token), s.now())
 		switch {
 		case errors.Is(err, db.ErrPasswordResetTokenInvalid):
-			TestingClearPasswordResetCookie(w)
+			TestingClearPasswordResetCookie(w, TestingIsSecureRequest(r))
 			http.Error(w, "invalid or expired reset token", http.StatusNotFound)
 			return
 		case err != nil:
@@ -151,7 +151,7 @@ func (s *PasswordResetService) Start() http.HandlerFunc {
 		err := s.database.ValidatePasswordResetToken(security.HashToken(token), s.now())
 		switch {
 		case errors.Is(err, db.ErrPasswordResetTokenInvalid):
-			TestingClearPasswordResetCookie(w)
+			TestingClearPasswordResetCookie(w, TestingIsSecureRequest(r))
 			http.Redirect(w, r, s.redirectURL, http.StatusSeeOther)
 			return
 		case err != nil:
@@ -170,7 +170,7 @@ func (s *PasswordResetService) handleForgotPassword(ctx context.Context, emailAd
 		log.Printf("forgot password lookup failed for %q: %v", emailAddress, err)
 		return
 	}
-	if user == nil {
+	if user == nil || user.Provider != "misty" {
 		return
 	}
 
@@ -238,16 +238,10 @@ func TestingBuildPasswordResetCookie(token string, expiresAt time.Time, secure b
 	}
 }
 
-func TestingClearPasswordResetCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     TestingPasswordResetCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-		Expires:  time.Unix(0, 0),
-	})
+func TestingClearPasswordResetCookie(w http.ResponseWriter, secure bool) {
+	cookie := TestingBuildPasswordResetCookie("", time.Unix(0, 0), secure)
+	cookie.MaxAge = -1
+	http.SetCookie(w, cookie)
 }
 
 func TestingValidateResetURL(rawURL string) error {

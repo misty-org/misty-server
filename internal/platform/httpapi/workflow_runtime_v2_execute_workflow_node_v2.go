@@ -210,42 +210,6 @@ func (s *SpacesService) executeWorkflowNodeV2(ctx context.Context, run *db.Space
 	if descriptor.Risk == workflowv2.RiskRead {
 		return readResult()
 	}
-	if descriptor.Risk == workflowv2.RiskDestructive {
-		approvalInput := TestingWorkflowApprovalEnvelope(run, descriptor.Kind, "", "", "", invocation.Input)
-		approved, err := s.database.EnsureWorkflowNodeApproval(ctx, run.ID, invocation.NodeID, descriptor.Kind, approvalInput)
-		if err != nil {
-			return nil, err
-		}
-		if !approved {
-			return nil, workflowv2.ErrAwaitingApproval
-		}
-	}
-	if descriptor.Risk == workflowv2.RiskWrite && descriptor.Kind != "notify_private" {
-		var config struct {
-			Provider     string `json:"provider"`
-			ConnectionID string `json:"connectionId"`
-			Destination  string `json:"destination"`
-		}
-		_ = json.Unmarshal(invocation.Config, &config)
-		if config.Destination == "" {
-			var rawConfig map[string]any
-			_ = json.Unmarshal(invocation.Config, &rawConfig)
-			for _, key := range []string{"outputDirectory", "filename"} {
-				if value, _ := rawConfig[key].(string); value != "" {
-					config.Destination = value
-					break
-				}
-			}
-		}
-		approvalInput := TestingWorkflowApprovalEnvelope(run, descriptor.Kind, config.Provider, config.ConnectionID, config.Destination, invocation.Input)
-		approved, approvalErr := s.database.EnsureWorkflowNodeApproval(ctx, run.ID, invocation.NodeID, descriptor.Kind, approvalInput)
-		if approvalErr != nil {
-			return nil, approvalErr
-		}
-		if !approved {
-			return nil, workflowv2.ErrAwaitingApproval
-		}
-	}
 	resourceKey, fingerprint := TestingWorkflowResourceIdentity(invocation.Config, invocation.Input)
 	if resourceKey != "" {
 		for {

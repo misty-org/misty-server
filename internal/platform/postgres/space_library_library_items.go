@@ -37,8 +37,9 @@ func (db *Database) LibraryItems(ctx context.Context, userID, spaceID string, qu
 	if structuredSearch.DateTo != nil {
 		query.DateTo = structuredSearch.DateTo
 	}
-	if query.Direction != "asc" {
-		query.Direction = "desc"
+	sortDirection := "DESC"
+	if query.Direction == "asc" {
+		sortDirection = "ASC"
 	}
 	if query.Visibility != "all" && query.Visibility != "hidden" {
 		query.Visibility = "visible"
@@ -155,7 +156,7 @@ func (db *Database) LibraryItems(ctx context.Context, userID, spaceID string, qu
 		}
 		if query.After != "" {
 			operator := "<"
-			if query.Direction == "asc" {
+			if sortDirection == "ASC" {
 				operator = ">"
 			}
 			placeholder := addArgument(query.After)
@@ -165,7 +166,7 @@ func (db *Database) LibraryItems(ctx context.Context, userID, spaceID string, qu
 		statement := `SELECT i.id,i.space_id,i.file_id,i.contributing_user_id,i.display_name,i.caption,i.tags,i.favorite,i.hidden,i.date_override,COALESCE(i.location_override,'null'::jsonb),i.contributor_information,COALESCE(i.current_edit_version_id,''),i.added_by_user_id,i.lifecycle_state,i.added_at,i.trashed_at,i.recover_until,i.version,i.updated_at,
 			f.id,f.blob_id,f.security_domain_id,f.uploader_user_id,f.original_filename,f.intrinsic_metadata,f.lifecycle_state,f.original_uploaded_at,f.version
 			FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id
-			WHERE ` + strings.Join(conditions, " AND ") + ` ORDER BY ` + sortExpression + ` ` + strings.ToUpper(query.Direction) + `,i.id ` + strings.ToUpper(query.Direction) + ` LIMIT $` + strconv.Itoa(len(args))
+			WHERE ` + strings.Join(conditions, " AND ") + ` ORDER BY ` + sortExpression + ` ` + sortDirection + `,i.id ` + sortDirection + ` LIMIT $` + strconv.Itoa(len(args))
 		rows, err := tx.QueryContext(ctx, statement, args...)
 		if err != nil {
 			return err

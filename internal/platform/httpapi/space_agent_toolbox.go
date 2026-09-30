@@ -253,21 +253,15 @@ func authorizeSpaceAgentTool(database *db.Database) agenttools.Authorizer {
 			}
 			return true, nil
 		}
-		if invocation.ConversationScopeKind == db.ConversationScopePrivate && descriptor.Locality == agenttools.LocalityProvider && descriptor.Risk != serveragent.RiskRead {
-			return false, nil
-		}
 		if descriptor.ProviderBinding != nil {
 			return authorizeAgentSDKTool(ctx, database, invocation, descriptor)
 		}
 		if strings.HasPrefix(descriptor.Name, "mcp.") {
 			return authorizeMCPAgentTool(ctx, database, invocation, descriptor)
 		}
-		if invocation.AgentID != "" && !descriptor.AllowCustomAgent {
-			return false, nil
-		}
 		if invocation.AgentID != "" {
-			policy, err := database.EffectivePersonalAgentToolPermissions(ctx, invocation.UserID, invocation.SpaceID, invocation.AgentID)
-			if err != nil || !personalAgentToolPolicyAllows(policy, descriptor) {
+			_, err := database.AskExecutionContext(ctx, invocation.UserID, invocation.SpaceID, invocation.AgentID)
+			if err != nil {
 				return false, err
 			}
 		}
@@ -286,9 +280,6 @@ func authorizeSpaceAgentTool(database *db.Database) agenttools.Authorizer {
 		allowed, err := database.HasSpacePermission(ctx, invocation.UserID, invocation.SpaceID, descriptor.RequiredPermission)
 		if err != nil || !allowed {
 			return allowed, err
-		}
-		if invocation.AgentID != "" && descriptor.AgentPermission != "" {
-			return database.EffectiveAgentSpacePermission(ctx, invocation.UserID, invocation.SpaceID, invocation.AgentID, descriptor.AgentPermission)
 		}
 		return true, nil
 	}

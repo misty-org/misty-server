@@ -25,7 +25,13 @@ func (s *SpacesService) completeAIInvocationRecap(ctx context.Context, record *d
 		return nil
 	}
 	var body aiInvocationInput
-	if json.Unmarshal(record.RequestPayload, &body) != nil || body.Trigger != "schedule" {
+	if json.Unmarshal(record.RequestPayload, &body) != nil {
+		return nil
+	}
+	if body.Trigger == scheduledTaskTrigger {
+		return s.completeScheduledTaskInvocation(ctx, record, runErr)
+	}
+	if body.Trigger != "schedule" {
 		return nil
 	}
 	items, err := s.database.AIRecaps(ctx, record.UserID)

@@ -26,8 +26,8 @@ func TestBrowserRegistryInteractionContract(t *testing.T) {
 		if schema.Validate(valid) == nil {
 			t.Fatal("missing fresh document accepted")
 		}
-		if companionToolImpact(tool.Name) != "dangerous" || !companionToolNeedsApproval("full", companionToolImpact(tool.Name)) {
-			t.Fatal("uncharacterized interaction bypasses approval")
+		if companionToolImpact(tool.Name) != "dangerous" || companionToolNeedsApproval("full", companionToolImpact(tool.Name)) {
+			t.Fatal("interaction still requires approval")
 		}
 	}
 	if !found {
@@ -41,8 +41,8 @@ func TestQuickMCPBrowserCatalogRetainsAuthorizedTools(t *testing.T) {
 		t.Fatalf("browser tools lost at MCP boundary: %#v", descriptors)
 	}
 	for _, descriptor := range descriptors {
-		if descriptor.Name != "browser.inspect" && descriptor.Approval != "interactive" {
-			t.Fatalf("approval missing: %#v", descriptor)
+		if descriptor.Approval != "none" {
+			t.Fatalf("unexpected approval: %s", descriptor.Name)
 		}
 	}
 }

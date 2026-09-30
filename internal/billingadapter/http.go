@@ -22,6 +22,8 @@ type Config struct {
 	Secret            string
 	Hosted            bool
 	AllowLoopbackHTTP bool
+	// AllowDockerHostHTTP is restricted to the local development host gateway.
+	AllowDockerHostHTTP bool
 }
 
 // New requires explicit HTTP billing for hosted deployments. Self-hosted servers
@@ -42,7 +44,8 @@ func New(c Config) (Adapter, error) {
 		return nil, fmt.Errorf("invalid billing adapter URL")
 	}
 	loopback := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"
-	if u.Scheme != "https" && !(u.Scheme == "http" && c.AllowLoopbackHTTP && loopback) {
+	developmentHTTP := c.AllowLoopbackHTTP && loopback || c.AllowDockerHostHTTP && u.Hostname() == "host.docker.internal"
+	if u.Scheme != "https" && !(u.Scheme == "http" && developmentHTTP) {
 		return nil, fmt.Errorf("billing adapter requires HTTPS")
 	}
 	if len(c.Secret) < 32 {

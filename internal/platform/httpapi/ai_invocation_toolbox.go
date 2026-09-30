@@ -116,7 +116,8 @@ func resolveAIInvocationSpaceToolbox(ctx context.Context, database *db.Database,
 			requested = append(requested, descriptor.Name)
 		}
 	}
-	if actor.agentID != "" {
+	{
+		// Every owned tool is discoverable; the model chooses actions from the task.
 		requested = []string{}
 		for _, descriptor := range toolbox.Descriptors() {
 			requested = append(requested, descriptor.Name)

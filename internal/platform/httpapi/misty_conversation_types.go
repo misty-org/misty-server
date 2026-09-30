@@ -10,6 +10,8 @@ type mistyConversationMessage struct {
 	Retryable   bool                          `json:"retryable,omitempty"`
 	Action      *mistyConversationAction      `json:"action,omitempty"`
 	Attachments []mistyConversationAttachment `json:"attachments,omitempty"`
+	// Source marks turns Misty started on its own, such as "scheduled_task".
+	Source string `json:"source,omitempty"`
 }
 
 type mistyConversationAttachment struct {
@@ -37,7 +39,7 @@ type mistyConversationAction struct {
 }
 
 type mistyConversation struct {
- AgentID string `json:"agentId,omitempty"`
+	AgentID       string                     `json:"agentId,omitempty"`
 	ID            string                     `json:"id"`
 	Title         string                     `json:"title"`
 	SpaceID       string                     `json:"spaceId,omitempty"`

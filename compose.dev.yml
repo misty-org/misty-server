@@ -41,8 +41,10 @@ services:
     restart: "no"
     env_file:
       - path: .env/dev/integrations/cloudflare.env
-        required: true
+        required: false
     environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
       PGHOST: postgres
       PGPORT: "5432"
       PGDATABASE: ${DB_NAME:-misty_server}
@@ -87,6 +89,13 @@ services:
       MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}
       MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
+      AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
+      MISTY_DEPLOYMENT_MODE: ${MISTY_DEPLOYMENT_MODE:-hosted}
+      MISTY_AGENT_MODEL_PROVIDER: ${MISTY_AGENT_MODEL_PROVIDER:-gateway}
+      MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
+      MISTY_AGENT_MODEL_API_KEY: ${MISTY_AGENT_MODEL_API_KEY:-}
+      MISTY_AGENT_MODEL_BASE_URL: ${MISTY_AGENT_MODEL_BASE_URL:-}
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -104,49 +113,55 @@ services:
     restart: unless-stopped
     env_file:
       - path: .env/dev/runtime.env
-        required: true
+        required: false
       - path: .env/dev/database.env
-        required: true
+        required: false
       - path: .env/dev/storage.env
-        required: true
+        required: false
       - path: .env/dev/observability.env
-        required: true
+        required: false
       - path: .env/dev/integrations/ai.env
-        required: true
+        required: false
       - path: .env/dev/integrations/discord.env
-        required: true
+        required: false
       - path: .env/dev/integrations/dropbox.env
-        required: true
+        required: false
       - path: .env/dev/integrations/email.env
-        required: true
+        required: false
       - path: .env/dev/integrations/figma.env
-        required: true
+        required: false
       - path: .env/dev/integrations/github.env
-        required: true
+        required: false
       - path: .env/dev/integrations/instagram.env
-        required: true
+        required: false
       - path: .env/dev/integrations/google.env
-        required: true
+        required: false
       - path: .env/dev/integrations/microsoft.env
-        required: true
-      - path: .env/dev/integrations/notion.env
-        required: true
-      - path: .env/dev/integrations/slack.env
-        required: true
+        required: false
       - path: .env/dev/integrations/billing.env
-        required: true
+        required: false
       - path: .env/dev/crypto/documents.env
-        required: true
+        required: false
       - path: .env/dev/crypto/journal.env
-        required: true
+        required: false
       - path: .env/dev/crypto/devices.env
-        required: true
+        required: false
       - path: .env/dev/crypto/spaces.env
-        required: true
+        required: false
       - path: .env/dev/crypto/services.env
-        required: true
+        required: false
     environment:
       PORT: "8080"
+      MISTY_ENVIRONMENT: development
+      MISTY_DEPLOYMENT_MODE: ${MISTY_DEPLOYMENT_MODE:-hosted}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      MISTY_REALTIME_API_KEY: ${MISTY_REALTIME_API_KEY:-}
+      VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
+      AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
+      MISTY_AGENT_MODEL_PROVIDER: ${MISTY_AGENT_MODEL_PROVIDER:-gateway}
+      MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
+      MISTY_AGENT_MODEL_API_KEY: ${MISTY_AGENT_MODEL_API_KEY:-}
+      MISTY_AGENT_MODEL_BASE_URL: ${MISTY_AGENT_MODEL_BASE_URL:-}
       # The API stays publicly reachable for callbacks, while the development
       # website runs only on localhost through Vite.
       MISTY_PUBLIC_API_URL: "${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}/v1"
@@ -205,7 +220,10 @@ services:
 
     env_file:
       - path: .env/dev/integrations/cloudflare.env
-        required: true
+        required: false
+
+    environment:
+      CLOUDFLARE_TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?run misty setup cloudflare}
 
     entrypoint: ["/bin/sh", "-c"]
     command:

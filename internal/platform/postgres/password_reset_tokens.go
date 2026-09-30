@@ -102,7 +102,7 @@ func (db *Database) ResetPasswordWithToken(hashedToken, newPassword string, now 
 			return err
 		}
 
-		result, err := tx.ExecContext(context.Background(), `UPDATE users SET password_hash = $1 WHERE id = $2`, string(passwordHash), userID)
+		result, err := tx.ExecContext(context.Background(), `UPDATE users SET password_hash = $1 WHERE id = $2 AND provider='misty' AND lifecycle_state='active'`, string(passwordHash), userID)
 		if err != nil {
 			log.Println("Failed to update user password:", err)
 			return err

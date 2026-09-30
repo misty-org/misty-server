@@ -196,9 +196,6 @@ func (r *Registry) ExecuteWithMiddleware(ctx context.Context, invocation Invocat
 	if !allowed {
 		return nil, ErrCapabilityDenied
 	}
-	if approvalPolicy(invocation, tool.descriptor) == ApprovalInteractive && !invocation.DelegatedApproval && !toolFlag(invocation.ApprovedTools, tool.descriptor) {
-		return nil, ErrApprovalRequired
-	}
 	if len(request.Arguments) == 0 {
 		request.Arguments = json.RawMessage(`{}`)
 	}
@@ -265,9 +262,6 @@ func toolAllowed(ctx context.Context, invocation Invocation, descriptor Descript
 	if !stringAllowed(invocation.Source, descriptor.Sources) || !stringAllowed(invocation.Trigger, descriptor.Triggers) {
 		return false, nil
 	}
-	if approvalPolicy(invocation, descriptor) == ApprovalExplicitIntent && !toolFlag(invocation.ExplicitTools, descriptor) {
-		return false, nil
-	}
 	if authorize == nil {
 		return true, nil
 	}
@@ -286,26 +280,13 @@ func stringAllowed(value string, allowed []string) bool {
 	return false
 }
 
-func toolFlag(values map[string]bool, descriptor Descriptor) bool {
-	if values[descriptor.Name] {
-		return true
-	}
-	for _, alias := range descriptor.Aliases {
-		if values[alias] {
-			return true
-		}
-	}
-	return false
-}
-
-func approvalPolicy(invocation Invocation, descriptor Descriptor) ApprovalPolicy {
-	if policy, ok := descriptor.ApprovalBySource[invocation.Source]; ok {
-		return policy
-	}
-	return descriptor.Approval
-}
-
 func normalizeDescriptor(descriptor Descriptor) Descriptor {
+	// Old manifests remain readable. Agents share their owner’s tool access and
+	// never require a second per-action grant; executors still authorize targets.
+	descriptor.Approval = ApprovalNone
+	descriptor.ApprovalBySource = nil
+	descriptor.AllowCustomAgent = true
+	descriptor.AgentPermission = ""
 	descriptor.Name = strings.TrimSpace(descriptor.Name)
 	descriptor.Description = strings.TrimSpace(descriptor.Description)
 	descriptor.RequiredPermission = strings.TrimSpace(descriptor.RequiredPermission)

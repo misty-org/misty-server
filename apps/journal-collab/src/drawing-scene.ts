@@ -1,4 +1,4 @@
-import * as Y from "yjs";
+import type * as Y from "yjs";
 
 import { isRecord } from "./control-protocol";
 
@@ -29,8 +29,13 @@ function positiveInteger(value: unknown, fallback: number): number {
 }
 
 function randomInteger(): number {
-  const bytes = crypto.getRandomValues(new Uint32Array(1));
-  return 1 + (bytes[0]! % 2_147_483_645);
+  const bytes = new Uint32Array(1);
+  let value: number;
+  do {
+    crypto.getRandomValues(bytes);
+    value = bytes[0]! & 0x7fffffff;
+  } while (value === 0 || value > 2_147_483_645);
+  return value;
 }
 
 function points(value: unknown, fallback: number[][]): number[][] {

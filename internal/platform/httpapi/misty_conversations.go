@@ -407,6 +407,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 				messages = append(messages, mistyConversationMessage{
 					ID: turn.InvocationID + "-user", Role: "user", Mode: mode,
 					Content: prompt, CreatedAt: turn.CreatedAt.UTC().Format(time.RFC3339Nano), State: "completed", Attachments: attachments,
+					Source: mistyTurnSource(turn.Trigger),
 				})
 			}
 			response := strings.TrimSpace(turn.Reply)

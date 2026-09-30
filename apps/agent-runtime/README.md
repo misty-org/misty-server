@@ -65,3 +65,15 @@ The signed Go start request also carries
 `MISTY_AGENT_RUNTIME_INTERNAL_API_URL` for each run. The Vercel
 `MISTY_INTERNAL_API_BASE` value is retained as a rolling-deployment fallback;
 set both to the same reachable API base.
+
+## Instance-wide BYOK
+
+Direct OpenAI, Anthropic, Google, and OpenAI-compatible routing is configured with
+`MISTY_AGENT_MODEL_PROVIDER`, `MISTY_AGENT_MODEL`, `MISTY_AGENT_MODEL_API_KEY`, and
+`MISTY_AGENT_MODEL_BASE_URL`. Configure the API and runtime consistently. See the
+[self-host guide](../../self-host/README.md#instance-wide-agent-byok) for examples,
+Gateway compatibility, and the separate voice/Library limitations.
+
+`InstanceModel` persists only the model ID at workflow boundaries and resolves
+operator credentials inside model execution. Never replace it with a serialized
+SDK model that contains resolved authorization headers.

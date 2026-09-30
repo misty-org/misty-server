@@ -1,5 +1,6 @@
 // This file intentionally exercises the emitted Worker bundle as a black box.
 // Miniflare's runtime objects are more dynamic than the Worker source types.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment -- black-box test of the built Worker
 // @ts-nocheck
 import assert from "node:assert/strict";
 import {

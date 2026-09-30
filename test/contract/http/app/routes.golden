@@ -1,10 +1,12 @@
 DELETE /ai/media-search/assets/{assetID}
 DELETE /ai/media-search/devices/{deviceID}
 DELETE /ai/memories/{memoryID}
+DELETE /ai/scheduled-tasks/{taskID}
 DELETE /ai/smart-library/folders/{folderID}
 DELETE /api/ai/media-search/assets/{assetID}
 DELETE /api/ai/media-search/devices/{deviceID}
 DELETE /api/ai/memories/{memoryID}
+DELETE /api/ai/scheduled-tasks/{taskID}
 DELETE /api/ai/smart-library/folders/{folderID}
 DELETE /api/cloud/connections/{connectionID}
 DELETE /api/connections/{connectionID}
@@ -16,6 +18,7 @@ DELETE /api/misty/agents/{agentID}
 DELETE /api/misty/attachments/{attachmentID}
 DELETE /api/misty/conversations/{conversationID}
 DELETE /api/self-host/invitations/{invitationID}
+DELETE /api/settings/profiles/{profileID}
 DELETE /api/spaces/{spaceID}
 DELETE /api/spaces/{spaceID}/calendar/events/{eventID}
 DELETE /api/spaces/{spaceID}/calendar/sources/{sourceID}
@@ -64,6 +67,7 @@ DELETE /misty/agents/{agentID}
 DELETE /misty/attachments/{attachmentID}
 DELETE /misty/conversations/{conversationID}
 DELETE /self-host/invitations/{invitationID}
+DELETE /settings/profiles/{profileID}
 DELETE /spaces/{spaceID}
 DELETE /spaces/{spaceID}/calendar/events/{eventID}
 DELETE /spaces/{spaceID}/calendar/sources/{sourceID}
@@ -104,6 +108,7 @@ DELETE /spaces/{spaceID}/tasks/{taskID}
 DELETE /v1/ai/media-search/assets/{assetID}
 DELETE /v1/ai/media-search/devices/{deviceID}
 DELETE /v1/ai/memories/{memoryID}
+DELETE /v1/ai/scheduled-tasks/{taskID}
 DELETE /v1/ai/smart-library/folders/{folderID}
 DELETE /v1/cloud/connections/{connectionID}
 DELETE /v1/connections/{connectionID}
@@ -115,6 +120,7 @@ DELETE /v1/misty/agents/{agentID}
 DELETE /v1/misty/attachments/{attachmentID}
 DELETE /v1/misty/conversations/{conversationID}
 DELETE /v1/self-host/invitations/{invitationID}
+DELETE /v1/settings/profiles/{profileID}
 DELETE /v1/spaces/{spaceID}
 DELETE /v1/spaces/{spaceID}/calendar/events/{eventID}
 DELETE /v1/spaces/{spaceID}/calendar/sources/{sourceID}
@@ -154,6 +160,7 @@ DELETE /v1/spaces/{spaceID}/studio/workflows/{resourceID}
 DELETE /v1/spaces/{spaceID}/tasks/{taskID}
 GET /activity/inbox
 GET /agent-runs/{runID}
+GET /agent-voice/realtime
 GET /ai/activity
 GET /ai/conversations
 GET /ai/conversations/{conversationID}
@@ -162,6 +169,7 @@ GET /ai/media-search/status
 GET /ai/memories
 GET /ai/models
 GET /ai/recaps
+GET /ai/scheduled-tasks
 GET /ai/settings
 GET /ai/smart-library/folders/{folderID}/progress
 GET /ai/smart-library/folders/{folderID}/results
@@ -169,6 +177,7 @@ GET /ai/smart-library/index-status
 GET /ai/status
 GET /api/activity/inbox
 GET /api/agent-runs/{runID}
+GET /api/agent-voice/realtime
 GET /api/ai/activity
 GET /api/ai/conversations
 GET /api/ai/conversations/{conversationID}
@@ -177,6 +186,7 @@ GET /api/ai/media-search/status
 GET /api/ai/memories
 GET /api/ai/models
 GET /api/ai/recaps
+GET /api/ai/scheduled-tasks
 GET /api/ai/settings
 GET /api/ai/smart-library/folders/{folderID}/progress
 GET /api/ai/smart-library/folders/{folderID}/results
@@ -185,6 +195,7 @@ GET /api/ai/status
 GET /api/auth/handoff/start
 GET /api/auth/reset/start
 GET /api/auth/reset/validate
+GET /api/billing/ai-usage
 GET /api/billing/usage
 GET /api/cloud/connections
 GET /api/cloud/connections/{connectionID}/token
@@ -221,6 +232,8 @@ GET /api/realtime
 GET /api/runs/{runID}
 GET /api/search/global
 GET /api/search/spaces
+GET /api/settings/profiles
+GET /api/settings/profiles/{profileID}
 GET /api/space-invitations/{token}
 GET /api/space-templates
 GET /api/spaces
@@ -295,12 +308,13 @@ GET /api/spaces/{spaceID}/studio/workflows/{workflowID}/versions
 GET /api/spaces/{spaceID}/tasks
 GET /api/spaces/{spaceID}/tasks/{taskID}/activity
 GET /api/sync/devices
-GET /api/sync/workspace
+GET /api/sync/vault
 GET /api/sync/ws
 GET /api/webhooks/social/instagram
 GET /auth/handoff/start
 GET /auth/reset/start
 GET /auth/reset/validate
+GET /billing/ai-usage
 GET /billing/usage
 GET /cloud/connections
 GET /cloud/connections/{connectionID}/token
@@ -338,6 +352,8 @@ GET /realtime
 GET /runs/{runID}
 GET /search/global
 GET /search/spaces
+GET /settings/profiles
+GET /settings/profiles/{profileID}
 GET /space-invitations/{token}
 GET /space-templates
 GET /spaces
@@ -412,10 +428,11 @@ GET /spaces/{spaceID}/studio/workflows/{workflowID}/versions
 GET /spaces/{spaceID}/tasks
 GET /spaces/{spaceID}/tasks/{taskID}/activity
 GET /sync/devices
-GET /sync/workspace
+GET /sync/vault
 GET /sync/ws
 GET /v1/activity/inbox
 GET /v1/agent-runs/{runID}
+GET /v1/agent-voice/realtime
 GET /v1/ai/activity
 GET /v1/ai/conversations
 GET /v1/ai/conversations/{conversationID}
@@ -424,6 +441,7 @@ GET /v1/ai/media-search/status
 GET /v1/ai/memories
 GET /v1/ai/models
 GET /v1/ai/recaps
+GET /v1/ai/scheduled-tasks
 GET /v1/ai/settings
 GET /v1/ai/smart-library/folders/{folderID}/progress
 GET /v1/ai/smart-library/folders/{folderID}/results
@@ -432,6 +450,7 @@ GET /v1/ai/status
 GET /v1/auth/handoff/start
 GET /v1/auth/reset/start
 GET /v1/auth/reset/validate
+GET /v1/billing/ai-usage
 GET /v1/billing/usage
 GET /v1/cloud/connections
 GET /v1/cloud/connections/{connectionID}/token
@@ -468,6 +487,8 @@ GET /v1/realtime
 GET /v1/runs/{runID}
 GET /v1/search/global
 GET /v1/search/spaces
+GET /v1/settings/profiles
+GET /v1/settings/profiles/{profileID}
 GET /v1/space-invitations/{token}
 GET /v1/space-templates
 GET /v1/spaces
@@ -542,11 +563,13 @@ GET /v1/spaces/{spaceID}/studio/workflows/{workflowID}/versions
 GET /v1/spaces/{spaceID}/tasks
 GET /v1/spaces/{spaceID}/tasks/{taskID}/activity
 GET /v1/sync/devices
-GET /v1/sync/workspace
+GET /v1/sync/vault
 GET /v1/sync/ws
 GET /v1/webhooks/social/instagram
 GET /webhooks/social/instagram
 PATCH /api/misty/conversations/{conversationID}
+PATCH /api/settings/preferences
+PATCH /api/settings/profiles/{profileID}
 PATCH /api/spaces/{spaceID}
 PATCH /api/spaces/{spaceID}/calendar/events/{eventID}
 PATCH /api/spaces/{spaceID}/conversations/{conversationID}
@@ -570,6 +593,8 @@ PATCH /api/spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}
 PATCH /api/spaces/{spaceID}/setup
 PATCH /api/spaces/{spaceID}/tasks/{taskID}
 PATCH /misty/conversations/{conversationID}
+PATCH /settings/preferences
+PATCH /settings/profiles/{profileID}
 PATCH /spaces/{spaceID}
 PATCH /spaces/{spaceID}/calendar/events/{eventID}
 PATCH /spaces/{spaceID}/conversations/{conversationID}
@@ -593,6 +618,8 @@ PATCH /spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}
 PATCH /spaces/{spaceID}/setup
 PATCH /spaces/{spaceID}/tasks/{taskID}
 PATCH /v1/misty/conversations/{conversationID}
+PATCH /v1/settings/preferences
+PATCH /v1/settings/profiles/{profileID}
 PATCH /v1/spaces/{spaceID}
 PATCH /v1/spaces/{spaceID}/calendar/events/{eventID}
 PATCH /v1/spaces/{spaceID}/conversations/{conversationID}
@@ -622,6 +649,7 @@ POST /agent-runs/{runID}/approvals/{approvalID}
 POST /agent-runs/{runID}/cancel
 POST /agent-runs/{runID}/contexts
 POST /agent-runs/{runID}/retry
+POST /agent-voice/realtime/ticket
 POST /agent-voice/speech
 POST /agent-voice/transcriptions
 POST /ai/artifacts/{artifactID}/completion
@@ -636,6 +664,8 @@ POST /ai/media-search/search
 POST /ai/preferences/{surfaceID}/proactive-events
 POST /ai/recaps/{surfaceID}/seen
 POST /ai/runs
+POST /ai/scheduled-tasks
+POST /ai/scheduled-tasks/{taskID}/run
 POST /ai/smart-library/folders
 POST /ai/smart-library/folders/{folderID}/approve
 POST /ai/smart-library/folders/{folderID}/preflight
@@ -653,6 +683,7 @@ POST /api/agent-runs/{runID}/approvals/{approvalID}
 POST /api/agent-runs/{runID}/cancel
 POST /api/agent-runs/{runID}/contexts
 POST /api/agent-runs/{runID}/retry
+POST /api/agent-voice/realtime/ticket
 POST /api/agent-voice/speech
 POST /api/agent-voice/transcriptions
 POST /api/ai/artifacts/{artifactID}/completion
@@ -667,6 +698,8 @@ POST /api/ai/media-search/search
 POST /api/ai/preferences/{surfaceID}/proactive-events
 POST /api/ai/recaps/{surfaceID}/seen
 POST /api/ai/runs
+POST /api/ai/scheduled-tasks
+POST /api/ai/scheduled-tasks/{taskID}/run
 POST /api/ai/smart-library/folders
 POST /api/ai/smart-library/folders/{folderID}/approve
 POST /api/ai/smart-library/folders/{folderID}/preflight
@@ -721,6 +754,8 @@ POST /api/search/global/visual
 POST /api/self-host/bootstrap
 POST /api/self-host/enroll
 POST /api/self-host/invitations
+POST /api/settings/preferences
+POST /api/settings/profiles
 POST /api/space-invitations/{token}
 POST /api/spaces
 POST /api/spaces/invitations/{inviteID}/accept
@@ -801,7 +836,7 @@ POST /api/sync/control
 POST /api/sync/devices
 POST /api/sync/restore/step
 POST /api/sync/ticket
-POST /api/sync/workspace
+POST /api/sync/vault
 POST /api/webhooks/social/instagram
 POST /auth/forgot
 POST /auth/handoff
@@ -856,6 +891,8 @@ POST /search/global/visual
 POST /self-host/bootstrap
 POST /self-host/enroll
 POST /self-host/invitations
+POST /settings/preferences
+POST /settings/profiles
 POST /space-invitations/{token}
 POST /spaces
 POST /spaces/invitations/{inviteID}/accept
@@ -936,7 +973,7 @@ POST /sync/control
 POST /sync/devices
 POST /sync/restore/step
 POST /sync/ticket
-POST /sync/workspace
+POST /sync/vault
 POST /v1/account/deletion/status
 POST /v1/activity/inbox/clear
 POST /v1/activity/inbox/seen
@@ -944,6 +981,7 @@ POST /v1/agent-runs/{runID}/approvals/{approvalID}
 POST /v1/agent-runs/{runID}/cancel
 POST /v1/agent-runs/{runID}/contexts
 POST /v1/agent-runs/{runID}/retry
+POST /v1/agent-voice/realtime/ticket
 POST /v1/agent-voice/speech
 POST /v1/agent-voice/transcriptions
 POST /v1/ai/artifacts/{artifactID}/completion
@@ -958,6 +996,8 @@ POST /v1/ai/media-search/search
 POST /v1/ai/preferences/{surfaceID}/proactive-events
 POST /v1/ai/recaps/{surfaceID}/seen
 POST /v1/ai/runs
+POST /v1/ai/scheduled-tasks
+POST /v1/ai/scheduled-tasks/{taskID}/run
 POST /v1/ai/smart-library/folders
 POST /v1/ai/smart-library/folders/{folderID}/approve
 POST /v1/ai/smart-library/folders/{folderID}/preflight
@@ -1012,6 +1052,8 @@ POST /v1/search/global/visual
 POST /v1/self-host/bootstrap
 POST /v1/self-host/enroll
 POST /v1/self-host/invitations
+POST /v1/settings/preferences
+POST /v1/settings/profiles
 POST /v1/space-invitations/{token}
 POST /v1/spaces
 POST /v1/spaces/invitations/{inviteID}/accept
@@ -1092,17 +1134,19 @@ POST /v1/sync/control
 POST /v1/sync/devices
 POST /v1/sync/restore/step
 POST /v1/sync/ticket
-POST /v1/sync/workspace
+POST /v1/sync/vault
 POST /v1/webhooks/social/instagram
 POST /webhooks/social/instagram
 PUT /ai/memories/{memoryID}
 PUT /ai/preferences/{surfaceID}
 PUT /ai/recaps/{surfaceID}
+PUT /ai/scheduled-tasks/{taskID}
 PUT /ai/settings
 PUT /ai/smart-library/folders/{folderID}/assets/{assetID}/tags
 PUT /api/ai/memories/{memoryID}
 PUT /api/ai/preferences/{surfaceID}
 PUT /api/ai/recaps/{surfaceID}
+PUT /api/ai/scheduled-tasks/{taskID}
 PUT /api/ai/settings
 PUT /api/ai/smart-library/folders/{folderID}/assets/{assetID}/tags
 PUT /api/mail/drafts/{draftID}
@@ -1149,6 +1193,7 @@ PUT /spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}/tasks
 PUT /v1/ai/memories/{memoryID}
 PUT /v1/ai/preferences/{surfaceID}
 PUT /v1/ai/recaps/{surfaceID}
+PUT /v1/ai/scheduled-tasks/{taskID}
 PUT /v1/ai/settings
 PUT /v1/ai/smart-library/folders/{folderID}/assets/{assetID}/tags
 PUT /v1/mail/drafts/{draftID}

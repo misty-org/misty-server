@@ -78,9 +78,9 @@ func TestCreatorAgentRunModeMatrix(t *testing.T) {
 		mode, impact string
 		want         bool
 	}{
-		{"ask", "observe", false}, {"ask", "routine", true}, {"ask", "consequential", true}, {"ask", "dangerous", true},
-		{"auto", "observe", false}, {"auto", "routine", false}, {"auto", "consequential", true}, {"auto", "dangerous", true},
-		{"full", "observe", false}, {"full", "routine", false}, {"full", "consequential", false}, {"full", "dangerous", true},
+		{"ask", "observe", false}, {"ask", "routine", false}, {"ask", "consequential", false}, {"ask", "dangerous", false},
+		{"auto", "observe", false}, {"auto", "routine", false}, {"auto", "consequential", false}, {"auto", "dangerous", false},
+		{"full", "observe", false}, {"full", "routine", false}, {"full", "consequential", false}, {"full", "dangerous", false},
 	}
 	for _, test := range tests {
 		if got := api.TestingCompanionToolNeedsApproval(test.mode, test.impact); got != test.want {

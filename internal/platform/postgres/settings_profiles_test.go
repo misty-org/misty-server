@@ -134,4 +134,28 @@ func TestSettingsProfilesPostgres(t *testing.T) {
 	if profiles, err := database.SettingsProfiles(ctx, "owner"); err != nil || len(profiles) != 0 {
 		t.Fatal("deleted profile returned", err)
 	}
+	shared, err := database.EnsureAccountPreferences(ctx, "owner", map[string]any{"app.zoom": 1.25, "browser.downloads.directory": "/downloads"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDevice, err := database.EnsureAccountPreferences(ctx, "owner", map[string]any{"app.zoom": 2.0})
+	if err != nil || secondDevice.ID != shared.ID || secondDevice.Values["app.zoom"] != 1.25 {
+		t.Fatal("second device replaced shared preferences", secondDevice, err)
+	}
+	updated, err := database.PatchSettingsProfile(ctx, "owner", shared.ID, SettingsProfilePatch{MutationID: uuid.NewString(), Set: map[string]any{"app.zoom": 1.5}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDevice, err = database.EnsureAccountPreferences(ctx, "owner", nil)
+	if err != nil || secondDevice.Revision != updated.Revision || secondDevice.Values["app.zoom"] != 1.5 {
+		t.Fatal("device did not receive remote preference", secondDevice, err)
+	}
+	other, err := database.EnsureAccountPreferences(ctx, "other", nil)
+	if err != nil || other.ID == shared.ID || len(other.Values) != 0 {
+		t.Fatal("account settings leaked", other, err)
+	}
+	if err = database.DeleteSettingsProfile(ctx, "owner", shared.ID); err == nil {
+		t.Fatal("deleted shared account settings")
+	}
+
 }

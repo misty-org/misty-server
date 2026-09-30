@@ -66,47 +66,43 @@ services:
     restart: unless-stopped
     env_file:
       - path: .env/prod/runtime.env
-        required: true
+        required: false
       - path: .env/prod/database.env
-        required: true
+        required: false
       - path: .env/prod/storage.env
-        required: true
+        required: false
       - path: .env/prod/observability.env
-        required: true
+        required: false
       - path: .env/prod/integrations/ai.env
-        required: true
+        required: false
       - path: .env/prod/integrations/discord.env
-        required: true
+        required: false
       - path: .env/prod/integrations/dropbox.env
-        required: true
+        required: false
       - path: .env/prod/integrations/email.env
-        required: true
+        required: false
       - path: .env/prod/integrations/figma.env
-        required: true
+        required: false
       - path: .env/prod/integrations/github.env
-        required: true
+        required: false
       - path: .env/prod/integrations/instagram.env
-        required: true
+        required: false
       - path: .env/prod/integrations/google.env
-        required: true
+        required: false
       - path: .env/prod/integrations/microsoft.env
-        required: true
-      - path: .env/prod/integrations/notion.env
-        required: true
-      - path: .env/prod/integrations/slack.env
-        required: true
+        required: false
       - path: .env/prod/integrations/billing.env
-        required: true
+        required: false
       - path: .env/prod/crypto/documents.env
-        required: true
+        required: false
       - path: .env/prod/crypto/journal.env
-        required: true
+        required: false
       - path: .env/prod/crypto/devices.env
-        required: true
+        required: false
       - path: .env/prod/crypto/spaces.env
-        required: true
+        required: false
       - path: .env/prod/crypto/services.env
-        required: true
+        required: false
     environment:
       PORT: "8080"
       DB_HOST: postgres

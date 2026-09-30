@@ -2,9 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -221,32 +218,6 @@ func (s *SpacesService) executeScopedSDKTool(ctx context.Context, run sdkExecuti
 		return agentRuntimeToolOutcome{}, s.sdkBrowserPreparationError(ctx, run, call, bound, err)
 	}
 	rawRequest, _ := json.Marshal(execution)
-	if registration.Descriptor.Approval != agenttools.ApprovalNone {
-		review, err := s.protectSDKApprovalReview(execution, bound, browser)
-		if err != nil {
-			return agentRuntimeToolOutcome{}, err
-		}
-		approvalRequest := rawRequest
-		if browser != nil {
-			approvalRequest, _ = json.Marshal([]any{execution, browser.Prepared})
-			approvalRequest, _ = cap.CanonicalJSON(approvalRequest)
-		}
-		hash := sha256.Sum256(approvalRequest)
-		argumentsHash := hex.EncodeToString(hash[:])
-		mac := hmac.New(sha256.New, s.agentRuntime.secret)
-		_, _ = mac.Write([]byte(run.ID + "\n" + call.CallID + "\n" + call.Name + "\n" + argumentsHash))
-		approval, allowed, err := run.Approval(ctx, call.CallID, effectID, call.Name, argumentsHash, hex.EncodeToString(mac.Sum(nil)), call.ApprovalHookToken, "Allow "+bound.Definition.Name+" on "+bound.Target.Label+"?", review)
-		if err != nil {
-			return agentRuntimeToolOutcome{}, err
-		}
-		if !allowed {
-			if approval.State != "pending" {
-				return agentRuntimeToolOutcome{}, errors.New("sdk_approval_denied")
-			}
-			return agentRuntimeToolOutcome{Approval: approval}, nil
-		}
-		invocation.ApprovedTools[call.Name] = true
-	}
 	registry, err := agenttools.New(registration)
 	if err != nil {
 		return agentRuntimeToolOutcome{}, err

@@ -16,12 +16,12 @@ func TestPermissionPolicyModes(t *testing.T) {
 	}
 
 	ask := policy.Apply(ModeAsk, cloneRequests(requests))
-	if !ask[0].ApprovalRequired || !ask[1].ApprovalRequired || !ask[2].ApprovalRequired {
-		t.Fatalf("ask mode should require all approvals: %#v", ask)
+	if ask[0].ApprovalRequired || ask[1].ApprovalRequired || ask[2].ApprovalRequired {
+		t.Fatalf("legacy ask mode still requires approval: %#v", ask)
 	}
 
 	auto := policy.Apply(ModeAuto, cloneRequests(requests))
-	if auto[0].ApprovalRequired || auto[1].ApprovalRequired || !auto[2].ApprovalRequired {
+	if auto[0].ApprovalRequired || auto[1].ApprovalRequired || auto[2].ApprovalRequired {
 		t.Fatalf("auto mode approval mismatch: %#v", auto)
 	}
 

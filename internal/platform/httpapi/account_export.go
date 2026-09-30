@@ -27,12 +27,13 @@ func (s *SpacesService) AccountExportManifest() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Password string `json:"password"`
+			Password              string `json:"password"`
+			ReauthenticationToken string `json:"reauthentication_token"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		valid, err := s.database.VerifyUserPassword(r.Context(), userID, body.Password)
+		valid, err := s.database.VerifyAccountReauthentication(r.Context(), userID, body.Password, body.ReauthenticationToken)
 		if err != nil {
 			writeSpaceError(w, err)
 			return

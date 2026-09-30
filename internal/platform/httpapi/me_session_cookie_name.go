@@ -49,6 +49,7 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			"name":             user.Name,
 			"username":         user.Username,
 			"email":            user.Email,
+			"provider":         user.Provider,
 			"avatar_version":   user.AvatarVersion,
 			"created_at":       user.CreatedAt,
 			"tier":             summary["tier"],

@@ -131,6 +131,7 @@ func CookieCSRFProtection(allowedOrigin func(string) bool) func(http.Handler) ht
 				}
 			}
 			login := path == "/login" || path == "/api/login" || path == "/register" || path == "/api/register" ||
+				path == "/auth/google" || path == "/auth/google/complete" ||
 				path == "/self-host/bootstrap" || path == "/api/self-host/bootstrap" || path == "/self-host/enroll" || path == "/api/self-host/enroll"
 			if accessErr == nil || refreshErr == nil || login {
 				origin := r.Header.Get("Origin")

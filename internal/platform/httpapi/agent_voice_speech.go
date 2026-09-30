@@ -6,6 +6,7 @@ import (
 	"errors"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -88,7 +89,17 @@ func (s *AgentsService) AgentVoiceSpeech() http.HandlerFunc {
 		}
 		s.voiceMetrics.RecordAIInvocation("agents", "speech", serveragent.AgentSpeechModel, outcome, time.Since(started), 0)
 		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "speech_generation_failed"})
+			code := "speech_generation_failed"
+			upstreamStatus := 0
+			var providerError *serveragent.SpeechProviderError
+			if errors.As(err, &providerError) {
+				upstreamStatus = providerError.Status
+				if upstreamStatus == http.StatusNotFound {
+					code = "speech_model_unavailable"
+				}
+			}
+			log.Printf("speech_failed request_id=%q invocation_id=%q model=%s upstream_status=%d code=%s", r.Header.Get("X-Request-ID"), body.InvocationID, serveragent.AgentSpeechModel, upstreamStatus, code)
+			writeJSON(w, http.StatusBadGateway, map[string]string{"code": code})
 			return
 		}
 		if err := s.settleAgentVoice(reservation, usage); err != nil {

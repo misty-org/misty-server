@@ -14,7 +14,7 @@
     "key_epoch": 1,
     "public_key": "PoQrWBzLOW6KOoqZg7dzcUh6hFi3ux8CBHS72zjDVjA=",
     "signature": "xfPWSsYnyoWKpIz8kRa5i0teCiU4yoN1LxOG5VItkLg0zzp3ioAplXjBmmoYlynpgrk+HEQS9dOjTuEQmx8MDg==",
-    "workspace_id": "01951d32-40ac-7000-8000-000000000001"
+    "vault_id": "01951d32-40ac-7000-8000-000000000001"
   },
   "grant_signing_bytes": "[\"misty.sync.device.v1\",\"01951d32-40ac-7000-8000-000000000001\",\"01951d32-40ac-7000-8000-000000000002\",1,\"PoQrWBzLOW6KOoqZg7dzcUh6hFi3ux8CBHS72zjDVjA=\"]",
   "key_envelope": {
@@ -35,7 +35,7 @@
     "key_epoch": 1,
     "operation_id": "01951d32-40ac-7000-8000-000000000003",
     "signature": "pS+AE2G3FArU95sdhjPvtplS5ToGDckUA+BeAG/GyaT/iMRlXTc9i5JleZYU+E3uHx87ZkboIHXcLdRrFK2sDg==",
-    "workspace_id": "01951d32-40ac-7000-8000-000000000001"
+    "vault_id": "01951d32-40ac-7000-8000-000000000001"
   },
   "mutation_signing_bytes": "[\"misty.sync.mutation.v1\",\"01951d32-40ac-7000-8000-000000000001\",\"01951d32-40ac-7000-8000-000000000003\",\"01951d32-40ac-7000-8000-000000000002\",1,1,1,\"lIIs1ijcl+FgCdx7\",\"kPPuWXB2y+2guHQ6WhXrdbvSaJLoYX6W1cM6zzG1iuIeV9FNamnNLNQ5rnUCjftNkLS/bwaYu/oBH0ntG8BrGA==\"]",
   "password": "public test password, never use this",
@@ -43,5 +43,5 @@
   "root_public_key": "wlmyRV3PEb3ISJK4bXlOjKjs/NVe6v0hpgsRGp5h8rA=",
   "sync_secret": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
   "warning": "Public test credentials. Not a real account or session.",
-  "workspace_id": "01951d32-40ac-7000-8000-000000000001"
+  "vault_id": "01951d32-40ac-7000-8000-000000000001"
 }

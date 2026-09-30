@@ -46,20 +46,6 @@ func (s *SpacesService) executeAIInvocationMCPTool(ctx context.Context, access *
 			return nil, err
 		}
 	}
-	browserApproved := false
-	if call.Name == "browser.click" || call.Name == "browser.interact" || call.Name == "browser.workspace.interact" {
-		approval, allowed, err := s.requireAIInvocationBrowserApproval(ctx, access, call)
-		if err != nil {
-			return nil, err
-		}
-		if !allowed {
-			if approval.State == "pending" {
-				return nil, &browserApprovalRequired{approval}
-			}
-			return TestingMustAPIRawJSON(map[string]any{"denied": true, "reason": "approval_denied_or_expired", "approval_id": approval.ID}), nil
-		}
-		browserApproved = true
-	}
 	var result json.RawMessage
 	var err error
 	if prepared.spaceID == "" || call.Name == toolboxWeatherCurrent {
@@ -98,9 +84,6 @@ func (s *SpacesService) executeAIInvocationMCPTool(ctx context.Context, access *
 		)
 		if resolveErr != nil || !agentManifestHasTool(manifest, call.Name) {
 			return nil, workflowv2.ErrCapabilityDenied
-		}
-		if browserApproved {
-			invocation.ApprovedTools = map[string]bool{call.Name: true}
 		}
 		result, err = executeSpaceAgentToolbox(ctx, toolbox, invocation, s.database, serveragent.ToolRequest{
 			ID: call.CallID, Name: call.Name, Arguments: call.Arguments,

@@ -3,8 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -115,44 +113,11 @@ func (s *SpacesService) executeSDKRuntimeTool(ctx context.Context, record *db.AI
 	if call.Name != registration.Descriptor.Name {
 		return agentRuntimeToolOutcome{}, db.ErrAppRuntimeForbidden
 	}
-	approved := registration.Descriptor.Approval == agenttools.ApprovalNone
-	if !approved {
-		execution := cap.Execution{Invocation: request.Request, RunID: db.SDKPublicRunID(record.ID), EffectID: request.EffectID, GrantIDs: []string{}}
-		review, err := s.protectSDKApprovalReview(execution, bound, browser)
-		if err != nil {
-			return agentRuntimeToolOutcome{}, err
-		}
-		raw, _ := json.Marshal(request.Request)
-		if browser != nil {
-			raw, _ = json.Marshal([]any{execution, browser.Prepared})
-			raw, _ = cap.CanonicalJSON(raw)
-		}
-		hash := sha256.Sum256(raw)
-		approval, allowed, err := s.database.RequireSDKToolApproval(authorized, record.UserID, record.ID, request.EffectID, call.Name, hex.EncodeToString(hash[:]), call.ApprovalHookToken, "Allow "+bound.Definition.Name+" on "+bound.Target.Label+"?", review)
-		if err != nil {
-			return agentRuntimeToolOutcome{}, err
-		}
-		if !allowed {
-			if approval.State != "pending" {
-				return agentRuntimeToolOutcome{}, errors.New("sdk_approval_denied")
-			}
-			outcome, _ := json.Marshal(map[string]any{"status": "approval_required", "waitId": approval.ID, "approvalId": approval.ID, "expiresAt": approval.ExpiresAt, "reason": approval.Summary})
-			encrypted, err := s.protectAgentEffectResult(request.EffectID+":outcome", outcome)
-			if err != nil {
-				return agentRuntimeToolOutcome{}, err
-			}
-			if err := s.database.StoreSDKWaitOutcome(ctx, record.UserID, record.ID, "approval_required", encrypted); err != nil {
-				return agentRuntimeToolOutcome{}, err
-			}
-			return agentRuntimeToolOutcome{Approval: approval}, nil
-		}
-		approved = true
-	}
 	registry, err := agenttools.New(registration)
 	if err != nil {
 		return agentRuntimeToolOutcome{}, err
 	}
-	invocation := agenttools.Invocation{UserID: record.UserID, SpaceID: bound.Target.SpaceID, RunID: record.ID, Source: "sdk", ApprovedTools: map[string]bool{call.Name: approved}}
+	invocation := agenttools.Invocation{UserID: record.UserID, SpaceID: bound.Target.SpaceID, RunID: record.ID, Source: "sdk", ApprovedTools: map[string]bool{call.Name: true}}
 	rawRequest, _ := json.Marshal(request.Request)
 	middleware := func(execCtx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor, tool serveragent.ToolRequest, next agenttools.Handler) (json.RawMessage, error) {
 		return s.database.JournalAgentToolboxAction(execCtx, db.AgentToolboxAction{IdempotencyKey: "sdk-effect:" + request.EffectID, UserID: record.UserID, SpaceID: record.SpaceID, RunID: record.ID, ToolName: call.Name, AuditEvent: "sdk.capability", Risk: descriptor.Risk, Source: "sdk", Request: rawRequest, RedactPayload: true,

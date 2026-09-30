@@ -2,9 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -127,26 +124,6 @@ func (s *SpacesService) executePersonalAgentRuntimeTool(ctx context.Context, run
 	if call.Name == "browser.request_user_action" && !call.SupportsIntervention {
 		return agentRuntimeToolOutcome{}, db.ErrSpaceForbidden
 	}
-	impact := companionToolImpact(call.Name)
-	if companionToolNeedsApproval(run.EffectiveRunMode, impact) {
-		digest := sha256.Sum256(call.Arguments)
-		argumentsHash := hex.EncodeToString(digest[:])
-		mac := hmac.New(sha256.New, s.agentRuntime.secret)
-		_, _ = mac.Write([]byte(run.ID + "\n" + call.CallID + "\n" + call.Name + "\n" + argumentsHash))
-		signedCall := hex.EncodeToString(mac.Sum(nil))
-		approval, allowed, err := s.database.RequireCreatorToolApproval(ctx, run, call.CallID, call.Name, impact, argumentsHash, signedCall, call.ApprovalHookToken, companionToolApprovalSummary(call.Name, call.Arguments))
-		if err != nil {
-			return agentRuntimeToolOutcome{}, err
-		}
-		if !allowed {
-			if approval.State == "denied" || approval.State == "expired" {
-				return agentRuntimeToolOutcome{Result: TestingMustAPIRawJSON(map[string]any{"denied": true, "reason": "creator_denied", "approval_id": approval.ID})}, nil
-			}
-			s.projectLinkedAIInvocationApproval(ctx, run, call.Name, approval)
-			return agentRuntimeToolOutcome{Approval: approval}, nil
-		}
-	}
-
 	ctx = withAgentExecutionRuntime(ctx, call.RuntimeRunID)
 	toolbox, invocation, authorize, err := s.resolvePersonalAgentRuntimeToolbox(ctx, run)
 	if err != nil {

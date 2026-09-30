@@ -1,8 +1,6 @@
 package unit
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -190,18 +188,36 @@ func TestMistyInvocationUsesOnePermissionAwareToolLoop(t *testing.T) {
 	}
 }
 
-func TestMistyBrowserContextMustBeExplicitlyAttachedAndSpaceBound(t *testing.T) {
+func TestMistyBrowserContextSupportsAccountScopedInvocations(t *testing.T) {
 	references := []byte(`[{"kind":"browser-tab","id":"tab-1","title":"Research","privacy":"device","opaque_scope_id":"scope-tab-1","attached":true}]`)
 	contexts := []byte(`[{"device_id":"device-1","kind":"browser_tab","opaque_ref":"scope-tab-1","capabilities":["browser.inspect","browser.navigate"]}]`)
 	if err := api.TestingValidateAIInvocationDeviceContexts(references, contexts, "space-1"); err != nil {
 		t.Fatalf("valid browser context rejected: %v", err)
 	}
-	if err := api.TestingValidateAIInvocationDeviceContexts(references, contexts, ""); err == nil {
-		t.Fatal("an account-scoped invocation accepted a browser context")
+	if err := api.TestingValidateAIInvocationDeviceContexts(references, contexts, ""); err != nil {
+		t.Fatalf("valid account-scoped browser context rejected: %v", err)
 	}
 	mismatch := []byte(`[{"device_id":"device-1","kind":"browser_tab","opaque_ref":"scope-other","capabilities":["browser.inspect"]}]`)
 	if err := api.TestingValidateAIInvocationDeviceContexts(references, mismatch, "space-1"); err == nil {
 		t.Fatal("an unattached browser scope was accepted")
+	}
+}
+
+func TestMistyAccountBrowserContextRequiresMatchingDeviceAttachment(t *testing.T) {
+	contexts := []byte(`[{"device_id":"device-1","kind":"browser_tab","opaque_ref":"scope-tab-1","capabilities":["browser.inspect"]}]`)
+	for name, references := range map[string]string{
+		"missing":         `[]`,
+		"detached":        `[{"kind":"browser-tab","privacy":"device","opaque_scope_id":"scope-tab-1","attached":false}]`,
+		"different scope": `[{"kind":"browser-tab","privacy":"device","opaque_scope_id":"scope-other","attached":true}]`,
+		"wrong privacy":   `[{"kind":"browser-tab","privacy":"shared","opaque_scope_id":"scope-tab-1","attached":true}]`,
+		"wrong kind":      `[{"kind":"note","privacy":"device","opaque_scope_id":"scope-tab-1","attached":true}]`,
+		"different Space": `[{"kind":"browser-tab","privacy":"device","space_id":"space-other","opaque_scope_id":"scope-tab-1","attached":true}]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := api.TestingValidateAIInvocationDeviceContexts([]byte(references), contexts, ""); err == nil {
+				t.Fatal("invalid account-scoped browser attachment was accepted")
+			}
+		})
 	}
 }
 
@@ -266,8 +282,8 @@ func TestPrivateSpaceToolboxRegistrationsAreCompleteAndGuardWrites(t *testing.T)
 		if descriptor.Version < 1 || descriptor.Description == "" || descriptor.Locality == "" {
 			t.Fatalf("incomplete descriptor: %#v", descriptor)
 		}
-		if descriptor.Risk != "read" && (descriptor.Approval == "none" || descriptor.AuditEvent == "") {
-			t.Fatalf("write tool lacks approval or audit policy: %#v", descriptor)
+		if descriptor.Risk != "read" && (descriptor.Approval != "none" || descriptor.AuditEvent == "") {
+			t.Fatalf("write tool requires approval or lacks audit policy: %#v", descriptor)
 		}
 	}
 	want := []string{"context.get", "members.list", "members.resolve", "messages.search", "messages.send", "library.search", "tasks.query", "calendar.query", "tasks.create", "tasks.update", "ask.delegate", "notes.search", "notes.read", "notes.create", "notes.update", "drawings.list", "drawings.read", "drawings.create", "drawings.apply", "calendar.create", "calendar.update", "roadmaps.query", "roadmaps.read", "roadmaps.create", "roadmaps.update", "library.read", "library.update", "library.promote_attachment", "memory.list", "memory.update", "memory.remember", "memory.forget", "agents.list", "agents.configure", "spaces.list", "spaces.tools", "spaces.execute"}
@@ -297,11 +313,11 @@ func TestCanonicalAndProviderActionsUseToolboxDescriptors(t *testing.T) {
 			t.Fatalf("incomplete canonical descriptor: %#v", descriptor)
 		}
 		if descriptor.Name == "messages.send" || descriptor.Name == "tasks.create" || descriptor.Name == "tasks.update" {
-			if descriptor.ApprovalBySource["canonical_run"] != "interactive" || descriptor.AuditEvent == "" {
-				t.Fatalf("canonical Task write lost durable approval metadata: %#v", descriptor)
+			if descriptor.Approval != "none" || len(descriptor.ApprovalBySource) != 0 || descriptor.AuditEvent == "" {
+				t.Fatalf("canonical Task write requires approval or lacks audit metadata: %#v", descriptor)
 			}
 		}
-		if descriptor.Name == "provider.figma.write" && (descriptor.Approval != "interactive" || descriptor.Locality != "provider" || descriptor.AuditEvent == "") {
+		if descriptor.Name == "provider.figma.write" && (descriptor.Approval != "none" || descriptor.Locality != "provider" || descriptor.AuditEvent == "") {
 			t.Fatalf("provider write policy = %#v", descriptor)
 		}
 	}
@@ -356,7 +372,7 @@ func TestDeviceActionsAreDeclaredInTheAgentToolbox(t *testing.T) {
 		if descriptor.Locality != "device" || descriptor.Description == "" || descriptor.InputSchema == nil {
 			t.Fatalf("incomplete device descriptor: %#v", descriptor)
 		}
-		if descriptor.Name == "apply_file_plan" && (descriptor.Approval != "interactive" || descriptor.AuditEvent == "") {
+		if descriptor.Name == "apply_file_plan" && (descriptor.Approval != "none" || descriptor.AuditEvent == "") {
 			t.Fatalf("file-plan write policy = %#v", descriptor)
 		}
 	}
@@ -470,27 +486,5 @@ func TestSpaceActionPlanningTurnCannotExecuteWrites(t *testing.T) {
 	}
 	if !slices.Contains(got, "messages.search") || !slices.Contains(got, "library.search") {
 		t.Fatalf("planning turn lost safe context actions: %v", got)
-	}
-}
-
-func TestExtractDOCXTextIsDeterministic(t *testing.T) {
-	var buffer bytes.Buffer
-	archive := zip.NewWriter(&buffer)
-	part, err := archive.Create("word/document.xml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := part.Write([]byte(`<w:document xmlns:w="urn:test"><w:body><w:p><w:r><w:t>Hello</w:t></w:r><w:r><w:tab/><w:t>Agent</w:t></w:r></w:p><w:p><w:r><w:t>Context</w:t></w:r></w:p></w:body></w:document>`)); err != nil {
-		t.Fatal(err)
-	}
-	if err := archive.Close(); err != nil {
-		t.Fatal(err)
-	}
-	text, err := api.TestingExtractDOCXText(buffer.Bytes())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if text != "HelloAgent\nContext" {
-		t.Fatalf("unexpected extraction: %q", text)
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -16,7 +15,6 @@ import (
 	mcpintegration "github.com/kannachi323/misty/server/internal/integrations/mcp"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
 
 type fakeMCPConnector struct {
@@ -144,41 +142,30 @@ func TestMCPConnectionDiscoveryAndManagedRuntimeContract(t *testing.T) {
 	if err != nil || callCount != 1 || !strings.Contains(string(replayed), `"provider":"mcp"`) || !strings.Contains(string(replayed), `"ok"`) {
 		t.Fatalf("MCP retry result=%s remote calls=%d err=%v", replayed, callCount, err)
 	}
-	approvalRun, err := database.CreateCreatorAgentRun(t.Context(), owner.ID, space.ID, agent.ID, db.CreatorAgentRunInput{Instruction: "use MCP"})
+	canonicalRun, err := database.CreateCreatorAgentRun(t.Context(), owner.ID, space.ID, agent.ID, db.CreatorAgentRunInput{Instruction: "use MCP"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if jobs, err := database.ClaimPersonalAgentTaskRunJobs(t.Context(), "mcp-test", 1, time.Minute); err != nil || len(jobs) != 1 {
 		t.Fatalf("claim MCP run: %v %v", jobs, err)
 	}
-	if _, err := database.ActivatePersonalAgentTaskRuntime(t.Context(), approvalRun.ID, "test", "mcp-test"); err != nil {
+	if _, err := database.ActivatePersonalAgentTaskRuntime(t.Context(), canonicalRun.ID, "test", "mcp-test"); err != nil {
 		t.Fatal(err)
 	}
-	approvalRequest := serveragent.ToolRequest{ID: "approval-call", Name: echoName, Arguments: json.RawMessage(`{"message":"review me"}`)}
-	if _, err := spaces.TestingExecuteMCPAgentTool(t.Context(), approvalRun, approvalRequest, true, "canonical_run"); !errors.Is(err, workflowv2.ErrAwaitingApproval) {
-		t.Fatalf("unapproved canonical call error=%v, want awaiting approval", err)
-	}
-	fake.mu.Lock()
-	callCount = fake.calls
-	fake.mu.Unlock()
-	if callCount != 1 {
-		t.Fatalf("unapproved canonical call reached provider: %d calls", callCount)
-	}
-	if _, err := database.Conn.ExecContext(t.Context(), `UPDATE space_run_actions SET state='approved' WHERE run_id=$1 AND action_kind=$2`, approvalRun.ID, echoName); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.Conn.ExecContext(t.Context(), `UPDATE space_runs SET state='running' WHERE id=$1`, approvalRun.ID); err != nil {
-		t.Fatal(err)
-	}
-	approvedResult, err := spaces.TestingExecuteMCPAgentTool(t.Context(), approvalRun, approvalRequest, true, "canonical_run")
-	if err != nil || !strings.Contains(string(approvedResult), `"provider":"mcp"`) {
-		t.Fatalf("approved canonical result=%s err=%v", approvedResult, err)
-	}
-	fake.mu.Lock()
-	callCount = fake.calls
-	fake.mu.Unlock()
-	if callCount != 2 {
-		t.Fatalf("approved canonical call count=%d, want 2 total", callCount)
+	canonicalRequest := serveragent.ToolRequest{ID: "canonical-call", Name: echoName, Arguments: json.RawMessage(`{"message":"execute once"}`)}
+	// Creator-enabled tools execute directly, including the legacy approval flag.
+	// Retrying the same canonical action must still avoid a second provider call.
+	for attempt := 0; attempt < 2; attempt++ {
+		result, err := spaces.TestingExecuteMCPAgentTool(t.Context(), canonicalRun, canonicalRequest, true, "canonical_run")
+		if err != nil || !strings.Contains(string(result), `"provider":"mcp"`) {
+			t.Fatalf("canonical attempt %d result=%s err=%v", attempt, result, err)
+		}
+		fake.mu.Lock()
+		callCount = fake.calls
+		fake.mu.Unlock()
+		if callCount != 2 {
+			t.Fatalf("canonical attempt %d call count=%d, want 2 total", attempt, callCount)
+		}
 	}
 }
 
@@ -186,7 +173,9 @@ func TestMCPCompanionCallsAreAlwaysDangerous(t *testing.T) {
 	if impact := TestingCompanionToolImpact("mcp.0123456789ab.echo"); impact != "dangerous" {
 		t.Fatalf("MCP companion impact=%q, want dangerous", impact)
 	}
-	if !TestingCompanionToolNeedsApproval("full", "dangerous") {
-		t.Fatal("MCP companion call bypassed creator approval in full mode")
+	for _, mode := range []string{"ask", "auto", "full"} {
+		if TestingCompanionToolNeedsApproval(mode, "dangerous") {
+			t.Fatalf("creator-enabled MCP tool unexpectedly requires per-action approval in %s mode", mode)
+		}
 	}
 }

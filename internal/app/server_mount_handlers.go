@@ -2,8 +2,8 @@ package app
 
 import (
 	"context"
-	"github.com/kannachi323/misty/server/internal/platform/security"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/platform/security"
 	browsersync "github.com/kannachi323/misty/server/internal/sync"
 	"net/http"
 	"time"
@@ -84,6 +84,10 @@ func (s *Server) MountHandlers() error {
 		registerHandler = api.ClosedSelfHostRegistration()
 	}
 	loginHandler := api.Login(s.Database)
+	googleSignIn, err := api.NewGoogleSignInService(s.Database)
+	if err != nil {
+		return err
+	}
 	logoutHandler := api.Logout(s.Database)
 	forgotPasswordHandler := passwordResetService.Forgot()
 	startResetHandler := passwordResetService.Start()
@@ -109,6 +113,11 @@ func (s *Server) MountHandlers() error {
 		s.Router.Post(prefix+"/self-host/invitations", api.SelfHostInvitation(s.Database))
 		s.Router.Delete(prefix+"/self-host/invitations/{invitationID}", api.SelfHostInvitation(s.Database))
 		s.Router.Post(prefix+"/login", loginHandler)
+		s.Router.Get(prefix+"/auth/google", googleSignIn.Available())
+		s.Router.Post(prefix+"/auth/google", googleSignIn.Begin())
+		s.Router.Get(prefix+"/auth/google/start", googleSignIn.Start())
+		s.Router.Get(prefix+"/auth/google/callback", googleSignIn.Callback())
+		s.Router.Post(prefix+"/auth/google/complete", googleSignIn.Complete())
 		s.Router.Post(prefix+"/logout", logoutHandler)
 		s.Router.Post(prefix+"/auth/refresh", api.RefreshSession(s.Database))
 		s.Router.Post(prefix+"/auth/forgot", forgotPasswordHandler)
@@ -118,8 +127,10 @@ func (s *Server) MountHandlers() error {
 		s.Router.Post(prefix+"/auth/handoff", mintHandoffHandler)
 		s.Router.Get(prefix+"/auth/handoff/start", startHandoffHandler)
 		s.Router.Get(prefix+"/me", api.GetMe(s.Database))
-		s.Router.Get(prefix+"/sync/workspace", browserSync.Workspace())
-		s.Router.Post(prefix+"/sync/workspace", browserSync.Workspace())
+		s.Router.Get(prefix+"/me/library-lock", api.LibraryLockPassword(s.Database))
+		s.Router.Post(prefix+"/me/library-lock", api.LibraryLockPassword(s.Database))
+		s.Router.Get(prefix+"/sync/vault", browserSync.Vault())
+		s.Router.Post(prefix+"/sync/vault", browserSync.Vault())
 		s.Router.Get(prefix+"/sync/devices", browserSync.Devices())
 		s.Router.Post(prefix+"/sync/devices", browserSync.Devices())
 		s.Router.Post(prefix+"/sync/control", browserSync.ControlDevice())
@@ -152,6 +163,7 @@ func (s *Server) MountHandlers() error {
 		s.Router.Post(prefix+"/billing/checkout-session", api.CreateCheckoutSession(s.Database))
 		s.Router.Post(prefix+"/billing/portal-session", api.CreatePortalSession(s.Database))
 		s.Router.Get(prefix+"/billing/usage", api.GetBillingUsage(s.Database))
+		s.Router.Get(prefix+"/billing/ai-usage", api.GetAIUsage(s.Database))
 		s.mountAIRoutes(prefix+"/ai", aiService)
 		s.mountMistyRoutes(prefix, aiService)
 		s.mountSmartLibraryRoutes(prefix+"/ai/smart-library", smartLibraryService)

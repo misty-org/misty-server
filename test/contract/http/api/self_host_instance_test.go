@@ -51,13 +51,13 @@ func TestInstanceDescriptorAdvertisesSelfHostedProviders(t *testing.T) {
 	}
 }
 
-func TestInstanceConfigDefaultsToIndependentSelfHosted(t *testing.T) {
+func TestInstanceConfigDefaultsToHosted(t *testing.T) {
 	t.Setenv("MISTY_BILLING_ADAPTER", "none")
 	t.Setenv("MISTY_DEPLOYMENT_MODE", "")
 	t.Setenv("MISTY_INSTANCE_NAME", "")
 	t.Setenv("MISTY_LIBRARY_BACKEND", "")
 	config := api.InstanceConfigFromEnv()
-	if config.Deployment != "self_hosted" || config.Name != "Misty Self-hosted" {
+	if config.Deployment != "hosted" || config.Name != "Misty Hosted" {
 		t.Fatalf("config = %#v", config)
 	}
 	if config.Capabilities.HostedBilling || !config.Capabilities.HostedIntegrations || !config.Capabilities.HostedAI {

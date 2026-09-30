@@ -13,18 +13,25 @@
     "postinstall": "node scripts/patch-workflow-schema.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.41",
+    "@ai-sdk/google": "4.0.50",
+    "@ai-sdk/openai": "4.0.46",
+    "@ai-sdk/openai-compatible": "3.0.36",
+    "@ai-sdk/provider": "4.0.7",
     "@ai-sdk/workflow": "1.0.67",
     "@misty/mcp-client-runtime": "file:./vendor/mcp-client-runtime",
     "@modelcontextprotocol/client": "^2.0.0",
     "@opentelemetry/api": "1.9.1",
+    "@workflow/serde": "4.1.0",
     "@workflow/world-local": "4.2.4",
     "@workflow/world-postgres": "4.3.3",
     "@workflow/world-vercel": "4.6.2",
     "ai": "7.0.66",
     "ajv-formats": "3.0.1",
     "express": "5.2.1",
+    "express-rate-limit": "8.7.0",
     "nitro": "3.0.260610-beta",
-    "workflow": "4.8.3",
+    "workflow": "4.8.9",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -32,10 +39,10 @@
     "@types/node": "26.1.1",
     "rollup": "4.62.4",
     "typescript": "5.9.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   },
   "overrides": {
     "nanoid": "6.0.1",
-    "undici": "8.10.1"
+    "undici": "8.10.2"
   }
 }

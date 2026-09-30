@@ -150,7 +150,7 @@ func TestManagedMistyMCPNegotiatesWithOfficialGoSDK(t *testing.T) {
 	if remoteTool == nil || remoteTool.InputSchema == nil || remoteTool.OutputSchema == nil {
 		t.Fatalf("connected remote MCP tool is not advertised with typed schemas: %#v", remoteTool)
 	}
-	if remoteTool.Meta["misty/approval"] != "interactive" || remoteTool.Meta["misty/locality"] != "provider" {
+	if remoteTool.Meta["misty/approval"] != "none" || remoteTool.Meta["misty/locality"] != "provider" {
 		t.Fatalf("remote MCP tool is missing approval/provider metadata: %#v", remoteTool.Meta)
 	}
 }

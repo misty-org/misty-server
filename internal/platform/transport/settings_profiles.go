@@ -11,12 +11,14 @@ import (
 var settingsDefinitions embed.FS
 
 type PreferenceDefinition struct {
-	ID    string   `json:"id"`
-	Owner string   `json:"owner"`
-	Type  string   `json:"type"`
-	Enum  []string `json:"enum"`
-	Min   *float64 `json:"min"`
-	Max   *float64 `json:"max"`
+	ID        string   `json:"id"`
+	Owner     string   `json:"owner"`
+	Type      string   `json:"type"`
+	Enum      []string `json:"enum"`
+	Min       *float64 `json:"min"`
+	Max       *float64 `json:"max"`
+	MaxLength int      `json:"maxLength"`
+	Format    string   `json:"format"`
 }
 
 var portableDefinitions = func() map[string]PreferenceDefinition {
@@ -27,7 +29,7 @@ var portableDefinitions = func() map[string]PreferenceDefinition {
 	}
 	result := map[string]PreferenceDefinition{}
 	for _, d := range definitions {
-		if d.Owner == "profile" {
+		if d.Owner == "profile" || d.Owner == "account" {
 			result[d.ID] = d
 		}
 	}
@@ -56,8 +58,15 @@ func ValidateProfilePatch(values map[string]any, unset []string) error {
 		case "boolean":
 			_, valid = value.(bool)
 		case "string":
-			if v, ok := value.(string); ok && len(v) <= 4096 {
+			maxLength := d.MaxLength
+			if maxLength == 0 {
+				maxLength = 4096
+			}
+			if v, ok := value.(string); ok && len(v) <= maxLength {
 				valid = len(d.Enum) == 0
+				if d.Format == "json" {
+					valid = validStructuredPreference(d.ID, v)
+				}
 				for _, option := range d.Enum {
 					if option == v {
 						valid = true
@@ -74,4 +83,60 @@ func ValidateProfilePatch(values map[string]any, unset []string) error {
 		}
 	}
 	return nil
+}
+
+func validStructuredPreference(id, raw string) bool {
+	var value any
+	if json.Unmarshal([]byte(raw), &value) != nil {
+		return false
+	}
+	if id == "files.openWith" {
+		entries, ok := value.(map[string]any)
+		if !ok {
+			return false
+		}
+		for _, path := range entries {
+			if text, ok := path.(string); !ok || len(text) > 4096 {
+				return false
+			}
+		}
+		return true
+	}
+	entries, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, entry := range entries {
+		item, ok := entry.(map[string]any)
+		if !ok {
+			return false
+		}
+		switch id {
+		case "app.shortcuts.bindings":
+			if _, ok := item["commandId"].(string); !ok {
+				return false
+			}
+			for _, slot := range []string{"primary", "alternate"} {
+				if v := item[slot]; v != nil {
+					if _, ok := v.(string); !ok {
+						return false
+					}
+				}
+			}
+		case "app.layout.presets":
+			if _, ok := item["id"].(string); !ok {
+				return false
+			}
+			if _, ok := item["name"].(string); !ok {
+				return false
+			}
+			positions := map[string]bool{"left": true, "right": true, "top": true, "bottom": true}
+			nav, _ := item["navigation"].(string)
+			tabs, _ := item["tabs"].(string)
+			if !positions[nav] || !positions[tabs] || nav == tabs {
+				return false
+			}
+		}
+	}
+	return true
 }

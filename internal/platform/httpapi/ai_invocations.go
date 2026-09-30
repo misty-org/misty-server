@@ -41,8 +41,11 @@ type aiCaptureAttachment struct {
 
 type aiDisplayCapture struct {
 	aiCaptureAttachment
-	Screen  string `json:"screen"`
-	Primary bool   `json:"primary"`
+	CapturedAt int64  `json:"captured_at,omitempty"`
+	DisplayID  uint32 `json:"display_id,omitempty"`
+	Source     string `json:"source,omitempty"`
+	Screen     string `json:"screen"`
+	Primary    bool   `json:"primary"`
 }
 
 type aiInvocationDeviceContext struct {
@@ -215,8 +218,8 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		modelFallbackNotice := false
 		modelID := agent.FrontierDefaultModelID()
 		if body.Mode == "companion" && body.CompanionModel != "" {
-			if !strings.HasPrefix(body.CompanionModel, "openai/") || !agent.FrontierModelAvailable(r.Context(), body.CompanionModel) {
-				writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_model", "message": "Choose an available OpenAI model."})
+			if !agent.FrontierModelAvailable(r.Context(), body.CompanionModel) {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_model", "message": "Choose an available model."})
 				return
 			}
 			modelID = body.CompanionModel

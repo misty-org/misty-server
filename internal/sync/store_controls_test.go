@@ -15,7 +15,7 @@ func TestBrowserSyncDeviceControls(t *testing.T) {
 	ctx := context.Background()
 	root, key, _ := ed25519.GenerateKey(rand.Reader)
 	grant, signingKey := syncTestGrant(uuid.NewString(), key)
-	if err := database.CreateBrowserSyncWorkspace(ctx, "owner", root, syncTestKeyEnvelope(), grant); err != nil {
+	if err := database.CreateBrowserSyncVault(ctx, "owner", root, syncTestKeyEnvelope(), grant); err != nil {
 		t.Fatal(err)
 	}
 	enabled, disabled, version, name := true, false, 1, "Office Mac"
@@ -32,7 +32,7 @@ func TestBrowserSyncDeviceControls(t *testing.T) {
 	if _, err := database.ControlBrowserSyncDevice(ctx, "owner", control); !errors.Is(err, ErrSyncInvalid) {
 		t.Fatalf("offline: %v", err)
 	}
-	identity := SyncConnectionIdentity{UserID: "owner", WorkspaceID: grant.WorkspaceID, DeviceID: grant.DeviceID}
+	identity := SyncConnectionIdentity{UserID: "owner", VaultID: grant.VaultID, DeviceID: grant.DeviceID}
 	connection := uuid.NewString()
 	if err := database.BrowserSyncHeartbeat(ctx, identity, connection, 0, true); err != nil {
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func TestBrowserSyncDeviceControls(t *testing.T) {
 	if err != nil || !validSyncID(request) {
 		t.Fatalf("activation request: %q %v", request, err)
 	}
-	devices, err := database.BrowserSyncDevices(ctx, "owner", grant.WorkspaceID)
+	devices, err := database.BrowserSyncDevices(ctx, "owner", grant.VaultID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,11 +49,11 @@ func TestBrowserSyncDeviceControls(t *testing.T) {
 	if d.DisplayName != name || d.ActivationRequest == nil || *d.ActivationRequest != request || d.ActivationExpiresAt <= time.Now().UnixMilli() || d.ActivationExpiresAt > time.Now().Add(31*time.Second).UnixMilli() {
 		t.Fatalf("bad roster: %+v", d)
 	}
-	workspace, err := database.BrowserSyncWorkspace(ctx, "owner")
+	vault, err := database.BrowserSyncVault(ctx, "owner")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if workspace.HeadSequence != 0 {
+	if vault.HeadSequence != 0 {
 		t.Fatal("a request must not itself publish an activation")
 	}
 	if _, err := database.Conn.Exec(`UPDATE browser_sync_control_requests SET expires_at=clock_timestamp()-interval '1 second' WHERE operation_id=$1`, request); err != nil {
@@ -69,7 +69,7 @@ func TestBrowserSyncDeviceControls(t *testing.T) {
 	if _, err := database.ControlBrowserSyncDevice(ctx, "owner", control); err != nil {
 		t.Fatal(err)
 	}
-	devices, err = database.BrowserSyncDevices(ctx, "owner", grant.WorkspaceID)
+	devices, err = database.BrowserSyncDevices(ctx, "owner", grant.VaultID)
 	if err != nil || devices[0].FullSync || devices[0].ActivationRequest != nil {
 		t.Fatalf("policy/cancel failed: %+v %v", devices, err)
 	}

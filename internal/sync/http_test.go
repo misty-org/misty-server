@@ -96,23 +96,24 @@ func browserSocketTestDatabase(t *testing.T) (*db.Database, *db.Database) {
 	if _, err = conn.Exec(strings.Split(string(activeMigration), "-- +goose Down")[0] + "\n" + strings.Split(string(controlsMigration), "-- +goose Down")[0]); err != nil {
 		t.Fatal(err)
 	}
-	treesMigration, err := os.ReadFile(filepath.Join("..", "platform", "postgres", "migrations", "20270926000000_browser_sync_trees.sql"))
+	workspacesMigration, err := os.ReadFile(filepath.Join("..", "platform", "postgres", "migrations", "20270926000000_browser_sync_trees.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = conn.Exec(strings.ReplaceAll(strings.Split(string(treesMigration), "-- +goose Down")[0], "public.", "")); err != nil {
+	if _, err = conn.Exec(strings.ReplaceAll(strings.Split(string(workspacesMigration), "-- +goose Down")[0], "public.", "")); err != nil {
 		t.Fatal(err)
 	}
+	applyLaterMigrations(t, conn, filepath.Join("..", "platform", "postgres", "migrations"))
 	return a, b
 }
-func socketTestGrant(workspace string, root ed25519.PrivateKey) (SyncDeviceGrant, ed25519.PrivateKey) {
+func socketTestGrant(vault string, root ed25519.PrivateKey) (SyncDeviceGrant, ed25519.PrivateKey) {
 	pub, key, _ := ed25519.GenerateKey(rand.Reader)
-	g := SyncDeviceGrant{WorkspaceID: workspace, DeviceID: uuid.NewString(), KeyEpoch: 1, PublicKey: pub}
+	g := SyncDeviceGrant{VaultID: vault, DeviceID: uuid.NewString(), KeyEpoch: 1, PublicKey: pub}
 	g.Signature = ed25519.Sign(root, g.SigningBytes())
 	return g, key
 }
 func socketTestMutation(g SyncDeviceGrant, key ed25519.PrivateKey, counter int64) SyncMutation {
-	m := SyncMutation{WorkspaceID: g.WorkspaceID, OperationID: uuid.NewString(), DeviceID: g.DeviceID, DeviceCounter: counter, KeyEpoch: 1, Envelope: SyncEnvelope{Version: 1, Nonce: base64.StdEncoding.EncodeToString(make([]byte, 12)), Ciphertext: base64.StdEncoding.EncodeToString(make([]byte, 32))}}
+	m := SyncMutation{VaultID: g.VaultID, OperationID: uuid.NewString(), DeviceID: g.DeviceID, DeviceCounter: counter, KeyEpoch: 1, Envelope: SyncEnvelope{Version: 1, Nonce: base64.StdEncoding.EncodeToString(make([]byte, 12)), Ciphertext: base64.StdEncoding.EncodeToString(make([]byte, 32))}}
 	m.Signature = ed25519.Sign(key, m.SigningBytes())
 	return m
 }
@@ -139,7 +140,7 @@ func socketTestDial(t *testing.T, database *db.Database, url string, g SyncDevic
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = NewStore(database.Conn).CreateBrowserSyncTicket(context.Background(), "owner", g.WorkspaceID, g.DeviceID, security.HashToken(token)); err != nil {
+	if err = NewStore(database.Conn).CreateBrowserSyncTicket(context.Background(), "owner", g.VaultID, g.DeviceID, security.HashToken(token)); err != nil {
 		t.Fatal(err)
 	}
 	c, _, err := websocket.DefaultDialer.Dial(url+"?ticket="+token, nil)
@@ -149,7 +150,7 @@ func socketTestDial(t *testing.T, database *db.Database, url string, g SyncDevic
 	challenge := socketTestRead(t, c, "challenge")
 	var nonce string
 	_ = json.Unmarshal(challenge["challenge"], &nonce)
-	if err = c.WriteJSON(map[string]any{"type": "authenticate", "after": after, "signature": ed25519.Sign(key, syncConnectionProof(g.WorkspaceID, g.DeviceID, nonce))}); err != nil {
+	if err = c.WriteJSON(map[string]any{"type": "authenticate", "after": after, "signature": ed25519.Sign(key, syncConnectionProof(g.VaultID, g.DeviceID, nonce))}); err != nil {
 		c.Close()
 		t.Fatal(err)
 	}
@@ -161,9 +162,9 @@ func TestBrowserSyncWebSocketTwoServersReplayAndProof(t *testing.T) {
 	ctx := context.Background()
 	root, rootKey, _ := ed25519.GenerateKey(rand.Reader)
 	a, keyA := socketTestGrant(uuid.NewString(), rootKey)
-	b, keyB := socketTestGrant(a.WorkspaceID, rootKey)
+	b, keyB := socketTestGrant(a.VaultID, rootKey)
 	wrapper := SyncKeyEnvelope{Version: 1, KDF: "argon2id-m65536-t3-p1", Salt: base64.StdEncoding.EncodeToString(make([]byte, 16)), Nonce: base64.StdEncoding.EncodeToString(make([]byte, 12)), Ciphertext: base64.StdEncoding.EncodeToString(make([]byte, 32))}
-	if err := NewStore(database.Conn).CreateBrowserSyncWorkspace(ctx, "owner", root, wrapper, a); err != nil {
+	if err := NewStore(database.Conn).CreateBrowserSyncVault(ctx, "owner", root, wrapper, a); err != nil {
 		t.Fatal(err)
 	}
 	if err := NewStore(database.Conn).EnrollBrowserSyncDevice(ctx, "owner", b); err != nil {
@@ -225,7 +226,7 @@ func TestBrowserSyncWebSocketTwoServersReplayAndProof(t *testing.T) {
 	}
 	// Disconnecting an older socket must not make its replacement disappear.
 	ca.Close()
-	presence, err := NewStore(database.Conn).BrowserSyncPresence(ctx, "owner", a.WorkspaceID)
+	presence, err := NewStore(database.Conn).BrowserSyncPresence(ctx, "owner", a.VaultID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +255,7 @@ func TestBrowserSyncWebSocketTwoServersReplayAndProof(t *testing.T) {
 	if !bytes.Contains(rejected["code"], []byte("sync_device_forbidden")) {
 		t.Fatal("identity mismatch accepted")
 	}
-	w, err := NewStore(database.Conn).BrowserSyncWorkspace(ctx, "owner")
+	w, err := NewStore(database.Conn).BrowserSyncVault(ctx, "owner")
 	if err != nil || w.HeadSequence != 2 {
 		t.Fatal("rejected frames changed durable head")
 	}
@@ -285,5 +286,19 @@ func TestBrowserSyncWebSocketTwoServersReplayAndProof(t *testing.T) {
 	receipt = SyncReceipt{}
 	if json.Unmarshal(ack["receipt"], &receipt) != nil || receipt.Sequence != 4 || receipt.Discarded {
 		t.Fatal("active device could not publish")
+	}
+}
+
+func TestConnectionTimersAreSpread(t *testing.T) {
+	seen := map[time.Duration]bool{}
+	for i := 0; i < 50; i++ {
+		d := jittered(10*time.Minute, 0.5)
+		if d < 5*time.Minute || d > 15*time.Minute {
+			t.Fatalf("reconnect outside its window: %v", d)
+		}
+		seen[d] = true
+	}
+	if len(seen) < 2 {
+		t.Fatal("every connection would reconnect at the same moment")
 	}
 }

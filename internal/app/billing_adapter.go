@@ -34,6 +34,9 @@ func runBillingCompletions(ctx context.Context, server *Server) {
 		if err := delivery.Flush(batch, 20); err != nil && ctx.Err() == nil {
 			log.Printf("billing completion delivery: %v", err)
 		}
+		if err := server.Database.RecoverVoiceUsage(batch); err != nil && ctx.Err() == nil {
+			log.Printf("voice usage recovery: %v", err)
+		}
 		cancel()
 		select {
 		case <-ctx.Done():

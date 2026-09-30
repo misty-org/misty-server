@@ -71,10 +71,7 @@ type InstanceConfig struct {
 }
 
 func InstanceConfigFromEnv() InstanceConfig {
-	deployment := strings.ToLower(strings.TrimSpace(envconfig.Getenv("MISTY_DEPLOYMENT_MODE")))
-	if deployment != "hosted" {
-		deployment = "self_hosted"
-	}
+	deployment := envconfig.DeploymentMode()
 	name := strings.TrimSpace(envconfig.Getenv("MISTY_INSTANCE_NAME"))
 	if name == "" {
 		if deployment == "self_hosted" {

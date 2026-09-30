@@ -94,6 +94,15 @@ func accountBillingSummary(ctx context.Context, database *db.Database, userID st
 	return summary, nil
 }
 func GetBillingUsage(database *db.Database) http.HandlerFunc {
+	return getBillingUsage(database, true)
+}
+
+// GetAIUsage reads only the account allowance, independent of Space storage.
+func GetAIUsage(database *db.Database) http.HandlerFunc {
+	return getBillingUsage(database, false)
+}
+
+func getBillingUsage(database *db.Database, includeStorage bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		userID, err := sessionUserID(r, database)
@@ -108,6 +117,14 @@ func GetBillingUsage(database *db.Database) http.HandlerFunc {
 		summary, err := accountBillingSummary(r.Context(), database, userID)
 		if err != nil {
 			writeBillingError(w, err)
+			return
+		}
+		ai, _ := summary["ai"].(map[string]any)
+		ratio, _ := ai["used_ratio"].(float64)
+		personal := map[string]any{"ai": ai}
+		response := map[string]any{"enabled": database.BillingService().Adapter.Enabled(), "plan": summary["tier"], "personal": personal, "billing": summary["billing"], "agent_usage": map[string]any{"percentage_used": ratio * 100, "available": ai["available"], "paused": ai["paused"], "reset_at": ai["reset_at"], "plan": summary["tier"]}}
+		if !includeStorage {
+			writeJSON(w, http.StatusOK, response)
 			return
 		}
 		storage, err := database.OwnerStorageUsage(r.Context(), userID)
@@ -129,8 +146,8 @@ func GetBillingUsage(database *db.Database) http.HandlerFunc {
 			}
 			spaceUsage = append(spaceUsage, map[string]any{"space_id": space.ID, "name": space.Name, "role": space.Role, "owner_user_id": space.OwnerUserID, "storage": usage})
 		}
-		ai, _ := summary["ai"].(map[string]any)
-		ratio, _ := ai["used_ratio"].(float64)
-		writeJSON(w, http.StatusOK, map[string]any{"enabled": database.BillingService().Adapter.Enabled(), "plan": summary["tier"], "storage": storage, "spaces": spaceUsage, "entitlements": summary["entitlements"], "personal": map[string]any{"ai": ai, "storage": storage.Personal}, "billing": summary["billing"], "agent_usage": map[string]any{"percentage_used": ratio * 100, "available": ai["available"], "paused": ai["paused"], "reset_at": ai["reset_at"], "plan": summary["tier"]}})
+		personal["storage"] = storage.Personal
+		response["storage"], response["spaces"], response["entitlements"] = storage, spaceUsage, summary["entitlements"]
+		writeJSON(w, http.StatusOK, response)
 	}
 }

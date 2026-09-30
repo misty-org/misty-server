@@ -83,43 +83,18 @@ func testAIInvocationSDKAccount(t *testing.T, database *db.Database, service *Sp
 		t.Fatalf("quick read: %#v %v calls=%d", result, err, calls.Load())
 	}
 	params := &mcp.CallToolParams{Name: write, Arguments: map[string]any{}, Meta: mcp.Meta{"misty/call_id": "quick-write", "misty/approval_hook_token": "quick-write-hook"}}
-	pending, err := session.CallTool(t.Context(), params)
-	if err != nil || pending.IsError || pending.Meta["misty/approval"] == nil || calls.Load() != 1 {
-		t.Fatalf("quick write bypassed approval: %#v %v", pending, err)
-	}
-	var approval struct {
-		ID string `json:"id"`
-	}
-	raw, _ := json.Marshal(pending.Meta["misty/approval"])
-	if json.Unmarshal(raw, &approval) != nil || approval.ID == "" {
-		t.Fatalf("invalid approval: %s", raw)
-	}
-	testSDKApprovalReview(t, database, user, approval.ID, targetID, "", json.RawMessage(`{}`), token)
-	if err := database.DecideSDKToolApproval(t.Context(), user, id, approval.ID, true); err != nil {
-		t.Fatal(err)
+	var raw []byte
+	result, err = session.CallTool(t.Context(), params)
+	if err != nil || result.IsError || result.Meta["misty/approval"] != nil || calls.Load() != 2 {
+		t.Fatalf("quick autonomous write: %#v %v calls=%d", result, err, calls.Load())
 	}
 	result, err = session.CallTool(t.Context(), params)
-	if err != nil || result.IsError || calls.Load() != 2 {
-		t.Fatalf("quick approved write: %#v %v calls=%d", result, err, calls.Load())
-	}
-	result, err = session.CallTool(t.Context(), params)
-	if err != nil || result.IsError || calls.Load() != 2 {
+	if err != nil || result.IsError || result.Meta["misty/approval"] != nil || calls.Load() != 2 {
 		t.Fatalf("quick write replay: %#v %v calls=%d", result, err, calls.Load())
 	}
 	loseResponse.Store(true)
 	params.Meta["misty/call_id"] = "quick-lost-write"
 	params.Meta["misty/approval_hook_token"] = "quick-lost-write-hook"
-	pending, err = session.CallTool(t.Context(), params)
-	if err != nil || pending.IsError || pending.Meta["misty/approval"] == nil {
-		t.Fatalf("second wait: %#v %v", pending, err)
-	}
-	raw, _ = json.Marshal(pending.Meta["misty/approval"])
-	if json.Unmarshal(raw, &approval) != nil {
-		t.Fatal("invalid second approval")
-	}
-	if err := database.DecideSDKToolApproval(t.Context(), user, id, approval.ID, true); err != nil {
-		t.Fatal(err)
-	}
 	result, err = session.CallTool(t.Context(), params)
 	var uncertain struct {
 		Status   string `json:"status"`

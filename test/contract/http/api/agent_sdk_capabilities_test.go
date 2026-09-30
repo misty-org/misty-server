@@ -104,24 +104,9 @@ func testConversationalSDKCrossApp(t *testing.T, database *db.Database, service 
 		t.Fatalf("cross-app registry missing provider or Journal: sdk=%q notes=%v tools=%d", sdkWrite, notes, len(catalog.Tools))
 	}
 	params := &mcp.CallToolParams{Name: sdkWrite, Arguments: map[string]any{}, Meta: mcp.Meta{"misty/call_id": "record-habit", "misty/approval_hook_token": "record-habit-hook"}}
-	pending, err := session.CallTool(t.Context(), params)
-	if err != nil || pending.IsError || pending.Meta["misty/approval"] == nil || writes.Load() != 0 {
-		t.Fatalf("unapproved SDK effect: %#v %v", pending, err)
-	}
-	raw, _ := json.Marshal(pending.Meta["misty/approval"])
-	var approval struct {
-		ID string `json:"id"`
-	}
-	if json.Unmarshal(raw, &approval) != nil || approval.ID == "" {
-		t.Fatalf("approval identity: %s", raw)
-	}
-	testSDKApprovalReview(t, database, user, approval.ID, targetID, space.ID, json.RawMessage(`{}`), token)
-	if _, err := database.DecideCreatorToolApproval(t.Context(), user, run.ID, approval.ID, true); err != nil {
-		t.Fatal(err)
-	}
 	executed, err := session.CallTool(t.Context(), params)
-	if err != nil || executed.IsError || writes.Load() != 1 || !cap.ValidID(effect) {
-		t.Fatalf("approved SDK action: %#v %v calls=%d", executed, err, writes.Load())
+	if err != nil || executed.IsError || executed.Meta["misty/approval"] != nil || writes.Load() != 1 || !cap.ValidID(effect) {
+		t.Fatalf("autonomous SDK action: %#v %v calls=%d", executed, err, writes.Load())
 	}
 	replay, err := session.CallTool(t.Context(), params)
 	if err != nil || replay.IsError || writes.Load() != 1 {
@@ -162,7 +147,7 @@ func testConversationalSDKCrossApp(t *testing.T, database *db.Database, service 
 	for _, callID := range []string{"lost-habit-reply", "replanner-replacement"} {
 		params.Meta["misty/call_id"] = callID
 		params.Meta["misty/approval_hook_token"] = callID + "-hook"
-		pending, err = session.CallTool(t.Context(), params)
+		pending, err := session.CallTool(t.Context(), params)
 		if callID == "replanner-replacement" {
 			encoded, _ := json.Marshal(pending)
 			if err != nil || pending.IsError || pending.Meta["misty/approval"] != nil || !strings.Contains(string(encoded), uncertainEffect) {
@@ -170,17 +155,7 @@ func testConversationalSDKCrossApp(t *testing.T, database *db.Database, service 
 			}
 			continue
 		}
-		if err != nil || pending.IsError || pending.Meta["misty/approval"] == nil {
-			t.Fatalf("write approval: %#v %v", pending, err)
-		}
-		raw, _ = json.Marshal(pending.Meta["misty/approval"])
-		if json.Unmarshal(raw, &approval) != nil || approval.ID == "" {
-			t.Fatal("missing approval")
-		}
-		if _, err := database.DecideCreatorToolApproval(t.Context(), user, run.ID, approval.ID, true); err != nil {
-			t.Fatal(err)
-		}
-		outcome, err := session.CallTool(t.Context(), params)
+		outcome := pending
 		if callID == "lost-habit-reply" {
 			uncertainEffect = effect
 		} else {

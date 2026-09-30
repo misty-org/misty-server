@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 	"strings"
+
+	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 const (
@@ -22,9 +24,13 @@ type FrontierGatewayModel struct {
 	ReasoningLevels []string `json:"reasoning_levels"`
 }
 
-// Model selection is a server release policy. Legacy client model IDs and catalog
-// overrides cannot change the model used by a personal agent.
-func FrontierDefaultModelID() string { return DefaultFrontierModelID }
+// Hosted model selection is release policy; self-hosted operators can pin a model.
+func FrontierDefaultModelID() string {
+	if config, err := envconfig.AgentModel(); err == nil && config.Model != "" {
+		return config.Model
+	}
+	return DefaultFrontierModelID
+}
 
 func configuredFrontierModelIDs() []string { return []string{FrontierDefaultModelID()} }
 
@@ -37,6 +43,17 @@ func ManagedReasoning(mode, legacyEffort string) string {
 }
 
 func FrontierGatewayModels(ctx context.Context) ([]FrontierGatewayModel, error) {
+	config, err := envconfig.AgentModel()
+	if err != nil {
+		return nil, err
+	}
+	if config.Provider != "gateway" {
+		providerID, providerName := frontierProvider(config.Model)
+		return []FrontierGatewayModel{{
+			ID: config.Model, Name: strings.TrimPrefix(config.Model, config.Provider+"/"), ProviderID: providerID, ProviderName: providerName,
+			Capabilities: []string{"chat", "tools", "vision"}, ReasoningLevels: []string{"high", "xhigh"},
+		}}, nil
+	}
 	models, err := GatewayModels(ctx)
 	if err != nil {
 		return nil, err
@@ -131,7 +148,8 @@ func frontierProvider(modelID string) (string, string) {
 	provider, _, _ := strings.Cut(modelID, "/")
 	names := map[string]string{
 		"openai": "OpenAI", "anthropic": "Anthropic", "google": "Google",
-		"spacexai": "xAI", "deepseek": "DeepSeek", "alibaba": "Qwen",
+		"openai-compatible": "OpenAI-compatible",
+		"spacexai":          "xAI", "deepseek": "DeepSeek", "alibaba": "Qwen",
 	}
 	if name := names[provider]; name != "" {
 		return provider, name

@@ -58,3 +58,35 @@ func TestBillingAdapterCustomerIdentityAndOutage(t *testing.T) {
 		t.Fatalf("disabled adapter: %d %s", response.Code, response.Body.String())
 	}
 }
+
+func TestAIUsageDoesNotDependOnStorageEntitlements(t *testing.T) {
+	database := openPresenceTestDatabase(t)
+	user, err := database.CreateUser("AI Usage", uniqueTestEmail("ai-usage"), "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := newConversationTestBearerToken(t, database, user.ID)
+	adapter := &customerAdapter{summary: json.RawMessage(`{"tier":"pro","ai":{"used_ratio":0.25,"available":true,"paused":false}}`)}
+	database.Billing = &billingadapter.Service{Adapter: adapter}
+	// Storage's entitlement source is unavailable; account AI remains readable.
+	t.Setenv("MISTY_BILLING_ADAPTER", "invalid-storage-adapter")
+	request := httptest.NewRequest("GET", "/billing/ai-usage", nil)
+	request.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: token})
+	response := httptest.NewRecorder()
+	GetAIUsage(database).ServeHTTP(response, request)
+	if response.Code != 200 || adapter.request.AccountID != user.ID {
+		t.Fatalf("AI summary: %d %s", response.Code, response.Body.String())
+	}
+	var body map[string]json.RawMessage
+	if err = json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["storage"] != nil || body["spaces"] != nil || !strings.Contains(string(body["agent_usage"]), `"percentage_used":25`) {
+		t.Fatalf("AI response mixed with storage: %s", response.Body.String())
+	}
+	response = httptest.NewRecorder()
+	GetBillingUsage(database).ServeHTTP(response, request)
+	if response.Code != 503 {
+		t.Fatalf("storage source unexpectedly available: %d", response.Code)
+	}
+}

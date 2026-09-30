@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
 import {
@@ -8,7 +8,28 @@ import {
   drawingSceneState,
 } from "../src/drawing-scene";
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("drawing scene control", () => {
+  it("rejects out-of-range random samples without biasing seeds or nonces", () => {
+    const samples = [0, 2_147_483_646, 2_147_483_647, 4_294_967_295, 2_147_483_649, 2_147_483_645];
+    const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+      expect(samples.length).toBeGreaterThan(0);
+      (array as Uint32Array)[0] = samples.shift()!;
+      return array;
+    });
+    const doc = new Y.Doc();
+    try {
+      applyDrawingSceneMutation(doc, buildDrawingSceneMutation(doc, {
+        elements: [{ id: "box", type: "rectangle" }],
+      }));
+      const state = drawingSceneState(doc, false) as { elements: Array<Record<string, unknown>> };
+      expect(state.elements[0]).toMatchObject({ seed: 1, versionNonce: 2_147_483_645 });
+      expect(random).toHaveBeenCalledTimes(6);
+    } finally {
+      doc.destroy();
+    }
+  });
   it("normalizes native shapes and supports partial collaborative updates", async () => {
     const doc = new Y.Doc();
     const first = buildDrawingSceneMutation(doc, {

@@ -10,9 +10,8 @@ func validateAIInvocationDeviceContexts(references []aiContextReference, context
 	if len(contexts) > 50 {
 		return errors.New("at most 50 browser workspaces can be attached")
 	}
-	if len(contexts) > 0 && strings.TrimSpace(spaceID) == "" {
-		return errors.New("browser workspaces require a bound Space")
-	}
+	// Account-scoped invocations can attach local browser tabs without a Space.
+	// Each workspace must still match an explicitly attached device reference.
 	seen := map[string]bool{}
 	for _, deviceContext := range contexts {
 		deviceContext.DeviceID = strings.TrimSpace(deviceContext.DeviceID)

@@ -39,69 +39,12 @@ func (db *Database) MarkSpaceNodeStale(ctx context.Context, userID, spaceID, nod
 	})
 }
 
-func (db *Database) SpaceInbox(ctx context.Context, userID, tab string, limit int) ([]SpaceInboxItem, error) {
-	if limit < 1 || limit > 200 {
-		limit = 100
-	}
-	items := []SpaceInboxItem{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		where := "i.kind='unread'"
-		if tab == "mentions" {
-			where = "i.kind IN ('mention','agent','approval','workflow')"
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.space_id,s.name,i.kind,COALESCE(i.message_id,''),i.event_id,i.payload,i.seen_at,i.created_at
-			FROM space_inbox_items i JOIN spaces s ON s.id=i.space_id
-			WHERE i.user_id=$1 AND `+where+`
-			AND EXISTS(SELECT 1 FROM space_members current_member WHERE current_member.space_id=i.space_id AND current_member.user_id=$1)
-			ORDER BY i.id DESC LIMIT $2`, userID, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item SpaceInboxItem
-			if err := rows.Scan(&item.ID, &item.SpaceID, &item.SpaceName, &item.Kind, &item.MessageID, &item.EventID, &item.Payload, &item.SeenAt, &item.CreatedAt); err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return rows.Err()
-	})
-	return items, err
-}
-
-func (db *Database) MarkSpaceInboxSeen(ctx context.Context, userID string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE space_inbox_items SET seen_at=NOW() WHERE user_id=$1 AND seen_at IS NULL`, userID)
-		return err
-	})
-}
-
-func (db *Database) ClearSpaceInbox(ctx context.Context, userID, tab string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		where := "kind='unread'"
-		if tab == "mentions" {
-			where = "kind IN ('mention','agent','approval','workflow')"
-		}
-		if tab == "unreads" {
-			if _, err := tx.ExecContext(ctx, `UPDATE space_members m SET read_message_seq=GREATEST(m.read_message_seq,COALESCE((SELECT max(seq) FROM space_messages WHERE space_id=m.space_id),0)) WHERE m.user_id=$1`, userID); err != nil {
-				return err
-			}
-		}
-		_, err := tx.ExecContext(ctx, `DELETE FROM space_inbox_items WHERE user_id=$1 AND `+where, userID)
-		return err
-	})
-}
-
 func (db *Database) MarkSpaceRead(ctx context.Context, userID, spaceID string, seq int64) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE space_members SET read_message_seq=GREATEST(read_message_seq,$1) WHERE space_id=$2 AND user_id=$3`, seq, spaceID, userID); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, `DELETE FROM space_inbox_items i USING space_messages m WHERE i.user_id=$1 AND i.space_id=$2 AND i.message_id=m.id AND m.seq<=$3 AND i.kind='unread'`, userID, spaceID, seq)
+		_, err := tx.ExecContext(ctx, `UPDATE space_members SET read_message_seq=GREATEST(read_message_seq,$1) WHERE space_id=$2 AND user_id=$3`, seq, spaceID, userID)
 		return err
 	})
 }

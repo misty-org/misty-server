@@ -80,21 +80,29 @@ func (s Service) Complete(ctx context.Context, action string, reservation *Reser
 // RecoverAdmissions completes only attempts that could not reach provider work.
 // It replays the original key, then durably releases the opaque hold.
 func (s Service) RecoverAdmissions(ctx context.Context, limit int) error {
+	_, err := s.RecoverAdmissionsBatch(ctx, limit)
+	return err
+}
+
+// RecoverAdmissionsBatch reports claimed rows so an event worker can distinguish
+// progress from another replica holding the ready rows' locks.
+func (s Service) RecoverAdmissionsBatch(ctx context.Context, limit int) (int, error) {
 	if !s.Adapter.Enabled() {
-		return nil
+		return 0, nil
 	}
 	if s.Store == nil {
-		return ErrUnavailable
+		return 0, ErrUnavailable
 	}
 	pending, err := s.Store.AbandonedAdmissions(ctx, limit)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	count := len(pending) // The store persisted a retry deadline while claiming these rows.
 	for _, req := range pending {
 		d, err := s.Adapter.Do(ctx, "reserve", req)
 		if errors.Is(err, ErrDenied) {
 			if err = s.Store.AdmissionRecovered(ctx, req); err != nil {
-				return err
+				return count, err
 			}
 			continue
 		}
@@ -105,12 +113,12 @@ func (s Service) RecoverAdmissions(ctx context.Context, limit int) error {
 		original := req
 		req.Key = "abandoned-release:" + keyID(req.AccountID, req.Key)
 		if err = (Reliable{Adapter: s.Adapter, Store: s.Store}).Submit(ctx, "release", req); err != nil {
-			return err
+			return count, err
 		}
 		req = original
 		if err = s.Store.AdmissionRecovered(ctx, req); err != nil {
-			return err
+			return count, err
 		}
 	}
-	return nil
+	return count, nil
 }

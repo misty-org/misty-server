@@ -137,7 +137,7 @@ func testInterventionMCPAndTrustedControl(t *testing.T, spaceRun bool) {
 	}
 	call := func(hook string) *mcp.CallToolResult {
 		t.Helper()
-		result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "browser.request_user_action", Arguments: map[string]any{"scopeId": scope, "action": "sign_in", "reason": "Sign in to the original personal inbox"}, Meta: mcp.Meta{"misty/call_id": "wait-for-login", "misty/device_hook_token": hook}})
+		result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "browser.request_user_action", Arguments: map[string]any{"scopeId": scope, "action": "sign_in", "reason": "Sign in to the original personal account"}, Meta: mcp.Meta{"misty/call_id": "wait-for-login", "misty/device_hook_token": hook}})
 		if err != nil {
 			t.Fatal(err)
 		}

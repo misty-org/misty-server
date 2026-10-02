@@ -44,6 +44,11 @@ for path in paths:
     execute(f"BEGIN;\n{up}\nINSERT INTO goose_db_version(version_id,is_applied) VALUES({version},true);\nCOMMIT;")
 print(f"Applied {len(paths)} migrations to a disposable database.")
 PY
+# Match deployment's post-migration grants, including the non-superuser,
+# non-BYPASSRLS application role used by cross-instance contract tests.
+docker exec -i -e PGUSER=postgres -e PGDATABASE=misty_browser_test \
+  -e MISTY_APP_DB_USER=misty_app -e MISTY_APP_DB_PASSWORD=misty-isolated-runtime \
+  "$misty_test_container" sh < scripts/docker/postgres-grant-app-role.sh >/dev/null
 if [ "${MISTY_BROWSER_SKIP_INTERNAL:-0}" != "1" ]; then
   go test -p 1 ./internal/...
 fi

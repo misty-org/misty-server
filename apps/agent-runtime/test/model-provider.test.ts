@@ -54,7 +54,6 @@ describe("instance model routing", () => {
         MISTY_AGENT_MODEL: "anthropic/example",
         MISTY_AGENT_MODEL_API_KEY: "secret",
       },
-      { MISTY_DEPLOYMENT_MODE: "hosted", MISTY_AGENT_MODEL: "openai/example" },
       { MISTY_AGENT_MODEL_API_KEY: "secret" },
       {
         MISTY_AGENT_MODEL_PROVIDER: "openai-compatible",

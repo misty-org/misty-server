@@ -68,6 +68,7 @@ CREATE TABLE space_action_suggestion_jobs(id text);
 CREATE TABLE space_action_suggestion_batches(id text);
 CREATE TABLE space_action_suggestion_settings(id text);
 CREATE TABLE space_conversation_follow_up_recipients(id text);
+CREATE TABLE space_inbox_items(payload jsonb, event_id bigint);
 CREATE TABLE space_conversation_suggestion_vetoes(id text);
 CREATE TABLE space_conversation_follow_ups(id text, agent_id text);
 ALTER TABLE ai_user_settings ADD COLUMN active_companion_agent_id text;

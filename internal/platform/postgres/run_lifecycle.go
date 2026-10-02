@@ -39,32 +39,6 @@ func (db *Database) CancelSpaceRun(ctx context.Context, userID, runID string) (*
 	return out, err
 }
 
-func requireRunResourceEnabledTx(ctx context.Context, tx *sql.Tx, run *SpaceRun) error {
-	var enabled bool
-	var err error
-	switch run.ResourceKind {
-	case "agent":
-		owner := run.OwnerUserID
-		if owner == "" {
-			owner = run.RequestingMemberID
-		}
-		err = tx.QueryRowContext(ctx, `SELECT a.enabled AND a.deleted_at IS NULL
-   FROM misty_ask_identities a WHERE a.id=$1 AND a.owner_user_id=$2`, run.ResourceID, owner).Scan(&enabled)
-	default:
-		return ErrSpaceInvalid
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrSpaceNotFound
-	}
-	if err != nil {
-		return err
-	}
-	if !enabled {
-		return ErrSpaceInvalid
-	}
-	return nil
-}
-
 func (db *Database) RunApprovals(ctx context.Context, userID, runID string) ([]RunApproval, error) {
 	if _, err := db.SpaceRun(ctx, userID, runID); err != nil {
 		return nil, err

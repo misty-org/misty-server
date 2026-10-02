@@ -137,7 +137,6 @@ func (config libraryS3Config) empty() bool {
 func TestingLibraryStoreFromEnv() (api.LibraryObjectStore, error) {
 	config := libraryS3ConfigFromEnv()
 	environment := strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT"))
-	deployment := envconfig.DeploymentMode()
 	backend := strings.ToLower(strings.TrimSpace(envconfig.Getenv("MISTY_LIBRARY_BACKEND")))
 	localRoot := firstConfigured("MISTY_LIBRARY_FILESYSTEM_DIR", "MISTY_LIBRARY_LOCAL_DIR")
 	if backend == "" {
@@ -148,8 +147,8 @@ func TestingLibraryStoreFromEnv() (api.LibraryObjectStore, error) {
 		}
 	}
 	if backend == "filesystem" {
-		if strings.EqualFold(environment, "production") && deployment != "self_hosted" {
-			return nil, fmt.Errorf("filesystem Library storage is allowed in production only for self-hosted deployments")
+		if strings.EqualFold(environment, "production") {
+			return nil, fmt.Errorf("filesystem Library storage is not allowed in production")
 		}
 		store, err := api.NewLocalLibraryObjectStore(localRoot)
 		if err != nil {
@@ -170,7 +169,6 @@ func TestingLibraryStoreFromEnv() (api.LibraryObjectStore, error) {
 		Endpoint: config.endpoint, Region: config.region, Bucket: config.bucket,
 		AccessKeyID: config.accessKey, SecretAccessKey: config.secretKey,
 		ForcePathStyle: config.forcePathStyle, BucketPrivate: true, PermanentObjects: true,
-		AllowInsecureLocal: deployment == "self_hosted",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure R2 Library store: %w", err)
@@ -198,7 +196,6 @@ func (s *Server) mountMediaSearchRoutes(prefix string, service *api.MediaSearchS
 
 func (s *Server) mountSmartLibraryRoutes(prefix string, service *api.SmartLibraryService) {
 	s.Router.Post(prefix+"/search", service.GlobalSearch())
-	s.Router.Get(prefix+"/index-status", service.IndexStatus())
 	s.Router.Post(prefix+"/reindex", service.PlanReindex())
 	s.Router.Post(prefix+"/reindex/{jobID}/complete", service.CompleteReindex())
 	s.Router.Post(prefix+"/folders", service.RegisterFolder())
@@ -256,7 +253,6 @@ var allowedCORSRequestHeaders = []string{
 	"X-Misty-Attachment-Upload-Token",
 	"X-Misty-Library-Upload-Token",
 	"X-Misty-Library-Reauthentication",
-	"X-Misty-Self-Hosted-Entitlement",
 }
 
 func TestingIsAllowedCORSOrigin(origin string) bool {
@@ -304,13 +300,9 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 }
 
 func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {
+	s.Router.Get(prefix+"/settings/preferences", aiService.AccountPreferences())
 	s.Router.Post(prefix+"/settings/preferences", aiService.AccountPreferences())
 	s.Router.Patch(prefix+"/settings/preferences", aiService.AccountPreferences())
-	s.Router.Get(prefix+"/settings/profiles", aiService.SettingsProfiles())
-	s.Router.Post(prefix+"/settings/profiles", aiService.SettingsProfiles())
-	s.Router.Get(prefix+"/settings/profiles/{profileID}", aiService.SettingsProfiles())
-	s.Router.Patch(prefix+"/settings/profiles/{profileID}", aiService.SettingsProfiles())
-	s.Router.Delete(prefix+"/settings/profiles/{profileID}", aiService.SettingsProfiles())
 	s.Router.Get(prefix+"/misty/events", aiService.AccountEvents())
 	s.Router.Post(prefix+"/misty/agent-followup", aiService.AgentFollowup())
 	s.Router.Post(prefix+"/misty/agent-execution", aiService.AgentExecutionLease())

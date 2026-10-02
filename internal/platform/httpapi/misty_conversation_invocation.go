@@ -1,27 +1,32 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
-
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 func (s *AIService) awaitAIInvocationAnswer(r *http.Request, userID, invocationID string) (string, []aiCitation, error) {
-	cursor := 0
+	cursor := int64(0)
+	stream, release := s.streams.acquire(userID, invocationID, cursor)
+	defer release()
 	answer := ""
 	citations := []aiCitation{}
 	for {
-		events, state, notify, found := s.invocations.events(userID, invocationID, cursor)
-		if !found {
-			return "", nil, db.ErrSpaceNotFound
+		page, err := stream.read(r.Context(), cursor)
+		if err != nil {
+			return "", nil, err
 		}
-		for _, event := range events {
-			if value, err := strconv.Atoi(event.ID); err == nil {
-				cursor = value
+		if page.ready {
+			cursor = page.cursor
+		}
+		for _, item := range page.events {
+			var event aiInvocationEvent
+			if err := json.Unmarshal(item.payload, &event); err != nil {
+				return "", nil, err
 			}
+			cursor = item.sequence
 			if event.Citation != nil {
 				citations = append(citations, *event.Citation)
 			}
@@ -32,16 +37,19 @@ func (s *AIService) awaitAIInvocationAnswer(r *http.Request, userID, invocationI
 				return "", citations, fmt.Errorf("%s", firstAIText(event.Error, "Misty could not complete this request."))
 			}
 		}
-		if aiInvocationTerminal(state) {
+		if page.ready && cursor >= page.head && aiInvocationTerminal(page.state) {
 			if strings.TrimSpace(answer) == "" {
 				return "", citations, fmt.Errorf("Misty returned no answer")
 			}
 			return answer, citations, nil
 		}
+		if len(page.events) > 0 {
+			continue
+		}
 		select {
 		case <-r.Context().Done():
 			return "", citations, r.Context().Err()
-		case <-notify:
+		case <-page.notify:
 		}
 	}
 }

@@ -81,7 +81,3 @@ func (g *AIRequestGuard) AcquireProviderCall(userID string) (release func(), ret
 		g.mu.Unlock()
 	}, 0, true
 }
-
-func (g *AIRequestGuard) AllowSession(userID string) (bool, time.Duration) {
-	return g.sessions.Allow(userID, g.TestingNow())
-}

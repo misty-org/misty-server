@@ -7,7 +7,6 @@ import (
 	"errors"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -329,12 +328,4 @@ func (db *Database) ArchiveSpaceRoadmapNode(ctx context.Context, userID, spaceID
 		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "roadmap.node.archived", nodeID, map[string]any{"roadmap_id": roadmapID, "graph_version": graphVersion})
 		return err
 	})
-}
-
-func roadmapDefinitionAgendaVisible(kind string) bool {
-	return kind == "risk" || kind == "decision" || kind == "metric"
-}
-
-func roadmapNodeDateRange(date time.Time) (time.Time, time.Time) {
-	return date, date.Add(24 * time.Hour)
 }

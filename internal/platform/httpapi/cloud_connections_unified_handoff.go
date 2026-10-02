@@ -4,57 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 const cloudHandoffLifetime = 60 * time.Second
-
-func (s *SpacesService) BindConnectedAccountCloudConnection() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		var body struct {
-			ConnectionID string `json:"connection_id"`
-			Name         string `json:"name"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		body.Name = strings.TrimSpace(body.Name)
-		account, err := s.database.ConnectedAccount(r.Context(), userID, body.ConnectionID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		provider, valid := cloudProviderForConnectedAccount(*account)
-		if body.Name == "" || !valid || account.Status != "active" || !containsString(account.Capabilities, "files") {
-			writeSpaceError(w, db.ErrSpaceForbidden)
-			return
-		}
-		entitlements, err := s.database.EntitlementsForUser(r.Context(), userID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		maximum := 0
-		if entitlements.Plan == db.TierBasic {
-			maximum = 1
-		}
-		item, err := s.database.BindConnectedAccountCloudConnection(r.Context(), userID, *account, provider, body.Name, maximum)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, cloudConnectionJSON(*item))
-	}
-}
 
 func cloudProviderForConnectedAccount(account db.ConnectedAccount) (string, bool) {
 	switch account.Provider {
@@ -66,73 +21,6 @@ func cloudProviderForConnectedAccount(account db.ConnectedAccount) (string, bool
 		return "dropbox", true
 	default:
 		return "", false
-	}
-}
-
-func (s *SpacesService) CloudConnectionHandoff() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		item, err := s.database.CloudConnection(r.Context(), userID, chi.URLParam(r, "connectionID"))
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if item.Status != "active" {
-			writeJSON(w, http.StatusConflict, map[string]string{"code": "cloud_reauthorization_required"})
-			return
-		}
-		handoff := randomProviderValue(32)
-		expiresAt := time.Now().UTC().Add(cloudHandoffLifetime)
-		if err := s.database.CreateCloudCredentialHandoff(r.Context(), hashProviderValue(handoff), db.CloudCredentialHandoff{
-			UserID: userID, CloudConnectionID: item.ID, ExpiresAt: expiresAt,
-		}); err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusCreated, map[string]any{
-			"connection_id": item.ID, "provider": item.Provider, "handoff": handoff,
-			"redeem_url": requestPublicAPIBase(r) + "/cloud/handoffs/redeem", "expires_at": expiresAt,
-		})
-	}
-}
-
-func (s *SpacesService) RedeemCloudConnectionHandoff() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			Handoff string `json:"handoff"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		body.Handoff = strings.TrimSpace(body.Handoff)
-		if body.Handoff == "" {
-			writeSpaceError(w, db.ErrSpaceInvalid)
-			return
-		}
-		claim, err := s.database.ConsumeCloudCredentialHandoff(r.Context(), hashProviderValue(body.Handoff))
-		if err != nil {
-			writeJSON(w, http.StatusGone, map[string]string{"code": "cloud_handoff_expired"})
-			return
-		}
-		item, err := s.database.CloudConnection(r.Context(), claim.UserID, claim.CloudConnectionID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		token, tokenType, err := s.cloudConnectionAccessToken(r.Context(), claim.UserID, item)
-		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "cloud_reauthorization_required"})
-			return
-		}
-		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, map[string]any{
-			"connection_id": item.ID, "provider": item.Provider,
-			"access_token": token, "token_type": tokenType, "expires_at": item.ExpiresAt,
-		})
 	}
 }
 

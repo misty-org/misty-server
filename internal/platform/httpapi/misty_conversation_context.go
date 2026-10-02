@@ -65,25 +65,3 @@ func mistyAnswerCitations(answer string, resolved []aiResolvedContext) []aiCitat
 	}
 	return result
 }
-
-func mistyPromptWithContext(prompt string, references []mistyContextReference) string {
-	if len(references) == 0 {
-		return prompt
-	}
-	var context strings.Builder
-	context.WriteString("Visible context labels (metadata only; do not imply file contents were read):\n")
-	for _, reference := range references {
-		title := strings.Join(strings.Fields(reference.Title), " ")
-		if title == "" {
-			continue
-		}
-		fmt.Fprintf(&context, "- %s: %s", reference.Kind, title)
-		if reference.SpaceName != "" {
-			fmt.Fprintf(&context, " in %s", strings.Join(strings.Fields(reference.SpaceName), " "))
-		}
-		context.WriteByte('\n')
-	}
-	context.WriteString("\nQuestion:\n")
-	context.WriteString(prompt)
-	return context.String()
-}

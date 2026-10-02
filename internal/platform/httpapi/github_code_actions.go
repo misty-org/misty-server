@@ -2,72 +2,10 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
-	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-func (s *SpacesService) GitHubCodeWorkspaceActions() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID, workspaceID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "workspaceID")
-		var body struct {
-			Operation string          `json:"operation"`
-			Payload   json.RawMessage `json:"payload"`
-			Confirmed bool            `json:"confirmed"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		if err := s.database.RequireSpacePermission(r.Context(), userID, spaceID, db.PermissionIntegrationsManage); err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		workspace, err := s.database.GitHubCodeWorkspace(r.Context(), userID, spaceID, workspaceID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if !body.Confirmed {
-			_ = s.database.RecordGitHubMutationAudit(r.Context(), userID, spaceID, workspaceID, "user", body.Operation, githubMutationTarget(body.Payload), "github_mutation_confirmation_required", false, false)
-			writeJSON(w, http.StatusConflict, map[string]string{"code": "github_mutation_confirmation_required"})
-			return
-		}
-		installation, err := s.database.GitHubAppInstallation(r.Context(), userID, spaceID, workspace.InstallationID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if err := githubValidateMutation(body.Operation, body.Payload, installation.Permissions, workspace.Permissions); err != nil {
-			_ = s.database.RecordGitHubMutationAudit(r.Context(), userID, spaceID, workspaceID, "user", body.Operation, githubMutationTarget(body.Payload), "permission_denied", true, false)
-			if errors.Is(err, db.ErrSpaceInvalid) {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusForbidden, map[string]string{"code": "github_write_permission_denied"})
-			return
-		}
-		provider, err := s.githubAppProvider(installation.InstallationID)
-		if err != nil {
-			writeGitHubProviderError(w, err)
-			return
-		}
-		result, err := provider.Mutate(r.Context(), body.Operation, githubRepositoryFromWorkspace(*workspace), body.Payload)
-		if err != nil {
-			_ = s.database.RecordGitHubMutationAudit(r.Context(), userID, spaceID, workspaceID, "user", body.Operation, githubMutationTarget(body.Payload), "github_api_error", true, false)
-			writeGitHubProviderError(w, err)
-			return
-		}
-		_ = s.database.RecordGitHubMutationAudit(r.Context(), userID, spaceID, workspaceID, "user", body.Operation, githubMutationTarget(body.Payload), "", true, true)
-		writeJSON(w, http.StatusOK, map[string]any{"operation": body.Operation, "result": result})
-	}
-}
 
 func githubValidateMutation(operation string, payload, installationPermissions, repositoryPermissions json.RawMessage) error {
 	var input map[string]any

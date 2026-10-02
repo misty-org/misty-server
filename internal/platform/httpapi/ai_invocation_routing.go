@@ -42,10 +42,6 @@ func inferredAIArtifactKind(body aiInvocationInput) string {
 		if has("add", "draw", "arrange", "cluster", "move", "diagram") {
 			return "drawing_patch"
 		}
-	case "inbox":
-		if has("draft", "reply", "compose", "write email") {
-			return "mail_draft"
-		}
 	case "space.chat":
 		if has("draft", "reply", "write message") {
 			return "message_draft"

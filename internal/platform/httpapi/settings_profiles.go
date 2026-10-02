@@ -127,6 +127,19 @@ func (s *AIService) AccountPreferences() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		if r.Method == http.MethodGet {
+			profile, err := s.database.AccountPreferences(r.Context(), user)
+			if errors.Is(err, db.ErrSettingsProfileNotFound) {
+				settingsProfileError(w, 404, "Settings not initialized")
+			} else if err != nil {
+				TestingWriteAIError(w, err)
+			} else {
+				w.Header().Set("Cache-Control", "private, no-store")
+				writeJSON(w, 200, profile)
+			}
+			return
+		}
+
 		if r.Method == http.MethodPost {
 			var body struct {
 				Values map[string]any `json:"values"`

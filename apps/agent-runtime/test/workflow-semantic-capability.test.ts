@@ -35,7 +35,7 @@ it("does not satisfy a required action with an uncertain provider result",async(
  expect(fixture.completions[0]?.status).toBe("incomplete");
 });
 it("does not satisfy task creation with a different successful capability",async()=>{
- fixture.capability="inbox.draft";
+ fixture.capability="social.draft_message";
  await runSpaceTaskAgent({mistyRunId:"run-pilot",controlPlaneURL:"https://api.test"});
  expect(fixture.completions[0]).toMatchObject({status:"incomplete",error_code:"required_action_not_completed"});
 });

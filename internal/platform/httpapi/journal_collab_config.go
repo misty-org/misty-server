@@ -8,8 +8,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
 	"strings"
 	"time"
 
@@ -35,7 +33,6 @@ const (
 // drawing collaboration service. It is only usable once every field validates.
 type JournalCollabConfig struct {
 	Host                            string
-	PublicOrigin                    string
 	Issuer                          string
 	Audience                        string
 	TestingPrivateKey               ed25519.PrivateKey
@@ -56,19 +53,10 @@ func JournalCollabConfigFromEnv() (JournalCollabConfig, error) {
 		Issuer:   journalTicketIssuer,
 		Audience: journalTicketAudience,
 	}
-	selfHosted := envconfig.DeploymentMode() == "self_hosted"
-	if selfHosted && strings.TrimSpace(envconfig.Getenv("MISTY_COLLAB_PUBLIC_URL")) != "" {
-		origin, err := validateCollaborationPublicOrigin(envconfig.Getenv("MISTY_COLLAB_PUBLIC_URL"))
-		if err != nil {
-			return JournalCollabConfig{}, err
-		}
-		config.PublicOrigin = origin
-		config.Host = strings.TrimPrefix(strings.TrimPrefix(origin, "https://"), "http://")
-	}
 	if config.Host == "" {
 		return JournalCollabConfig{}, errors.New("PARTYKIT_HOST is required for journal collaboration")
 	}
-	if config.PublicOrigin == "" && (strings.Contains(config.Host, "/") || strings.Contains(config.Host, ":")) {
+	if strings.Contains(config.Host, "/") || strings.Contains(config.Host, ":") {
 		return JournalCollabConfig{}, errors.New("PARTYKIT_HOST must be a bare hostname")
 	}
 	privateKey, err := parseEd25519PrivateKey(envconfig.Getenv("JOURNAL_COLLAB_TICKET_PRIVATE_KEY"))
@@ -91,31 +79,12 @@ func JournalCollabConfigFromEnv() (JournalCollabConfig, error) {
 	return config, nil
 }
 
-func validateCollaborationPublicOrigin(raw string) (string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
-		return "", errors.New("MISTY_COLLAB_PUBLIC_URL must be an origin URL")
-	}
-	loopback := parsed.Hostname() == "localhost" || net.ParseIP(parsed.Hostname()) != nil && net.ParseIP(parsed.Hostname()).IsLoopback()
-	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && loopback) {
-		return "", errors.New("MISTY_COLLAB_PUBLIC_URL must use HTTPS except on loopback")
-	}
-	return strings.TrimRight(parsed.String(), "/"), nil
-}
-
 func (c JournalCollabConfig) httpOrigin() string {
-	if c.PublicOrigin != "" {
-		return c.PublicOrigin
-	}
 	return "https://" + c.Host
 }
 
 func (c JournalCollabConfig) websocketOrigin() string {
-	origin := c.httpOrigin()
-	if strings.HasPrefix(origin, "http://") {
-		return "ws://" + strings.TrimPrefix(origin, "http://")
-	}
-	return "wss://" + strings.TrimPrefix(origin, "https://")
+	return "wss://" + c.Host
 }
 
 func envOrDefault(name, fallback string) string {

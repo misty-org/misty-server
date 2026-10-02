@@ -120,10 +120,6 @@ func NewSenderFromEnv() (Sender, error) {
 	}, nil
 }
 
-func NewPasswordResetSenderFromEnv() (PasswordResetSender, error) {
-	return NewSenderFromEnv()
-}
-
 func (s *MailjetSender) SendPasswordResetEmail(ctx context.Context, recipientEmail, resetLink string) error {
 	if strings.TrimSpace(recipientEmail) == "" {
 		return fmt.Errorf("recipient email is required")

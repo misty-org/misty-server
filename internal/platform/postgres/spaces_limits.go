@@ -157,18 +157,6 @@ type SpaceEvent struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
-type SpaceInboxItem struct {
-	ID        int64           `json:"id"`
-	SpaceID   string          `json:"space_id"`
-	SpaceName string          `json:"space_name"`
-	Kind      string          `json:"kind"`
-	MessageID string          `json:"message_id,omitempty"`
-	EventID   *int64          `json:"event_id,omitempty"`
-	Payload   json.RawMessage `json:"payload"`
-	SeenAt    *time.Time      `json:"seen_at,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
-}
-
 type SpaceStudioResource struct {
 	ID                      string           `json:"id"`
 	SpaceID                 string           `json:"space_id"`

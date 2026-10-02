@@ -9,7 +9,7 @@ import (
 )
 
 // BillingMeter sends authenticated identity and native usage only. Private
-// billing calculates prices; disabled self-hosting never calls a billing server.
+// billing calculates prices; a disabled adapter (development) never calls it.
 type BillingMeter struct{ Service *billingadapter.Service }
 
 func (m BillingMeter) Reserve(userID, key, meter, provider, model string, input, output int64) (*UsageReservation, error) {

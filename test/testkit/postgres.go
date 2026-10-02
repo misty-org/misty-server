@@ -266,19 +266,36 @@ func (config databaseConfig) dsn() string {
 // which records the schema version checkSchemaVersion reads.
 func resetDatabase(t testing.TB, database *db.Database) {
 	t.Helper()
+	// TRUNCATE replaces every table's files, which dominated the suite's time
+	// with ~200 mostly empty tables. Truncate only tables holding rows (checking
+	// an empty table is nearly free) and restart only sequences that advanced,
+	// which leaves the same clean state as truncating everything.
 	_, err := database.Conn.Exec(`
 		DO $$
-		DECLARE statement text;
+		DECLARE
+			item record;
+			has_rows boolean;
+			dirty text[] := '{}';
 		BEGIN
-			SELECT 'TRUNCATE TABLE ' ||
-				string_agg(format('%I.%I', schemaname, tablename), ', ') ||
-				' RESTART IDENTITY CASCADE'
-			INTO statement
-			FROM pg_tables
-			WHERE schemaname = 'public' AND tablename <> 'goose_db_version';
-			IF statement IS NOT NULL THEN
-				EXECUTE statement;
+			FOR item IN
+				SELECT schemaname, tablename FROM pg_tables
+				WHERE schemaname = 'public' AND tablename <> 'goose_db_version'
+			LOOP
+				EXECUTE format('SELECT EXISTS (SELECT 1 FROM %I.%I)', item.schemaname, item.tablename) INTO has_rows;
+				IF has_rows THEN
+					dirty := dirty || format('%I.%I', item.schemaname, item.tablename);
+				END IF;
+			END LOOP;
+			IF cardinality(dirty) > 0 THEN
+				EXECUTE 'TRUNCATE TABLE ' || array_to_string(dirty, ', ') || ' CASCADE';
 			END IF;
+			FOR item IN
+				SELECT schemaname, sequencename FROM pg_sequences
+				WHERE schemaname = 'public' AND last_value IS NOT NULL
+					AND sequencename <> 'goose_db_version_id_seq'
+			LOOP
+				EXECUTE format('ALTER SEQUENCE %I.%I RESTART', item.schemaname, item.sequencename);
+			END LOOP;
 		END $$;
 	`)
 	if err != nil {

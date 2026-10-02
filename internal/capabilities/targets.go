@@ -84,14 +84,6 @@ func (t Target) ValidateBackend(provider Provider) (BackendBinding, error) {
 	}
 	return binding, nil
 }
-func HasScopes(granted, required []string) bool {
-	for _, scope := range required {
-		if !slices.Contains(granted, scope) {
-			return false
-		}
-	}
-	return true
-}
 
 // BrowserBinding is authorized in trusted controls. It identifies an intended
 // account/profile, not proof that the website currently has that account active.

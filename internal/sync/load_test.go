@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	mathrand "math/rand/v2"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -38,8 +39,11 @@ import (
 //	MISTY_SYNC_LOAD_CLIENTS=10000 go test ./internal/sync -run TestBrowserSyncLoad -timeout 30m -v
 //
 // Knobs (env): MISTY_SYNC_LOAD_CLIENTS (10000), _ACTIVE (0.2), _INTERVAL (5s),
-// _DURATION (60s), _POOL (64 connections per instance), _ASSERT=1 to fail on
-// the targets (p99 delta latency 150ms, no errors), _REPORT=<path> for JSON.
+// _DURATION (60s), _SETTLE (0s before measuring), _POOL (64 connections per instance), _ASSERT=1 to fail on
+// the targets (p99 delta latency 150ms, no errors), _REPORT=<path> for JSON,
+// _UNIX=1 to serve the instances on Unix sockets. One loopback address has
+// about 16k ephemeral ports, so runs past that need _UNIX=1 (it changes the
+// transport only; the protocol, handlers and database work are identical).
 func TestBrowserSyncLoad(t *testing.T) {
 	clients := loadEnvInt("MISTY_SYNC_LOAD_CLIENTS", 0)
 	if clients == 0 {
@@ -58,9 +62,39 @@ func TestBrowserSyncLoad(t *testing.T) {
 	defer cancel()
 
 	servers := make([]string, 2)
+	unix := os.Getenv("MISTY_SYNC_LOAD_UNIX") == "1"
+	socketDir := ""
+	if unix {
+		// Short path: Unix socket names are limited to ~100 bytes on macOS.
+		dir, err := os.MkdirTemp("/tmp", "msl")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
+		socketDir = dir
+		loadDial = func(ctx context.Context, _, addr string) (net.Conn, error) {
+			host, _, _ := net.SplitHostPort(addr)
+			return (&net.Dialer{}).DialContext(ctx, "unix", socketDir+"/"+host)
+		}
+		defer func() { loadDial = nil }()
+	}
 	for i, instance := range []*db.Database{database, peer} {
 		mux := http.NewServeMux()
 		mux.Handle("/ws", NewBrowserSyncService(instance).Connect())
+		if unix {
+			name := fmt.Sprintf("i%d", i)
+			listener, err := net.Listen("unix", socketDir+"/"+name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := httptest.NewUnstartedServer(mux)
+			server.Listener.Close()
+			server.Listener = listener
+			server.Start()
+			defer server.Close()
+			servers[i] = "ws://" + name + ":80/ws"
+			continue
+		}
 		server := httptest.NewServer(mux)
 		defer server.Close()
 		servers[i] = "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
@@ -88,6 +122,9 @@ func TestBrowserSyncLoad(t *testing.T) {
 	})
 	t.Logf("connected %d clients in %s", clients, time.Since(setup).Round(time.Millisecond))
 
+	// Connection setup (replays, snapshots, presence) settles before the
+	// measured window, so the counters reflect steady-state cost.
+	time.Sleep(loadEnvDuration("MISTY_SYNC_LOAD_SETTLE", 0))
 	before := loadDatabaseCounters(t, database)
 	var wg sync.WaitGroup
 	deadline := time.Now().Add(duration)
@@ -109,6 +146,8 @@ func TestBrowserSyncLoad(t *testing.T) {
 		}
 	}
 	wg.Wait()
+	// The window is the full duration even when nobody publishes.
+	time.Sleep(time.Until(deadline))
 	// Let the last deltas arrive.
 	time.Sleep(2 * time.Second)
 	after := loadDatabaseCounters(t, database)
@@ -178,6 +217,9 @@ func enrollLoadAccount(ctx context.Context, store *Store, user string) (*loadAcc
 	return account, nil
 }
 
+// loadDial replaces the WebSocket dial when the instances listen on Unix sockets.
+var loadDial func(ctx context.Context, network, addr string) (net.Conn, error)
+
 func (d *loadDevice) connect(ctx context.Context, database *db.Database, base string, stats *loadStats) error {
 	token, err := security.GenerateSecureToken()
 	if err != nil {
@@ -186,7 +228,7 @@ func (d *loadDevice) connect(ctx context.Context, database *db.Database, base st
 	if err = NewStore(database.Conn).CreateBrowserSyncTicket(ctx, d.user, d.grant.VaultID, d.grant.DeviceID, security.HashToken(token)); err != nil {
 		return err
 	}
-	dialer := websocket.Dialer{HandshakeTimeout: 30 * time.Second}
+	dialer := websocket.Dialer{HandshakeTimeout: 30 * time.Second, NetDialContext: loadDial}
 	conn, _, err := dialer.Dial(base+"?protocol=3&ticket="+token, nil)
 	if err != nil {
 		return err

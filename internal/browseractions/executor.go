@@ -42,30 +42,12 @@ type Page struct {
 }
 
 // Facts are extracted from provider account controls and identified content, not
-// from model claims or arbitrary instructions in message bodies.
+// from model claims or arbitrary instructions in page content.
 type Observation struct {
-	Adapter    string      `json:"adapter"`
-	Version    int         `json:"version"`
-	Account    string      `json:"account"`
-	Thread     string      `json:"thread,omitempty"`
-	Subject    string      `json:"subject,omitempty"`
-	Message    string      `json:"message,omitempty"`
-	Text       string      `json:"text,omitempty"`
-	Recipients []Recipient `json:"recipients,omitempty"`
-	Draft      *Draft      `json:"draft,omitempty"`
-	Task       *Task       `json:"task,omitempty"`
-	Sent       *Draft      `json:"sent,omitempty"`
-}
-type Recipient struct {
-	Address     string `json:"address"`
-	DisplayName string `json:"displayName,omitempty"`
-}
-type Draft struct {
-	Reference  string      `json:"reference"`
-	Thread     string      `json:"thread"`
-	Text       string      `json:"text"`
-	Subject    string      `json:"subject"`
-	Recipients []Recipient `json:"recipients"`
+	Adapter string `json:"adapter"`
+	Version int    `json:"version"`
+	Account string `json:"account"`
+	Task    *Task  `json:"task,omitempty"`
 }
 type Destination struct {
 	TargetID           string `json:"targetId"`
@@ -105,14 +87,6 @@ type Prepared struct {
 func (p Prepared) Hash() string {
 	raw, _ := json.Marshal(p)
 	raw, _ = cap.CanonicalJSON(raw)
-	h := sha256.Sum256(raw)
-	return hex.EncodeToString(h[:])
-}
-func ContentHash(account string, draft Draft) string {
-	raw, _ := json.Marshal(struct {
-		Account string
-		Draft   Draft
-	}{account, draft})
 	h := sha256.Sum256(raw)
 	return hex.EncodeToString(h[:])
 }
@@ -320,9 +294,6 @@ func (s *Session) Reconcile(ctx context.Context, e cap.Execution, review Prepare
 }
 
 func beforeReference(page Page) string {
-	if page.Semantic.Sent != nil {
-		return page.Semantic.Sent.Reference
-	}
 	if page.Semantic.Task != nil {
 		return page.Semantic.Task.Reference
 	}

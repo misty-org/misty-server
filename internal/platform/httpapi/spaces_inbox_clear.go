@@ -10,29 +10,6 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func (s *SpacesService) InboxClear() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		var body struct {
-			Tab string `json:"tab"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		if body.Tab != "mentions" {
-			body.Tab = "unreads"
-		}
-		if err := s.database.ClearSpaceInbox(r.Context(), userID, body.Tab); err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
 func (s *SpacesService) StudioResources(kind string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

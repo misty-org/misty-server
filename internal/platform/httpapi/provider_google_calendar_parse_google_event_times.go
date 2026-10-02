@@ -91,22 +91,6 @@ func (s *SpacesService) GoogleCalendarCallback() http.HandlerFunc {
 	}
 }
 
-func (s *SpacesService) ReconcileGoogleCalendars(ctx context.Context, limit int) (int, error) {
-	sources, err := s.database.CalendarSourcesNeedingReconciliation(ctx, limit)
-	if err != nil {
-		return 0, err
-	}
-	completed := 0
-	for index := range sources {
-		if err := s.syncGoogleCalendarSource(ctx, &sources[index], true); err != nil {
-			_ = s.database.UpdateCalendarSourceSync(ctx, sources[index].ID, sources[index].SyncToken, "", "", "", "needs_attention", providerErrorCode(err), nil)
-			continue
-		}
-		completed++
-	}
-	return completed, nil
-}
-
 func googleCalendarRequest(ctx context.Context, token, tokenType, method, endpoint string, body any) ([]byte, error) {
 	return googleCalendarRequestWithHeaders(ctx, token, tokenType, method, endpoint, body, nil)
 }
@@ -170,8 +154,4 @@ func TestingProviderInfrastructureURL(parts ...string) string {
 		}
 	}
 	return base + "/provider-callbacks/" + strings.Join(escaped, "/")
-}
-
-func TestingProviderErrorCodeForStatus(status int) string {
-	return providerErrorCode(&providerAPIError{Status: status})
 }

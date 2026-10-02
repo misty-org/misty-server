@@ -200,14 +200,6 @@ func agentFollowupIsCapabilityQuestion(prompt string) bool {
 	return false
 }
 
-func agentActionEnvelopeJSON(envelope agentActionEnvelope) string {
-	if envelope.Status == "none" || envelope.Status == "" {
-		return ""
-	}
-	raw, _ := json.Marshal(envelope)
-	return string(raw)
-}
-
 func TestingResolveAgentActionEnvelope(prompt string, focuses []db.AIConversationFocus) json.RawMessage {
 	raw, _ := json.Marshal(resolveAgentActionEnvelope(prompt, focuses))
 	return raw

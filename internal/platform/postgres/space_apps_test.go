@@ -4,7 +4,7 @@ import "testing"
 
 func TestCuratedSpaceTemplateApps(t *testing.T) {
 	templates := BuiltInSpaceTemplates()
-	expected := map[string][]string{"blank": {}, "family": {"chat", "planner", "journal", "library"}, "startup": {"chat", "inbox", "journal", "planner", "library"}, "game-development": {"chat", "journal", "planner", "library", "files", "code", "terminal"}}
+	expected := map[string][]string{"blank": {}, "family": {"chat", "planner", "journal", "library"}, "startup": {"chat", "journal", "planner", "library"}, "game-development": {"chat", "journal", "planner", "library", "files", "code", "terminal"}}
 	for _, template := range templates {
 		ids, ok := expected[template.ID]
 		if !ok {

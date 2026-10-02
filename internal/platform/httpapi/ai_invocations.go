@@ -137,6 +137,7 @@ type aiInvocationHub struct {
 	artifacts   map[string]*aiArtifact
 	idempotency map[string]string
 	database    *db.Database
+	nextPrune   time.Time
 }
 
 func newAIInvocationHub(databases ...*db.Database) *aiInvocationHub {
@@ -339,13 +340,6 @@ func TestingConversationSpaceChanged(boundSpaceID, requestedSpaceID string) bool
 	return conversationSpaceChanged(boundSpaceID, requestedSpaceID)
 }
 
-func firstAIError(primary, fallback error) error {
-	if primary != nil {
-		return primary
-	}
-	return fallback
-}
-
 func writeAIInvocationCreated(w http.ResponseWriter, record *aiInvocationRecord) {
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"invocationId":   record.ID,
@@ -357,86 +351,37 @@ func writeAIInvocationCreated(w http.ResponseWriter, record *aiInvocationRecord)
 
 func (s *AIService) InvocationEvents() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
+		user, ok := s.requireUser(w, r)
 		if !ok {
 			return
 		}
-		invocationID := strings.TrimSpace(chi.URLParam(r, "invocationID"))
-		if _, _, _, found := s.invocations.events(userID, invocationID, 0); !found {
-			stored, loadErr := s.database.AIInvocationByID(r.Context(), userID, invocationID)
-			if loadErr != nil {
-				http.Error(w, "invocation not found", http.StatusNotFound)
-				return
-			}
-			persisted, state, loadErr := s.database.AIInvocationEvents(r.Context(), userID, invocationID, 0)
-			if loadErr != nil {
-				http.Error(w, "invocation not found", http.StatusNotFound)
-				return
-			}
-			events := make([]aiInvocationEvent, 0, len(persisted))
-			for _, item := range persisted {
-				var event aiInvocationEvent
-				if json.Unmarshal(item.Payload, &event) == nil {
-					event.ID = strconv.FormatInt(item.Sequence, 10)
-					events = append(events, event)
-				}
-			}
-			stored.State = state
-			record := s.invocations.restore(*stored, events)
-			// Durable WorkflowAgent runs survive Go process restarts. A bound runtime
-			// will continue posting signed events, so reconnecting must not convert an
-			// active run into a failure merely because the in-memory hub was rebuilt.
-			if !aiInvocationTerminal(record.State) && stored.State != "queued" && stored.RuntimeRunID == "" && stored.AgentRunID == "" {
-				s.invocations.fail(record.ID, "Misty was interrupted before finishing. Please retry the request.")
-			}
+		id := strings.TrimSpace(chi.URLParam(r, "invocationID"))
+		stored, err := s.database.AIInvocationByID(r.Context(), user, id)
+		if err != nil || time.Now().After(stored.ExpiresAt) {
+			http.Error(w, "invocation not found", http.StatusNotFound)
+			return
 		}
-		_, ok = w.(http.Flusher)
-		if !ok {
+		if _, ok := w.(http.Flusher); !ok {
 			http.Error(w, "streaming unavailable", http.StatusInternalServerError)
 			return
 		}
-		cursor := 0
-		if value := strings.TrimSpace(r.Header.Get("Last-Event-ID")); value != "" {
-			cursor, _ = strconv.Atoi(value)
+		// Preserve recovery for interrupted non-durable legacy runs.
+		if !aiInvocationTerminal(stored.State) && stored.State != "queued" && stored.RuntimeRunID == "" && stored.AgentRunID == "" {
+			if _, err := s.invocations.restoreDurable(r.Context(), *stored); err != nil {
+				return
+			}
+			if err := s.invocations.fail(id, "Misty was interrupted before finishing. Please retry the request."); err != nil {
+				return
+			}
 		}
+		cursor, _ := strconv.ParseInt(strings.TrimSpace(r.Header.Get("Last-Event-ID")), 10, 64)
+		cursor = max(cursor, 0)
+		stream, release := s.streams.acquire(user, id, cursor)
+		defer release()
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache, no-transform")
 		w.Header().Set("X-Accel-Buffering", "no")
-		for {
-			stored, refreshErr := s.database.AIInvocationByID(r.Context(), userID, invocationID)
-			if refreshErr != nil {
-				return
-			}
-			if _, refreshErr = s.invocations.restoreDurable(r.Context(), *stored); refreshErr != nil {
-				return
-			}
-			events, state, notify, found := s.invocations.events(userID, invocationID, cursor)
-			if !found {
-				http.Error(w, "invocation not found", http.StatusNotFound)
-				return
-			}
-			var frame strings.Builder
-			for _, event := range events {
-				payload, _ := json.Marshal(event)
-				fmt.Fprintf(&frame, "id: %s\ndata: %s\n\n", event.ID, payload)
-				cursor, _ = strconv.Atoi(event.ID)
-			}
-			if err := writeAIInvocationSSE(w, frame.String()); err != nil {
-				return
-			}
-			if aiInvocationTerminal(state) {
-				return
-			}
-			select {
-			case <-r.Context().Done():
-				return
-			case <-notify:
-			case <-time.After(15 * time.Second):
-				if err := writeAIInvocationSSE(w, ": keep-alive\n\n"); err != nil {
-					return
-				}
-			}
-		}
+		serveInvocationStream(r.Context(), w, stream, cursor, 15*time.Second)
 	}
 }
 

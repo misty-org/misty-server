@@ -201,10 +201,6 @@ func (s *SpaceLibraryService) SetSubsystems(attachmentsEnabled, groupsEnabled, p
 	s.exportsEnabled = exportsEnabled
 }
 
-func (s *SpaceLibraryService) SetMalwareScanner(scanner LibraryMalwareScanner) {
-	s.malwareScanner = scanner
-}
-
 func (s *SpaceLibraryService) SetIntelligence(analyzer *serveragent.SmartLibraryAnalyzer, aiEnabled bool) {
 	s.intelligence = analyzer
 	s.aiEnabled = aiEnabled

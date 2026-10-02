@@ -63,63 +63,6 @@ func cancelMistyRunTx(ctx context.Context, tx *sql.Tx, userID, runID, runtimeID 
 	return nil
 }
 
-func cancelMistySpaceTx(ctx context.Context, tx *sql.Tx, spaceID string) error {
-	rows, err := tx.QueryContext(ctx, `SELECT id,owner_user_id,COALESCE(runtime_run_id,'') FROM space_runs WHERE space_id=$1 AND state IN ('queued','running','awaiting_approval','awaiting_device','awaiting_intervention') FOR UPDATE`, spaceID)
-	if err != nil {
-		return err
-	}
-	type run struct{ id, user, runtime string }
-	runs := []run{}
-	for rows.Next() {
-		var item run
-		if err := rows.Scan(&item.id, &item.user, &item.runtime); err != nil {
-			rows.Close()
-			return err
-		}
-		runs = append(runs, item)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	for _, item := range runs {
-		if err := cancelMistyRunTx(ctx, tx, item.user, item.id, item.runtime); err != nil {
-			return err
-		}
-	}
-	invocationRows, err := tx.QueryContext(ctx, `SELECT id,user_id,COALESCE(runtime_run_id,'') FROM ai_invocations WHERE space_id=$1 AND state IN ('queued','running','awaiting_approval','awaiting_device','awaiting_intervention','awaiting_timer') FOR UPDATE`, spaceID)
-	if err != nil {
-		return err
-	}
-	invocations := []run{}
-	for invocationRows.Next() {
-		var item run
-		if err := invocationRows.Scan(&item.id, &item.user, &item.runtime); err != nil {
-			invocationRows.Close()
-			return err
-		}
-		invocations = append(invocations, item)
-	}
-	err = invocationRows.Err()
-	invocationRows.Close()
-	if err != nil {
-		return err
-	}
-	for _, item := range invocations {
-		if item.runtime != "" {
-			if err := queueAgentContinuationTx(ctx, tx, item.user, item.id, "runtime.cancel", item.runtime, AgentContinuation{RuntimeID: item.runtime}); err != nil {
-				return err
-			}
-		}
-		if err := releasePersonalAgentRuntimeReservationsTx(ctx, tx, item.id); err != nil {
-			return err
-		}
-	}
-	_, err = tx.ExecContext(ctx, `UPDATE ai_invocations SET state='canceled',updated_at=NOW() WHERE space_id=$1 AND state IN ('queued','running','awaiting_approval','awaiting_device','awaiting_intervention','awaiting_timer')`, spaceID)
-	return err
-}
-
 func (db *Database) CancelMistyInvocationChildren(ctx context.Context, userID, invocationID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		var id string

@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-func nativeAgentManagementTool(name string) bool {
-	return strings.HasPrefix(name, "agents.") || strings.HasPrefix(name, "memory.")
-}
-
 func nativeAgentToolAllowed(name, risk, mode string, tools map[string]bool) bool {
 	if strings.HasPrefix(name, "browser.workspace.") {
 		return mode == "agent" && tools["browser"]

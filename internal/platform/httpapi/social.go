@@ -145,35 +145,6 @@ func (s *SpacesService) SocialSendAuthorities() http.HandlerFunc {
 	}
 }
 
-func (s *SpacesService) SocialAutomationRules() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID := chi.URLParam(r, "spaceID")
-		if r.Method == http.MethodGet {
-			items, err := s.database.SocialAutomationRules(r.Context(), userID, spaceID)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"rules": items})
-			return
-		}
-		var body db.SocialAutomationRule
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		item, err := s.database.SaveSocialAutomationRule(r.Context(), userID, spaceID, body)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, item)
-	}
-}
-
 func (s *SpacesService) SocialScheduledMessages() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

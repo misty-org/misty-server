@@ -50,22 +50,6 @@ func handleNoteAccountDeletionTx(ctx context.Context, tx *sql.Tx, userID string)
 	return err
 }
 
-func scanNoteIDs(rows *sql.Rows, queryErr error) ([]string, error) {
-	if queryErr != nil {
-		return nil, queryErr
-	}
-	defer rows.Close()
-	ids := []string{}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
 // PurgeExpiredNotes deletes archived notes whose retention window has passed,
 // plus notes already marked deleting whose room purge has been delivered.
 //

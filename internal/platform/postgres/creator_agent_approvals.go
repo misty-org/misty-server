@@ -160,6 +160,36 @@ func (db *Database) CreatorToolApprovalResumesPending(ctx context.Context, limit
 	return items, err
 }
 
+// CreatorToolApprovalResumesUnqueued lists decided approvals awaiting a resume
+// whose idempotent delivery was never queued (decided by an older server). An
+// approval whose delivery exists is waiting on that delivery, not on a scan.
+func (db *Database) CreatorToolApprovalResumesUnqueued(ctx context.Context, limit int) ([]AgentToolApproval, error) {
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	items := []AgentToolApproval{}
+	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT `+qualifiedAgentToolApprovalColumns("a")+` FROM agent_run_tool_approvals a
+			JOIN space_runs r ON r.id=a.run_id
+			WHERE a.state IN ('approved','denied') AND r.approval_wait_id=a.id AND r.state='running' AND r.runtime_phase='approval_resume_pending'
+			AND `+approvalResumeUnqueued+`
+			ORDER BY a.decided_at,a.id LIMIT $1`, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var item AgentToolApproval
+			if err := scanAgentToolApproval(rows, &item); err != nil {
+				return err
+			}
+			items = append(items, item)
+		}
+		return rows.Err()
+	})
+	return items, err
+}
+
 func (db *Database) MarkCreatorToolApprovalResumed(ctx context.Context, runID, approvalID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `UPDATE space_runs r SET runtime_phase='working',runtime_heartbeat_at=NOW(),updated_at=NOW()

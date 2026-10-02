@@ -30,6 +30,28 @@ func SessionUserID(r *http.Request) (string, error) {
 	return "", nil
 }
 
+// SessionID returns the account session that signed this request's access
+// token, so a long-lived stream can revalidate that session later. It is empty
+// when the request is not cookie-authenticated.
+func SessionID(r *http.Request) string {
+	if _, bearer := BearerTokenFromRequest(r); bearer {
+		return ""
+	}
+	cookie, err := r.Cookie(SessionCookieName)
+	if err != nil {
+		return ""
+	}
+	signer, err := security.SessionSignerFromEnv()
+	if err != nil {
+		return ""
+	}
+	claims, err := signer.Verify(cookie.Value, "access")
+	if err != nil {
+		return ""
+	}
+	return claims.SessionID
+}
+
 func BearerTokenFromRequest(r *http.Request) (string, bool) {
 	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 	scheme, token, ok := strings.Cut(authHeader, " ")

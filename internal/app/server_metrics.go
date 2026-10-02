@@ -76,22 +76,23 @@ func (s *Server) registerDomainGauges(registry *metrics.Registry) {
 		},
 	)
 
-	// The background workers each drain one job kind. Reporting them separately
-	// is what distinguishes "ffmpeg is wedged" from "the AI provider is slow".
+	definitions := map[string]string{}
 	for _, kind := range []string{"ai", "rendition", "people"} {
-		jobKind := kind
-		registry.WatchGauge(
-			"misty_library_jobs_pending_"+jobKind,
-			"Library "+jobKind+" jobs queued, leased, or running.",
-			func(ctx context.Context) (float64, error) {
-				counts, err := s.Database.PendingLibraryJobs(ctx)
-				if err != nil {
-					return 0, err
-				}
-				return float64(counts[jobKind]), nil
-			},
-		)
+		definitions["misty_library_jobs_pending_"+kind] = "Library " + kind + " jobs queued, leased, or running."
 	}
+	registry.WatchGauges(definitions, func(ctx context.Context) (map[string]float64, error) {
+		counts, err := s.Database.PendingLibraryJobs(ctx)
+		values := map[string]float64{}
+		for kind, count := range counts {
+			values["misty_library_jobs_pending_"+kind] = float64(count)
+		}
+		return values, err
+	})
+	registry.WatchGauge("misty_db_pool_wait_count", "Cumulative waits for a database connection since process start.",
+		func(context.Context) (float64, error) { return float64(s.Database.Conn.Stats().WaitCount), nil })
+	registry.WatchGauge("misty_db_pool_wait_seconds", "Cumulative time waiting for database connections since process start.",
+		func(context.Context) (float64, error) { return s.Database.Conn.Stats().WaitDuration.Seconds(), nil })
+
 }
 
 // metricsToken reads the bearer token that gates the metrics endpoint.

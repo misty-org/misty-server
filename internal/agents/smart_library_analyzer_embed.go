@@ -234,8 +234,6 @@ func isSafePreviewMime(mime string) bool {
 	}
 }
 
-func isDirectEmbeddingMime(mime string) bool { return isSafePreviewMime(mime) }
-
 func (a *SmartLibraryAnalyzer) request(ctx context.Context, path string, body any, dst any) error {
 	return a.requestAt(ctx, strings.TrimRight(a.chatBaseURL(), "/")+path, body, nil, dst)
 }

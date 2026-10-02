@@ -4,9 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -20,7 +17,6 @@ import (
 
 	"github.com/coregx/gxpdf"
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
@@ -204,89 +200,6 @@ func NewSpaceLibraryService(database *db.Database, store LibraryObjectStore, upl
 		return nil, err
 	}
 	return service, nil
-}
-
-// WriteGeneratedTextArtifact creates a normal, ACL-protected Library item
-// through the same quota, immutable-object, deduplication, and audit path as a
-// user upload. It is intentionally text-only; richer generated artifacts must
-// use a registered renderer/provider first.
-func (s *SpaceLibraryService) WriteGeneratedTextArtifact(ctx context.Context, userID, spaceID, filename, content string, provenance map[string]any) (*db.SpaceLibraryItem, error) {
-	filename = sanitizeLibraryFilename(filename)
-	data := []byte(content)
-	if filename == "" || len(data) == 0 || int64(len(data)) > s.TestingUploadLimits.Max(UploadPurposeLibrary) {
-		return nil, db.ErrLibraryInvalid
-	}
-	digest := sha256.Sum256(data)
-	digestHex := hex.EncodeToString(digest[:])
-	token, err := security.GenerateSecureToken()
-	if err != nil {
-		return nil, err
-	}
-	tokenHash := security.HashToken(token)
-	objectKey := "library/" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	upload, err := s.database.CreateLibraryUpload(ctx, userID, spaceID, "library", filename, "text/markdown; charset=utf-8", int64(len(data)), digestHex, objectKey, tokenHash, time.Now().Add(libraryUploadLifetime).UTC())
-	if err != nil {
-		return nil, err
-	}
-	if _, err = s.database.SetLibraryUploadState(ctx, userID, spaceID, upload.ID, tokenHash, "initiated", "uploading"); err != nil {
-		return nil, err
-	}
-	metadata := LibraryObjectMetadata{ByteSize: int64(len(data)), SHA256: digestHex, MIMEType: "text/markdown; charset=utf-8"}
-	if err = s.TestingStore.Put(ctx, objectKey, bytes.NewReader(data), metadata); err != nil {
-		s.rejectAndDelete(ctx, upload, tokenHash, "invalid", "object_write_failed")
-		return nil, err
-	}
-	if _, err = s.database.SetLibraryUploadState(ctx, userID, spaceID, upload.ID, tokenHash, "uploading", "uploaded_unverified"); err != nil {
-		_ = s.TestingStore.Delete(ctx, objectKey)
-		return nil, err
-	}
-	intrinsic, _ := json.Marshal(map[string]any{"generated": true, "provenance": provenance})
-	completed, err := s.database.CompleteLibraryUpload(ctx, userID, spaceID, upload.ID, tokenHash, int64(len(data)), digestHex, metadata.MIMEType, intrinsic)
-	if err != nil {
-		_ = s.TestingStore.Delete(ctx, objectKey)
-		return nil, err
-	}
-	if completed.DiscardObjectKey != "" {
-		_ = s.TestingStore.Delete(ctx, completed.DiscardObjectKey)
-	}
-	return completed.Item, nil
-}
-
-// ReadTextItem returns bounded normalized source bytes for the universal
-// workflow reader. Binary Office/PDF/image formats remain provider-specific
-// and must not be misrepresented as readable text.
-func (s *SpaceLibraryService) ReadTextItem(ctx context.Context, userID, spaceID, itemID string, maximumBytes int64) ([]byte, *db.LibraryDownload, error) {
-	if maximumBytes < 1 || maximumBytes > 25_000_000 {
-		maximumBytes = 25_000_000
-	}
-	download, err := s.database.LibraryItemDownload(ctx, userID, spaceID, itemID)
-	if err != nil {
-		return nil, nil, err
-	}
-	mimeType := strings.ToLower(strings.TrimSpace(strings.Split(download.MIMEType, ";")[0]))
-	textual := strings.HasPrefix(mimeType, "text/") || mimeType == "application/json" || mimeType == "application/xml" || mimeType == "application/x-ndjson" || mimeType == "application/yaml"
-	if !textual {
-		return nil, download, workflowv2.ErrUnsupportedContent
-	}
-	if download.ByteSize > maximumBytes {
-		return nil, download, db.ErrLibraryInvalid
-	}
-	reader, metadata, err := s.TestingStore.Open(ctx, download.ObjectKey)
-	if err != nil {
-		return nil, download, err
-	}
-	defer reader.Close()
-	if metadata.ByteSize != download.ByteSize || metadata.SHA256 != download.SHA256 {
-		return nil, download, db.ErrLibraryUploadMismatch
-	}
-	data, err := io.ReadAll(io.LimitReader(reader, maximumBytes+1))
-	if err != nil {
-		return nil, download, err
-	}
-	if int64(len(data)) > maximumBytes {
-		return nil, download, db.ErrLibraryInvalid
-	}
-	return data, download, nil
 }
 
 func (s *SpaceLibraryService) Items() http.HandlerFunc {

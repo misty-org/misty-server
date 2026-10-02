@@ -11,7 +11,7 @@ import (
 
 func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testing.T) {
 	database := openTestDatabase(t)
- useResourceAdapterFixture(t,database)
+	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 
 	owner, err := database.CreateUser("Owner", "space-owner@example.com", "password123")
@@ -94,13 +94,6 @@ func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testi
 	if _, err := database.UpdateSpaceMessage(ctx, member.ID, project.ID, message.ID, []MessageSpan{{Type: "text", Text: "Not mine"}}, nil); !errors.Is(err, ErrSpaceForbidden) {
 		t.Fatalf("UpdateSpaceMessage(member) error = %v, want ErrSpaceForbidden", err)
 	}
-	inbox, err := database.SpaceInbox(ctx, member.ID, "unreads", 20)
-	if err != nil {
-		t.Fatalf("SpaceInbox(member) error = %v", err)
-	}
-	if len(inbox) != 1 || inbox[0].MessageID != message.ID {
-		t.Fatalf("member inbox = %#v, want unread delivery for %q", inbox, message.ID)
-	}
 	reacted, err := database.AddSpaceMessageReaction(ctx, member.ID, project.ID, message.ID, "😂")
 	if err != nil {
 		t.Fatalf("AddSpaceMessageReaction(member) error = %v", err)
@@ -147,7 +140,7 @@ func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testi
 
 func TestOwnershipTransferAllowsSpaceToBecomeOverQuota(t *testing.T) {
 	database := openTestDatabase(t)
- useResourceAdapterFixture(t,database)
+	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, err := database.CreateUser("Transfer Owner", "transfer-owner@example.com", "password123")
 	if err != nil {

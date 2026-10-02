@@ -158,7 +158,8 @@ func (s *AgentsService) UpdateConnectedDevicePresence() http.HandlerFunc {
 			writeAgentError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "online"})
+		// deviceSeen tells clients this call also refreshed agent eligibility.
+		writeJSON(w, http.StatusOK, map[string]any{"status": "online", "deviceSeen": true})
 	}
 }
 

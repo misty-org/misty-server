@@ -91,7 +91,7 @@ func init() {
 		case "family":
 			template.AppIDs = []string{"chat", "planner", "journal", "library"}
 		case "startup":
-			template.AppIDs = []string{"chat", "inbox", "journal", "planner", "library"}
+			template.AppIDs = []string{"chat", "journal", "planner", "library"}
 		case "game-development":
 			template.AppIDs = []string{"chat", "journal", "planner", "library", "files", "code", "terminal"}
 		default:

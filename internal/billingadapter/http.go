@@ -20,19 +20,19 @@ type Config struct {
 	Mode              string
 	URL               string
 	Secret            string
-	Hosted            bool
+	Required          bool
 	AllowLoopbackHTTP bool
 	// AllowDockerHostHTTP is restricted to the local development host gateway.
 	AllowDockerHostHTTP bool
 }
 
-// New requires explicit HTTP billing for hosted deployments. Self-hosted servers
-// may omit billing altogether. A mistyped mode never grants access implicitly.
+// New requires explicit HTTP billing in production. Development and tests may
+// omit billing altogether. A mistyped mode never grants access implicitly.
 func New(c Config) (Adapter, error) {
 	mode := strings.ToLower(strings.TrimSpace(c.Mode))
 	if mode == "" || mode == "none" || mode == "null" {
-		if c.Hosted {
-			return nil, fmt.Errorf("hosted deployment requires an explicit http billing adapter")
+		if c.Required {
+			return nil, fmt.Errorf("production requires an explicit http billing adapter")
 		}
 		return Disabled{}, nil
 	}

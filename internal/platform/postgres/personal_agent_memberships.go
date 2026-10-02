@@ -58,10 +58,6 @@ func askExecutionContextTx(ctx context.Context, tx *sql.Tx, userID, spaceID, ide
 	}, nil
 }
 
-func askIdentityAllowedTx(ctx context.Context, tx *sql.Tx, userID, spaceID, agentID string) (*AskExecutionContext, error) {
-	return askExecutionContextTx(ctx, tx, userID, spaceID, agentID)
-}
-
 func (db *Database) EffectiveAgentSpacePermission(ctx context.Context, userID, spaceID, agentID, permission string) (bool, error) {
 	allowed := false
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {

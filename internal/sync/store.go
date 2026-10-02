@@ -202,6 +202,9 @@ func (db *Store) EnrollBrowserSyncDevice(ctx context.Context, userID string, g S
 	if err = ensureBrowserSyncWorkspaces(ctx, tx, g.VaultID, g.DeviceID); err != nil {
 		return err
 	}
+	if err = notifySync(ctx, tx, userID, g.VaultID, "browser-presence"); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 

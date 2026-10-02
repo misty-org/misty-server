@@ -75,3 +75,15 @@ func (db *Database) RotateRefreshSession(ctx context.Context, sessionHash, oldHa
 	})
 	return valid, err
 }
+
+// AccountSessionActive reports whether a session can still mint access tokens
+// for an active account. Long-lived streams call it instead of reconnecting to
+// re-present a credential.
+func (db *Database) AccountSessionActive(ctx context.Context, sessionHash, userID string) (bool, error) {
+	active := false
+	err := db.TestingWithRLSContext(ctx, TestingServiceRLSSettings(), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id
+   WHERE s.token_hash=$1 AND s.user_id=$2 AND s.expires_at>clock_timestamp() AND u.lifecycle_state='active')`, sessionHash, userID).Scan(&active)
+	})
+	return active, err
+}

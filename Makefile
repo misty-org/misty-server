@@ -1,11 +1,17 @@
 .DEFAULT_GOAL := help
-.PHONY: help build run test test-unit lint fmt fmt-check vet sizes migrate check
+.PHONY: help generate console build run test test-unit lint fmt fmt-check vet sizes migrate check
 
 GOLANGCI := $(shell command -v golangci-lint 2>/dev/null || echo "$(shell go env GOPATH)/bin/golangci-lint")
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+
+generate: ## Regenerate templ views for the operator console
+	go tool templ generate -path internal/console
+
+console: generate ## Run the operator console (prefer: misty server up --gui)
+	go run ./cmd/misty-console
 
 build: ## Compile all packages
 	go build ./...

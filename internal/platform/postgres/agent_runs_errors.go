@@ -1,13 +1,9 @@
 package db
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 var ErrWorkflowIntegrationRequired = errors.New("workflow integration required")
@@ -73,16 +69,3 @@ type AgentConversationEvent struct {
 }
 
 const spaceRunColumns = `id,COALESCE(space_id,''),resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,result,COALESCE(error_code,''),created_at,completed_at,requesting_member_id,COALESCE(source_conversation_id,''),source_type,COALESCE(agent_id,''),COALESCE(workflow_identifier,''),COALESCE(workflow_version_id,''),COALESCE(workflow_version,''),COALESCE(capability_id,''),progress,outputs,artifacts,COALESCE(error_message,''),COALESCE(retry_of_run_id,''),canceled_at,updated_at,COALESCE(agent_instance_id,''),COALESCE(agent_version_id,''),attempt,next_retry_at,COALESCE(source_task_id,''),action_envelope,conversation_scope_kind,COALESCE(scope_conversation_id,''),COALESCE(source_message_id,''),runtime_kind,runtime_run_id,runtime_phase,runtime_heartbeat_at,owner_user_id,initial_run_mode,effective_run_mode,agent_version_snapshot,approval_state,COALESCE(parent_run_id,''),delegation_depth,context_bindings,device_wait_hook_token,device_wait_expires_at`
-
-func insertRunApprovalTx(ctx context.Context, tx *sql.Tx, runID, userID string, capability *WorkflowCapability, workflowVersionID string) error {
-	proposed := mustJSON([]map[string]any{{"capability_id": capability.ID, "description": capability.Description, "destructive": capability.Destructive}})
-	if _, err := tx.ExecContext(ctx, `INSERT INTO space_run_approvals(id,run_id,requested_from_user_id,action_summary,proposed_actions) VALUES($1,$2,$3,$4,$5)`, "runapproval_"+uuid.NewString(), runID, userID, "Approve "+capability.Name, proposed); err != nil {
-		return err
-	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO space_run_actions(id,run_id,action_kind,summary,details,destructive,state) VALUES($1,$2,$3,$4,$5,$6,'proposed')`, "runaction_"+uuid.NewString(), runID, capability.ID, capability.Description, mustJSON(map[string]any{"capability_id": capability.ID, "workflow_version_id": workflowVersionID}), capability.Destructive)
-	if err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO space_inbox_items(user_id,space_id,kind,payload) SELECT $1,space_id,'approval',$2 FROM space_runs WHERE id=$3`, userID, mustJSON(map[string]any{"run_id": runID, "capability_id": capability.ID, "workflow_version_id": workflowVersionID}), runID)
-	return err
-}

@@ -87,6 +87,3 @@ func (c JournalCollabConfig) MintJournalExportTicket(
 func (s *SpacesService) SetJournalCollab(config JournalCollabConfig) {
 	s.TestingJournalCollab = config
 }
-
-// JournalCollab exposes the configuration for control commands and callbacks.
-func (s *SpacesService) JournalCollab() JournalCollabConfig { return s.TestingJournalCollab }

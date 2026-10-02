@@ -220,45 +220,6 @@ func (db *Database) ResolveSDKTargets(ctx context.Context, userID string, reques
 	return targets, nil
 }
 
-func (db *Database) discoverSDKTargetProvider(ctx context.Context, userID, targetID, capability string) (*cap.Provider, error) {
-	if !cap.ValidID(targetID) {
-		return nil, cap.ErrInvalid
-	}
-	var raw []byte
-	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT p.definition FROM sdk_targets t JOIN sdk_target_versions v ON v.user_id=t.user_id AND v.id=t.id AND v.revision=t.revision JOIN sdk_provider_versions p ON p.user_id=v.user_id AND p.provider_id=v.provider_id AND p.version=v.provider_version WHERE t.user_id=$1 AND t.id=$2 AND t.enabled`, userID, targetID).Scan(&raw)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var provider cap.Provider
-	if cap.Decode(raw, &provider) != nil {
-		return nil, ErrSpaceInvalid
-	}
-	allowed := []cap.Definition{}
-	for _, definition := range provider.Capabilities {
-		if capability != "" && capability != definition.Name {
-			continue
-		}
-		_, err := db.ResolveSDKBoundCapability(ctx, userID, targetID, 0, definition.Name, definition.Version)
-		if errors.Is(err, ErrSDKProviderUnavailable) || errors.Is(err, ErrAppRuntimeForbidden) || errors.Is(err, ErrSpaceForbidden) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		allowed = append(allowed, definition)
-	}
-	if len(allowed) == 0 {
-		return nil, nil
-	}
-	provider.Capabilities = allowed
-	return &provider, nil
-}
-
 func sdkBrowserDeviceAccessTx(ctx context.Context, tx *sql.Tx, userID, deviceID string) error {
 	var valid bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL)`, deviceID, userID).Scan(&valid); err != nil {

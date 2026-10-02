@@ -42,7 +42,6 @@ type SpacesService struct {
 	searchEmbeddings         map[string]globalSearchEmbeddingCacheEntry
 	searchEmbeddingInflight  map[string]*globalSearchEmbeddingFlight
 	usageMeter               serveragent.UsageMeter
-	mailProviderFactory      MailProviderFactory
 	githubAppProviderFactory GitHubAppProviderFactory
 	figmaProviderFactory     FigmaProviderFactory
 	mcpConnectorClient       mcpintegration.ConnectorClient
@@ -102,8 +101,7 @@ func NewSpacesService(database *db.Database, agent *serveragent.Service, encrypt
 		return nil, err
 	}
 	return &SpacesService{database: database, agent: agent, aead: aead, keyVer: 1,
-		mailProviderFactory: defaultMailProviderFactory,
-		mcpConnectorClient:  mcpintegration.NewClient(mcpintegration.DefaultLimits())}, nil
+		mcpConnectorClient: mcpintegration.NewClient(mcpintegration.DefaultLimits())}, nil
 }
 
 func (s *SpacesService) TestingSetMCPConnectorClient(client mcpintegration.ConnectorClient) {

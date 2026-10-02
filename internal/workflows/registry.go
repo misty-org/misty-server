@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"sync"
 )
 
@@ -80,17 +79,4 @@ func (registry *Registry) Resolve(kind string, version int) (NodeDescriptor, boo
 	defer registry.mu.RUnlock()
 	descriptor, ok := registry.nodes[registryKey(kind, version)]
 	return descriptor, ok
-}
-
-func (registry *Registry) Descriptors() []NodeDescriptor {
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-	out := make([]NodeDescriptor, 0, len(registry.nodes))
-	for _, descriptor := range registry.nodes {
-		out = append(out, descriptor)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return registryKey(out[i].Kind, out[i].Version) < registryKey(out[j].Kind, out[j].Version)
-	})
-	return out
 }

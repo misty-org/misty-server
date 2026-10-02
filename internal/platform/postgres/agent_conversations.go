@@ -265,13 +265,6 @@ func (db *Database) ValidateAgentSessionAccess(ctx context.Context, userID, conv
 	return bound, nil
 }
 
-func validateAgentSpaceAccessTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) error {
-	if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
-		return err
-	}
-	return requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAskRun)
-}
-
 // RenameAgentSession sets the human-facing label. Clients derive a first title
 // from the opening message, so this runs on the first exchange and again on any
 // explicit rename.

@@ -5,18 +5,6 @@ import (
 	"strings"
 )
 
-// SessionBillingScope exposes only the server-owned billing scope associated
-// with a session. API adapters use it to bind short-lived document attachments
-// to the exact durable job that created the conversation.
-func (s *Service) SessionBillingScope(sessionID, userID string) (string, error) {
-	var scope string
-	err := s.store.WithSession(sessionID, userID, func(session *Session) error {
-		scope = session.BillingScope
-		return nil
-	})
-	return scope, err
-}
-
 func (s *Service) SendMessage(sessionID, userID string, request AgentMessageRequest) error {
 	return s.SendMessageWithTier(sessionID, userID, request, TierLow)
 }
@@ -157,19 +145,6 @@ type SpaceContextState struct {
 	HasCard  bool
 }
 
-// SessionSpaceContext reports the change token the session's current Space
-// records were built from. The API layer owns rebuilding context, because only
-// it can reach the database; this lets it skip that work when nothing the agent
-// can see has changed.
-func (s *Service) SessionSpaceContext(ctx context.Context, sessionID, userID string) (SpaceContextState, error) {
-	var state SpaceContextState
-	err := s.store.WithSessionContext(ctx, sessionID, userID, func(_ context.Context, session *Session) error {
-		state = SpaceContextState{Revision: session.SpaceContextRevision, HasCard: session.SpaceCard != ""}
-		return nil
-	})
-	return state, err
-}
-
 // Transcript returns the conversation as plain messages, for a client rebuilding
 // a session it does not hold locally. Replaying the event stream would be wrong
 // for that: events carry tool requests, and a client that replayed them would
@@ -199,22 +174,6 @@ func (s *Service) AppendExternalAgentMessage(ctx context.Context, sessionID, use
 		return nil
 	})
 	return &appended, err
-}
-
-// AppendExternalUserMessage persists a user turn that a server-coordinated
-// Agent run will answer, without invoking the generic client-tool loop.
-func (s *Service) AppendExternalUserMessage(ctx context.Context, sessionID, userID, text string) error {
-	return s.store.WithSessionContext(ctx, sessionID, userID, func(_ context.Context, session *Session) error {
-		message := strings.TrimSpace(text)
-		if message == "" {
-			return ErrInvalidRequest("user_message is required")
-		}
-		if len(message) > MaxUserMessageBytes {
-			return ErrInvalidRequest("user_message is too large")
-		}
-		session.Messages = append(session.Messages, Message{Role: RoleUser, Content: message})
-		return nil
-	})
 }
 
 func (s *Service) Cancel(sessionID, userID string) error {

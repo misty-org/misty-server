@@ -239,7 +239,6 @@ func TestGoogleSignInRoundTrip(t *testing.T) {
 }
 
 func TestGoogleSignInConfiguration(t *testing.T) {
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "hosted")
 	t.Setenv("GOOGLE_CLIENT_ID", "client")
 	t.Setenv("GOOGLE_CLIENT_SECRET", "secret")
 	t.Setenv("MISTY_PUBLIC_API_URL", "https://api.misty.test/v1")

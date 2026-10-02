@@ -77,15 +77,6 @@ func TestUpdateSpaceConversationRestrictedToCreator(t *testing.T) {
 	}
 }
 
-func containsInboxMessage(items []SpaceInboxItem, messageID string) bool {
-	for _, item := range items {
-		if item.MessageID == messageID {
-			return true
-		}
-	}
-	return false
-}
-
 func containsSpaceEvent(events []SpaceEvent, eventType, entityID string) bool {
 	for _, event := range events {
 		if event.EventType == eventType && event.EntityID == entityID {

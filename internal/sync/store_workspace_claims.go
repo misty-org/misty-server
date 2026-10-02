@@ -117,10 +117,3 @@ func (db *Store) BrowserSyncWorkspaceMode(ctx context.Context, userID, vault str
 	}
 	return mode, err
 }
-
-// TouchBrowserSyncDriver refreshes liveness for the workspace a connected device
-// drives. It never claims a workspace.
-func (db *Store) TouchBrowserSyncDriver(ctx context.Context, i SyncConnectionIdentity) error {
-	_, err := db.Conn.ExecContext(ctx, `UPDATE browser_sync_workspaces SET driver_seen_at=clock_timestamp() WHERE vault_id=$1 AND driver_device_id=$2`, i.VaultID, i.DeviceID)
-	return err
-}

@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -120,112 +119,7 @@ func loadLatestWorkflowVersionTx(ctx context.Context, tx *sql.Tx, workflowID str
 	return loadWorkflowVersionTx(ctx, tx, versionID)
 }
 
-func createDefaultAgentWorkflowTx(ctx context.Context, tx *sql.Tx, userID string, item *SpaceStudioResource) error {
-	workflowID := "workflow_" + uuid.NewString()
-	stableIdentifier := "space." + item.SpaceID + ".agent." + item.ID
-	definition := json.RawMessage(`{"nodes":[{"id":"respond","kind":"structured_prompt","config":{"prompt":"{{input}}"}}],"edges":[]}`)
-	if workflowDefinitionHasNodes(item.Definition) {
-		definition = item.Definition
-	}
-	metadata := defaultWorkflowMetadata(item.Name, item.Description, item.RuntimeKind)
-	metadataRaw, _ := json.Marshal(metadata)
-	digest := sha256.Sum256(append(append([]byte{}, metadataRaw...), definition...))
-	versionID := "wfver_" + uuid.NewString()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO space_workflows(id,space_id,creator_user_id,name,definition,enabled,stable_identifier,description,author_name,tags,suggested_agent_preset,source_kind)
-		VALUES($1,$2,$3,$4,$5,TRUE,$6,$7,'Misty','["agent"]'::jsonb,$8,'custom')`, workflowID, item.SpaceID, userID, item.Name+" Workflow", definition, stableIdentifier, item.Description, mustJSON(SuggestedAgentPreset{Name: item.Name, Icon: item.Icon, Description: item.Description, Instructions: item.Instructions})); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO space_workflow_versions(id,workflow_id,space_id,stable_identifier,version,name,description,author_name,metadata,definition,checksum_sha256,created_by_user_id)
-		VALUES($1,$2,$3,$4,'1.0.0',$5,$6,'Misty',$7,$8,$9,$10)`, versionID, workflowID, item.SpaceID, stableIdentifier, item.Name+" Workflow", item.Description, metadataRaw, definition, hex.EncodeToString(digest[:]), userID); err != nil {
-		return err
-	}
-	item.ActiveWorkflowVersionID = versionID
-	return nil
-}
-
-func workflowDefinitionHasNodes(definition json.RawMessage) bool {
-	var parsed struct {
-		Nodes []json.RawMessage `json:"nodes"`
-	}
-	return json.Unmarshal(definition, &parsed) == nil && len(parsed.Nodes) > 0
-}
-
-func snapshotWorkflowTx(ctx context.Context, tx *sql.Tx, userID string, item *SpaceStudioResource) (*WorkflowVersion, error) {
-	var stableIdentifier, description, authorName string
-	if err := tx.QueryRowContext(ctx, `SELECT stable_identifier,description,author_name FROM space_workflows WHERE id=$1 AND space_id=$2`, item.ID, item.SpaceID).Scan(&stableIdentifier, &description, &authorName); err != nil {
-		return nil, err
-	}
-	metadata, explicitMetadata, err := metadataFromWorkflowDefinition(item.Name, description, item.Definition)
-	if err != nil {
-		return nil, err
-	}
-	if !explicitMetadata && item.ActiveWorkflow != nil && ValidateWorkflowMetadata(item.ActiveWorkflow.Metadata) == nil {
-		metadata = item.ActiveWorkflow.Metadata
-	}
-	metadataRaw, _ := json.Marshal(metadata)
-	digest := sha256.Sum256(append(append([]byte{}, metadataRaw...), item.Definition...))
-	checksum := hex.EncodeToString(digest[:])
-	version := fmt.Sprintf("1.0.%d", maxInt64(item.Version-1, 0))
-	out := &WorkflowVersion{}
-	err = scanWorkflowVersion(tx.QueryRowContext(ctx, `INSERT INTO space_workflow_versions(id,workflow_id,space_id,stable_identifier,version,name,description,author_name,metadata,definition,checksum_sha256,created_by_user_id)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-		ON CONFLICT(workflow_id,checksum_sha256) DO UPDATE SET checksum_sha256=EXCLUDED.checksum_sha256
-		RETURNING `+workflowVersionReturningColumns,
-		"wfver_"+uuid.NewString(), item.ID, item.SpaceID, stableIdentifier, version, item.Name, description, authorName, metadataRaw, item.Definition, checksum, userID), out)
-	return out, err
-}
-
-func metadataFromWorkflowDefinition(name, description string, definition json.RawMessage) (WorkflowMetadata, bool, error) {
-	var envelope map[string]json.RawMessage
-	if json.Unmarshal(definition, &envelope) != nil || envelope == nil {
-		return WorkflowMetadata{}, false, ErrSpaceInvalid
-	}
-	raw, exists := envelope["metadata"]
-	if !exists {
-		return defaultWorkflowMetadata(name, description, "cloud"), false, nil
-	}
-	var metadata WorkflowMetadata
-	if json.Unmarshal(raw, &metadata) != nil || ValidateWorkflowMetadata(metadata) != nil {
-		return WorkflowMetadata{}, true, ErrSpaceInvalid
-	}
-	return metadata, true, nil
-}
-
-func defaultWorkflowMetadata(name, description, runtimeKind string) WorkflowMetadata {
-	if strings.TrimSpace(description) == "" {
-		description = "Run " + name
-	}
-	runtime := "misty-cloud"
-	if runtimeKind == "device" {
-		runtime = "misty-device"
-	}
-	capability := WorkflowCapability{
-		ID: "default", Name: name, Description: description,
-		Inputs:  []WorkflowField{{Name: "prompt", Type: "string", Required: true}},
-		Outputs: []WorkflowField{{Name: "result", Type: "object"}},
-		Tags:    []string{"assistant"},
-	}
-	permissions := []string{}
-	if runtimeKind == "device" {
-		capability.Destructive, capability.ConfirmationRequired = true, true
-		capability.Tags = []string{"files", "folders"}
-		permissions = []string{"files.read", "files.write"}
-	}
-	return WorkflowMetadata{
-		Capabilities:         []WorkflowCapability{capability},
-		RequiredIntegrations: []string{}, RequiredPermissions: permissions,
-		Runtime: WorkflowRuntime{Kind: runtime, Compatibility: "1"}, Tags: []string{"assistant"},
-	}
-}
-
 func mustJSON(value any) json.RawMessage {
 	raw, _ := json.Marshal(value)
 	return raw
-}
-
-func maxInt64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }

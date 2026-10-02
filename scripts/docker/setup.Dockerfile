@@ -17,6 +17,7 @@ COPY apps/journal-collab/src ./src
 COPY --chmod=0555 apps/journal-collab/docker/cloudflare-init.sh /usr/local/bin/misty-cloudflare-init
 COPY --chmod=0555 apps/journal-collab/docker/cloudflare-deploy.sh /usr/local/bin/misty-cloudflare-deploy
 COPY --chmod=0555 scripts/docker/postgres-grant-app-role.sh /usr/local/bin/misty-grant-app-role
+COPY --chmod=0555 scripts/docker/postgres-workflow-database.sh /usr/local/bin/misty-workflow-database
 COPY --chmod=0555 scripts/docker/setup.sh /usr/local/bin/misty-setup
 
 ENTRYPOINT ["/usr/local/bin/misty-setup"]

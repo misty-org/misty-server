@@ -18,7 +18,6 @@ func testCollabConfig(t *testing.T) JournalCollabConfig {
 	// The default-host contract must not depend on whichever development
 	// environment invoked the test process.
 	t.Setenv("PARTYKIT_HOST", "")
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "")
 	t.Setenv("MISTY_COLLAB_PUBLIC_URL", "")
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

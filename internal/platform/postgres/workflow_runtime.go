@@ -104,11 +104,7 @@ func (db *Database) EnsureWorkflowNodeApproval(ctx context.Context, runID, nodeI
 		if _, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='awaiting_approval',updated_at=NOW() WHERE id=$1`, runID); err != nil {
 			return err
 		}
-		if spaceID == "" {
-			return nil
-		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO space_inbox_items(user_id,space_id,kind,payload) VALUES($1,$2,'approval',$3)`, userID, spaceID, mustJSON(map[string]any{"run_id": runID, "node_id": nodeID, "approval_id": approvalID, "action_digest": digest}))
-		return err
+		return nil
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrSpaceNotFound
@@ -116,20 +112,17 @@ func (db *Database) EnsureWorkflowNodeApproval(ctx context.Context, runID, nodeI
 	return approved, err
 }
 
+// NotifyWorkflowResult acknowledges a private notification node for the run's
+// requesting member. The node records nothing beyond the run's own checkpoint:
+// the Space inbox it once wrote to had no reader.
 func (db *Database) NotifyWorkflowResult(ctx context.Context, runID, nodeID string, payload json.RawMessage) (string, error) {
-	if len(payload) == 0 {
-		payload = json.RawMessage(`{}`)
-	}
 	eventID := "workflow_node_" + uuid.NewString()
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `INSERT INTO space_inbox_items(user_id,space_id,kind,event_id,payload)
-			SELECT requesting_member_id,space_id,'workflow',$1,jsonb_build_object('run_id',id,'node_id',$2,'output',$3::jsonb)
-			FROM space_runs WHERE id=$4 AND requesting_member_id=misty_rls_user_id()`, eventID, nodeID, payload, runID)
-		if err != nil {
+		var owned bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_runs WHERE id=$1 AND requesting_member_id=misty_rls_user_id())`, runID).Scan(&owned); err != nil {
 			return err
 		}
-		count, _ := result.RowsAffected()
-		if count != 1 {
+		if !owned {
 			return ErrSpaceNotFound
 		}
 		return nil
@@ -279,23 +272,6 @@ func (db *Database) JournalWorkflowAction(ctx context.Context, runID, nodeID, id
 		return nil, errors.Join(ErrAgentToolboxActionUnknown, executeErr)
 	}
 	return result, executeErr
-}
-
-func (db *Database) AcquireWorkflowResourceLease(ctx context.Context, runID, nodeID, resourceKey, fingerprint string, duration time.Duration) (bool, error) {
-	if duration < time.Second || duration > 10*time.Minute {
-		return false, ErrSpaceInvalid
-	}
-	acquired := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `INSERT INTO space_workflow_resource_leases(resource_key,run_id,node_id,fingerprint,expires_at) VALUES($1,$2,$3,$4,NOW()+$5::interval) ON CONFLICT(resource_key) DO UPDATE SET run_id=EXCLUDED.run_id,node_id=EXCLUDED.node_id,fingerprint=EXCLUDED.fingerprint,expires_at=EXCLUDED.expires_at,created_at=NOW() WHERE space_workflow_resource_leases.expires_at<=NOW() OR space_workflow_resource_leases.run_id=EXCLUDED.run_id`, resourceKey, runID, nodeID, fingerprint, duration.String())
-		if err != nil {
-			return err
-		}
-		count, _ := result.RowsAffected()
-		acquired = count == 1
-		return nil
-	})
-	return acquired, err
 }
 
 func (db *Database) ReleaseWorkflowResourceLease(ctx context.Context, runID, nodeID, resourceKey string) error {

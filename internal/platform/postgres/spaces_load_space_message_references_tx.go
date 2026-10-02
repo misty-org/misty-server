@@ -93,9 +93,6 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 		if _, err := tx.ExecContext(ctx, `UPDATE space_messages SET content=$1,file_node_ids=$2,edited_at=NOW() WHERE id=$3`, raw, pqStringArray(fileNodeIDs), messageID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM space_inbox_items WHERE message_id=$1 AND kind='mention'`, messageID); err != nil {
-			return err
-		}
 		for _, span := range content {
 			if span.UserID != "" && span.UserID != sender {
 				memberQuery := `SELECT EXISTS(SELECT 1 FROM space_members WHERE space_id=$1 AND user_id=$2)`
@@ -110,10 +107,6 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 				}
 				if !allowed {
 					return ErrSpaceInvalid
-				}
-				payload, _ := json.Marshal(map[string]string{"conversation_id": conversationID})
-				if _, err := tx.ExecContext(ctx, `INSERT INTO space_inbox_items(user_id,space_id,kind,message_id,payload) VALUES($1,$2,'mention',$3,$4)`, span.UserID, spaceID, messageID, payload); err != nil {
-					return err
 				}
 			}
 		}

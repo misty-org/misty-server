@@ -10,20 +10,12 @@ func OfficialBrowserProvider(id string, version int) (Provider, bool) {
 	var label, adapter string
 	var origins, names []string
 	switch id {
-	case "inbox/gmail":
-		label, adapter, origins = "Gmail", "gmail", []string{"https://mail.google.com"}
-	case "inbox/outlook":
-		label, adapter, origins = "Outlook", "outlook", []string{"https://outlook.live.com", "https://outlook.office.com", "https://outlook.office365.com", "https://outlook.cloud.microsoft"}
 	case "planner/todoist":
 		label, adapter, origins = "Todoist", "todoist", []string{"https://app.todoist.com"}
 	default:
 		return Provider{}, false
 	}
-	if adapter == "todoist" {
-		names = []string{"tasks.create"}
-	} else {
-		names = []string{"inbox.read", "inbox.draft", "inbox.send"}
-	}
+	names = []string{"tasks.create"}
 	p := Provider{ID: id, Version: version, Label: label, Route: Route{Kind: "browser", Adapter: adapter, AdapterVersion: 1, Origins: origins, Hints: []string{}}, Capabilities: []Definition{}}
 	for _, name := range names {
 		d, ok := Builtin(name, 1)
@@ -33,24 +25,4 @@ func OfficialBrowserProvider(id string, version int) (Provider, bool) {
 		p.Capabilities = append(p.Capabilities, d)
 	}
 	return p, true
-}
-
-func OfficialBrowserScopes(providerID, capability string) ([]string, bool) {
-	p, ok := OfficialBrowserProvider(providerID, 1)
-	if !ok {
-		return nil, false
-	}
-	for _, d := range p.Capabilities {
-		if d.Name != capability {
-			continue
-		}
-		if capability == "inbox.read" {
-			return []string{"mail.read", "browser.inspect"}, true
-		}
-		if capability == "tasks.create" {
-			return []string{"tasks.write", "browser.inspect", "browser.interact"}, true
-		}
-		return []string{"mail.write", "browser.inspect", "browser.interact"}, true
-	}
-	return nil, false
 }

@@ -10,28 +10,29 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/kannachi323/misty/server/internal/platform/metrics"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 func (s *BrowserSyncService) serveConnection(parent context.Context, conn *websocket.Conn, identity SyncConnectionIdentity, after int64, version int) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	// A fenced process closes every socket, including this one.
+	defer context.AfterFunc(s.connectionScope(), cancel)()
 	connectionID := uuid.NewString()
-	if s.store.BrowserSyncHeartbeat(ctx, identity, connectionID, after, false) != nil {
+	if s.store.BrowserSyncConnect(ctx, identity, connectionID, s.instanceID, after, false) != nil {
 		return
 	}
 	defer func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 3*time.Second)
 		defer stop()
 		_ = s.store.BrowserSyncDisconnect(cleanup, identity, connectionID)
-		_ = s.store.NotifyBrowserSyncPresence(cleanup, identity)
 	}()
 	events, unsubscribe, err := s.database.SubscribeAccountEvents(ctx, identity.UserID)
 	if err != nil {
 		return
 	}
 	defer unsubscribe()
-	_ = s.store.NotifyBrowserSyncPresence(ctx, identity)
 	outgoing := make(chan any, 32)
 	resume := make(chan int64, 1)
 	var watches chan workspaceWatch
@@ -58,24 +59,29 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 		s.writeConnection(ctx, conn, identity, connectionID, after, events, outgoing, resume, watches)
 	}()
 	defer func() { cancel(); _ = conn.Close(); <-done }()
+	// Liveness is the socket itself (pings and the process lease). The database
+	// hears only real progress: a changed applied cursor or readiness.
 	applied, ready := after, false
-	activeEpoch := ""
+	persistedApplied, persistedReady, caughtUp := after, false, false
+	alive := func() error { return conn.SetReadDeadline(time.Now().Add(45 * time.Second)) }
 	heartbeat := func() error {
-		bounded, stop := context.WithTimeout(ctx, 5*time.Second)
-		defer stop()
-		if err := s.store.BrowserSyncHeartbeat(bounded, identity, connectionID, applied, ready, activeEpoch); err != nil {
-			return err
-		}
-		if version == syncWorkspaceProtocol {
-			if err := s.store.TouchBrowserSyncDriver(bounded, identity); err != nil {
+		if applied != persistedApplied || ready != persistedReady {
+			bounded, stop := context.WithTimeout(ctx, 5*time.Second)
+			current, err := s.store.BrowserSyncProgress(bounded, identity, connectionID, applied, ready, caughtUp)
+			stop()
+			if err != nil {
 				return err
 			}
+			persistedApplied, persistedReady, caughtUp = applied, ready, current
 		}
-		return conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+		return alive()
 	}
 	conn.SetReadLimit(SyncWorkspaceMaxOpBytes*4/3 + 64<<10)
 	_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
-	conn.SetPongHandler(func(string) error { return heartbeat() })
+	conn.SetPongHandler(func(payload string) error {
+		metrics.RecordSyncMessage(ctx, "in", "pong", len(payload))
+		return alive()
+	})
 	windowStart := time.Now()
 	messages := 0
 	for {
@@ -92,7 +98,9 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 			return
 		}
 		var frame syncClientFrame
-		if err = decodeSync(bytes.NewReader(raw), &frame); err != nil {
+		err = decodeSync(bytes.NewReader(raw), &frame)
+		metrics.RecordSyncMessage(ctx, "in", frame.Type, len(raw))
+		if err != nil {
 			send(map[string]any{"type": "error", "code": "invalid_sync_frame"})
 			continue
 		}
@@ -131,7 +139,6 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 				continue
 			}
 			applied, ready = frame.AppliedSequence, frame.Ready
-			activeEpoch = frame.ActiveEpoch
 			if heartbeat() != nil {
 				return
 			}
@@ -178,7 +185,7 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 		if err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
 			return err
 		}
-		return conn.WriteJSON(value)
+		return writeSyncJSON(ctx, conn, value)
 	}
 	vault, err := s.store.BrowserSyncVault(ctx, identity.UserID)
 	if err != nil || vault == nil {
@@ -247,7 +254,8 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 	blocked := false
 	replay := func() error {
 		if blocked {
-			return nil
+			// A client awaiting a checkpoint still follows device changes.
+			return presence()
 		}
 		if err := presence(); err != nil {
 			return err
@@ -283,23 +291,42 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 	if replay() != nil {
 		return
 	}
+	// Transport keepalive only: pings keep proxies and NAT mappings open and
+	// detect dead peers through the read deadline. They never touch the database.
 	ping := time.NewTicker(15 * time.Second)
 	defer ping.Stop()
-	// Hints can be dropped. A slow safety check makes durability independent
-	// of LISTEN delivery without polling the database from every connection:
-	// changes arrive by push. Both timers are spread so a restart or a deploy
-	// never lines every connection up on the same second.
-	reconcile := time.NewTicker(jittered(60*time.Second, 0.25))
-	defer reconcile.Stop()
-	expiry := time.NewTimer(jittered(10*time.Minute, 0.5))
-	defer expiry.Stop()
+	// Changes arrive by push. The account event hub turns a lost LISTEN session
+	// or a slow consumer into a "reset", which replays authoritatively, so no
+	// connection polls the database on a timer.
+	//
+	// The socket outlives the access token that minted its ticket. Instead of
+	// reconnecting to re-present a credential, it confirms in band that the
+	// minting account session is still active, on the same bound as before.
+	revalidate := time.NewTimer(jittered(s.sessionRevalidation(), 0.25))
+	defer revalidate.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-expiry.C:
-			closeBrowserSyncForReconnect(conn)
-			return
+		case <-revalidate.C:
+			if identity.SessionHash == "" {
+				// Tickets from before session binding renew by reconnecting.
+				closeBrowserSyncForReconnect(conn)
+				return
+			}
+			bounded, stop := context.WithTimeout(ctx, 5*time.Second)
+			active, err := s.database.AccountSessionActive(bounded, identity.SessionHash, identity.UserID)
+			stop()
+			if err == nil && !active {
+				closeBrowserSyncForReconnect(conn)
+				return
+			}
+			next := jittered(s.sessionRevalidation(), 0.25)
+			if err != nil {
+				// A database outage must not disconnect every device at once.
+				next = jittered(min(time.Minute, s.sessionRevalidation()), 0.5)
+			}
+			revalidate.Reset(next)
 		case next := <-resume:
 			cursor = next
 			blocked = false
@@ -334,17 +361,11 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 					return
 				}
 			}
-		case <-reconcile.C:
-			if replay() != nil || workspaces.refresh(ctx) != nil {
-				return
-			}
-			if blocked && presence() != nil {
-				return
-			}
 		case <-ping.C:
 			if conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second)) != nil {
 				return
 			}
+			metrics.RecordSyncMessage(ctx, "out", "ping", 0)
 		}
 	}
 }

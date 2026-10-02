@@ -2,11 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
+	"time"
+
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	"log"
-	"time"
 )
 
 func configureBilling(database *db.Database) error {
@@ -24,24 +25,14 @@ func runBillingCompletions(ctx context.Context, server *Server) {
 		return
 	}
 	delivery := billingadapter.Reliable{Adapter: service.Adapter, Store: service.Store}
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
+	runDatabaseQueue(ctx, server, "billing", func(ctx context.Context) (int, error) {
 		batch, cancel := context.WithTimeout(ctx, 30*time.Second)
-		if err := service.RecoverAdmissions(batch, 20); err != nil && ctx.Err() == nil {
-			log.Printf("billing admission recovery: %v", err)
-		}
-		if err := delivery.Flush(batch, 20); err != nil && ctx.Err() == nil {
-			log.Printf("billing completion delivery: %v", err)
-		}
-		if err := server.Database.RecoverVoiceUsage(batch); err != nil && ctx.Err() == nil {
-			log.Printf("voice usage recovery: %v", err)
-		}
-		cancel()
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
+		defer cancel()
+		admissions, admissionErr := service.RecoverAdmissionsBatch(batch, 20)
+		deliveries, deliveryErr := delivery.FlushBatch(batch, 20)
+		voice, voiceErr := server.Database.RecoverVoiceUsageBatch(batch)
+		// These existing APIs persist retry/lease deadlines themselves; the next
+		// plan re-reads those deadlines and drains any remaining bounded batch.
+		return admissions + deliveries + voice, errors.Join(admissionErr, deliveryErr, voiceErr)
+	})
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 )
 
 //go:embed settings_definitions.json
@@ -105,6 +106,25 @@ func validStructuredPreference(id, raw string) bool {
 	entries, ok := value.([]any)
 	if !ok {
 		return false
+	}
+	if strings.HasPrefix(id, "collections.tabs.") {
+		if len(entries) > 40 {
+			return false
+		}
+		seen := map[string]bool{}
+		for _, entry := range entries {
+			tab, ok := entry.(string)
+			if !ok || len(tab) == 0 || len(tab) > 64 || seen[tab] || tab[0] < 'a' || tab[0] > 'z' {
+				return false
+			}
+			for _, char := range tab {
+				if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-') {
+					return false
+				}
+			}
+			seen[tab] = true
+		}
+		return true
 	}
 	for _, entry := range entries {
 		item, ok := entry.(map[string]any)

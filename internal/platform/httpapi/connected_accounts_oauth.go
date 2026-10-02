@@ -35,7 +35,6 @@ var TestingConnectedAccountOAuthCatalog = map[string]ConnectedAccountOAuthDefini
 		ClientIDEnv: "GOOGLE_CLIENT_ID", ClientSecretEnv: "GOOGLE_CLIENT_SECRET",
 		BaseScopes: []string{"openid", "email", "profile"},
 		CapabilityScopes: map[string][]string{
-			"mail":           {"https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.send"},
 			"calendar_read":  {"https://www.googleapis.com/auth/calendar.readonly"},
 			"calendar_write": {"https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/calendar.events"},
 			"files":          {"https://www.googleapis.com/auth/drive"},
@@ -49,7 +48,6 @@ var TestingConnectedAccountOAuthCatalog = map[string]ConnectedAccountOAuthDefini
 		ClientIDEnv:  "MICROSOFT_CLIENT_ID", ClientSecretEnv: "MICROSOFT_CLIENT_SECRET",
 		BaseScopes: []string{"openid", "profile", "email", "offline_access", "User.Read"},
 		CapabilityScopes: map[string][]string{
-			"mail":  {"Mail.ReadWrite", "Mail.Send"},
 			"files": {"Files.ReadWrite.All"},
 		},
 	},
@@ -174,7 +172,6 @@ func (s *SpacesService) BeginConnectedAccountAuthorization() http.HandlerFunc {
 			return
 		}
 		if len(body.Capabilities) == 0 {
-			body.Capabilities = []string{"mail"}
 			if provider == "figma" {
 				body.Capabilities = []string{"drawings_read"}
 			} else if provider == "discord" || provider == "instagram" {

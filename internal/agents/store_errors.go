@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"time"
 
@@ -93,16 +92,6 @@ func (s *SessionStore) Create(userID string) *Session {
 
 func (s *SessionStore) CreateWithBilling(userID, billingUserID string) *Session {
 	return s.CreateWithBillingScope(userID, billingUserID, "")
-}
-
-func (s *SessionStore) CreateWithModel(userID, billingUserID, modelID string) *Session {
-	session := s.CreateWithBillingScope(userID, billingUserID, "")
-	_ = s.WithSession(session.ID, userID, func(current *Session) error {
-		current.ModelID = strings.TrimSpace(modelID)
-		return nil
-	})
-	session.ModelID = strings.TrimSpace(modelID)
-	return session
 }
 
 func (s *SessionStore) CreateWithBillingScope(userID, billingUserID, billingScope string) *Session {

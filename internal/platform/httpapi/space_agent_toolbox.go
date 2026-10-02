@@ -165,49 +165,6 @@ func withToolTriggers(descriptor agenttools.Descriptor, triggers []string) agent
 	return descriptor
 }
 
-func resolveSpaceAgentToolbox(ctx context.Context, database *db.Database, actor spaceConversationToolActor, prompt, previousUserPrompt, previousAgentReply string, includeMessages, includeLibrary bool, delegationHandlers ...agenttools.Handler) (*agenttools.Registry, agenttools.Invocation, serveragent.ToolManifest, error) {
-	requested := append([]string{"calendar.query"}, TestingCompileAgentIntentWithContinuation(prompt, previousUserPrompt, previousAgentReply)...)
-	if includeMessages {
-		requested = append([]string{toolboxMessagesSearch}, requested...)
-	}
-	if includeLibrary {
-		requested = append([]string{toolboxLibrarySearch}, requested...)
-	}
-	browserTabs := []string{}
-	browserCapabilities := map[string]bool{}
-	if actor.agentID != "" {
-		if grants, err := database.AgentDeviceGrants(ctx, actor.userID, actor.spaceID, actor.agentID); err == nil {
-			browserTabs = activeBrowserGrantTabs(grants)
-			for _, descriptor := range browserToolDescriptors() {
-				browserCapabilities[descriptor.Name] = activeBrowserCapability(grants, descriptor.Name)
-			}
-		}
-	}
-	toolbox := spaceAgentToolboxWithBrowser(database, browserTabs, browserCapabilities, delegationHandlers...)
-	if len(browserTabs) > 0 {
-		for _, descriptor := range browserToolDescriptors() {
-			if !browserCapabilities[descriptor.Name] {
-				continue
-			}
-			requested = append(requested, descriptor.Name)
-		}
-	}
-	if actor.planOnly {
-		requested = readOnlyToolRequests(toolbox, requested)
-	}
-	explicit := make(map[string]bool, len(requested))
-	for _, name := range requested {
-		explicit[name] = true
-	}
-	invocation := agenttools.Invocation{
-		UserID: actor.userID, SpaceID: actor.spaceID, AgentID: actor.agentID, RunID: actor.runID,
-		SessionID: actor.sessionID, Source: "space_conversation", Trigger: "message", OriginalInput: prompt, ExplicitTools: explicit,
-		ConversationScopeKind: map[bool]string{true: db.ConversationScopePrivate, false: db.ConversationScopeEveryone}[actor.conversationID != ""], ConversationID: actor.conversationID,
-	}
-	manifest, err := toolbox.Resolve(ctx, invocation, requested, authorizeSpaceAgentTool(database))
-	return toolbox, invocation, manifest, err
-}
-
 func readOnlyToolRequests(toolbox *agenttools.Registry, requested []string) []string {
 	readable := map[string]bool{}
 	for _, descriptor := range toolbox.Descriptors() {

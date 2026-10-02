@@ -15,7 +15,7 @@ import (
 )
 
 func TestSDKOfficialBrowserProviderAdmission(t *testing.T) {
-	for _, id := range []string{"inbox/gmail", "inbox/outlook", "planner/todoist"} {
+	for _, id := range []string{"planner/todoist"} {
 		t.Run(id, func(t *testing.T) {
 			database := openTestDatabase(t)
 			ctx := t.Context()

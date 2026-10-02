@@ -17,20 +17,6 @@ import (
 )
 
 func sdkExecutionEnabled() bool { return envconfig.Getenv("MISTY_SDK_EXECUTION_ENABLED") == "true" }
-func (s *SpacesService) prepareSDKInvocationRuntime(ctx context.Context, record *db.AIInvocationRecord) (*preparedAIInvocationRuntime, error) {
-	request, bound, ctx, err := s.sdkInvocationAuthority(ctx, record)
-	_ = ctx
-	if err != nil {
-		return nil, err
-	}
-	registration, err := agenttools.ProviderRegistration(bound.Provider, bound.Target, bound.Definition, func(context.Context, agenttools.Invocation, serveragent.ToolRequest) (json.RawMessage, error) {
-		return nil, db.ErrSpaceForbidden
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &preparedAIInvocationRuntime{sdkRequest: request, body: aiInvocationInput{SurfaceID: "sdk", Timezone: "UTC", Prompt: bound.Definition.Description}, spaceID: record.SpaceID, spaceName: bound.Target.Label, spaceKind: "sdk", timezone: "UTC", currentTime: time.Now().UTC(), prompt: bound.Definition.Description, allowedTools: []string{registration.Descriptor.Name}, requiredTools: []string{registration.Descriptor.Name}}, nil
-}
 func (s *SpacesService) sdkInvocationAuthority(ctx context.Context, record *db.AIInvocationRecord) (*db.SDKInvocationRecord, *db.SDKBoundCapability, context.Context, error) {
 	if !sdkExecutionEnabled() {
 		return nil, nil, ctx, db.ErrSDKProviderUnavailable

@@ -1,0 +1,94 @@
+package console
+
+import "strconv"
+
+templ configurationPage(v configurationView) {
+	@pageHeader("Configuration", "Environment known to the CLI. Secret values are never shown.") {
+		if v.Missing > 0 {
+			<span class="tag tag-problem">
+				@iconAlert()
+				{ plural(v.Missing, "required setting missing", "required settings missing") }
+			</span>
+		}
+	}
+	if v.Err != "" {
+		@note(v.Err)
+	}
+	for _, group := range v.Groups {
+		@sectionLabel(group.File)
+		<ul class="rows">
+			for _, s := range group.Settings {
+				@settingRow(s)
+			}
+		</ul>
+	}
+}
+
+templ databasePage(v databaseView) {
+	@pageHeader("Database", v.Stats.Name) {
+		if v.Pending > 0 {
+			<span class="tag tag-problem">
+				@iconAlert()
+				{ plural(v.Pending, "migration pending", "migrations pending") }
+			</span>
+		} else if v.Err == "" {
+			<span class="tag">
+				@iconCheck()
+				Schema current
+			</span>
+		}
+	}
+	if v.Err != "" {
+		@problem(v.Err)
+	}
+	<div class="metrics">
+		@metric("Size", bytesLabel(v.Stats.SizeBytes))
+		@metric("Connections", itoa(v.Stats.Connections))
+		@metric("Schema version", strconv.FormatInt(v.Stats.Applied, 10))
+		@metric("Backups", itoa(len(v.Backups)))
+	</div>
+	if v.Pending > 0 {
+		@note("Pending migrations apply on the next misty server up.")
+	}
+	@sectionLabel("Migrations")
+	<ul class="rows">
+		for _, m := range v.recentMigrations() {
+			<li class={ "row", templ.KV("row-problem", !m.Applied) }>
+				<span class="row-label">
+					if m.Applied {
+						@iconCheck()
+					} else {
+						@iconAlert()
+					}
+					{ humanize(m.Name) }
+				</span>
+				<span class="muted">
+					{ strconv.FormatInt(m.Version, 10) }
+					if !m.Applied {
+						{ " · pending" }
+					}
+				</span>
+			</li>
+		}
+	</ul>
+	@sectionLabel("Largest tables")
+	<div class="table">
+		<div class="table-head"><span>Table</span><span>Rows</span><span>Size</span></div>
+		for _, t := range v.Stats.Tables {
+			<div class="table-row">
+				<span><code>{ t.Name }</code></span>
+				<span class="muted">{ strconv.FormatInt(t.Rows, 10) }</span>
+				<span>{ bytesLabel(t.Bytes) }</span>
+			</div>
+		}
+	</div>
+	@sectionLabel("Backups in server/.misty/backups")
+	<ul class="rows">
+		for _, b := range v.Backups {
+			<li class="row"><span><code>{ b.Name }</code></span><span class="muted">{ ago(b.Modified) }</span></li>
+		}
+		if len(v.Backups) == 0 {
+			@emptyRow("No local backups.")
+		}
+	</ul>
+}

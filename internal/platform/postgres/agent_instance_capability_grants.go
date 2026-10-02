@@ -21,11 +21,6 @@ var defaultAgentCapabilityGrants = []AgentCapabilityGrant{
 	{Capability: "tasks.update", Risk: "write"},
 }
 
-func DefaultAgentCapabilityGrants() json.RawMessage {
-	raw, _ := json.Marshal(defaultAgentCapabilityGrants)
-	return raw
-}
-
 func normalizeAgentCapabilityGrants(raw json.RawMessage) (json.RawMessage, error) {
 	var grants []AgentCapabilityGrant
 	if len(raw) == 0 || json.Unmarshal(raw, &grants) != nil || grants == nil {

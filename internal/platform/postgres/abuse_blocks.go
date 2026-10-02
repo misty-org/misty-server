@@ -36,19 +36,13 @@ func (db *Database) SaveAbuseBlock(ctx context.Context, block AbuseBlock) error 
 	})
 }
 
-// ActiveAbuseBlocks returns every live block and prunes expired rows.
+// ActiveAbuseBlocks returns live blocks. Expired rows have a separate deadline worker.
 //
-// The set is small by construction — one row per blocked caller — so loading it
-// whole keeps the request path free of database work entirely.
+// Startup, committed hints and reconnects refresh this set outside the request
+// path. Burst coalescing in the guard bounds snapshot frequency.
 func (db *Database) ActiveAbuseBlocks(ctx context.Context) ([]AbuseBlock, error) {
 	blocks := []AbuseBlock{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		// Expired rows are cleaned here rather than by a separate job: the
-		// refresh already runs on a timer and needs the write anyway.
-		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM abuse_blocks WHERE blocked_until < NOW() - INTERVAL '1 day'`); err != nil {
-			return err
-		}
 		rows, err := tx.QueryContext(ctx, `SELECT block_key,blocked_until,block_seconds,COALESCE(reason,'')
 			FROM abuse_blocks WHERE blocked_until > NOW()`)
 		if err != nil {
@@ -74,4 +68,26 @@ func (db *Database) ClearAbuseBlock(ctx context.Context, key string) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM abuse_blocks WHERE block_key=$1`, key)
 		return err
 	})
+}
+
+func (db *Database) SubscribeAbuseBlockEvents(ctx context.Context) (<-chan struct{}, func(), error) {
+	return db.SubscribeWorkerEvents(ctx, "abuse-blocks")
+}
+
+// PurgeExpiredAbuseBlocks retains one day of expired records, using bounded
+// locked batches so concurrent servers can cooperate without duplicate scans.
+func (db *Database) PurgeExpiredAbuseBlocks(ctx context.Context, limit int) (int, error) {
+	var count int64
+	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `WITH expired AS (
+   SELECT block_key FROM abuse_blocks WHERE blocked_until<=now()-interval '1 day'
+   ORDER BY blocked_until FOR UPDATE SKIP LOCKED LIMIT $1
+  ) DELETE FROM abuse_blocks b USING expired e WHERE b.block_key=e.block_key`, min(max(limit, 1), 500))
+		if err != nil {
+			return err
+		}
+		count, err = result.RowsAffected()
+		return err
+	})
+	return int(count), err
 }

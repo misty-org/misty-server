@@ -59,6 +59,10 @@ func (s *RealtimeService) Connect() http.HandlerFunc {
 func (s *RealtimeService) register(client *TestingRealtimeClient) {
 	s.TestingMu.Lock()
 	s.clients[client] = struct{}{}
+	if s.clientsByUser[client.TestingUserID] == nil {
+		s.clientsByUser[client.TestingUserID] = map[*TestingRealtimeClient]struct{}{}
+	}
+	s.clientsByUser[client.TestingUserID][client] = struct{}{}
 	s.TestingMu.Unlock()
 }
 
@@ -66,6 +70,10 @@ func (s *RealtimeService) TestingUnregister(client *TestingRealtimeClient) {
 	s.TestingMu.Lock()
 	if _, ok := s.clients[client]; ok {
 		delete(s.clients, client)
+		delete(s.clientsByUser[client.TestingUserID], client)
+		if len(s.clientsByUser[client.TestingUserID]) == 0 {
+			delete(s.clientsByUser, client.TestingUserID)
+		}
 		client.once.Do(func() { close(client.TestingDone) })
 	}
 	previousSpaceID := client.viewingSpaceID

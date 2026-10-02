@@ -23,24 +23,31 @@ import (
 
 // Registry owns the metric collectors and the HTTP surfaces that feed them.
 type Registry struct {
-	registry *prometheus.Registry
+	syncTraffic syncTraffic
+	registry    *prometheus.Registry
+	workerWakes *prometheus.CounterVec
 
-	requests      *prometheus.CounterVec
-	duration      *prometheus.HistogramVec
-	inFlight      prometheus.Gauge
-	sampleAge     prometheus.Gauge
-	sampleFail    prometheus.Counter
-	aiInvocations *prometheus.CounterVec
-	aiDuration    *prometheus.HistogramVec
-	aiFirstOutput *prometheus.HistogramVec
+	requests        *prometheus.CounterVec
+	duration        *prometheus.HistogramVec
+	inFlight        prometheus.Gauge
+	sampleAge       prometheus.GaugeFunc
+	lastSample      time.Time
+	traffic         *prometheus.CounterVec
+	aiStreamReads   *prometheus.CounterVec
+	aiStreamEvents  *prometheus.CounterVec
+	aiStreamBytes   *prometheus.CounterVec
+	aiStreamWindows prometheus.Gauge
+	sampleFail      prometheus.Counter
+	aiInvocations   *prometheus.CounterVec
+	aiDuration      *prometheus.HistogramVec
+	aiFirstOutput   *prometheus.HistogramVec
 
 	mu       sync.Mutex
 	samplers []sampler
 }
 
 type sampler struct {
-	gauge prometheus.Gauge
-	read  func(context.Context) (float64, error)
+	read func(context.Context) error
 }
 
 // New builds a registry preloaded with Go runtime and process collectors.
@@ -71,10 +78,6 @@ func New() *Registry {
 			Name: "misty_http_requests_in_flight",
 			Help: "HTTP requests currently being served.",
 		}),
-		sampleAge: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "misty_metrics_sample_age_seconds",
-			Help: "Seconds since domain gauges were last refreshed. A climbing value means sampling stalled and the domain gauges are stale.",
-		}),
 		sampleFail: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "misty_metrics_sample_failures_total",
 			Help: "Domain gauge samples that returned an error.",
@@ -94,6 +97,19 @@ func New() *Registry {
 			Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 3, 5, 8, 15, 30, 60},
 		}, []string{"surface", "action", "model"}),
 	}
+	m.lastSample = time.Now()
+	m.sampleAge = prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "misty_metrics_sample_age_seconds",
+		Help: "Seconds since the last fully successful domain sample (or startup before the first success).",
+	}, func() float64 {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return time.Since(m.lastSample).Seconds()
+	})
+	m.initWorkers()
+	m.initTraffic()
+	m.initAIStreams()
+	m.initSyncTraffic()
 	registry.MustRegister(m.requests, m.duration, m.inFlight, m.sampleAge, m.sampleFail, m.aiInvocations, m.aiDuration, m.aiFirstOutput)
 	return m
 }
@@ -121,7 +137,13 @@ func (m *Registry) WatchGauge(name, help string, read func(context.Context) (flo
 	gauge := prometheus.NewGauge(prometheus.GaugeOpts{Name: name, Help: help})
 	m.registry.MustRegister(gauge)
 	m.mu.Lock()
-	m.samplers = append(m.samplers, sampler{gauge: gauge, read: read})
+	m.samplers = append(m.samplers, sampler{read: func(ctx context.Context) error {
+		value, err := read(ctx)
+		if err == nil {
+			gauge.Set(value)
+		}
+		return err
+	}})
 	m.mu.Unlock()
 }
 
@@ -152,57 +174,47 @@ func (m *Registry) sampleOnce(ctx context.Context) {
 	copy(samplers, m.samplers)
 	m.mu.Unlock()
 
+	complete := true
 	for _, s := range samplers {
 		// Each sample is individually bounded so one wedged query cannot stall
 		// the whole refresh loop.
 		sampleCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		value, err := s.read(sampleCtx)
+		err := s.read(sampleCtx)
 		cancel()
 		if err != nil {
+			complete = false
 			m.sampleFail.Inc()
 			// The gauge keeps its previous value; sample age is what reveals
 			// that it has gone stale.
 			continue
 		}
-		s.gauge.Set(value)
 	}
-	m.sampleAge.Set(0)
-	go m.ageSampleAge(ctx, time.Now())
-}
-
-// ageSampleAge advances the staleness gauge between refreshes so a stalled
-// sampler is visible rather than looking permanently fresh.
-func (m *Registry) ageSampleAge(ctx context.Context, since time.Time) {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			age := time.Since(since).Seconds()
-			if age > 120 {
-				return
-			}
-			m.sampleAge.Set(age)
-		}
+	if complete {
+		m.mu.Lock()
+		m.lastSample = time.Now()
+		m.mu.Unlock()
 	}
 }
 
 // Middleware records request counts and latency per route.
 func (m *Registry) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(context.WithValue(r.Context(), registryContextKey{}, m))
 		// chi's wrapper preserves http.Hijacker and http.Flusher. A naive
 		// ResponseWriter wrapper would break the realtime WebSocket upgrade,
 		// which needs to take over the connection.
 		wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		wrapped.Tee(bodyCounter{record: func(n int) { m.recordHTTP(r, "out", n) }})
+		if r.Body != nil {
+			r.Body = &countingBody{ReadCloser: r.Body, record: func(n int) { m.recordHTTP(r, "in", n) }}
+		}
 		started := time.Now()
 		m.inFlight.Inc()
 
 		defer func() {
 			m.inFlight.Dec()
 			route := routePattern(r)
-			method := r.Method
+			method := boundedMethod(r.Method)
 			m.requests.WithLabelValues(route, method, statusClass(wrapped.Status())).Inc()
 			m.duration.WithLabelValues(route, method).Observe(time.Since(started).Seconds())
 		}()

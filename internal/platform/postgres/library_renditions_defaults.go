@@ -154,8 +154,8 @@ func (db *Database) ClaimLibraryRenditionJob(ctx context.Context, workerID strin
 	var raw []byte
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, `WITH candidate AS (
-			SELECT id FROM library_processing_jobs WHERE job_kind='edit' AND (state='queued' AND available_at<=NOW() OR state IN ('leased','running') AND lease_expires_at<=NOW())
-			ORDER BY priority DESC,created_at FOR UPDATE SKIP LOCKED LIMIT 1
+			SELECT j.id FROM library_processing_jobs j WHERE j.job_kind='edit' AND (state='queued' AND available_at<=NOW() OR state IN ('leased','running') AND lease_expires_at<=NOW()) AND `+libraryJobEligibility("edit")+`
+			ORDER BY priority DESC,created_at FOR UPDATE OF j SKIP LOCKED LIMIT 1
 		), claimed AS (
 			UPDATE library_processing_jobs j SET state='leased',lease_token=$1,lease_owner=$2,lease_expires_at=NOW()+$3::interval,attempt_count=attempt_count+1,updated_at=NOW()
 			FROM candidate WHERE j.id=candidate.id RETURNING j.*

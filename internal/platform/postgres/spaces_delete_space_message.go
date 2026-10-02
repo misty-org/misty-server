@@ -129,53 +129,8 @@ func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, b
 			}
 		}
 		out.Sender = SpaceMessageSender{Kind: senderKind, AgentID: agentID, DisplayName: out.SenderName}
-		eventID, err := recordSpaceEventTx(ctx, tx, spaceID, billingUserID, "message.created", out.ID, out)
-		if err != nil {
+		if _, err := recordSpaceEventTx(ctx, tx, spaceID, billingUserID, "message.created", out.ID, out); err != nil {
 			return err
-		}
-		inboxPayload, _ := json.Marshal(map[string]any{"sender_name": out.SenderName, "preview": messagePreview(content), "conversation_id": conversationID})
-		recipientsQuery := `SELECT user_id FROM space_members WHERE space_id=$1`
-		recipientArgs := []any{spaceID}
-		if conversationID != "" {
-			// Agent members carry a NULL user_id, and only people have an inbox.
-			recipientsQuery = `SELECT cm.user_id FROM space_conversation_members cm JOIN space_conversations c ON c.id=cm.conversation_id WHERE c.space_id=$1 AND cm.conversation_id=$2 AND cm.actor_kind='person' AND cm.user_id IS NOT NULL`
-			recipientArgs = append(recipientArgs, conversationID)
-		}
-		rows, err := tx.QueryContext(ctx, recipientsQuery, recipientArgs...)
-		if err != nil {
-			return err
-		}
-		recipientIDs := []string{}
-		for rows.Next() {
-			var memberID string
-			if err := rows.Scan(&memberID); err != nil {
-				rows.Close()
-				return err
-			}
-			recipientIDs = append(recipientIDs, memberID)
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return err
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		for _, memberID := range recipientIDs {
-			allowed, err := hasSpacePermissionTx(ctx, tx, memberID, spaceID, PermissionMessagesRead)
-			if err != nil {
-				return err
-			}
-			if !allowed {
-				continue
-			}
-			kind := "unread"
-			if memberID == billingUserID {
-				kind = "agent"
-			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO space_inbox_items(user_id,space_id,kind,message_id,event_id,payload) VALUES($1,$2,$3,$4,$5,$6)`, memberID, spaceID, kind, out.ID, eventID, inboxPayload); err != nil {
-				return err
-			}
 		}
 		return nil
 	})

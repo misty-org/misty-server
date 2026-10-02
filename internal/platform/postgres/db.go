@@ -21,10 +21,12 @@ import (
 var migrationFiles embed.FS
 
 type Database struct {
-	Billing  *billingadapter.Service
-	Conn     *sql.DB
-	eventsMu sync.Mutex
-	events   *accountEventHub
+	Billing   *billingadapter.Service
+	Conn      *sql.DB
+	eventsMu  sync.Mutex
+	events    *accountEventHub
+	workersMu sync.Mutex
+	workers   *workerEventHub
 }
 
 func (db *Database) GetDSN() string {
@@ -172,6 +174,12 @@ func TestingLatestMigrationVersion() (int64, error) {
 }
 
 func (db *Database) Stop() {
+	db.workersMu.Lock()
+	if db.workers != nil {
+		_ = db.workers.listener.Close()
+		db.workers = nil
+	}
+	db.workersMu.Unlock()
 	db.eventsMu.Lock()
 	if db.events != nil {
 		_ = db.events.listener.Close()

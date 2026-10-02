@@ -74,6 +74,6 @@ func TestDisabledOptionalBillingIsHealthy(t *testing.T) {
 		"billing":  {Status: "disabled", Mode: "configuration", Critical: false},
 	})
 	if status != "ok" || code != http.StatusOK {
-		t.Fatalf("self-host health: %s %d", status, code)
+		t.Fatalf("disabled billing health: %s %d", status, code)
 	}
 }

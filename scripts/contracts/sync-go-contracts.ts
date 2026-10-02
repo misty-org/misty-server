@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { readFile, writeFile } from "node:fs/promises";
-import { mistyInboxCapabilities, mistySocialCapabilities } from "../../../src/shared/schemas/communications-capabilities.ts";
+import { mistySocialCapabilities } from "../../../src/shared/schemas/communications-capabilities.ts";
 import { mistyTaskCapabilities } from "../../../src/shared/schemas/task-capabilities.ts";
 import { MistyBrowserInteractionSchema } from "../../../src/shared/schemas/browser.ts";
 
 // Reserve Misty-owned semantic definitions before any provider can
 // claim them. This is the same internal contract data, not a second handwritten tool catalog.
 const capabilityTarget = new URL("../../internal/capabilities/builtins.json", import.meta.url);
-const capabilityExpected = JSON.stringify([...mistyInboxCapabilities, ...mistySocialCapabilities, ...mistyTaskCapabilities], null, 2) + "\n";
+const capabilityExpected = JSON.stringify([...mistySocialCapabilities, ...mistyTaskCapabilities], null, 2) + "\n";
 if (process.argv.includes("--check")) {
   if (await readFile(capabilityTarget, "utf8") !== capabilityExpected) throw new Error("Go capability contracts differ from the internal contract source");
 } else await writeFile(capabilityTarget, capabilityExpected);

@@ -109,9 +109,6 @@ func TestFixedMemberCollaborationPermissionsAreEnforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSpaceMessage(owner) error = %v", err)
 	}
-	if inbox, err := database.SpaceInbox(ctx, member.ID, "unreads", 20); err != nil || !containsInboxMessage(inbox, ownerMessage.ID) {
-		t.Fatalf("SpaceInbox(member) = %#v, %v, want message %q", inbox, err, ownerMessage.ID)
-	}
 	events, _, err := database.SpaceEventsAfter(ctx, member.ID, 0, 500)
 	if err != nil {
 		t.Fatalf("SpaceEventsAfter(member) error = %v", err)

@@ -37,8 +37,3 @@ func TestingAgentScheduleDue(expression string, baseline, now time.Time) bool {
 	spec, err := standardAgentCronParser.Parse(expression)
 	return err == nil && !spec.Next(baseline).After(now)
 }
-
-func ValidAgentSchedule(expression string) bool {
-	_, err := standardAgentCronParser.Parse(expression)
-	return err == nil
-}

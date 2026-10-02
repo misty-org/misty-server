@@ -15,6 +15,7 @@ type AIService struct {
 	database              *db.Database
 	runtime               *agent.Service
 	invocations           *aiInvocationHub
+	streams               *invocationStreams
 	metrics               *platformmetrics.Registry
 	analyzer              *agent.SmartLibraryAnalyzer
 	agentRuntime          AgentRuntimeConfig
@@ -24,7 +25,12 @@ type AIService struct {
 	attachmentDownloadTTL time.Duration
 }
 
-func (s *AIService) SetMetrics(registry *platformmetrics.Registry) { s.metrics = registry }
+func (s *AIService) SetMetrics(registry *platformmetrics.Registry) {
+	s.metrics = registry
+	if s.streams != nil {
+		s.streams.setMetrics(registry)
+	}
+}
 func (s *AIService) SetEmbeddingAnalyzer(analyzer *agent.SmartLibraryAnalyzer) {
 	s.analyzer = analyzer
 }
@@ -54,7 +60,7 @@ func (s *AIService) AttachSpacesRuntime(spaces *SpacesService) {
 }
 
 func NewAIService(database *db.Database, runtime *agent.Service) *AIService {
-	return &AIService{database: database, runtime: runtime, invocations: newAIInvocationHub(database)}
+	return &AIService{database: database, runtime: runtime, invocations: newAIInvocationHub(database), streams: newInvocationStreams(database)}
 }
 
 func (s *AIService) Status() http.HandlerFunc {

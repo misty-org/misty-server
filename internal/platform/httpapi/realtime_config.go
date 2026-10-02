@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -38,11 +37,12 @@ type TestingRealtimeClient struct {
 }
 
 type RealtimeService struct {
-	database  *db.Database
-	dsn       string
-	listener  *pq.Listener
-	TestingMu sync.RWMutex
-	clients   map[*TestingRealtimeClient]struct{}
+	database      *db.Database
+	dsn           string
+	listener      *pq.Listener
+	TestingMu     sync.RWMutex
+	clients       map[*TestingRealtimeClient]struct{}
+	clientsByUser map[string]map[*TestingRealtimeClient]struct{}
 	// viewers maps a space ID to the set of clients currently viewing that
 	// space's chat, for the "active users" presence capsule. Guarded by mu.
 	TestingViewers map[string]map[*TestingRealtimeClient]struct{}
@@ -55,6 +55,7 @@ func NewRealtimeService(database *db.Database, dsn string) *RealtimeService {
 		database:       database,
 		dsn:            dsn,
 		clients:        map[*TestingRealtimeClient]struct{}{},
+		clientsByUser:  map[string]map[*TestingRealtimeClient]struct{}{},
 		TestingViewers: map[string]map[*TestingRealtimeClient]struct{}{},
 		closed:         make(chan struct{}),
 	}
@@ -90,6 +91,7 @@ func (s *RealtimeService) Close() error {
 			_ = client.conn.Close()
 		}
 		s.clients = map[*TestingRealtimeClient]struct{}{}
+		s.clientsByUser = map[string]map[*TestingRealtimeClient]struct{}{}
 		s.TestingViewers = map[string]map[*TestingRealtimeClient]struct{}{}
 		s.TestingMu.Unlock()
 	})
@@ -113,6 +115,7 @@ func (s *RealtimeService) listen() {
 				return
 			}
 			if notification == nil {
+				s.broadcastReset()
 				continue
 			}
 			if notification.Channel == "misty_space_control" {
@@ -162,10 +165,7 @@ func (s *RealtimeService) broadcastControl(payload []byte) {
 	}
 	s.TestingMu.RUnlock()
 	for _, client := range clients {
-		select {
-		case client.TestingSend <- envelope:
-		default:
-		}
+		s.deliver(client, envelope)
 		if control.KeepConnection {
 			continue
 		}
@@ -181,32 +181,6 @@ func (s *RealtimeService) broadcastControl(payload []byte) {
 			_ = target.conn.Close()
 			s.TestingUnregister(target)
 		}(client)
-	}
-}
-
-func (s *RealtimeService) BroadcastEvent(eventID int64) {
-	s.TestingMu.RLock()
-	clients := make([]*TestingRealtimeClient, 0, len(s.clients))
-	for client := range s.clients {
-		clients = append(clients, client)
-	}
-	s.TestingMu.RUnlock()
-	for _, client := range clients {
-		event, err := s.database.EventByIDForUser(context.Background(), client.TestingUserID, eventID)
-		if err != nil {
-			continue
-		}
-		payload, err := json.Marshal(map[string]any{"type": "event", "event": event})
-		if err != nil {
-			continue
-		}
-		select {
-		case client.TestingSend <- payload:
-		default:
-			_ = client.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(1013, "reconnect and resync"), time.Now().Add(time.Second))
-			_ = client.conn.Close()
-			s.TestingUnregister(client)
-		}
 	}
 }
 

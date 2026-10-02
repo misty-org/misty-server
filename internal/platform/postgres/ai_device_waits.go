@@ -72,7 +72,7 @@ func (db *Database) AIInvocationDeviceWaitsReady(ctx context.Context, limit int)
 	}
 	items := []AgentDeviceWait{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.device_wait_hook_token,`+aiDeviceReady+` FROM ai_invocations i WHERE i.state='awaiting_device' AND i.device_wait_hook_token<>'' AND (i.device_wait_expires_at<=NOW() OR `+aiDeviceReady+`) ORDER BY i.updated_at,i.id LIMIT $1`, limit)
+		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.device_wait_hook_token,`+aiDeviceReady+` FROM ai_invocations i WHERE i.state='awaiting_device' AND i.device_wait_hook_token<>'' AND COALESCE(i.agent_run_id,'')='' AND (i.device_wait_expires_at<=NOW() OR `+aiDeviceReady+`) ORDER BY i.updated_at,i.id LIMIT $1`, limit)
 		if err != nil {
 			return err
 		}

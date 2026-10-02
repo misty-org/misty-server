@@ -226,10 +226,6 @@ func validMCPHTTPSURL(raw string) bool {
 	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == ""
 }
 
-func normalizeMCPDiscovery(connectionID string, remote []mcpintegration.Tool) []db.MCPRemoteTool {
-	return normalizeMCPDiscoveryForProvider(connectionID, "custom", remote)
-}
-
 func normalizeMCPDiscoveryForProvider(connectionID, provider string, remote []mcpintegration.Tool) []db.MCPRemoteTool {
 	items := make([]db.MCPRemoteTool, 0, len(remote))
 	for _, tool := range remote {
@@ -386,10 +382,6 @@ func mcpErrorCode(err error) string {
 	default:
 		return "mcp_unavailable"
 	}
-}
-
-func TestingNormalizeMCPDiscoveryForProvider(connectionID, provider string, remote []mcpintegration.Tool) []db.MCPRemoteTool {
-	return normalizeMCPDiscoveryForProvider(connectionID, provider, remote)
 }
 
 func TestingValidateMCPToolSchema(schema json.RawMessage) error {

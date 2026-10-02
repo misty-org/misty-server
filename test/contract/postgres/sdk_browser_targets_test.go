@@ -27,11 +27,11 @@ func TestSDKBrowserTargetConfigurationPreservesProfilesAndRejectsBackendDispatch
 	if err != nil {
 		t.Fatal(err)
 	}
-	document, _ := sdkInstallFixture(t, "example.mail")
-	document.Scopes = []string{"capabilities.providers.write", "capabilities.read", "browser.inspect", "inbox.read"}
+	document, _ := sdkInstallFixture(t, "example.social")
+	document.Scopes = []string{"capabilities.providers.write", "capabilities.read", "browser.inspect", "social.read_thread"}
 	provider := &document.Capabilities.Providers[0]
-	provider.ID = "example.mail/browser"
-	provider.Route = cap.Route{Kind: "browser", Origins: []string{"https://mail.google.com", "https://outlook.live.com"}, Hints: []string{}}
+	provider.ID = "example.social/browser"
+	provider.Route = cap.Route{Kind: "browser", Origins: []string{"https://chat.example.com", "https://social.example.com"}, Hints: []string{}}
 	raw, err := os.ReadFile("../../../internal/capabilities/builtins.json")
 	if err != nil {
 		t.Fatal(err)
@@ -41,13 +41,13 @@ func TestSDKBrowserTargetConfigurationPreservesProfilesAndRejectsBackendDispatch
 		t.Fatal(err)
 	}
 	for _, definition := range builtins {
-		if definition.Name == "inbox.read" {
+		if definition.Name == "social.read_thread" {
 			provider.Capabilities[0] = definition
 			break
 		}
 	}
-	if provider.Capabilities[0].Name != "inbox.read" {
-		t.Fatal("missing canonical inbox.read fixture")
+	if provider.Capabilities[0].Name != "social.read_thread" {
+		t.Fatal("missing canonical social.read_thread fixture")
 	}
 	seedConnectedProvider(t, database, owner.ID, document.AppID, *provider)
 	session := &AppRuntimeSession{UserID: owner.ID, AppID: document.AppID, AuthorityGeneration: 1, Scopes: document.Scopes}
@@ -63,8 +63,8 @@ func TestSDKBrowserTargetConfigurationPreservesProfilesAndRejectsBackendDispatch
 	}
 	device := deviceFor(owner.ID)
 	foreign := deviceFor(other.ID)
-	binding := cap.BrowserBinding{Kind: "browser", DeviceID: device.ID, ProfileID: strings.Repeat("a", 64), AccountBindingID: uuid.NewString(), Origins: []string{"https://mail.google.com"}, ContextID: uuid.NewString()}
-	request := cap.TargetConfiguration{TargetID: uuid.NewString(), ProviderID: provider.ID, ProviderVersion: 1, Label: "Personal inbox", Capabilities: []string{"inbox.read"}, CallerApps: []string{}, Browser: &binding}
+	binding := cap.BrowserBinding{Kind: "browser", DeviceID: device.ID, ProfileID: strings.Repeat("a", 64), AccountBindingID: uuid.NewString(), Origins: []string{"https://chat.example.com"}, ContextID: uuid.NewString()}
+	request := cap.TargetConfiguration{TargetID: uuid.NewString(), ProviderID: provider.ID, ProviderVersion: 1, Label: "Personal account", Capabilities: []string{"social.read_thread"}, CallerApps: []string{}, Browser: &binding}
 	target, err := database.ConfigureSDKTarget(ctx, owner.ID, request)
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestSDKBrowserTargetConfigurationPreservesProfilesAndRejectsBackendDispatch
 	if _, err := database.ConfigureSDKTarget(ctx, owner.ID, request); !errors.Is(err, ErrSDKVersionConflict) {
 		t.Fatalf("stale target update: %v", err)
 	}
-	if _, err := database.ResolveSDKBoundCapability(ctx, owner.ID, target.ID, 1, "inbox.read", 1); !errors.Is(err, ErrSDKProviderUnavailable) {
+	if _, err := database.ResolveSDKBoundCapability(ctx, owner.ID, target.ID, 1, "social.read_thread", 1); !errors.Is(err, ErrSDKProviderUnavailable) {
 		t.Fatalf("browser fell through to backend: %v", err)
 	}
 	request.ExpectedRevision = 1
@@ -99,11 +99,11 @@ func TestSDKBrowserTargetConfigurationPreservesProfilesAndRejectsBackendDispatch
 		t.Fatalf("foreign device bound: %v", err)
 	}
 	binding.DeviceID = device.ID
-	binding.Origins = []string{"https://mail.google.com.evil.invalid"}
+	binding.Origins = []string{"https://chat.example.com.evil.invalid"}
 	if _, err := database.ConfigureSDKTarget(ctx, owner.ID, request); !errors.Is(err, cap.ErrInvalid) {
 		t.Fatalf("expanded origin: %v", err)
 	}
-	binding.Origins = []string{"https://outlook.live.com"}
+	binding.Origins = []string{"https://social.example.com"}
 	binding.ProfileID = strings.Repeat("b", 64)
 	binding.AccountBindingID = uuid.NewString()
 	updated, err := database.ConfigureSDKTarget(ctx, owner.ID, request)
@@ -137,7 +137,7 @@ func TestSDKBrowserTargetConfigurationPreservesProfilesAndRejectsBackendDispatch
 	if _, err := database.ConfigureSDKTarget(ctx, owner.ID, request); !errors.Is(err, ErrDeviceNotFound) {
 		t.Fatalf("revoked device rebound: %v", err)
 	}
-	targets, err := database.ResolveSDKTargets(ctx, owner.ID, cap.TargetResolve{Capability: "inbox.read"})
+	targets, err := database.ResolveSDKTargets(ctx, owner.ID, cap.TargetResolve{Capability: "social.read_thread"})
 	if err != nil || len(targets) != 0 {
 		t.Fatalf("unavailable target discovery: %#v %v", targets, err)
 	}

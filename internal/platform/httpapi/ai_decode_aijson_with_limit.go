@@ -55,17 +55,6 @@ func TestingWriteAIError(w http.ResponseWriter, err error) {
 	}
 }
 
-func writeAISessionAccessError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, agent.ErrPersistedSessionNotFound):
-		http.Error(w, "session not found", http.StatusNotFound)
-	case errors.Is(err, db.ErrPersonalAgentNotFound), errors.Is(err, db.ErrSpaceForbidden), errors.Is(err, db.ErrLibraryForbidden):
-		writeJSON(w, http.StatusForbidden, map[string]string{"code": "forbidden"})
-	default:
-		writeSpaceError(w, err)
-	}
-}
-
 func isAIInvalidRequest(err error) bool {
 	var invalid agent.ErrInvalidRequest
 	return errors.As(err, &invalid)

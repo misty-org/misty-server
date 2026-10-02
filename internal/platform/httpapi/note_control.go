@@ -99,12 +99,6 @@ func (s *SpacesService) requestCollaborationControlCommand(
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Misty-Timestamp", timestamp)
 	request.Header.Set("X-Misty-Signature", s.TestingJournalCollab.SignControlRequest(timestamp, body))
-	// The Hosted worker deliberately sees only opaque room IDs. A self-hosted
-	// service persists through the local API, so it also needs the local
-	// resource ID to address that storage row.
-	if InstanceConfigFromEnv().Deployment == "self_hosted" {
-		request.Header.Set("X-Misty-Resource-ID", resourceID)
-	}
 
 	response, err := TestingNoteControlHTTPClient.Do(request)
 	if err != nil {

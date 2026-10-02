@@ -12,15 +12,14 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func TestConnectedAccountOAuthCatalogHasMailCapabilities(t *testing.T) {
+func TestConnectedAccountOAuthCatalogNoLongerOffersMail(t *testing.T) {
 	for _, provider := range []string{"google", "microsoft"} {
 		definition, ok := TestingConnectedAccountOAuthCatalog[provider]
 		if !ok || definition.AuthorizeURL == "" || definition.TokenURL == "" || definition.IdentityURL == "" {
 			t.Fatalf("%s connected-account OAuth definition is incomplete", provider)
 		}
-		capabilities, scopes, valid := TestingConnectedAccountRequestedScopes(definition, []string{"mail"})
-		if !valid || len(capabilities) != 1 || capabilities[0] != "mail" || len(scopes) < 2 {
-			t.Fatalf("%s mail consent = capabilities %#v scopes %#v valid %v", provider, capabilities, scopes, valid)
+		if _, _, valid := TestingConnectedAccountRequestedScopes(definition, []string{"mail"}); valid {
+			t.Fatalf("%s still accepts mail consent", provider)
 		}
 	}
 }
@@ -44,7 +43,7 @@ func TestConnectedAccountOAuthCatalogHasReusableFileCapabilities(t *testing.T) {
 
 func TestConnectedAccountOAuthRejectsUnknownCapabilities(t *testing.T) {
 	definition := TestingConnectedAccountOAuthCatalog["google"]
-	if _, _, valid := TestingConnectedAccountRequestedScopes(definition, []string{"mail", "unknown"}); valid {
+	if _, _, valid := TestingConnectedAccountRequestedScopes(definition, []string{"files", "unknown"}); valid {
 		t.Fatal("unknown connected-account capability was accepted")
 	}
 }
@@ -62,13 +61,13 @@ func TestConnectedAccountCallbackURLAndIncrementalConsent(t *testing.T) {
 		t.Fatalf("configured callback followed a caller header: %q", got)
 	}
 	definition := TestingConnectedAccountOAuthCatalog["google"]
-	_, scopes, _ := TestingConnectedAccountRequestedScopes(definition, []string{"mail", "mail"})
+	_, scopes, _ := TestingConnectedAccountRequestedScopes(definition, []string{"files", "files"})
 	joined := strings.Join(scopes, " ")
-	if !strings.Contains(joined, "gmail.modify") || !strings.Contains(joined, "gmail.send") {
-		t.Fatalf("Google mail scopes = %#v", scopes)
+	if strings.Count(joined, "auth/drive") != 1 {
+		t.Fatalf("Google file scopes = %#v", scopes)
 	}
 	if strings.Contains(url.QueryEscape(joined), "calendar") {
-		t.Fatalf("mail consent unexpectedly requested Calendar: %#v", scopes)
+		t.Fatalf("file consent unexpectedly requested Calendar: %#v", scopes)
 	}
 }
 
@@ -81,14 +80,14 @@ func TestGoogleCalendarConsentIsIncrementalAndLeastPrivilege(t *testing.T) {
 	if containsValue(readScopes, "https://www.googleapis.com/auth/calendar.events") {
 		t.Fatalf("read-only Calendar consent requested write access: %#v", readScopes)
 	}
-	capabilities, writeScopes, valid := TestingConnectedAccountRequestedScopes(definition, []string{"mail", "calendar_write"})
-	if !valid || !containsValue(capabilities, "mail") || !containsValue(capabilities, "calendar_write") {
+	capabilities, writeScopes, valid := TestingConnectedAccountRequestedScopes(definition, []string{"files", "calendar_write"})
+	if !valid || !containsValue(capabilities, "files") || !containsValue(capabilities, "calendar_write") {
 		t.Fatalf("incremental capabilities = %#v, valid %v", capabilities, valid)
 	}
 	for _, scope := range []string{
 		"https://www.googleapis.com/auth/calendar.readonly",
 		"https://www.googleapis.com/auth/calendar.events",
-		"https://www.googleapis.com/auth/gmail.modify",
+		"https://www.googleapis.com/auth/drive",
 	} {
 		if !containsValue(writeScopes, scope) {
 			t.Fatalf("incremental Google consent missing %q: %#v", scope, writeScopes)
@@ -129,8 +128,8 @@ func TestConnectedAccountResponseJSONContract(t *testing.T) {
 	expires := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
 	raw, err := json.Marshal(ConnectedAccountResponse{
 		ID: "connection-1", Provider: "google", AccountID: "account-1",
-		AccountDisplay: "owner@example.com", Capabilities: []string{"mail"},
-		GrantedScopes: []string{"gmail.modify", "gmail.send"}, Status: "active", ExpiresAt: &expires,
+		AccountDisplay: "owner@example.com", Capabilities: []string{"files"},
+		GrantedScopes: []string{"drive"}, Status: "active", ExpiresAt: &expires,
 	})
 	if err != nil {
 		t.Fatal(err)

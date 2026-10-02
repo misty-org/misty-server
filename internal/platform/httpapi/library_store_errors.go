@@ -94,8 +94,8 @@ type MemoryLibraryObjectStore struct {
 
 func (s *MemoryLibraryObjectStore) Health(_ context.Context) error { return nil }
 
-// LocalLibraryObjectStore is a persistent filesystem backend. Production
-// configuration permits it only for explicitly self-hosted deployments.
+// LocalLibraryObjectStore is a persistent filesystem backend for development.
+// Production always uses S3-compatible storage.
 type LocalLibraryObjectStore struct{ root string }
 
 func (s *LocalLibraryObjectStore) Health(_ context.Context) error {

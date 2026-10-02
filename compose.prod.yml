@@ -3,9 +3,18 @@ name: misty-server-production
 x-api-image: &api-image
   image: ${MISTY_API_IMAGE:?set immutable MISTY_API_IMAGE}
 
+x-agent-runtime-image: &agent-runtime-image
+  image: ${MISTY_AGENT_RUNTIME_IMAGE:?set immutable MISTY_AGENT_RUNTIME_IMAGE}
+
+x-logging: &logging
+  logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
+
 services:
+  # One PostgreSQL server holds two databases: Misty's (with pgvector) and the
+  # agent runtime's workflow database, each owned by its own role.
   postgres:
     image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    <<: *logging
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_MIGRATION_USER:?set DB_MIGRATION_USER}
@@ -42,6 +51,8 @@ services:
     command: ["up"]
     networks: [database]
 
+  # Grants the Misty application role and creates the agent runtime's
+  # separate workflow database on the same PostgreSQL server.
   database-permissions:
     image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
     restart: "no"
@@ -53,16 +64,57 @@ services:
       PGPASSWORD: ${DB_MIGRATION_PASSWORD:?set DB_MIGRATION_PASSWORD}
       MISTY_APP_DB_USER: ${DB_USER:?set DB_USER}
       MISTY_APP_DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      AGENT_RUNTIME_DB_PASSWORD: ${AGENT_RUNTIME_DB_PASSWORD:?set AGENT_RUNTIME_DB_PASSWORD}
     volumes:
       - ./scripts/docker/postgres-grant-app-role.sh:/usr/local/bin/misty-grant-app-role:ro
+      - ./scripts/docker/postgres-workflow-database.sh:/usr/local/bin/misty-workflow-database:ro
     depends_on:
       migrate:
         condition: service_completed_successfully
-    entrypoint: ["/bin/sh", "/usr/local/bin/misty-grant-app-role"]
+    entrypoint: ["/bin/sh", "-c", "/bin/sh /usr/local/bin/misty-grant-app-role && /bin/sh /usr/local/bin/misty-workflow-database"]
     networks: [database]
 
+  agent-runtime-setup:
+    <<: [*agent-runtime-image, *logging]
+    restart: "no"
+    environment:
+      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
+      WORKFLOW_POSTGRES_URL: postgres://workflow:${AGENT_RUNTIME_DB_PASSWORD:?set AGENT_RUNTIME_DB_PASSWORD}@postgres:5432/workflow
+    depends_on:
+      database-permissions:
+        condition: service_completed_successfully
+    command: ["node", "node_modules/@workflow/world-postgres/bin/setup.js"]
+    networks: [database]
+
+  agent-runtime:
+    <<: [*agent-runtime-image, *logging]
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
+      WORKFLOW_POSTGRES_URL: postgres://workflow:${AGENT_RUNTIME_DB_PASSWORD:?set AGENT_RUNTIME_DB_PASSWORD}@postgres:5432/workflow
+      MISTY_INTERNAL_API_BASE: http://api:8080
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:?set MISTY_AGENT_RUNTIME_CONTROL_SECRET}
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
+      AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
+      MISTY_AGENT_MODEL_PROVIDER: ${MISTY_AGENT_MODEL_PROVIDER:-gateway}
+      MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
+      MISTY_AGENT_MODEL_API_KEY: ${MISTY_AGENT_MODEL_API_KEY:-}
+      MISTY_AGENT_MODEL_BASE_URL: ${MISTY_AGENT_MODEL_BASE_URL:-}
+    depends_on:
+      agent-runtime-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [edge, database]
+
   api:
-    <<: *api-image
+    <<: [*api-image, *logging]
     restart: unless-stopped
     env_file:
       - path: .env/prod/runtime.env
@@ -113,12 +165,18 @@ services:
       DB_MIGRATION_USER: ""
       DB_MIGRATION_PASSWORD: ""
       CLOUDFLARE_API_TOKEN: ""
+      MISTY_AGENT_RUNTIME_URL: http://agent-runtime:3000
+      MISTY_AGENT_RUNTIME_INTERNAL_API_URL: http://api:8080
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:?set MISTY_AGENT_RUNTIME_CONTROL_SECRET}
+      MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
     ports:
       - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"
     depends_on:
       database-permissions:
         condition: service_completed_successfully
         restart: true
+      agent-runtime:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
       interval: 3s

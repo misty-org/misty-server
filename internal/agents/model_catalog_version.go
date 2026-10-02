@@ -76,26 +76,6 @@ func GatewayModelAvailable(ctx context.Context, modelID string) bool {
 	return false
 }
 
-func GatewayModelSupportsTools(ctx context.Context, modelID string) bool {
-	models, err := GatewayModels(ctx)
-	if err != nil {
-		return false
-	}
-	for _, model := range models {
-		if model.ID != strings.TrimSpace(modelID) {
-			continue
-		}
-		for _, capability := range model.Capabilities {
-			switch strings.ToLower(strings.TrimSpace(capability)) {
-			case "tools", "tool-use", "tool_calling", "function_calling":
-				return true
-			}
-		}
-		return false
-	}
-	return false
-}
-
 // GatewayModelSupportsReasoning reports whether a model exposes adjustable
 // reasoning effort, based on the capabilities the gateway advertises. Keep the
 // capability strings in sync with modelSupportsReasoning on the client.
@@ -117,28 +97,6 @@ func GatewayModelSupportsReasoning(ctx context.Context, modelID string) bool {
 		return false
 	}
 	return false
-}
-
-// CachedGatewayModelRates exposes server-only gateway pricing to the usage
-// meter without sending prices to clients. Values are thousandths of a dollar
-// per million tokens, matching the versioned Hosted AI rate-card units.
-func CachedGatewayModelRates(modelID string) (input, cachedInput, output int64, ok bool) {
-	gatewayCatalogCache.Lock()
-	defer gatewayCatalogCache.Unlock()
-	for _, model := range gatewayCatalogCache.models {
-		if model.ID == strings.TrimSpace(modelID) && model.HasTokenPricing {
-			cached := model.CachedRateMilliUSDPerMillion
-			if cached <= 0 {
-				cached = model.InputRateMilliUSDPerMillion
-			}
-			return model.InputRateMilliUSDPerMillion, cached, model.OutputRateMilliUSDPerMillion, true
-		}
-	}
-	return 0, 0, 0, false
-}
-
-func NewGatewayProviderForModel(modelID string) (ModelProvider, error) {
-	return NewGatewayProviderForModelWithReasoning(modelID, "")
 }
 
 func NewGatewayProviderForModelWithReasoning(modelID, reasoningEffort string) (ModelProvider, error) {

@@ -36,7 +36,7 @@ func TestSpaceInterventionWaitRecoveryRevocationAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.AttachAgentRunContext(ctx, owner.ID, run.ID, device.ID, "browser_tab", "scope-original", "Original inbox", json.RawMessage(`["browser.inspect"]`), json.RawMessage(`{"kind":"browser_tab"}`)); err != nil {
+	if _, err := database.AttachAgentRunContext(ctx, owner.ID, run.ID, device.ID, "browser_tab", "scope-original", "Original account", json.RawMessage(`["browser.inspect"]`), json.RawMessage(`{"kind":"browser_tab"}`)); err != nil {
 		t.Fatal(err)
 	}
 	// Admit both targets before execution; running work cannot change its context.
@@ -45,7 +45,7 @@ func TestSpaceInterventionWaitRecoveryRevocationAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.AttachAgentRunContext(ctx, owner.ID, run.ID, other.ID, "browser_tab", "scope-other", "Other inbox", json.RawMessage(`["browser.inspect"]`), json.RawMessage(`{"kind":"browser_tab"}`)); err != nil {
+	if _, err := database.AttachAgentRunContext(ctx, owner.ID, run.ID, other.ID, "browser_tab", "scope-other", "Other account", json.RawMessage(`["browser.inspect"]`), json.RawMessage(`{"kind":"browser_tab"}`)); err != nil {
 		t.Fatal(err)
 	}
 	jobs, err := database.ClaimPersonalAgentTaskRunJobs(ctx, "wait-worker", 1, time.Minute)

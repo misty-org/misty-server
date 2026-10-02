@@ -9,10 +9,11 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-const SelfHostedProtocolVersion = 1
+// InstanceProtocolVersion is the client protocol the server speaks.
+const InstanceProtocolVersion = 1
 
 type instanceStateStore interface {
-	SelfHostedInstanceState(context.Context, string) (db.InstanceState, error)
+	InstanceState(context.Context, string) (db.InstanceState, error)
 }
 
 type InstanceCapabilities struct {
@@ -26,6 +27,8 @@ type InstanceCapabilities struct {
 	StorageBackend     string `json:"storage_backend"`
 }
 
+// InstanceDescriptor keeps the fields installed desktop apps already read.
+// Misty is hosted only, so deployment and registration are fixed.
 type InstanceDescriptor struct {
 	ServerID          string               `json:"server_id"`
 	Name              string               `json:"name"`
@@ -40,66 +43,33 @@ type InstanceDescriptor struct {
 
 func Instance(store instanceStateStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		config := InstanceConfigFromEnv()
-		state, err := store.SelfHostedInstanceState(r.Context(), config.Name)
+		name := strings.TrimSpace(envconfig.Getenv("MISTY_INSTANCE_NAME"))
+		if name == "" {
+			name = "Misty"
+		}
+		state, err := store.InstanceState(r.Context(), name)
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "instance_unavailable"})
 			return
 		}
-		descriptor := InstanceDescriptor{
+		writeJSON(w, http.StatusOK, InstanceDescriptor{
 			ServerID:          state.ServerID,
 			Name:              state.DisplayName,
-			Deployment:        config.Deployment,
-			ProtocolVersion:   SelfHostedProtocolVersion,
-			MinClientProtocol: SelfHostedProtocolVersion,
-			MaxClientProtocol: SelfHostedProtocolVersion,
-			Capabilities:      config.Capabilities,
-			BootstrapRequired: config.Deployment == "self_hosted" && state.BootstrapRequired,
-			Registration:      "open",
-		}
-		if config.Deployment == "self_hosted" {
-			descriptor.Registration = "invitation"
-		}
-		writeJSON(w, http.StatusOK, descriptor)
-	}
-}
-
-type InstanceConfig struct {
-	Name         string
-	Deployment   string
-	Capabilities InstanceCapabilities
-}
-
-func InstanceConfigFromEnv() InstanceConfig {
-	deployment := envconfig.DeploymentMode()
-	name := strings.TrimSpace(envconfig.Getenv("MISTY_INSTANCE_NAME"))
-	if name == "" {
-		if deployment == "self_hosted" {
-			name = "Misty Self-hosted"
-		} else {
-			name = "Misty Hosted"
-		}
-	}
-	storageBackend := strings.ToLower(strings.TrimSpace(envconfig.Getenv("MISTY_LIBRARY_BACKEND")))
-	if storageBackend == "" {
-		if deployment == "self_hosted" && strings.TrimSpace(envconfig.Getenv("MISTY_LIBRARY_FILESYSTEM_DIR")) != "" {
-			storageBackend = "filesystem"
-		} else {
-			storageBackend = "s3"
-		}
-	}
-	return InstanceConfig{
-		Name:       name,
-		Deployment: deployment,
-		Capabilities: InstanceCapabilities{
-			Collaboration:      true,
-			Library:            true,
-			Notes:              true,
-			Drawings:           true,
-			HostedBilling:      strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_BILLING_ADAPTER")), "http"),
-			HostedIntegrations: true,
-			HostedAI:           true,
-			StorageBackend:     storageBackend,
-		},
+			Deployment:        "hosted",
+			ProtocolVersion:   InstanceProtocolVersion,
+			MinClientProtocol: InstanceProtocolVersion,
+			MaxClientProtocol: InstanceProtocolVersion,
+			Capabilities: InstanceCapabilities{
+				Collaboration:      true,
+				Library:            true,
+				Notes:              true,
+				Drawings:           true,
+				HostedBilling:      strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_BILLING_ADAPTER")), "http"),
+				HostedIntegrations: true,
+				HostedAI:           true,
+				StorageBackend:     "s3",
+			},
+			Registration: "open",
+		})
 	}
 }

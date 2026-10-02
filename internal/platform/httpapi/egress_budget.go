@@ -131,24 +131,6 @@ func (g *EgressGuard) purgeLocked(now time.Time) {
 	}
 }
 
-// BytesServed reports what one identity has been charged in the current window.
-func (g *EgressGuard) BytesServed(key string) int64 {
-	g.TestingMu.Lock()
-	defer g.TestingMu.Unlock()
-	record := g.TestingPerKey[key]
-	if record == nil || record.windowEnd.Before(g.TestingNow()) {
-		return 0
-	}
-	return record.bytes
-}
-
-// Refusals reports how many transfers the ceiling has rejected, for monitoring.
-func (g *EgressGuard) Refusals() int64 {
-	g.TestingMu.Lock()
-	defer g.TestingMu.Unlock()
-	return g.refusals
-}
-
 // WriteQuotaExceeded reports the refusal to the caller.
 func WriteQuotaExceeded(w http.ResponseWriter) {
 	w.Header().Set("Retry-After", "3600")

@@ -57,6 +57,15 @@ func TestSettingsProfilesPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	revision := p.Revision
+	unchanged := SettingsProfilePatch{MutationID: uuid.NewString(), Set: map[string]any{"browser.searchEngine": "bing"}}
+	p, err = database.PatchSettingsProfile(ctx, "owner", id, unchanged)
+	if err != nil || p.Revision != revision {
+		t.Fatal("no-op advanced revision", p, err)
+	}
+	unchanged.Set["browser.searchEngine"] = "google"
+	if _, err = database.PatchSettingsProfile(ctx, "owner", id, unchanged); !errors.Is(err, ErrSettingsProfileMutation) {
+		t.Fatal("no-op mutation lost its idempotency receipt", err)
+	}
 	disjoint := SettingsProfilePatch{MutationID: uuid.NewString(), Set: map[string]any{"files.hidden": true}}
 	p, err = database.PatchSettingsProfile(ctx, "owner", id, disjoint)
 	if err != nil || p.Values["browser.searchEngine"] != "bing" {
@@ -137,6 +146,13 @@ func TestSettingsProfilesPostgres(t *testing.T) {
 	shared, err := database.EnsureAccountPreferences(ctx, "owner", map[string]any{"app.zoom": 1.25, "browser.downloads.directory": "/downloads"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	readBack, err := database.AccountPreferences(ctx, "owner")
+	if err != nil || readBack.Revision != shared.Revision || readBack.Values["app.zoom"] != 1.25 {
+		t.Fatalf("read authoritative settings: %+v %v", readBack, err)
+	}
+	if _, err := database.AccountPreferences(ctx, "other"); !errors.Is(err, ErrSettingsProfileNotFound) {
+		t.Fatalf("cross-account read must not expose owner's record: %v", err)
 	}
 	secondDevice, err := database.EnsureAccountPreferences(ctx, "owner", map[string]any{"app.zoom": 2.0})
 	if err != nil || secondDevice.ID != shared.ID || secondDevice.Values["app.zoom"] != 1.25 {

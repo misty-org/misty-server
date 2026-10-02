@@ -138,7 +138,7 @@ func syncTestDatabase(t *testing.T) (*Store, string) {
 // schema.
 func applyLaterMigrations(t *testing.T, conn *sql.DB, dir string) {
 	t.Helper()
-	for _, name := range []string{"20270929000000_browser_sync_records.sql", "20270930000000_browser_sync_names.sql"} {
+	for _, name := range []string{"20270929000000_browser_sync_records.sql", "20270930000000_browser_sync_names.sql", "20271001090000_browser_sync_live_connections.sql"} {
 		raw, err := os.ReadFile(dir + "/" + name)
 		if err != nil {
 			t.Fatal(err)

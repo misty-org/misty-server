@@ -62,7 +62,6 @@ func TestPasswordResetURLsRejectNonLocalhostHTTP(t *testing.T) {
 
 func TestStripeWebhookIsNotMounted(t *testing.T) {
 	configureJournalCollabForTest(t)
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "self_hosted")
 	t.Setenv("MISTY_BILLING_ADAPTER", "none")
 	server, err := CreateServer()
 	if err != nil {
@@ -115,7 +114,6 @@ func TestCreateServerRequiresProductionR2Configuration(t *testing.T) {
 	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
 	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "hosted")
 	t.Setenv("R2_ENDPOINT", "")
 	t.Setenv("R2_BUCKET", "")
 	t.Setenv("R2_ACCESS_KEY", "")
@@ -128,7 +126,6 @@ func TestCreateServerRequiresProductionR2Configuration(t *testing.T) {
 
 func TestValidateProductionEnvironmentRequiresCoreConfiguration(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "hosted")
 	for _, key := range []string{
 		"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY",
 		"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME",
@@ -144,7 +141,6 @@ func TestValidateProductionEnvironmentRequiresCoreConfiguration(t *testing.T) {
 
 func TestValidateProductionEnvironmentAcceptsCoreConfiguration(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "hosted")
 	values := map[string]string{
 		"R2_ENDPOINT":               "https://account.r2.cloudflarestorage.com",
 		"R2_BUCKET":                 "misty-production",

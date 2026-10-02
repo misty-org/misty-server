@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -149,25 +148,4 @@ func (s *SpacesService) AIRuns() http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusAccepted, map[string]any{"status": run.State, "routing": decision, "run": run, "agents_href": agentsHref, "origin": body.Origin})
 	}
-}
-
-func (s *SpacesService) managedMistyRunSpace(ctx context.Context, userID, requestedSpaceID string, references []aiContextReference) (*db.Space, error) {
-	if mixedAIContextSpaces(references) {
-		return nil, db.ErrSpaceInvalid
-	}
-	spaceID := strings.TrimSpace(requestedSpaceID)
-	if spaceID == "" {
-		spaceID = firstAIContextSpace(references)
-	}
-	if spaceID != "" {
-		space, err := s.database.SpaceByID(ctx, userID, spaceID)
-		if err != nil {
-			return nil, err
-		}
-		if !space.Permissions[db.PermissionAskRun] {
-			return nil, db.ErrSpaceForbidden
-		}
-		return space, nil
-	}
-	return nil, db.ErrSpaceInvalid
 }

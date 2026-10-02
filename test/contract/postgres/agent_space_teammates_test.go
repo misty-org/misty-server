@@ -59,6 +59,11 @@ func TestCreatorToolApprovalIsExactOwnerScopedAndRecoverable(t *testing.T) {
 	if err != nil || len(pending) != 1 || pending[0].ID != approval.ID {
 		t.Fatalf("pending resumes = %#v, %v", pending, err)
 	}
+	// The decision queued its delivery atomically, so the dispatcher's recovery
+	// scan has nothing to re-queue and its due-time planning stays idle.
+	if unqueued, err := database.CreatorToolApprovalResumesUnqueued(ctx, 20); err != nil || len(unqueued) != 0 {
+		t.Fatalf("queued resume is rescanned = %#v, %v", unqueued, err)
+	}
 	if err := database.MarkCreatorToolApprovalResumed(ctx, run.ID, approval.ID); err != nil {
 		t.Fatal(err)
 	}

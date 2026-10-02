@@ -63,4 +63,3 @@ func normalizeEmail(email string) string { return accounts.NormalizeEmail(email)
 func TestingNormalizeUsername(username string) (string, error) {
 	return accounts.NormalizeUsername(username)
 }
-func defaultUsernameForEmail(email string) string { return accounts.DefaultUsernameForEmail(email) }

@@ -18,9 +18,6 @@ func AgentModel() (AgentModelConfig, error) {
 		c.Provider = "gateway"
 	}
 	key, base := strings.TrimSpace(Getenv("MISTY_AGENT_MODEL_API_KEY")), strings.TrimSpace(Getenv("MISTY_AGENT_MODEL_BASE_URL"))
-	if DeploymentMode() == "hosted" && (c.Provider != "gateway" || c.Model != "" || key != "" || base != "") {
-		return c, errors.New("instance model overrides require self_hosted deployment mode")
-	}
 	switch c.Provider {
 	case "gateway", "openai", "anthropic", "google", "openai-compatible":
 	default:

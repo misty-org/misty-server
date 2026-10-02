@@ -49,16 +49,6 @@ func (db *Store) BrowserSyncWorkspaces(ctx context.Context, userID, vault string
 	return out, rows.Err()
 }
 
-// DrivenBrowserSyncWorkspace returns the workspace a device currently drives, if any.
-func (db *Store) DrivenBrowserSyncWorkspace(ctx context.Context, vault, device string) (string, error) {
-	var workspace string
-	err := db.Conn.QueryRowContext(ctx, `SELECT workspace_id FROM browser_sync_workspaces WHERE vault_id=$1 AND driver_device_id=$2`, vault, device).Scan(&workspace)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return workspace, err
-}
-
 func workspaceVersion(ctx context.Context, tx *sql.Tx, vault, workspace string) (int64, error) {
 	var version int64
 	err := tx.QueryRowContext(ctx, `SELECT version FROM browser_sync_workspaces WHERE vault_id=$1 AND workspace_id=$2`, vault, workspace).Scan(&version)

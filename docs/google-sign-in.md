@@ -9,10 +9,6 @@ password to a Google identity.
 
 ## Configuration
 
-The hosted service is the default deployment. The development runtime is set to
-`MISTY_DEPLOYMENT_MODE=hosted`; self-host connection controls are hidden for this
-preview. Explicit self-host deployments do not offer Google registration.
-
 In `server/.env/dev/integrations/google.env` (or the corresponding production
 directory), configure:
 

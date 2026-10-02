@@ -189,10 +189,6 @@ func mistyMemoryLooksSensitive(content string) bool {
 	return false
 }
 
-func TestingMistyMemoryIntent(prompt, toolName string) bool {
-	return explicitMistyMemoryIntent(prompt, toolName)
-}
-
 func TestingMistyMemoryGrounded(prompt, content string) bool {
 	return mistyMemoryGroundedInPrompt(prompt, content) && !mistyMemoryLooksSensitive(content)
 }

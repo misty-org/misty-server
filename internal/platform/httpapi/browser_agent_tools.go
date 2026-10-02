@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"time"
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	"github.com/kannachi323/misty/server/internal/agenttools"
@@ -134,32 +133,19 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 			return nil, errors.Join(db.ErrAgentToolboxNotAttempted, err)
 		}
 	}
-	ticker := time.NewTicker(250 * time.Millisecond)
-	defer ticker.Stop()
-	timeout := time.NewTimer(time.Until(job.DeadlineAt))
-	defer timeout.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return s.stopBrowserDeviceTool(invocation.UserID, job.ID)
-		case <-timeout.C:
-			return s.stopBrowserDeviceTool(invocation.UserID, job.ID)
-		case <-ticker.C:
-			current, lookupErr := s.database.WorkflowDeviceNodeJob(ctx, invocation.UserID, job.ID)
-			if lookupErr != nil {
-				return s.stopBrowserDeviceTool(invocation.UserID, job.ID)
-			}
-			switch current.State {
-			case "completed":
-				return current.Output, nil
-			case "uncertain":
-				return nil, db.ErrAgentToolboxActionUnknown
-			case "canceled":
-				return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
-			case "failed":
-				return nil, browserDeviceFailure(current.ErrorCode)
-			}
-		}
+	current, err := waitForDeviceJob(ctx, s.database, invocation.UserID, job.ID, job.DeadlineAt)
+	if err != nil {
+		return s.stopBrowserDeviceTool(invocation.UserID, job.ID)
+	}
+	switch current.State {
+	case "completed":
+		return current.Output, nil
+	case "uncertain":
+		return nil, db.ErrAgentToolboxActionUnknown
+	case "canceled":
+		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
+	default:
+		return nil, browserDeviceFailure(current.ErrorCode)
 	}
 }
 

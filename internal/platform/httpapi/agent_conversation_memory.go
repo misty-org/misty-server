@@ -15,11 +15,6 @@ type agentConversationContext struct {
 	PreviousAgentReply string
 }
 
-func (s *SpacesService) agentConversationMemory(ctx context.Context, run *db.SpaceRun) (string, error) {
-	conversation, err := s.agentConversationContext(ctx, run)
-	return conversation.Transcript, err
-}
-
 func (s *SpacesService) agentConversationContext(ctx context.Context, run *db.SpaceRun) (agentConversationContext, error) {
 	messages, err := s.database.SpaceConversationMessages(ctx, run.OwnerUserID, run.SpaceID, run.SourceConversationID, 0, 30)
 	if err != nil {

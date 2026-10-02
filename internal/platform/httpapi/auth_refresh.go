@@ -122,7 +122,7 @@ func CookieCSRFProtection(allowedOrigin func(string) bool) func(http.Handler) ht
 			}
 			_, accessErr := r.Cookie(TestingSessionCookieName)
 			_, refreshErr := r.Cookie(RefreshCookieName)
-			// Login and enrollment also need protection against login CSRF.
+			// Login also needs protection against login CSRF.
 			path := r.URL.Path
 			for _, prefix := range []string{"/api/v1", "/v1", "/api"} {
 				if strings.HasPrefix(path, prefix+"/") {
@@ -131,8 +131,7 @@ func CookieCSRFProtection(allowedOrigin func(string) bool) func(http.Handler) ht
 				}
 			}
 			login := path == "/login" || path == "/api/login" || path == "/register" || path == "/api/register" ||
-				path == "/auth/google" || path == "/auth/google/complete" ||
-				path == "/self-host/bootstrap" || path == "/api/self-host/bootstrap" || path == "/self-host/enroll" || path == "/api/self-host/enroll"
+				path == "/auth/google" || path == "/auth/google/complete"
 			if accessErr == nil || refreshErr == nil || login {
 				origin := r.Header.Get("Origin")
 				if r.Header.Get("X-Misty-CSRF") != "1" || (origin != "" && !allowedOrigin(origin)) {

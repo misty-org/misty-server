@@ -68,6 +68,14 @@ misty server logs api --follow
 
 Normal startup shows progress and service status. Failures show the relevant diagnostic tail. Bounded, redacted build diagnostics are saved under `server/.misty/logs/`; `--verbose` displays that output after the build. Container logs rotate at 10 MB with three files per service.
 
+### Operator console
+
+```sh
+misty server up --gui
+```
+
+With `--gui`, `up` also opens the operator console in your browser. It covers health and traffic, development services and their logs, accounts and their sessions, sync vaults, background jobs, AI usage, billing delivery, configuration and database migrations. Every change made there is recorded in the audit log shown on the Overview. It listens only on `127.0.0.1:7070` and never goes through the tunnel. A one-time link authenticates the browser. Running the command again reuses the console that is already running, and `misty server down` stops it. Traffic metrics require `MISTY_METRICS_TOKEN`. Its views are templ files in `internal/console`; run `make generate` after editing them.
+
 Check `/health` on the configured public API origin before using another computer. Service health is not a substitute for testing account, sync, or agent workflows.
 
 Then return to the desktop setup:
@@ -84,7 +92,6 @@ Desktop setup creates a root `.env` pointing at the local API if that file is ab
 
 - [CLI commands](../cli/README.md)
 - [Environment configuration and production deployment](deploy/README.md)
-- [Self-hosted deployment bundle](self-host/README.md)
 - [Backend architecture](https://github.com/misty-org/misty/wiki/Server-backend-architecture)
 - [Server development](https://github.com/misty-org/misty/wiki/Server-development)
 - [Repository migration and validation ledger](https://github.com/misty-org/misty/wiki/Cli-server-consolidation)

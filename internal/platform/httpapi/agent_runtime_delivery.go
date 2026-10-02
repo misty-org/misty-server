@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+// AgentRuntimeDeliveriesEnabled reports whether this process should run the
+// invocation dispatcher. Without a runtime its due work can never clear.
+func (s *SpacesService) AgentRuntimeDeliveriesEnabled() bool { return s.agentRuntime.Enabled() }
+
 func (s *SpacesService) ProcessAgentRuntimeDeliveries(ctx context.Context, limit int) (int, error) {
 	if !s.agentRuntime.Enabled() {
 		return 0, nil

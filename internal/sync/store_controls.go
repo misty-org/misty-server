@@ -54,7 +54,7 @@ func (db *Store) ControlBrowserSyncDevice(ctx context.Context, user string, c Sy
 	}
 	if c.Activate || c.FullSync != nil {
 		var online bool
-		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM browser_sync_connections WHERE vault_id=$1 AND device_id=$2 AND expires_at>clock_timestamp())`, vault, c.DeviceID).Scan(&online)
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM browser_sync_connections c WHERE c.vault_id=$1 AND c.device_id=$2 AND `+syncConnectionLive+`)`, vault, c.DeviceID).Scan(&online)
 		if err != nil {
 			return "", err
 		}
@@ -90,10 +90,13 @@ func (db *Store) ControlBrowserSyncDevice(ctx context.Context, user string, c Sy
 	if err != nil {
 		return "", err
 	}
+	// Publish with the commit: no periodic reconcile backs up a lost hint.
+	if err = notifySync(ctx, tx, user, vault, "browser-presence"); err != nil {
+		return "", err
+	}
 	if err = tx.Commit(); err != nil {
 		return "", err
 	}
-	_ = db.NotifyBrowserSyncPresence(ctx, SyncConnectionIdentity{UserID: user, VaultID: vault, DeviceID: c.DeviceID})
 	id, _ := request.(string)
 	return id, nil
 }

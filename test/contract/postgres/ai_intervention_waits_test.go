@@ -33,7 +33,7 @@ func TestAIInterventionWaitPreservesTargetAndTrustedDecision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = database.AttachAIInvocationContext(t.Context(), owner.ID, run, space.ID, device.ID, "browser_tab", "scope-user-wait", "Personal inbox", json.RawMessage(`["browser.inspect"]`), json.RawMessage(`{}`))
+	_, err = database.AttachAIInvocationContext(t.Context(), owner.ID, run, space.ID, device.ID, "browser_tab", "scope-user-wait", "Personal account", json.RawMessage(`["browser.inspect"]`), json.RawMessage(`{}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,13 +41,13 @@ func TestAIInterventionWaitPreservesTargetAndTrustedDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 	await := func(call, hook, digest string) (*AIInterventionWait, error) {
-		return database.AwaitAIUserIntervention(t.Context(), owner.ID, run, runtime, call, hook, "scope-user-wait", "sign_in", "Sign in to your personal inbox", digest)
+		return database.AwaitAIUserIntervention(t.Context(), owner.ID, run, runtime, call, hook, "scope-user-wait", "sign_in", "Sign in to your personal account", digest)
 	}
 	wait, err := await("call-1", "hook-1", strings.Repeat("a", 64))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if wait.State != "pending" || wait.TargetLabel != "Personal inbox" {
+	if wait.State != "pending" || wait.TargetLabel != "Personal account" {
 		t.Fatalf("wait: %#v", wait)
 	}
 	record, err := database.AIInvocationByID(t.Context(), owner.ID, run)

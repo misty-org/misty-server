@@ -18,7 +18,6 @@ func TestSpacesToolsRemainMountedAndAuthenticated(t *testing.T) {
 			{"GET", "/spaces/example/tasks"}, {"POST", "/spaces/example/tasks"},
 			{"GET", "/spaces/example/agenda"}, {"GET", "/spaces/example/notes"},
 			{"GET", "/spaces/example/drawings"}, {"GET", "/spaces/example/library"},
-			{"POST", "/spaces/invitations/example/accept"},
 		} {
 			t.Run(endpoint.method+prefix+endpoint.path, func(t *testing.T) {
 				response := httptest.NewRecorder()

@@ -18,10 +18,10 @@ func TestConnectedAccountOAuthStateIsPrivateAndSingleUse(t *testing.T) {
 	}
 	stateHash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	want := ConnectedAccountOAuthState{
-		UserID: owner.ID, Provider: "google", Capabilities: []string{"mail"},
-		RequestedScopes:    []string{"openid", "gmail.modify"},
+		UserID: owner.ID, Provider: "google", Capabilities: []string{"calendar_read"},
+		RequestedScopes:    []string{"openid", "calendar.readonly"},
 		VerifierCiphertext: []byte("sealed-verifier"), VerifierNonce: []byte("nonce"),
-		ReturnTo: "/inbox", ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
+		ReturnTo: "/planner", ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
 	}
 	if err := database.CreateConnectedAccountOAuthState(ctx, stateHash, want); err != nil {
 		t.Fatalf("CreateConnectedAccountOAuthState() error = %v", err)
@@ -46,7 +46,7 @@ func TestConnectedAccountReconnectAndRevoke(t *testing.T) {
 		UserID: owner.ID, Provider: "google", AccountID: "google-user-1",
 		AccountDisplay: "owner@example.com", CredentialCiphertext: []byte("sealed-token-1"),
 		CredentialNonce: []byte("nonce-1"), KeyVersion: 1,
-		Capabilities: []string{"mail"}, GrantedScopes: []string{"gmail.modify"},
+		Capabilities: []string{"calendar_read"}, GrantedScopes: []string{"calendar.readonly"},
 	})
 	if err != nil {
 		t.Fatalf("SaveConnectedAccount() error = %v", err)
@@ -55,7 +55,7 @@ func TestConnectedAccountReconnectAndRevoke(t *testing.T) {
 		UserID: owner.ID, Provider: "google", AccountID: "google-user-1",
 		AccountDisplay: "owner@example.com", CredentialCiphertext: []byte("sealed-token-2"),
 		CredentialNonce: []byte("nonce-2"), KeyVersion: 1,
-		Capabilities: []string{"mail"}, GrantedScopes: []string{"gmail.modify", "gmail.send"},
+		Capabilities: []string{"calendar_read"}, GrantedScopes: []string{"calendar.readonly", "calendar.events"},
 	})
 	if err != nil || reconnected.ID != first.ID || len(reconnected.GrantedScopes) != 2 {
 		t.Fatalf("reconnected account = %#v, %v", reconnected, err)

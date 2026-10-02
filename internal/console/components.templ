@@ -1,0 +1,61 @@
+package console
+
+templ pageHeader(title, subtitle string) {
+	<header class="page-header">
+		<div>
+			<h1>{ title }</h1>
+			if subtitle != "" {
+				<p class="muted">{ subtitle }</p>
+			}
+		</div>
+		{ children... }
+	</header>
+}
+
+templ sectionLabel(label string) {
+	<h2 class="section-label">{ label }</h2>
+}
+
+templ metric(label, value string) {
+	<div class="metric"><span class="muted">{ label }</span><strong>{ value }</strong></div>
+}
+
+templ note(text string) {
+	<p class="note">{ text }</p>
+}
+
+// problem renders an error line with a warning icon; status is conveyed by
+// icon and weight rather than color.
+templ problem(text string) {
+	<p class="problem">
+		@iconAlert()
+		<span>{ text }</span>
+	</p>
+}
+
+templ flash(text string) {
+	if text != "" {
+		<p class="flash" role="status">
+			@iconCheck()
+			<span>{ text }</span>
+		</p>
+	}
+}
+
+templ databaseUnavailable(title string) {
+	@pageHeader(title, "")
+	@problem("The console could not connect to Postgres. Check DB_HOST and DB_PORT, then restart it with misty server up --gui.")
+}
+
+templ stateTag(state string) {
+	<span class={ "tag", templ.KV("tag-problem", problemState(state)) }>
+		if problemState(state) {
+			@iconAlert()
+		}
+		{ humanize(state) }
+	</span>
+}
+
+templ emptyRow(text string) {
+	<li class="row"><span class="muted">{ text }</span></li>
+}

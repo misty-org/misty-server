@@ -8,7 +8,6 @@ import (
 )
 
 func TestInstanceModelCatalogWithoutGateway(t *testing.T) {
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "self_hosted")
 	t.Setenv("AI_GATEWAY_API_KEY", "")
 	t.Setenv("AI_GATEWAY_BASE_URL", "http://127.0.0.1:1")
 	t.Setenv("MISTY_AGENT_MODEL_PROVIDER", "anthropic")
@@ -28,10 +27,6 @@ func TestInstanceModelCatalogWithoutGateway(t *testing.T) {
 	if FrontierModelAvailable(context.Background(), DefaultFrontierModelID) {
 		t.Fatal("unconfigured model admitted")
 	}
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "hosted")
-	if _, err := envconfig.AgentModel(); err == nil {
-		t.Fatal("hosted override accepted")
-	}
 }
 
 func TestInstanceModelConfigRejectsInvalidRouting(t *testing.T) {
@@ -50,7 +45,6 @@ func TestInstanceModelConfigRejectsInvalidRouting(t *testing.T) {
 		{"unknown", "unknown/example", "fixture", "", false},
 	} {
 		t.Run(c.provider+"/"+c.model+"/"+c.base, func(t *testing.T) {
-			t.Setenv("MISTY_DEPLOYMENT_MODE", "self_hosted")
 			t.Setenv("MISTY_AGENT_MODEL_PROVIDER", c.provider)
 			t.Setenv("MISTY_AGENT_MODEL", c.model)
 			t.Setenv("MISTY_AGENT_MODEL_API_KEY", c.key)

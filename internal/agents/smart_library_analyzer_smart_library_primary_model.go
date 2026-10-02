@@ -182,27 +182,6 @@ func (a *SmartLibraryAnalyzer) Analyze(ctx context.Context, assets []SmartLibrar
 	return analysis, nil
 }
 
-// AnalyzeForEvaluation runs one named candidate without production fallback so
-// benchmark reports measure that model rather than the router.
-func (a *SmartLibraryAnalyzer) AnalyzeForEvaluation(ctx context.Context, model string, assets []SmartLibraryAsset) ([]SmartLibraryMetadata, ModelUsage, error) {
-	if strings.TrimSpace(model) == "" || len(assets) == 0 || len(assets) > SmartLibraryMaxBatchSize {
-		return nil, ModelUsage{}, errors.New("invalid evaluation batch")
-	}
-	for _, asset := range assets {
-		if err := ValidateSmartLibraryAsset(asset); err != nil {
-			return nil, ModelUsage{}, err
-		}
-	}
-	results, usage, err := a.analyzeWithModel(ctx, model, assets)
-	if err != nil {
-		return nil, usage, err
-	}
-	for i := range results {
-		results[i] = normalizeSmartLibraryMetadata(results[i])
-	}
-	return results, usage, nil
-}
-
 // EmbedQuery embeds a user query in the same multimodal space as indexed assets.
 func (a *SmartLibraryAnalyzer) EmbedQuery(ctx context.Context, query string) ([]float64, ModelUsage, error) {
 	query = strings.TrimSpace(query)

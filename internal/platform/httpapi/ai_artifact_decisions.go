@@ -307,7 +307,7 @@ func TestingValidateAIInvocationAttachmentShape(prompt string, attachmentIDs []s
 var aiSurfaceIDs = map[string]bool{
 	"global": true, "home": true, "activity": true, "space.chat": true,
 	"planner.tasks": true, "planner.agenda": true, "planner.roadmap": true,
-	"notes": true, "drawings": true, "library": true, "inbox": true,
+	"notes": true, "drawings": true, "library": true,
 	"browser": true, "files": true, "code": true, "terminal": true,
 	"transfers": true, "extensions": true, "photo-editor": true,
 	"agents": true, "settings": true,
@@ -336,19 +336,6 @@ func publicAIInvocationError(err error) string {
 		return prefix
 	}
 	return "Misty could not complete this request."
-}
-
-func aiTextDeltas(value string, size int) []string {
-	if size <= 0 || len(value) <= size {
-		return []string{value}
-	}
-	parts := []string{}
-	for len(value) > 0 {
-		end := min(size, len(value))
-		parts = append(parts, value[:end])
-		value = value[end:]
-	}
-	return parts
 }
 
 func aiInvocationTerminal(state string) bool {

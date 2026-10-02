@@ -6,27 +6,6 @@ import (
 	"errors"
 )
 
-func authorizeWorkflowRequirementsTx(ctx context.Context, tx *sql.Tx, userID, spaceID string, metadata WorkflowMetadata) error {
-	for _, permission := range metadata.RequiredPermissions {
-		spacePermission, ok := TestingWorkflowPermissionSpacePermission(permission)
-		if ok {
-			if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, spacePermission); err != nil {
-				return err
-			}
-		}
-	}
-	for _, provider := range metadata.RequiredIntegrations {
-		var available bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_integrations WHERE space_id=$1 AND provider=$2 AND status='active')`, spaceID, provider).Scan(&available); err != nil {
-			return err
-		}
-		if !available {
-			return ErrWorkflowIntegrationRequired
-		}
-	}
-	return nil
-}
-
 func TestingWorkflowPermissionSpacePermission(permission string) (string, bool) {
 	switch permission {
 	case "files.read":
@@ -42,40 +21,7 @@ func TestingWorkflowPermissionSpacePermission(permission string) (string, bool) 
 	return "", false
 }
 
-func selectWorkflowCapability(metadata WorkflowMetadata, requested string) (*WorkflowCapability, error) {
-	if requested == "" && len(metadata.Capabilities) == 1 {
-		return &metadata.Capabilities[0], nil
-	}
-	for index := range metadata.Capabilities {
-		if metadata.Capabilities[index].ID == requested {
-			return &metadata.Capabilities[index], nil
-		}
-	}
-	return nil, ErrSpaceInvalid
-}
-
 const RunSourceAgentConsole = "agent_console"
-
-// Every value here must also appear in the space_runs source_type CHECK, or the
-// run passes validation and then fails at insert time. "connector" and "task"
-// were accepted here long before the constraint listed them, which is why
-// 20260916000000_rename_agent_run_source_type.sql adds them.
-func validRunSource(value string) bool {
-	switch value {
-	case "direct",
-		"group_mention",
-		RunSourceAgentConsole,
-		"studio_test",
-		"schedule",
-		"connector",
-		"task",
-		"suggestion",
-		"follow_up":
-		return true
-	default:
-		return false
-	}
-}
 
 func sharedSpaceRunVisibleToUserTx(ctx context.Context, tx *sql.Tx, run *SpaceRun, userID string) (bool, error) {
 	if run.RequestingMemberID == userID {

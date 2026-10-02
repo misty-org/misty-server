@@ -4,20 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-func containsWorkflowInbox(items []SpaceInboxItem, runID string) bool {
-	for _, item := range items {
-		if item.Kind == "workflow" && strings.Contains(string(item.Payload), runID) {
-			return true
-		}
-	}
-	return false
-}
 
 func unifiedTestDefinition(kind, capability, risk string) json.RawMessage {
 	return mustTestRaw(map[string]any{"formatVersion": 2, "inputs": map[string]any{"type": "object"}, "outputs": map[string]any{"type": "object"}, "capabilities": []map[string]any{{"capability": capability, "risk": risk}}, "nodes": []map[string]any{{"id": "task", "kind": kind, "kindVersion": 1, "label": "Task", "config": map[string]any{}, "outputSchema": map[string]any{"type": "object"}, "retry": map[string]any{"maxAttempts": 3, "cooldownSeconds": 60}, "errors": map[string]any{"mode": "fail"}}}, "edges": []any{}, "dependencies": []any{}})

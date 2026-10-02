@@ -6,7 +6,6 @@ import (
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	browsersync "github.com/kannachi323/misty/server/internal/sync"
 	"net/http"
-	"time"
 
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
@@ -40,13 +39,12 @@ func (s *Server) MountHandlers() error {
 	// them; the per-request counters stay in memory for speed.
 	abuseGuard := api.NewAbuseGuard(api.DefaultAbusePolicy()).
 		WithStore(context.Background(), s.Database)
-	abuseGuard.StartRefreshLoop(context.Background(), 30*time.Second)
+	s.AbuseGuard = abuseGuard
 	s.Router.Use(abuseGuard.Middleware)
 	s.Router.Use(api.NewAPIRateLimiter().WithAbuseGuard(abuseGuard).Middleware)
 	s.Metrics = metrics.New()
 	s.registerDomainGauges(s.Metrics)
 	s.Router.Use(s.Metrics.Middleware)
-	s.Router.Use(api.SelfHostedAccountMiddleware(s.Database))
 
 	passwordResetService, err := api.NewPasswordResetService(s.Database, s.EmailSender, s.PasswordResetStartURL, s.PasswordResetRedirectURL)
 	if err != nil {
@@ -80,9 +78,6 @@ func (s *Server) MountHandlers() error {
 		agentsService.SetConnectedDevices(connectedDevicesConfig)
 	}
 	registerHandler := api.RegisterWithTelemetry(s.Database, s.Telemetry)
-	if api.InstanceConfigFromEnv().Deployment == "self_hosted" {
-		registerHandler = api.ClosedSelfHostRegistration()
-	}
 	loginHandler := api.Login(s.Database)
 	googleSignIn, err := api.NewGoogleSignInService(s.Database)
 	if err != nil {
@@ -98,6 +93,7 @@ func (s *Server) MountHandlers() error {
 	healthHandler := s.HealthMonitor.Handler()
 	instanceHandler := api.Instance(s.Database)
 	browserSync := browsersync.NewBrowserSyncService(s.Database)
+	s.BrowserSync = browserSync
 	if s.AIAgent != nil {
 		browserSync.SetRestoreCompleter(func(ctx context.Context, userID, prompt string) (string, error) {
 			text, _, err := s.AIAgent.CompleteWithTierContext(ctx, userID, prompt, "assistant_ai", serveragent.TierLow)
@@ -108,10 +104,6 @@ func (s *Server) MountHandlers() error {
 		s.Router.Get(prefix+"/health", healthHandler)
 		s.Router.Get(prefix+"/instance", instanceHandler)
 		s.Router.Post(prefix+"/register", registerHandler)
-		s.Router.Post(prefix+"/self-host/bootstrap", api.SelfHostBootstrap(s.Database))
-		s.Router.Post(prefix+"/self-host/enroll", api.SelfHostEnroll(s.Database))
-		s.Router.Post(prefix+"/self-host/invitations", api.SelfHostInvitation(s.Database))
-		s.Router.Delete(prefix+"/self-host/invitations/{invitationID}", api.SelfHostInvitation(s.Database))
 		s.Router.Post(prefix+"/login", loginHandler)
 		s.Router.Get(prefix+"/auth/google", googleSignIn.Available())
 		s.Router.Post(prefix+"/auth/google", googleSignIn.Begin())
@@ -140,7 +132,6 @@ func (s *Server) MountHandlers() error {
 		s.Router.Put(prefix+"/me/profile", api.UpdateProfile(s.Database))
 		s.Router.Post(prefix+"/me/export", s.Spaces.AccountExportManifest())
 		s.Router.Post(prefix+"/me/deletion", s.Spaces.BeginAccountDeletion())
-		s.Router.Post(prefix+"/account/deletion/status", s.Spaces.AccountDeletionStatus())
 		s.Router.MethodFunc(http.MethodGet, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
 		s.Router.MethodFunc(http.MethodPut, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
 		s.Router.Put(prefix+"/me/device", api.UpdateDevice(s.Database))
@@ -157,7 +148,6 @@ func (s *Server) MountHandlers() error {
 		s.Router.Post(prefix+"/me/agent-interventions/{waitID}", s.Spaces.AIUserInterventionControl())
 
 		s.Router.Get(prefix+"/me/home", api.HomeDashboard(s.Database))
-		s.Router.Post(prefix+"/me/home/visits", api.RecordHomeVisit(s.Database))
 		s.Router.Post(prefix+"/me/home/apps", api.RecordHomeAppActivity(s.Database))
 		s.Router.Put(prefix+"/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
 		s.Router.Post(prefix+"/billing/checkout-session", api.CreateCheckoutSession(s.Database))
@@ -175,8 +165,8 @@ func (s *Server) MountHandlers() error {
 		}
 	}
 
-	// /v1 is the canonical hosted contract. The bare and /api trees remain
-	// available for self-hosted installations and existing desktop releases.
+	// /v1 is the canonical contract. The bare and /api trees remain available
+	// for existing desktop releases.
 	for _, prefix := range []string{"", "/api", "/v1"} {
 		mountPublicRoutes(prefix)
 	}
@@ -186,9 +176,6 @@ func (s *Server) MountHandlers() error {
 	if token := metricsToken(); token != "" {
 		s.Router.Get("/metrics", s.Metrics.Handler(token))
 	}
-	s.Router.MethodFunc(http.MethodGet, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
-	s.Router.MethodFunc(http.MethodPut, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
-	s.Router.MethodFunc(http.MethodDelete, "/internal/self-host/collaboration/{resourceType}/{resourceID}", api.SelfHostCollaborationState(s.Database))
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/activate", s.Spaces.AgentRuntimeActivate())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/start-receipt", s.Spaces.AgentRuntimeStartReceipt())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/budget", s.Spaces.AgentRuntimeExecutionBudget())
@@ -213,7 +200,6 @@ func (s *Server) mountLibraryRoutes(prefix string, library *api.SpaceLibraryServ
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/library/pins", library.PinnedCollections())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/library/pins", library.PinnedCollections())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/duplicates/merge", library.MergeDuplicates())
-	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/exports/download", library.ExportItems())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/imports", library.ImportItems())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/library/imports/history", library.ImportHistory())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/library/shared", library.SharedReferences())

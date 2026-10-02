@@ -4,7 +4,6 @@ import (
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -84,20 +83,4 @@ func (c ConnectedDevicesConfig) valid() bool {
 
 func encodeConnectedDevicePublicKey(key ed25519.PublicKey) string {
 	return base64.StdEncoding.EncodeToString(key)
-}
-
-func parseConnectedDevicePrivateKeyForTesting(encoded string) (ed25519.PrivateKey, error) {
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
-	if err != nil {
-		return nil, err
-	}
-	parsed, err := x509.ParsePKCS8PrivateKey(raw)
-	if err != nil {
-		return nil, err
-	}
-	key, ok := parsed.(ed25519.PrivateKey)
-	if !ok {
-		return nil, errors.New("not an Ed25519 key")
-	}
-	return key, nil
 }

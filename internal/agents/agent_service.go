@@ -123,25 +123,6 @@ func (s *Service) CompleteWithToolsForSpaceContext(ctx context.Context, userID, 
 	}
 }
 
-// CompleteWithModelToolsContext executes a bounded tool run using an explicitly
-// pinned gateway model. Agent memberships pin immutable profile versions, so a
-// Space run must not silently fall back to the service's default provider.
-func (s *Service) CompleteWithModelToolsContext(ctx context.Context, userID, billingUserID, systemPrompt, prompt, modelID string, tier AgentTier, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
-	return s.CompleteWithModelToolsForSpaceContext(ctx, userID, billingUserID, "", systemPrompt, prompt, modelID, tier, manifest, execute)
-}
-
-func (s *Service) CompleteWithModelToolsForSpaceContext(ctx context.Context, userID, billingUserID, spaceID, systemPrompt, prompt, modelID string, tier AgentTier, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
-	if !GatewayModelAvailable(ctx, modelID) {
-		return ToolCompletion{}, ErrModelUnavailable
-	}
-	provider, err := NewGatewayProviderForModel(modelID)
-	if err != nil {
-		return ToolCompletion{}, err
-	}
-	selected := &Service{store: s.store, provider: provider, policy: s.policy, meter: s.meter}
-	return selected.CompleteWithToolsForSpaceContext(ctx, userID, billingUserID, spaceID, systemPrompt, prompt, tier, manifest, execute)
-}
-
 func (s *Service) Complete(userID, prompt, meterName string) (string, UsageSettlement, error) {
 	return s.CompleteWithTier(userID, prompt, meterName, TierLow)
 }
@@ -156,21 +137,6 @@ func (s *Service) CompleteWithTierContext(ctx context.Context, userID, prompt, m
 
 func (s *Service) CompleteWithTierForSpaceContext(ctx context.Context, userID, spaceID, prompt, meterName string, tier AgentTier) (string, UsageSettlement, error) {
 	return s.completeWithProviderContext(ctx, userID, spaceID, prompt, meterName, TestingResolveAgentProvider(s.provider, NormalizeAgentTier(tier)), NormalizeAgentTier(tier))
-}
-
-func (s *Service) CompleteWithModelContext(ctx context.Context, userID, prompt, meterName, modelID string) (string, UsageSettlement, error) {
-	return s.CompleteWithModelForSpaceContext(ctx, userID, "", prompt, meterName, modelID)
-}
-
-func (s *Service) CompleteWithModelForSpaceContext(ctx context.Context, userID, spaceID, prompt, meterName, modelID string) (string, UsageSettlement, error) {
-	if !GatewayModelAvailable(ctx, modelID) {
-		return "", UsageSettlement{}, ErrModelUnavailable
-	}
-	provider, err := NewGatewayProviderForModel(modelID)
-	if err != nil {
-		return "", UsageSettlement{}, err
-	}
-	return s.completeWithProviderContext(ctx, userID, spaceID, prompt, meterName, provider, TierLow)
 }
 
 func (s *Service) completeWithProviderContext(ctx context.Context, userID, spaceID, prompt, meterName string, selectedProvider ModelProvider, tier AgentTier) (string, UsageSettlement, error) {
@@ -249,11 +215,6 @@ func (s *Service) ProviderStatusForTier(tier AgentTier) (string, string) {
 	return TestingProviderStatus(TestingResolveAgentProvider(s.provider, tier))
 }
 
-func (s *Service) AgentConfigured(tier AgentTier) bool {
-	provider, _ := s.ProviderStatusForTier(tier)
-	return provider != ProviderMock
-}
-
 func TestingProviderStatus(provider ModelProvider) (string, string) {
 	if info, ok := provider.(ProviderInfo); ok {
 		return info.ProviderName(), info.ModelName()
@@ -263,10 +224,6 @@ func TestingProviderStatus(provider ModelProvider) (string, string) {
 
 func (s *Service) CreateSession(userID string) *Session {
 	return s.store.Create(userID)
-}
-
-func (s *Service) CreateSessionWithBilling(userID, billingUserID string) *Session {
-	return s.store.CreateWithBilling(userID, billingUserID)
 }
 
 func (s *Service) CreateSessionWithBillingAndSpace(userID, billingUserID, spaceID string) *Session {
@@ -286,19 +243,6 @@ func (s *Service) CreateSessionWithBillingAndSpace(userID, billingUserID, spaceI
 	return session
 }
 
-func (s *Service) CreateSessionWithModel(userID, billingUserID, modelID string) *Session {
-	return s.store.CreateWithModel(userID, billingUserID, modelID)
-}
-
-func (s *Service) ConfigureSession(sessionID, userID, systemPrompt string, allowTools, allowWriteTools bool) error {
-	return s.store.WithSession(sessionID, userID, func(session *Session) error {
-		session.SystemPrompt = strings.TrimSpace(systemPrompt)
-		session.AllowTools = allowTools
-		session.AllowWriteTools = allowWriteTools
-		return nil
-	})
-}
-
 // SetSessionSystemPrompt supplies the Agent identity and approved instructions
 // the prompt builder emits as agent_instructions_and_context. Unlike
 // ConfigureSession it leaves the tool flags alone, so a caller can name the
@@ -306,15 +250,6 @@ func (s *Service) ConfigureSession(sessionID, userID, systemPrompt string, allow
 func (s *Service) SetSessionSystemPrompt(sessionID, userID, systemPrompt string) error {
 	return s.store.WithSession(sessionID, userID, func(session *Session) error {
 		session.SystemPrompt = strings.TrimSpace(systemPrompt)
-		return nil
-	})
-}
-
-// SetSessionReasoningEffort pins the reasoning effort ("low"/"medium"/"high") for
-// a session. It is only forwarded to the gateway for reasoning-capable models.
-func (s *Service) SetSessionReasoningEffort(sessionID, userID, effort string) error {
-	return s.store.WithSession(sessionID, userID, func(session *Session) error {
-		session.ReasoningEffort = strings.TrimSpace(effort)
 		return nil
 	})
 }

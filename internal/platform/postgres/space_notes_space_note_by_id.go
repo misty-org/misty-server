@@ -217,15 +217,6 @@ func noteLifecycleTx(ctx context.Context, tx *sql.Tx, noteID string) (string, er
 	return lifecycle, err
 }
 
-func noteCreatorTx(ctx context.Context, tx *sql.Tx, noteID string) (string, error) {
-	var creator string
-	err := tx.QueryRowContext(ctx, `SELECT creator_user_id FROM space_notes WHERE id=$1`, noteID).Scan(&creator)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return creator, err
-}
-
 func noteDestructiveActorTx(
 	ctx context.Context,
 	tx *sql.Tx,

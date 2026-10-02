@@ -2,18 +2,22 @@ package browsersync
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
 	"github.com/kannachi323/misty/server/internal/platform/transport"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/kannachi323/misty/server/internal/platform/metrics"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
@@ -23,10 +27,28 @@ type BrowserSyncService struct {
 	store      *Store
 	workspaces workspaceCaches
 	restore    RestoreCompleter
+	// instanceID owns this process's connection rows; they stay live while
+	// RunLiveness renews its lease.
+	instanceID string
+	scopeMu    sync.Mutex
+	scope      context.Context
+	endScope   context.CancelFunc
+	// revalidateEvery bounds how long a socket outlives a revoked account
+	// session; zero means syncSessionRevalidation.
+	revalidateEvery time.Duration
+}
+
+const syncSessionRevalidation = 10 * time.Minute
+
+func (s *BrowserSyncService) sessionRevalidation() time.Duration {
+	if s.revalidateEvery > 0 {
+		return s.revalidateEvery
+	}
+	return syncSessionRevalidation
 }
 
 func NewBrowserSyncService(database *db.Database) *BrowserSyncService {
-	return &BrowserSyncService{database: database, store: NewStore(database.Conn), workspaces: newWorkspaceCaches(256 << 20)}
+	return &BrowserSyncService{database: database, store: NewStore(database.Conn), workspaces: newWorkspaceCaches(256 << 20), instanceID: uuid.NewString()}
 }
 
 func syncErrorCode(err error) (string, int) {
@@ -143,7 +165,6 @@ func (s *BrowserSyncService) Devices() http.HandlerFunc {
 			writeSyncError(w, err)
 			return
 		}
-		_ = s.store.NotifyBrowserSyncPresence(r.Context(), SyncConnectionIdentity{UserID: user, VaultID: body.VaultID})
 		transport.WriteJSON(w, 201, map[string]string{"device_id": body.DeviceID})
 	}
 }
@@ -178,7 +199,11 @@ func (s *BrowserSyncService) Ticket() http.HandlerFunc {
 			writeSyncError(w, err)
 			return
 		}
-		if err = s.store.CreateBrowserSyncTicket(r.Context(), user, body.VaultID, body.DeviceID, security.HashToken(token)); err != nil {
+		session := ""
+		if sid := accounts.SessionID(r); sid != "" {
+			session = security.HashToken(sid)
+		}
+		if err = s.store.CreateBrowserSyncTicket(r.Context(), user, body.VaultID, body.DeviceID, security.HashToken(token), session); err != nil {
 			writeSyncError(w, err)
 			return
 		}
@@ -257,6 +282,7 @@ func (s *BrowserSyncService) Connect() http.HandlerFunc {
 			return
 		}
 		defer conn.Close()
+		defer metrics.TrackSyncConnection(r.Context())()
 		challenge, err := security.GenerateSecureToken()
 		if err != nil {
 			return
@@ -264,7 +290,7 @@ func (s *BrowserSyncService) Connect() http.HandlerFunc {
 		conn.SetReadLimit(4096)
 		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		if conn.WriteJSON(map[string]any{"type": "challenge", "protocol_version": version, "challenge": challenge}) != nil {
+		if writeSyncJSON(r.Context(), conn, map[string]any{"type": "challenge", "protocol_version": version, "challenge": challenge}) != nil {
 			return
 		}
 		kind, raw, err := conn.ReadMessage()
@@ -272,7 +298,9 @@ func (s *BrowserSyncService) Connect() http.HandlerFunc {
 			return
 		}
 		var auth syncClientFrame
-		if decodeSync(bytes.NewReader(raw), &auth) != nil || auth.Type != "authenticate" || auth.After < 0 || auth.After > SyncMaxCounter || len(identity.PublicKey) != ed25519.PublicKeySize || !ed25519.Verify(identity.PublicKey, syncConnectionProof(identity.VaultID, identity.DeviceID, challenge), auth.Signature) {
+		decodeErr := decodeSync(bytes.NewReader(raw), &auth)
+		metrics.RecordSyncMessage(r.Context(), "in", auth.Type, len(raw))
+		if decodeErr != nil || auth.Type != "authenticate" || auth.After < 0 || auth.After > SyncMaxCounter || len(identity.PublicKey) != ed25519.PublicKeySize || !ed25519.Verify(identity.PublicKey, syncConnectionProof(identity.VaultID, identity.DeviceID, challenge), auth.Signature) {
 			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Device proof required"), time.Now().Add(time.Second))
 			return
 		}

@@ -45,9 +45,6 @@ func NewGoogleSignInService(database *db.Database) (*GoogleSignInService, error)
 	s.session = func(w http.ResponseWriter, r *http.Request, u *db.User) {
 		writeAuthSession(w, r, database, u, http.StatusOK)
 	}
-	if envconfig.DeploymentMode() == "self_hosted" {
-		return s, nil
-	}
 	clientID := strings.TrimSpace(envconfig.Getenv("GOOGLE_CLIENT_ID"))
 	secret := strings.TrimSpace(envconfig.Getenv("GOOGLE_CLIENT_SECRET"))
 	if clientID == "" || secret == "" {

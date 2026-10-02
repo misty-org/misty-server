@@ -76,11 +76,17 @@ grep -q 'COPY --from=api /app/migrations' scripts/docker/setup.Dockerfile ||
 
 grep -q 'MISTY_API_IMAGE' compose.prod.yml ||
   fail "production must select an immutable MISTY_API_IMAGE"
-production_image_consumers="$(grep -c '<<: \*api-image' compose.prod.yml)"
+production_image_consumers="$(grep -c '<<: .*\*api-image' compose.prod.yml)"
 [ "$production_image_consumers" -ge 2 ] ||
   fail "production migrations and API must consume the same API image anchor"
+grep -q 'MISTY_AGENT_RUNTIME_IMAGE' compose.prod.yml ||
+  fail "production must select an immutable MISTY_AGENT_RUNTIME_IMAGE"
+if grep -Eq '^  agent-runtime-postgres:' compose.prod.yml; then
+  fail "production must keep the workflow database on the shared PostgreSQL server"
+fi
+[ ! -e self-host ] || fail "self-hosting is retired; production is the only deployment"
 
-for compose_file in compose.dev.yml compose.prod.yml self-host/compose.yml; do
+for compose_file in compose.dev.yml compose.prod.yml; do
   role_password_consumers="$(grep -c 'MISTY_APP_DB_PASSWORD:' "$compose_file")"
   [ "$role_password_consumers" -ge 2 ] ||
     fail "$compose_file must synchronize the application role password after migrations"

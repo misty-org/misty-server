@@ -98,9 +98,6 @@ func Login(database *db.Database) http.HandlerFunc {
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
-		if !acceptSelfHostLogin(w, r, database, user.ID) {
-			return
-		}
 
 		writeAuthSession(w, r, database, user, http.StatusOK)
 	}

@@ -12,7 +12,7 @@ vi.mock("workflow", () => ({
 }));
 vi.mock("../src/control-plane.js", () => ({
   controlPlaneRequest: async (_identity: unknown, operation: string, body: Record<string, unknown>) => {
-    if (operation === "context") return { model_id: "fixture/model", system: "", prompt: "Send then record it", allowed_tools: ["inbox.send", "notes.create"], required_tools: [] };
+    if (operation === "context") return { model_id: "fixture/model", system: "", prompt: "Message then record it", allowed_tools: ["social.send_message", "notes.create"], required_tools: [] };
     if (operation === "complete") fixture.completions.push(body);
     if (operation === "budget") return { version: 1, remaining_ms: 1800000, active: true, deadline: new Date(Date.now()+1800000).toISOString() };
     if (operation === "mcp-token") return {};
@@ -20,7 +20,7 @@ vi.mock("../src/control-plane.js", () => ({
   },
 }));
 vi.mock("../src/mcp-runtime.js", () => ({
-  discoverRemoteMCPTools: async () => ({ supported: true, tools: ["inbox.send", "notes.create"].map(name => ({ name, description: name, inputSchema: { type: "object", properties: {} } })) }),
+  discoverRemoteMCPTools: async () => ({ supported: true, tools: ["social.send_message", "notes.create"].map(name => ({ name, description: name, inputSchema: { type: "object", properties: {} } })) }),
   requestMCPToolExecution: async (_context: unknown, _access: unknown, _id: string, name: string) => {
     fixture.executed.push(name);
     return { result: fixture.result };
@@ -56,7 +56,7 @@ for (const output of [{ status: "uncertain", reason: "Send response lost" }, { d
   it(`stops a queued dependent action after ${output.status ?? "denial"} and records incomplete work`, async () => {
     fixture.result = output;
     expect(await runSpaceTaskAgent({ mistyRunId: "run-fixture", controlPlaneURL: "https://api.test" })).toMatchObject({ incomplete: true });
-    expect(fixture.executed).toEqual(["inbox.send"]);
+    expect(fixture.executed).toEqual(["social.send_message"]);
     expect(fixture.completions).toEqual([expect.objectContaining({ status: "incomplete", error_code: "tool_sequence_stopped" })]);
   });
 }
@@ -65,6 +65,6 @@ it("does not spend another model turn after a single denied action", async () =>
   fixture.queued = false;
   fixture.result = { denied: true, reason: "creator_denied" };
   expect(await runSpaceTaskAgent({ mistyRunId: "run-fixture", controlPlaneURL: "https://api.test" })).toMatchObject({ incomplete: true });
-  expect(fixture.executed).toEqual(["inbox.send"]);
+  expect(fixture.executed).toEqual(["social.send_message"]);
   expect(fixture.completions[0]?.status).not.toBe("success");
 });

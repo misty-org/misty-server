@@ -7,21 +7,6 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func (s *SpacesService) WorkflowRuns() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		items, err := s.database.SpaceWorkflowRuns(r.Context(), userID, chi.URLParam(r, "spaceID"), chi.URLParam(r, "workflowID"), 100)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"runs": items})
-	}
-}
-
 func (s *SpacesService) RunDetail() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

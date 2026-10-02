@@ -15,14 +15,14 @@ Tokens cannot be reused for another Misty run or Vercel Workflow run. During a r
 ## Worlds
 
 - Local development: omit `WORKFLOW_TARGET_WORLD` to use Workflow's local world.
-- Self-hosted: set `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`; run `npm run world:setup` from `apps/agent-runtime/` before the worker starts.
+- Production: `compose.prod.yml` sets `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and points `WORKFLOW_POSTGRES_URL` at the `workflow` database on the shared Postgres server; its `agent-runtime-setup` job runs the world migrations before the worker starts.
 - Vercel: use `apps/agent-runtime` as the project root and `npm run build` as the build command. Workflow selects the managed Vercel world in that environment.
 
 A Vercel Workflow is the durable execution host for Misty's agent loop, not the
 browser frontend and not the MCP server. In development, `misty server up` runs
 the workflow runtime, its PostgreSQL world, the Go API, and the MCP endpoint in
-local containers. In the managed production topology, the Go API and MCP
-endpoint stay on the VPS while only this runtime is deployed to Vercel.
+local containers. Production runs the same containers on the VPS through
+`compose.prod.yml`; deploying only this runtime to Vercel remains possible.
 
 ## Required environment
 
@@ -66,13 +66,13 @@ The signed Go start request also carries
 `MISTY_INTERNAL_API_BASE` value is retained as a rolling-deployment fallback;
 set both to the same reachable API base.
 
-## Instance-wide BYOK
+## Operator model provider
 
-Direct OpenAI, Anthropic, Google, and OpenAI-compatible routing is configured with
+Models route through the AI Gateway by default. The operator can instead pin one
+direct OpenAI, Anthropic, Google, or OpenAI-compatible model with
 `MISTY_AGENT_MODEL_PROVIDER`, `MISTY_AGENT_MODEL`, `MISTY_AGENT_MODEL_API_KEY`, and
-`MISTY_AGENT_MODEL_BASE_URL`. Configure the API and runtime consistently. See the
-[self-host guide](../../self-host/README.md#instance-wide-agent-byok) for examples,
-Gateway compatibility, and the separate voice/Library limitations.
+`MISTY_AGENT_MODEL_BASE_URL`. Configure the API and runtime consistently; a run
+pinned to a different model fails rather than silently switching provider.
 
 `InstanceModel` persists only the model ID at workflow boundaries and resolves
 operator credentials inside model execution. Never replace it with a serialized

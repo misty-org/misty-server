@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -74,20 +72,6 @@ func (s *SpaceLibraryService) copyLibraryItem(ctx context.Context, userID, sourc
 		return nil, err
 	}
 	return completed.Item, nil
-}
-
-func uniqueArchiveName(filename string, used map[string]int) string {
-	if filename == "" {
-		filename = "item"
-	}
-	count := used[strings.ToLower(filename)]
-	used[strings.ToLower(filename)] = count + 1
-	if count == 0 {
-		return filename
-	}
-	extension := filepath.Ext(filename)
-	base := strings.TrimSuffix(filename, extension)
-	return fmt.Sprintf("%s (%d)%s", base, count+1, extension)
 }
 
 func (s *SpaceLibraryService) Item() http.HandlerFunc {

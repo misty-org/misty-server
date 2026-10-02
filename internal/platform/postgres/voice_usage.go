@@ -35,14 +35,26 @@ WHERE voice_usage_journal.account_id=EXCLUDED.account_id AND voice_usage_journal
 // Resume only a recorded, final usage decision. Stale active sessions become
 // visible reconciliation work; their unmeasured balance is never auto-released.
 func (db *Database) RecoverVoiceUsage(ctx context.Context) error {
-	if _, err := db.Conn.ExecContext(ctx, `UPDATE voice_usage_journal SET state='reconcile',updated_at=now() WHERE state='active' AND updated_at<now()-interval '2 minutes'`); err != nil {
-		return err
+	_, err := db.RecoverVoiceUsageBatch(ctx)
+	return err
+}
+
+func (db *Database) RecoverVoiceUsageBatch(ctx context.Context) (int, error) {
+	processed := 0
+	result, err := db.Conn.ExecContext(ctx, `UPDATE voice_usage_journal SET state='reconcile',updated_at=now() WHERE state='active' AND updated_at<now()-interval '2 minutes'`)
+	if err != nil {
+		return processed, err
 	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	processed = int(n)
 	rows, err := db.Conn.QueryContext(ctx, `SELECT r.reservation_id,r.admission,j.usage FROM voice_usage_journal j
 JOIN billing_adapter_reservations r ON r.account_id=j.account_id AND r.reservation_id=j.reservation_id
 WHERE j.state='settlement_pending' AND j.updated_at<now()-interval '30 seconds' LIMIT 20`)
 	if err != nil {
-		return err
+		return processed, err
 	}
 	type pending struct {
 		reservation billingadapter.Reservation
@@ -54,18 +66,18 @@ WHERE j.state='settlement_pending' AND j.updated_at<now()-interval '30 seconds' 
 		var admission, usage []byte
 		if err = rows.Scan(&item.reservation.ID, &admission, &usage); err != nil {
 			rows.Close()
-			return err
+			return processed, err
 		}
 		if json.Unmarshal(admission, &item.reservation.Admission) != nil || json.Unmarshal(usage, &item.usage) != nil {
 			rows.Close()
-			return errors.New("invalid voice usage journal")
+			return processed, errors.New("invalid voice usage journal")
 		}
 		work = append(work, item)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return err
+		return processed, err
 	}
 	for _, item := range work {
 		action := "release"
@@ -77,11 +89,12 @@ WHERE j.state='settlement_pending' AND j.updated_at<now()-interval '30 seconds' 
 		}
 		u := billingadapter.Usage{Provider: item.reservation.Admission.Usage.Provider, Model: item.reservation.Admission.Usage.Model, Units: item.usage}
 		if err = db.BillingService().Complete(ctx, action, &item.reservation, item.reservation.Admission.Key+":"+action, u, ""); err != nil {
-			return err
+			return processed, err
 		}
 		if err = db.RecordVoiceUsage(ctx, &item.reservation, "closed", item.usage); err != nil {
-			return err
+			return processed, err
 		}
+		processed++
 	}
-	return nil
+	return processed, nil
 }

@@ -206,10 +206,6 @@ const (
 	RunRejected            RunState = "rejected"
 )
 
-func (state RunState) Terminal() bool {
-	return state == RunCompleted || state == RunCompletedWithErrors || state == RunFailed || state == RunCanceled || state == RunRejected
-}
-
 type WorkflowRun struct {
 	ID                string                     `json:"id"`
 	SpaceID           string                     `json:"spaceId"`

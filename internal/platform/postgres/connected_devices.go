@@ -219,7 +219,10 @@ func (db *Database) UpdateDevicePresence(userID, deviceID, endpointID, protocolV
 		if count, _ := result.RowsAffected(); count == 0 {
 			return ErrDeviceNotFound
 		}
-		return nil
+		// Presence is also the device's liveness for agent work, so a desktop
+		// running Connected Devices needs no second heartbeat.
+		_, err = tx.Exec(`UPDATE trusted_devices SET last_seen_at=NOW() WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`, deviceID, userID)
+		return err
 	})
 }
 

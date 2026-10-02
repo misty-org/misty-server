@@ -103,9 +103,18 @@ func (hub *aiInvocationHub) completeArtifact(userID, id, state, message string) 
 
 func (hub *aiInvocationHub) pruneLocked() {
 	now := time.Now()
+	if now.Before(hub.nextPrune) {
+		return
+	}
+	hub.nextPrune = now.Add(time.Minute)
 	for id, record := range hub.invocations {
 		if now.After(record.ExpiresAt) {
 			delete(hub.invocations, id)
+		}
+	}
+	for key, id := range hub.idempotency {
+		if hub.invocations[id] == nil {
+			delete(hub.idempotency, key)
 		}
 	}
 	for id, artifact := range hub.artifacts {

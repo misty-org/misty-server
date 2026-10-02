@@ -24,7 +24,7 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 	err = chi.Walk(server.Router, func(method, path string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		normalized := strings.TrimPrefix(strings.TrimPrefix(path, "/api/"), "/v1/")
 		normalized = "/" + strings.TrimLeft(normalized, "/")
-		for _, retired := range []string{"/stripe/webhook", "/billing/trial/start", "/billing/credit-checkout-session", "/apps", "/me/apps", "/app-runtime", "/me/routines", "/me/routine-runs", "/automations", "/waitlist", "/activepieces", "/capabilities", "/me/sdk-targets", "/me/sdk-runs", "/me/capability-approvals", "/self-host/entitlement", "/billing/self-host-entitlement"} {
+		for _, retired := range []string{"/stripe/webhook", "/billing/trial/start", "/billing/credit-checkout-session", "/apps", "/me/apps", "/app-runtime", "/me/routines", "/me/routine-runs", "/automations", "/waitlist", "/activepieces", "/capabilities", "/me/sdk-targets", "/me/sdk-runs", "/me/capability-approvals", "/self-host", "/internal/self-host", "/billing/self-host-entitlement"} {
 			if normalized == retired || strings.HasPrefix(normalized, retired+"/") {
 				t.Errorf("retired route remains: %s %s", method, path)
 			}

@@ -63,7 +63,6 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 			}
 			out.Attachments = append(out.Attachments, attachment)
 		}
-		mentionUsers := map[string]bool{}
 		for _, span := range content {
 			if span.UserID != "" {
 				var ok bool
@@ -76,7 +75,6 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 				if err := tx.QueryRowContext(ctx, query, args...).Scan(&ok); err != nil || !ok {
 					return ErrSpaceInvalid
 				}
-				mentionUsers[span.UserID] = true
 			}
 			if span.AgentID != "" {
 				if _, personalErr := askExecutionContextTx(ctx, tx, userID, spaceID, span.AgentID); personalErr != nil {
@@ -128,52 +126,8 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 			return err
 		}
 		out.Sender = SpaceMessageSender{Kind: "person", UserID: userID, DisplayName: out.SenderName, AvatarVersion: out.SenderAvatarVersion}
-		eventID, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "message.created", out.ID, out)
-		if err != nil {
+		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "message.created", out.ID, out); err != nil {
 			return err
-		}
-		inboxPayload, _ := json.Marshal(map[string]any{"sender_name": out.SenderName, "preview": messagePreview(content), "conversation_id": conversationID})
-		recipientsQuery := `SELECT user_id FROM space_members WHERE space_id=$1 AND user_id<>$2`
-		recipientArgs := []any{spaceID, userID}
-		if conversationID != "" {
-			recipientsQuery = `SELECT cm.user_id FROM space_conversation_members cm JOIN space_conversations c ON c.id=cm.conversation_id WHERE c.space_id=$1 AND cm.user_id<>$2 AND cm.conversation_id=$3`
-			recipientArgs = append(recipientArgs, conversationID)
-		}
-		rows, err := tx.QueryContext(ctx, recipientsQuery, recipientArgs...)
-		if err != nil {
-			return err
-		}
-		recipientIDs := []string{}
-		for rows.Next() {
-			var memberID string
-			if err := rows.Scan(&memberID); err != nil {
-				rows.Close()
-				return err
-			}
-			recipientIDs = append(recipientIDs, memberID)
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return err
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		for _, memberID := range recipientIDs {
-			allowed, err := hasSpacePermissionTx(ctx, tx, memberID, spaceID, PermissionMessagesRead)
-			if err != nil {
-				return err
-			}
-			if !allowed {
-				continue
-			}
-			kind := "unread"
-			if mentionUsers[memberID] {
-				kind = "mention"
-			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO space_inbox_items(user_id,space_id,kind,message_id,event_id,payload) VALUES($1,$2,$3,$4,$5,$6)`, memberID, spaceID, kind, out.ID, eventID, inboxPayload); err != nil {
-				return err
-			}
 		}
 		return nil
 	})

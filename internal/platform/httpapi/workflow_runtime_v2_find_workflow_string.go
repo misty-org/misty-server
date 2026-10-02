@@ -43,37 +43,6 @@ func TestingFindWorkflowString(value any, keys ...string) string {
 	return find(value)
 }
 
-func findWorkflowStrings(value any, key string) []string {
-	var find func(any) []string
-	find = func(current any) []string {
-		switch item := current.(type) {
-		case map[string]any:
-			if values, ok := item[key].([]any); ok {
-				out := make([]string, 0, len(values))
-				for _, value := range values {
-					if text, ok := value.(string); ok {
-						out = append(out, text)
-					}
-				}
-				return out
-			}
-			for _, child := range item {
-				if found := find(child); len(found) > 0 {
-					return found
-				}
-			}
-		case []any:
-			for _, child := range item {
-				if found := find(child); len(found) > 0 {
-					return found
-				}
-			}
-		}
-		return nil
-	}
-	return find(value)
-}
-
 func TestingEvaluateControlBranch(kind string, invocation workflowv2.Invocation) (json.RawMessage, error) {
 	var input any
 	if json.Unmarshal(invocation.Input, &input) != nil {
@@ -183,28 +152,4 @@ func workflowValuesEqual(left, right any) bool {
 	leftJSON, _ := json.Marshal(left)
 	rightJSON, _ := json.Marshal(right)
 	return string(leftJSON) == string(rightJSON)
-}
-
-func safeGeneratedArtifactName(agentName, nodeID string) string {
-	clean := func(value string) string {
-		value = strings.ToLower(strings.TrimSpace(value))
-		var out strings.Builder
-		for _, char := range value {
-			if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' {
-				out.WriteRune(char)
-			} else if out.Len() > 0 && !strings.HasSuffix(out.String(), "-") {
-				out.WriteByte('-')
-			}
-		}
-		return strings.Trim(out.String(), "-")
-	}
-	name := clean(agentName)
-	if name == "" {
-		name = "agent"
-	}
-	node := clean(nodeID)
-	if node == "" {
-		node = "result"
-	}
-	return name + "-" + node + ".md"
 }

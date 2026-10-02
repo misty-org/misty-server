@@ -26,7 +26,7 @@ import (
 // These tests cross actual admission, runtime MCP dispatch, autonomous execution,
 // effect journaling and leased device jobs. Only the device's website is a fixture.
 func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
-	for _, scenario := range []string{"gmail", "outlook", "todoist", "planner", "gmail/lost", "gmail/stale", "gmail/account", "gmail/recipients", "gmail/content", "gmail/cancel", "gmail/disconnected", "gmail/unconfirmed", "todoist/destination", "gmail/global", "todoist/global", "planner/global", "gmail/read", "outlook/read", "gmail/draft", "outlook/draft", "gmail/login"} {
+	for _, scenario := range []string{"todoist", "planner", "todoist/lost", "todoist/stale", "todoist/account", "todoist/content", "todoist/cancel", "todoist/disconnected", "todoist/unconfirmed", "todoist/destination", "todoist/global", "planner/global", "todoist/login"} {
 		t.Run(scenario, func(t *testing.T) {
 			name, mode, _ := strings.Cut(scenario, "/")
 			ctx, cancelTest := context.WithTimeout(t.Context(), 45*time.Second)
@@ -43,23 +43,8 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 			}
 			var target *cap.Target
 			var device *db.TrustedDevice
-			origin := "https://mail.google.com"
-			if name == "outlook" {
-				origin = "https://outlook.live.com"
-			}
-			if name == "todoist" {
-				origin = "https://app.todoist.com"
-			}
-			capability := "inbox.send"
-			if mode == "read" {
-				capability = "inbox.read"
-			}
-			if mode == "draft" {
-				capability = "inbox.draft"
-			}
-			if name == "todoist" || name == "planner" {
-				capability = "tasks.create"
-			}
+			origin := "https://app.todoist.com"
+			capability := "tasks.create"
 			var binding cap.BrowserBinding
 			if name == "planner" {
 				targets, err := database.ResolveSDKTargets(ctx, user.ID, cap.TargetResolve{Capability: "tasks.create", SpaceID: space.ID})
@@ -68,11 +53,7 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 				}
 				target = &targets[0]
 			} else {
-				providerID := "inbox/" + name
-				if name == "todoist" {
-					providerID = "planner/todoist"
-				}
-				provider, ok := cap.OfficialBrowserProvider(providerID, 1)
+				provider, ok := cap.OfficialBrowserProvider("planner/todoist", 1)
 				if !ok {
 					t.Fatal("missing first-party provider")
 				}
@@ -107,22 +88,12 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			draft := browseractions.Draft{Reference: origin + "/#draft/1", Thread: origin + "/#thread/1", Subject: "Review", Text: "I can meet Tuesday.", Recipients: []browseractions.Recipient{{Address: "boss@example.com"}}}
-			task := browseractions.Task{Destination: browseractions.Destination{TargetID: target.ID, ContainerReference: origin + "/app/project/1", Label: "Work"}, Title: "Follow up", Text: "Discuss the email", Source: browseractions.Source{Reference: "https://mail.google.com/#thread/1", Label: "Source email"}}
+			task := browseractions.Task{Destination: browseractions.Destination{TargetID: target.ID, ContainerReference: origin + "/app/project/1", Label: "Work"}, Title: "Follow up", Text: "Discuss the request", Source: browseractions.Source{Reference: "https://example.com/request/1", Label: "Request"}}
 			if name == "planner" {
 				task.Destination.ContainerReference = cap.PlannerContainer(space.ID)
 				task.Destination.Label = target.Label
 			}
-			input, _ := json.Marshal(map[string]any{"draftReference": draft.Reference, "expectedContentHash": browseractions.ContentHash(binding.AccountIdentity, draft), "recipients": draft.Recipients})
-			if capability == "tasks.create" {
-				input, _ = json.Marshal(task)
-			}
-			if mode == "read" {
-				input, _ = json.Marshal(map[string]any{"threadReference": draft.Thread, "limit": 20})
-			}
-			if mode == "draft" {
-				input, _ = json.Marshal(map[string]any{"recipients": draft.Recipients, "text": draft.Text, "replyTo": draft.Thread, "attachments": []any{}})
-			}
+			input, _ := json.Marshal(task)
 			request := cap.Invocation{RequestID: uuid.NewString(), Capability: capability, CapabilityVersion: 1, ProviderID: target.ProviderID, ProviderVersion: 1, TargetID: target.ID, TargetRevision: target.Revision, Input: input, Deadline: time.Now().UTC().Add(time.Hour)}
 			callID := uuid.NewString()
 			var admitted *db.SDKInvocationRecord
@@ -205,7 +176,7 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 				done := make(chan error, 1)
 				go func() {
 					inspections := 0
-					page := browseractions.Page{URL: origin + "/#thread/1", Interactive: []browseractions.Element{{Ref: "commit", Role: "button", Name: "Send"}}}
+					page := browseractions.Page{URL: origin + "/app/project/1", Interactive: []browseractions.Element{{Ref: "commit", Role: "button", Name: "Add task"}}}
 					page.Target.ScopeID = binding.ScopeID
 					page.Target.ProfileID = binding.ProfileID
 					page.Target.Origin = origin
@@ -213,24 +184,9 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 					if mode == "login" {
 						page.Target.Authentication = "required"
 					}
-					page.Semantic = browseractions.Observation{Adapter: name, Version: 1, Account: binding.AccountIdentity, Thread: draft.Thread, Draft: &draft}
-					page.Semantic.Message = origin + "/#message/identified"
-					page.Semantic.Subject = draft.Subject
-					page.Semantic.Text = "Original email body"
-					page.Semantic.Recipients = draft.Recipients
-					if mode == "draft" {
-						copy := draft
-						copy.Text = "Old unsent body"
-						page.Semantic.Draft = &copy
-						page.Interactive = append(page.Interactive, browseractions.Element{Ref: "body", Role: "textbox", Name: "Message Body"})
-					}
-					if name == "todoist" {
-						prepared := task
-						prepared.Text = task.Text + "\n\n" + task.Source.Label + ": " + task.Source.Reference
-						page.Semantic.Draft = nil
-						page.Semantic.Task = &prepared
-						page.Interactive[0].Name = "Add task"
-					}
+					prepared := task
+					prepared.Text = task.Text + "\n\n" + task.Source.Label + ": " + task.Source.Reference
+					page.Semantic = browseractions.Observation{Adapter: name, Version: 1, Account: binding.AccountIdentity, Task: &prepared}
 					for workerCtx.Err() == nil {
 						job, lease, err := database.ClaimWorkflowDeviceNodeJob(user.ID, device.ID, 30*time.Second, 2)
 						if errors.Is(err, db.ErrAgentJobNotFound) {
@@ -260,13 +216,9 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 								switch mode {
 								case "account":
 									page.Semantic.Account = "other@example.com"
-								case "recipients":
-									if page.Semantic.Draft != nil {
-										page.Semantic.Draft.Recipients = []browseractions.Recipient{{Address: "other@example.com"}}
-									}
 								case "content":
-									if page.Semantic.Draft != nil {
-										page.Semantic.Draft.Text = "Unreviewed body"
+									if page.Semantic.Task != nil {
+										page.Semantic.Task.Text = "Unreviewed body"
 									}
 								case "destination":
 									if page.Semantic.Task != nil {
@@ -280,13 +232,6 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 							if inspections == 1 {
 								changed.Store(true)
 							}
-						case "browser.interact":
-							var input struct{ Action struct{ Kind, Text string } }
-							if json.Unmarshal(job.Input, &input) != nil || input.Action.Kind != "fill" || page.Semantic.Draft == nil {
-								done <- cap.ErrInvalid
-								return
-							}
-							page.Semantic.Draft.Text = input.Action.Text
 						case "browser.click":
 							if mode == "stale" && changed.Swap(false) {
 								if _, err := database.FinishWorkflowDeviceNodeJob(user.ID, device.ID, job.ID, lease, "failed", nil, "browser_snapshot_stale"); err != nil {
@@ -296,13 +241,7 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 								continue
 							}
 							writes.Add(1)
-							if mode != "unconfirmed" && page.Semantic.Draft != nil {
-								sent := *page.Semantic.Draft
-								sent.Reference = origin + "/#sent/new"
-								page.Semantic.Draft = nil
-								page.Semantic.Sent = &sent
-							}
-							if page.Semantic.Task != nil {
+							if mode != "unconfirmed" && page.Semantic.Task != nil {
 								page.Semantic.Task.Reference = origin + "/app/task/new"
 							}
 						default:
@@ -359,23 +298,8 @@ func TestSDKBrowserAndPlannerInvocationGate(t *testing.T) {
 				return
 			}
 
-			if mode == "read" || mode == "draft" {
-				raw, _ := json.Marshal(pending)
-				if err != nil || pending.IsError || pending.Meta["misty/approval"] != nil {
-					t.Fatalf("autonomous preparation failed: %s %v", raw, err)
-				}
-				expected := "Original email body"
-				if mode == "draft" {
-					expected = "contentHash"
-				}
-				if !strings.Contains(string(raw), expected) || writes.Load() != 0 {
-					t.Fatalf("preparation result unverified or sent: %s", raw)
-				}
-				return
-			}
-
 			result := pending
-			invalidated := mode == "account" || mode == "recipients" || mode == "content" || mode == "destination" || mode == "cancel" || mode == "disconnected"
+			invalidated := mode == "account" || mode == "content" || mode == "destination" || mode == "cancel" || mode == "disconnected"
 			if invalidated {
 				if err == nil && !result.IsError {
 					t.Fatal("changed/cancelled action executed")

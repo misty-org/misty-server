@@ -77,9 +77,6 @@ func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, mes
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM space_inbox_items WHERE message_id=ANY($1::text[])`, pqStringArray(messageIDs)); err != nil {
-		return err
-	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM space_events WHERE entity_id=ANY($1::text[])`, pqStringArray(messageIDs)); err != nil {
 		return err
 	}

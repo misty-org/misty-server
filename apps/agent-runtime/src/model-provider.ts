@@ -16,12 +16,6 @@ export function instanceModelConfig(env: Environment = process.env) {
   if (provider !== "gateway" && !directProviders.has(provider)) {
     throw new Error("Invalid MISTY_AGENT_MODEL_PROVIDER");
   }
-  if (
-    env.MISTY_DEPLOYMENT_MODE?.trim().toLowerCase() === "hosted" &&
-    (provider !== "gateway" || model || baseURL || apiKey)
-  ) {
-    throw new Error("Instance model overrides require self_hosted deployment mode");
-  }
   if (model && (!/^[^\s/]+\/\S+$/.test(model) || model.length > 200)) {
     throw new Error("MISTY_AGENT_MODEL must be a provider/model ID");
   }

@@ -116,20 +116,3 @@ func cancelPersonalAgentRunsTx(ctx context.Context, tx *sql.Tx, agentID, code st
 		WHERE run_id IN (SELECT id FROM space_runs WHERE agent_id=$1 AND state='canceled' AND error_code=$2) AND state='attached'`, agentID, code)
 	return err
 }
-
-func cancelCreatorSpaceRunsTx(ctx context.Context, tx *sql.Tx, ownerUserID, spaceID, code string) error {
-	if _, err := tx.ExecContext(ctx, `WITH canceled AS (
-		UPDATE space_runs SET state='canceled',runtime_phase='canceled',error_code=$3,canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
-		WHERE owner_user_id=$1 AND space_id=$2 AND state IN ('queued','running','cooldown','awaiting_approval','awaiting_device','awaiting_intervention') RETURNING id
-	) UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW()
-	WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, ownerUserID, spaceID, code); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE agent_run_tool_approvals SET state='denied',decided_at=NOW()
-		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND space_id=$2 AND state='canceled' AND error_code=$3) AND state='pending'`, ownerUserID, spaceID, code); err != nil {
-		return err
-	}
-	_, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW()
-		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND space_id=$2 AND state='canceled' AND error_code=$3) AND state='attached'`, ownerUserID, spaceID, code)
-	return err
-}

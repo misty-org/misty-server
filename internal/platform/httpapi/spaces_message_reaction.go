@@ -221,36 +221,3 @@ func (s *SpacesService) Resolve() http.HandlerFunc {
 		http.Redirect(w, r, parsed.String(), http.StatusFound)
 	}
 }
-
-func (s *SpacesService) Inbox() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		tab := r.URL.Query().Get("tab")
-		if tab != "mentions" {
-			tab = "unreads"
-		}
-		items, err := s.database.SpaceInbox(r.Context(), userID, tab, 100)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"items": items})
-	}
-}
-
-func (s *SpacesService) InboxSeen() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		if err := s.database.MarkSpaceInboxSeen(r.Context(), userID); err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}
-}

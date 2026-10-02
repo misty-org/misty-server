@@ -39,7 +39,8 @@ func (db *Database) ClaimLibraryPeopleJob(ctx context.Context, workerID string, 
 	out := &LibraryPeopleJob{LeaseToken: "lease_" + uuid.NewString()}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `WITH candidate AS (
-			SELECT id FROM library_processing_jobs WHERE job_kind='faces' AND state='queued' AND available_at<=NOW() ORDER BY priority DESC,created_at FOR UPDATE SKIP LOCKED LIMIT 1
+			SELECT j.id FROM library_processing_jobs j WHERE j.job_kind='faces' AND (state='queued' AND available_at<=NOW() OR state IN ('leased','running') AND lease_expires_at<=NOW())
+ AND `+libraryJobEligibility("faces")+` ORDER BY priority DESC,created_at FOR UPDATE OF j SKIP LOCKED LIMIT 1
 		), claimed AS (
 			UPDATE library_processing_jobs j SET state='leased',lease_token=$1,lease_owner=$2,lease_expires_at=NOW()+$3::interval,attempt_count=attempt_count+1,updated_at=NOW() FROM candidate WHERE j.id=candidate.id RETURNING j.*
 		) SELECT c.id,c.security_domain_id,c.space_id,c.target_id,i.file_id,b.r2_object_key,b.server_detected_mime_type,b.byte_size,c.payload,c.attempt_count

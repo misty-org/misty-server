@@ -1,0 +1,136 @@
+package console
+
+templ servicesPage(v servicesView) {
+	@servicesPanel(v)
+	<div id="logs">
+		@note("Choose Logs on a service to follow its output here.")
+	</div>
+}
+
+templ servicesPanel(v servicesView) {
+	<section id="services" hx-get="/services/panel" hx-trigger="every 15s" hx-swap="outerHTML">
+		@pageHeader("Services", "compose.dev.yml · development only") {
+			<button
+				class="button"
+				hx-post="/services/all/restart"
+				hx-target="#services"
+				hx-swap="outerHTML"
+				hx-confirm="Restart every service in the development stack?"
+				hx-disabled-elt="this"
+			>
+				@iconRotate()
+				<span>Restart all</span>
+			</button>
+		}
+		@flash(v.Flash)
+		if v.Err != "" {
+			@problem(v.Err)
+		}
+		<div class="table services-table">
+			<div class="table-head"><span>Service</span><span>State</span><span>Status</span><span></span></div>
+			for _, service := range v.Services {
+				<div class={ "table-row", templ.KV("row-problem", problemState(service.status())) }>
+					<span>{ service.Service }</span>
+					<span>
+						@stateTag(service.status())
+					</span>
+					<span class="muted">{ service.Status }</span>
+					<span class="row-actions">
+						<button
+							class="icon-button"
+							aria-label={ "Logs for " + service.Service }
+							title="Logs"
+							hx-get={ "/services/" + service.Service + "/logs" }
+							hx-target="#logs"
+						>
+							@iconFileText()
+						</button>
+						if service.State == "running" {
+							<button
+								class="icon-button"
+								aria-label={ "Restart " + service.Service }
+								title="Restart"
+								hx-post={ "/services/" + service.Service + "/restart" }
+								hx-target="#services"
+								hx-swap="outerHTML"
+								hx-confirm={ "Restart " + service.Service + "?" }
+								hx-disabled-elt="this"
+							>
+								@iconRotate()
+							</button>
+							<button
+								class="icon-button"
+								aria-label={ "Stop " + service.Service }
+								title="Stop"
+								hx-post={ "/services/" + service.Service + "/stop" }
+								hx-target="#services"
+								hx-swap="outerHTML"
+								hx-confirm={ "Stop " + service.Service + "?" }
+								hx-disabled-elt="this"
+							>
+								@iconSquare()
+							</button>
+						} else {
+							<button
+								class="icon-button"
+								aria-label={ "Start " + service.Service }
+								title="Start"
+								hx-post={ "/services/" + service.Service + "/start" }
+								hx-target="#services"
+								hx-swap="outerHTML"
+								hx-disabled-elt="this"
+							>
+								@iconPlay()
+							</button>
+						}
+					</span>
+				</div>
+			}
+			if len(v.Services) == 0 && v.Err == "" {
+				<div class="table-row"><span class="muted">No containers. Run misty server up.</span></div>
+			}
+		</div>
+	</section>
+}
+
+templ logsPanel(v logsView) {
+	<section
+		id="logs"
+		if v.Follow {
+			hx-get={ "/services/" + v.Service + "/logs" }
+			hx-trigger="every 3s"
+			hx-swap="outerHTML"
+		}
+	>
+		<div class="logs-header">
+			<span class="section-label">
+				{ "Logs · " + v.Service }
+				if v.Follow {
+					{ " · following" }
+				} else {
+					{ " · paused" }
+				}
+			</span>
+			if v.Follow {
+				<button class="link-button" hx-get={ "/services/" + v.Service + "/logs?follow=0" } hx-target="#logs" hx-swap="outerHTML">
+					@iconPause()
+					<span>Pause</span>
+				</button>
+			} else {
+				<button class="link-button" hx-get={ "/services/" + v.Service + "/logs" } hx-target="#logs" hx-swap="outerHTML">
+					@iconPlay()
+					<span>Follow</span>
+				</button>
+			}
+		</div>
+		if v.Err != "" {
+			@problem(v.Err)
+		} else {
+			<pre class="logs"><code>
+				for _, line := range v.Lines {
+					{ line + "\n" }
+				}
+			</code></pre>
+		}
+	</section>
+}

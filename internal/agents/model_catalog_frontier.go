@@ -24,7 +24,7 @@ type FrontierGatewayModel struct {
 	ReasoningLevels []string `json:"reasoning_levels"`
 }
 
-// Hosted model selection is release policy; self-hosted operators can pin a model.
+// Model selection is release policy unless the operator pins a model.
 func FrontierDefaultModelID() string {
 	if config, err := envconfig.AgentModel(); err == nil && config.Model != "" {
 		return config.Model

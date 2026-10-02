@@ -365,12 +365,6 @@ func CompileSchema(raw json.RawMessage) (*jsonschema.Resolved, error) {
 	}
 	return resolved, nil
 }
-func (a Availability) Validate(now time.Time) error {
-	if !slices.Contains([]string{"available", "device_required", "authentication_required", "account_confirmation_required", "view_closed", "unavailable", "revoked"}, a.State) || a.ObservedAt.IsZero() || a.ObservedAt.After(now.Add(time.Minute)) || a.ObservedAt.Before(now.Add(-5*time.Minute)) || !textWithin(a.Reason, 0, 1000) {
-		return ErrInvalid
-	}
-	return nil
-}
 
 // EqualJSON compares parsed values, independent of whitespace or object order.
 func EqualJSON(a, b []byte) bool {

@@ -50,28 +50,32 @@ func (r Reliable) Submit(ctx context.Context, action string, req Request) error 
 	}
 	return r.Store.Delivered(ctx, entry.ID)
 }
-func (r Reliable) Flush(ctx context.Context, limit int) error {
+
+// FlushBatch reports delivered or rescheduled entries, including partial batches.
+func (r Reliable) FlushBatch(ctx context.Context, limit int) (int, error) {
 	if !r.Adapter.Enabled() {
-		return nil
+		return 0, nil
 	}
 	if r.Store == nil {
-		return errors.New("billing outbox is required")
+		return 0, errors.New("billing outbox is required")
 	}
 	entries, err := r.Store.Pending(ctx, limit)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	processed := 0
 	for _, e := range entries {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return processed, ctx.Err()
 		}
 		if _, err = r.Adapter.Do(ctx, e.Action, e.Request); err != nil {
 			if err = r.Store.Retry(ctx, e.ID, time.Now().Add(time.Minute)); err != nil {
-				return err
+				return processed, err
 			}
 		} else if err = r.Store.Delivered(ctx, e.ID); err != nil {
-			return err
+			return processed, err
 		}
+		processed++
 	}
-	return nil
+	return processed, nil
 }

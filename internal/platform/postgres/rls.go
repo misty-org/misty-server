@@ -58,18 +58,12 @@ func (db *Database) TestingWithRLSContext(ctx context.Context, settings map[stri
 	return nil
 }
 
-func anonymousRLSSettings(email string) map[string]string { return accounts.AnonymousScope(email) }
-func registrationRLSSettings(user, id, email string) map[string]string {
-	return accounts.RegistrationScope(user, id, email)
-}
-
 func TestingServiceRLSSettings() map[string]string {
 	return map[string]string{
 		rlsModeSetting: rlsModeService,
 	}
 }
 
-func sessionRLSSettings(hash string) map[string]string { return accounts.SessionScope(hash) }
 func sessionCreateRLSSettings(hash, user string) map[string]string {
 	return accounts.SessionCreateScope(hash, user)
 }

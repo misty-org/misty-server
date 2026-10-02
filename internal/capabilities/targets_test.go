@@ -7,9 +7,9 @@ import (
 )
 
 func TestBrowserTargetBindsCanonicalOriginsAndRealDeviceIdentities(t *testing.T) {
-	provider := Provider{ID: "example.mail/browser", Version: 1, Route: Route{Kind: "browser", Origins: []string{"https://mail.google.com", "https://outlook.live.com"}}}
-	binding := BrowserBinding{Kind: "browser", DeviceID: "device_10000000-0000-4000-8000-000000000001", ProfileID: strings.Repeat("a", 64), AccountBindingID: "10000000-0000-4000-8000-000000000002", Origins: []string{"https://mail.google.com"}}
-	target := Target{ID: "10000000-0000-4000-8000-000000000003", Revision: 1, AppID: "example.mail", ProviderID: provider.ID, ProviderVersion: 1, Label: "Personal mail"}
+	provider := Provider{ID: "example.tasks/browser", Version: 1, Route: Route{Kind: "browser", Origins: []string{"https://app.todoist.com", "https://tasks.example.com"}}}
+	binding := BrowserBinding{Kind: "browser", DeviceID: "device_10000000-0000-4000-8000-000000000001", ProfileID: strings.Repeat("a", 64), AccountBindingID: "10000000-0000-4000-8000-000000000002", Origins: []string{"https://app.todoist.com"}}
+	target := Target{ID: "10000000-0000-4000-8000-000000000003", Revision: 1, AppID: "example.tasks", ProviderID: provider.ID, ProviderVersion: 1, Label: "Personal tasks"}
 	check := func(b BrowserBinding) error {
 		target.Binding, _ = json.Marshal(b)
 		_, err := target.ValidateBrowser(provider)
@@ -35,7 +35,7 @@ func TestBrowserTargetBindsCanonicalOriginsAndRealDeviceIdentities(t *testing.T)
 			}
 		})
 	}
-	for _, origin := range []string{"https://mail.google.com/", "https://mail.google.com?", "https://mail.google.com:443", "https://user@mail.google.com", "http://mail.google.com", "https://MAIL.google.com", "https://mail.google.com/path"} {
+	for _, origin := range []string{"https://app.todoist.com/", "https://app.todoist.com?", "https://app.todoist.com:443", "https://user@app.todoist.com", "http://app.todoist.com", "https://APP.todoist.com", "https://app.todoist.com/path"} {
 		provider.Route.Origins = []string{origin}
 		b := binding
 		b.Origins = []string{origin}
@@ -43,7 +43,7 @@ func TestBrowserTargetBindsCanonicalOriginsAndRealDeviceIdentities(t *testing.T)
 			t.Fatalf("noncanonical origin accepted: %s", origin)
 		}
 	}
-	provider.Route.Origins = []string{"https://mail.google.com"}
+	provider.Route.Origins = []string{"https://app.todoist.com"}
 	target.AppID = "another.app"
 	if check(binding) == nil {
 		t.Fatal("provider owner substitution accepted")

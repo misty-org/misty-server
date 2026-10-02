@@ -12,7 +12,7 @@ import (
 func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	values := map[string]string{
-		"MISTY_DEPLOYMENT_MODE": "hosted", "MISTY_BILLING_ADAPTER": "http", "MISTY_BILLING_URL": "https://billing.example.com/adapter", "MISTY_BILLING_SECRET": "01234567890123456789012345678901",
+		"MISTY_BILLING_ADAPTER": "http", "MISTY_BILLING_URL": "https://billing.example.com/adapter", "MISTY_BILLING_SECRET": "01234567890123456789012345678901",
 		"R2_ENDPOINT":               "https://account.r2.cloudflarestorage.com",
 		"R2_BUCKET":                 "misty-production",
 		"R2_ACCESS_KEY":             "access",
@@ -70,24 +70,21 @@ func TestCreateServerConfiguresIndependentDevelopmentLibrary(t *testing.T) {
 	}
 }
 
-func TestValidateProductionEnvironmentAcceptsSelfHostedFilesystemWithoutHostedBilling(t *testing.T) {
+func TestValidateProductionEnvironmentRequiresBilling(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "self_hosted")
 	values := map[string]string{
+		"R2_ENDPOINT": "https://account.r2.cloudflarestorage.com", "R2_BUCKET": "misty-production",
+		"R2_ACCESS_KEY": "access", "R2_SECRET_KEY": "secret",
 		"DB_HOST": "postgres", "DB_USER": "misty_app", "DB_PASSWORD": "password", "DB_NAME": "misty",
-		"MISTY_PUBLIC_API_URL": "https://misty.example.com/api", "MISTY_INSTANCE_NAME": "Studio",
-		"MISTY_COLLAB_PUBLIC_URL": "https://misty.example.com",
-		"MISTY_LIBRARY_BACKEND":   "filesystem", "MISTY_LIBRARY_FILESYSTEM_DIR": "/var/lib/misty/library",
+		"MISTY_PUBLIC_API_URL":      "https://misty.example.com/api",
 		"SPACE_LINK_ENCRYPTION_KEY": "01234567890123456789012345678901",
-		"PARTYKIT_HOST":             "misty.example.com", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY": "private-key",
-		"JOURNAL_COLLAB_CONTROL_SECRET": "control-secret", "JOURNAL_COLLAB_PROJECTION_SECRET": "projection-secret",
-		"JOURNAL_COLLAB_ROOM_SALT": "room-salt", "MISTY_COLLAB_INTERNAL_SECRET": "01234567890123456789012345678901",
+		"MISTY_BILLING_ADAPTER":     "", "MISTY_BILLING_URL": "", "MISTY_BILLING_SECRET": "",
 	}
 	for key, value := range values {
 		t.Setenv(key, value)
 	}
-	if err := TestingValidateProductionEnvironment(); err != nil {
-		t.Fatalf("self-hosted production configuration error = %v", err)
+	if err := TestingValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), "MISTY_BILLING_ADAPTER") {
+		t.Fatalf("production without billing error = %v, want MISTY_BILLING_ADAPTER rejection", err)
 	}
 }
 

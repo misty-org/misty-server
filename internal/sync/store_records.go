@@ -3,11 +3,8 @@ package browsersync
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"regexp"
-
-	"github.com/kannachi323/misty/server/internal/platform/transport"
 )
 
 // Cold-tier collections: rarely changed, endpoint-encrypted records that are
@@ -207,7 +204,12 @@ func (db *Store) PushBrowserSyncRecords(ctx context.Context, userID, vault, devi
 // cold store. The first time, other devices are told so they can re-check
 // whether the shared workspace has retired.
 func (db *Store) MarkBrowserSyncRecordsCapable(ctx context.Context, userID, vault, device string) error {
-	result, err := db.Conn.ExecContext(ctx, `UPDATE browser_sync_devices d SET uses_collections=true FROM browser_sync_vaults w
+	tx, err := db.Conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE browser_sync_devices d SET uses_collections=true FROM browser_sync_vaults w
 		WHERE w.vault_id=d.vault_id AND w.user_id=$1 AND d.vault_id=$2 AND d.device_id=$3 AND d.revoked_at IS NULL AND NOT d.uses_collections`, userID, vault, device)
 	if err != nil {
 		return err
@@ -215,9 +217,10 @@ func (db *Store) MarkBrowserSyncRecordsCapable(ctx context.Context, userID, vaul
 	if n, _ := result.RowsAffected(); n == 0 {
 		return nil
 	}
-	hint, _ := json.Marshal(transport.AccountEvent{UserID: userID, Topic: "browser-presence", ID: vault})
-	_, err = db.Conn.ExecContext(ctx, `SELECT pg_notify('misty_account_events',$1)`, string(hint))
-	return err
+	if err = notifySync(ctx, tx, userID, vault, "browser-presence"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // sharedWorkspaceRetired: every active device keeps bookmarks in the cold store,

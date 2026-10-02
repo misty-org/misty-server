@@ -13,11 +13,11 @@ import (
 )
 
 func TestStorageEntitlementsNeverDefaultToUnlimited(t *testing.T) {
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "self_hosted")
+	t.Setenv("MISTY_ENVIRONMENT", "development")
 	t.Setenv("MISTY_BILLING_ADAPTER", "none")
 	limits, err := entitlementsForUserTx(context.Background(), nil, "account", time.Now())
 	if err != nil || limits.PersonalStorageLimitBytes != 2_000_000_000 || limits.SpaceStorageLimitBytes != 2_000_000_000 {
-		t.Fatalf("finite self-hosted limits: %+v, %v", limits, err)
+		t.Fatalf("finite default limits: %+v, %v", limits, err)
 	}
 }
 
@@ -33,7 +33,6 @@ func TestStorageEntitlementsUseAccountPlanAndRejectUnavailableLimits(t *testing.
 		_ = json.NewEncoder(w).Encode(map[string]any{"allowed": true, "summary": summary})
 	}))
 	defer endpoint.Close()
-	t.Setenv("MISTY_DEPLOYMENT_MODE", "hosted")
 	t.Setenv("MISTY_ENVIRONMENT", "development")
 	t.Setenv("MISTY_BILLING_ADAPTER", "http")
 	t.Setenv("MISTY_BILLING_URL", endpoint.URL)

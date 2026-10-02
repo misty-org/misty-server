@@ -1,0 +1,70 @@
+package console
+
+templ layout(v layoutView) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'/>
+			<title>{ v.Title } · Misty console</title>
+			<link rel="stylesheet" href="/assets/console.css"/>
+			<script src="/assets/htmx.min.js" defer></script>
+			<script src="/assets/console.js" defer></script>
+		</head>
+		<body hx-headers={ v.csrfHeaders() }>
+			<div class="shell">
+				<nav class="sidebar" aria-label="Console">
+					<div class="brand">
+						@iconServer()
+						<span>Misty console</span>
+					</div>
+					<label class="nav-search">
+						@iconSearch()
+						<input id="nav-search" type="search" placeholder="Search" aria-label="Search console pages" autocomplete="off"/>
+					</label>
+					for _, group := range v.Nav {
+						<div class="nav-group">
+						if group.Label != "" {
+							<div class="group-label">{ group.Label }</div>
+						}
+						for _, page := range group.Pages {
+							<a
+								class={ "nav-item", templ.KV("active", page.Slug == v.Active) }
+								href={ templ.SafeURL("/" + page.Slug) }
+								if page.Slug == v.Active {
+									aria-current="page"
+								}
+							>
+								@page.Icon()
+								<span>{ page.Title }</span>
+							</a>
+						}
+						</div>
+					}
+				</nav>
+				<main class="content">
+					@v.Content
+				</main>
+			</div>
+		</body>
+	</html>
+}
+
+templ unauthorized() {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<title>Sign in · Misty console</title>
+			<link rel="stylesheet" href="/assets/console.css"/>
+		</head>
+		<body>
+			<main class="gate">
+				@iconLock()
+				<h1>Open the console from the CLI</h1>
+				<p class="muted">Run <code>misty server up --gui</code> to get a fresh link. Links stop working when the console restarts.</p>
+			</main>
+		</body>
+	</html>
+}

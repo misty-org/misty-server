@@ -1,8 +1,6 @@
 package api
 
 import (
-	"strings"
-
 	"github.com/kannachi323/misty/server/internal/agenttools"
 )
 
@@ -23,12 +21,4 @@ type agentToolboxCatalogItem struct {
 	Granted            bool                             `json:"granted"`
 	Available          bool                             `json:"available"`
 	Reasons            []agentToolboxAvailabilityReason `json:"reasons"`
-}
-
-func providerFromToolName(name string) string {
-	parts := strings.Split(name, ".")
-	if len(parts) == 3 && parts[0] == "provider" {
-		return parts[1]
-	}
-	return ""
 }

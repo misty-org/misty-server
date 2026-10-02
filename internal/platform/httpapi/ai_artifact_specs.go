@@ -41,11 +41,6 @@ var aiArtifactSpecs = map[string]aiArtifactSpec{
 		Prompt: "Propose a file operation plan using opaque device scope identifiers, display names, and explicit conflict policies. Never emit raw local paths.",
 		Shape:  `{"steps":[{"action":"copy|move|rename|trash|mkdir","source_scope_id":"opaque id","destination_scope_id":"opaque id","display_name":"...","conflict_policy":"ask|skip|rename"}]}`,
 	},
-	"mail_draft": {
-		Title: "Review email draft", Risk: "draft", ApprovalPolicy: "visible_apply",
-		Prompt: "Draft an email for review. This creates draft content only and must never send it.",
-		Shape:  `{"thread_scope_id":"opaque id","to":["address"],"cc":[],"bcc":[],"subject":"...","text":"..."}`,
-	},
 	"message_draft": {
 		Title: "Review message draft", Risk: "draft", ApprovalPolicy: "visible_apply",
 		Prompt: "Draft a Space message for review. Do not post it.",

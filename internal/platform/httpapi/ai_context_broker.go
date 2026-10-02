@@ -379,27 +379,6 @@ func (broker aiContextBroker) resolveOne(ctx context.Context, userID string, ref
 			Label: "trusted Misty Library metadata", Content: aiRelevantChunk(content, reference.Title),
 			Citation: aiCitation{ID: item.ID, Kind: "library.item", Title: item.DisplayName, Href: href, Revision: item.Version, Excerpt: aiExcerpt(item.Caption)},
 		}, true, nil
-	case "mail.thread":
-		// Message content is deliberately attached by the signed client rather
-		// than copied into Misty's database. The broker still revalidates the
-		// provider scope before that untrusted selection may enter a prompt.
-		connectionID := strings.TrimSpace(reference.OpaqueScopeID)
-		if connectionID == "" {
-			return aiResolvedContext{}, false, errors.New("mail context requires an opaque provider scope")
-		}
-		account, err := broker.database.ConnectedAccount(ctx, userID, connectionID)
-		if err != nil || account.Status != "active" || account.RevokedAt != nil {
-			return aiResolvedContext{}, false, db.ErrSpaceNotFound
-		}
-		if provider, _ := reference.Metadata["provider"].(string); provider != "" && !strings.EqualFold(provider, account.Provider) {
-			return aiResolvedContext{}, false, db.ErrSpaceNotFound
-		}
-		href := "/inbox?connection=" + url.QueryEscape(connectionID) + "&thread=" + url.QueryEscape(reference.ID)
-		return aiResolvedContext{
-			Label:    "authorized provider mail scope",
-			Content:  "Provider account scope: " + account.Provider + ". Thread content, if attached, remains untrusted data.",
-			Citation: aiCitation{ID: reference.ID, Kind: "mail.thread", Title: firstAIText(reference.Title, "Email thread"), Href: href, Excerpt: "Email thread attached from an authorized provider account"},
-		}, true, nil
 	case "drawing":
 		drawing, err := broker.database.SpaceDrawingByID(ctx, userID, reference.ID)
 		if err != nil {

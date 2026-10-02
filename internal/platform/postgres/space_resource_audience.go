@@ -29,14 +29,6 @@ type SpaceResourceAudience struct {
 	ConversationID string `json:"conversation_id,omitempty"`
 }
 
-func NormalizeConversationScope(conversationID string) SpaceConversationScopeRef {
-	conversationID = strings.TrimSpace(conversationID)
-	if conversationID == "" {
-		return SpaceConversationScopeRef{Kind: ConversationScopeEveryone}
-	}
-	return SpaceConversationScopeRef{Kind: ConversationScopePrivate, ConversationID: conversationID}
-}
-
 func NormalizeResourceAudience(kind, conversationID string) (SpaceResourceAudience, error) {
 	kind, conversationID = strings.TrimSpace(kind), strings.TrimSpace(conversationID)
 	if kind == "" || kind == SpaceAudienceSpace {
@@ -68,13 +60,6 @@ func validateResourceAudienceTx(ctx context.Context, tx *sql.Tx, userID, spaceID
 		return ErrSpaceForbidden
 	}
 	return nil
-}
-
-func resourceAudienceForConversation(conversationID string) SpaceResourceAudience {
-	if strings.TrimSpace(conversationID) == "" {
-		return SpaceResourceAudience{Kind: SpaceAudienceSpace}
-	}
-	return SpaceResourceAudience{Kind: SpaceAudienceConversation, ConversationID: strings.TrimSpace(conversationID)}
 }
 
 // requireLibraryItemAudienceTx closes the gap created by service-role database

@@ -83,6 +83,7 @@ func (hub *aiInvocationHub) appendReceipt(id string, event aiInvocationEvent, re
 func (hub *aiInvocationHub) restore(stored db.AIInvocationRecord, events []aiInvocationEvent) *aiInvocationRecord {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
+	hub.pruneLocked()
 	if existing := hub.invocations[stored.ID]; existing != nil {
 		if len(events) > len(existing.Events) || (len(events) == len(existing.Events) && stored.State != existing.State && !aiInvocationTerminal(existing.State)) {
 			existing.Events = append([]aiInvocationEvent(nil), events...)
@@ -90,7 +91,8 @@ func (hub *aiInvocationHub) restore(stored db.AIInvocationRecord, events []aiInv
 			close(existing.Notify)
 			existing.Notify = make(chan struct{})
 		}
-		return existing
+		copy := *existing
+		return &copy
 	}
 	record := &aiInvocationRecord{
 		ID: stored.ID, OwnerUserID: stored.UserID, ConversationID: stored.ConversationID,
@@ -99,35 +101,14 @@ func (hub *aiInvocationHub) restore(stored db.AIInvocationRecord, events []aiInv
 	}
 	hub.invocations[record.ID] = record
 	hub.idempotency[stored.UserID+":"+stored.IdempotencyKey] = record.ID
-	return record
+	copy := *record
+	return &copy
 }
 
-// restoreDurable reconstructs the in-memory stream from the database before a
-// resumed workflow can append more events. This keeps event sequence numbers
-// monotonic across Go server restarts.
-func (hub *aiInvocationHub) restoreDurable(ctx context.Context, stored db.AIInvocationRecord) (*aiInvocationRecord, error) {
-	if hub.database == nil {
-		return hub.restore(stored, nil), nil
-	}
-	persisted, state, err := hub.database.AIInvocationEvents(ctx, stored.UserID, stored.ID, 0)
-	if err != nil {
-		return nil, err
-	}
-	events := make([]aiInvocationEvent, 0, len(persisted))
-	for _, item := range persisted {
-		var event aiInvocationEvent
-		if err := json.Unmarshal(item.Payload, &event); err != nil {
-			return nil, err
-		}
-		if event.ID == "" {
-			event.ID = strconv.FormatInt(item.Sequence, 10)
-		}
-		events = append(events, event)
-	}
-	if strings.TrimSpace(state) != "" {
-		stored.State = state
-	}
-	return hub.restore(stored, events), nil
+// Durable writers only need metadata. Sequence allocation and receipts belong
+// to PostgreSQL; active readers use the separate bounded invocation streams.
+func (hub *aiInvocationHub) restoreDurable(_ context.Context, stored db.AIInvocationRecord) (*aiInvocationRecord, error) {
+	return hub.restore(stored, nil), nil
 }
 
 func (hub *aiInvocationHub) complete(id string) error {

@@ -36,16 +36,8 @@ func (f *fixture) execute(ctx context.Context, _ string, operation string, input
 		return nil, ErrUnsupported
 	}
 	f.writes++
-	if !f.unconfirmed {
-		if f.page.Semantic.Draft != nil {
-			sent := *f.page.Semantic.Draft
-			sent.Reference = "https://mail.google.com/#sent/new-message"
-			f.page.Semantic.Sent = &sent
-			f.page.Semantic.Draft = nil
-		}
-		if f.page.Semantic.Task != nil {
-			f.page.Semantic.Task.Reference = "https://app.todoist.com/app/task/verified-1"
-		}
+	if !f.unconfirmed && f.page.Semantic.Task != nil {
+		f.page.Semantic.Task.Reference = "https://app.todoist.com/app/task/verified-1"
 	}
 	if f.lost {
 		return nil, errors.New("lost response")
@@ -54,41 +46,26 @@ func (f *fixture) execute(ctx context.Context, _ string, operation string, input
 }
 func setup(t *testing.T, name string) (*Session, *fixture, cap.Execution) {
 	t.Helper()
-	mail := name != "todoist"
-	origin := "https://mail.google.com"
-	if name == "outlook" {
-		origin = "https://outlook.live.com"
-	}
-	if !mail {
-		origin = "https://app.todoist.com"
-	}
-	adapter := Pilot{name, []string{origin}, mail}
+	origin := "https://app.todoist.com"
+	adapter := Pilot{name, []string{origin}}
 	provider := cap.Provider{ID: "example.pilot/" + name, Version: 1, Route: cap.Route{Kind: "browser", Adapter: name, AdapterVersion: 1, Origins: []string{origin}}}
 	binding := cap.BrowserBinding{Kind: "browser", DeviceID: uuid.NewString(), ProfileID: strings.Repeat("a", 64), AccountBindingID: uuid.NewString(), Origins: []string{origin}, ScopeID: "browser-pilot", AccountIdentity: "owner@example.com"}
 	raw, _ := json.Marshal(binding)
 	target := cap.Target{ID: uuid.NewString(), Revision: 1, AppID: "example.pilot", ProviderID: provider.ID, ProviderVersion: 1, Label: "Pilot", Binding: raw}
 	f := &fixture{}
-	f.page.URL = origin + "/#thread/1"
+	f.page.URL = origin + "/app/project/1"
 	f.page.Target.ScopeID = binding.ScopeID
 	f.page.Target.ProfileID = binding.ProfileID
 	f.page.Target.Origin = origin
 	f.page.Target.Trust = "host-observation"
-	f.page.Semantic = Observation{Adapter: name, Version: 1, Account: binding.AccountIdentity, Thread: f.page.URL}
-	f.page.Interactive = []Element{{Ref: "commit", Role: "button", Name: "Send"}}
-	e := cap.Execution{Invocation: cap.Invocation{RequestID: uuid.NewString(), Capability: "inbox.send", CapabilityVersion: 1, ProviderID: provider.ID, ProviderVersion: 1, TargetID: target.ID, TargetRevision: 1, Deadline: time.Now().Add(time.Hour)}, RunID: uuid.NewString(), EffectID: uuid.NewString(), GrantIDs: []string{}}
-	draft := Draft{Reference: origin + "/#draft/1", Thread: f.page.URL, Text: "Available Tuesday", Subject: "Availability", Recipients: []Recipient{{Address: "boss@example.com"}}}
-	f.page.Semantic.Draft = &draft
-	e.Input, _ = json.Marshal(map[string]any{"draftReference": draft.Reference, "expectedContentHash": ContentHash(binding.AccountIdentity, draft), "recipients": draft.Recipients})
-	if !mail {
-		e.Capability = "tasks.create"
-		task := Task{Destination: Destination{target.ID, origin + "/app/project/1", "Work"}, Title: "Reply", Text: "Follow up", Source: Source{"https://mail.google.com/#thread/1", "Email"}}
-		e.Input, _ = json.Marshal(task)
-		prepared := task
-		prepared.Text = task.Text + "\n\n" + task.Source.Label + ": " + task.Source.Reference
-		f.page.Semantic.Draft = nil
-		f.page.Semantic.Task = &prepared
-		f.page.Interactive[0].Name = "Add task"
-	}
+	f.page.Semantic = Observation{Adapter: name, Version: 1, Account: binding.AccountIdentity}
+	f.page.Interactive = []Element{{Ref: "commit", Role: "button", Name: "Add task"}}
+	e := cap.Execution{Invocation: cap.Invocation{RequestID: uuid.NewString(), Capability: "tasks.create", CapabilityVersion: 1, ProviderID: provider.ID, ProviderVersion: 1, TargetID: target.ID, TargetRevision: 1, Deadline: time.Now().Add(time.Hour)}, RunID: uuid.NewString(), EffectID: uuid.NewString(), GrantIDs: []string{}}
+	task := Task{Destination: Destination{target.ID, origin + "/app/project/1", "Work"}, Title: "Reply", Text: "Follow up", Source: Source{"https://example.com/request/1", "Request"}}
+	e.Input, _ = json.Marshal(task)
+	prepared := task
+	prepared.Text = task.Text + "\n\n" + task.Source.Label + ": " + task.Source.Reference
+	f.page.Semantic.Task = &prepared
 	s, err := NewSession(adapter, target, provider, f.execute, "fixture")
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +73,7 @@ func setup(t *testing.T, name string) (*Session, *fixture, cap.Execution) {
 	return s, f, e
 }
 func TestInterchangeableProvidersVerifyThroughOneExecutor(t *testing.T) {
-	for _, name := range []string{"gmail", "outlook", "todoist", "fixture_mail"} {
+	for _, name := range []string{"todoist", "fixture_tasks"} {
 		t.Run(name, func(t *testing.T) {
 			s, f, e := setup(t, name)
 			r, err := NewRegistry(s.Adapter)
@@ -125,7 +102,7 @@ func TestInterchangeableProvidersVerifyThroughOneExecutor(t *testing.T) {
 	}
 }
 func TestLostResponseReconcilesWithoutRepeatingWrite(t *testing.T) {
-	for _, name := range []string{"gmail", "outlook", "todoist"} {
+	for _, name := range []string{"todoist", "fixture_tasks"} {
 		t.Run(name, func(t *testing.T) {
 			s, f, e := setup(t, name)
 			p, err := s.Prepare(t.Context(), e)
@@ -149,9 +126,9 @@ func TestLostResponseReconcilesWithoutRepeatingWrite(t *testing.T) {
 	}
 }
 func TestChangedReviewOrAccountCannotCommit(t *testing.T) {
-	for _, change := range []string{"account", "profile", "scope", "origin", "recipients", "content", "draft", "cancel"} {
+	for _, change := range []string{"account", "profile", "scope", "origin", "title", "content", "destination", "cancel"} {
 		t.Run(change, func(t *testing.T) {
-			s, f, e := setup(t, "gmail")
+			s, f, e := setup(t, "todoist")
 			p, err := s.Prepare(t.Context(), e)
 			if err != nil {
 				t.Fatal(err)
@@ -167,12 +144,12 @@ func TestChangedReviewOrAccountCannotCommit(t *testing.T) {
 				f.page.Target.ScopeID = "different"
 			case "origin":
 				f.page.Target.Origin = "https://evil.invalid"
-			case "recipients":
-				f.page.Semantic.Draft.Recipients[0].Address = "other@example.com"
+			case "title":
+				f.page.Semantic.Task.Title = "Changed"
 			case "content":
-				f.page.Semantic.Draft.Text = "Changed"
-			case "draft":
-				f.page.Semantic.Draft.Reference = "different"
+				f.page.Semantic.Task.Text = "Changed"
+			case "destination":
+				f.page.Semantic.Task.Destination.Label = "Other"
 			case "cancel":
 				cancel()
 			case "stale":
@@ -188,7 +165,7 @@ func TestChangedReviewOrAccountCannotCommit(t *testing.T) {
 	}
 }
 func TestUnconfirmedWriteRemainsUncertain(t *testing.T) {
-	s, f, e := setup(t, "gmail")
+	s, f, e := setup(t, "todoist")
 	p, err := s.Prepare(t.Context(), e)
 	if err != nil {
 		t.Fatal(err)
@@ -205,11 +182,11 @@ func TestUnconfirmedWriteRemainsUncertain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if f.writes != 1 {
-		t.Fatal("reconciliation repeated send")
+		t.Fatal("reconciliation repeated the write")
 	}
 }
 func TestExpiredLoginRequiresIntervention(t *testing.T) {
-	s, f, e := setup(t, "gmail")
+	s, f, e := setup(t, "todoist")
 	f.page.Target.Authentication = "required"
 	_, err := s.Prepare(t.Context(), e)
 	var intervention *Intervention
@@ -222,7 +199,7 @@ func TestExpiredLoginRequiresIntervention(t *testing.T) {
 }
 
 func TestStalePageReinspectsBeforeSingleCommit(t *testing.T) {
-	s, f, e := setup(t, "gmail")
+	s, f, e := setup(t, "todoist")
 	p, err := s.Prepare(t.Context(), e)
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +214,17 @@ func TestStalePageReinspectsBeforeSingleCommit(t *testing.T) {
 }
 
 func TestPreparedDigestSurvivesDurableJSONRoundTrip(t *testing.T) {
- s,_,e:=setup(t,"gmail");original,err:=s.Prepare(t.Context(),e);if err!=nil{t.Fatal(err)}
- raw,_:=json.Marshal(original);var restored Prepared;if err:=json.Unmarshal(raw,&restored);err!=nil{t.Fatal(err)}
- if original.Hash()!=restored.Hash(){t.Fatal("durable review changed without a content change")}
+	s, _, e := setup(t, "todoist")
+	original, err := s.Prepare(t.Context(), e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(original)
+	var restored Prepared
+	if err := json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if original.Hash() != restored.Hash() {
+		t.Fatal("durable review changed without a content change")
+	}
 }

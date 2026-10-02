@@ -22,7 +22,7 @@ are outside this checkout audit.
 
 | Priority | Finding and evidence | Effect / remaining work |
 | --- | --- | --- |
-| High | `server/compose.prod.yml` has API/Postgres/migration/permission services but no Agent runtime. `AgentRuntimeConfigFromEnv` requires a runtime URL and secret in production; `PROD_REQUIRED` does not require either. | `misty server prod check` can pass without a usable Agent runtime. Supply and validate an external runtime, or add a managed runtime to this stack. The separate `server/self-host/compose.yml` already defines one. No production deployment was changed or launched during this audit. |
+| Resolved | `server/compose.prod.yml` had no Agent runtime. | Resolved 2026-10-01: production now runs the agent runtime and its workflow database on the shared PostgreSQL server, and `PROD_REQUIRED` includes `MISTY_AGENT_RUNTIME_IMAGE`, `MISTY_AGENT_RUNTIME_CONTROL_SECRET` and `AGENT_RUNTIME_DB_PASSWORD`. Self-hosting was retired at the same time. |
 | High | Rust `cli/src/release/model.rs` publishes `misty-v…` tags to `misty-org/misty-public`; the active TypeScript beta tasks and `.github/workflows/macos-beta.yml` use `v…` tags in `misty-org/misty`, separate architecture artifacts, `release/trust.json`, and the beta feed. | Two incompatible release systems remain publicly callable. Consolidate around the current release contract or explicitly support both with separate documentation. Merely changing the repository string would leave manifests, signatures, feed publication, and platform handling incompatible. The old route was not deleted based solely on lack of internal callers. |
 | Medium | `.config/tooling.json` exposes Wrangler, but root `package.json` does not declare it and the installed resolver fails for `wrangler`. | `misty tool wrangler` and `npm run deploy:web:dev` cannot currently resolve their deployment tool. Add an explicit root dependency or deliberately route this command to a package that owns it. Worker deployment has its own separate Wrangler dependency. |
 | Medium | Compose's service `env_file` values are not overridden by arbitrary shell exports. Only values referenced by `${…}` in the Compose file get CLI/shell precedence. | The earlier blanket shell-precedence claim was incorrect. BYOK, runtime authentication, and the development tunnel/deploy tokens are explicitly wired; other settings such as an exported Mailjet credential still require editing their owning env file. Unify this transport before claiming shell-only configuration works for every registered setting. |
@@ -187,14 +187,11 @@ variables and deliberate compatibility aliases are called out separately below.
 | Setting | Owner under `server/.env/{dev,prod}/` | Representative consumer |
 | --- | --- | --- |
 | `AUTH_HANDOFF_START_URL` | `runtime.env` | `server/internal/app/server_environment.go` |
-| `MISTY_AGENT_RUNTIME_IMAGE` | `runtime.env` | `server/self-host/compose.yml` |
+| `MISTY_AGENT_RUNTIME_IMAGE` | `runtime.env` | `server/compose.prod.yml` |
 | `MISTY_AGENT_RUNTIME_INTERNAL_API_URL` | `runtime.env` | `server/internal/platform/httpapi/agent_runtime_config.go` · `server/compose.dev.yml` |
 | `MISTY_AGENT_RUNTIME_URL` | `runtime.env` | `server/internal/platform/httpapi/agent_runtime_config.go` · `server/compose.dev.yml` |
 | `MISTY_ALLOWED_ORIGINS` | `runtime.env` | `server/internal/app/server_mount_drawing_routes.go` · `server/compose.dev.yml` |
 | `MISTY_API_IMAGE` | `runtime.env` | `server/compose.dev.yml` · `server/compose.prod.yml` |
-| `MISTY_COLLAB_IMAGE` | `runtime.env` | `server/self-host/compose.yml` |
-| `MISTY_COLLAB_PUBLIC_URL` | `runtime.env` | `server/internal/app/production_environment.go` · `server/internal/platform/httpapi/journal_collab_config.go` |
-| `MISTY_DEPLOYMENT_MODE` | `runtime.env` | `server/internal/platform/config/billing.go` · `server/internal/platform/httpapi/instance.go` |
 | `MISTY_ENVIRONMENT` | `runtime.env` | `server/internal/app/health.go` · `server/internal/platform/config/billing.go` |
 | `MISTY_HOST_PORT` | `runtime.env` | `server/compose.dev.yml` · `server/compose.prod.yml` |
 | `MISTY_INSTANCE_NAME` | `runtime.env` | `server/internal/platform/httpapi/instance.go` · `server/internal/app/production_environment.go` |
@@ -204,7 +201,7 @@ variables and deliberate compatibility aliases are called out separately below.
 | `MISTY_WEBSITE_URL` | `runtime.env` | `server/internal/app/server_environment.go` |
 | `PASSWORD_RESET_START_URL` | `runtime.env` | `server/internal/app/server_environment.go` |
 | `PASSWORD_RESET_URL` | `runtime.env` | `server/internal/app/server_environment.go` |
-| `PORT` | `runtime.env` | `server/apps/self-host-collab/index.ts` · `server/internal/app/production_environment.go` |
+| `PORT` | `runtime.env` | `server/internal/app/production_environment.go` |
 | `TRUST_PROXY_HEADERS` | `runtime.env` | `server/internal/app/server_environment.go` · `server/internal/platform/httpapi/client_ip.go` |
 | `TRUSTED_PROXY_CIDRS` | `runtime.env` | `server/internal/app/server_environment.go` · `server/internal/platform/httpapi/client_ip.go` |
 | `MISTY_INVITATION_URL_BASE` | `runtime.env` | `server/internal/app/server_core.go` |
@@ -331,22 +328,21 @@ variables and deliberate compatibility aliases are called out separately below.
 | `MISTY_ONEDRIVE_CLIENT_ID` | `integrations/microsoft.env` | `server/internal/platform/httpapi/cloud_connections_cloud_o_auth_definition.go` |
 | `MISTY_ONEDRIVE_CLIENT_SECRET` | `integrations/microsoft.env` | `server/internal/platform/httpapi/cloud_connections_cloud_o_auth_definition.go` |
 | `DOCUMENT_SIGNING_KEY` | `crypto/documents.env` | `server/internal/app/server_mount_spaces_routes.go` |
-| `JOURNAL_COLLAB_CONTROL_SECRET` | `crypto/journal.env` | `server/apps/self-host-collab/index.ts` · `server/internal/app/production_environment.go` |
+| `JOURNAL_COLLAB_CONTROL_SECRET` | `crypto/journal.env` | `server/internal/platform/httpapi/journal_collab_config.go` |
 | `JOURNAL_COLLAB_CONTROL_SECRET_PREVIOUS` | `crypto/journal.env` | `server/apps/journal-collab/src/document-room.ts` |
-| `JOURNAL_COLLAB_PROJECTION_SECRET` | `crypto/journal.env` | `server/apps/self-host-collab/index.ts` · `server/internal/app/production_environment.go` |
+| `JOURNAL_COLLAB_PROJECTION_SECRET` | `crypto/journal.env` | `server/internal/platform/httpapi/journal_collab_config.go` |
 | `JOURNAL_COLLAB_PROJECTION_SECRET_PREVIOUS` | `crypto/journal.env` | `server/apps/journal-collab/src/document-room.ts` · `server/internal/platform/httpapi/journal_collab_config.go` |
-| `JOURNAL_COLLAB_ROOM_SALT` | `crypto/journal.env` | `server/apps/self-host-collab/index.ts` · `server/internal/app/production_environment.go` |
+| `JOURNAL_COLLAB_ROOM_SALT` | `crypto/journal.env` | `server/internal/platform/httpapi/journal_collab_config.go` |
 | `JOURNAL_COLLAB_TICKET_PRIVATE_KEY` | `crypto/journal.env` | `server/internal/app/production_environment.go` · `server/internal/platform/httpapi/journal_collab_config.go` |
-| `JOURNAL_COLLAB_TICKET_PUBLIC_KEY` | `crypto/journal.env` | `server/apps/self-host-collab/index.ts` · `server/apps/journal-collab/src/document-room.ts` |
+| `JOURNAL_COLLAB_TICKET_PUBLIC_KEY` | `crypto/journal.env` | `server/apps/journal-collab/src/document-room.ts` |
 | `MISTY_DEVICE_PAIRING_PEPPER` | `crypto/devices.env` | `server/internal/app/server_mount_drawing_routes.go` · `server/internal/platform/httpapi/connected_devices_config.go` |
 | `MISTY_DEVICE_TICKET_PREVIOUS_PUBLIC_KEYS` | `crypto/devices.env` | `server/internal/platform/httpapi/connected_devices_config.go` |
 | `MISTY_DEVICE_TICKET_PRIVATE_KEY` | `crypto/devices.env` | `server/internal/app/server_mount_drawing_routes.go` · `server/internal/platform/httpapi/connected_devices_config.go` |
 | `SPACE_LINK_ENCRYPTION_KEY` | `crypto/spaces.env` | `server/internal/app/production_environment.go` · `server/internal/app/server_mount_spaces_routes.go` |
 | `MISTY_AGENT_RUNTIME_CONTROL_SECRET` | `crypto/services.env` | `server/apps/agent-runtime/src/signature.ts` · `server/internal/platform/httpapi/agent_runtime_config.go` |
 | `MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS` | `crypto/services.env` | `server/apps/agent-runtime/src/index.ts` · `server/internal/platform/httpapi/agent_runtime_config.go` |
-| `MISTY_AUTH_SIGNING_KEY` | `crypto/services.env` | `server/internal/platform/security/session_jwt.go` · `server/self-host/compose.yml` |
-| `MISTY_AUTH_SIGNING_KEY_PREVIOUS` | `crypto/services.env` | `server/internal/platform/security/session_jwt.go` · `server/self-host/compose.yml` |
-| `MISTY_COLLAB_INTERNAL_SECRET` | `crypto/services.env` | `server/apps/self-host-collab/index.ts` · `server/internal/app/production_environment.go` |
+| `MISTY_AUTH_SIGNING_KEY` | `crypto/services.env` | `server/internal/platform/security/session_jwt.go` |
+| `MISTY_AUTH_SIGNING_KEY_PREVIOUS` | `crypto/services.env` | `server/internal/platform/security/session_jwt.go` |
 
 ## CLI and external configuration contracts retained
 

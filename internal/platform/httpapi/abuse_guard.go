@@ -18,6 +18,12 @@ import (
 // rejection instead of work the server keeps paying for.
 type AbuseGuard struct {
 	mu sync.Mutex
+	// Serializes snapshots with local persistence without locking the request path.
+	storeMu         sync.Mutex
+	persistSequence uint64
+	persistRunning  bool
+	persistCtx      context.Context
+	persistCancel   context.CancelFunc
 
 	TestingNow     func() time.Time
 	total          *SlidingWindowLimiter
@@ -52,10 +58,11 @@ type AbusePolicy struct {
 }
 
 type abuseRecord struct {
-	strikes      int
-	firstStrike  time.Time
-	blockedUntil time.Time
-	blockLength  time.Duration
+	strikes            int
+	firstStrike        time.Time
+	blockedUntil       time.Time
+	blockLength        time.Duration
+	pendingPersistence uint64
 }
 
 // DefaultAbusePolicy is sized for a desktop client that polls and syncs, while
@@ -144,30 +151,9 @@ func (g *AbuseGuard) RecordRejection(key string) {
 	}
 	record.blockedUntil = now.Add(record.blockLength)
 	record.strikes, record.firstStrike = 0, now
-	g.persistBlock(key, *record)
-}
-
-// persistBlock writes the block out so a restart or a sibling instance honours
-// it. Done without holding the caller's request: a storage failure must not
-// turn into a failed block.
-func (g *AbuseGuard) persistBlock(key string, record abuseRecord) {
-	if g.store == nil {
-		return
-	}
-	block := db.AbuseBlock{
-		Key:          key,
-		BlockedUntil: record.blockedUntil,
-		BlockSeconds: int(record.blockLength / time.Second),
-		Reason:       "rate_limit_abuse",
-	}
-	if block.BlockSeconds <= 0 {
-		block.BlockSeconds = 60
-	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = g.store.SaveAbuseBlock(ctx, block)
-	}()
+	g.persistSequence++
+	record.pendingPersistence = g.persistSequence
+	g.startPersistenceLocked()
 }
 
 // purgeLocked drops records that are neither blocked nor recently active.
@@ -197,30 +183,42 @@ func (g *AbuseGuard) WithStore(ctx context.Context, store AbuseBlockStore) *Abus
 		return g
 	}
 	g.store = store
+	g.persistCtx, g.persistCancel = context.WithCancel(ctx)
 	g.Refresh(ctx)
 	return g
 }
 
-// Refresh reloads live blocks from the store. Called on start and on a timer,
-// which is how a block raised by one instance reaches the others.
-func (g *AbuseGuard) Refresh(ctx context.Context) {
+// Refresh reloads live blocks. Run updates from committed hints and reconnects.
+func (g *AbuseGuard) Refresh(ctx context.Context) { _ = g.refresh(ctx) }
+
+func (g *AbuseGuard) refresh(ctx context.Context) error {
 	if g.store == nil {
-		return
+		return nil
 	}
+	g.storeMu.Lock()
+	defer g.storeMu.Unlock()
 	blocks, err := g.store.ActiveAbuseBlocks(ctx)
 	if err != nil {
-		// A database blip must not drop the in-memory blocks already held.
-		return
-	}
+		return err
+	} // Retain all cached blocks on a failed read.
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	now := g.TestingNow()
+	g.purgeLocked(now)
+	// A successful snapshot also applies operator unblocks. Unpersisted local
+	// blocks remain enforced until a save succeeds or their own deadline expires.
+	for _, record := range g.strikes {
+		if record.pendingPersistence == 0 {
+			record.blockedUntil = time.Time{}
+		}
+	}
 	for _, block := range blocks {
 		record := g.strikes[block.Key]
 		if record == nil {
 			if len(g.strikes) >= g.TestingMaxKeys {
 				continue
 			}
-			record = &abuseRecord{firstStrike: g.TestingNow()}
+			record = &abuseRecord{firstStrike: now}
 			g.strikes[block.Key] = record
 		}
 		if block.BlockedUntil.After(record.blockedUntil) {
@@ -230,28 +228,7 @@ func (g *AbuseGuard) Refresh(ctx context.Context) {
 			record.blockLength = stored
 		}
 	}
-}
-
-// StartRefreshLoop keeps this instance's view of blocks current.
-func (g *AbuseGuard) StartRefreshLoop(ctx context.Context, interval time.Duration) {
-	if g.store == nil {
-		return
-	}
-	if interval <= 0 {
-		interval = 30 * time.Second
-	}
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				g.Refresh(ctx)
-			}
-		}
-	}()
+	return nil
 }
 
 // Middleware rejects blocked callers before any routing or handler work.

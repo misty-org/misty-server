@@ -35,13 +35,3 @@ func Getenv(name string) string {
 func LookupEnv(name string) (string, bool) {
 	return os.LookupEnv(name)
 }
-
-// DeploymentMode defaults to the hosted Misty service. Self-hosting remains an
-// explicit opt-in while it is not a supported release target.
-func DeploymentMode() string {
-	mode := strings.ToLower(strings.TrimSpace(Getenv("MISTY_DEPLOYMENT_MODE")))
-	if mode == "" {
-		return "hosted"
-	}
-	return mode
-}

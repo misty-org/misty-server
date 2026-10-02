@@ -26,7 +26,7 @@ func assertLibraryRealtimeEvent(t *testing.T, database *Database, ctx context.Co
 
 func TestMissingDeduplicationObjectCanBeReplacedByNewUpload(t *testing.T) {
 	database := openTestDatabase(t)
- useResourceAdapterFixture(t,database)
+	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, err := database.CreateUser("Library Repair Owner", "library-repair-owner@example.com", "password123")
 	if err != nil {
@@ -120,7 +120,7 @@ func TestParseLibrarySearchRejectsInvalidStructuredValues(t *testing.T) {
 
 func TestMergeLibraryDuplicatesPreservesMetadataAndTrashesRedundantItems(t *testing.T) {
 	database := openTestDatabase(t)
- useResourceAdapterFixture(t,database)
+	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, _ := database.CreateUser("Duplicate Owner", "duplicate-owner@example.com", "password123")
 	spaceID := createTestSpace(t, database, ctx, owner.ID, "Duplicates").ID
@@ -160,7 +160,7 @@ func TestMergeLibraryDuplicatesPreservesMetadataAndTrashesRedundantItems(t *test
 
 func TestLibraryQuotaReservationRejectsOversubscriptionAndReleasesFailure(t *testing.T) {
 	database := openTestDatabase(t)
- useResourceAdapterFixture(t,database)
+	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, _ := database.CreateUser("Quota Owner", "quota-owner@example.com", "password123")
 	member, _ := database.CreateUser("Quota Member", "quota-member@example.com", "password123")

@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
@@ -162,55 +161,6 @@ func extractWorkflowText(raw json.RawMessage) string {
 		return ""
 	}
 	return find(value)
-}
-
-func workflowToolEligible(descriptor workflowv2.NodeDescriptor, declared map[string]workflowv2.Risk) bool {
-	granted, ok := declared[descriptor.Capability]
-	if !ok || workflowRiskRank(granted) < workflowRiskRank(descriptor.Risk) || descriptor.Risk == workflowv2.RiskDestructive {
-		return false
-	}
-	switch descriptor.Kind {
-	case "manual_trigger", "chat_trigger", "cron_trigger", "file_changes", "library_changes", "message_trigger", "connector_trigger", "transform", "for_each", "condition", "switch", "join", "debounce", "delay", "call_workflow", "agent_task":
-		return false
-	default:
-		return true
-	}
-}
-
-func workflowRiskRank(risk workflowv2.Risk) int {
-	if risk == workflowv2.RiskDestructive {
-		return 3
-	}
-	if risk == workflowv2.RiskWrite {
-		return 2
-	}
-	return 1
-}
-
-func agentToolRisk(risk workflowv2.Risk) string {
-	if risk == workflowv2.RiskDestructive {
-		return serveragent.RiskDangerous
-	}
-	if risk == workflowv2.RiskWrite {
-		return serveragent.RiskWrite
-	}
-	return serveragent.RiskRead
-}
-
-func workflowToolArguments(raw json.RawMessage) (json.RawMessage, json.RawMessage) {
-	config := json.RawMessage(`{}`)
-	input := raw
-	var object map[string]any
-	if json.Unmarshal(raw, &object) != nil {
-		return config, input
-	}
-	if value, ok := object["config"].(map[string]any); ok {
-		config, _ = json.Marshal(value)
-	}
-	if value, exists := object["input"]; exists {
-		input, _ = json.Marshal(value)
-	}
-	return config, input
 }
 
 func TestingWorkflowResourceIdentity(config, input json.RawMessage) (string, string) {

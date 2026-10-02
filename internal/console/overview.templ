@@ -1,0 +1,61 @@
+package console
+
+templ overviewPanel(v overviewView) {
+	<section id="overview" hx-get="/overview/panel" hx-trigger="every 10s" hx-swap="outerHTML">
+		@pageHeader("Overview", v.subtitle()) {
+			<span class={ "tag", templ.KV("tag-problem", !v.healthy()) }>
+				if v.healthy() {
+					@iconCheck()
+				} else {
+					@iconAlert()
+				}
+				{ v.statusLabel() }
+			</span>
+		}
+		<div class="metrics">
+			@metric("Requests/min", v.requestsPerMin())
+			@metric("5xx rate", v.errorRate())
+			@metric("Accounts", v.count(v.Accounts))
+			@metric("Active runs", v.count(v.ActiveRuns))
+		</div>
+		if v.MetricsErr != "" {
+			@note(v.MetricsErr)
+		}
+		@sectionLabel("Health checks")
+		<ul class="rows">
+			@healthRow("Database (console connection)", v.DBErr == "", v.dbDetail())
+			if v.HealthErr != "" {
+				@healthRow("API server", false, v.HealthErr)
+			}
+			for _, check := range v.Health.SortedChecks() {
+				@healthRow(check.Label(), check.OK(), checkDetail(check))
+			}
+		</ul>
+		@sectionLabel("Recent admin activity")
+		<ul class="rows">
+			for _, entry := range v.Activity {
+				<li class="row">
+					<span>{ entry.Action }<span class="muted">{ " " + entry.Target }</span></span>
+					<span class="muted">{ ago(entry.CreatedAt) }</span>
+				</li>
+			}
+			if len(v.Activity) == 0 {
+				@emptyRow("Actions you take in the console appear here.")
+			}
+		</ul>
+	</section>
+}
+
+templ healthRow(label string, ok bool, detail string) {
+	<li class={ "row", templ.KV("row-problem", !ok) }>
+		<span class="row-label">
+			if ok {
+				@iconCheck()
+			} else {
+				@iconAlert()
+			}
+			{ label }
+		</span>
+		<span class={ templ.KV("muted", ok) }>{ detail }</span>
+	</li>
+}

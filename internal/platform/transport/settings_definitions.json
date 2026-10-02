@@ -657,5 +657,83 @@
     "format": "json",
     "maxLength": 65536,
     "platforms": ["desktop", "web"]
+  },
+  {
+    "id": "collections.tabs.space",
+    "label": "Space tab order",
+    "page": "appearance",
+    "section": "collections",
+    "key": "space_tab_order",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "format": "json",
+    "maxLength": 4096,
+    "platforms": ["desktop", "web"]
+  },
+  {
+    "id": "collections.tabs.chat",
+    "label": "Chat tab order",
+    "page": "appearance",
+    "section": "collections",
+    "key": "chat_tab_order",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "format": "json",
+    "maxLength": 4096,
+    "platforms": ["desktop", "web"]
+  },
+  {
+    "id": "collections.tabs.journal",
+    "label": "Journal tab order",
+    "page": "appearance",
+    "section": "collections",
+    "key": "journal_tab_order",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "format": "json",
+    "maxLength": 4096,
+    "platforms": ["desktop", "web"]
+  },
+  {
+    "id": "collections.tabs.planner",
+    "label": "Planner tab order",
+    "page": "appearance",
+    "section": "collections",
+    "key": "planner_tab_order",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "format": "json",
+    "maxLength": 4096,
+    "platforms": ["desktop", "web"]
+  },
+  {
+    "id": "collections.tabs.library",
+    "label": "Library tab order",
+    "page": "appearance",
+    "section": "collections",
+    "key": "library_tab_order",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "format": "json",
+    "maxLength": 4096,
+    "platforms": ["desktop", "web"]
+  },
+  {
+    "id": "collections.tabs.agents",
+    "label": "Agents tab order",
+    "page": "appearance",
+    "section": "collections",
+    "key": "agents_tab_order",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "format": "json",
+    "maxLength": 4096,
+    "platforms": ["desktop", "web"]
   }
 ]

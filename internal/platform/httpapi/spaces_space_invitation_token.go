@@ -59,25 +59,6 @@ func (s *SpacesService) SpaceInvitationToken() http.HandlerFunc {
 	}
 }
 
-func (s *SpacesService) RespondInvite(accept bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		space, err := s.database.RespondToSpaceInvite(r.Context(), userID, chi.URLParam(r, "inviteID"), accept)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if !accept {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		writeJSON(w, http.StatusOK, space)
-	}
-}
-
 func (s *SpacesService) RemoveMember() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -185,11 +166,6 @@ func TestingAgentMentionFailureFromError(agentID string, err error) agentMention
 	return agentMentionFailure{AgentID: agentID, Code: code, Reason: reason, Message: message}
 }
 
-func spaceRunFailureFromError(err error) (string, string) {
-	code, _, message := spaceRunFailureDetails(err)
-	return code, message
-}
-
 func spaceRunFailureDetails(err error) (string, string, string) {
 	switch {
 	case errors.Is(err, context.Canceled):
@@ -210,18 +186,6 @@ func spaceRunFailureDetails(err error) (string, string, string) {
 	default:
 		return "run_failed", "", "The run could not start. Try again or inspect its details in Studio."
 	}
-}
-
-func uniqueStrings(values []string) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, value := range values {
-		if !seen[value] {
-			seen[value] = true
-			out = append(out, value)
-		}
-	}
-	return out
 }
 
 func renderMessageText(content []db.MessageSpan) string {

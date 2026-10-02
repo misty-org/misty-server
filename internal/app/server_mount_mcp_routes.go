@@ -12,6 +12,4 @@ func (s *Server) mountMCPRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.Get(prefix+"/mcp/connections/{connectionID}", spaces.MCPConnection())
 	s.Router.Delete(prefix+"/mcp/connections/{connectionID}", spaces.MCPConnection())
 	s.Router.Post(prefix+"/mcp/connections/{connectionID}/test", spaces.TestMCPConnection())
-	s.Router.Post(prefix+"/mcp/connections/{connectionID}/discover", spaces.DiscoverMCPConnection())
-	s.Router.Get(prefix+"/mcp/connections/{connectionID}/tools", spaces.MCPConnectionTools())
 }

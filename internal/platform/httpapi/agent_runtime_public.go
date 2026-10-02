@@ -31,34 +31,6 @@ func (s *SpacesService) DecidePersonalAgentRunApproval() http.HandlerFunc {
 	}
 }
 
-func (s *SpacesService) AttachPersonalAgentRunContext() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, err := sessionUserID(r, s.database)
-		if err != nil || userID == "" {
-			writeAgentRuntimeSessionError(w, err)
-			return
-		}
-		var body struct {
-			DeviceID     string          `json:"device_id"`
-			Kind         string          `json:"kind"`
-			OpaqueRef    string          `json:"opaque_ref"`
-			DisplayName  string          `json:"display_name"`
-			Capabilities json.RawMessage `json:"capabilities"`
-			Metadata     json.RawMessage `json:"metadata"`
-		}
-		if json.NewDecoder(r.Body).Decode(&body) != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_context"})
-			return
-		}
-		item, err := s.database.AttachAgentRunContext(r.Context(), userID, chi.URLParam(r, "runID"), body.DeviceID, body.Kind, body.OpaqueRef, body.DisplayName, body.Capabilities, body.Metadata)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, item)
-	}
-}
-
 func (s *SpacesService) PersonalAgentRunDetail() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, err := sessionUserID(r, s.database)

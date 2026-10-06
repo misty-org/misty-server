@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agenttools"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
@@ -73,43 +72,6 @@ func TestAgentRuntimeMayBeUnconfiguredOutsideProduction(t *testing.T) {
 	}
 }
 
-func TestCreatorAgentRunModeMatrix(t *testing.T) {
-	tests := []struct {
-		mode, impact string
-		want         bool
-	}{
-		{"ask", "observe", false}, {"ask", "routine", false}, {"ask", "consequential", false}, {"ask", "dangerous", false},
-		{"auto", "observe", false}, {"auto", "routine", false}, {"auto", "consequential", false}, {"auto", "dangerous", false},
-		{"full", "observe", false}, {"full", "routine", false}, {"full", "consequential", false}, {"full", "dangerous", false},
-	}
-	for _, test := range tests {
-		if got := api.TestingCompanionToolNeedsApproval(test.mode, test.impact); got != test.want {
-			t.Errorf("mode=%s impact=%s: approval=%v, want %v", test.mode, test.impact, got, test.want)
-		}
-	}
-	for _, name := range []string{"git.push", "files.delete", "members.update", "browser.click", "browser.confirm_high_risk", "terminal.execute_unsandboxed"} {
-		if got := api.TestingCompanionToolImpact(name); got != "dangerous" {
-			t.Errorf("%s classified as %s", name, got)
-		}
-	}
-	for _, name := range []string{"messages.send", "git.commit", "project.publish", "connections.write", "provider.slack.write"} {
-		if got := api.TestingCompanionToolImpact(name); got != "consequential" {
-			t.Errorf("%s classified as %s", name, got)
-		}
-	}
-}
-
-func TestCreatorApprovalSummaryDescribesTheProposedAction(t *testing.T) {
-	summary := api.TestingCompanionToolApprovalSummary("tasks.create", json.RawMessage(`{"title":"Prepare investor demo"}`))
-	if !strings.Contains(summary, "Prepare investor demo") || strings.Contains(summary, "tasks.create") {
-		t.Fatalf("task approval summary = %q", summary)
-	}
-	message := api.TestingCompanionToolApprovalSummary("messages.send", json.RawMessage(`{"message":"The demo is ready"}`))
-	if !strings.Contains(message, "Space chat") || !strings.Contains(message, "The demo is ready") {
-		t.Fatalf("message approval summary = %q", message)
-	}
-}
-
 func TestAgentLifecycleEventsRedactSecretsAndBoundText(t *testing.T) {
 	raw := json.RawMessage(`{"authorization":"Bearer private","nested":{"api_key":"key","message":"safe"}}`)
 	sanitized := string(api.TestingSanitizeAgentLifecycleJSON(raw))
@@ -138,42 +100,7 @@ func TestCreatorAgentCompletionRequiresExplicitTaskDone(t *testing.T) {
 	}
 }
 
-func TestCreatorAuthorityPolicyAndBrowserCatalog(t *testing.T) {
-	policy := json.RawMessage(`{"mode":"inherit_creator"}`)
-	if !api.TestingPersonalAgentCapabilityAllowed(policy, "tasks.update", "write") || !api.TestingPersonalAgentCapabilityAllowed(policy, "browser.navigate", "write") {
-		t.Fatal("creator authority should enable Space and Browser actions")
-	}
-	if api.TestingPersonalAgentCapabilityAllowed(json.RawMessage(`{"mode":"inherit_invoker"}`), "browser.navigate", "write") {
-		t.Fatal("retired invoker policy must fail closed")
-	}
-	want := map[string]bool{"browser.inspect": true, "browser.navigate": true, "browser.click": true, "browser.downloads.list": true, "browser.request_user_action": true, "browser.interact": true, "browser.visual": true, "browser.workspace.visual": true, "browser.workspace.interact": true, "browser.upload": true, "browser.type": true}
-	for _, descriptor := range api.TestingPersonalAgentToolboxDescriptors() {
-		if !strings.HasPrefix(descriptor.Name, "browser.") {
-			continue
-		}
-		if !want[descriptor.Name] || descriptor.Locality != agenttools.LocalityDevice {
-			t.Fatalf("unexpected Browser descriptor: %#v", descriptor)
-		}
-		delete(want, descriptor.Name)
-	}
-	if len(want) != 0 {
-		t.Fatalf("missing Browser descriptors: %#v", want)
-	}
-}
 
-func TestCompanionToolboxIncludesAuthoritativeContextAndMemberResolution(t *testing.T) {
-	want := map[string]bool{"context.get": true, "members.list": true, "members.resolve": true}
-	for _, descriptor := range api.TestingPersonalAgentToolboxDescriptors() {
-		delete(want, descriptor.Name)
-	}
-	if len(want) != 0 {
-		t.Fatalf("missing foundational descriptors: %#v", want)
-	}
-	intent := api.TestingCompileAgentIntent("Add a chore for Melissa to the planner")
-	if !contains(intent, "tasks.create") {
-		t.Fatalf("planner request did not expose task creation: %#v", intent)
-	}
-}
 
 func TestAgentTaskDueDatesUseTheCreatorsTimezone(t *testing.T) {
 	if got := api.TestingAgentToolTimezone(`{"instruction":"create a task","timezone":"America/Los_Angeles"}`); got != "America/Los_Angeles" {

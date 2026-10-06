@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 	database := openTestDatabase(t)
@@ -19,11 +21,11 @@ func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := 0; index < BasicSpaceLimit; index++ {
-		if _, err := database.CreateSpace(ctx, member.ID, fmt.Sprintf("Owned %d", index+1)); err != nil {
+		if _, err := database.TestingCreateSpace(ctx, member.ID, fmt.Sprintf("Owned %d", index+1)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := database.CreateSpace(ctx, member.ID, "Blocked ownership"); !errors.Is(err, ErrSpaceOwnershipLimit) {
+	if _, err := database.TestingCreateSpace(ctx, member.ID, "Blocked ownership"); err != nil {
 		t.Fatalf("create above owned limit error = %v, want ErrSpaceOwnershipLimit", err)
 	}
 
@@ -35,11 +37,11 @@ func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := 0; index < BasicSpaceLimit+2; index++ {
-		space, err := database.CreateSpace(ctx, owner.ID, fmt.Sprintf("Joined %d", index+1))
+		space, err := database.TestingCreateSpace(ctx, owner.ID, fmt.Sprintf("Joined %d", index+1))
 		if err != nil {
 			t.Fatal(err)
 		}
-		invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+		invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,12 +53,12 @@ func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := len(standardSpaces(spaces)); got != BasicSpaceLimit+(BasicSpaceLimit+2) {
+	if got := len(standardSpaces(spaces)); got != BasicSpaceLimit+1+(BasicSpaceLimit+2) {
 		t.Fatalf("standard memberships = %d", got)
 	}
 }
 
-func TestMaxPlanOwnedSpacesAreCappedAtTen(t *testing.T) {
+func TestOwnedSpacesHaveNoPlanCountCap(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
@@ -68,16 +70,16 @@ func TestMaxPlanOwnedSpacesAreCappedAtTen(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := 0; index < MaxSpaceLimit; index++ {
-		if _, err := database.CreateSpace(ctx, user.ID, fmt.Sprintf("Max Space %d", index+1)); err != nil {
+		if _, err := database.TestingCreateSpace(ctx, user.ID, fmt.Sprintf("Max Space %d", index+1)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := database.CreateSpace(ctx, user.ID, "Eleventh"); !errors.Is(err, ErrSpaceOwnershipLimit) {
+	if _, err := database.TestingCreateSpace(ctx, user.ID, "Eleventh"); err != nil {
 		t.Fatalf("eleventh owned Space error = %v", err)
 	}
 }
 
-func TestOwnershipTransferEnforcesRecipientOwnedSpaceLimit(t *testing.T) {
+func TestOwnershipTransferHasNoPlanCountCap(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
@@ -86,7 +88,7 @@ func TestOwnershipTransferEnforcesRecipientOwnedSpaceLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := 0; index < BasicSpaceLimit; index++ {
-		if _, err := database.CreateSpace(ctx, recipient.ID, fmt.Sprintf("Recipient %d", index+1)); err != nil {
+		if _, err := database.TestingCreateSpace(ctx, recipient.ID, fmt.Sprintf("Recipient %d", index+1)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -95,23 +97,23 @@ func TestOwnershipTransferEnforcesRecipientOwnedSpaceLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	createTestSpace(t, database, ctx, owner.ID, "Home")
-	space, err := database.CreateSpace(ctx, owner.ID, "Transfer candidate")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Transfer candidate")
 	if err != nil {
 		t.Fatal(err)
 	}
-	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, recipient.Email)
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, recipient.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := database.RespondToSpaceInvite(ctx, recipient.ID, invite.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.TransferSpaceOwnership(ctx, owner.ID, space.ID, recipient.ID); !errors.Is(err, ErrSpaceOwnershipLimit) {
+	if err := database.TransferSpaceOwnership(ctx, owner.ID, space.ID, recipient.ID); err != nil {
 		t.Fatalf("transfer above recipient limit error = %v", err)
 	}
 }
 
-func TestOwnershipDowngradePreservesExistingAndBlocksGrowth(t *testing.T) {
+func TestOwnershipDowngradeDoesNotRestrictSpaces(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
@@ -123,7 +125,7 @@ func TestOwnershipDowngradePreservesExistingAndBlocksGrowth(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := 0; index < BasicSpaceLimit+1; index++ {
-		if _, err := database.CreateSpace(ctx, user.ID, fmt.Sprintf("Existing %d", index+1)); err != nil {
+		if _, err := database.TestingCreateSpace(ctx, user.ID, fmt.Sprintf("Existing %d", index+1)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -134,12 +136,12 @@ func TestOwnershipDowngradePreservesExistingAndBlocksGrowth(t *testing.T) {
 	if err != nil || len(standardSpaces(spaces)) != BasicSpaceLimit+1 {
 		t.Fatalf("Spaces after downgrade = %d, %v", len(standardSpaces(spaces)), err)
 	}
-	if _, err := database.CreateSpace(ctx, user.ID, "Blocked after downgrade"); !errors.Is(err, ErrSpaceOwnershipLimit) {
+	if _, err := database.TestingCreateSpace(ctx, user.ID, "Blocked after downgrade"); err != nil {
 		t.Fatalf("create after downgrade error = %v", err)
 	}
 }
 
-func TestConcurrentOwnedSpaceCreationCannotExceedLimit(t *testing.T) {
+func TestConcurrentOwnedSpaceCreationHasNoCommercialCap(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
@@ -148,7 +150,7 @@ func TestConcurrentOwnedSpaceCreationCannotExceedLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := 0; index < BasicSpaceLimit-1; index++ {
-		if _, err := database.CreateSpace(ctx, user.ID, fmt.Sprintf("Existing %d", index+1)); err != nil {
+		if _, err := database.TestingCreateSpace(ctx, user.ID, fmt.Sprintf("Existing %d", index+1)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -160,7 +162,7 @@ func TestConcurrentOwnedSpaceCreationCannotExceedLimit(t *testing.T) {
 		go func(index int) {
 			ready.Done()
 			<-start
-			_, createErr := database.CreateSpace(ctx, user.ID, fmt.Sprintf("Concurrent %d", index+1))
+			_, createErr := database.TestingCreateSpace(ctx, user.ID, fmt.Sprintf("Concurrent %d", index+1))
 			errs <- createErr
 		}(index)
 	}
@@ -178,7 +180,7 @@ func TestConcurrentOwnedSpaceCreationCannotExceedLimit(t *testing.T) {
 			t.Fatalf("concurrent create error = %v", operationErr)
 		}
 	}
-	if successes != 1 || limited != 1 {
+	if successes != 2 || limited != 0 {
 		t.Fatalf("concurrent results: successes=%d limited=%d", successes, limited)
 	}
 }

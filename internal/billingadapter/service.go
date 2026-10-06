@@ -77,13 +77,6 @@ func (s Service) Complete(ctx context.Context, action string, reservation *Reser
 	return (Reliable{Adapter: s.Adapter, Store: s.Store}).Submit(ctx, action, req)
 }
 
-// RecoverAdmissions completes only attempts that could not reach provider work.
-// It replays the original key, then durably releases the opaque hold.
-func (s Service) RecoverAdmissions(ctx context.Context, limit int) error {
-	_, err := s.RecoverAdmissionsBatch(ctx, limit)
-	return err
-}
-
 // RecoverAdmissionsBatch reports claimed rows so an event worker can distinguish
 // progress from another replica holding the ready rows' locks.
 func (s Service) RecoverAdmissionsBatch(ctx context.Context, limit int) (int, error) {

@@ -11,17 +11,6 @@ import (
 	"time"
 )
 
-type AgentToolboxActionAudit struct {
-	ToolName   string    `json:"tool_name"`
-	AuditEvent string    `json:"audit_event"`
-	Risk       string    `json:"risk"`
-	Source     string    `json:"source"`
-	State      string    `json:"state"`
-	ErrorCode  string    `json:"error_code,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-}
-
 var ErrAgentToolboxActionInProgress = errors.New("Agent Toolbox action is already in progress")
 var ErrAgentToolboxActionTerminal = errors.New("Agent Toolbox action already attempted")
 var ErrAgentToolboxActionUnknown = errors.New("Agent Toolbox action outcome is uncertain; reconcile before retrying")
@@ -226,39 +215,4 @@ func (db *Database) JournalAgentToolboxAction(ctx context.Context, action AgentT
 		return nil, errors.Join(ErrAgentToolboxActionUnknown, executeErr)
 	}
 	return result, executeErr
-}
-
-func (db *Database) PersonalAgentToolboxActionAudits(ctx context.Context, userID, agentID string, limit int) ([]AgentToolboxActionAudit, error) {
-	userID, agentID = strings.TrimSpace(userID), strings.TrimSpace(agentID)
-	if userID == "" || agentID == "" {
-		return nil, ErrSpaceInvalid
-	}
-	if limit < 1 || limit > 100 {
-		limit = 50
-	}
-	items := []AgentToolboxActionAudit{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var exists bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM misty_ask_identities WHERE id=$1 AND owner_user_id=$2 AND deleted_at IS NULL)`, agentID, userID).Scan(&exists); err != nil {
-			return err
-		}
-		if !exists {
-			return ErrPersonalAgentNotFound
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT tool_name,audit_event,risk,source,state,COALESCE(error_code,''),created_at,updated_at
-			FROM agent_toolbox_action_journal WHERE user_id=$1 AND agent_id=$2 ORDER BY created_at DESC LIMIT $3`, userID, agentID, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item AgentToolboxActionAudit
-			if err := rows.Scan(&item.ToolName, &item.AuditEvent, &item.Risk, &item.Source, &item.State, &item.ErrorCode, &item.CreatedAt, &item.UpdatedAt); err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return rows.Err()
-	})
-	return items, err
 }

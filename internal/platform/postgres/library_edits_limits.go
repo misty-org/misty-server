@@ -95,10 +95,6 @@ type LibraryEditResult struct {
 	Edit *LibraryEditVersion `json:"edit,omitempty"`
 }
 
-func DefaultLibraryEditDefinition() LibraryEditDefinition {
-	return LibraryEditDefinition{Brightness: 1, Contrast: 1, Saturation: 1, PlaybackSpeed: 1}
-}
-
 func (definition LibraryEditDefinition) Validate(mimeType string) error {
 	if definition.PlaybackSpeed == 0 {
 		definition.PlaybackSpeed = 1
@@ -243,3 +239,4 @@ func (db *Database) LibraryEditVersions(ctx context.Context, userID, spaceID, it
 	})
 	return versions, err
 }
+

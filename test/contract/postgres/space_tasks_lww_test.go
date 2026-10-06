@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 // taskLWWFixture creates one owner, one Space, and one active task.
 func taskLWWFixture(t *testing.T, emailPrefix string) (*Database, context.Context, string, *SpaceTask) {
@@ -17,7 +19,7 @@ func taskLWWFixture(t *testing.T, emailPrefix string) (*Database, context.Contex
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Task Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Task Space")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,11 +17,7 @@ func (s *SpacesService) SpaceTemplates() http.HandlerFunc {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		providers := TestingProviderOAuthAvailabilityCatalog()
-		writeJSON(w, http.StatusOK, map[string]any{
-			"templates": db.BuiltInSpaceTemplates(),
-			"providers": providers,
-		})
+		writeJSON(w, http.StatusOK, map[string]any{"templates": db.BuiltInSpaceTemplates()})
 	}
 }
 
@@ -34,24 +30,6 @@ func (s *SpacesService) SpaceSetup() http.HandlerFunc {
 		spaceID := chi.URLParam(r, "spaceID")
 		switch r.Method {
 		case http.MethodGet:
-			setup, err := s.database.SpaceSetup(r.Context(), userID, spaceID)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, setup)
-		case http.MethodPatch:
-			var body struct {
-				Provider string `json:"provider"`
-				Status   string `json:"status"`
-			}
-			if decodeJSON(w, r, &body) != nil {
-				return
-			}
-			if err := s.database.SetSpaceSetupProviderStatus(r.Context(), userID, spaceID, body.Provider, body.Status); err != nil {
-				writeSpaceError(w, err)
-				return
-			}
 			setup, err := s.database.SpaceSetup(r.Context(), userID, spaceID)
 			if err != nil {
 				writeSpaceError(w, err)

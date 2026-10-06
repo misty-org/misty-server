@@ -7,28 +7,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 )
 
 var _ serveragent.SessionPersistence = (*Database)(nil)
-
-// CreateAIConversation creates the durable user-facing thread used by the
-// Vercel WorkflowAgent runtime. It intentionally does not create a Go Agent
-// session: conversation turns are projected from ai_invocations and remain
-// portable across runtime restarts.
-func (db *Database) CreateAIConversation(ctx context.Context, userID string, requestedSpaceID ...string) (string, error) {
-	id := "conversation_" + uuid.NewString()
-	spaceID := ""
-	// requestedSpaceID remains accepted by legacy callers; it is not ownership.
-	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO misty_ask_conversations(
-			id,user_id,state,active_until,retention_expires_at,space_id
-		) VALUES($1,$2,'{}'::jsonb,NOW()+INTERVAL '30 days',NOW()+INTERVAL '30 days',NULLIF($3,''))`, id, userID, spaceID)
-		return err
-	})
-	return id, err
-}
 
 // CreateAgentSession implements agent.SessionPersistence. Conversation state
 // is sanitized by the agent package before it crosses this boundary.
@@ -100,10 +82,11 @@ func (db *Database) SaveAgentSession(ctx context.Context, conversationID, userID
 // AgentSessionSummary is the listing shape: enough to render a session rail
 // without loading conversation state or events.
 type AgentSessionSummary struct {
-	AgentID string `json:"agent_id,omitempty"`
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Active  bool   `json:"active"`
+	HasLegacySession bool   `json:"-"`
+	AgentID          string `json:"agent_id,omitempty"`
+	ID               string `json:"id"`
+	Title            string `json:"title"`
+	Active           bool   `json:"active"`
 
 	SpaceID          string    `json:"space_id,omitempty"`
 	ConversationKind string    `json:"kind"`
@@ -111,6 +94,7 @@ type AgentSessionSummary struct {
 	OriginHref       string    `json:"origin_href,omitempty"`
 	PrivacyBoundary  string    `json:"-"`
 	ModelID          string    `json:"model_id,omitempty"`
+	ModelOverride    string    `json:"model_override,omitempty"`
 	ReasoningEffort  string    `json:"reasoning_effort,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
@@ -125,7 +109,7 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, title, active_until > NOW(), ''::text,
-				conversation_kind,origin_surface,origin_href,privacy_boundary,model_id,reasoning_effort,created_at,updated_at,COALESCE(agent_id,'')
+				conversation_kind,origin_surface,origin_href,privacy_boundary,model_id,model_override,reasoning_effort,created_at,updated_at,COALESCE(agent_id,''),state <> '{}'::jsonb
 			FROM misty_ask_conversations
 			WHERE user_id = $1 AND deleted_at IS NULL
 			ORDER BY updated_at DESC
@@ -136,7 +120,7 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 		defer rows.Close()
 		for rows.Next() {
 			var item AgentSessionSummary
-			if err := rows.Scan(&item.ID, &item.Title, &item.Active, &item.SpaceID, &item.ConversationKind, &item.OriginSurface, &item.OriginHref, &item.PrivacyBoundary, &item.ModelID, &item.ReasoningEffort, &item.CreatedAt, &item.UpdatedAt, &item.AgentID); err != nil {
+			if err := rows.Scan(&item.ID, &item.Title, &item.Active, &item.SpaceID, &item.ConversationKind, &item.OriginSurface, &item.OriginHref, &item.PrivacyBoundary, &item.ModelID, &item.ModelOverride, &item.ReasoningEffort, &item.CreatedAt, &item.UpdatedAt, &item.AgentID, &item.HasLegacySession); err != nil {
 				return err
 			}
 			items = append(items, item)
@@ -157,6 +141,23 @@ func (db *Database) UpdateMistyConversationModel(ctx context.Context, userID, co
 			return err
 		}
 		if rows == 0 {
+			return serveragent.ErrPersistedSessionNotFound
+		}
+		return nil
+	})
+}
+
+// SetMistyConversationModelOverride pins a conversation to a model, or with an
+// empty model returns it to the account's Thinking choice.
+func (db *Database) SetMistyConversationModelOverride(ctx context.Context, userID, conversationID, model string) error {
+	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `UPDATE misty_ask_conversations SET model_override=$1,updated_at=NOW() WHERE id=$2 AND user_id=$3 AND deleted_at IS NULL`, model, conversationID, userID)
+		if err != nil {
+			return err
+		}
+		if rows, err := result.RowsAffected(); err != nil {
+			return err
+		} else if rows == 0 {
 			return serveragent.ErrPersistedSessionNotFound
 		}
 		return nil
@@ -194,22 +195,6 @@ func (db *Database) BindAskSurfaceConversation(ctx context.Context, userID, conv
 	})
 }
 
-func (db *Database) LinkAgentRunConversation(ctx context.Context, userID, runID, invocationID string) (string, error) {
-	conversationID := ""
-	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `UPDATE space_runs AS run
-			SET source_agent_conversation_id=invocation.conversation_id
-			FROM ai_invocations AS invocation
-			WHERE run.id=$1 AND run.owner_user_id=$3 AND invocation.id=$2 AND invocation.user_id=$3
-				AND invocation.conversation_id IS NOT NULL
-			RETURNING invocation.conversation_id`, runID, invocationID, userID).Scan(&conversationID)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return conversationID, err
-}
-
 // AgentSessionContext is the Space and Agent a session was bound to when it was
 // created. It is read from the session row rather than taken from the request,
 // so a caller cannot point an existing session at a different Space.
@@ -218,14 +203,17 @@ type AgentSessionContext struct {
 	SpaceID         string
 	ModelID         string
 	ReasoningEffort string
+	// ModelOverride is the model the user picked for this conversation; empty
+	// follows the account's Thinking choice.
+	ModelOverride string
 }
 
 func (db *Database) AgentConversationIdentity(ctx context.Context, userID, conversationID string) (AgentSessionContext, error) {
 	var bound AgentSessionContext
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		err := tx.QueryRowContext(ctx, `SELECT COALESCE(space_id,''),model_id,reasoning_effort,COALESCE(agent_id,'')
+		err := tx.QueryRowContext(ctx, `SELECT COALESCE(space_id,''),model_id,reasoning_effort,COALESCE(agent_id,''),model_override
 			FROM misty_ask_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL`, conversationID, userID).
-			Scan(&bound.SpaceID, &bound.ModelID, &bound.ReasoningEffort, &bound.AgentID)
+			Scan(&bound.SpaceID, &bound.ModelID, &bound.ReasoningEffort, &bound.AgentID, &bound.ModelOverride)
 		if errors.Is(err, sql.ErrNoRows) {
 			return serveragent.ErrPersistedSessionNotFound
 		}
@@ -249,10 +237,10 @@ func (db *Database) ValidateAgentSessionAccess(ctx context.Context, userID, conv
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		bound = AgentSessionContext{}
 		err := tx.QueryRowContext(ctx, `
-			SELECT COALESCE(space_id, ''), model_id, reasoning_effort,COALESCE(agent_id,'')
+			SELECT COALESCE(space_id, ''), model_id, reasoning_effort,COALESCE(agent_id,''),model_override
 			FROM misty_ask_conversations
 			WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL
-		`, conversationID, userID).Scan(&bound.SpaceID, &bound.ModelID, &bound.ReasoningEffort, &bound.AgentID)
+		`, conversationID, userID).Scan(&bound.SpaceID, &bound.ModelID, &bound.ReasoningEffort, &bound.AgentID, &bound.ModelOverride)
 		if errors.Is(err, sql.ErrNoRows) {
 			return serveragent.ErrPersistedSessionNotFound
 		}
@@ -293,22 +281,13 @@ func (db *Database) RenameAgentSession(ctx context.Context, userID, conversation
 // cascade removes event data immediately rather than waiting for the sweeper.
 func (db *Database) DeleteAgentConversation(ctx context.Context, userID, conversationID string) error {
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		// Collaboration rows (mode, questions, plans, goals) go with their conversation.
+		for _, table := range []string{"ai_conversation_modes", "agent_question_sets", "agent_plans", "agent_goals"} {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE owner_user_id=$1 AND conversation_id=$2`, userID, conversationID); err != nil {
+				return err
+			}
+		}
 		_, err := tx.ExecContext(ctx, `DELETE FROM misty_ask_conversations WHERE id=$1 AND user_id=$2`, conversationID, userID)
 		return err
 	})
-}
-
-// PurgeExpiredAgentConversations is suitable for a periodic server task. It
-// intentionally runs as the service role because expiration spans accounts.
-func (db *Database) PurgeExpiredAgentConversations(ctx context.Context) (int64, error) {
-	var deleted int64
-	err := db.TestingWithRLSContext(ctx, TestingServiceRLSSettings(), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `DELETE FROM misty_ask_conversations WHERE retention_expires_at <= NOW()`)
-		if err != nil {
-			return err
-		}
-		deleted, err = result.RowsAffected()
-		return err
-	})
-	return deleted, err
 }

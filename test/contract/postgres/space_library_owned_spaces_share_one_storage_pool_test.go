@@ -6,9 +6,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestOwnedSpacesShareOneStoragePool(t *testing.T) {
 	database := openTestDatabase(t)
@@ -19,7 +21,7 @@ func TestOwnedSpacesShareOneStoragePool(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstSpace := createTestSpace(t, database, ctx, owner.ID, "First pool consumer")
-	project, err := database.CreateSpace(ctx, owner.ID, "Second pool consumer")
+	project, err := database.TestingCreateSpace(ctx, owner.ID, "Second pool consumer")
 	if err != nil {
 		t.Fatal(err)
 	}

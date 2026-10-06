@@ -64,9 +64,6 @@ func TestConnectedAccountReconnectAndRevoke(t *testing.T) {
 	if err != nil || len(items) != 1 || items[0].Status != "active" {
 		t.Fatalf("ConnectedAccounts() = %#v, %v", items, err)
 	}
-	if err := database.SetConnectedAccountHealth(ctx, owner.ID, first.ID, "needs_attention", "refresh_failed"); err != nil {
-		t.Fatalf("SetConnectedAccountHealth() error = %v", err)
-	}
 	if err := database.RevokeConnectedAccount(ctx, owner.ID, first.ID); err != nil {
 		t.Fatalf("RevokeConnectedAccount() error = %v", err)
 	}

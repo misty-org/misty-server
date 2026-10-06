@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"github.com/kannachi323/misty/server/internal/platform/telemetry"
 	"net/http"
 	"testing"
 
@@ -10,7 +11,7 @@ import (
 func TestPublicAccountResponsesHideLicenseID(t *testing.T) {
 	database := openIntegrationDatabase(t)
 
-	registerRec := performJSONRequest(t, api.Register(database), http.MethodPost, "/register", map[string]string{
+	registerRec := performJSONRequest(t, api.RegisterWithTelemetry(database, telemetry.NoopClient{}), http.MethodPost, "/register", map[string]string{
 		"name":     "Ada Lovelace",
 		"username": "ada_lovelace",
 		"email":    "ada@example.com",
@@ -71,7 +72,7 @@ func TestPublicAccountResponsesHideLicenseID(t *testing.T) {
 func TestSettingsEndpointsExposeAndPersistEmailUpdatesPreference(t *testing.T) {
 	database := openIntegrationDatabase(t)
 
-	registerRec := performJSONRequest(t, api.Register(database), http.MethodPost, "/register", map[string]string{
+	registerRec := performJSONRequest(t, api.RegisterWithTelemetry(database, telemetry.NoopClient{}), http.MethodPost, "/register", map[string]string{
 		"name":     "Settings User",
 		"username": "settings_user",
 		"email":    "settings@example.com",

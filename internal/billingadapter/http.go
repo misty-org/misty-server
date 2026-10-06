@@ -92,16 +92,14 @@ func (a *HTTP) Do(ctx context.Context, action string, input Request) (Decision, 
 		return Decision{}, fmt.Errorf("%w: transport failure", ErrUnavailable)
 	}
 	defer res.Body.Close()
-	if res.StatusCode == http.StatusPaymentRequired || res.StatusCode == http.StatusForbidden {
-		return Decision{}, ErrDenied
-	}
+	denied := res.StatusCode == http.StatusPaymentRequired || res.StatusCode == http.StatusForbidden
 	if res.StatusCode == http.StatusBadRequest {
 		return Decision{}, ErrInvalid
 	}
 	if res.StatusCode == http.StatusConflict {
 		return Decision{}, ErrConflict
 	}
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode != http.StatusOK && !denied {
 		return Decision{}, fmt.Errorf("%w: HTTP %d", ErrUnavailable, res.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
@@ -112,8 +110,8 @@ func (a *HTTP) Do(ctx context.Context, action string, input Request) (Decision, 
 	if json.Unmarshal(raw, &result) != nil {
 		return Decision{}, ErrUnavailable
 	}
-	if !result.Allowed {
-		return Decision{}, ErrDenied
+	if denied || !result.Allowed {
+		return result, ErrDenied
 	}
 	if action == "reserve" && strings.TrimSpace(result.ReservationID) == "" {
 		return Decision{}, ErrUnavailable

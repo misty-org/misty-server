@@ -15,6 +15,7 @@ WORKDIR /app
 ENV NODE_ENV=production PORT=3000
 COPY --from=builder /src/apps/agent-runtime/node_modules ./node_modules
 COPY --from=builder /src/apps/agent-runtime/.output ./.output
+COPY --from=builder /src/apps/agent-runtime/licenses ./licenses
 USER node
 EXPOSE 3000
 CMD ["node", ".output/server/index.mjs"]

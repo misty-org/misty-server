@@ -1,9 +1,6 @@
 package workflow
 
-import (
-	"crypto/sha256"
-	"encoding/hex"
-)
+import ()
 
 func schemaNumber(value any) (float64, bool) {
 	switch number := value.(type) {
@@ -60,9 +57,4 @@ func schemaValues(value any) ([]any, bool) {
 		return out, true
 	}
 	return nil, false
-}
-
-func idempotencyKey(runID, nodeID string) string {
-	digest := sha256.Sum256([]byte(runID + ":" + nodeID))
-	return hex.EncodeToString(digest[:])
 }

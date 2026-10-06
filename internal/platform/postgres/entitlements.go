@@ -14,7 +14,7 @@ type PlanEntitlements struct {
 	Plan                            Tier  `json:"plan"`
 	MaxOwnedSpaces                  int   `json:"max_owned_spaces"`
 	PersonalStorageLimitBytes       int64 `json:"personal_storage_limit_bytes"`
-	SpaceStorageLimitBytes          int64 `json:"space_storage_limit_bytes"`
+	SpaceStorageLimitBytes          int64 `json:"space_storage_limit_bytes,omitempty"`
 	PersonalWeeklyHostedAIAllowance int64 `json:"personal_ai_limit"`
 
 	// Compatibility fields retained for clients that have not yet adopted the
@@ -32,7 +32,7 @@ type PlanEntitlements struct {
 // asks the billing service; development and tests without one receive these
 // finite defaults.
 func defaultEntitlements() PlanEntitlements {
-	return PlanEntitlements{Plan: TierBasic, MaxOwnedSpaces: 2147483647, SpaceLimit: 2147483647, PersonalStorageLimitBytes: 2_000_000_000, SpaceStorageLimitBytes: 2_000_000_000, StorageLimitBytes: 2_000_000_000, UnlimitedSpaces: true, UnlimitedCollaborators: true, UnlimitedAgentDefinitions: true, BillingAvailable: true}
+	return PlanEntitlements{Plan: TierBasic, MaxOwnedSpaces: 2147483647, SpaceLimit: 2147483647, UnlimitedSpaces: true, UnlimitedCollaborators: true, UnlimitedAgentDefinitions: true, BillingAvailable: true}
 }
 func entitlementsForUserTx(ctx context.Context, _ *sql.Tx, userID string, _ time.Time) (PlanEntitlements, error) {
 	adapter, err := envconfig.BillingAdapter()
@@ -68,28 +68,6 @@ func entitlementsForUserTx(ctx context.Context, _ *sql.Tx, userID string, _ time
 func addSpaceMembershipTx(ctx context.Context, tx *sql.Tx, spaceID, userID, role string) error {
 	if role != "owner" && role != "member" {
 		return ErrSpaceInvalid
-	}
-	if role == "owner" {
-		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:owner:"+userID); err != nil {
-			return err
-		}
-		entitlements, err := entitlementsForUserTx(ctx, tx, userID, time.Now())
-		if err != nil {
-			return err
-		}
-		if !entitlements.BillingAvailable {
-			return billingadapter.ErrUnavailable
-		}
-		var memberships int
-		// The Space being created already exists in this transaction, hence the
-		// strict > check.
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM spaces
-			WHERE owner_user_id=$1 AND lifecycle_state<>'deleted'`, userID).Scan(&memberships); err != nil {
-			return err
-		}
-		if memberships > entitlements.MaxOwnedSpaces {
-			return ErrSpaceOwnershipLimit
-		}
 	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,$3)`, spaceID, userID, role)
 	return err

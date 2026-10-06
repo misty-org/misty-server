@@ -20,12 +20,8 @@ import (
 type ConnectedAccountOAuthDefinition struct {
 	ID, Name, AuthorizeURL, TokenURL, ClientIDEnv, ClientSecretEnv, IdentityURL string
 	IdentityMethod                                                              string
-	TokenAuthBasic                                                              bool
-	DisablePKCE                                                                 bool
-	IdentityTokenQuery                                                          bool
 	BaseScopes                                                                  []string
 	CapabilityScopes                                                            map[string][]string
-	AuthorizationParams                                                         map[string]string
 }
 
 var TestingConnectedAccountOAuthCatalog = map[string]ConnectedAccountOAuthDefinition{
@@ -58,47 +54,6 @@ var TestingConnectedAccountOAuthCatalog = map[string]ConnectedAccountOAuthDefini
 		ClientIDEnv:    "MISTY_DROPBOX_CLIENT_ID", ClientSecretEnv: "MISTY_DROPBOX_CLIENT_SECRET",
 		CapabilityScopes: map[string][]string{
 			"files": {"account_info.read", "files.metadata.read", "files.content.read", "files.content.write"},
-		},
-	},
-	"figma": {
-		ID: "figma", Name: "Figma", AuthorizeURL: "https://www.figma.com/oauth",
-		TokenURL: "https://api.figma.com/v1/oauth/token", IdentityURL: "https://api.figma.com/v1/me",
-		ClientIDEnv: "FIGMA_CLIENT_ID", ClientSecretEnv: "FIGMA_CLIENT_SECRET",
-		TokenAuthBasic: true,
-		BaseScopes:     []string{"current_user:read"},
-		CapabilityScopes: map[string][]string{
-			"drawings_read":     {"file_metadata:read", "file_content:read", "file_versions:read", "file_comments:read"},
-			"drawings_comments": {"file_comments:write"},
-			// Team/folder discovery is optional because Figma does not make the
-			// corresponding list endpoints generally available to public OAuth apps.
-			"drawings_projects": {"folders:read"},
-			"drawings_webhooks": {"webhooks:write"},
-		},
-	},
-	"discord": {
-		ID: "discord", Name: "Discord", AuthorizeURL: "https://discord.com/oauth2/authorize",
-		TokenURL: "https://discord.com/api/v10/oauth2/token", IdentityURL: "https://discord.com/api/v10/users/@me",
-		ClientIDEnv: "DISCORD_CLIENT_ID", ClientSecretEnv: "DISCORD_CLIENT_SECRET",
-		BaseScopes: []string{"identify", "guilds", "bot"},
-		AuthorizationParams: map[string]string{
-			"permissions": "68608",
-		},
-		CapabilityScopes: map[string][]string{
-			"social_read":       {"identify", "guilds"},
-			"social_send":       {"identify", "guilds"},
-			"social_automation": {"identify", "guilds"},
-		},
-	},
-	"instagram": {
-		ID: "instagram", Name: "Instagram", AuthorizeURL: "https://www.instagram.com/oauth/authorize",
-		TokenURL: "https://api.instagram.com/oauth/access_token", IdentityURL: "https://graph.instagram.com/me?fields=id,username",
-		ClientIDEnv: "INSTAGRAM_CLIENT_ID", ClientSecretEnv: "INSTAGRAM_CLIENT_SECRET",
-		DisablePKCE: true, IdentityTokenQuery: true,
-		BaseScopes: []string{"instagram_business_basic", "instagram_business_manage_messages"},
-		CapabilityScopes: map[string][]string{
-			"social_read":       {"instagram_business_basic", "instagram_business_manage_messages"},
-			"social_send":       {"instagram_business_basic", "instagram_business_manage_messages"},
-			"social_automation": {"instagram_business_basic", "instagram_business_manage_messages"},
 		},
 	},
 }
@@ -171,25 +126,6 @@ func (s *SpacesService) BeginConnectedAccountAuthorization() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		if len(body.Capabilities) == 0 {
-			if provider == "figma" {
-				body.Capabilities = []string{"drawings_read"}
-			} else if provider == "discord" || provider == "instagram" {
-				body.Capabilities = []string{"social_read", "social_send"}
-			}
-		}
-		if provider == "figma" {
-			// Figma has one active app token per user. Always request the union of
-			// previously granted capabilities so incremental consent cannot replace
-			// a read-capable token with a narrower comments-only token.
-			if accounts, accountErr := s.database.ConnectedAccounts(r.Context(), userID); accountErr == nil {
-				for _, account := range accounts {
-					if account.Provider == provider && account.Status == "active" && account.RevokedAt == nil {
-						body.Capabilities = mergeConnectedAccountValues(body.Capabilities, account.Capabilities)
-					}
-				}
-			}
-		}
 		capabilities, scopes, valid := TestingConnectedAccountRequestedScopes(definition, body.Capabilities)
 		if !valid || !TestingValidProviderReturnPath(body.ReturnTo) {
 			writeSpaceError(w, db.ErrSpaceInvalid)
@@ -215,21 +151,16 @@ func (s *SpacesService) BeginConnectedAccountAuthorization() http.HandlerFunc {
 			"client_id": {clientID}, "redirect_uri": {callback}, "response_type": {"code"},
 			"state": {state}, "scope": {strings.Join(scopes, " ")},
 		}
-		if !definition.DisablePKCE {
-			digest := sha256.Sum256([]byte(verifier))
-			params.Set("code_challenge", base64.RawURLEncoding.EncodeToString(digest[:]))
-			params.Set("code_challenge_method", "S256")
-		}
-		for key, value := range definition.AuthorizationParams {
-			params.Set(key, value)
-		}
+		digest := sha256.Sum256([]byte(verifier))
+		params.Set("code_challenge", base64.RawURLEncoding.EncodeToString(digest[:]))
+		params.Set("code_challenge_method", "S256")
 		if provider == "google" {
 			params.Set("access_type", "offline")
 			params.Set("include_granted_scopes", "true")
 			params.Set("prompt", "consent")
 		} else if provider == "dropbox" {
 			params.Set("token_access_type", "offline")
-		} else if provider != "instagram" && provider != "discord" {
+		} else {
 			params.Set("prompt", "select_account")
 		}
 		writeJSON(w, http.StatusOK, map[string]any{

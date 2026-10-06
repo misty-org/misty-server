@@ -3,10 +3,8 @@ package api
 import (
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 
 	agent "github.com/kannachi323/misty/server/internal/agents"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
@@ -22,9 +20,6 @@ func (s *AIService) Complete() http.HandlerFunc {
 	}
 }
 
-func agentDocumentsEnabled() bool {
-	return strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_DOCUMENTS_ENABLED")), "true")
-}
 
 func TestingWriteAIRateLimit(w http.ResponseWriter, retryAfter time.Duration) {
 	seconds := retryAfterSeconds(retryAfter)

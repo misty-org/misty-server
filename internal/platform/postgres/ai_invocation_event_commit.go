@@ -40,6 +40,16 @@ func (db *Database) CommitAIInvocationEvent(ctx context.Context, userID, invocat
 		if state == "completed" || state == "failed" || state == "canceled" {
 			return ErrSpaceConflict
 		}
+		if eventType == "user.steering" {
+			var closed bool
+			var count int
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ai_invocation_events WHERE invocation_id=$1 AND event_type='steering.closed'), (SELECT COUNT(*) FROM ai_invocation_events WHERE invocation_id=$1 AND event_type='user.steering')`, invocationID).Scan(&closed, &count); err != nil {
+				return err
+			}
+			if closed || count >= 40 {
+				return ErrSpaceConflict
+			}
+		}
 		if nextState == "" {
 			nextState = state
 		}

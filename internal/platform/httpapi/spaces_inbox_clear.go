@@ -1,58 +1,8 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"net"
-	"net/http"
-
-	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-func (s *SpacesService) StudioResources(kind string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID := chi.URLParam(r, "spaceID")
-		if r.Method == http.MethodGet {
-			items, err := s.database.SpaceStudioResources(r.Context(), userID, spaceID, kind)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"resources": items})
-			return
-		}
-		var item db.SpaceStudioResource
-		if decodeJSON(w, r, &item) != nil {
-			return
-		}
-		item.SpaceID, item.Kind = spaceID, kind
-		saved, err := s.database.SaveSpaceStudioResource(r.Context(), userID, item)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, saved)
-	}
-}
-
-func (s *SpacesService) DeleteStudioResource(kind string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		if err := s.database.DeleteSpaceStudioResource(r.Context(), userID, chi.URLParam(r, "spaceID"), kind, chi.URLParam(r, "resourceID")); err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
 
 func TestingIsPublicWorkflowIP(ip net.IP) bool {
 	if ip == nil || !ip.IsGlobalUnicast() || ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() {
@@ -65,11 +15,4 @@ func TestingIsPublicWorkflowIP(ip net.IP) bool {
 		}
 	}
 	return true
-}
-
-// SpaceTargetFingerprint is used in audit logs and tests when a stable, safe
-// identifier is needed. It never returns the Drive target itself.
-func SpaceTargetFingerprint(target string) string {
-	sum := sha256.Sum256([]byte(target))
-	return hex.EncodeToString(sum[:8])
 }

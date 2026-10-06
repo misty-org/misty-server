@@ -5,9 +5,11 @@ import (
 	"errors"
 	"testing"
 	"time"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func testLibrarySharingAndLifecycle(
 	t *testing.T,
@@ -21,7 +23,7 @@ func testLibrarySharingAndLifecycle(
 	memoryID, tripID string,
 ) {
 	t.Helper()
-	destination, err := database.CreateSpace(ctx, ownerID, "Transfer destination")
+	destination, err := database.TestingCreateSpace(ctx, ownerID, "Transfer destination")
 	if err != nil {
 		t.Fatalf("CreateSpace(transfer destination): %v", err)
 	}

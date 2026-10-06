@@ -12,10 +12,7 @@ import (
 )
 
 func TestRealtimeGatewayUsesServerSecretAndManualTurnProtocol(t *testing.T) {
-	t.Setenv("MISTY_AGENT_MODEL_PROVIDER", "gateway")
 	t.Setenv("MISTY_AGENT_MODEL", "")
-	t.Setenv("MISTY_AGENT_MODEL_API_KEY", "")
-	t.Setenv("MISTY_AGENT_MODEL_BASE_URL", "")
 	configured := make(chan map[string]any, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/realtime/client-secrets" {
@@ -49,8 +46,7 @@ func TestRealtimeGatewayUsesServerSecretAndManualTurnProtocol(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	t.Setenv("AI_GATEWAY_EMBEDDING_BASE_URL", server.URL+"/v4/ai")
-	a := &SmartLibraryAnalyzer{APIKey: "fixture-key", Client: server.Client()}
+	a := &SmartLibraryAnalyzer{APIKey: "fixture-key", BaseURL: server.URL + "/v1", Client: server.Client()}
 	session, err := a.OpenVoiceRealtime(context.Background())
 	if err != nil {
 		t.Fatal(err)

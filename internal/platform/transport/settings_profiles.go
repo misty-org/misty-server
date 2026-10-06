@@ -126,6 +126,16 @@ func validStructuredPreference(id, raw string) bool {
 		}
 		return true
 	}
+	if id == "extensions.pins" {
+		// Installation IDs, matching the client's safe-integer filter.
+		for _, entry := range entries {
+			pin, ok := entry.(float64)
+			if !ok || pin < 0 || pin > 1<<53-1 || pin != math.Trunc(pin) {
+				return false
+			}
+		}
+		return true
+	}
 	for _, entry := range entries {
 		item, ok := entry.(map[string]any)
 		if !ok {

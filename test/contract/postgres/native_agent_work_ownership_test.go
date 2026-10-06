@@ -3,9 +3,11 @@ package db
 import (
 	"testing"
 	"time"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestGoAgentSchedulerLeavesNativeOwnedJobsUntouched(t *testing.T) {
 	database := openTestDatabase(t)
@@ -14,7 +16,7 @@ func TestGoAgentSchedulerLeavesNativeOwnedJobsUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Ownership")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Ownership")
 	if err != nil {
 		t.Fatal(err)
 	}

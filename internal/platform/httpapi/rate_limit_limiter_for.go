@@ -33,20 +33,11 @@ const overflowRouteKey = "{overflow}"
 // they are charged per account rather than per address. Keyed by the normalized
 // path the limiter already computes.
 var costBearingRoutes = map[string]bool{
-	"/ai/complete":                                              true,
-	"/ai/media-search/chunks":                                   true,
-	"/ai/media-search/search":                                   true,
-	"/spaces/{spaceID}/calendar/sync":                           true,
-	"/spaces/{spaceID}/integrations/discord/link":               true,
-	"/spaces/{spaceID}/integrations/discord/link/{id}/sync":     true,
-	"/spaces/{spaceID}/integrations/discord/link/{id}/publish":  true,
-	"/spaces/{spaceID}/integrations/discord/links":              true,
-	"/spaces/{spaceID}/integrations/discord/links/{id}/sync":    true,
-	"/spaces/{spaceID}/integrations/discord/links/{id}/publish": true,
-	"/spaces/{spaceID}/integrations/notion/sources":             true,
-	"/spaces/{spaceID}/integrations/notion/search":              true,
-	"/spaces/{spaceID}/integrations/notion/pages":               true,
-	"/spaces/{spaceID}/integrations/{provider}/authorize":       true,
+	"/ai/complete":                      true,
+	"/ai/media-search/chunks":           true,
+	"/ai/media-search/search":           true,
+	"/spaces/{spaceID}/calendar/sync":   true,
+	"/connections/{provider}/authorize": true,
 	// Egress and storage operations bill per byte and per request.
 	"/spaces/{spaceID}/library/exports/download":                   true,
 	"/spaces/{spaceID}/library/items/{id}/download":                true,
@@ -76,14 +67,14 @@ func TestingNormalizeRateLimitPath(path string) string {
 	if len(parts) == 4 && parts[0] == "spaces" && parts[2] == "library" && parts[3] == "reauthenticate" {
 		return "/spaces/{spaceID}/library/reauthenticate"
 	}
+	if len(parts) == 3 && parts[0] == "connections" && parts[2] == "authorize" {
+		return "/connections/{provider}/authorize"
+	}
 	// Space-scoped routes carry ids in the path. Collapsing them keeps one
 	// budget per route shape instead of handing out a fresh budget per Space —
 	// and keeps the number of tracked route templates bounded.
 	if parts[0] == "spaces" && len(parts) >= 2 {
 		parts[1] = "{spaceID}"
-		if len(parts) == 5 && parts[2] == "integrations" && parts[4] == "authorize" {
-			parts[3] = "{provider}"
-		}
 		for index := 2; index < len(parts); index++ {
 			if looksLikeRatePathIdentifier(parts[index]) {
 				parts[index] = "{id}"

@@ -11,9 +11,6 @@ const agentRuntimeWorkerDeadline = `SELECT min(due) FROM (
  (SELECT w.expires_at AS due FROM ai_intervention_waits w JOIN ` + interventionRunsSQL + ` r ON r.id=w.run_id AND r.user_id=w.user_id
   WHERE w.state='pending' AND r.state='awaiting_intervention' ORDER BY w.expires_at LIMIT 1)
  UNION ALL
- (SELECT a.expires_at AS due FROM agent_run_tool_approvals a JOIN ai_invocations i ON i.id=a.invocation_id
-  WHERE a.state='pending' AND i.state='awaiting_approval' AND i.approval_wait_id=a.id ORDER BY a.expires_at LIMIT 1)
- UNION ALL
  (SELECT CASE WHEN ` + aiDeviceReady + ` THEN clock_timestamp() ELSE i.device_wait_expires_at END AS due FROM ai_invocations i
   WHERE i.state='awaiting_device' AND i.device_wait_hook_token<>'' AND COALESCE(i.agent_run_id,'')='' ORDER BY 1 LIMIT 1)
  UNION ALL
@@ -33,25 +30,11 @@ const personalRunDeviceReady = `EXISTS(SELECT 1 FROM agent_run_contexts c JOIN t
  AND r.device_wait_capability<>'' AND c.capabilities ? r.device_wait_capability
  AND d.revoked_at IS NULL AND d.last_seen_at>NOW()-INTERVAL '90 seconds')`
 
-// Approval resumes are due only until their delivery row exists. Queuing is
-// idempotent by delivery ID, so a run whose delivery exists in any state cannot
-// be advanced by another scan; it waits for the delivery outcome instead.
-const approvalResumeUnqueued = `NOT EXISTS(SELECT 1 FROM agent_runtime_deliveries d WHERE d.id='approval.resume:'||r.id||':'||a.id)`
-
 const personalAgentTaskJobClaimable = `r.execution_owner='go' AND r.state IN ('queued','running')
  AND (j.task_id IS NULL OR (t.assignee_agent_id=j.agent_id AND t.archived_at IS NULL))
  AND NOT EXISTS(SELECT 1 FROM agent_run_jobs active WHERE active.agent_id=j.agent_id AND active.run_id<>j.run_id AND active.state='dispatched')`
 
 const agentTaskWorkerDeadline = `SELECT min(due) FROM (
- (SELECT clock_timestamp() AS due FROM agent_run_tool_approvals a JOIN space_runs r ON r.id=a.run_id
-  WHERE a.state IN ('approved','denied') AND r.approval_wait_id=a.id AND r.state='running'
-  AND r.runtime_phase='approval_resume_pending' AND ` + approvalResumeUnqueued + ` LIMIT 1)
- UNION ALL
- (SELECT expires_at AS due FROM agent_run_tool_approvals WHERE state='pending' ORDER BY expires_at LIMIT 1)
- UNION ALL
- (SELECT clock_timestamp() AS due FROM agent_run_tool_approvals a JOIN space_runs r ON r.id=a.run_id
-  WHERE a.state='expired' AND r.approval_wait_id=a.id AND r.state='awaiting_approval' LIMIT 1)
- UNION ALL
  (SELECT CASE WHEN ` + personalRunDeviceReady + ` THEN clock_timestamp() ELSE r.device_wait_expires_at END AS due FROM space_runs r
   WHERE r.state='awaiting_device' AND r.device_wait_hook_token<>'' ORDER BY 1 LIMIT 1)
  UNION ALL

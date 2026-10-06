@@ -2,13 +2,30 @@ package db
 
 import (
 	"context"
-	"errors"
 	"strings"
-	"testing"
 	"time"
+)
+
+
+import (
+	"errors"
+	"testing"
 
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+func TestParseLibrarySearchRejectsInvalidStructuredValues(t *testing.T) {
+	if _, err := TestingParseLibrarySearch("type:executable"); !errors.Is(err, ErrLibraryInvalid) {
+		t.Fatalf("type error = %v", err)
+	}
+	if _, err := TestingParseLibrarySearch("after:tomorrow"); !errors.Is(err, ErrLibraryInvalid) {
+		t.Fatalf("date error = %v", err)
+	}
+	parsed, err := TestingParseLibrarySearch(`summer trip album:"Road trip" hidden:false`)
+	if err != nil || parsed.Text != "summer trip" || parsed.Album != "Road trip" || parsed.Hidden == nil || *parsed.Hidden {
+		t.Fatalf("parsed search = %#v, %v", parsed, err)
+	}
+}
 
 func assertLibraryRealtimeEvent(t *testing.T, database *Database, ctx context.Context, userID, eventType, entityID string) {
 	t.Helper()
@@ -105,19 +122,6 @@ func containsString(values []string, expected string) bool {
 	return false
 }
 
-func TestParseLibrarySearchRejectsInvalidStructuredValues(t *testing.T) {
-	if _, err := TestingParseLibrarySearch("type:executable"); !errors.Is(err, ErrLibraryInvalid) {
-		t.Fatalf("type error = %v", err)
-	}
-	if _, err := TestingParseLibrarySearch("after:tomorrow"); !errors.Is(err, ErrLibraryInvalid) {
-		t.Fatalf("date error = %v", err)
-	}
-	parsed, err := TestingParseLibrarySearch(`summer trip album:"Road trip" hidden:false`)
-	if err != nil || parsed.Text != "summer trip" || parsed.Album != "Road trip" || parsed.Hidden == nil || *parsed.Hidden {
-		t.Fatalf("parsed search = %#v, %v", parsed, err)
-	}
-}
-
 func TestMergeLibraryDuplicatesPreservesMetadataAndTrashesRedundantItems(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
@@ -158,14 +162,14 @@ func TestMergeLibraryDuplicatesPreservesMetadataAndTrashesRedundantItems(t *test
 	}
 }
 
-func TestLibraryQuotaReservationRejectsOversubscriptionAndReleasesFailure(t *testing.T) {
+func TestLibraryQuotaReservationsDrawOnEachAccountsAllowance(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, _ := database.CreateUser("Quota Owner", "quota-owner@example.com", "password123")
 	member, _ := database.CreateUser("Quota Member", "quota-member@example.com", "password123")
 	spaceID := createTestSpace(t, database, ctx, owner.ID, "Quota").ID
-	invite, err := database.InviteToSpace(ctx, owner.ID, spaceID, member.Email)
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, spaceID, member.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,39 +177,39 @@ func TestLibraryQuotaReservationRejectsOversubscriptionAndReleasesFailure(t *tes
 		t.Fatal(err)
 	}
 	digest := strings.Repeat("b", 64)
-	// The pool is filled by owner and member together, in per-file-legal chunks,
-	// to prove one shared pool rather than a per-member allowance.
+	// Storage belongs to the account that uploads it; a shared Space has no pool.
 	ownerHalf := reserveQuotaBytes(t, database, ctx, owner.ID, spaceID, "quota-owner", FreeStorageBytes/2)
-	memberHalf := reserveQuotaBytes(t, database, ctx, member.ID, spaceID, "quota-member", FreeStorageBytes/2)
+	memberFull := reserveQuotaBytes(t, database, ctx, member.ID, spaceID, "quota-member", FreeStorageBytes)
 	if _, err := database.CreateLibraryUpload(ctx, member.ID, spaceID, "library", "extra.bin", "application/octet-stream", 1, digest, "library/extraobject", "extra-token", time.Now().Add(time.Hour)); !errors.Is(err, ErrLibraryQuota) {
-		t.Fatalf("cross-member oversubscription error = %v, want ErrLibraryQuota", err)
+		t.Fatalf("an account over its own allowance = %v, want ErrLibraryQuota", err)
 	}
+	ownerExtra := reserveQuotaBytes(t, database, ctx, owner.ID, spaceID, "quota-owner-extra", 1)
+	releaseQuota(t, database, ctx, ownerExtra)
 	releaseQuota(t, database, ctx, ownerHalf)
-	releaseQuota(t, database, ctx, memberHalf)
+	releaseQuota(t, database, ctx, memberFull)
 	usage, _ := database.SpaceStorageUsage(ctx, member.ID, spaceID)
 	if usage.ReservedBytes != 0 || usage.RemainingBytes != FreeStorageBytes {
-		t.Fatalf("rejected reservation usage = %#v", usage)
+		t.Fatalf("released reservation usage = %#v", usage)
 	}
 	// Leave room for exactly one more maximum-size Library upload, so two
-	// concurrent reservations must resolve to one winner and one quota denial.
+	// concurrent reservations by one account resolve to one winner and one denial.
 	raceChunk := DefaultLibraryMaxFileBytes
 	baseReservations := reserveQuotaBytes(t, database, ctx, owner.ID, spaceID, "quota-base", FreeStorageBytes-raceChunk)
 
 	type reservationResult struct {
-		userID string
 		token  string
 		upload *LibraryUpload
 		err    error
 	}
 	start := make(chan struct{})
 	results := make(chan reservationResult, 2)
-	reserve := func(userID, token, key string) {
+	reserve := func(token, key string) {
 		<-start
-		next, reserveErr := database.CreateLibraryUpload(ctx, userID, spaceID, "library", key+".bin", "application/octet-stream", raceChunk, digest, "library/"+key, token, time.Now().Add(time.Hour))
-		results <- reservationResult{userID: userID, token: token, upload: next, err: reserveErr}
+		next, reserveErr := database.CreateLibraryUpload(ctx, owner.ID, spaceID, "library", key+".bin", "application/octet-stream", raceChunk, digest, "library/"+key, token, time.Now().Add(time.Hour))
+		results <- reservationResult{token: token, upload: next, err: reserveErr}
 	}
-	go reserve(owner.ID, "owner-race-token", "owner-race")
-	go reserve(member.ID, "member-race-token", "member-race")
+	go reserve("race-token-a", "race-a")
+	go reserve("race-token-b", "race-b")
 	close(start)
 	first, second := <-results, <-results
 	succeeded, denied := 0, 0
@@ -213,7 +217,7 @@ func TestLibraryQuotaReservationRejectsOversubscriptionAndReleasesFailure(t *tes
 		switch {
 		case result.err == nil:
 			succeeded++
-			if err := database.RejectLibraryUpload(ctx, result.userID, spaceID, result.upload.ID, result.token, "invalid", "test_cleanup"); err != nil {
+			if err := database.RejectLibraryUpload(ctx, owner.ID, spaceID, result.upload.ID, result.token, "invalid", "test_cleanup"); err != nil {
 				t.Fatal(err)
 			}
 		case errors.Is(result.err, ErrLibraryQuota):
@@ -223,7 +227,7 @@ func TestLibraryQuotaReservationRejectsOversubscriptionAndReleasesFailure(t *tes
 		}
 	}
 	if succeeded != 1 || denied != 1 {
-		t.Fatalf("concurrent shared quota results: succeeded=%d denied=%d", succeeded, denied)
+		t.Fatalf("concurrent account quota results: succeeded=%d denied=%d", succeeded, denied)
 	}
 	releaseQuota(t, database, ctx, baseReservations)
 }

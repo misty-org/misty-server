@@ -32,13 +32,6 @@ WHERE voice_usage_journal.account_id=EXCLUDED.account_id AND voice_usage_journal
 	return err
 }
 
-// Resume only a recorded, final usage decision. Stale active sessions become
-// visible reconciliation work; their unmeasured balance is never auto-released.
-func (db *Database) RecoverVoiceUsage(ctx context.Context) error {
-	_, err := db.RecoverVoiceUsageBatch(ctx)
-	return err
-}
-
 func (db *Database) RecoverVoiceUsageBatch(ctx context.Context) (int, error) {
 	processed := 0
 	result, err := db.Conn.ExecContext(ctx, `UPDATE voice_usage_journal SET state='reconcile',updated_at=now() WHERE state='active' AND updated_at<now()-interval '2 minutes'`)

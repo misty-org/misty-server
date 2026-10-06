@@ -43,11 +43,15 @@ func noteAgentToolDescriptors() []agenttools.Descriptor {
 	writeSchema := TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{
 		"id": map[string]any{"type": "string", "maxLength": 200}, "title": map[string]any{"type": "string", "maxLength": 500}, "markdown": map[string]any{"type": "string", "maxLength": 100000},
 	}})
+	updateSchema := TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{
+		"id": map[string]any{"type": "string", "maxLength": 200}, "title": map[string]any{"type": "string", "maxLength": 500}, "markdown": map[string]any{"type": "string", "maxLength": 100000, "description": "Replaces the whole body."},
+		"append": map[string]any{"type": "string", "maxLength": 100000, "description": "Markdown added after the current body, for adding a line or section without rewriting it."},
+	}})
 	return []agenttools.Descriptor{
 		{Name: toolboxNotesSearch, Version: 1, Description: "Search Notes visible in the current Space.", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
-		{Name: toolboxNotesRead, Version: 1, Description: "Read one Note visible in the current Space.", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
+		{Name: toolboxNotesRead, Version: 1, Description: "Read one Note visible in the current Space, including its Markdown body (empty means the Note has no text yet).", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
 		{Name: toolboxNotesCreate, Version: 1, Description: "Create a native Note in the current Space from a title and Markdown body.", Risk: serveragent.RiskWrite, InputSchema: writeSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Locality: agenttools.LocalityServer, AuditEvent: "note.created", Sources: agentToolboxSpaceSources},
-		{Name: toolboxNotesUpdate, Version: 1, Description: "Replace the title or Markdown body of an explicitly identified Note.", Risk: serveragent.RiskWrite, InputSchema: writeSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "note.updated", Sources: agentToolboxSpaceSources},
+		{Name: toolboxNotesUpdate, Version: 1, Description: "Change an explicitly identified Note: a new title, a replacement Markdown body, or Markdown appended to the end of the body.", Risk: serveragent.RiskWrite, InputSchema: updateSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "note.updated", Sources: agentToolboxSpaceSources},
 	}
 }
 
@@ -95,7 +99,15 @@ func executeAgentNoteTool(ctx context.Context, database *db.Database, actor spac
 		if err == nil && note.SpaceID != actor.spaceID {
 			err = db.ErrSpaceNotFound
 		}
-		return TestingMustAPIRawJSON(note), true, err
+		if err != nil {
+			return nil, true, err
+		}
+		// The body is always present, so an empty Note reads as empty rather
+		// than as content the tool left out.
+		return TestingMustAPIRawJSON(map[string]any{
+			"id": note.ID, "space_id": note.SpaceID, "title": note.TitleProjection, "markdown": note.MarkdownProjection,
+			"empty": strings.TrimSpace(note.MarkdownProjection) == "", "created_at": note.CreatedAt, "updated_at": note.UpdatedAt, "role": note.Role,
+		}), true, nil
 	case toolboxNotesCreate:
 		var input struct {
 			Title    string `json:"title"`
@@ -111,9 +123,13 @@ func executeAgentNoteTool(ctx context.Context, database *db.Database, actor spac
 			ID       string `json:"id"`
 			Title    string `json:"title"`
 			Markdown string `json:"markdown"`
+			Append   string `json:"append"`
 		}
 		if json.Unmarshal(tool.Arguments, &input) != nil || strings.TrimSpace(input.ID) == "" {
 			return nil, true, serveragent.ErrInvalidRequest("note id is required")
+		}
+		if input.Markdown != "" && input.Append != "" {
+			return nil, true, serveragent.ErrInvalidRequest("use markdown to replace the body or append to add to it, not both")
 		}
 		current, err := database.SpaceNoteByID(ctx, actor.userID, input.ID)
 		if err != nil || current.SpaceID != actor.spaceID {
@@ -122,14 +138,16 @@ func executeAgentNoteTool(ctx context.Context, database *db.Database, actor spac
 			}
 			return nil, true, err
 		}
-		if err := requireAgentMutationTarget(ctx, database, actor, actor.originalPrompt, "note", current.ID); err != nil {
-			return nil, true, err
-		}
 		if strings.TrimSpace(input.Title) == "" {
 			input.Title = current.TitleProjection
 		}
-		if input.Markdown == "" {
-			input.Markdown = current.PlainTextProjection
+		switch {
+		case input.Append != "" && strings.TrimSpace(current.MarkdownProjection) != "":
+			input.Markdown = strings.TrimRight(current.MarkdownProjection, "\n") + "\n\n" + input.Append
+		case input.Append != "":
+			input.Markdown = input.Append
+		case input.Markdown == "":
+			input.Markdown = current.MarkdownProjection
 		}
 		note, err := database.UpdateSpaceNoteContent(ctx, actor.userID, input.ID, input.Title, input.Markdown)
 		return agentNoteWriteResult(note, input.Title, input.Markdown, "update"), true, err

@@ -82,25 +82,6 @@ func TestAbuseBlockEscalationIsNotLostOnRepeat(t *testing.T) {
 	t.Fatal("block not found")
 }
 
-func TestClearAbuseBlockLiftsIt(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	key := "ip:192.0.2.55"
-
-	_ = database.SaveAbuseBlock(ctx, AbuseBlock{
-		Key: key, BlockedUntil: time.Now().UTC().Add(time.Hour), BlockSeconds: 3600,
-	})
-	if err := database.ClearAbuseBlock(ctx, key); err != nil {
-		t.Fatalf("ClearAbuseBlock() error = %v", err)
-	}
-	blocks, _ := database.ActiveAbuseBlocks(ctx)
-	for _, block := range blocks {
-		if block.Key == key {
-			t.Fatal("a cleared block is still active")
-		}
-	}
-}
-
 func TestSaveAbuseBlockRejectsInvalidInput(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()

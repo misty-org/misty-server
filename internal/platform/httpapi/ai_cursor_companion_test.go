@@ -51,6 +51,32 @@ func TestCursorCompanionKeepsTenExchangesWithoutChangingStoredHistory(t *testing
 		t.Fatal("historical record was mutated")
 	}
 }
+
+func TestCursorCompanionRetainsFailedRequestForRetry(t *testing.T) {
+	turns := []db.AIConversationTurnRecord{
+		{InvocationID: "failed", Prompt: "Open example.com and report its heading", State: "failed", Failure: "Browser inspection unavailable"},
+		{InvocationID: "current", Prompt: "try again", State: "running"},
+	}
+	history := companionConversationHistory(turns, "current")
+	for _, expected := range []string{"Open example.com and report its heading", "Failed attempt", "Browser inspection unavailable"} {
+		if !strings.Contains(history, expected) {
+			t.Fatalf("missing %q in %q", expected, history)
+		}
+	}
+	if strings.Contains(history, "try again") || turns[0].Reply != "" {
+		t.Fatal("included current request or changed saved turn")
+	}
+}
+
+func TestCursorCompanionBoundsFailedHistory(t *testing.T) {
+	history := companionConversationHistory([]db.AIConversationTurnRecord{{
+		InvocationID: "failed", Prompt: strings.Repeat("p", 20000), State: "failed",
+		Failure: strings.Repeat("f", 20000),
+	}}, "current")
+	if len([]rune(history)) > 4000 || !strings.Contains(history, "Failed attempt") {
+		t.Fatal("failed history must retain its status within the context budget")
+	}
+}
 func TestCursorCompanionHasOneNaturalPolicy(t *testing.T) {
 	team := companionSystemPrompt(aiInvocationInput{CompanionMode: "team"})
 	auto := companionSystemPrompt(aiInvocationInput{CompanionMode: "auto"})

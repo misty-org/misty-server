@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
+  steering: [] as Array<{ sequence: number; text: string }>,
   limit: undefined as number | undefined,
   aborted: false,
   finishReason: "stop",
@@ -14,6 +15,7 @@ const fixture = vi.hoisted(() => ({
   outcomes: [] as string[],
   advanceAfterFirst: 0,
   budgetFailureAfterFirst: false,
+  separateToolResults: false,
 }));
 
 vi.mock("workflow", () => ({
@@ -26,9 +28,10 @@ vi.mock("../src/control-plane.js", () => ({
   controlPlaneRequest: async (_identity: unknown, operation: string, body: Record<string, unknown>) => {
     if (operation === "context") return {
       model_id: "fixture/model", system: "", prompt: "Summarize this request",
-      allowed_tools: [], required_tools: [], model_turn_limit: fixture.limit,
+      allowed_tools: [], model_turn_limit: fixture.limit,
     };
     if (operation === "complete") fixture.completions.push(body);
+    if (operation === "steering") { const messages = body.close ? fixture.steering.splice(0) : []; return { messages, closed: messages.length === 0 }; }
     if (operation === "budget") {
       fixture.budgetReads++;
       if (fixture.budgetFailureAfterFirst && fixture.budgetReads>1) throw new ControlPlaneError(422, "agent_execution_time_limit", "agent_execution_time_limit");
@@ -52,13 +55,15 @@ vi.mock("@ai-sdk/workflow", () => ({
       await this.callbacks.experimental_onStepStart({ stepNumber: 0 });
       if (fixture.aborted) await options.onAbort?.();
       if (fixture.advanceAfterFirst && fixture.timeoutValues.length === 1) vi.spyOn(Date, "now").mockReturnValue(Date.now()+fixture.advanceAfterFirst);
+      const finishReason = fixture.outcomes.shift() ?? fixture.finishReason;
       return {
         steps: Array.from({ length: fixture.steps }, () => ({
           text: "Earlier model text that must not prove completion.",
-          content: [{ type: "text", text: "Earlier model text that must not prove completion." }],
+          content: fixture.separateToolResults ? [{type:"tool-call",toolName:"misty_finish_task",toolCallId:"finish"}] : finishReason === "stop" ? [{type:"tool-call",toolName:"misty_finish_task"},{type:"tool-result",toolName:"misty_finish_task",output:{outcome:"completed",summary:"Task verified",remaining:[]}}] : [{ type: "text", text: "Earlier model text that must not prove completion." }],
         })),
+        toolResults: fixture.separateToolResults ? [{type:"tool-result",toolName:"misty_finish_task",toolCallId:"finish",output:{outcome:"completed",summary:"Task verified",remaining:[]}}] : [],
         messages: [{ role: "system", content: "adapter instructions" }, ...options.messages, { role: "assistant", content: "Prior model turn" }, { role: "tool", content: [{ type: "tool-result", toolCallId: "prior-call", toolName: "notes.read", output: { type: "text", value: "Observed note" } }] }],
-        finishReason: fixture.outcomes.shift() ?? fixture.finishReason,
+        finishReason,
         totalUsage: { inputTokens: 100, outputTokens: 12 },
       };
     }
@@ -69,6 +74,7 @@ import { runSpaceTaskAgent } from "../workflows/space-task-agent.js";
 import { ControlPlaneError } from "../src/control-plane-error.js";
 
 beforeEach(() => {
+  fixture.steering = [];
   fixture.limit = undefined;
   fixture.aborted = false;
   fixture.finishReason = "stop";
@@ -76,10 +82,18 @@ beforeEach(() => {
   fixture.completions = [];
   fixture.budgetVersion=1; fixture.budgetReads=0; fixture.timeoutValues=[]; fixture.messageInputs=[];
   fixture.modelNodes=[]; fixture.outcomes=[]; fixture.advanceAfterFirst=0; fixture.budgetFailureAfterFirst=false;
+  fixture.separateToolResults = false;
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe("workflow completion evidence", () => {
+  it("finishes from the pinned SDK's standalone call and separate raw tool receipt", async () => {
+    fixture.separateToolResults = true;
+    fixture.finishReason = "tool-calls";
+    await runSpaceTaskAgent({mistyRunId:"run-fixture",controlPlaneURL:"https://control.invalid"});
+    expect(fixture.modelNodes).toEqual(["model:1"]);
+    expect(fixture.completions).toEqual([expect.objectContaining({status:"success",text:"Task verified"})]);
+  });
   it("does not publish success when an aborted stream resolves with prior text and a stop reason", async () => {
     fixture.aborted = true;
     const result = await runSpaceTaskAgent({ mistyRunId: "run-fixture", controlPlaneURL: "https://control.invalid" });
@@ -158,4 +172,12 @@ it("still stops exactly at the foreground budget without claiming success", asyn
   await runSpaceTaskAgent({ mistyRunId: "run-fixture", controlPlaneURL: "https://control.invalid" });
   expect(fixture.modelNodes).toHaveLength(120);
   expect(fixture.completions[0]).toMatchObject({ status: "incomplete", error_code: "agent_model_turn_limit" });
+});
+
+it("continues the same model transcript when a follow-up arrives before completion", async () => {
+ fixture.steering = [{sequence:7,text:"Keep the invoices unchanged"}];
+ await runSpaceTaskAgent({ mistyRunId:"run-fixture", controlPlaneURL:"https://api.test" });
+ expect(fixture.messageInputs).toHaveLength(2);
+ expect(fixture.messageInputs[1]).toContainEqual({role:"user",content:"Keep the invoices unchanged"});
+ expect(fixture.completions).toHaveLength(1);
 });

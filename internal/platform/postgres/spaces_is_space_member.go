@@ -8,27 +8,6 @@ import (
 	"fmt"
 )
 
-// IsSpaceMember reports whether userID is an active member of spaceID. It
-// exists for callers outside the normal request/response flow (the realtime
-// WebSocket handler, checking a client-claimed "viewing" space) that need a
-// lightweight membership check without an otherwise-unused mutation.
-func (db *Database) IsSpaceMember(ctx context.Context, userID, spaceID string) (bool, error) {
-	var isMember bool
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, memberErr := requireSpaceMemberTx(ctx, tx, spaceID, userID)
-		if errors.Is(memberErr, ErrSpaceForbidden) {
-			isMember = false
-			return nil
-		}
-		if memberErr != nil {
-			return memberErr
-		}
-		isMember = true
-		return nil
-	})
-	return isMember, err
-}
-
 func requireSpaceOwnerTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
 	role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
 	if err != nil {
@@ -62,14 +41,6 @@ func notifySpaceControlTx(ctx context.Context, tx *sql.Tx, payload any) error {
 	}
 	_, err = tx.ExecContext(ctx, `SELECT pg_notify('misty_space_control',$1)`, string(raw))
 	return err
-}
-
-func (db *Database) CreateSpace(ctx context.Context, userID, name string) (*Space, error) {
-	result, err := db.CreateSpaceWithTemplate(ctx, userID, name, "blank", nil)
-	if err != nil {
-		return nil, err
-	}
-	return &result.Space, nil
 }
 
 func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, error) {

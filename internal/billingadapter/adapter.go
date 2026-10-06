@@ -27,6 +27,8 @@ type Usage struct {
 // AccountID must come from server authentication, never from the request body.
 // OperationID identifies the work; Key identifies one idempotent state transition.
 type Request struct {
+	CommandID      string     `json:"command_id,omitempty"`
+	Background     bool       `json:"background,omitempty"`
 	Customer       *Customer  `json:"customer,omitempty"`
 	Selection      *Selection `json:"selection,omitempty"`
 	Version        int        `json:"version"`
@@ -66,6 +68,9 @@ func (Disabled) Do(_ context.Context, action string, request Request) (Decision,
 	return Decision{Allowed: true}, nil
 }
 func validate(action string, r Request) error {
+	if len(r.CommandID) > 512 {
+		return ErrInvalid
+	}
 	switch action {
 	case "check", "reserve", "settle", "settle_group", "release_group", "release", "refund", "summary", "checkout", "portal", "close", "provision":
 	default:

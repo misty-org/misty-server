@@ -5,73 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"google.golang.org/genai"
 )
-
-func filePlanGenAISchema(nullable bool) *genai.Schema {
-	return &genai.Schema{
-		Type:        genai.TypeObject,
-		Nullable:    boolPointer(nullable),
-		Description: "A safe Misty file operation plan, or null when more context is needed.",
-		Properties: map[string]*genai.Schema{
-			"summary": {
-				Type:        genai.TypeString,
-				Description: "Future-tense summary of what Misty will do before Apply.",
-			},
-			"completion_summary": {
-				Type:        genai.TypeString,
-				Description: "Past-tense summary of what Misty did after Apply.",
-			},
-			"operations": {
-				Type:  genai.TypeArray,
-				Items: fileOperationGenAISchema(),
-			},
-			"warnings": {
-				Type:  genai.TypeArray,
-				Items: &genai.Schema{Type: genai.TypeString},
-			},
-		},
-		Required: []string{"summary", "completion_summary", "operations", "warnings"},
-	}
-}
-
-func fileOperationGenAISchema() *genai.Schema {
-	return &genai.Schema{
-		Type:        genai.TypeObject,
-		Description: "One mkdir, move, or rename operation using paths relative to active_root.",
-		Properties: map[string]*genai.Schema{
-			"type": {
-				Type: genai.TypeString,
-				Enum: []string{"mkdir", "move", "rename"},
-			},
-			"path": {
-				Type:        genai.TypeString,
-				Description: "Relative folder path for mkdir, or empty string when unused.",
-			},
-			"from": {
-				Type:        genai.TypeString,
-				Description: "Relative source path for move or rename, or empty string when unused.",
-			},
-			"to": {
-				Type:        genai.TypeString,
-				Description: "Relative destination path for move or rename, or empty string when unused.",
-			},
-			"reason": {
-				Type:        genai.TypeString,
-				Description: "Short user-facing reason.",
-			},
-			"confidence": {
-				Type:        genai.TypeNumber,
-				Description: "Confidence from 0 to 1.",
-			},
-		},
-		Required: []string{"type", "path", "from", "to", "reason", "confidence"},
-	}
-}
-
-func boolPointer(value bool) *bool {
-	return &value
-}
 
 func normalizeToolRequests(requests []ToolRequest) []ToolRequest {
 	if len(requests) == 0 {

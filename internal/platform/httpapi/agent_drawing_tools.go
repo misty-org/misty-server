@@ -61,8 +61,8 @@ func drawingAgentToolDescriptors() []agenttools.Descriptor {
 	return []agenttools.Descriptor{
 		{Name: toolboxDrawingsList, Version: 1, Description: "List collaborative Excalidraw drawings visible in the current Space.", Risk: serveragent.RiskRead, InputSchema: listSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
 		{Name: toolboxDrawingsRead, Version: 1, Description: "Read one live Excalidraw scene, including native element JSON, background state, revision, and content hash.", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
-		{Name: toolboxDrawingsCreate, Version: 1, Description: "Create an empty collaborative Excalidraw drawing in the current Space. Call drawings.apply afterward to draw its scene.", Risk: serveragent.RiskWrite, InputSchema: createSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, ApprovalBySource: writeApproval, Locality: agenttools.LocalityServer, AuditEvent: "drawing.created", Sources: agentToolboxSpaceSources},
-		{Name: toolboxDrawingsApply, Version: 1, Description: "Draw or edit a live Excalidraw scene. Merge or replace native elements of any supported Excalidraw type; partial objects update existing IDs, new IDs require type, and delete_element_ids creates collaboration-safe tombstones. Common fields are defaulted; advanced native Excalidraw fields are preserved. Pass the latest drawings.read base_hash to reject conflicting edits. Image elements reference fileId values already uploaded through Misty's drawing asset pipeline.", Risk: serveragent.RiskWrite, InputSchema: applySchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, ApprovalBySource: writeApproval, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "drawing.scene.applied", Sources: agentToolboxSpaceSources},
+		{Name: toolboxDrawingsCreate, Version: 1, Description: "Create an empty collaborative Excalidraw drawing in the current Space. Call drawings_apply afterward to draw its scene.", Risk: serveragent.RiskWrite, InputSchema: createSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, ApprovalBySource: writeApproval, Locality: agenttools.LocalityServer, AuditEvent: "drawing.created", Sources: agentToolboxSpaceSources},
+		{Name: toolboxDrawingsApply, Version: 1, Description: "Draw or edit a live Excalidraw scene. Merge or replace native elements of any supported Excalidraw type; partial objects update existing IDs, new IDs require type, and delete_element_ids creates collaboration-safe tombstones. Common fields are defaulted; advanced native Excalidraw fields are preserved. Pass the latest drawings_read base_hash to reject conflicting edits. Image elements reference fileId values already uploaded through Misty's drawing asset pipeline.", Risk: serveragent.RiskWrite, InputSchema: applySchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, ApprovalBySource: writeApproval, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "drawing.scene.applied", Sources: agentToolboxSpaceSources},
 	}
 }
 
@@ -119,9 +119,6 @@ func executeAgentDrawingTool(ctx context.Context, database *db.Database, actor s
 			return nil, true, err
 		}
 		if tool.Name == toolboxDrawingsApply {
-			if err := requireAgentMutationTarget(ctx, database, actor, actor.originalPrompt, "drawing", drawing.ID); err != nil {
-				return nil, true, err
-			}
 			access, accessErr := database.DrawingAccessFor(ctx, actor.userID, drawing.ID)
 			if accessErr != nil || !access.CanEdit {
 				if accessErr == nil {

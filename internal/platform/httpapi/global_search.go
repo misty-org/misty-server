@@ -107,7 +107,7 @@ func (s *SpacesService) GlobalSearch() http.HandlerFunc {
 			}
 			embedding, semanticUsed = s.globalSearchQueryEmbedding(r.Context(), userID, query)
 		}
-		indexed, indexErr := s.database.SearchAIRetrieval(r.Context(), userID, query, embedding, 100)
+		indexed, indexErr := s.database.SearchAIRetrieval(r.Context(), userID, query, embedding, 100, "", configuredEmbeddingModel(r.Context(), s.searchAnalyzer, userID))
 		if indexErr != nil {
 			indexed = nil
 			semanticUsed = false
@@ -305,7 +305,9 @@ func (s *SpacesService) globalSearchQueryEmbedding(ctx context.Context, userID, 
 	if len([]rune(normalized)) < 3 || s.searchAnalyzer == nil {
 		return nil, false
 	}
-	key := userID + "\x00" + normalized
+	model := configuredEmbeddingModel(ctx, s.searchAnalyzer, userID)
+ if model == "" { return nil, false }
+ key := userID + "\x00" + model + "\x00" + normalized
 	now := time.Now()
 	s.searchEmbeddingMu.Lock()
 	if cached, ok := s.searchEmbeddings[key]; ok && cached.expiresAt.After(now) {

@@ -27,22 +27,17 @@ type SpaceConversationParticipant struct {
 }
 
 type SpaceConversation struct {
-	ID                  string                         `json:"id"`
-	SpaceID             string                         `json:"space_id"`
-	Title               string                         `json:"title"`
-	Kind                string                         `json:"kind"`
-	CreatedByUserID     string                         `json:"created_by_user_id"`
-	Origin              string                         `json:"origin"`
-	IntegrationID       string                         `json:"integration_id,omitempty"`
-	ExternalResourceID  string                         `json:"external_resource_id,omitempty"`
-	ExternalDisplayName string                         `json:"external_display_name,omitempty"`
-	IntegrationStatus   string                         `json:"integration_status"`
-	VisibleToSpace      bool                           `json:"visible_to_space"`
-	DirectUserID        string                         `json:"direct_user_id,omitempty"`
-	DirectAgentID       string                         `json:"direct_agent_id,omitempty"`
-	Participants        []SpaceConversationParticipant `json:"participants"`
-	CreatedAt           time.Time                      `json:"created_at"`
-	UpdatedAt           time.Time                      `json:"updated_at"`
+	ID              string                         `json:"id"`
+	SpaceID         string                         `json:"space_id"`
+	Title           string                         `json:"title"`
+	Kind            string                         `json:"kind"`
+	CreatedByUserID string                         `json:"created_by_user_id"`
+	VisibleToSpace  bool                           `json:"visible_to_space"`
+	DirectUserID    string                         `json:"direct_user_id,omitempty"`
+	DirectAgentID   string                         `json:"direct_agent_id,omitempty"`
+	Participants    []SpaceConversationParticipant `json:"participants"`
+	CreatedAt       time.Time                      `json:"created_at"`
+	UpdatedAt       time.Time                      `json:"updated_at"`
 }
 
 func normalizeConversationTitle(title string) (string, error) {
@@ -129,8 +124,7 @@ func (db *Database) SpaceConversations(ctx context.Context, userID, spaceID stri
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT c.id,c.space_id,c.title,c.kind,c.created_by_user_id,
-			c.origin,COALESCE(c.integration_id,''),c.external_resource_id,c.external_display_name,
-			c.integration_status,c.visible_to_space,COALESCE(c.direct_user_id,''),COALESCE(c.direct_agent_id,''),c.created_at,c.updated_at
+			c.visible_to_space,COALESCE(c.direct_user_id,''),COALESCE(c.direct_agent_id,''),c.created_at,c.updated_at
 			FROM space_conversations c
 			LEFT JOIN space_conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$2
 			WHERE c.space_id=$1 AND (c.visible_to_space OR cm.user_id=$2)
@@ -141,8 +135,7 @@ func (db *Database) SpaceConversations(ctx context.Context, userID, spaceID stri
 		for rows.Next() {
 			var item SpaceConversation
 			if err := rows.Scan(&item.ID, &item.SpaceID, &item.Title, &item.Kind, &item.CreatedByUserID,
-				&item.Origin, &item.IntegrationID, &item.ExternalResourceID, &item.ExternalDisplayName,
-				&item.IntegrationStatus, &item.VisibleToSpace, &item.DirectUserID, &item.DirectAgentID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+				&item.VisibleToSpace, &item.DirectUserID, &item.DirectAgentID, &item.CreatedAt, &item.UpdatedAt); err != nil {
 				rows.Close()
 				return err
 			}
@@ -165,33 +158,6 @@ func (db *Database) SpaceConversations(ctx context.Context, userID, spaceID stri
 	return items, err
 }
 
-// IsSpaceConversationForMember distinguishes a selected-member group
-// conversation from the message correlation ID used by the Space-wide chat.
-// If the ID belongs to a selected group, the caller must still be a member;
-// otherwise returning false here could accidentally redirect a private reply
-// into the Space-wide conversation.
-func (db *Database) IsSpaceConversationForMember(ctx context.Context, userID, spaceID, conversationID string) (bool, error) {
-	if strings.TrimSpace(conversationID) == "" {
-		return false, nil
-	}
-	selectedGroup := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesWrite); err != nil {
-			return err
-		}
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-			SELECT 1 FROM space_conversations WHERE id=$1 AND space_id=$2
-		)`, conversationID, spaceID).Scan(&selectedGroup); err != nil {
-			return err
-		}
-		if !selectedGroup {
-			return nil
-		}
-		return requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID)
-	})
-	return selectedGroup, err
-}
-
 func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef) (*SpaceConversation, error) {
 	title, err := normalizeConversationTitle(title)
 	if err != nil {
@@ -203,7 +169,7 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 	}
 	out := &SpaceConversation{
 		ID: "space_conversation_" + uuid.NewString(), SpaceID: spaceID, Title: title,
-		Kind: "standard", CreatedByUserID: userID, Origin: "misty", IntegrationStatus: "active",
+		Kind: "standard", CreatedByUserID: userID,
 	}
 	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
@@ -262,7 +228,7 @@ func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceI
 		}
 		err := tx.QueryRowContext(ctx, `SELECT c.id,c.space_id,c.title,c.kind,c.created_by_user_id,c.created_at,c.updated_at
 			FROM space_conversations c
-			WHERE c.space_id=$1 AND c.kind='standard' AND NOT c.visible_to_space AND c.origin='misty'
+			WHERE c.space_id=$1 AND c.kind='standard' AND NOT c.visible_to_space
 			  AND (SELECT count(*) FROM space_conversation_members cm WHERE cm.conversation_id=c.id)=2
 			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.actor_kind='person' AND cm.user_id=$2)
 			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.actor_kind='person' AND cm.user_id=$3)
@@ -286,7 +252,7 @@ func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceI
 				return err
 			}
 		}
-		out.Origin, out.IntegrationStatus, out.VisibleToSpace = "misty", "active", false
+		out.VisibleToSpace = false
 		return loadSpaceConversationParticipantsTx(ctx, tx, out)
 	})
 	return out, err

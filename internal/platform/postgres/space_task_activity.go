@@ -66,37 +66,3 @@ func (db *Database) AddSpaceTaskAgentActivity(ctx context.Context, taskID, agent
 	})
 	return out, err
 }
-
-func (db *Database) SpaceTaskActivity(ctx context.Context, userID, spaceID, taskID string) ([]SpaceTaskActivity, error) {
-	items := []SpaceTaskActivity{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionTasksView); err != nil {
-			return err
-		}
-		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, spaceID, "space_tasks", taskID)
-		if err != nil {
-			return err
-		}
-		if !visible {
-			return ErrSpaceNotFound
-		}
-		var exists bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_tasks WHERE id=$1 AND space_id=$2)`, taskID, spaceID).Scan(&exists); err != nil || !exists {
-			return ErrSpaceNotFound
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT `+spaceTaskActivityColumns+` FROM space_task_activity WHERE task_id=$1 ORDER BY created_at,id`, taskID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item SpaceTaskActivity
-			if err := scanSpaceTaskActivity(rows, &item); err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return rows.Err()
-	})
-	return items, err
-}

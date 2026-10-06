@@ -149,6 +149,24 @@ func applyLaterMigrations(t *testing.T, conn *sql.DB, dir string) {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
+	// Minimal native content tables let this isolated sync schema exercise the
+	// same account inventory and write triggers as the complete application.
+	if _, err := conn.Exec(`
+    CREATE TABLE space_storage_contributions(user_id text,logical_bytes bigint,state text);
+    CREATE TABLE space_upload_reservations(user_id text,reserved_bytes bigint,state text);
+    CREATE TABLE space_rendition_reservations(user_id text,reserved_bytes bigint,state text);
+    CREATE TABLE space_messages(sender_user_id text,content jsonb);
+    CREATE TABLE space_notes(creator_user_id text,title_projection text,markdown_projection text,plain_text_projection text,shared_tags jsonb);
+    `); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(dir + "/20271003120000_account_cloud_measurements.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = conn.Exec(strings.Split(string(raw), "-- +goose Down")[0]); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
@@ -310,64 +328,5 @@ func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
 	replay, err = database.ReplayBrowserSync(ctx, "owner", a.VaultID, a.DeviceID, 0, 200)
 	if err != nil || !replay.CheckpointRequired || len(replay.Events) != 0 {
 		t.Fatalf("compaction gap was not detected: %+v %v", replay, err)
-	}
-}
-
-func TestBrowserSyncActiveHeartbeatHandoff(t *testing.T) {
-	database, _ := syncTestDatabase(t)
-	ctx := context.Background()
-	root, rootKey, _ := ed25519.GenerateKey(rand.Reader)
-	a, keyA := syncTestGrant(uuid.NewString(), rootKey)
-	if err := database.CreateBrowserSyncVault(ctx, "owner", root, syncTestKeyEnvelope(), a); err != nil {
-		t.Fatal(err)
-	}
-	b, keyB := syncTestGrant(a.VaultID, rootKey)
-	if err := database.EnrollBrowserSyncDevice(ctx, "owner", b); err != nil {
-		t.Fatal(err)
-	}
-	publish := func(m SyncMutation, options SyncPublishOptions, sequence int64, discarded bool) {
-		t.Helper()
-		receipt, err := database.PublishBrowserSync(ctx, "owner", m, options)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if receipt.Sequence != sequence || receipt.Discarded != discarded {
-			t.Fatalf("unexpected receipt: %+v", receipt)
-		}
-	}
-	claimA := syncTestMutation(a, keyA, 1)
-	claimB := syncTestMutation(b, keyB, 1)
-	publish(claimA, SyncPublishOptions{Activate: true}, 1, false)
-	publish(claimB, SyncPublishOptions{Activate: true}, 2, false)
-	// A delayed renewal and retried claim from A must not steal back control.
-	identity := SyncConnectionIdentity{UserID: "owner", VaultID: a.VaultID, DeviceID: a.DeviceID}
-	if err := database.BrowserSyncHeartbeat(ctx, identity, uuid.NewString(), 2, true, claimA.OperationID); err != nil {
-		t.Fatal(err)
-	}
-	publish(claimA, SyncPublishOptions{Activate: true}, 1, false)
-	stale := syncTestMutation(a, keyA, 2)
-	publish(stale, SyncPublishOptions{ActiveEpoch: claimA.OperationID}, 2, true)
-	publish(stale, SyncPublishOptions{ActiveEpoch: claimA.OperationID}, 2, true)
-	publish(syncTestMutation(b, keyB, 2), SyncPublishOptions{ActiveEpoch: claimB.OperationID}, 3, false)
-	// The discarded counter is consumed; a later explicit click still works.
-	nextClaim := syncTestMutation(a, keyA, 3)
-	publish(nextClaim, SyncPublishOptions{Activate: true}, 4, false)
-	publish(syncTestMutation(a, keyA, 4), SyncPublishOptions{ActiveEpoch: claimA.OperationID}, 4, true)
-	publish(syncTestMutation(a, keyA, 5), SyncPublishOptions{ActiveEpoch: nextClaim.OperationID}, 5, false)
-	var count int
-	if err := database.Conn.QueryRow("SELECT count(*) FROM browser_sync_events").Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	if count != 5 {
-		t.Fatalf("stale updates entered replay: %d events", count)
-	}
-	presence, err := database.BrowserSyncPresence(ctx, "owner", a.VaultID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range presence {
-		if p.Active != (p.DeviceID == a.DeviceID) {
-			t.Fatal("presence owner disagrees")
-		}
 	}
 }

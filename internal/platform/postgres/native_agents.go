@@ -116,28 +116,6 @@ func (db *Database) DeletePersonalAgent(ctx context.Context, userID, id string) 
 	})
 }
 
-// AgentWorkspaceTools describes built-in tool families, not grants to a website,
-// device, file root, or action. Those authorities are checked at dispatch.
-func (db *Database) AgentWorkspaceTools(ctx context.Context, userID, agentID string) ([]string, error) {
-	if userID == "" || agentID == "" {
-		return nil, ErrPersonalAgentNotFound
-	}
-	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		var exists bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM misty_ask_identities WHERE id=$1 AND owner_user_id=$2 AND enabled AND deleted_at IS NULL)`, agentID, userID).Scan(&exists); err != nil {
-			return err
-		}
-		if !exists {
-			return ErrPersonalAgentNotFound
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return []string{"browser", "files"}, nil
-}
-
 // Binding is immutable. A legacy NULL identity can only be claimed by default Misty.
 func (db *Database) BindConversationAgent(ctx context.Context, userID, conversationID, agentID string) error {
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {

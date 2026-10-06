@@ -22,7 +22,7 @@ it("shares a throttle across control routes before parsing or authentication", a
       expect(response.status).toBe(401);
       await response.arrayBuffer();
     }
-    for (const route of ["runs", "runs/id/status", "runs/id/cancel", "approvals/token", "devices/token"]) {
+    for (const route of ["runs", "runs/id/status", "runs/id/cancel", "devices/token"]) {
       const response = await fetch(`${base}/v1/${route}`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-forwarded-for": "192.0.2.123" },

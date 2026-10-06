@@ -6,22 +6,6 @@ import (
 	"errors"
 )
 
-func TestingWorkflowPermissionSpacePermission(permission string) (string, bool) {
-	switch permission {
-	case "files.read":
-		return PermissionLibraryView, true
-	case "files.write":
-		return PermissionLibraryEdit, true
-	}
-	for _, candidate := range configurableSpacePermissions {
-		if permission == candidate {
-			return candidate, true
-		}
-	}
-	return "", false
-}
-
-const RunSourceAgentConsole = "agent_console"
 
 func sharedSpaceRunVisibleToUserTx(ctx context.Context, tx *sql.Tx, run *SpaceRun, userID string) (bool, error) {
 	if run.RequestingMemberID == userID {
@@ -53,65 +37,6 @@ func sharedSpaceRunVisibleToUserTx(ctx context.Context, tx *sql.Tx, run *SpaceRu
 	default:
 		return false, nil
 	}
-}
-
-const sharedSpaceRunListVisibility = `(requesting_member_id=$3 OR source_type='schedule' OR
-	(conversation_scope_kind='everyone' AND source_type IN ('group_mention','suggestion','follow_up')) OR
-	(conversation_scope_kind='conversation' AND EXISTS(
-		SELECT 1 FROM space_conversation_members cm JOIN space_conversations c ON c.id=cm.conversation_id
-		WHERE cm.conversation_id=space_runs.scope_conversation_id AND cm.actor_kind='person' AND cm.user_id=$3 AND c.space_id=space_runs.space_id
-	)))`
-
-func (db *Database) SpaceRuns(ctx context.Context, userID, spaceID, agentID string, limit int) ([]SpaceRun, error) {
-	if limit < 1 || limit > 200 {
-		limit = 100
-	}
-	items := []SpaceRun{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionStudioView); err != nil {
-			return err
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs WHERE space_id=$1 AND ($2='' OR agent_id=$2) AND `+sharedSpaceRunListVisibility+` ORDER BY created_at DESC LIMIT $4`, spaceID, agentID, userID, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item SpaceRun
-			if err := scanSpaceRun(rows, &item); err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return rows.Err()
-	})
-	return items, err
-}
-
-func (db *Database) SpaceWorkflowRuns(ctx context.Context, userID, spaceID, workflowID string, limit int) ([]SpaceRun, error) {
-	if limit < 1 || limit > 200 {
-		limit = 100
-	}
-	items := []SpaceRun{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionStudioView); err != nil {
-			return err
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs WHERE space_id=$1 AND resource_kind='workflow' AND resource_id=$2 AND `+sharedSpaceRunListVisibility+` ORDER BY created_at DESC LIMIT $4`, spaceID, workflowID, userID, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item SpaceRun
-			if err := scanSpaceRun(rows, &item); err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return rows.Err()
-	})
-	return items, err
 }
 
 func (db *Database) SpaceRun(ctx context.Context, userID, runID string) (*SpaceRun, error) {

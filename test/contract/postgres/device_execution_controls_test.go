@@ -3,15 +3,16 @@ package db
 import (
 	"crypto/ed25519"
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
-	"strings"
 	"testing"
 	"time"
+	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestDeviceExecutionControls(t *testing.T) {
 	database := openTestDatabase(t)
@@ -118,82 +119,5 @@ func TestDeviceExecutionControls(t *testing.T) {
 	}
 	if _, err := database.RenewWorkflowDeviceNodeJob(user, device.ID, job.ID, token); !errors.Is(err, ErrInvalidLease) {
 		t.Fatalf("renewed canceled authority: %v", err)
-	}
-}
-
-func TestUnstartedBrowserRecoveryPreservesJobAndRejectsStartedReplay(t *testing.T) {
-	database, _, user, _ := sdkInvocationFixture(t)
-	ctx := t.Context()
-	space := createTestSpace(t, database, ctx, user, "Recovery")
-	invocation, _, err := database.CreateAIInvocationRecord(ctx, AIInvocationRecord{ID: "invocation_rearm", UserID: user, SpaceID: space.ID, SurfaceID: "settings", Mode: "quick", Trigger: "message", State: "queued", IdempotencyKey: "rearm", RequestPayload: json.RawMessage(`{}`), ExpiresAt: time.Now().Add(time.Hour)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	key, _, _ := ed25519.GenerateKey(rand.Reader)
-	device, err := database.RegisterTrustedDevice(user, "Recovery Mac", base64.RawURLEncoding.EncodeToString(key), "macos", "", json.RawMessage(`[]`), json.RawMessage(`{"browser_tools":true}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.AttachAIInvocationContext(ctx, user, invocation.ID, space.ID, device.ID, "browser_tab", "scope-rearm", "Original view", json.RawMessage(`["browser.inspect"]`), json.RawMessage(`{}`)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.ActivateAIInvocationRuntime(ctx, invocation.ID, "vercel-workflow", "runtime-rearm"); err != nil {
-		t.Fatal(err)
-	}
-	job, err := database.QueueAIInvocationDeviceNodeJob(ctx, user, invocation.ID, "inspect", 1, "scope-rearm", "browser.inspect", "browser.inspect", json.RawMessage(`{}`), json.RawMessage(`{}`), json.RawMessage(`{"type":"object"}`), json.RawMessage(`{"type":"object"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	canceled, err := database.StopWorkflowDeviceNodeJob(user, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rearmed, err := database.RearmUnstartedBrowserJob(ctx, user, canceled)
-	if err != nil || rearmed.ID != job.ID || rearmed.State != "queued" || rearmed.CancelRequestedAt != nil {
-		t.Fatalf("unsafe rearm: %#v %v", rearmed, err)
-	}
-	claimed, token, err := database.ClaimWorkflowDeviceNodeJob(user, device.ID, time.Minute, 2)
-	if err != nil || claimed.ID != job.ID {
-		t.Fatalf("wrong recovery job: %#v %v", claimed, err)
-	}
-	if _, err := database.BeginWorkflowDeviceNodeJob(user, device.ID, job.ID, token); err != nil {
-		t.Fatal(err)
-	}
-	unknown, err := database.StopWorkflowDeviceNodeJob(user, job.ID)
-	if err != nil || unknown.State != "uncertain" {
-		t.Fatalf("lost uncertain state: %#v %v", unknown, err)
-	}
-	if _, err := database.RearmUnstartedBrowserJob(ctx, user, unknown); !errors.Is(err, ErrSpaceConflict) {
-		t.Fatalf("started action was retried: %v", err)
-	}
-
-	waiting, err := database.AIInvocationDeviceWait(ctx, user, invocation.ID, "runtime-rearm", "expire-call", "expire-hook", "scope-rearm", "browser.inspect", strings.Repeat("a", 64), true)
-	if err != nil || !waiting {
-		t.Fatalf("admit wait: %v %v", waiting, err)
-	}
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET device_wait_expires_at=NOW()-INTERVAL '1 second' WHERE id=$1`, invocation.ID)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := database.QueueAgentDeviceResume(ctx, AgentDeviceWait{RunID: invocation.ID, HookToken: "expire-hook", Available: true}); err != nil {
-		t.Fatal(err)
-	}
-	var available bool
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT COALESCE((payload->>'available')::boolean,false) FROM agent_runtime_deliveries WHERE run_id=$1 AND operation='device.resume' AND payload->>'hook_token'='expire-hook'`, invocation.ID).Scan(&available)
-	}); err != nil || available {
-		t.Fatalf("expired wait resumed affirmatively: %v %v", available, err)
-	}
-	waiting, err = database.AIInvocationDeviceWait(ctx, user, invocation.ID, "runtime-rearm", "cancel-call", "cancel-hook", "scope-rearm", "browser.inspect", strings.Repeat("b", 64), true)
-	if err != nil || !waiting {
-		t.Fatalf("second wait: %v %v", waiting, err)
-	}
-	if _, err := database.CommitAIInvocationEvent(ctx, user, invocation.ID, "cancel-recovery", "invocation.canceled", json.RawMessage(`{"type":"invocation.canceled","state":"canceled"}`), "canceled"); err != nil {
-		t.Fatal(err)
-	}
-	if err := database.QueueAgentDeviceResume(ctx, AgentDeviceWait{RunID: invocation.ID, HookToken: "cancel-hook", Available: true}); !errors.Is(err, ErrSpaceConflict) {
-		t.Fatalf("canceled wait resumed: %v", err)
 	}
 }

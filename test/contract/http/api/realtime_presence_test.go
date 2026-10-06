@@ -1,13 +1,16 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
+	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+)
+
+
+import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
-
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 
@@ -113,7 +116,7 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser(outsider) error = %v", err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Presence")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Presence")
 	if err != nil {
 		t.Fatalf("CreateSpace(owner) error = %v", err)
 	}
@@ -147,7 +150,7 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser(member) error = %v", err)
 	}
-	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
 	if err != nil {
 		t.Fatalf("InviteToSpace() error = %v", err)
 	}

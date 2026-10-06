@@ -12,15 +12,22 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/kannachi323/misty/server/internal/aimodels"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 const AgentRealtimeModel = "openai/gpt-realtime-2.1"
 const AgentRealtimeTranscriptionModel = "gpt-4o-mini-transcribe"
 
-// The gateway's normalized Realtime V4 protocol is an identity codec. Provider
-// credentials, client secrets and raw provider events never reach the desktop.
-type VoiceRealtime struct{ conn *websocket.Conn }
+// The server owns provider credentials and translates provider events into the
+// same companion protocol for direct OpenAI and Gateway voices.
+type VoiceRealtime struct {
+	conn   *websocket.Conn
+	openAI bool
+ model string
+}
+
+
 type VoiceRealtimeEvent struct {
 	Type       string          `json:"type"`
 	ItemID     string          `json:"itemId"`
@@ -29,21 +36,28 @@ type VoiceRealtimeEvent struct {
 	Delta      string          `json:"delta"`
 	Status     string          `json:"status"`
 	Code       string          `json:"code"`
+	CallID     string          `json:"callId"`
+	Name       string          `json:"name"`
+	Arguments  string          `json:"arguments"`
 	Raw        json.RawMessage `json:"raw"`
 }
 
 func (a *SmartLibraryAnalyzer) OpenVoiceRealtime(ctx context.Context) (*VoiceRealtime, error) {
-	config, err := envconfig.AgentModel()
-	if err != nil || config.Provider != "gateway" || strings.TrimSpace(a.APIKey) == "" {
-		return nil, errors.New("realtime voice requires the configured AI Gateway")
+	// OpenAI voices use the instance OpenAI key directly, like every other
+	// OpenAI model; other voices go through the Gateway.
+	if model := a.selectedRealtimeModel(); aimodels.DirectOpenAI(model) {
+		return openOpenAIRealtimeModel(ctx, openAIRealtimeBase, envconfig.OpenAIKey(), model)
 	}
-	base, err := url.Parse(strings.TrimRight(a.embeddingBaseURL(), "/"))
+	if strings.TrimSpace(a.APIKey) == "" {
+		return nil, errors.New("realtime voice provider key is required")
+	}
+	base, err := url.Parse(strings.TrimRight(a.realtimeBaseURL(), "/"))
 	if err != nil || base.Host == "" {
 		return nil, errors.New("invalid realtime gateway URL")
 	}
 	mint := *base
 	mint.Path, mint.RawQuery = "/v1/realtime/client-secrets", ""
-	body, _ := json.Marshal(map[string]any{"model": AgentRealtimeModel, "expiresIn": 60})
+	body, _ := json.Marshal(map[string]any{"model": a.selectedRealtimeModel(), "expiresIn": 60})
 	setup, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(setup, http.MethodPost, mint.String(), bytes.NewReader(body))
@@ -74,7 +88,7 @@ func (a *SmartLibraryAnalyzer) OpenVoiceRealtime(ctx context.Context) (*VoiceRea
 	}
 	base.Path += "/realtime-model"
 	query := base.Query()
-	query.Set("ai-model-id", AgentRealtimeModel)
+	query.Set("ai-model-id", a.selectedRealtimeModel())
 	base.RawQuery = query.Encode()
 	if base.Scheme == "https" {
 		base.Scheme = "wss"
@@ -93,11 +107,20 @@ func (a *SmartLibraryAnalyzer) OpenVoiceRealtime(ctx context.Context) (*VoiceRea
 		return nil, errors.New("realtime gateway websocket failed")
 	}
 	conn.SetReadLimit(2 << 20)
-	return &VoiceRealtime{conn: conn}, nil
+	return &VoiceRealtime{conn: conn, model: a.selectedRealtimeModel()}, nil
 }
+
+func (v *VoiceRealtime) ModelID() string { if v.model != "" { return v.model }; return AgentRealtimeModel }
 
 func (v *VoiceRealtime) Close() { _ = v.conn.Close() }
 func (v *VoiceRealtime) Read() (VoiceRealtimeEvent, error) {
+	if v.openAI {
+		var raw json.RawMessage
+		if err := v.conn.ReadJSON(&raw); err != nil {
+			return VoiceRealtimeEvent{}, err
+		}
+		return decodeOpenAIRealtimeEvent(raw)
+	}
 	var event VoiceRealtimeEvent
 	err := v.conn.ReadJSON(&event)
 	return event, err
@@ -105,6 +128,13 @@ func (v *VoiceRealtime) Read() (VoiceRealtimeEvent, error) {
 
 // One session actor owns writes; reads run independently.
 func (v *VoiceRealtime) Send(event any) error {
+	if v.openAI {
+		translated, err := openAIRealtimeCommand(event)
+		if err != nil {
+			return err
+		}
+		event = translated
+	}
 	_ = v.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	return v.conn.WriteJSON(event)
 }
@@ -131,4 +161,19 @@ func VoiceRealtimeManualSession(raw json.RawMessage) bool {
 		} `json:"session"`
 	}
 	return json.Unmarshal(raw, &event) == nil && string(event.Session.Audio.Input.TurnDetection) == "null"
+}
+
+// Wait for session-updated before starting generation under this bound.
+func (v *VoiceRealtime) SetOutputLimit(tokens int) error {
+	return v.Send(map[string]any{"type": "session-update", "config": map[string]any{"providerOptions": map[string]any{"max_output_tokens": tokens}}})
+}
+
+// A session acknowledgement must confirm the requested cap before generation.
+func VoiceRealtimeOutputLimit(raw json.RawMessage, tokens int) bool {
+	var event struct {
+		Session struct {
+			MaxOutputTokens int `json:"max_output_tokens"`
+		} `json:"session"`
+	}
+	return tokens > 0 && json.Unmarshal(raw, &event) == nil && event.Session.MaxOutputTokens == tokens
 }

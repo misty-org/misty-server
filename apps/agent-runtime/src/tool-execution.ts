@@ -1,7 +1,6 @@
 /** Transport compatibility envelope. Absence of a result is not confirmation. */
 export interface ToolExecutionResponse {
   result?: unknown;
-  approval?: { id: string; state: string };
   device_wait?: boolean;
   intervention_wait?: { id: string; action: string; reason: string };
   tool_error?: { code: string; message: string };
@@ -9,19 +8,31 @@ export interface ToolExecutionResponse {
 
 export interface ToolExecutionContinuation {
   request(attempt: number): Promise<ToolExecutionResponse>;
-  approval(
-    value: NonNullable<ToolExecutionResponse["approval"]>,
-    attempt: number,
-  ): Promise<boolean>;
   device(attempt: number): Promise<boolean>;
   intervention?(attempt: number): Promise<boolean>;
+}
+
+/** Misty reported this call as failed without effect: it rejected the call
+ * before execution or recorded a definite failure. Unknown write outcomes
+ * arrive as an `uncertain` result instead, never as this error. */
+export class ToolRejectedError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(`${code}: ${message}`);
+    this.name = "ToolRejectedError";
+  }
+}
+
+// Transport anomalies where the call may have run despite the failure.
+const unverifiedFailureCodes = new Set(["invalid_tool_outcome", "missing_tool_result"]);
+
+export function rejectedWithoutEffect(error: unknown): boolean {
+  return error instanceof ToolRejectedError && !unverifiedFailureCodes.has(error.code);
 }
 
 /** Engine-independent outcomes for the authoritative transport response. */
 export type HarnessToolOutcome =
   | { status: "success"; result: unknown }
   | { status: "failure"; code: string; message: string }
-  | { status: "approval_required"; approval: NonNullable<ToolExecutionResponse["approval"]> }
   | { status: "device_required" }
   | { status: "intervention_wait"; wait: NonNullable<ToolExecutionResponse["intervention_wait"]> }
   | { status: "user_intervention_required"; result: unknown }
@@ -30,16 +41,12 @@ export type HarnessToolOutcome =
 export function normalizeToolOutcome(response: ToolExecutionResponse): HarnessToolOutcome {
   if (!response || typeof response !== "object" || Array.isArray(response)) throw new Error("invalid_tool_outcome");
   const hasResult = Object.hasOwn(response, "result") && response.result !== undefined;
-  const alternatives = Number(hasResult) + Number(Boolean(response.approval)) + Number(response.device_wait === true) + Number(Boolean(response.tool_error)) + Number(Boolean(response.intervention_wait));
+  const alternatives = Number(hasResult) + Number(response.device_wait === true) + Number(Boolean(response.tool_error)) + Number(Boolean(response.intervention_wait));
   if (alternatives === 0) throw new Error("missing_tool_result: execution was not confirmed");
   if (alternatives !== 1) throw new Error("invalid_tool_outcome: contradictory execution outcomes");
   if (response.tool_error) {
     if (typeof response.tool_error.code !== "string" || !response.tool_error.code || typeof response.tool_error.message !== "string") throw new Error("invalid_tool_outcome: malformed failure");
     return {status:"failure",...response.tool_error};
-  }
-  if (response.approval) {
-    if (typeof response.approval.id !== "string" || !response.approval.id || response.approval.state !== "pending") throw new Error("invalid_tool_outcome: malformed approval wait");
-    return {status:"approval_required",approval:response.approval};
   }
   if (response.intervention_wait) {
     const wait = response.intervention_wait;
@@ -57,10 +64,7 @@ export async function continueToolExecution(continuation: ToolExecutionContinuat
   for (let attempt = 0; attempt < 64; attempt++) {
     const outcome = normalizeToolOutcome(await continuation.request(attempt));
     switch (outcome.status) {
-      case "failure": throw new Error(`${outcome.code}: ${outcome.message}`);
-      case "approval_required":
-        if (!(await continuation.approval(outcome.approval, attempt))) return {denied:true,reason:"creator_denied",approval_id:outcome.approval.id};
-        break;
+      case "failure": throw new ToolRejectedError(outcome.code, outcome.message);
       case "intervention_wait":
         if (!continuation.intervention) throw new Error("intervention_adapter_unavailable");
         if (!(await continuation.intervention(attempt))) return {denied:true,reason:"user_action_declined_or_expired",waitId:outcome.wait.id};

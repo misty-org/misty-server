@@ -1,41 +1,35 @@
 package api
 
 import (
-	"encoding/base64"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
-func TestDeviceRegistrationReturnsIdentityConflict(t *testing.T) {
-	database := openPresenceTestDatabase(t)
-	user, err := database.CreateUser("Device owner", uniqueTestEmail("device-identity"), "password123")
-	if err != nil {
-		t.Fatal(err)
+// Registration proves possession of the device key, is idempotent for the same
+// key, and needs a signed-in session.
+func TestDeviceRegistrationProvesItsKey(t *testing.T) {
+	f := newDeviceFixture(t)
+	_, key, _ := ed25519.GenerateKey(rand.Reader)
+	if response := f.registerKey(key, "Device", false); response.Code != http.StatusBadRequest {
+		t.Fatalf("a proof from another key was accepted: %d", response.Code)
 	}
-	token := newConversationTestBearerToken(t, database, user.ID)
-	router := chi.NewRouter()
-	router.Post("/devices", NewAgentsService(database).RegisterDevice())
-	payload := map[string]any{"name": "Device", "publicKey": base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("a", 32))), "keyAlgorithm": "ed25519", "platform": "macos", "p2pEndpointId": strings.Repeat("a", 64), "protocolVersions": []string{"misty-device/1"}, "capabilities": map[string]any{}}
-	first := performConversationRequest(t, router, http.MethodPost, "/devices", token, payload)
-	if first.Code != http.StatusCreated {
-		t.Fatalf("registration: %d %s", first.Code, first.Body.String())
+	first := f.registerKey(key, "Device", true)
+	again := f.registerKey(key, "Device again", true)
+	var a, b struct {
+		ID string `json:"id"`
 	}
-	payload["publicKey"] = base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("b", 32)))
-	conflict := performConversationRequest(t, router, http.MethodPost, "/devices", token, payload)
-	var body map[string]string
-	if err := json.Unmarshal(conflict.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
+	_ = json.Unmarshal(first.Body.Bytes(), &a)
+	_ = json.Unmarshal(again.Body.Bytes(), &b)
+	if first.Code != http.StatusCreated || again.Code != http.StatusCreated || a.ID == "" || a.ID != b.ID {
+		t.Fatalf("re-registering the same key: %d %d %q %q", first.Code, again.Code, a.ID, b.ID)
 	}
-	if conflict.Code != http.StatusConflict || body["code"] != "device_identity_conflict" {
-		t.Fatalf("conflict: %d %s", conflict.Code, conflict.Body.String())
+	token := f.token
+	f.token = ""
+	if response := f.registerKey(key, "Device", true); response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated registration: %d", response.Code)
 	}
-	unauthenticated := performConversationRequest(t, router, http.MethodPost, "/devices", "", payload)
-	if unauthenticated.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated: %d", unauthenticated.Code)
-	}
+	f.token = token
 }

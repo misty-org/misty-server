@@ -3,8 +3,6 @@ package api
 import (
 	"encoding/json"
 	"testing"
-
-	"github.com/kannachi323/misty/server/internal/capabilities"
 )
 
 func TestBrowserUploadSourceRequiresExactlyOneAuthorizedSource(t *testing.T) {
@@ -30,7 +28,7 @@ func TestBrowserUploadSourceRequiresExactlyOneAuthorizedSource(t *testing.T) {
 }
 
 func TestBrowserUploadSchemaExcludesMixedSourcesBeforeDispatch(t *testing.T) {
-	schema, err := capabilities.CompileSchema(browserAgentToolSchema("upload"))
+	schema, err := compileTestSchema(browserAgentToolSchema("upload"))
 	if err != nil {
 		t.Fatal(err)
 	}

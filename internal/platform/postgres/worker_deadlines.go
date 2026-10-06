@@ -55,8 +55,6 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 		deadline = `SELECT clock_timestamp() FROM space_drawings d WHERE d.lifecycle_state='deleting'
    AND EXISTS(SELECT 1 FROM space_drawing_control_outbox o WHERE o.drawing_id=d.id
    AND o.command='purge' AND o.delivered_at IS NOT NULL) LIMIT 1`
-	case "social":
-		deadline = socialWorkerDeadline
 	case "billing":
 		deadline = billingWorkerDeadline
 	case "agent-runtime":

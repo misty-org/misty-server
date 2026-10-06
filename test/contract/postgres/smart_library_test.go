@@ -3,9 +3,11 @@ package db
 import (
 	"sync"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestSmartLibraryLifecycleUsesRLSServiceContext(t *testing.T) {
 	database := openTestDatabase(t)
@@ -41,7 +43,7 @@ func TestSmartLibraryLifecycleUsesRLSServiceContext(t *testing.T) {
 	if err != nil || len(results) != 1 || results[0].AssetID != candidate.AssetID {
 		t.Fatalf("SmartLibraryResults() results=%v err=%v", results, err)
 	}
-	hits, err := database.SearchSmartLibrary(user.ID, folder.ID, "concrete", 10)
+	hits, err := database.TestingSearchSmartLibrary(user.ID, folder.ID, "concrete", 10)
 	if err != nil || len(hits) != 1 {
 		t.Fatalf("SearchSmartLibrary() hits=%v err=%v", hits, err)
 	}
@@ -98,7 +100,7 @@ func TestSmartLibraryLifecycleUsesRLSServiceContext(t *testing.T) {
 	if _, records, replayErr := database.SmartLibraryReindexRecords(user.ID, job.ID, []SmartLibraryPreviewRef{{AssetID: candidate.AssetID, Fingerprint: candidate.Fingerprint}}); replayErr != nil || len(records) != 0 {
 		t.Fatalf("completed replay records=%v err=%v", records, replayErr)
 	}
-	refreshedHits, refreshErr := database.SearchSmartLibrary(user.ID, folder.ID, "pikachu", 10)
+	refreshedHits, refreshErr := database.TestingSearchSmartLibrary(user.ID, folder.ID, "pikachu", 10)
 	if refreshErr != nil || len(refreshedHits) != 1 || len(refreshedHits[0].Metadata.Characters) != 1 || refreshedHits[0].Metadata.Characters[0] != "Pikachu" {
 		t.Fatalf("refreshed metadata hits=%+v err=%v", refreshedHits, refreshErr)
 	}
@@ -106,7 +108,7 @@ func TestSmartLibraryLifecycleUsesRLSServiceContext(t *testing.T) {
 	if tagErr != nil || len(tagged.Tags) != 2 || tagged.Tags[0] != "favorite" {
 		t.Fatalf("updated tags=%+v err=%v", tagged, tagErr)
 	}
-	tagHits, tagSearchErr := database.SearchSmartLibrary(user.ID, folder.ID, "favorite", 10)
+	tagHits, tagSearchErr := database.TestingSearchSmartLibrary(user.ID, folder.ID, "favorite", 10)
 	if tagSearchErr != nil || len(tagHits) != 1 || tagHits[0].AssetID != candidate.AssetID {
 		t.Fatalf("tag search hits=%+v err=%v", tagHits, tagSearchErr)
 	}
@@ -114,7 +116,7 @@ func TestSmartLibraryLifecycleUsesRLSServiceContext(t *testing.T) {
 	if removeTagErr != nil || len(withoutFavorite.Tags) != 1 || withoutFavorite.Tags[0] != "Pokemon" {
 		t.Fatalf("removed tag result=%+v err=%v", withoutFavorite, removeTagErr)
 	}
-	removedTagHits, removedTagSearchErr := database.SearchSmartLibrary(user.ID, folder.ID, "favorite", 10)
+	removedTagHits, removedTagSearchErr := database.TestingSearchSmartLibrary(user.ID, folder.ID, "favorite", 10)
 	if removedTagSearchErr != nil || len(removedTagHits) != 0 {
 		t.Fatalf("removed tag remained searchable hits=%+v err=%v", removedTagHits, removedTagSearchErr)
 	}

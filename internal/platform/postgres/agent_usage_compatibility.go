@@ -2,8 +2,7 @@ package db
 
 // Persisted operation identifiers remain stable for existing Agent histories.
 const (
-	CreditMeterAgentAI      = "assistant_ai"
-	CreditMeterAutomationAI = "automation_ai"
+	CreditMeterAgentAI = "assistant_ai"
 )
 
 // Retained only to recognize errors in older persisted invocations.

@@ -13,10 +13,7 @@
     "postinstall": "node scripts/patch-workflow-schema.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "4.0.41",
-    "@ai-sdk/google": "4.0.50",
     "@ai-sdk/openai": "4.0.46",
-    "@ai-sdk/openai-compatible": "3.0.36",
     "@ai-sdk/provider": "4.0.7",
     "@ai-sdk/workflow": "1.0.67",
     "@misty/mcp-client-runtime": "file:./vendor/mcp-client-runtime",

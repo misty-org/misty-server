@@ -2,11 +2,10 @@ import {
   Client as MCPClient,
   StreamableHTTPClientTransport,
 } from "@misty/mcp-client-runtime";
-import { FatalError, RetryableError } from "workflow";
 import { controlPlaneRequest } from "./control-plane.js";
 import { ControlPlaneError } from "./control-plane-error.js";
-import { classifyMCPTransportError } from "./mcp-errors.js";
 import { resolveMCPEndpoint } from "./mcp-endpoint.js";
+import { rethrowStepError } from "./runtime-errors.js";
 import type {
   MCPRunAccess,
   MCPRemoteTool,
@@ -15,39 +14,15 @@ import type {
 import { normalizeToolInputSchema } from "./tool-schema.js";
 import { collectToolPages } from "./tool-discovery.js";
 
-function rethrowMCPError(error: unknown): never {
-  if (error instanceof ControlPlaneError) {
-    if (error.transient) {
-      throw new RetryableError(
-        "Misty's control plane is temporarily unavailable.",
-        {
-          retryAfter: error.status === 429 ? 5_000 : 1_000,
-        },
-      );
-    }
-    throw new FatalError("Misty's authorization or run state changed.");
-  }
-  const failure = classifyMCPTransportError(error);
-  if (failure.transient) {
-    throw new RetryableError(failure.message, {
-      retryAfter: failure.retryAfterMs,
-    });
-  }
-  if (failure.recognized) throw new FatalError(failure.message);
-  throw error;
-}
-
 export async function requestMCPToolExecution(
   context: RuntimeToolContext,
   access: MCPRunAccess,
   callId: string,
   name: string,
   input: unknown,
-  approvalHookToken: string,
   deviceHookToken: string,
 ): Promise<{
   result?: unknown;
-  approval?: { id: string; state: string };
   device_wait?: boolean;
   intervention_wait?: { id: string; action: string; reason: string };
   tool_error?: { code: string; message: string };
@@ -75,19 +50,13 @@ export async function requestMCPToolExecution(
       arguments: input as Record<string, unknown>,
       _meta: {
         "misty/call_id": callId,
-        "misty/approval_hook_token": approvalHookToken,
         "misty/device_hook_token": deviceHookToken,
       },
     });
     const meta = response._meta as Record<string, unknown> | undefined;
-    const waitCount = Number(Boolean(meta?.["misty/approval"])) + Number(meta?.["misty/device_wait"] === true) + Number(Boolean(meta?.["misty/intervention_wait"]));
+    const waitCount = Number(meta?.["misty/device_wait"] === true) + Number(Boolean(meta?.["misty/intervention_wait"]));
     if (waitCount > 1 || (waitCount > 0 && (response.isError || response.structuredContent !== undefined))) {
       return {tool_error:{code:"invalid_tool_outcome",message:"The tool returned contradictory wait or completion outcomes."}};
-    }
-    if (meta?.["misty/approval"]) {
-      return {
-        approval: meta["misty/approval"] as { id: string; state: string },
-      };
     }
     if (meta?.["misty/intervention_wait"]) return { intervention_wait: meta["misty/intervention_wait"] as {id:string;action:string;reason:string} };
     if (meta?.["misty/device_wait"] === true) return { device_wait: true };
@@ -147,7 +116,7 @@ export async function discoverRemoteMCPTools(
     ) {
       return { supported: false, tools: [] };
     }
-    rethrowMCPError(error);
+    rethrowStepError(error);
   }
   if (
     !access.access_token ||
@@ -174,12 +143,12 @@ export async function discoverRemoteMCPTools(
       supported: true,
       tools: tools.map((item) => ({
         name: item.name,
-        capability: item.name.startsWith("sdk.") && typeof item._meta?.["misty/capability"] === "string" ? item._meta["misty/capability"] as string : undefined,
         description: (item.description || item.title || item.name).slice(
           0,
           2_000,
         ),
         inputSchema: normalizeToolInputSchema(item.inputSchema as Record<string, unknown>),
+        readOnly: item.annotations?.readOnlyHint === true,
       })),
     };
   } finally {

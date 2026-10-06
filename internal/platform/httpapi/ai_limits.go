@@ -13,6 +13,7 @@ const TestingMaxAIJSONBodyBytes = 2 << 20
 
 type AIService struct {
 	database              *db.Database
+	providerSettings      *SpacesService
 	runtime               *agent.Service
 	invocations           *aiInvocationHub
 	streams               *invocationStreams
@@ -56,6 +57,7 @@ func (s *AIService) SetAttachmentStore(store LibraryObjectStore) {
 func (s *AIService) AttachSpacesRuntime(spaces *SpacesService) {
 	if spaces != nil {
 		spaces.aiInvocations = s.invocations
+		s.providerSettings = spaces
 	}
 }
 
@@ -65,15 +67,20 @@ func NewAIService(database *db.Database, runtime *agent.Service) *AIService {
 
 func (s *AIService) Status() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, ok := s.requireUser(w, r)
+		user, ok := s.requireUser(w, r)
 		if !ok {
 			return
 		}
+		model := agent.FrontierDefaultModelID()
+		selected, _, accountModel, modelErr := s.accountAgentModel(r.Context(), user)
+		if accountModel {
+			model = selected
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"configured": s.agentRuntime.Enabled(),
+			"configured": s.agentRuntime.Enabled() && modelErr == nil,
 			"provider":   "misty",
-			"model":      agent.InitialSelectedModelID,
-			"model_name": agent.InitialSelectedModelName,
+			"model":      model,
+			"model_name": model,
 			"capabilities": map[string]bool{
 				"space_conversation_agents": true,
 				"asynchronous_runs":         true,

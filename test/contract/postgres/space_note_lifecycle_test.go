@@ -3,9 +3,11 @@ package db
 import (
 	"context"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func noteLifecycleState(t *testing.T, fixture noteFixture, noteID string) string {
 	t.Helper()
@@ -56,36 +58,6 @@ func TestCreatorRemovedKeepsTheNote(t *testing.T) {
 
 	if state := noteLifecycleState(t, fixture, fixture.note.ID); state != NoteLifecycleActive {
 		t.Fatalf("lifecycle = %q, want the note to stay active", state)
-	}
-}
-
-// Deleting an account must not delete the Space's notes. Destructive control
-// moves to the Space owner instead.
-func TestAccountDeletionReassignsNotesToTheSpaceOwner(t *testing.T) {
-	fixture := newNoteFixture(t, "note-life-account")
-
-	if err := fixture.database.PurgeNotesForDeletedAccount(fixture.ctx, fixture.creator); err != nil {
-		t.Fatal(err)
-	}
-
-	if state := noteLifecycleState(t, fixture, fixture.note.ID); state != NoteLifecycleActive {
-		t.Fatalf("lifecycle = %q, want the note preserved", state)
-	}
-	var creatorUserID string
-	if err := fixture.database.Conn.QueryRow(
-		`SELECT creator_user_id FROM space_notes WHERE id=$1`, fixture.note.ID).Scan(&creatorUserID); err != nil {
-		t.Fatal(err)
-	}
-	if creatorUserID != fixture.owner {
-		t.Fatalf("creator_user_id = %q, want the Space owner %q", creatorUserID, fixture.owner)
-	}
-	// The note is still readable and editable by the remaining members.
-	access, err := fixture.database.NoteAccessFor(fixture.ctx, fixture.member, fixture.note.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !access.CanEdit {
-		t.Fatalf("member lost access after the creator's account was deleted: %#v", access)
 	}
 }
 

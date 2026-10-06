@@ -22,10 +22,6 @@ func writePersonalAgentError(w http.ResponseWriter, err error) {
 func (s *AIService) PersonalAgents() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
-		if db.AppAuthorityFromContext(r.Context()) != nil {
-			http.Error(w, "Host-only agent management", http.StatusForbidden)
-			return
-		}
 		if !ok {
 			return
 		}
@@ -60,10 +56,6 @@ func (s *AIService) PersonalAgents() http.HandlerFunc {
 func (s *AIService) PersonalAgent() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
-		if db.AppAuthorityFromContext(r.Context()) != nil {
-			http.Error(w, "Host-only agent management", http.StatusForbidden)
-			return
-		}
 		if !ok {
 			return
 		}
@@ -94,10 +86,6 @@ func (s *AIService) AgentExecutionLease() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
 		if !ok {
-			return
-		}
-		if db.AppAuthorityFromContext(r.Context()) != nil {
-			http.Error(w, "Host-only execution activation", http.StatusForbidden)
 			return
 		}
 		if r.Method == http.MethodDelete {

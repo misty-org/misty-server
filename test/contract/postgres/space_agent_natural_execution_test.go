@@ -6,10 +6,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
+
+
+import ()
 
 func TestSpaceAgentPersistsFinishedFiveParagraphJournalEssay(t *testing.T) {
 	database := openTestDatabase(t)
@@ -18,7 +20,7 @@ func TestSpaceAgentPersistsFinishedFiveParagraphJournalEssay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Essay Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Essay Space")
 	if err != nil {
 		t.Fatal(err)
 	}

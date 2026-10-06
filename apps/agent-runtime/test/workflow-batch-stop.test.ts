@@ -12,8 +12,9 @@ vi.mock("workflow", () => ({
 }));
 vi.mock("../src/control-plane.js", () => ({
   controlPlaneRequest: async (_identity: unknown, operation: string, body: Record<string, unknown>) => {
-    if (operation === "context") return { model_id: "fixture/model", system: "", prompt: "Message then record it", allowed_tools: ["social.send_message", "notes.create"], required_tools: [] };
+    if (operation === "context") return { model_id: "fixture/model", system: "", prompt: "Message then record it", allowed_tools: ["social.send_message", "notes.create"] };
     if (operation === "complete") fixture.completions.push(body);
+    if (operation === "steering") return { messages: [], closed: true };
     if (operation === "budget") return { version: 1, remaining_ms: 1800000, active: true, deadline: new Date(Date.now()+1800000).toISOString() };
     if (operation === "mcp-token") return {};
     return { accepted: true };
@@ -30,7 +31,7 @@ vi.mock("@ai-sdk/workflow", () => ({
   WorkflowAgent: class {
     constructor(private options: any) {}
     async stream() {
-      const entries = Object.entries(this.options.tools).filter(([name]) => name !== "misty_discover_capabilities") as Array<[string, any]>;
+      const entries = Object.entries(this.options.tools) as Array<[string, any]>;
       const first = { toolCallId: "send-call", toolName: entries[0]![0], input: {} };
       const second = { toolCallId: "note-call", toolName: entries[1]![0], input: {} };
       await this.options.onToolExecutionStart({ toolCall: first });

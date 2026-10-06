@@ -5,9 +5,11 @@ import (
 	"errors"
 	"reflect"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestTemplateCreationIsTransactionalAndIdempotent(t *testing.T) {
 	database := openTestDatabase(t)
@@ -21,7 +23,7 @@ func TestTemplateCreationIsTransactionalAndIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := database.CreateSpaceWithTemplate(
+	if _, err := database.TestingCreateSpaceWithTemplate(
 		ctx,
 		owner.ID,
 		"Invalid template",
@@ -30,7 +32,7 @@ func TestTemplateCreationIsTransactionalAndIdempotent(t *testing.T) {
 	); !errors.Is(err, ErrSpaceInvalid) {
 		t.Fatalf("invalid template error = %v, want ErrSpaceInvalid", err)
 	}
-	if _, err := database.CreateSpaceWithTemplate(
+	if _, err := database.TestingCreateSpaceWithTemplate(
 		ctx,
 		owner.ID,
 		"Invalid provider",
@@ -48,7 +50,7 @@ func TestTemplateCreationIsTransactionalAndIdempotent(t *testing.T) {
 		owner.ID,
 		"Research group",
 		"research",
-		[]string{"notion", "google", "notion"},
+		[]string{"google", " GOOGLE ", "google"},
 		"create-research-once",
 	)
 	if err != nil {
@@ -59,7 +61,7 @@ func TestTemplateCreationIsTransactionalAndIdempotent(t *testing.T) {
 		owner.ID,
 		"Research group",
 		"research",
-		[]string{"google", "notion"},
+		[]string{"google"},
 		"create-research-once",
 	)
 	if err != nil {
@@ -68,7 +70,7 @@ func TestTemplateCreationIsTransactionalAndIdempotent(t *testing.T) {
 	if first.Space.ID != repeated.Space.ID {
 		t.Fatalf("idempotent creation returned %q then %q", first.Space.ID, repeated.Space.ID)
 	}
-	if !reflect.DeepEqual(first.Setup.SelectedProviders, []string{"google", "notion"}) {
+	if !reflect.DeepEqual(first.Setup.SelectedProviders, []string{"google"}) {
 		t.Fatalf("selected providers = %#v", first.Setup.SelectedProviders)
 	}
 	if _, err := database.CreateSpaceWithTemplateIdempotent(

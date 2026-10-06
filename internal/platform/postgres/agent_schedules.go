@@ -9,17 +9,6 @@ import (
 
 var standardAgentCronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 
-type DueAgentWorkflowSchedule struct {
-	InstanceID        string
-	UserID            string
-	SpaceID           string
-	AgentID           string
-	WorkflowVersionID string
-	CapabilityID      string
-	EventID           string
-	ScheduledFor      time.Time
-}
-
 func TestingNextAgentSchedule(expression, timezone string, baseline, now time.Time) (time.Time, bool) {
 	location, err := time.LoadLocation(strings.TrimSpace(timezone))
 	if err != nil || strings.TrimSpace(timezone) == "" || timezone == "local" {

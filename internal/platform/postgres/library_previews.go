@@ -76,12 +76,8 @@ func (db *Database) LibraryItemPreviewSource(ctx context.Context, userID, spaceI
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
-			quota, err := storageQuotaStateTx(ctx, tx, contributingUserID, spaceID, true)
-			if err != nil {
-				return err
-			}
 			const previewReserve = int64(25_000_000)
-			if err := storageQuotaError(quota, previewReserve); err != nil {
+			if _, err := reserveStorageQuotaTx(ctx, tx, contributingUserID, spaceID, previewReserve); err != nil {
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO space_rendition_reservations(id,space_id,user_id,source_kind,source_id,reserved_bytes,state,expires_at)

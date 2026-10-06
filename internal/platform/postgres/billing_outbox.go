@@ -3,8 +3,10 @@ package db
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/billingadapter"
@@ -14,7 +16,7 @@ import (
 type BillingOutbox struct{ Database *Database }
 
 func (s BillingOutbox) Reservations(ctx context.Context, accountID, operationID string) ([]billingadapter.Reservation, error) {
-	rows, err := s.Database.Conn.QueryContext(ctx, `SELECT reservation_id,admission FROM billing_adapter_reservations WHERE account_id=$1 AND admission->>'operation_id'=$2 ORDER BY key`, accountID, operationID)
+	rows, err := s.executor(ctx).QueryContext(ctx, `SELECT reservation_id,admission FROM billing_adapter_reservations WHERE account_id=$1 AND admission->>'operation_id'=$2 ORDER BY key`, accountID, operationID)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +41,7 @@ func (s BillingOutbox) Enqueue(ctx context.Context, e billingadapter.Entry) erro
 	if err != nil {
 		return err
 	}
-	result, err := s.Database.Conn.ExecContext(ctx, `INSERT INTO billing_adapter_outbox(id,action,payload) VALUES($1,$2,$3::jsonb)
+	result, err := s.executor(ctx).ExecContext(ctx, `INSERT INTO billing_adapter_outbox(id,action,payload) VALUES($1,$2,$3::jsonb)
  ON CONFLICT(id) DO UPDATE SET id=EXCLUDED.id WHERE billing_adapter_outbox.action=EXCLUDED.action AND billing_adapter_outbox.payload=EXCLUDED.payload`, e.ID, e.Action, string(raw))
 	if err != nil {
 		return err
@@ -54,7 +56,7 @@ func (s BillingOutbox) Enqueue(ctx context.Context, e billingadapter.Entry) erro
 	return nil
 }
 func (s BillingOutbox) Pending(ctx context.Context, limit int) ([]billingadapter.Entry, error) {
-	rows, err := s.Database.Conn.QueryContext(ctx, `SELECT id,action,payload FROM billing_adapter_outbox WHERE delivered_at IS NULL AND available_at<=now() ORDER BY created_at,id LIMIT $1`, min(max(limit, 1), 100))
+	rows, err := s.executor(ctx).QueryContext(ctx, `SELECT id,action,payload FROM billing_adapter_outbox WHERE delivered_at IS NULL AND available_at<=now() ORDER BY created_at,id LIMIT $1`, min(max(limit, 1), 100))
 	if err != nil {
 		return nil, err
 	}
@@ -74,11 +76,11 @@ func (s BillingOutbox) Pending(ctx context.Context, limit int) ([]billingadapter
 	return result, rows.Err()
 }
 func (s BillingOutbox) Delivered(ctx context.Context, id string) error {
-	_, err := s.Database.Conn.ExecContext(ctx, `UPDATE billing_adapter_outbox SET delivered_at=now() WHERE id=$1 AND delivered_at IS NULL`, id)
+	_, err := s.executor(ctx).ExecContext(ctx, `UPDATE billing_adapter_outbox SET delivered_at=now() WHERE id=$1 AND delivered_at IS NULL`, id)
 	return err
 }
 func (s BillingOutbox) Retry(ctx context.Context, id string, at time.Time) error {
-	_, err := s.Database.Conn.ExecContext(ctx, `UPDATE billing_adapter_outbox SET available_at=$2,attempts=attempts+1 WHERE id=$1 AND delivered_at IS NULL`, id, at)
+	_, err := s.executor(ctx).ExecContext(ctx, `UPDATE billing_adapter_outbox SET available_at=$2,attempts=attempts+1 WHERE id=$1 AND delivered_at IS NULL`, id, at)
 	return err
 }
 
@@ -111,4 +113,68 @@ func (s BillingOutbox) SaveReservation(ctx context.Context, r billingadapter.Res
 		return err
 	}
 	return tx.Commit()
+}
+
+// Serialize per-turn and final settlement decisions across API replicas. The
+// durable outbox remains the accounting journal; the lock never authorizes work.
+type billingRuntimeConnectionKey struct{}
+type billingRuntimeConnection struct {
+	database   *Database
+	connection *sql.Conn
+}
+type billingRuntimeExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func (s BillingOutbox) executor(ctx context.Context) billingRuntimeExecutor {
+	if bound, ok := ctx.Value(billingRuntimeConnectionKey{}).(billingRuntimeConnection); ok && bound.database == s.Database {
+		return bound.connection
+	}
+	return s.Database.Conn
+}
+
+func (s BillingOutbox) WithRuntimeBillingLock(ctx context.Context, account, operation string, action func(context.Context) error) error {
+	conn, err := s.Database.Conn.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	key := fmt.Sprintf("%d:%s:%s", len(account), account, operation)
+	if _, err = conn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtextextended($1,842315794))`, key); err != nil {
+		return err
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := conn.ExecContext(cleanup, `SELECT pg_advisory_unlock(hashtextextended($1,842315794))`, key); err != nil {
+			// Never return a connection carrying an advisory lock to the pool.
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		}
+	}()
+	// All journal reads/writes use the owned connection. Each remains autocommit,
+	// so Enqueue is durable before remote delivery, without borrowing a second
+	// connection and deadlocking a pool full of concurrent callbacks.
+	return action(context.WithValue(ctx, billingRuntimeConnectionKey{}, billingRuntimeConnection{s.Database, conn}))
+}
+
+func (s BillingOutbox) RuntimeTransitions(ctx context.Context, account, operation string) ([]billingadapter.Entry, error) {
+	rows, err := s.executor(ctx).QueryContext(ctx, `SELECT id,action,payload FROM billing_adapter_outbox WHERE payload->>'account_id'=$1 AND payload->>'operation_id'=$2 AND action IN ('settle','settle_group') ORDER BY created_at,id`, account, operation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []billingadapter.Entry
+	for rows.Next() {
+		var e billingadapter.Entry
+		var raw []byte
+		if err = rows.Scan(&e.ID, &e.Action, &raw); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(raw, &e.Request); err != nil {
+			return nil, err
+		}
+		result = append(result, e)
+	}
+	return result, rows.Err()
 }

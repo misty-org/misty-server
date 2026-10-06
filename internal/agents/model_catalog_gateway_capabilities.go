@@ -3,7 +3,6 @@ package agent
 import (
 	"encoding/json"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -39,37 +38,6 @@ func normalizedCapabilities(capabilities []string) []string {
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
 	return out
-}
-
-func firstPricingValue(pricing map[string]json.RawMessage, keys ...string) json.RawMessage {
-	for _, key := range keys {
-		if len(pricing[key]) > 0 {
-			return pricing[key]
-		}
-	}
-	return nil
-}
-
-func TestingGatewayTokenRate(raw json.RawMessage) (int64, bool) {
-	if len(raw) == 0 {
-		return 0, false
-	}
-	var value string
-	if raw[0] == '"' {
-		if json.Unmarshal(raw, &value) != nil {
-			return 0, false
-		}
-	} else {
-		value = string(raw)
-	}
-	perTokenUSD, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-	if err != nil || perTokenUSD < 0 {
-		return 0, false
-	}
-	// USD/token × 1,000,000 tokens × 1,000 converts to the meter's
-	// thousandths-of-USD-per-million-token unit.
-	rate := int64(perTokenUSD*1_000_000_000 + 0.5)
-	return rate, true
 }
 
 func TestingFilterChatModels(models []GatewayModel) []GatewayModel {

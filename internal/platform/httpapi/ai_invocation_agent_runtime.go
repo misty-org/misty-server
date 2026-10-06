@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agenttools"
-
 	"github.com/go-chi/chi/v5"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/aimodels"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
 
 func isAIInvocationRuntimeID(value string) bool {
@@ -57,10 +57,6 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 		writeAgentError(w, err)
 		return
 	}
-	if prepared.sdkRequest != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"run_id": record.ID, "allowed_tools": prepared.allowedTools, "prompt": prepared.prompt, "sdk_execution": map[string]any{"name": prepared.allowedTools[0], "call_id": prepared.sdkRequest.EffectID, "input": prepared.sdkRequest.Request.Input}})
-		return
-	}
 	if s.aiInvocations != nil {
 		for _, item := range prepared.resolved {
 			citation := item.Citation
@@ -76,15 +72,25 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 		writeAgentError(w, err)
 		return
 	}
+	routes, err := s.database.FreezeAIModelRoutes(r.Context(), record.UserID, record.ID, defaultAIRoutes(prepared.modelID, prepared.reasoning), nil)
+	if err != nil {
+		writeAIProviderError(w, err)
+		return
+	}
+	agentRoute, visionRoute := modelRoute(routes, "agent"), modelRoute(routes, "vision")
+	if !agentRoute.Enabled {
+		writeAIProviderError(w, aimodels.ErrDisabled)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"run_id": record.ID, "agent_id": prepared.body.AgentID, "space_id": prepared.spaceID,
 		"space_name": prepared.spaceName, "space_kind": prepared.spaceKind,
 		"timezone": prepared.timezone, "current_time": prepared.currentTime.Format(time.RFC3339),
-		"members": prepared.members, "model_id": prepared.modelID, "reasoning_effort": prepared.reasoning,
+		"members": prepared.members, "model_id": agentRoute.Model, "reasoning_effort": agentRoute.Reasoning, "vision_model_id": visionRoute.Model,
 		"run_mode": "full", "system": prepared.system, "prompt": prepared.prompt,
 		"attached_sources": []any{}, "file_warnings": "", "allowed_tools": prepared.allowedTools,
-		"required_tools":        prepared.requiredTools,
 		"model_turn_limit":      record.ModelTurnLimit,
+		"context_window_tokens": serveragent.ModelContextWindow(r.Context(), agentRoute.Model),
 		"capture":               prepared.body.Capture,
 		"display_captures":      prepared.body.DisplayCaptures,
 		"companion_mode":        prepared.body.CompanionMode,
@@ -95,12 +101,11 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 
 func (s *SpacesService) agentRuntimeToolAIInvocation(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ApprovalHookToken string          `json:"approval_hook_token"`
-		DeviceHookToken   string          `json:"device_hook_token"`
-		RuntimeRunID      string          `json:"runtime_run_id"`
-		CallID            string          `json:"call_id"`
-		Name              string          `json:"name"`
-		Arguments         json.RawMessage `json:"arguments"`
+		DeviceHookToken string          `json:"device_hook_token"`
+		RuntimeRunID    string          `json:"runtime_run_id"`
+		CallID          string          `json:"call_id"`
+		Name            string          `json:"name"`
+		Arguments       json.RawMessage `json:"arguments"`
 	}
 	if !readAgentRuntimeRequest(s.agentRuntime, w, r, &body) {
 		return
@@ -119,108 +124,28 @@ func (s *SpacesService) agentRuntimeToolAIInvocation(w http.ResponseWriter, r *h
 		writeAgentError(w, err)
 		return
 	}
-	if record.SurfaceID == "routine" {
-		writeAgentError(w, db.ErrSpaceInvalid)
-		return
-	}
-	if body.Name != toolboxWeatherCurrent && !agentToolNameAllowed(prepared.allowedTools, body.Name) {
+	// The legacy endpoint executes exactly like the MCP route.
+	access := &mcpRuntimeAccess{record: record, prepared: prepared, claims: mcpAccessClaims{RuntimeRunID: body.RuntimeRunID}}
+	result, err := s.executeAIInvocationMCPTool(r.Context(), access, agentRuntimeToolCall{RuntimeRunID: body.RuntimeRunID, CallID: body.CallID, Name: body.Name, Arguments: body.Arguments, DeviceHookToken: body.DeviceHookToken})
+	var intervention *aiInterventionRequired
+	switch {
+	case errors.As(err, &intervention):
+		writeJSON(w, http.StatusAccepted, map[string]any{"intervention_wait": intervention.wait})
+	case errors.Is(err, errAIInvocationDeviceWait):
+		writeJSON(w, http.StatusAccepted, map[string]any{"device_wait": true})
+	case errors.Is(err, db.ErrSpaceForbidden), errors.Is(err, workflowv2.ErrCapabilityDenied):
 		writeJSON(w, http.StatusForbidden, map[string]string{"code": "tool_denied"})
-		return
-	}
-	permitted := false
-	for _, descriptor := range aiInvocationMCPDescriptors(prepared.allowedTools) {
-		if descriptor.Name == body.Name {
-			permitted, err = authorizeAppRuntimeTool(r.Context(), s.database, agenttools.Invocation{RunID: record.ID, UserID: record.UserID, SpaceID: prepared.spaceID}, descriptor)
-			break
-		}
-	}
-	if err != nil || !permitted {
-		writeJSON(w, http.StatusForbidden, map[string]string{"code": "tool_denied"})
-		return
-	}
-	if strings.HasPrefix(body.Name, "browser.") {
-		access := &mcpRuntimeAccess{record: record, prepared: prepared, claims: mcpAccessClaims{RuntimeRunID: body.RuntimeRunID}}
-		result, err := s.executeAIInvocationMCPTool(r.Context(), access, agentRuntimeToolCall{RuntimeRunID: body.RuntimeRunID, CallID: body.CallID, Name: body.Name, Arguments: body.Arguments, ApprovalHookToken: body.ApprovalHookToken, DeviceHookToken: body.DeviceHookToken})
-		var intervention *aiInterventionRequired
-		if errors.As(err, &intervention) {
-			writeJSON(w, http.StatusAccepted, map[string]any{"intervention_wait": intervention.wait})
-			return
-		}
-		if errors.Is(err, errAIInvocationDeviceWait) {
-			writeJSON(w, http.StatusAccepted, map[string]any{"device_wait": true})
-			return
-		}
-		var wait *browserApprovalRequired
-		if errors.As(err, &wait) {
-			writeJSON(w, http.StatusAccepted, map[string]any{"approval": wait.approval})
-			return
-		}
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"result": json.RawMessage(result)})
-		return
-	}
-	var result json.RawMessage
-	r = r.WithContext(withAgentExecutionRuntime(r.Context(), body.RuntimeRunID))
-	if prepared.spaceID == "" || body.Name == toolboxWeatherCurrent {
-		bounded, cancel, budgetErr := boundedAgentExecutionContext(r.Context(), s.database, record.UserID, record.ID)
-		if budgetErr != nil {
-			writeAgentError(w, budgetErr)
-			return
-		}
-		defer cancel()
-		r = r.WithContext(bounded)
-	}
-	if body.Name == toolboxWeatherCurrent {
-		var input struct {
-			Location string `json:"location"`
-		}
-		if json.Unmarshal(body.Arguments, &input) != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_weather_request"})
-			return
-		}
-		result, err = currentWeather(r.Context(), input.Location)
-	} else if body.Name == toolboxContextGet && prepared.spaceID == "" {
-		result = TestingMustAPIRawJSON(map[string]any{
-			"timezone": prepared.timezone, "current_time": prepared.currentTime.Format(time.RFC3339),
-			"current_date": prepared.currentTime.Format("2006-01-02"), "scope": "account",
-		})
-	} else if prepared.spaceID == "" && (body.Name == toolboxMemoryRemember || body.Name == toolboxMemoryForget) {
-		result, _, err = executeAgentMemoryTool(r.Context(), s.database, spaceConversationToolActor{
-			userID: record.UserID, agentID: prepared.body.AgentID, runID: record.ID, sessionID: record.ConversationID,
-		}, prepared.body.Prompt, serveragent.ToolRequest{ID: body.CallID, Name: body.Name, Arguments: body.Arguments})
-	} else {
-		actor := spaceConversationToolActor{
-			userID: record.UserID, spaceID: prepared.spaceID, agentID: prepared.body.AgentID,
-			runID: record.ID, sessionID: record.ConversationID,
-		}
-		toolbox, invocation, manifest, resolveErr := resolveAIInvocationSpaceToolbox(
-			r.Context(), s.database, actor, prepared.body.Prompt,
-			prepared.previousUserPrompt, prepared.previousAgentReply,
-		)
-		if resolveErr != nil || !agentManifestHasTool(manifest, body.Name) {
-			writeJSON(w, http.StatusForbidden, map[string]string{"code": "tool_denied"})
-			return
-		}
-		result, err = executeSpaceAgentToolbox(r.Context(), toolbox, invocation, s.database, serveragent.ToolRequest{
-			ID: body.CallID, Name: body.Name, Arguments: body.Arguments,
-		})
-	}
-	if err != nil {
-		if errors.Is(err, db.ErrSpaceForbidden) {
-			writeJSON(w, http.StatusForbidden, map[string]string{"code": "tool_denied"})
-			return
-		}
+	case err != nil:
 		writeAgentError(w, err)
-		return
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"result": json.RawMessage(result)})
 	}
-	_ = s.database.TouchAIInvocationRuntime(r.Context(), record.ID, body.RuntimeRunID)
-	writeJSON(w, http.StatusOK, map[string]any{"result": json.RawMessage(result)})
 }
 
 func runtimeToolStatus(name string) string {
+	if name == "misty_finish_task" || name == "misty.finish.task" {
+		return "Finishing task…"
+	}
 	label := strings.ReplaceAll(strings.TrimSpace(name), "_", " ")
 	label = strings.ReplaceAll(label, ".", " ")
 	if label == "" {

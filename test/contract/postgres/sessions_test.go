@@ -117,10 +117,12 @@ func openRuntimeRoleDatabase(t *testing.T, adminDatabase *Database) *Database {
 	if runtimeUser == "" || runtimePassword == "" {
 		t.Skip("DB_USER and DB_PASSWORD are required to exercise the runtime RLS role")
 	}
+	// Mirror scripts/docker/postgres-grant-app-role.sh, which production runs
+	// after every migration: the runtime role gets DML on every table.
 	if _, err := adminDatabase.Conn.Exec(
-		"GRANT SELECT ON sessions TO " + pq.QuoteIdentifier(runtimeUser),
+		"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO " + pq.QuoteIdentifier(runtimeUser),
 	); err != nil {
-		t.Fatalf("grant runtime role session access error = %v", err)
+		t.Fatalf("grant runtime role table access error = %v", err)
 	}
 
 	conn, err := sql.Open("postgres", testkit.DatabaseDSN(t, runtimeUser, runtimePassword))

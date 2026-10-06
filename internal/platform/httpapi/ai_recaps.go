@@ -66,25 +66,6 @@ func (s *AIService) Recap() http.HandlerFunc {
 	}
 }
 
-func (s *AIService) RecapSeen() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		surfaceID := strings.TrimSpace(chi.URLParam(r, "surfaceID"))
-		if !aiRecapSurfaceIDs[surfaceID] {
-			http.Error(w, "invalid recap surface", http.StatusBadRequest)
-			return
-		}
-		if err := s.database.MarkAIRecapSeen(r.Context(), userID, surfaceID); err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
 // ProcessDueAIRecaps executes personal, explicitly enabled briefings. It uses
 // recent permission-filtered records and also records a normal AI invocation,
 // so schedules do not become an unmetered or invisible model path.

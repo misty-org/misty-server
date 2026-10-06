@@ -7,11 +7,13 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
+
+
+import ()
 
 func TestPrivateSpaceConversationCreatesTaskThroughServerOwnedTool(t *testing.T) {
 	database := openTestDatabase(t)
@@ -20,7 +22,7 @@ func TestPrivateSpaceConversationCreatesTaskThroughServerOwnedTool(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Agentic Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Agentic Space")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,11 +64,11 @@ func TestPrivateSpaceConversationTaskWriteRechecksMemberPermission(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Permission Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Permission Space")
 	if err != nil {
 		t.Fatal(err)
 	}
-	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +101,7 @@ func TestPrivateSpaceAgentSendsExactMessageThroughServerOwnedToolbox(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Message Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Message Space")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +112,7 @@ func TestPrivateSpaceAgentSendsExactMessageThroughServerOwnedToolbox(t *testing.
 	result, err := api.TestingExecuteSpaceConversationTool(
 		ctx, database, owner.ID, space.ID, personal.ID,
 		"Tell everyone Stone is off for today", "messages.send",
-		json.RawMessage(`{"message":"Stone is off for today"}`),
+		json.RawMessage(`{"message":"Stone is off for today","audience":"space"}`),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -143,11 +145,11 @@ func TestMistyRoutesOnePersonPrivatelyAndPreservesStructuredMention(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Family")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Family")
 	if err != nil {
 		t.Fatal(err)
 	}
-	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +194,7 @@ func TestMistyRoutesOnePersonPrivatelyAndPreservesStructuredMention(t *testing.T
 	groupResult, err := api.TestingExecuteSpaceConversationTool(
 		ctx, database, owner.ID, space.ID, "",
 		"Post in the group chat that Melissa Chen will finish the laundry tonight", "messages.send",
-		json.RawMessage(`{"message":"@Melissa Chen will finish the laundry tonight.","audience":"auto","recipientUserId":"`+member.ID+`"}`),
+		json.RawMessage(`{"message":"@Melissa Chen will finish the laundry tonight.","audience":"space","recipientUserId":"`+member.ID+`"}`),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +215,7 @@ func TestMistyRoutesOnePersonPrivatelyAndPreservesStructuredMention(t *testing.T
 		"Send the laundry update", "messages.send",
 		json.RawMessage(`{"message":"Laundry update","audience":"auto"}`),
 	)
-	if err == nil || !strings.Contains(err.Error(), "Should I send this privately or in the Space chat?") {
+	if err == nil || !strings.Contains(err.Error(), "choose audience") {
 		t.Fatalf("ambiguous audience error = %v", err)
 	}
 	shared, err = database.SpaceMessages(ctx, member.ID, space.ID, 0, 10)
@@ -233,11 +235,11 @@ func TestSpaceAgentResolvesMemberAndCreatesAssignedTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Family")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Family")
 	if err != nil {
 		t.Fatal(err)
 	}
-	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +271,7 @@ func TestSpaceAgentInterpretsTaskTimestampInTheSuppliedTimezone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Date Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Date Space")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,68 +299,6 @@ func TestSpaceAgentInterpretsTaskTimestampInTheSuppliedTimezone(t *testing.T) {
 	}
 }
 
-func TestSpaceAgentMayParaphraseExplicitSharedMessage(t *testing.T) {
-	if !api.TestingSpaceAgentSendIsGrounded("Tell everyone Melissa will wash the dishes tonight at 7 PM", "Melissa is handling the dishes by 7 PM.") {
-		t.Fatal("explicit send request should allow a concise agent-authored paraphrase")
-	}
-	if api.TestingSpaceAgentSendIsGrounded("Add a task for Melissa", "Melissa is handling the dishes by 7 PM.") {
-		t.Fatal("task request must not implicitly authorize a shared message")
-	}
-}
-
-func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Note Tool Owner", "note-tool-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Notes Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-	createdRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Create a launch note", "notes.create", json.RawMessage(`{"title":"Launch plan","markdown":"# Launch\nInitial checklist"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var created SpaceNote
-	if err := json.Unmarshal(createdRaw, &created); err != nil || created.ID == "" {
-		t.Fatalf("created note = %s, %v", createdRaw, err)
-	}
-	updatedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Update the launch note", "notes.update", json.RawMessage(`{"id":"`+created.ID+`","title":"Launch plan","markdown":"# Launch\nReady for beta"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var updated SpaceNote
-	if json.Unmarshal(updatedRaw, &updated) != nil || updated.ID != created.ID {
-		t.Fatalf("updated note = %s", updatedRaw)
-	}
-	commands, err := database.PendingNoteControlCommands(ctx, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	foundReplace := false
-	for _, command := range commands {
-		if command.NoteID == created.ID && command.Command == "replace_markdown" {
-			foundReplace = true
-		}
-	}
-	if !foundReplace {
-		t.Fatalf("missing durable replace_markdown command: %#v", commands)
-	}
-	applied, err := database.ApplySpaceNoteProjection(ctx, SpaceNoteProjection{
-		NoteID: created.ID, Revision: created.CollaborationRevision + 1, Title: "Launch plan",
-		Markdown: "# Launch\nReady for beta", PlainText: "Launch\nReady for beta",
-	})
-	if err != nil || !applied {
-		t.Fatalf("room projection was not applied: applied=%v err=%v", applied, err)
-	}
-	searchRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Find launch notes", "notes.search", json.RawMessage(`{"query":"Ready for beta"}`))
-	if err != nil || !strings.Contains(string(searchRaw), created.ID) {
-		t.Fatalf("searched notes = %s, %v", searchRaw, err)
-	}
-}
-
 func TestFamilySpaceResearchCanBeSavedAndPostedWithCitations(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
@@ -366,7 +306,7 @@ func TestFamilySpaceResearchCanBeSavedAndPostedWithCitations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Family Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Family Space")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +322,7 @@ func TestFamilySpaceResearchCanBeSavedAndPostedWithCitations(t *testing.T) {
 	summary := "Pasadena summer camps include art and science programs. Source: " + sourceURL
 	if _, err := api.TestingExecuteSpaceConversationTool(
 		ctx, database, owner.ID, space.ID, "", prompt, "messages.send",
-		json.RawMessage(`{"message":"`+summary+`"}`),
+		json.RawMessage(`{"message":"`+summary+`","audience":"space"}`),
 	); err != nil {
 		t.Fatalf("post cited summary: %v", err)
 	}
@@ -399,7 +339,7 @@ func TestSpaceAgentCreatesQueriesAndUpdatesNativeCalendarEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Calendar Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Calendar Space")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +374,7 @@ func TestSpaceAgentInterpretsCalendarTimestampInTheSuppliedTimezone(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Calendar Date Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Calendar Date Space")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,7 +395,7 @@ func TestSpaceAgentCreatesReadsAndUpdatesRoadmap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Roadmap Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Roadmap Space")
 	if err != nil {
 		t.Fatal(err)
 	}

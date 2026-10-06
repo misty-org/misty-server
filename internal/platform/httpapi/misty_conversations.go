@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	agent "github.com/kannachi323/misty/server/internal/agents"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
@@ -220,7 +219,20 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 				}
 				response["title"] = title
 			}
-			if body.ThinkingMode != nil || body.ModelID != nil || body.ReasoningEffort != nil {
+			if body.ModelID != nil {
+				// A conversation's own model; empty returns it to the account's choice.
+				model := strings.TrimSpace(*body.ModelID)
+				if model != "" && !agent.SenseModelAvailable(r.Context(), "thinking", model) {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_model", "message": "Choose an available model."})
+					return
+				}
+				if err := s.database.SetMistyConversationModelOverride(r.Context(), userID, conversationID, model); err != nil {
+					TestingWriteAIError(w, err)
+					return
+				}
+				response["model_override"] = model
+			}
+			if body.ThinkingMode != nil || body.ReasoningEffort != nil {
 				bound, err := s.database.AgentConversationIdentity(r.Context(), userID, conversationID)
 				if err != nil {
 					TestingWriteAIError(w, err)
@@ -254,139 +266,18 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 	}
 }
 
-func (s *AIService) MistyConversationTurn() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		conversationID := strings.TrimSpace(chi.URLParam(r, "conversationID"))
-		var body struct {
-			Mode     string                  `json:"mode"`
-			Prompt   string                  `json:"prompt"`
-			Context  []mistyContextReference `json:"context"`
-			Timezone string                  `json:"timezone,omitempty"`
-		}
-		if err := decodeAIJSON(w, r, &body); err != nil {
-			http.Error(w, "invalid request", http.StatusBadRequest)
-			return
-		}
-		body.Prompt = strings.TrimSpace(body.Prompt)
-		if conversationID == "" || body.Prompt == "" {
-			http.Error(w, "conversation and prompt are required", http.StatusBadRequest)
-			return
-		}
-		_, accessErr := s.database.AgentConversationIdentity(r.Context(), userID, conversationID)
-		if accessErr != nil {
-			writeSpaceError(w, accessErr)
-			return
-		}
-		if body.Mode == "action" {
-			s.mistyActionProposal(w, r, userID, conversationID, body.Prompt)
-			return
-		}
-		if body.Mode != "ask" {
-			http.Error(w, "mode must be ask or action", http.StatusBadRequest)
-			return
-		}
-		available, err := s.database.AIActionAvailable(r.Context(), userID, "global", "ask", agent.InitialSelectedModelID)
-		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		if !available {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "ai_surface_unavailable", "message": "Misty Ask is temporarily unavailable."})
-			return
-		}
-		if !s.agentRuntime.Enabled() {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "agent_runtime_unavailable", "message": "Misty's agent runtime is not configured."})
-			return
-		}
-		invocationBody := aiInvocationInput{
-			Mode: "drawer", SurfaceID: "global", Trigger: "explicit", Prompt: body.Prompt,
-			Context: mistyAIContextReferences(body.Context), ConversationID: conversationID,
-			IdempotencyKey: "misty-turn:" + uuid.NewString(), Timezone: body.Timezone,
-		}
-		if err := validateAIInvocationInput(&invocationBody); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_invocation", "message": err.Error()})
-			return
-		}
-		payload, _ := json.Marshal(invocationBody)
-		now := time.Now().UTC()
-		_, err = s.database.ValidateAgentSessionAccess(r.Context(), userID, conversationID)
-		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		spaceID := ""
-		stored, _, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-			ID: "invocation_" + uuid.NewString(), UserID: userID, SpaceID: spaceID, ConversationID: conversationID,
-			SurfaceID: "global", Mode: "drawer", Trigger: "explicit", State: "queued",
-			IdempotencyKey: invocationBody.IdempotencyKey, RequestPayload: payload, ExpiresAt: now.Add(aiInvocationTTL),
-		})
-		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		if _, err := s.invocations.restoreDurable(r.Context(), stored); err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		if _, err := s.agentRuntime.Start(r.Context(), stored.ID); err != nil {
-			s.invocations.fail(stored.ID, "Misty could not start the agent runtime. Please try again.")
-			TestingWriteAIError(w, err)
-			return
-		}
-		answer, citations, err := s.awaitAIInvocationAnswer(r, userID, stored.ID)
-		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		_ = s.database.RenameAgentSession(r.Context(), userID, conversationID, cleanMistyTitle(body.Prompt))
-		message := mistyConversationMessage{
-			ID: "message_" + uuid.NewString(), Role: "assistant", Mode: "ask",
-			Content: answer, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"text": answer, "message": message, "citations": citations})
-	}
-}
-
-func (s *AIService) mistyActionProposal(w http.ResponseWriter, r *http.Request, userID, conversationID, prompt string) {
-	readOnly := mistyReadOnlyAction(prompt)
-	title := "Review this action"
-	risk := "write"
-	summary := "Misty will delegate this request after you confirm."
-	if readOnly {
-		title = "Run with Misty"
-		risk = "read"
-		summary = "Misty will delegate this read-only request now."
-	}
-	proposalID := "proposal_" + uuid.NewString()
-	_ = s.database.RenameAgentSession(r.Context(), userID, conversationID, cleanMistyTitle(prompt))
-	writeJSON(w, http.StatusOK, map[string]any{
-		"action": map[string]any{
-			"id": proposalID, "title": title, "summary": summary, "prompt": prompt,
-			"risk": risk, "state": "proposed", "requiresConfirmation": !readOnly,
-		},
-	})
-}
-
-func mistyReadOnlyAction(prompt string) bool {
-	first, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(prompt)), " ")
-	switch strings.Trim(first, ",.:;!?") {
-	case "find", "search", "show", "list", "summarize", "summarise", "explain", "review", "check":
-		return true
-	default:
-		return false
-	}
-}
-
 func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string, summary db.AgentSessionSummary) (mistyConversation, error) {
 	turns, err := s.database.AIConversationTurns(r.Context(), userID, summary.ID)
 	if err != nil {
 		return mistyConversation{}, err
 	}
-	if len(turns) > 0 {
+	// Empty canonical conversations have no legacy Go transcript. They must be
+	// visible before admission so another renderer can attach the first task.
+	if len(turns) > 0 || !summary.HasLegacySession {
+		notes, notesErr := s.database.AIConversationSummary(r.Context(), userID, summary.ID)
+		if notesErr != nil {
+			return mistyConversation{}, notesErr
+		}
 		messages := make([]mistyConversationMessage, 0, len(turns)*2)
 		for _, turn := range turns {
 			mode := "ask"
@@ -410,6 +301,23 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 					Source: mistyTurnSource(turn.Trigger),
 				})
 			}
+			events, pendingArtifact, reviewErr := s.database.AIConversationReview(r.Context(), userID, turn.InvocationID)
+			if reviewErr != nil {
+				return mistyConversation{}, reviewErr
+			}
+			{
+				for _, event := range events {
+					if event.EventType != "user.steering" {
+						continue
+					}
+					var input struct {
+						Text string `json:"text"`
+					}
+					if json.Unmarshal(event.Payload, &input) == nil {
+						messages = append(messages, mistyConversationMessage{ID: fmt.Sprintf("%s-steering-%d", turn.InvocationID, event.Sequence), Role: "user", Mode: mode, Content: input.Text, State: "completed", CreatedAt: event.CreatedAt.UTC().Format(time.RFC3339Nano)})
+					}
+				}
+			}
 			response := strings.TrimSpace(turn.Reply)
 			if response == "" {
 				response = strings.TrimSpace(turn.Failure)
@@ -426,7 +334,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 			if response == "" && turn.State == "canceled" {
 				response = "This task was canceled."
 			}
-			if response != "" {
+			if response != "" || turn.State == "queued" || turn.State == "running" || strings.HasPrefix(turn.State, "awaiting_") {
 				var action *mistyConversationAction
 				if turn.AgentRunID != "" {
 					resultHref := "/agents?conversation=" + summary.ID
@@ -443,18 +351,24 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 					}
 				}
 				messages = append(messages, mistyConversationMessage{
-					ID: turn.InvocationID + "-assistant", Role: "assistant", Mode: mode,
+					ID: turn.InvocationID + "-assistant", InvocationID: turn.InvocationID, Artifact: pendingArtifact, Role: "assistant", Mode: mode,
 					Content: response, CreatedAt: turn.ReplyAt.UTC().Format(time.RFC3339Nano),
 					State:     mistyTurnMessageState(turn.State, turn.AgentState),
 					Retryable: turn.State == "failed" || turn.AgentState == "failed", Action: action,
 				})
 			}
 		}
+		if notes != nil {
+			markCompactedAfter(messages, notes.ThroughInvocationID)
+		}
 		modelID := agent.FrontierDefaultModelID()
+		if summary.ModelOverride != "" {
+			modelID = summary.ModelOverride
+		}
 		return mistyConversation{
 			ID: summary.ID, AgentID: summary.AgentID, Title: cleanMistyTitle(summary.Title),
 			SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
-			OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
+			OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, ModelOverride: summary.ModelOverride, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
 			CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),
 			UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), Messages: messages, Remote: true,
 		}, nil
@@ -482,11 +396,25 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 		})
 	}
 	modelID := agent.FrontierDefaultModelID()
+	if summary.ModelOverride != "" {
+		modelID = summary.ModelOverride
+	}
 	return mistyConversation{
 		ID: summary.ID, AgentID: summary.AgentID, Title: cleanMistyTitle(summary.Title),
 		SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
-		OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
+		OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, ModelOverride: summary.ModelOverride, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
 		CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),
 		UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), Messages: messages, Remote: true,
 	}, nil
+}
+
+// markCompactedAfter flags the last message of the newest summarized turn, so
+// the transcript can show where the model's notes end.
+func markCompactedAfter(messages []mistyConversationMessage, invocationID string) {
+	for index := len(messages) - 1; index >= 0; index-- {
+		if strings.HasPrefix(messages[index].ID, invocationID+"-") {
+			messages[index].CompactedAfter = true
+			return
+		}
+	}
 }

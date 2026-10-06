@@ -7,8 +7,8 @@ func compileAIInvocationPrompt(body aiInvocationInput, resolved []aiResolvedCont
 	if body.Trigger == "schedule" {
 		prompt = "This is an explicitly enabled recurring personal briefing. Include [N] citations for factual claims.\n\n" + prompt
 	}
-	if body.Trigger == scheduledTaskTrigger {
-		prompt = "The user's scheduled task started this request automatically; they are not watching it run. Do the work, then report concisely what you found or did. Ask for approval instead of taking any irreversible action.\n\n" + prompt
+	if body.Trigger == scheduledRunTrigger {
+		prompt = "The user's scheduled workflow started this request automatically; they are not watching it run. Do the work, then report concisely what you found or did. Ask for approval instead of taking any irreversible action.\n\n" + prompt
 	}
 	artifactKind := strings.TrimSpace(body.RequestedArtifactKind)
 	if artifactKind == "" {

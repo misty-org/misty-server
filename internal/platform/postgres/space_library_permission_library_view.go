@@ -20,11 +20,8 @@ const (
 	PermissionLibraryEdit        = spaces.PermissionLibraryEdit
 	PermissionLibraryDownload    = spaces.PermissionLibraryDownload
 	PermissionLibraryImport      = spaces.PermissionLibraryImport
-	PermissionStorageViewMembers = spaces.PermissionStorageViewMembers
-	PermissionStorageManage      = spaces.PermissionStorageManage
 	PermissionStorageViewOwn     = spaces.PermissionStorageViewOwn
 	PermissionStudioView         = spaces.PermissionStudioView
-	PermissionStudioManage       = spaces.PermissionStudioManage
 	PermissionAskRun             = spaces.PermissionAskRun
 	PermissionTasksView          = spaces.PermissionTasksView
 	PermissionTasksManage        = spaces.PermissionTasksManage
@@ -37,13 +34,6 @@ const (
 	LibraryRecoveryWindow        = spaces.LibraryRecoveryWindow
 )
 
-// RequireSpacePermission exposes the database's canonical permission check to
-// HTTP adapters that must authorize before making an external provider call.
-func (db *Database) RequireSpacePermission(ctx context.Context, userID, spaceID, permission string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return requireSpacePermissionTx(ctx, tx, userID, spaceID, permission)
-	})
-}
 
 // Upload purposes decide which Space permission an upload needs and which
 // maximum file size applies. The database enforces the maximum independently of
@@ -78,7 +68,7 @@ var (
 	ErrLibraryNotFound         = errors.New("library resource not found")
 	ErrLibraryForbidden        = errors.New("library permission denied")
 	ErrLibraryInvalid          = errors.New("invalid library request")
-	ErrLibraryQuota            = errors.New("space storage quota exceeded")
+	ErrLibraryQuota            = errors.New("account cloud storage quota exceeded")
 	ErrLibraryConflict         = errors.New("library resource version conflict")
 	ErrLibraryReauthentication = errors.New("library reauthentication required")
 	ErrLibraryUploadMismatch   = errors.New("library upload does not match its reservation")

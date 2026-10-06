@@ -43,7 +43,7 @@ func (s *SpacesService) requestAIUserAction(ctx context.Context, user, run strin
 }
 func (s *SpacesService) AIUserInterventionControl() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := trustedSDKUser(w, r, s.database)
+		user, ok := authenticatedUser(w, r, s.database)
 		if !ok {
 			return
 		}
@@ -60,7 +60,7 @@ func (s *SpacesService) AIUserInterventionControl() http.HandlerFunc {
 		var body struct {
 			Ready *bool `json:"ready"`
 		}
-		if !decodeCapabilityRequest(w, r, &body) {
+		if decodeJSON(w, r, &body) != nil {
 			return
 		}
 		if body.Ready == nil {

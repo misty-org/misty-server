@@ -14,7 +14,7 @@ const interventionContextsSQL = `(SELECT id,invocation_id AS run_id,user_id,COAL
 
 func lockAgentInterventionParentTx(ctx context.Context, tx *sql.Tx, user, run string) (string, error) {
 	query := `SELECT runtime_run_id FROM space_runs WHERE id=$1 AND owner_user_id=$2 AND state='awaiting_intervention' FOR UPDATE`
-	if sdkRunIdentity(run) {
+	if invocationRunIdentity(run) {
 		query = `SELECT runtime_run_id FROM ai_invocations WHERE id=$1 AND user_id=$2 AND state='awaiting_intervention' AND COALESCE(agent_run_id,'')='' FOR UPDATE`
 	}
 	var runtime string
@@ -24,7 +24,7 @@ func lockAgentInterventionParentTx(ctx context.Context, tx *sql.Tx, user, run st
 	return runtime, nil
 }
 func agentInterventionStateTx(ctx context.Context, tx *sql.Tx, user, run, wait, state, phase, message string) error {
-	if sdkRunIdentity(run) {
+	if invocationRunIdentity(run) {
 		if _, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET state=$2,updated_at=NOW() WHERE id=$1`, run, state); err != nil {
 			return err
 		}
@@ -47,7 +47,7 @@ func agentInterventionAuthorityTx(ctx context.Context, tx *sql.Tx, user, run, ru
 	if _, _, err := deviceRunAuthorityTx(ctx, tx, user, run, &runtime, "browser.inspect", true); err != nil {
 		return err
 	}
-	if sdkRunIdentity(run) {
+	if invocationRunIdentity(run) {
 		return nil
 	}
 	var valid bool

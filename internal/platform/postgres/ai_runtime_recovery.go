@@ -59,11 +59,11 @@ func (db *Database) ReconcileStaleAIInvocations(ctx context.Context, staleBefore
 	return count, err
 }
 
-// RecordAIInvocationRuntimeStatus returns true only when a stopped SDK or routine run needs
-// proof-based completion. An engine exit is never proof that an action succeeded.
-func (db *Database) RecordAIInvocationRuntimeStatus(ctx context.Context, userID, runID, runtimeID, status string, observedAfter time.Time) (bool, error) {
+// RecordAIInvocationRuntimeStatus records the engine's reported status. An engine
+// exit is never proof that an action succeeded.
+func (db *Database) RecordAIInvocationRuntimeStatus(ctx context.Context, userID, runID, runtimeID, status string, observedAfter time.Time) error {
 	if observedAfter.IsZero() {
-		return false, ErrSpaceInvalid
+		return ErrSpaceInvalid
 	}
 	terminal := false
 	switch status {
@@ -71,13 +71,12 @@ func (db *Database) RecordAIInvocationRuntimeStatus(ctx context.Context, userID,
 	case "completed", "failed", "cancelled", "missing":
 		terminal = true
 	default:
-		return false, ErrSpaceInvalid
+		return ErrSpaceInvalid
 	}
-	reconcileSDK := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var state, surface string
+	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		var state string
 		var updated time.Time
-		err := tx.QueryRowContext(ctx, `SELECT state,surface_id,updated_at FROM ai_invocations WHERE id=$1 AND user_id=$2 AND runtime_run_id=$3 AND COALESCE(agent_run_id,'')='' FOR UPDATE`, runID, userID, runtimeID).Scan(&state, &surface, &updated)
+		err := tx.QueryRowContext(ctx, `SELECT state,updated_at FROM ai_invocations WHERE id=$1 AND user_id=$2 AND runtime_run_id=$3 AND COALESCE(agent_run_id,'')='' FOR UPDATE`, runID, userID, runtimeID).Scan(&state, &updated)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -98,15 +97,10 @@ func (db *Database) RecordAIInvocationRuntimeStatus(ctx context.Context, userID,
 		if !terminal {
 			return nil
 		}
-		if surface == "sdk" || surface == "routine" {
-			reconcileSDK = true
-			return nil
-		}
 		if _, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET state='failed',updated_at=NOW() WHERE id=$1`, runID); err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO ai_invocation_events(invocation_id,sequence,event_type,payload,receipt_key) SELECT $1,n,'invocation.failed',jsonb_build_object('id',n::text,'type','invocation.failed','state','failed','code','runtime_reconciliation_required','error','The pinned runtime stopped without a confirmed completion. Review completed and uncertain actions before recovery.'),$2 FROM (SELECT COALESCE(MAX(sequence),0)+1 n FROM ai_invocation_events WHERE invocation_id=$1) seq ON CONFLICT(invocation_id,receipt_key) WHERE receipt_key IS NOT NULL DO NOTHING`, runID, "runtime-reconciliation:"+runtimeID)
 		return err
 	})
-	return reconcileSDK, err
 }

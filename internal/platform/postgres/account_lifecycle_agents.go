@@ -21,10 +21,6 @@ func disableAccountAgentsTx(ctx context.Context, tx *sql.Tx, userID string) erro
 	WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, userID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE agent_run_tool_approvals SET state='denied',decided_at=NOW()
-		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND state='canceled' AND error_code='account_disabled') AND state='pending'`, userID); err != nil {
-		return err
-	}
 	_, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW()
 		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND state='canceled' AND error_code='account_disabled') AND state='attached'`, userID)
 	return err
@@ -54,7 +50,7 @@ func purgeAccountAgentsTx(ctx context.Context, tx *sql.Tx, userID string) error 
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `UPDATE space_runs SET input='{}'::jsonb,result='{"redacted":true}'::jsonb,
-		outputs='{}'::jsonb,artifacts='[]'::jsonb,action_envelope='{}'::jsonb,error_message=NULL,updated_at=NOW()
+		outputs='{}'::jsonb,artifacts='[]'::jsonb,error_message=NULL,updated_at=NOW()
 		WHERE requesting_member_id=$1 OR billing_user_id=$1 OR initiated_by_user_id=$1`, userID)
 	return err
 }

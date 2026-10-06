@@ -18,8 +18,9 @@ const collaborationControlResponseLimit = 6 << 20
 var TestingNoteControlHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 type TestingNoteControlEnvelope struct {
-	Command string          `json:"command"`
-	Payload json.RawMessage `json:"payload"`
+	ResourceID string          `json:"resource_id"`
+	Command    string          `json:"command"`
+	Payload    json.RawMessage `json:"payload"`
 }
 
 // ProcessNoteControlCommands delivers a bounded batch from the transactional
@@ -81,7 +82,7 @@ func (s *SpacesService) requestCollaborationControlCommand(
 	if !json.Valid(payload) {
 		return nil, errors.New("collaboration control payload is invalid JSON")
 	}
-	body, err := json.Marshal(TestingNoteControlEnvelope{Command: command, Payload: json.RawMessage(payload)})
+	body, err := json.Marshal(TestingNoteControlEnvelope{ResourceID: resourceID, Command: command, Payload: json.RawMessage(payload)})
 	if err != nil {
 		return nil, err
 	}

@@ -12,7 +12,7 @@ func TestManagedThinkingPolicy(t *testing.T) {
 			t.Fatalf("%+v: %s", c, got)
 		}
 	}
-	if normalizeReasoningEffort("xhigh") != "xhigh" {
-		t.Fatal("deep thinking dropped from Responses request")
+	if runtimeReasoning("xhigh") != "xhigh" || runtimeReasoning("max") != "xhigh" {
+		t.Fatal("deep thinking dropped from the model request")
 	}
 }

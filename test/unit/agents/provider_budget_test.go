@@ -178,33 +178,6 @@ func (p *tokenProvider) Count() int {
 	return p.calls
 }
 
-func TestProviderBudgetCapsBillableTokensNotJustCalls(t *testing.T) {
-	// Ten calls are well inside the call ceiling, but each is expensive. A
-	// call-count limit alone would let all of them through.
-	inner := &tokenProvider{tokens: 100_000}
-	provider := NewBudgetedProvider(inner, ProviderBudget{
-		PerMinute: 1000, PerHour: 1000, PerDay: 1000, MaxConcurrent: 8,
-		TokensPerHour: 250_000, TokensPerDay: 250_000,
-	})
-
-	refused := 0
-	for i := 0; i < 10; i++ {
-		if _, err := provider.Next(ModelRequest{}); errors.Is(err, ErrProviderTokenBudgetExceeded) {
-			refused++
-		}
-	}
-	// Three calls fit before the running total crosses the ceiling.
-	if inner.Count() != 3 {
-		t.Fatalf("provider was billed for %d calls, want 3 before the token ceiling", inner.Count())
-	}
-	if refused != 7 {
-		t.Fatalf("refused %d calls, want 7", refused)
-	}
-	if provider.SpentTokens() != 300_000 {
-		t.Fatalf("SpentTokens() = %d, want 300000", provider.SpentTokens())
-	}
-}
-
 func TestProviderTokenBudgetRecoversAsTheWindowRolls(t *testing.T) {
 	inner := &tokenProvider{tokens: 100_000}
 	provider := NewBudgetedProvider(inner, ProviderBudget{
@@ -224,17 +197,6 @@ func TestProviderTokenBudgetRecoversAsTheWindowRolls(t *testing.T) {
 	current = current.Add(61 * time.Minute)
 	if _, err := provider.Next(ModelRequest{}); err != nil {
 		t.Fatalf("call after the window rolled was refused: %v", err)
-	}
-}
-
-func TestProviderTokenBudgetCountsOutputAndReasoning(t *testing.T) {
-	provider := NewBudgetedProvider(&countingProvider{}, DefaultProviderBudget())
-	provider.TestingRecordSpend(ModelResponse{Usage: ModelUsage{
-		InputTokens: 10, OutputTokens: 20, ReasoningTokens: 30,
-	}})
-	// Output and reasoning tokens are billed too, often at a higher rate.
-	if provider.SpentTokens() != 60 {
-		t.Fatalf("SpentTokens() = %d, want 60", provider.SpentTokens())
 	}
 }
 

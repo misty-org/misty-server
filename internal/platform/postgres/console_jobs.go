@@ -24,7 +24,7 @@ type ConsoleJob struct {
 }
 
 const consoleJobStateCounts = `
-	SELECT 'Scheduled tasks', state, count(*) FROM scheduled_tasks WHERE enabled GROUP BY state
+	SELECT 'Workflow schedules', state, count(*) FROM workflow_schedules WHERE enabled GROUP BY state
 	UNION ALL
 	SELECT 'AI invocations (24h)', state, count(*) FROM ai_invocations
 		WHERE created_at > now() - interval '1 day' GROUP BY state
@@ -37,10 +37,12 @@ const consoleJobStateCounts = `
 	ORDER BY 1, 2`
 
 const consoleJobAttention = `
-	(SELECT 'Scheduled task', t.title, COALESCE(u.email, t.user_id), t.state,
+	(SELECT 'Workflow schedule', COALESCE(v.definition->>'title', t.method_id), COALESCE(u.email, t.user_id), t.state,
 	        CASE WHEN t.state = 'failed' THEN t.last_error ELSE 'next run ' || COALESCE(to_char(t.next_run_at, 'YYYY-MM-DD HH24:MI'), 'unscheduled') END,
 	        t.updated_at
-	 FROM scheduled_tasks t LEFT JOIN users u ON u.id = t.user_id
+	 FROM workflow_schedules t LEFT JOIN users u ON u.id = t.user_id
+	 LEFT JOIN agent_methods m ON m.id = t.method_id
+	 LEFT JOIN agent_method_versions v ON v.method_id = m.id AND v.version = m.current_version
 	 WHERE t.enabled AND t.state IN ('running','failed'))
 	UNION ALL
 	(SELECT 'AI invocation', i.mode || ' · ' || i.surface_id, COALESCE(u.email, i.user_id), i.state,

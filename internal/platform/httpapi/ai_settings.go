@@ -61,6 +61,64 @@ func (s *AIService) Settings() http.HandlerFunc {
 	}
 }
 
+// AppActionsSetting changes only whether agents ask before sends, shares,
+// deletes and payments in connected apps.
+func (s *AIService) AppActionsSetting() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := s.requireUser(w, r)
+		if !ok {
+			return
+		}
+		var body struct {
+			Ask *bool `json:"ask"`
+		}
+		if decodeAIJSON(w, r, &body) != nil {
+			return
+		}
+		if body.Ask == nil {
+			TestingWriteAIError(w, db.ErrSpaceInvalid)
+			return
+		}
+		if err := s.database.SetAIAppActionsAsk(r.Context(), userID, *body.Ask); err != nil {
+			TestingWriteAIError(w, err)
+			return
+		}
+		settings, _, err := s.database.AISettings(r.Context(), userID)
+		if err != nil {
+			TestingWriteAIError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"settings": settings})
+	}
+}
+
+// ScreenLocationSetting changes only where agents open a screen when a task
+// needs one: a separate window, the user's Misty window, or ask each time.
+func (s *AIService) ScreenLocationSetting() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := s.requireUser(w, r)
+		if !ok {
+			return
+		}
+		var body struct {
+			Location string `json:"location"`
+		}
+		if decodeAIJSON(w, r, &body) != nil {
+			return
+		}
+		if err := s.database.SetAIScreenLocation(r.Context(), userID, body.Location); err != nil {
+			TestingWriteAIError(w, err)
+			return
+		}
+		settings, _, err := s.database.AISettings(r.Context(), userID)
+		if err != nil {
+			TestingWriteAIError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"settings": settings})
+	}
+}
+
 func (s *AIService) SurfacePreference() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)

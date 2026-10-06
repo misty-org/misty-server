@@ -130,21 +130,6 @@ func (s *SpacesService) SpaceTask() http.HandlerFunc {
 	}
 }
 
-func (s *SpacesService) SpaceTaskActivity() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		items, err := s.database.SpaceTaskActivity(r.Context(), userID, chi.URLParam(r, "spaceID"), chi.URLParam(r, "taskID"))
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"activity": items})
-	}
-}
-
 func (s *SpacesService) SpaceCalendar() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -153,19 +138,6 @@ func (s *SpacesService) SpaceCalendar() http.HandlerFunc {
 		}
 		spaceID := chi.URLParam(r, "spaceID")
 		switch r.Method {
-		case http.MethodGet:
-			from, fromErr := time.Parse(time.RFC3339, r.URL.Query().Get("from"))
-			to, toErr := time.Parse(time.RFC3339, r.URL.Query().Get("to"))
-			if fromErr != nil || toErr != nil || !to.After(from) || to.Sub(from) > 370*24*time.Hour {
-				writeSpaceError(w, db.ErrSpaceInvalid)
-				return
-			}
-			items, err := s.database.SpaceCalendarEvents(r.Context(), userID, spaceID, from, to)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"events": items})
 		case http.MethodPost:
 			var body db.SpaceCalendarEvent
 			if decodeJSON(w, r, &body) != nil {

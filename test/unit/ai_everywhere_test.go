@@ -82,8 +82,8 @@ func TestWeatherToolUsesFixedHostsAndEscapedLocation(t *testing.T) {
 	}
 }
 
-func TestAIInvocationMCPAdvertisesWeatherWithTypedSchema(t *testing.T) {
-	descriptors := api.TestingAIInvocationMCPDescriptors("context.get", "weather.current")
+func TestAccountToolboxAdvertisesWeatherWithTypedSchema(t *testing.T) {
+	descriptors := api.TestingAccountAgentToolboxDescriptors()
 	var weatherName, weatherSchema string
 	for _, descriptor := range descriptors {
 		if descriptor.Name == "weather.current" {
@@ -92,7 +92,7 @@ func TestAIInvocationMCPAdvertisesWeatherWithTypedSchema(t *testing.T) {
 		}
 	}
 	if weatherName == "" {
-		t.Fatal("weather.current is allowed for AI invocations but missing from the MCP catalog")
+		t.Fatal("weather.current is missing from the account toolbox")
 	}
 	if !strings.Contains(weatherSchema, `"location"`) || !strings.Contains(weatherSchema, `"required"`) {
 		t.Fatalf("weather.current lost its typed MCP input contract: %s", weatherSchema)
@@ -138,11 +138,6 @@ func TestAIInvocationValidationRejectsRawLocalPaths(t *testing.T) {
 	}
 }
 
-func TestAIInvocationJournalIsIdempotentAndOwnerScoped(t *testing.T) {
-	if !api.TestingAIInvocationJournalIsolation() {
-		t.Fatal("invocation journal duplicated work or crossed an owner boundary")
-	}
-}
 
 func TestAccountRetrievalHelpersRankAndBoundUntrustedContent(t *testing.T) {
 	if api.TestingAISearchScore("launch blockers", "Launch plan with two blockers") <= api.TestingAISearchScore("launch blockers", "Unrelated launch note") {

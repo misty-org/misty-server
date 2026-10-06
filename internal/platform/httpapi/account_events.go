@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
@@ -27,10 +26,6 @@ func (s *AIService) AccountEvents() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
 		if !ok {
-			return
-		}
-		if db.AppAuthorityFromContext(r.Context()) != nil {
-			http.Error(w, "Host-only account events", http.StatusForbidden)
 			return
 		}
 		flusher, ok := w.(http.Flusher)

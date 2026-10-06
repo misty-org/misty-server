@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 func validateAIInvocationDeviceContexts(references []aiContextReference, contexts []aiInvocationDeviceContext, spaceID string) error {
@@ -17,10 +19,22 @@ func validateAIInvocationDeviceContexts(references []aiContextReference, context
 		deviceContext.DeviceID = strings.TrimSpace(deviceContext.DeviceID)
 		deviceContext.Kind = strings.TrimSpace(deviceContext.Kind)
 		deviceContext.OpaqueRef = strings.TrimSpace(deviceContext.OpaqueRef)
-		if deviceContext.DeviceID == "" || deviceContext.Kind != "browser_tab" || deviceContext.OpaqueRef == "" || seen[deviceContext.OpaqueRef] {
+		if deviceContext.DeviceID == "" || deviceContext.OpaqueRef == "" || seen[deviceContext.OpaqueRef] {
 			return errors.New("browser workspace identity is invalid")
 		}
 		seen[deviceContext.OpaqueRef] = true
+		if deviceContext.Kind == "local_folder" || deviceContext.Kind == "workspace" || deviceContext.Kind == "inbox" {
+			// Folders, the Misty browser and the device's inbox are granted on
+			// the device itself; they never come from page content, so no page
+			// reference applies.
+			if !db.DeviceContextCapabilitiesAllowed(deviceContext.Kind, deviceContext.Capabilities) {
+				return errors.New("device grant capabilities are invalid")
+			}
+			continue
+		}
+		if deviceContext.Kind != "browser_tab" {
+			return errors.New("browser workspace identity is invalid")
+		}
 		var capabilities []string
 		if json.Unmarshal(deviceContext.Capabilities, &capabilities) != nil || len(capabilities) == 0 {
 			return errors.New("browser workspace capabilities are invalid")

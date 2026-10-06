@@ -19,7 +19,7 @@ type AgentRuntimePin struct {
 // It is an internal control-plane operation, never an app registration API.
 func (db *Database) BindAgentRuntime(ctx context.Context, runID, endpoint, callback string) (*AgentRuntimePin, error) {
 	if endpoint == "" || callback == "" {
-		return nil, ErrAppRuntimeForbidden
+		return nil, ErrSpaceForbidden
 	}
 	table := "space_runs"
 	if strings.HasPrefix(runID, "invocation_") {

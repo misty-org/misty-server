@@ -2,14 +2,11 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"time"
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	"github.com/kannachi323/misty/server/internal/agenttools"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
@@ -24,45 +21,6 @@ func permittedSpaceConversationRead(ctx context.Context, database *db.Database, 
 	return database.EffectiveAgentSpacePermission(ctx, userID, spaceID, agentID, permission)
 }
 
-// TestingSpaceConversationToolNames exposes the server-owned manifest decision
-// without exposing an executor. Contract tests use it to keep private chat and
-// mentioned-Agent capability routing aligned.
-func TestingSpaceConversationToolNames(prompt string) []string {
-	requested := append([]string{toolboxMessagesSearch, toolboxLibrarySearch}, TestingCompileAgentIntent(prompt)...)
-	explicit := map[string]bool{}
-	for _, name := range requested {
-		explicit[name] = true
-	}
-	manifest, _ := spaceAgentToolbox(nil).Resolve(context.Background(), agenttools.Invocation{Source: "space_conversation", Trigger: "message", ExplicitTools: explicit}, requested, nil)
-	return manifestToolNames(manifest)
-}
-
-func TestingSpaceConversationPlanningToolNames(prompt string) []string {
-	requested := append([]string{toolboxMessagesSearch, toolboxLibrarySearch}, TestingCompileAgentIntent(prompt)...)
-	toolbox := spaceAgentToolbox(nil)
-	requested = readOnlyToolRequests(toolbox, requested)
-	explicit := map[string]bool{}
-	for _, name := range requested {
-		explicit[name] = true
-	}
-	manifest, _ := toolbox.Resolve(context.Background(), agenttools.Invocation{Source: "space_conversation", Trigger: "message", ExplicitTools: explicit}, requested, nil)
-	return manifestToolNames(manifest)
-}
-
-func TestingExecuteSpaceConversationTaskTool(ctx context.Context, database *db.Database, userID, spaceID, agentID, prompt, name string, arguments json.RawMessage) (json.RawMessage, error) {
-	return TestingExecuteSpaceConversationTool(ctx, database, userID, spaceID, agentID, prompt, name, arguments)
-}
-
-func TestingExecuteSpaceConversationTool(ctx context.Context, database *db.Database, userID, spaceID, agentID, prompt, name string, arguments json.RawMessage) (json.RawMessage, error) {
-	toolbox := spaceAgentToolbox(database)
-	invocation := agenttools.Invocation{
-		UserID: userID, SpaceID: spaceID, AgentID: agentID, Source: "space_conversation", Trigger: "message", OriginalInput: prompt,
-		SessionID: "testing:" + userID + ":" + spaceID, ExplicitTools: map[string]bool{name: true},
-	}
-	digest := sha256.Sum256([]byte(prompt + "\x00" + name + "\x00" + string(arguments)))
-	return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, serveragent.ToolRequest{ID: "test-" + hex.EncodeToString(digest[:]), Name: name, Arguments: arguments})
-}
-
 type spaceConversationToolActor struct {
 	userID         string
 	spaceID        string
@@ -70,13 +28,10 @@ type spaceConversationToolActor struct {
 	runID          string
 	sessionID      string
 	conversationID string
-	originalPrompt string
-	planOnly       bool
 }
 
 func executeSpaceConversationTool(ctx context.Context, database *db.Database, actor spaceConversationToolActor, originalPrompt string, tool serveragent.ToolRequest) (json.RawMessage, error) {
-	actor.originalPrompt = originalPrompt
-	if result, handled, err := executeAgentMemoryTool(ctx, database, actor, originalPrompt, tool); handled {
+	if result, handled, err := executeAgentMemoryTool(ctx, database, actor, tool); handled {
 		return result, err
 	}
 	if result, handled, err := executeAgentNoteTool(ctx, database, actor, tool); handled {
@@ -131,8 +86,8 @@ func executeSpaceConversationTool(ctx context.Context, database *db.Database, ac
 			return nil, db.ErrSpaceInvalid
 		}
 		input.Message, input.Audience, input.RecipientUserID = strings.TrimSpace(input.Message), strings.TrimSpace(input.Audience), strings.TrimSpace(input.RecipientUserID)
-		if !TestingSpaceAgentSendIsGrounded(originalPrompt, input.Message) {
-			return nil, workflowv2.ErrCapabilityDenied
+		if input.Message == "" {
+			return nil, serveragent.ErrInvalidRequest("message is required")
 		}
 		members, err := database.SpaceMembers(ctx, actor.userID, actor.spaceID)
 		if err != nil {
@@ -142,7 +97,7 @@ func executeSpaceConversationTool(ctx context.Context, database *db.Database, ac
 		if err != nil {
 			return nil, err
 		}
-		audience, err := resolveAgentMessageAudience(originalPrompt, input.Audience, recipient != nil)
+		audience, err := resolveAgentMessageAudience(input.Audience, recipient != nil)
 		if err != nil {
 			return nil, err
 		}
@@ -347,9 +302,6 @@ func executeSpaceConversationTool(ctx context.Context, database *db.Database, ac
 		}
 		current, err := database.SpaceTaskForMember(ctx, actor.userID, actor.spaceID, input.ID)
 		if err != nil {
-			return nil, err
-		}
-		if err := requireAgentMutationTarget(ctx, database, actor, originalPrompt, "task", current.ID, current.TaskKey); err != nil {
 			return nil, err
 		}
 		if input.Title != nil {

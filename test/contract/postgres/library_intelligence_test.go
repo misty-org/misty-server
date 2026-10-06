@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
+
+import ()
+
 func TestLibraryIntelligencePolicyProcessingSearchAndCleanup(t *testing.T) {
 	database := openTestDatabase(t)
+	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, _ := database.CreateUser("Intelligence Owner", "intelligence-owner@example.com", "password123")
 	spaceID := createTestSpace(t, database, ctx, owner.ID, "Intelligence").ID
@@ -35,7 +38,7 @@ func TestLibraryIntelligencePolicyProcessingSearchAndCleanup(t *testing.T) {
 	if err != nil || len(lexical) != 1 || lexical[0].ID != item.ID {
 		t.Fatalf("lexical intelligence search = %#v, %v", lexical, err)
 	}
-	semantic, err := database.SearchSpaceLibraryIntelligence(ctx, owner.ID, spaceID, "unmatched words", vector, 10)
+	semantic, err := database.SearchSpaceLibraryIntelligence(ctx, owner.ID, spaceID, "unmatched words", vector, 10, "test-embedding")
 	if err != nil || len(semantic) != 1 || semantic[0].ID != item.ID {
 		t.Fatalf("semantic intelligence search = %#v, %v", semantic, err)
 	}

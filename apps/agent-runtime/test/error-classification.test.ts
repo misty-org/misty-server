@@ -5,18 +5,25 @@ import {
   SdkHttpError,
 } from "@modelcontextprotocol/client";
 import { ControlPlaneError } from "../src/control-plane-error.js";
-import {
-  classifyMCPTransportError,
-  classifyRuntimeError,
-  stoppedAtModelTurnLimit,
-  classifyToolCompletion,
-  incompleteToolResultText,
-  recoverableToolError,
-  stopOnRepeatedOrTerminalToolFailure,
-  toolFailureSignature,
-} from "../workflows/space-task-agent.js";
+import { classifyMCPTransportError } from "../src/mcp-errors.js";
+import { classifyRuntimeError, recoverableToolError, visibleErrorMessage } from "../src/runtime-errors.js";
+import { classifyToolOutcome, incompleteToolResultText, stoppedAtModelTurnLimit, toolFailureSignature } from "../src/tool-outcomes.js";
 
 describe("runtime error classification", () => {
+  it("preserves a safe native browser failure without exposing its raw details", () => {
+    expect(visibleErrorMessage(new Error("browser_webview_unavailable: private diagnostic details"))).toBe(
+      "The local browser view is unavailable. Reopen the browser view and retry the task.",
+    );
+    expect(visibleErrorMessage(new Error("desktop_accessibility_required: private diagnostic"))).toBe(
+      "Allow the running Misty app in System Settings → Privacy & Security → Accessibility, then retry.",
+    );
+    expect(visibleErrorMessage(new Error("desktop_screen_recording_required: private diagnostic"))).toBe(
+      "Allow the running Misty app in System Settings → Privacy & Security → Screen Recording, then retry.",
+    );
+    expect(visibleErrorMessage(new Error("unclassified private diagnostic"))).toBe(
+      "The tool could not complete this action.",
+    );
+  });
   it("does not treat tool calls at the step limit as a finished answer", () => {
     expect(stoppedAtModelTurnLimit(20, "tool-calls")).toBe(true);
     expect(stoppedAtModelTurnLimit(20, "length")).toBe(true);
@@ -35,7 +42,7 @@ describe("runtime error classification", () => {
     expect(error.transient).toBe(false);
     expect(recoverableToolError(error)).toBeNull();
     expect(classifyRuntimeError(error).code).toBe("agent_execution_time_limit");
-    expect(await stopOnRepeatedOrTerminalToolFailure({ steps: [{ content: [{ type: "tool-error", toolName: "notes.create", input: {}, error }] }] } as never)).toBe(true);
+    expect(classifyToolOutcome({ success: false, error: error.message, readOnly: true, rejected: true }).kind).toBe("stop");
   });
   it("retries only transient control-plane responses", () => {
     expect(new ControlPlaneError(503, "unavailable").transient).toBe(true);
@@ -83,6 +90,28 @@ describe("runtime error classification", () => {
     });
   });
 
+  it.each([
+    new Error("A positive credit balance is required for all requests, including BYOK."),
+    { name: "GatewayInternalServerError", message: "A positive credit balance is required for all requests, including BYOK." },
+    new Error("Workflow step failed", { cause: { name: "GatewayInternalServerError", message: "A positive credit balance is required for all requests, including BYOK." } }),
+    "insufficient_quota",
+  ])("preserves provider credit exhaustion through workflow errors", (error) => {
+    expect(classifyRuntimeError(error)).toEqual({
+      code: "model_provider_credit_exhausted",
+      message: "Misty's AI provider has no available credit. The server administrator needs to add credit or configure another provider.",
+    });
+  });
+
+  it("recognizes serialized gateway outages without returning private provider data", () => {
+    expect(classifyRuntimeError({ name: "GatewayInternalServerError", message: "Service temporarily unavailable", response: "private provider payload" })).toEqual({
+      code: "model_gateway_unavailable",
+      message: "Misty's model providers are temporarily unavailable. Please try again shortly.",
+    });
+    const circular = { message: "unexpected failure", cause: undefined as unknown };
+    circular.cause = circular;
+    expect(classifyRuntimeError(circular).code).toBe("agent_runtime_failed");
+  });
+
   it("returns correctable validation errors to the model without workflow internals", () => {
     expect(
       recoverableToolError(
@@ -103,13 +132,13 @@ describe("runtime error classification", () => {
 			recoverableToolError(
 				new ControlPlaneError(
 					422,
-					"invalid_tool_input: target_not_grounded: search or read the exact item first",
+					"invalid_tool_input: pass space for this change; available: \"Personal\" (space_1)",
 					"invalid_tool_input",
 				),
 			),
 		).toEqual({
 			code: "invalid_tool_input",
-			message: "target_not_grounded: search or read the exact item first",
+			message: "pass space for this change; available: \"Personal\" (space_1)",
 		});
   });
 
@@ -151,15 +180,8 @@ describe("runtime error classification", () => {
   });
 });
 
-describe("tool completion classification", () => {
-  it("does not report success after a failed tool action", () => {
-    expect(classifyToolCompletion(["tasks_create", "tasks_create"])).toEqual({
-      status: "incomplete",
-      error_code: "tool_execution_failed",
-      error_message: "Could not complete tasks_create.",
-    });
-    expect(classifyToolCompletion([])).toEqual({ status: "success" });
-
+describe("tool failure reporting", () => {
+  it("names the failed action without claiming success", () => {
     const visible = incompleteToolResultText([
       { toolName: "tasks_create", error: "assignee could not be resolved" },
     ]);
@@ -168,55 +190,9 @@ describe("tool completion classification", () => {
     expect(visible).not.toContain("success");
   });
 
-  it("uses stable call signatures and stops poisoned tool loops", async () => {
+  it("uses stable call signatures", () => {
     expect(toolFailureSignature("weather.current", { b: 2, a: 1 })).toBe(
       toolFailureSignature("weather.current", { a: 1, b: 2 }),
     );
-    const repeated = {
-      steps: [
-        {
-          content: [
-            {
-              type: "tool-error",
-              toolName: "weather_current",
-              toolCallId: "call-1",
-              input: { location: "Arcadia, CA" },
-              error: new Error("tool_service_unavailable"),
-            },
-          ],
-        },
-        {
-          content: [
-            {
-              type: "tool-error",
-              toolName: "weather_current",
-              toolCallId: "call-2",
-              input: { location: "Arcadia, CA" },
-              error: new Error("tool_service_unavailable"),
-            },
-          ],
-        },
-      ],
-    };
-    expect(
-      await stopOnRepeatedOrTerminalToolFailure(repeated as never),
-    ).toBe(true);
-    expect(
-      await stopOnRepeatedOrTerminalToolFailure({
-        steps: [
-          {
-            content: [
-              {
-                type: "tool-error",
-                toolName: "weather_current",
-                toolCallId: "call-3",
-                input: { location: "Arcadia, CA" },
-                error: new Error("tool_unavailable"),
-              },
-            ],
-          },
-        ],
-      } as never),
-    ).toBe(true);
   });
 });

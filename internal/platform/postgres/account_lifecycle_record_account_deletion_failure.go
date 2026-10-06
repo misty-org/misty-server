@@ -94,10 +94,6 @@ func (db *Database) ScheduleAccountDeletion(
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
-			DELETE FROM cloud_oauth_states WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
 			UPDATE space_integrations
 			SET status='needs_attention',credential_reference='account_deleted',
 			    updated_at=NOW()
@@ -109,20 +105,6 @@ func (db *Database) ScheduleAccountDeletion(
 			SET revoked_at=NOW(),ciphertext=''::bytea,nonce=''::bytea,
 			    updated_at=NOW()
 			WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			DELETE FROM provider_oauth_states WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE provider_subscriptions
-			SET status='disabled',updated_at=NOW()
-			WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			DELETE FROM provider_event_inbox WHERE user_id=$1`, userID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `

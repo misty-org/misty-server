@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
@@ -137,17 +138,6 @@ func (c AgentRuntimeConfig) Status(ctx context.Context, runtimeID, mistyRunID st
 	return "", errors.New("runtime returned an invalid status")
 }
 
-func (c AgentRuntimeConfig) ResumeApproval(ctx context.Context, hookToken, runID, approvalID string, approved bool) error {
-	var err error
-	c, err = c.forRun(ctx, runID)
-	if err != nil {
-		return err
-	}
-	body, _ := json.Marshal(map[string]any{"approved": approved, "approval_id": approvalID})
-	path := "/v1/approvals/" + url.PathEscape(hookToken)
-	return c.request(ctx, http.MethodPost, path, runID+":approval:"+approvalID, body, nil)
-}
-
 func (c AgentRuntimeConfig) ResumeDevice(ctx context.Context, hookToken, runID string, available bool) error {
 	var err error
 	c, err = c.forRun(ctx, runID)
@@ -213,11 +203,7 @@ func (c AgentRuntimeConfig) request(ctx context.Context, method, path, idempoten
 }
 
 func signAgentRuntimeRequest(secret []byte, method, path, timestamp string, body []byte) string {
-	digest := sha256.Sum256(body)
-	message := strings.Join([]string{strings.ToUpper(method), path, timestamp, hex.EncodeToString(digest[:])}, "\n")
-	mac := hmac.New(sha256.New, secret)
-	_, _ = mac.Write([]byte(message))
-	return hex.EncodeToString(mac.Sum(nil))
+	return modelruntime.Sign(secret, method, path, timestamp, body)
 }
 
 func (c AgentRuntimeConfig) verifyRequest(r *http.Request, body []byte) bool {

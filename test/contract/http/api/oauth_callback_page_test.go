@@ -19,11 +19,10 @@ func TestOAuthCallbackFailuresRenderHTMLRatherThanJSON(t *testing.T) {
 		TestingOAuthStaleState,
 		TestingOAuthExchangeFailed,
 		TestingOAuthTokenUnusable,
-		TestingOAuthCloudConnectionLimit,
 		TestingOAuthNotSaved,
 	} {
 		recorder := httptest.NewRecorder()
-		TestingWriteOAuthCallbackFailure(recorder, "figma", failure, errors.New("cause"))
+		TestingWriteOAuthCallbackFailure(recorder, "google", failure, errors.New("cause"))
 
 		if got := recorder.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
 			t.Fatalf("%s Content-Type = %q, want text/html; charset=utf-8", failure.Reason, got)
@@ -40,7 +39,7 @@ func TestOAuthCallbackFailuresRenderHTMLRatherThanJSON(t *testing.T) {
 		if !strings.Contains(body, failure.Reason) {
 			t.Fatalf("%s page omits its reason: %s", failure.Reason, body)
 		}
-		if !strings.Contains(body, "Figma") {
+		if !strings.Contains(body, "Google") {
 			t.Fatalf("%s page omits the provider name: %s", failure.Reason, body)
 		}
 	}
@@ -50,7 +49,7 @@ func TestOAuthCallbackFailuresRenderHTMLRatherThanJSON(t *testing.T) {
 // be reported as one.
 func TestDeniedConsentIsNotReportedAsAnError(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	TestingWriteOAuthCallbackFailure(recorder, "figma", TestingOAuthDeniedByProvider, nil)
+	TestingWriteOAuthCallbackFailure(recorder, "google", TestingOAuthDeniedByProvider, nil)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)

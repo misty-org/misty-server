@@ -55,16 +55,25 @@ type aiInvocationDeviceContext struct {
 	DisplayName  string          `json:"display_name,omitempty"`
 	Capabilities json.RawMessage `json:"capabilities"`
 	Metadata     json.RawMessage `json:"metadata,omitempty"`
+	// RunGrant is signed by the device that asked for this context.
+	RunGrant *signedDeviceRecord `json:"run_grant,omitempty"`
 }
 
 type aiInvocationInput struct {
+	MethodVersionID       string                      `json:"method_version_id,omitempty"`
+	MethodInputs          map[string]any              `json:"method_inputs,omitempty"`
+	SkillVersionIDs       []string                    `json:"skill_version_ids,omitempty"`
 	CompanionMode         string                      `json:"companion_mode,omitempty"`
 	CompanionModel        string                      `json:"companion_model,omitempty"`
+	// ModelOverride pins a new conversation's Thinking model with its first
+	// message; an existing conversation sets it with PATCH instead.
+	ModelOverride string `json:"model_override,omitempty"`
 	DisplayCaptures       []aiDisplayCapture          `json:"display_captures,omitempty"`
 	ThinkingMode          string                      `json:"thinking_mode,omitempty"`
 	TaskID                string                      `json:"task_id,omitempty"`
 	AgentID               string                      `json:"agent_id,omitempty"`
 	ExecutionMode         string                      `json:"execution_mode,omitempty"`
+	CollaborationMode string `json:"collaboration_mode,omitempty"` // "plan" or "act"; frozen at admission
 	WindowLabel           string                      `json:"window_label,omitempty"`
 	Mode                  string                      `json:"mode"`
 	SurfaceID             string                      `json:"surface_id"`
@@ -97,7 +106,11 @@ type aiInvocationEvent struct {
 	ToolName   string      `json:"toolName,omitempty"`
 	Citation   *aiCitation `json:"citation,omitempty"`
 	Artifact   *aiArtifact `json:"artifact,omitempty"`
-	Error      string      `json:"error,omitempty"`
+	AppRequest *appRequest `json:"appRequest,omitempty"`
+	// ScreenRequest asks the desktop to open a screen and continue the task.
+	ScreenRequest *screenRequest `json:"screenRequest,omitempty"`
+	aiCollaborationEventFields
+	Error         string         `json:"error,omitempty"`
 }
 
 type aiArtifact struct {
@@ -159,6 +172,10 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
+		if _, err := resolveInvocationMethod(r.Context(), s.database, userID, &body); err != nil {
+			writeAgentMethodError(w, err)
+			return
+		}
 		if err := validateAIInvocationInput(&body); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_invocation", "message": err.Error()})
 			return
@@ -194,10 +211,6 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			http.Error(w, "execution window required", http.StatusBadRequest)
 			return
 		}
-		if db.AppAuthorityFromContext(r.Context()) != nil && body.ExecutionMode != "user" {
-			http.Error(w, "Only the host can activate agent execution", http.StatusForbidden)
-			return
-		}
 		var identity *db.AskIdentity
 		var identityErr error
 		if body.AgentID == "" {
@@ -214,11 +227,23 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			return
 		}
 		body.AgentID = identity.ID
+		if err := pinInvocationSkills(r.Context(), s.database, userID, &body); err != nil {
+			writeAgentMethodError(w, err)
+			return
+		}
 		conversationID := strings.TrimSpace(body.ConversationID)
 		var err error
 		modelFallbackNotice := false
 		modelID := agent.FrontierDefaultModelID()
-		if body.Mode == "companion" && body.CompanionModel != "" {
+		selectedModel, _, accountModel, selectErr := s.accountAgentModel(r.Context(), userID)
+		if selectErr != nil {
+			writeAIProviderError(w, selectErr)
+			return
+		}
+		if accountModel {
+			modelID = selectedModel
+		}
+		if !accountModel && body.Mode == "companion" && body.CompanionModel != "" {
 			if !agent.FrontierModelAvailable(r.Context(), body.CompanionModel) {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_model", "message": "Choose an available model."})
 				return
@@ -226,6 +251,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			modelID = body.CompanionModel
 		}
 		reasoning := agent.ManagedReasoning(body.ThinkingMode, body.ReasoningEffort)
+		modelOverrides := map[string]string{}
 		spaceID := "" // AI execution belongs to the authenticated account.
 		if conversationID != "" {
 			bound, boundErr := s.database.AgentConversationIdentity(r.Context(), userID, conversationID)
@@ -240,12 +266,32 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			if body.ThinkingMode == "" && body.ReasoningEffort == "" {
 				reasoning = agent.ManagedReasoning("", bound.ReasoningEffort)
 			}
+			// The conversation's own pick beats the account's Thinking choice.
+			// A model the Gateway retired falls back with a notice.
+			if override := bound.ModelOverride; override != "" {
+				if agent.SenseModelRetired(r.Context(), "thinking", override) {
+					_ = s.database.SetMistyConversationModelOverride(r.Context(), userID, conversationID, "")
+					modelFallbackNotice = true
+				} else {
+					modelID = override
+					modelOverrides["agent"] = override
+				}
+			}
 			if bound.ModelID != modelID || bound.ReasoningEffort != reasoning {
 				if err := s.database.UpdateMistyConversationModel(r.Context(), userID, conversationID, modelID, reasoning, agent.FrontierModelCatalogVersion); err != nil {
 					TestingWriteAIError(w, err)
 					return
 				}
 			}
+		}
+		if requested := strings.TrimSpace(body.ModelOverride); requested != "" {
+			if !agent.SenseModelAvailable(r.Context(), "thinking", requested) {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_model", "message": "Choose an available model."})
+				return
+			}
+			body.ModelOverride = requested
+			modelID = requested
+			modelOverrides["agent"] = requested
 		}
 		payload, _ := json.Marshal(body)
 		if err := s.database.ValidateNativeAgentExecution(r.Context(), &db.AIInvocationRecord{UserID: userID, SpaceID: spaceID, RequestPayload: payload}); err != nil {
@@ -254,6 +300,10 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		}
 		if err := validateAIInvocationDeviceContexts(body.Context, body.DeviceContexts, spaceID); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_device_context", "message": err.Error()})
+			return
+		}
+		if err := verifyDeviceContextGrants(r.Context(), s.database, userID, body.AgentID, body.DeviceContexts); err != nil {
+			writeJSON(w, http.StatusForbidden, map[string]any{"code": "device_grant_required", "message": "This device couldn't confirm the request. Make sure it's added to your account and allows agents."})
 			return
 		}
 		if conversationID == "" && (body.Mode == "drawer" || body.Mode == "companion") && body.RequestedArtifactKind == "" {
@@ -274,7 +324,13 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			_ = s.database.RenameAgentSession(r.Context(), userID, conversationID, cleanMistyTitle(body.Prompt))
 			_ = s.database.UpdateMistyConversationModel(r.Context(), userID, conversationID, modelID, reasoning, agent.FrontierModelCatalogVersion)
 		}
-		if !agent.FrontierModelAvailable(r.Context(), modelID) || !agent.FrontierModelReasoningAvailable(r.Context(), modelID, reasoning) {
+		if body.ModelOverride != "" && conversationID != "" {
+			if err := s.database.SetMistyConversationModelOverride(r.Context(), userID, conversationID, body.ModelOverride); err != nil {
+				TestingWriteAIError(w, err)
+				return
+			}
+		}
+		if !accountModel && len(modelOverrides) == 0 && (!agent.FrontierModelAvailable(r.Context(), modelID) || !agent.FrontierModelReasoningAvailable(r.Context(), modelID, reasoning)) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "model_unavailable", "message": "Misty’s model is temporarily unavailable. Please try again."})
 			return
 		}
@@ -296,6 +352,10 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		body.ConversationID = conversationID
 		body.ModelID = modelID
 		body.ReasoningEffort = reasoning
+		if err := admitCollaboration(r.Context(), s.database, userID, &body); err != nil {
+			TestingWriteAIError(w, err)
+			return
+		}
 		if err := s.database.ValidateAIConversationAttachments(r.Context(), userID, conversationID, body.AttachmentIDs); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_attachment", "message": err.Error()})
 			return
@@ -316,6 +376,12 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			TestingWriteAIError(w, err)
 			return
 		}
+		if created && s.providerSettings != nil {
+			if _, routeErr := s.database.FreezeAIModelRoutes(r.Context(), userID, stored.ID, defaultAIRoutes(modelID, reasoning), modelOverrides); routeErr != nil {
+				writeAIProviderError(w, routeErr)
+				return
+			}
+		}
 		record, err := s.invocations.restoreDurable(r.Context(), stored)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "load invocation stream"})
@@ -332,13 +398,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 	}
 }
 
-func conversationSpaceChanged(boundSpaceID, requestedSpaceID string) bool {
-	return boundSpaceID != "" && requestedSpaceID != "" && boundSpaceID != requestedSpaceID
-}
 
-func TestingConversationSpaceChanged(boundSpaceID, requestedSpaceID string) bool {
-	return conversationSpaceChanged(boundSpaceID, requestedSpaceID)
-}
 
 func writeAIInvocationCreated(w http.ResponseWriter, record *aiInvocationRecord) {
 	writeJSON(w, http.StatusAccepted, map[string]any{
@@ -412,16 +472,14 @@ func (s *AIService) CancelInvocation() http.HandlerFunc {
 		} else if !aiInvocationTerminal(stored.State) && stored.RuntimeRunID != "" {
 			_ = s.agentRuntime.Cancel(r.Context(), stored.RuntimeRunID, stored.ID)
 		}
-		if !aiInvocationTerminal(stored.State) {
-			if err := s.invocations.cancel(stored.ID); err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Misty could not persist the stop request."})
-				return
-			}
+		current, err := s.database.AIInvocationByID(r.Context(), userID, stored.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Misty could not load the stop result."})
+			return
 		}
-		state := stored.State
-		if !aiInvocationTerminal(state) {
-			state = "canceled"
-		}
+		_, _ = s.invocations.restoreDurable(r.Context(), *current)
+		state := current.State
+		_ = s.database.SetAgentQuestionState(r.Context(), userID, "", stored.ID, "canceled")
 		writeJSON(w, http.StatusAccepted, map[string]any{"state": state, "runtime_cancel_pending": !aiInvocationTerminal(stored.State) && stored.RuntimeRunID != "", "message": "Stop requested. Previously completed or uncertain actions remain in history."})
 	}
 }

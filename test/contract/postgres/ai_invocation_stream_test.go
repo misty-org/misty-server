@@ -38,7 +38,7 @@ func TestInvocationStreamPagesHintsIsolationAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stopOther()
-	peer := &Database{}
+	peer := &Database{DSN: database.GetDSN()}
 	peer.Conn, err = sql.Open("postgres", peer.GetDSN())
 	if err != nil {
 		t.Fatal(err)

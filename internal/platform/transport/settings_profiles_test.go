@@ -34,13 +34,31 @@ func TestSettingsProfilesRejectUnknownAndInvalidValues(t *testing.T) {
 }
 
 func TestCollectionTabOrderPreferences(t *testing.T) {
-	key := "collections.tabs.journal"
-	for _, raw := range []string{`{}`, `[1]`, `["all","all"]`, `["bad id"]`} {
-		if ValidateProfilePatch(map[string]any{key: raw}, nil) == nil {
-			t.Fatalf("accepted invalid order: %s", raw)
+	for _, key := range []string{"collections.tabs.journal", "collections.tabs.navigator"} {
+		for _, raw := range []string{`{}`, `[1]`, `["all","all"]`, `["bad id"]`} {
+			if ValidateProfilePatch(map[string]any{key: raw}, nil) == nil {
+				t.Fatalf("accepted invalid order for %s: %s", key, raw)
+			}
 		}
 	}
+	key := "collections.tabs.journal"
 	if err := ValidateProfilePatch(map[string]any{key: `["drawings","all","notes"]`}, nil); err != nil {
 		t.Fatal(err)
+	}
+	if err := ValidateProfilePatch(map[string]any{"collections.tabs.navigator": `["browser","home","agents","files","extensions","spaces"]`}, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExtensionPinPreferences(t *testing.T) {
+	for _, raw := range []string{`[]`, `[3,7]`} {
+		if err := ValidateProfilePatch(map[string]any{"extensions.pins": raw}, nil); err != nil {
+			t.Fatalf("rejected pins %s: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{`{}`, `["3"]`, `[1.5]`, `[-1]`, `[{"id":3}]`} {
+		if ValidateProfilePatch(map[string]any{"extensions.pins": raw}, nil) == nil {
+			t.Fatalf("accepted invalid pins %s", raw)
+		}
 	}
 }

@@ -1,7 +1,6 @@
 import { startWithReceipt } from "./start-receipt.js";
 import { getRun, start } from "workflow/api";
 import { runSpaceTaskAgent } from "../workflows/space-task-agent.js";
-import { agentToolApprovalHook } from "./approval.js";
 import { agentDeviceHook } from "./device.js";
 import { MISTY_HARNESS_VERSION, type MistyHarness } from "./harness.js";
 
@@ -21,10 +20,6 @@ export const vercelHarness: MistyHarness = {
   },
   async cancel(id) { await getRun(id).cancel(); },
   async resume(input) {
-    if (input.kind === "approval") {
-      await agentToolApprovalHook.resume(input.token, { approved: input.approved, approval_id: input.approvalId });
-    } else {
-      await agentDeviceHook.resume(input.token, { available: input.available });
-    }
+    await agentDeviceHook.resume(input.token, { available: input.available });
   },
 };

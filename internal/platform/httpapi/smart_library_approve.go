@@ -24,7 +24,7 @@ func (s *SmartLibraryService) Approve(kind string) http.HandlerFunc {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "smart_library_disabled", "message": "Image analysis is temporarily disabled. Weekly usage was not charged."})
 			return
 		}
-		if s.analyzer == nil || strings.TrimSpace(s.analyzer.APIKey) == "" {
+		if !s.analyzer.Available() {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "smart_library_unavailable", "message": "Image analysis is not configured. Weekly usage was not charged."})
 			return
 		}
@@ -114,7 +114,7 @@ func (s *SmartLibraryService) Approve(kind string) http.HandlerFunc {
 		}
 		_ = s.database.RecordSmartLibraryCostEvent(userID, folderID, batch.ID, "smart-library-routing", len(assets), analysis.Usage.InputTokens, analysis.Usage.OutputTokens, len(analysis.Results) > 0)
 		if embeddingTokens > 0 {
-			_ = s.database.RecordSmartLibrarySemanticUsage(userID, folderID, "semantic_index", currentEmbeddingModel(), embeddingCount, embeddingTokens, 0, true)
+			_ = s.database.RecordSmartLibrarySemanticUsage(userID, folderID, "semantic_index", configuredEmbeddingModel(r.Context(), s.analyzer, userID), embeddingCount, embeddingTokens, 0, true)
 		}
 		if err := analyzer.BillingError(); err != nil {
 			_ = s.database.ResetSmartLibraryBatch(batch.ID)
@@ -171,7 +171,7 @@ func (s *SmartLibraryService) Progress() http.HandlerFunc {
 		}
 		payload["sampleAssetIds"] = sampleAssetIDs
 		payload["phase"] = phase
-		if indexStatus, indexErr := s.database.SmartLibraryIndexStatusForUser(userID, folder.ID, currentEmbeddingModel(), serveragent.SmartLibraryIndexVersion); indexErr == nil {
+		if indexStatus, indexErr := s.database.SmartLibraryIndexStatusForUser(userID, folder.ID, configuredEmbeddingModel(r.Context(), s.analyzer, userID), serveragent.SmartLibraryIndexVersion); indexErr == nil {
 			payload["indexStatus"] = map[string]any{"currentVersion": indexStatus.CurrentVersion, "embeddingModel": indexStatus.EmbeddingModel, "outdatedAssets": indexStatus.OutdatedAssets, "failedAssets": indexStatus.FailedAssets, "upgradeNeeded": indexStatus.OutdatedAssets > 0}
 		}
 		writeJSON(w, 200, payload)

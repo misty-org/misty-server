@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	defaultLibraryRenditionReserve = int64(250_000_000)
 	minimumLibraryRenditionReserve = int64(64_000)
 )
 
@@ -53,9 +52,8 @@ type LibraryRenditionPurge struct {
 	LeaseToken   string
 }
 
-// QueueLibraryEditRendition atomically reserves Space storage before any
-// expensive media processing begins. A zero maximum chooses a conservative
-// server estimate and may use the remaining Space allowance as the hard cap.
+// QueueLibraryEditRendition asks billing for account storage admission before
+// media processing. Billing chooses the reservation when maximumBytes is zero.
 func (db *Database) QueueLibraryEditRendition(ctx context.Context, userID, spaceID, itemID, editID string, maximumBytes int64) (*LibraryRenditionRequest, error) {
 	if editID == "" || maximumBytes < 0 || maximumBytes > MaxSpaceStorageBytes {
 		return nil, ErrLibraryInvalid
@@ -93,34 +91,9 @@ func (db *Database) QueueLibraryEditRendition(ctx context.Context, userID, space
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		quota, err := storageQuotaStateTx(ctx, tx, userID, spaceID, true)
+		requested, err := approveCloudStorageTx(ctx, tx, userID, "storage.rendition", map[string]int64{"requested_bytes": maximumBytes, "source_bytes": sourceBytes, "minimum_bytes": minimumLibraryRenditionReserve})
 		if err != nil {
 			return err
-		}
-		remaining := quota.Personal.RemainingBytes
-		if quota.Space.RemainingBytes < remaining {
-			remaining = quota.Space.RemainingBytes
-		}
-		if remaining < minimumLibraryRenditionReserve {
-			return storageQuotaError(quota, minimumLibraryRenditionReserve)
-		}
-		requested := maximumBytes
-		if requested == 0 {
-			requested = sourceBytes
-			if requested < 1_000_000 {
-				requested = 1_000_000
-			}
-			if requested > defaultLibraryRenditionReserve {
-				requested = defaultLibraryRenditionReserve
-			}
-			if requested > remaining {
-				requested = remaining
-			}
-		} else if requested > remaining {
-			return storageQuotaError(quota, requested)
-		}
-		if requested < minimumLibraryRenditionReserve {
-			return storageQuotaError(quota, minimumLibraryRenditionReserve)
 		}
 		reservationID := "rendition_reservation_" + uuid.NewString()
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_rendition_reservations(id,space_id,user_id,source_kind,source_id,reserved_bytes,state,expires_at)

@@ -180,10 +180,6 @@ func (db *Database) UpdateSpaceTask(ctx context.Context, actorUserID string, ite
 			WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, item.ID, previousAgentID); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `UPDATE agent_run_tool_approvals SET state='denied',decided_at=NOW()
-				WHERE run_id IN (SELECT id FROM space_runs WHERE source_task_id=$1 AND agent_id=$2 AND state='canceled' AND error_code='task_unassigned') AND state='pending'`, item.ID, previousAgentID); err != nil {
-				return err
-			}
 			if _, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW()
 				WHERE run_id IN (SELECT id FROM space_runs WHERE source_task_id=$1 AND agent_id=$2 AND state='canceled' AND error_code='task_unassigned') AND state='attached'`, item.ID, previousAgentID); err != nil {
 				return err

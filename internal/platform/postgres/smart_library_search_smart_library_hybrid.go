@@ -13,7 +13,8 @@ import (
 // SearchSmartLibraryHybrid securely scopes candidates before rank fusion. The
 // lexical branch preserves exact names and tags, while the ANN branch recovers
 // concepts that the generated caption omitted.
-func (db *Database) SearchSmartLibraryHybrid(userID, folderID, query string, embedding []float64, limit int) ([]SmartLibrarySearchHit, error) {
+func (db *Database) SearchSmartLibraryHybrid(userID, folderID, query string, embedding []float64, limit int, embeddingModels ...string) ([]SmartLibrarySearchHit, error) {
+	embeddingModel := "google/gemini-embedding-2"; if len(embeddingModels)>0 { embeddingModel=embeddingModels[0] }
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return []SmartLibrarySearchHit{}, nil
@@ -54,7 +55,7 @@ func (db *Database) SearchSmartLibraryHybrid(userID, folderID, query string, emb
 		), semantic AS (
 			SELECT a.folder_id,a.asset_id,GREATEST(0.0, 1.0-(a.semantic_embedding <=> $4::vector)) AS semantic_score
 			FROM smart_library_assets a
-			WHERE $4 IS NOT NULL AND a.user_id=$1 AND a.status='analyzed' AND a.semantic_embedding IS NOT NULL AND ($2='' OR a.folder_id=$2)
+			WHERE $4 IS NOT NULL AND a.user_id=$1 AND a.status='analyzed' AND a.semantic_embedding IS NOT NULL AND a.embedding_model=$7 AND ($2='' OR a.folder_id=$2)
 			ORDER BY a.semantic_embedding <=> $4::vector
 			LIMIT $5
 		), candidates AS (
@@ -77,7 +78,7 @@ func (db *Database) SearchSmartLibraryHybrid(userID, folderID, query string, emb
 		// Strict iterative scans improve filtered HNSW recall without ever relaxing
 		// the tenant predicate. Older pgvector releases simply reject this setting.
 		_, _ = tx.Exec(`SET LOCAL hnsw.iterative_scan = 'strict_order'`)
-		rows, err := tx.Query(querySQL, userID, folderID, query, vector, candidateLimit, limit)
+		rows, err := tx.Query(querySQL, userID, folderID, query, vector, candidateLimit, limit, embeddingModel)
 		if err != nil {
 			return err
 		}

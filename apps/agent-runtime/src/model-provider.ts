@@ -1,57 +1,51 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import type { LanguageModelV4, LanguageModelV4CallOptions } from "@ai-sdk/provider";
+import type {
+  EmbeddingModelV4,
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  TranscriptionModelV4,
+} from "@ai-sdk/provider";
 import { createGateway } from "ai";
+import type { RuntimeIdentity } from "./control-plane.js";
 
 type Environment = Record<string, string | undefined>;
-const directProviders = new Set(["openai", "anthropic", "google", "openai-compatible"]);
 
+/**
+ * Every model runs on Misty's own keys. OpenAI models go straight to OpenAI when
+ * the instance has an OpenAI key; everything else goes through the AI Gateway.
+ */
 export function instanceModelConfig(env: Environment = process.env) {
-  const provider = env.MISTY_AGENT_MODEL_PROVIDER?.trim() || "gateway";
   const model = env.MISTY_AGENT_MODEL?.trim() || "";
-  const baseURL = env.MISTY_AGENT_MODEL_BASE_URL?.trim() || undefined;
-  const apiKey = env.MISTY_AGENT_MODEL_API_KEY?.trim() || undefined;
-  if (provider !== "gateway" && !directProviders.has(provider)) {
-    throw new Error("Invalid MISTY_AGENT_MODEL_PROVIDER");
-  }
   if (model && (!/^[^\s/]+\/\S+$/.test(model) || model.length > 200)) {
     throw new Error("MISTY_AGENT_MODEL must be a provider/model ID");
   }
-  if (provider !== "gateway") {
-    if (!model.startsWith(`${provider}/`)) {
-      throw new Error("MISTY_AGENT_MODEL must use the configured provider prefix");
-    }
-    if (!apiKey && provider !== "openai-compatible") {
-      throw new Error("MISTY_AGENT_MODEL_API_KEY is required for the configured provider");
-    }
-    if (provider === "openai-compatible" && !baseURL) {
-      throw new Error("MISTY_AGENT_MODEL_BASE_URL is required for openai-compatible");
-    }
-  } else if (baseURL || apiKey) {
-    throw new Error("Gateway credentials use AI_GATEWAY_API_KEY and AI_GATEWAY_BASE_URL");
-  }
-  if (baseURL) {
-    let url: URL;
-    try {
-      url = new URL(baseURL);
-    } catch {
-      throw new Error("Invalid MISTY_AGENT_MODEL_BASE_URL");
-    }
-    if (
-      !["http:", "https:"].includes(url.protocol) ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    ) {
-      throw new Error(
-        "MISTY_AGENT_MODEL_BASE_URL must be an HTTP(S) URL without credentials, query, or fragment",
-      );
-    }
-  }
-  return { provider, model, baseURL, apiKey };
+  return { provider: "gateway", model };
+}
+
+/** The route Go admitted for a call: always Misty's own, with its reasoning. */
+export interface ModelRoute {
+  provider: "instance";
+  reasoning?: string;
+}
+
+function openAIKey(env: Environment) {
+  return env.OPENAI_API_KEY?.trim() || "";
+}
+
+/** An `openai/…` model with an instance OpenAI key skips the Gateway. */
+function directOpenAI(modelId: string, env: Environment) {
+  return modelId.startsWith("openai/") && openAIKey(env) !== "";
+}
+
+function openAI(env: Environment) {
+  return createOpenAI({ apiKey: openAIKey(env) });
+}
+
+function instanceGateway(env: Environment = process.env) {
+  return createGateway({
+    apiKey: env.AI_GATEWAY_API_KEY?.trim() || env.VERCEL_OIDC_TOKEN?.trim() || undefined,
+    baseURL: env.AI_GATEWAY_BASE_URL?.trim() || undefined,
+  });
 }
 
 export function resolveInstanceModel(
@@ -59,44 +53,66 @@ export function resolveInstanceModel(
   options: LanguageModelV4CallOptions,
   env: Environment = process.env,
 ): { model: LanguageModelV4; options: LanguageModelV4CallOptions } {
-  const config = instanceModelConfig(env);
-  if (config.provider === "gateway") {
-    const gateway = createGateway({
-      apiKey: env.AI_GATEWAY_API_KEY?.trim() || env.VERCEL_OIDC_TOKEN?.trim() || undefined,
-      baseURL: env.AI_GATEWAY_BASE_URL?.trim() || undefined,
-    });
-    return { model: gateway(modelId), options };
-  }
-  if (modelId !== config.model)
-    throw new Error("Requested model is not configured for this instance");
-  const nativeId = modelId.slice(config.provider.length + 1);
-  const settings = { apiKey: config.apiKey, baseURL: config.baseURL };
-  let model: LanguageModelV4;
-  switch (config.provider) {
-    case "openai":
-      model = createOpenAI(settings)(nativeId);
-      break;
-    case "anthropic":
-      model = createAnthropic(settings)(nativeId);
-      break;
-    case "google":
-      model = createGoogleGenerativeAI(settings)(nativeId);
-      break;
-    default:
-      model = createOpenAICompatible({
-        ...settings,
-        name: "openai-compatible",
-        baseURL: config.baseURL!,
-      })(nativeId);
-  }
-  // A direct request never falls back to a different provider or Gateway bill.
+  if (!directOpenAI(modelId, env)) return { model: instanceGateway(env)(modelId), options };
+  // Gateway routing options mean nothing to OpenAI itself.
   const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};
   return {
-    model,
+    model: openAI(env).responses(modelId.slice("openai/".length)),
     options: {
       ...options,
+      // Responses normalizes an omitted strict flag, which can turn optional
+      // capability arguments into required fields. Preserve the admitted schema
+      // unless the caller explicitly requested strict function calling.
+      tools: options.tools?.map((tool) =>
+        tool.type === "function" && tool.strict == null ? { ...tool, strict: false } : tool,
+      ),
       providerOptions,
-      reasoning: config.provider === "openai-compatible" ? undefined : options.reasoning,
     },
   };
+}
+
+/** Resolve the run's reasoning in the Node model step, never in the workflow bundle. */
+export async function resolveRuntimeModel(
+  modelId: string,
+  options: LanguageModelV4CallOptions,
+  identity?: RuntimeIdentity,
+  role: "agent" | "vision" = "agent",
+): Promise<{ model: LanguageModelV4; options: LanguageModelV4CallOptions }> {
+  if (!identity) return resolveInstanceModel(modelId, options);
+  const { controlPlaneRequest } = await import("./control-plane.js");
+  const route = await controlPlaneRequest<ModelRoute>(
+    identity,
+    "model-provider",
+    { role, model: modelId },
+    `${role}:provider`,
+  );
+  return resolveConfiguredModel(modelId, options, route);
+}
+
+export async function resolveConfiguredModel(
+  modelId: string,
+  options: LanguageModelV4CallOptions,
+  route: ModelRoute,
+): Promise<{ model: LanguageModelV4; options: LanguageModelV4CallOptions }> {
+  return resolveInstanceModel(modelId, {
+    ...options,
+    reasoning: (route.reasoning || options.reasoning) as LanguageModelV4CallOptions["reasoning"],
+  });
+}
+
+export async function resolveEmbeddingModel(
+  modelId: string,
+  env: Environment = process.env,
+): Promise<EmbeddingModelV4> {
+  if (directOpenAI(modelId, env)) return openAI(env).embedding(modelId.slice("openai/".length));
+  return instanceGateway(env).embeddingModel(modelId);
+}
+
+export async function resolveTranscriptionModel(
+  modelId: string,
+  env: Environment = process.env,
+): Promise<TranscriptionModelV4> {
+  if (directOpenAI(modelId, env))
+    return openAI(env).transcription(modelId.slice("openai/".length));
+  return instanceGateway(env).transcriptionModel(modelId);
 }

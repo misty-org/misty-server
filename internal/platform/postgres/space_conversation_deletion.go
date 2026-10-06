@@ -138,10 +138,10 @@ func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, 
 		if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
 		}
-		var kind, creator, origin, integrationStatus string
-		if err := tx.QueryRowContext(ctx, `SELECT kind,created_by_user_id,origin,integration_status
+		var kind, creator string
+		if err := tx.QueryRowContext(ctx, `SELECT kind,created_by_user_id
 			FROM space_conversations WHERE id=$1 AND space_id=$2 FOR UPDATE`, conversationID, spaceID).
-			Scan(&kind, &creator, &origin, &integrationStatus); err != nil {
+			Scan(&kind, &creator); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrSpaceNotFound
 			}
@@ -152,9 +152,6 @@ func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, 
 			return err
 		}
 		if kind != "direct" && (kind != "standard" || (creator != userID && role != "owner")) {
-			return ErrSpaceForbidden
-		}
-		if origin == "discord" && integrationStatus != "disconnected" {
 			return ErrSpaceForbidden
 		}
 		participantUserIDs, err := humanMemberIDsForConversationTx(ctx, tx, conversationID)
@@ -183,30 +180,5 @@ func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, 
 				"conversation_id": conversationID, "participant_user_ids": participantUserIDs,
 			})
 		return err
-	})
-}
-
-func (db *Database) ClearEveryoneConversation(ctx context.Context, userID, spaceID string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
-			return err
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT id FROM space_messages WHERE space_id=$1 AND conversation_id IS NULL FOR UPDATE`, spaceID)
-		if err != nil {
-			return err
-		}
-		ids := []string{}
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
-				return err
-			}
-			ids = append(ids, id)
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		return cleanupSpaceMessagesTx(ctx, tx, spaceID, ids)
 	})
 }

@@ -200,17 +200,3 @@ func (db *Database) CompleteAIRecap(ctx context.Context, item AIRecap, invocatio
 		return nil
 	})
 }
-
-func (db *Database) MarkAIRecapSeen(ctx context.Context, userID, surfaceID string) error {
-	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE ai_recaps SET last_seen_at=NOW(),updated_at=NOW() WHERE user_id=$1 AND surface_id=$2`, userID, surfaceID)
-		if err != nil {
-			return err
-		}
-		rows, _ := result.RowsAffected()
-		if rows == 0 {
-			return ErrSpaceNotFound
-		}
-		return nil
-	})
-}

@@ -20,7 +20,33 @@ Use the [server setup guide](../README.md#get-started). The CLI owns environment
 
 The CLI passes every scoped environment file to Compose. A bare Compose invocation does not load the same configuration. Keep generated keys stable when retaining database volumes.
 
+Do not recreate a service with only a subset of those files loaded for Compose interpolation. Explicit `environment` entries override service `env_file` values, including when interpolation supplies an empty string. For example, omitting `integrations/ai.env` can erase the running API's gateway key while its ordinary HTTP health check still passes. Use the CLI's environment loader and verify provider readiness after changes to AI services.
+
 ## Development
+
+### AI models
+
+All AI (the agent worker, visual planner, routing, Library and companion
+voice) runs on Misty's own keys through the agent runtime's AI SDK. OpenAI
+models (`openai/…`) call OpenAI directly when `OPENAI_API_KEY` is set; every
+other model, and OpenAI models without that key, go through the AI Gateway and
+draw on its balance. Set the keys in the private
+`server/.env/dev/integrations/ai.env`:
+
+```dotenv
+AI_GATEWAY_API_KEY=<your AI Gateway API key>
+# Optional: OpenAI models use this key instead of the Gateway.
+OPENAI_API_KEY=<your OpenAI API key>
+# Optional: pin the default agent model (any Gateway provider/model ID).
+MISTY_AGENT_MODEL=openai/gpt-6-luna
+```
+
+Then run `misty server up` to rebuild and apply the configuration. Accounts
+cannot add their own keys. In Settings → Agents → Models they choose a model
+for each of four senses (Thinking, Seeing, Listening, Speaking) from the
+Gateway catalog, and the Agents composer can pin a different Thinking model to
+one conversation. Production uses the same settings in `server/.env/prod/`;
+changing development does not deploy production.
 
 ```sh
 misty env check dev
@@ -174,30 +200,19 @@ the stack again, which applies any newer migrations. Practise it on a spare
 server: a backup that has never been restored is not yet a backup. Named Docker
 volumes are persistent, but they are not backups.
 
-## Browser app
+## Desktop application and account website
 
-The browser app is a separate static build. Build it from the Misty desktop
-repository with the public API base baked in:
+Misty ships only as a native desktop application. Build its renderer with
+`npm run build:desktop` and package it through the desktop release workflow.
+The `dist/` directory is an input to Tauri packaging, not a hosted application.
 
-```sh
-MISTY_PUBLIC_API_URL=https://api.mistysys.com/v1 npm run build:web
-```
+The separately maintained public/account website continues to handle downloads,
+account administration, password resets, and authenticated desktop handoff.
+Configure `MISTY_WEBSITE_URL` for that website, `MISTY_PUBLIC_API_URL` for the API,
+and `MISTY_ALLOWED_ORIGINS` for the deployed website and native app origins.
+Do not route website handoffs to a hosted copy of the desktop renderer.
 
-Serve that repository's `dist/` directory from the existing frontend server
-with an SPA fallback to `index.html`, then route `app.mistysys.com` to that
-server through a **named** Cloudflare Tunnel. A Tunnel maps the hostname to the
-frontend origin; it does not perform Misty user-session routing. Do not expose
-a Vite development server as the production origin.
-
-The server environment must keep `MISTY_PUBLIC_API_URL` on the API host and
-include both `https://mistysys.com` and `https://app.mistysys.com` in
-`MISTY_ALLOWED_ORIGINS`. `MISTY_WEBSITE_URL`, password-reset URLs, and the
-desktop-to-browser handoff redirect should point at `https://app.mistysys.com`;
-the handoff start URL remains at `https://api.mistysys.com/v1/auth/handoff/start`.
-The API's Secure HttpOnly cookie remains host-only on `api.mistysys.com` and is
-sent with credentialed requests from the allowed Misty web origins.
-
-Billing webhooks belong to the separately deployed billing service. The browser
+Billing webhooks belong to the separately deployed billing service. The API
 server exposes no payment-provider webhook. Production must explicitly configure
 the authenticated HTTP adapter; development may leave it disabled. See
 [the public contract](https://github.com/misty-org/misty/wiki/Server-billing-adapter).

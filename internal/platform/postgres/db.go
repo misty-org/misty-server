@@ -21,8 +21,11 @@ import (
 var migrationFiles embed.FS
 
 type Database struct {
-	Billing   *billingadapter.Service
-	Conn      *sql.DB
+	Billing *billingadapter.Service
+	Conn    *sql.DB
+	// DSN, when set, is the database Conn was opened against. LISTEN
+	// connections use it so notifications come from the same database.
+	DSN       string
 	eventsMu  sync.Mutex
 	events    *accountEventHub
 	workersMu sync.Mutex
@@ -30,6 +33,9 @@ type Database struct {
 }
 
 func (db *Database) GetDSN() string {
+	if db.DSN != "" {
+		return db.DSN
+	}
 	host := envconfig.Getenv("DB_HOST")
 	port := envconfig.Getenv("DB_PORT")
 	user := envconfig.Getenv("DB_USER")

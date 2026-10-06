@@ -81,6 +81,7 @@ func (s *SpaceLibraryService) processIntelligenceJob(ctx context.Context, job *d
 	}
 	metadata := analysis.Results[0]
 	var vector []float64
+ embeddingModel := ""
 	if payload.Semantic {
 		embeddings, usage, embedErr := analyzer.EmbedAssets(ctx, []serveragent.SmartLibraryAsset{asset}, map[string]serveragent.SmartLibraryMetadata{asset.AssetID: metadata})
 		analysis.Usage.InputTokens += usage.InputTokens
@@ -93,10 +94,11 @@ func (s *SpaceLibraryService) processIntelligenceJob(ctx context.Context, job *d
 			return errors.New("Library intelligence embedding missing")
 		}
 		vector = embeddings[0].Vector
+  embeddingModel = embeddings[0].Model
 	}
 	rawMetadata, _ := json.Marshal(metadata)
 	searchText := strings.Join([]string{job.DisplayName, job.Filename, job.Caption, strings.Join(job.Tags, " "), metadata.SearchDocument()}, " | ")
-	if err := s.database.CompleteLibraryIntelligenceJob(ctx, job, db.LibraryIntelligenceResult{Metadata: rawMetadata, SearchText: searchText, Embedding: vector, Model: serveragent.SmartLibraryEmbeddingModel, Version: serveragent.SmartLibraryIndexVersion}); err != nil {
+	if err := s.database.CompleteLibraryIntelligenceJob(ctx, job, db.LibraryIntelligenceResult{Metadata: rawMetadata, SearchText: searchText, Embedding: vector, Model: embeddingModel, Version: serveragent.SmartLibraryIndexVersion}); err != nil {
 		return err
 	}
 	return nil
@@ -161,7 +163,7 @@ func (s *SpaceLibraryService) SemanticSearch() http.HandlerFunc {
 			vector = operation.Vector
 			defer operation.Release(s.database)
 		}
-		items, err := s.database.SearchSpaceLibraryIntelligence(r.Context(), userID, chi.URLParam(r, "spaceID"), query, vector, 100)
+		items, err := s.database.SearchSpaceLibraryIntelligence(r.Context(), userID, chi.URLParam(r, "spaceID"), query, vector, 100, configuredEmbeddingModel(r.Context(), s.intelligence, userID))
 		if err != nil {
 			writeLibraryError(w, err)
 			return
@@ -216,7 +218,7 @@ func (s *SpaceLibraryService) GlobalSemanticSearch() http.HandlerFunc {
 			if space.Permissions[db.PermissionLibraryView] == false {
 				continue
 			}
-			items, searchErr := s.database.SearchSpaceLibraryIntelligence(r.Context(), userID, space.ID, query, vector, min(20, limit-len(hits)))
+			items, searchErr := s.database.SearchSpaceLibraryIntelligence(r.Context(), userID, space.ID, query, vector, min(20, limit-len(hits)), configuredEmbeddingModel(r.Context(), s.intelligence, userID))
 			if searchErr != nil {
 				continue
 			}

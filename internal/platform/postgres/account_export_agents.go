@@ -57,34 +57,6 @@ type AccountExportAgentMembership struct {
 	RemovedAt         *time.Time `json:"removed_at,omitempty"`
 }
 
-type AccountExportAgentEvent struct {
-	ID        int64           `json:"id"`
-	Type      string          `json:"type"`
-	Data      json.RawMessage `json:"data"`
-	CreatedAt time.Time       `json:"created_at"`
-}
-
-type AccountExportAgentConversation struct {
-	ID        string                    `json:"id"`
-	SpaceID   string                    `json:"space_id,omitempty"`
-	ModelID   string                    `json:"model_id,omitempty"`
-	State     json.RawMessage           `json:"state"`
-	Events    []AccountExportAgentEvent `json:"events"`
-	CreatedAt time.Time                 `json:"created_at"`
-	UpdatedAt time.Time                 `json:"updated_at"`
-	DeletedAt *time.Time                `json:"deleted_at,omitempty"`
-}
-
-type AccountExportAgentMemory struct {
-	AgentID      string          `json:"agent_id"`
-	SpaceID      string          `json:"space_id,omitempty"`
-	ScopeKey     string          `json:"scope_key"`
-	Memory       json.RawMessage `json:"memory"`
-	LegacyMemory json.RawMessage `json:"legacy_memory"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
-}
-
 func appendAccountAgentExport(ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport) error {
 	return exportOwnedAgents(ctx, tx, userID, out)
 }

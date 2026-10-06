@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestLibraryCopyOnWriteEditVersionsAndRevert(t *testing.T) {
 	database := openTestDatabase(t)
@@ -15,7 +17,7 @@ func TestLibraryCopyOnWriteEditVersionsAndRevert(t *testing.T) {
 	spaceID := createTestSpace(t, database, ctx, owner.ID, "Edits").ID
 	item := createPeopleTestImage(t, database, owner.ID, spaceID, "portrait.jpg", "e")
 
-	firstDefinition := DefaultLibraryEditDefinition()
+	firstDefinition := TestingDefaultLibraryEditDefinition()
 	firstDefinition.Rotation = 90
 	firstDefinition.Contrast = 1.2
 	firstDefinition.Exposure = .5
@@ -57,18 +59,18 @@ func TestLibraryCopyOnWriteEditVersionsAndRevert(t *testing.T) {
 		t.Fatalf("delete reverted edit error = %v", err)
 	}
 
-	invalid := DefaultLibraryEditDefinition()
+	invalid := TestingDefaultLibraryEditDefinition()
 	invalid.Crop = &LibraryCrop{X: 0.8, Y: 0, Width: 0.5, Height: 1}
 	if _, err := database.CreateLibraryEditVersion(ctx, owner.ID, spaceID, item.ID, reverted.Item.Version, invalid); !errors.Is(err, ErrLibraryInvalid) {
 		t.Fatalf("invalid crop error = %v", err)
 	}
-	invalid = DefaultLibraryEditDefinition()
+	invalid = TestingDefaultLibraryEditDefinition()
 	invalid.Trim = &LibraryTrim{Start: 1, End: 2}
 	if _, err := database.CreateLibraryEditVersion(ctx, owner.ID, spaceID, item.ID, reverted.Item.Version, invalid); !errors.Is(err, ErrLibraryInvalid) {
 		t.Fatalf("image trim error = %v", err)
 	}
 
-	otherSpace, _ := database.CreateSpace(ctx, owner.ID, "Other edit domain")
+	otherSpace, _ := database.TestingCreateSpace(ctx, owner.ID, "Other edit domain")
 	if _, err := database.LibraryEditVersions(ctx, owner.ID, otherSpace.ID, item.ID); !errors.Is(err, ErrLibraryNotFound) {
 		t.Fatalf("cross-Space versions error = %v", err)
 	}

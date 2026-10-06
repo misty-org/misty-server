@@ -52,7 +52,8 @@ func (db *Database) RegisterTrustedDevice(userID, name, publicKey, platform, end
 	device := &TrustedDevice{}
 	err := db.agentTx(userID, func(tx *sql.Tx) error {
 		return scanDevice(tx.QueryRow(`INSERT INTO trusted_devices(id,user_id,name,public_key,platform,p2p_endpoint_id,device_protocol_versions,capabilities) VALUES($1,$2,$3,$4,$5,NULLIF($6,''),$7,$8)
-			ON CONFLICT(user_id,public_key) DO UPDATE SET name=EXCLUDED.name,platform=EXCLUDED.platform,p2p_endpoint_id=EXCLUDED.p2p_endpoint_id,device_protocol_versions=EXCLUDED.device_protocol_versions,capabilities=EXCLUDED.capabilities,last_seen_at=NOW(),updated_at=NOW(),revoked_at=NULL
+			ON CONFLICT(user_id,public_key) DO UPDATE SET name=EXCLUDED.name,platform=EXCLUDED.platform,p2p_endpoint_id=EXCLUDED.p2p_endpoint_id,device_protocol_versions=EXCLUDED.device_protocol_versions,capabilities=EXCLUDED.capabilities,last_seen_at=NOW(),updated_at=NOW()
+			WHERE trusted_devices.revoked_at IS NULL
 			RETURNING id,user_id,name,public_key,key_algorithm,capabilities,platform,COALESCE(p2p_endpoint_id,''),device_protocol_versions,last_seen_at,revoked_at,created_at,updated_at`,
 			"device_"+uuid.NewString(), userID, name, publicKey, platform, endpointID, protocolVersions, capabilities), device)
 	})

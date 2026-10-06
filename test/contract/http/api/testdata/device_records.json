@@ -1,0 +1,42 @@
+{
+  "accountId": "user_fixture",
+  "admission": {
+    "payload": "WyJtaXN0eS5kZXZpY2UuYWRtaXNzaW9uLnYxIiwidXNlcl9maXh0dXJlIiwiZGV2aWNlXzAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIjRWcVZPS1d1RHdvY1cyMzRndzZsMmwyUW5QVk5xc3FxQjV1RlJMZEdHOEk9IiwiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQT0iLCIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwxOTAwMDAwMDAwXQ==",
+    "signature": "xj7G1zBQWGE0jGC4ERCnLm2qXmPxXUvL5ktRks7alBtHJkJxDc1B+ggGw9mI76/hqU9tJjTZ7Eb6N2Fs5gRmBw=="
+  },
+  "channel": {
+    "challenge": "challenge-1",
+    "instance": "instance-1",
+    "signature": "3zsG1BTMAhvQ6zyD+a5qtkxTU2nlXxm5xEmut2gzM2NnQCkstPFkx9PHbXDAqFCixSN+LBsQDbILiSu2Me5sCA=="
+  },
+  "deviceId": "device_00000000-0000-4000-8000-000000000002",
+  "devicePublicKey": "4VqVOKWuDwocW234gw6l2l2QnPVNqsqqB5uFRLdGG8I=",
+  "grant": {
+    "payload": "WyJtaXN0eS5kZXZpY2UuZ3JhbnQudjIiLCJ1c2VyX2ZpeHR1cmUiLCIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJkZXZpY2VfMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwxLCI0VnFWT0tXdUR3b2NXMjM0Z3c2bDJsMlFuUFZOcXNxcUI1dUZSTGRHRzhJPSIsIiIsMTkwMDAwMDAwMCwiIl0=",
+    "signature": "h+eb824DHSCja2PN2peIgFHdMYLcFtu6BpUiR18IPMSmaLdhm5AOfC6KvfJrWEWXi6Esb7Pp27kGsBXr7dxsDg=="
+  },
+  "issuedAt": 1900000000,
+  "list": {
+    "payload": "WyJtaXN0eS5kZXZpY2UubGlzdC52MSIsInVzZXJfZml4dHVyZSIsIjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsMSwxLFtbImRldmljZV8wMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCI0VnFWT0tXdUR3b2NXMjM0Z3c2bDJsMlFuUFZOcXNxcUI1dUZSTGRHRzhJPSJdXSxbXSwxOTAwMDAwMDAwXQ==",
+    "signature": "BPqunEprCXAqnLJta9zAbE/1J0oeRpzbLhYoe77ZxE0l0GXPleZ+gKQZaD88i/70gDErZpqnHyCAXE6MGNm4Bw=="
+  },
+  "policy": {
+    "payload": "WyJtaXN0eS5kZXZpY2UucG9saWN5LnYxIiwidXNlcl9maXh0dXJlIiwiZGV2aWNlXzAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsNywidmlldyIsZmFsc2UsWyJicm93c2VyIiwiZm9sZGVycyJdLFtbInNjb3BlLTEiLCJSZXBvcnRzIOKAnDIwMjbigJ0iXV0sMTkwMDAwMDAwMF0=",
+    "signature": "sq7AB28fMzDw0s6IA8ddRpT3Fo1A+ym12imyzr/ItA6u9qX9wmoAAq6wo9p4WNMbfjycwK2JRe6e/xdpX0kgDg=="
+  },
+  "registration": {
+    "endpointId": "e15a9538a5ae0f0a1c5b6df8830ea5da5d909cf54daacaaa079b8544b7461bc2",
+    "proof": "wqTYNaqhZwpUTue9cw21qg5FGyvCZIj7lMTp8oIjSX+EwcV1XYTgrTcKBOCkealkcdaJIcpp4yByBOWwW1QkBA=="
+  },
+  "request": {
+    "canonical": "POST\n/api/devices/x/admit\n1900000000\nbm9uY2U=\nabababababababababababababababababababababababababababababababab",
+    "signature": "+Mx89SD6iwnYej8fmYKW4ue8n1KMWVyKf7/c8wX6MxiHty+DQb4jcwtkA9mZftbzUpE41djLFye9J1zSQkpeCQ=="
+  },
+  "rootPublicKey": "cFvSoxagGznWrFDkB0LXKo55S+y5pAWrGTkNvnP0Ph4=",
+  "runGrant": {
+    "payload": "WyJtaXN0eS5kZXZpY2UucnVuLWdyYW50LnYxIiwidXNlcl9maXh0dXJlIiwicnVuZ3JhbnRfMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDA0IiwiZGV2aWNlXzAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsImRldmljZV8wMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCIiLFsiZmlsZXMubGlzdCIsImZpbGVzLnJlYWQiXSxbInNjb3BlLTEiXSwxOTAwMDAwMDAwLDE5MDAwMDM2MDBd",
+    "signature": "+8z8hmanV1iDy4SxxKup6MbEES8zLSOMBloJtHY3345M+Y2IG21CIG7RA1/0Ixm3JbcrIjPxeB+7Pc1SZmO+Aw=="
+  },
+  "targetDeviceId": "device_00000000-0000-4000-8000-000000000003",
+  "vaultId": "00000000-0000-4000-8000-000000000001"
+}

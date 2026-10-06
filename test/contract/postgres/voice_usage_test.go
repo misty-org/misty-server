@@ -3,14 +3,16 @@ package db
 import (
 	"context"
 	"database/sql"
+	"github.com/google/uuid"
+	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestVoiceUsageJournalRecoversKnownUsageButHoldsUnknownWork(t *testing.T) {
 	dsn := os.Getenv("MISTY_BILLING_TEST_DSN")
@@ -68,7 +70,7 @@ func TestVoiceUsageJournalRecoversKnownUsageButHoldsUnknownWork(t *testing.T) {
 	if _, err = scoped.Exec("UPDATE voice_usage_journal SET updated_at=now()-interval '3 minutes'"); err != nil {
 		t.Fatal(err)
 	}
-	if err = database.RecoverVoiceUsage(ctx); err != nil {
+	if err = database.TestingRecoverVoiceUsage(ctx); err != nil {
 		t.Fatal(err)
 	}
 	var state string
@@ -81,7 +83,7 @@ func TestVoiceUsageJournalRecoversKnownUsageButHoldsUnknownWork(t *testing.T) {
 	if _, err = scoped.Exec("UPDATE voice_usage_journal SET updated_at=now()-interval '1 minute'"); err != nil {
 		t.Fatal(err)
 	}
-	if err = database.RecoverVoiceUsage(ctx); err != nil {
+	if err = database.TestingRecoverVoiceUsage(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err = scoped.QueryRow("SELECT state FROM voice_usage_journal").Scan(&state); err != nil || state != "closed" {

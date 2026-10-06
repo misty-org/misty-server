@@ -29,31 +29,20 @@ func resolveAgentMessageRecipient(members []db.SpaceMember, actorUserID, request
 	return nil, nil
 }
 
-func resolveAgentMessageAudience(prompt, requested string, hasRecipient bool) (string, error) {
+// resolveAgentMessageAudience uses the model's chosen audience. auto sends to
+// a resolved recipient privately; without one the model must choose.
+func resolveAgentMessageAudience(requested string, hasRecipient bool) (string, error) {
 	requested = strings.ToLower(strings.TrimSpace(requested))
-	if requested == "" {
-		requested = "auto"
-	}
-	if requested != "auto" && requested != "private" && requested != "space" {
-		return "", serveragent.ErrInvalidRequest("audience must be auto, private, or space")
-	}
-	for _, phrase := range []string{"dm", "direct message", "private message", "privately", "one on one", "one-to-one"} {
-		if containsGroundingPhrase(prompt, phrase) {
+	switch requested {
+	case "private", "space":
+		return requested, nil
+	case "", "auto":
+		if hasRecipient {
 			return "private", nil
 		}
+		return "", serveragent.ErrInvalidRequest("choose audience private (with recipientUserId) or space; ask the user if their intent is unclear")
 	}
-	for _, phrase := range []string{"everyone", "everybody", "all members", "whole team", "group chat", "shared chat", "space chat", "team chat", "in the group", "post", "announce"} {
-		if containsGroundingPhrase(prompt, phrase) {
-			return "space", nil
-		}
-	}
-	if requested != "auto" {
-		return requested, nil
-	}
-	if hasRecipient {
-		return "private", nil
-	}
-	return "", serveragent.ErrInvalidRequest("Ask the user before sending: Should I send this privately or in the Space chat?")
+	return "", serveragent.ErrInvalidRequest("audience must be auto, private, or space")
 }
 
 func agentMessageContent(message string, recipient *db.SpaceMember) []db.MessageSpan {

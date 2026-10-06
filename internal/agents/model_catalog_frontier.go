@@ -43,17 +43,6 @@ func ManagedReasoning(mode, legacyEffort string) string {
 }
 
 func FrontierGatewayModels(ctx context.Context) ([]FrontierGatewayModel, error) {
-	config, err := envconfig.AgentModel()
-	if err != nil {
-		return nil, err
-	}
-	if config.Provider != "gateway" {
-		providerID, providerName := frontierProvider(config.Model)
-		return []FrontierGatewayModel{{
-			ID: config.Model, Name: strings.TrimPrefix(config.Model, config.Provider+"/"), ProviderID: providerID, ProviderName: providerName,
-			Capabilities: []string{"chat", "tools", "vision"}, ReasoningLevels: []string{"high", "xhigh"},
-		}}, nil
-	}
 	models, err := GatewayModels(ctx)
 	if err != nil {
 		return nil, err

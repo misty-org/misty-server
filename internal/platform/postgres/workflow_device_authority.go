@@ -30,25 +30,6 @@ func deviceRunAuthorityTx(ctx context.Context, tx *sql.Tx, userID, runID string,
 	if err := validateNativeAgentExecutionTx(ctx, tx, userID, spaceID, payload); err != nil {
 		return "", nil, err
 	}
-	authority, err := AppAuthorityFromPayload(payload)
-	if err != nil {
-		return "", nil, err
-	}
-	scope := capability
-	switch capability {
-	case "browser.click", "browser.type", "browser.interact", "browser.upload":
-		scope = "browser.interact"
-	case "browser.downloads.list", "browser.visual":
-		scope = "browser.inspect"
-	case "browser.inspect", "browser.navigate", "files.read":
-	default:
-		if authority != nil {
-			return "", nil, ErrAppRuntimeForbidden
-		}
-	}
-	if err := validateAppExecutionAuthorityTx(ctx, tx, authority, userID, spaceID, "ai.write", scope); err != nil {
-		return "", nil, err
-	}
 	if spaceID != "" {
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return "", nil, err

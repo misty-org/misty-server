@@ -5,14 +5,6 @@ import (
 	"strings"
 )
 
-func (s *Service) SendMessage(sessionID, userID string, request AgentMessageRequest) error {
-	return s.SendMessageWithTier(sessionID, userID, request, TierLow)
-}
-
-func (s *Service) SendMessageWithTier(sessionID, userID string, request AgentMessageRequest, tier AgentTier) error {
-	return s.SendMessageWithTierContext(context.Background(), sessionID, userID, request, tier)
-}
-
 func (s *Service) SendMessageWithTierContext(ctx context.Context, sessionID, userID string, request AgentMessageRequest, tier AgentTier) error {
 	request.UserMessage = strings.TrimSpace(request.UserMessage)
 	request.Mode = NormalizeMode(request.Mode)
@@ -56,6 +48,7 @@ func (s *Service) SendMessageWithTierContext(ctx context.Context, sessionID, use
 			session.SpaceContextRevision = request.SpaceContextRevision
 		}
 		session.ProviderCallsThisTurn = 0
+		session.BillingTurnSequence = session.nextSequence + 1
 		session.ToolResults = nil
 		clear(session.PendingToolRequests)
 		for _, selected := range request.SelectedPaths {
@@ -75,14 +68,6 @@ func isSafeActiveRoot(value string) bool {
 	}
 	_, ok := normalizeRelativePath(trimmed)
 	return ok
-}
-
-func (s *Service) SubmitToolResults(sessionID, userID string, results []ToolResult) error {
-	return s.SubmitToolResultsWithTier(sessionID, userID, results, TierLow)
-}
-
-func (s *Service) SubmitToolResultsWithTier(sessionID, userID string, results []ToolResult, tier AgentTier) error {
-	return s.SubmitToolResultsWithTierContext(context.Background(), sessionID, userID, results, tier)
 }
 
 func (s *Service) SubmitToolResultsWithTierContext(ctx context.Context, sessionID, userID string, results []ToolResult, tier AgentTier) error {
@@ -138,13 +123,6 @@ func (s *Service) Events(sessionID, userID string, after int64) ([]AgentEvent, e
 	return s.store.Events(sessionID, userID, after)
 }
 
-// SpaceContextState is what a caller needs to decide whether to rebuild Space
-// context for the next turn.
-type SpaceContextState struct {
-	Revision string
-	HasCard  bool
-}
-
 // Transcript returns the conversation as plain messages, for a client rebuilding
 // a session it does not hold locally. Replaying the event stream would be wrong
 // for that: events carry tool requests, and a client that replayed them would
@@ -156,28 +134,6 @@ func (s *Service) Transcript(ctx context.Context, sessionID, userID string) ([]M
 		return nil
 	})
 	return messages, err
-}
-
-// AppendExternalAgentMessage delivers the terminal result of delegated
-// work back into the originating agent session without invoking the model.
-// WithSessionContext persists both the message and its sequenced event.
-func (s *Service) AppendExternalAgentMessage(ctx context.Context, sessionID, userID, runID, text string) (*AgentEvent, error) {
-	var appended AgentEvent
-	err := s.store.WithSessionContext(ctx, sessionID, userID, func(_ context.Context, session *Session) error {
-		message := strings.TrimSpace(text)
-		if message == "" {
-			return ErrInvalidRequest("agent message is required")
-		}
-		session.Messages = append(session.Messages, Message{Role: RoleAgent, Content: message})
-		session.appendEvent(AgentEvent{Type: EventAgentMessage, RunID: runID, Text: message})
-		appended = session.Events[len(session.Events)-1]
-		return nil
-	})
-	return &appended, err
-}
-
-func (s *Service) Cancel(sessionID, userID string) error {
-	return s.store.Cancel(sessionID, userID)
 }
 
 func (s *Service) Forget(sessionID, userID string) error {

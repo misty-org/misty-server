@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"google.golang.org/genai"
 )
 
 type modelJSONResponse struct {
@@ -17,11 +15,6 @@ type modelJSONResponse struct {
 
 type agentPromptImage struct {
 	Label, DataURL string
-}
-
-func buildAgentPrompt(request ModelRequest) string {
-	prompt, _ := buildAgentPromptWithImages(request)
-	return prompt
 }
 
 // promptEntry keeps the runtime-state payload in a deliberate order.
@@ -163,16 +156,6 @@ func responseRule(filesDomain bool) string {
 	return rule + " This conversation has no local-file tools: always return file_plan with empty summary/completion_summary strings and empty operations/warnings arrays."
 }
 
-// mistyAgentInstruction is the ADK/Gemini path's system instruction. It stays
-// identity-neutral; the approved Agent version supplies the actual identity.
-func mistyAgentInstruction() string {
-	return agentPersona + "\n\n" + spaceGuidance + "\n\n" + filePlanGuidance + `
-
-Apply the Space rules only when the runtime state includes a space object, and the local file rules only when your capabilities include local file tools.
-
-Return only the JSON object requested by the output schema.`
-}
-
 func parseProviderJSONResponse(raw string) (ModelResponse, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -200,53 +183,4 @@ func parseProviderJSONResponse(raw string) (ModelResponse, error) {
 		}
 	}
 	return response, nil
-}
-
-func agentResponseGenAISchema() *genai.Schema {
-	return &genai.Schema{
-		Type: genai.TypeObject,
-		Properties: map[string]*genai.Schema{
-			"text": {
-				Type:        genai.TypeString,
-				Description: "Brief assistant text to show the user.",
-			},
-			"tool_requests": {
-				Type:        genai.TypeArray,
-				Description: "Deferred Misty Desktop tool requests. Use an empty array when no tool is needed.",
-				Items: &genai.Schema{
-					Type: genai.TypeObject,
-					Properties: map[string]*genai.Schema{
-						"id": {
-							Type:        genai.TypeString,
-							Description: "Optional unique request id. Misty will fill one if omitted.",
-						},
-						"name": {
-							Type: genai.TypeString,
-						},
-						"risk": {
-							Type: genai.TypeString,
-							Enum: []string{RiskRead, RiskWrite, RiskDangerous},
-						},
-						"arguments": {
-							Type:        genai.TypeObject,
-							Description: "JSON arguments for the requested tool.",
-						},
-					},
-					Required: []string{"name", "risk", "arguments"},
-				},
-			},
-			"file_plan": filePlanGenAISchema(true),
-			"citations": agentCitationsGenAISchema(),
-		},
-		Required: []string{"text", "tool_requests", "file_plan", "citations"},
-	}
-}
-
-func agentCitationsGenAISchema() *genai.Schema {
-	return &genai.Schema{Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeObject, Properties: map[string]*genai.Schema{
-		"id": {Type: genai.TypeString}, "scopeId": {Type: genai.TypeString}, "fileName": {Type: genai.TypeString},
-		"relativePath": {Type: genai.TypeString}, "kind": {Type: genai.TypeString, Enum: []string{"pdf_page", "slide", "sheet_range", "section", "image"}},
-		"label": {Type: genai.TypeString}, "page": {Type: genai.TypeInteger}, "slide": {Type: genai.TypeInteger},
-		"sheet": {Type: genai.TypeString}, "range": {Type: genai.TypeString}, "section": {Type: genai.TypeString}, "excerpt": {Type: genai.TypeString},
-	}, Required: []string{"id", "scopeId", "fileName", "relativePath", "kind", "label", "page", "slide", "sheet", "range", "section", "excerpt"}}}
 }

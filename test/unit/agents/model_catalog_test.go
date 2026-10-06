@@ -10,16 +10,6 @@ import (
 	. "github.com/kannachi323/misty/server/internal/agents"
 )
 
-func TestGatewayTokenRateUsesHostedAIRateCardUnits(t *testing.T) {
-	rate, ok := TestingGatewayTokenRate(json.RawMessage(`"0.00000125"`))
-	if !ok || rate != 1250 {
-		t.Fatalf("gatewayTokenRate() = %d, %v; want 1250, true", rate, ok)
-	}
-	if rate, ok := TestingGatewayTokenRate(json.RawMessage(`"0"`)); !ok || rate != 0 {
-		t.Fatalf("free-model pricing = %d, %v; want 0, true", rate, ok)
-	}
-}
-
 func TestFilterChatModelsExcludesNonChatAndDuplicates(t *testing.T) {
 	models := TestingFilterChatModels([]GatewayModel{
 		{ID: "provider/chat", Name: "Chat"},
@@ -45,7 +35,7 @@ func TestFetchGatewayModelsUsesPublicCatalogWithoutCredentials(t *testing.T) {
 		authorization = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"data":[
-			{"id":"provider/chat","name":"Chat","type":"language","tags":["reasoning","tool-use"],"pricing":{"input":"0.000001","output":"0.000002"}},
+			{"id":"provider/chat","name":"Chat","type":"language","context_window":400000,"tags":["reasoning","tool-use"],"pricing":{"input":"0.000001","output":"0.000002"}},
 			{"id":"provider/free","name":"Free","type":"language","tags":[],"pricing":{"input":"0","output":"0"}},
 			{"id":"provider/search","name":"Search","type":"language","tags":["web-search"],"pricing":{}},
 			{"id":"provider/embed","name":"Embed","type":"embedding","tags":[],"pricing":{"input":"0.000001"}}
@@ -66,11 +56,11 @@ func TestFetchGatewayModelsUsesPublicCatalogWithoutCredentials(t *testing.T) {
 	if len(models) != 3 {
 		t.Fatalf("fetchGatewayModels() returned %d models, want 3", len(models))
 	}
-	if !models[0].HasTokenPricing || !models[1].HasTokenPricing || models[2].HasTokenPricing {
-		t.Fatal("catalog models must distinguish token-priced, free, and fallback-priced models")
-	}
 	if !gatewayModelSupportsToolsFrom(models[0]) {
 		t.Fatalf("tool-use tag was not normalized: %#v", models[0].Capabilities)
+	}
+	if models[0].ContextWindow != 400_000 || models[1].ContextWindow != 0 {
+		t.Fatalf("context windows = %d, %d", models[0].ContextWindow, models[1].ContextWindow)
 	}
 }
 

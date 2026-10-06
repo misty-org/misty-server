@@ -219,31 +219,6 @@ func (db *Database) ValidatePersonalAgentTaskRuntime(ctx context.Context, runID,
 	return run, task, err
 }
 
-func (db *Database) RenewPersonalAgentTaskRunLease(ctx context.Context, runID, workerID string, lease time.Duration) (bool, error) {
-	if lease < 30*time.Second || lease > 10*time.Minute {
-		lease = 90 * time.Second
-	}
-	active := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE agent_run_jobs j SET lease_expires_at=$1,updated_at=NOW()
-			FROM space_runs r,misty_ask_identities a
-			WHERE j.run_id=$2 AND j.lease_owner=$3 AND j.state='leased' AND r.id=j.run_id AND r.state='running'
-			  AND (j.task_id IS NULL OR EXISTS(SELECT 1 FROM space_tasks t WHERE t.id=j.task_id AND t.assignee_agent_id=j.agent_id AND t.archived_at IS NULL))
-			  AND a.id=j.agent_id AND a.owner_user_id=r.owner_user_id AND a.enabled AND a.deleted_at IS NULL`, time.Now().UTC().Add(lease), runID, workerID)
-		if err != nil {
-			return err
-		}
-		changed, err := result.RowsAffected()
-		active = err == nil && changed == 1
-		return err
-	})
-	return active, err
-}
-
-func (db *Database) CompletePersonalAgentTaskRunJob(ctx context.Context, runID, workerID string) error {
-	return db.finishPersonalAgentTaskRunJob(ctx, runID, workerID, "completed", "", "")
-}
-
 func (db *Database) FailPersonalAgentTaskRunJob(ctx context.Context, runID, workerID, code, message string, retry bool) (bool, error) {
 	requeued := false
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
@@ -278,12 +253,6 @@ func (db *Database) FailPersonalAgentTaskRunJob(ctx context.Context, runID, work
 		return finishPersonalAgentTaskRunJobTx(ctx, tx, runID, workerID, "failed", code, message)
 	})
 	return requeued, err
-}
-
-func (db *Database) finishPersonalAgentTaskRunJob(ctx context.Context, runID, workerID, state, code, message string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return finishPersonalAgentTaskRunJobTx(ctx, tx, runID, workerID, state, code, message)
-	})
 }
 
 func finishPersonalAgentTaskRunJobTx(ctx context.Context, tx *sql.Tx, runID, workerID, state, code, message string) error {

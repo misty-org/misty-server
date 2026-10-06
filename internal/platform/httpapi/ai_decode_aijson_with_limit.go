@@ -42,6 +42,8 @@ func TestingWriteAIError(w http.ResponseWriter, err error) {
 		http.Error(w, "session not found", http.StatusNotFound)
 	case errors.Is(err, agent.ErrModelUnavailable):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_unavailable", "message": "The selected model is unavailable. Choose another model or Automatic."})
+	case errors.Is(err, db.ErrAIConversationBusy):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "conversation_busy", "message": "This conversation already has an active task. Reopen it to follow its progress."})
 	case errors.Is(err, db.ErrAgentToolboxActionInProgress):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "agent_action_in_progress", "message": "This Agent action is already being recorded. Retry shortly."})
 	case isAIInvalidRequest(err):

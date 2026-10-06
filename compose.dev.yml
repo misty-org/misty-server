@@ -89,12 +89,10 @@ services:
       MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}
       MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
       AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
-      MISTY_AGENT_MODEL_PROVIDER: ${MISTY_AGENT_MODEL_PROVIDER:-gateway}
       MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
-      MISTY_AGENT_MODEL_API_KEY: ${MISTY_AGENT_MODEL_API_KEY:-}
-      MISTY_AGENT_MODEL_BASE_URL: ${MISTY_AGENT_MODEL_BASE_URL:-}
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -121,17 +119,13 @@ services:
         required: false
       - path: .env/dev/integrations/ai.env
         required: false
-      - path: .env/dev/integrations/discord.env
+      - path: .env/dev/composio.env
+        required: false
+      - path: .env/dev/integrations/composio.env
         required: false
       - path: .env/dev/integrations/dropbox.env
         required: false
       - path: .env/dev/integrations/email.env
-        required: false
-      - path: .env/dev/integrations/figma.env
-        required: false
-      - path: .env/dev/integrations/github.env
-        required: false
-      - path: .env/dev/integrations/instagram.env
         required: false
       - path: .env/dev/integrations/google.env
         required: false
@@ -153,13 +147,10 @@ services:
       PORT: "8080"
       MISTY_ENVIRONMENT: development
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
-      MISTY_REALTIME_API_KEY: ${MISTY_REALTIME_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
       AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
-      MISTY_AGENT_MODEL_PROVIDER: ${MISTY_AGENT_MODEL_PROVIDER:-gateway}
       MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
-      MISTY_AGENT_MODEL_API_KEY: ${MISTY_AGENT_MODEL_API_KEY:-}
-      MISTY_AGENT_MODEL_BASE_URL: ${MISTY_AGENT_MODEL_BASE_URL:-}
       # The API stays publicly reachable for callbacks, while the development
       # website runs only on localhost through Vite.
       MISTY_PUBLIC_API_URL: "${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}/v1"
@@ -175,7 +166,6 @@ services:
       PARTYKIT_HOST: ${MISTY_CLOUDFLARE_WORKER_HOST:?run misty setup cloudflare}
       MISTY_JOURNAL_SERVER_ENV_FILE: /run/misty/journal-server.env
       MISTY_AGENT_RUNTIME_URL: http://agent-runtime:3000
-      MISTY_SDK_EXECUTION_ENABLED: ${MISTY_SDK_EXECUTION_ENABLED:-false}
       MISTY_DEVICE_JOBS_ENABLED: ${MISTY_SDK_EXECUTION_ENABLED:-false}
       MISTY_AGENT_RUNTIME_INTERNAL_API_URL: http://misty-api:8080
       MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}

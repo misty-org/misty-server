@@ -97,10 +97,8 @@ func (monitor *healthMonitor) evaluate(ctx context.Context) (TestingHealthSnapsh
 
 	checks["public_api"] = TestingPublicAPIConfigurationCheck()
 	agentGatewayCheck := environmentConfigurationCheck("AI_GATEWAY_API_KEY|VERCEL_OIDC_TOKEN")
-	if config, err := envconfig.AgentModel(); err != nil {
+	if _, err := envconfig.AgentModel(); err != nil {
 		agentGatewayCheck = TestingHealthCheck{Status: "unavailable", Mode: "configuration", Critical: false}
-	} else if config.Provider != "gateway" {
-		agentGatewayCheck = TestingHealthCheck{Status: "ready", Mode: "configuration", Critical: false}
 	}
 	checks["agent_gateway"] = agentGatewayCheck
 	// Pre-rename key, still emitted so any external dashboard or alert watching

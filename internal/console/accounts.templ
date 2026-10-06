@@ -96,8 +96,6 @@ templ accountDetail(v accountDetailView) {
 
 templ deviceIcon(platform string) {
 	switch platform {
-		case "ios", "android":
-			@iconPhone()
 		case "macos":
 			@iconLaptop()
 		default:

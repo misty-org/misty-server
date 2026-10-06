@@ -10,8 +10,6 @@ import (
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type PersonalAgentRunSummary struct {
@@ -43,19 +41,9 @@ type PersonalAgentRunSummary struct {
 	OwnerUserID        string          `json:"owner_user_id"`
 	InitialRunMode     string          `json:"initial_run_mode"`
 	EffectiveRunMode   string          `json:"effective_run_mode"`
-	ApprovalState      string          `json:"approval_state"`
 	ParentRunID        string          `json:"parent_run_id,omitempty"`
 	DelegationDepth    int             `json:"delegation_depth"`
 	ContextBindings    json.RawMessage `json:"context_bindings"`
-}
-
-type PersonalAgentActivityPage struct {
-	AgentID    string                    `json:"agent_id"`
-	WorkState  string                    `json:"work_state"`
-	QueueCount int                       `json:"queue_count"`
-	ActiveRun  *PersonalAgentRunSummary  `json:"active_run,omitempty"`
-	Runs       []PersonalAgentRunSummary `json:"runs"`
-	NextCursor string                    `json:"next_cursor,omitempty"`
 }
 
 type PersonalAgentRunDetail struct {
@@ -64,24 +52,23 @@ type PersonalAgentRunDetail struct {
 	Result      json.RawMessage         `json:"result"`
 	Steps       []WorkflowRunStep       `json:"steps"`
 	Activity    []SpaceTaskActivity     `json:"activity"`
-	Approvals   []AgentToolApproval     `json:"approvals"`
 }
 
 const personalAgentRunSummaryColumns = `r.id,r.agent_id,''::text,''::text,COALESCE(t.id,''),COALESCE(t.task_key,''),COALESCE(t.title,''),COALESCE(t.status,''),
 	r.trigger_kind,r.source_type,COALESCE(r.source_message_id,''),COALESCE((SELECT response.id FROM space_messages response WHERE response.origin->>'agent_run_id'=r.id ORDER BY response.created_at DESC LIMIT 1),''),COALESCE(r.input->>'input_modality','text'),r.state,EXISTS(SELECT 1 FROM space_run_steps failed_step WHERE failed_step.run_id=r.id AND failed_step.state='failed'),r.runtime_phase,r.progress,r.attempt,r.runtime_kind,COALESCE(r.error_code,''),COALESCE(r.error_message,''),
 	r.created_at,r.updated_at,r.completed_at,r.runtime_heartbeat_at,
-	r.owner_user_id,r.initial_run_mode,r.effective_run_mode,r.approval_state,COALESCE(r.parent_run_id,''),r.delegation_depth,r.context_bindings`
+	r.owner_user_id,r.initial_run_mode,r.effective_run_mode,COALESCE(r.parent_run_id,''),r.delegation_depth,r.context_bindings`
 
 func scanPersonalAgentRunSummary(row scanner, out *PersonalAgentRunSummary) error {
 	return row.Scan(&out.RunID, &out.AgentID, &out.SpaceID, &out.SpaceName, &out.TaskID, &out.TaskKey,
 		&out.TaskTitle, &out.TaskStatus, &out.TriggerKind, &out.SourceType, &out.SourceMessageID, &out.ResponseMessageID, &out.InputModality, &out.State, &out.HasFailedSteps, &out.Phase, &out.Progress, &out.Attempt,
 		&out.RuntimeKind, &out.ErrorCode, &out.ErrorMessage, &out.CreatedAt, &out.UpdatedAt,
 		&out.CompletedAt, &out.RuntimeHeartbeatAt, &out.OwnerUserID, &out.InitialRunMode, &out.EffectiveRunMode,
-		&out.ApprovalState, &out.ParentRunID, &out.DelegationDepth, &out.ContextBindings)
+		&out.ParentRunID, &out.DelegationDepth, &out.ContextBindings)
 }
 
 func (db *Database) PersonalAgentRunDetailForOwner(ctx context.Context, userID, runID string) (*PersonalAgentRunDetail, error) {
-	out := &PersonalAgentRunDetail{Steps: []WorkflowRunStep{}, Activity: []SpaceTaskActivity{}, Approvals: []AgentToolApproval{}}
+	out := &PersonalAgentRunDetail{Steps: []WorkflowRunStep{}, Activity: []SpaceTaskActivity{}}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := scanPersonalAgentRunSummary(tx.QueryRowContext(ctx, `SELECT `+personalAgentRunSummaryColumns+`
 			FROM space_runs r LEFT JOIN space_tasks t ON t.id=r.source_task_id
@@ -129,21 +116,7 @@ func (db *Database) PersonalAgentRunDetailForOwner(ctx context.Context, userID, 
 		if err := activityRows.Close(); err != nil {
 			return err
 		}
-		approvalRows, err := tx.QueryContext(ctx, `SELECT `+agentToolApprovalColumns+` FROM agent_run_tool_approvals WHERE run_id=$1 ORDER BY created_at`, runID)
-		if err != nil {
-			return err
-		}
-		defer approvalRows.Close()
-		for approvalRows.Next() {
-			var item AgentToolApproval
-			if err := scanAgentToolApproval(approvalRows, &item); err != nil {
-				return err
-			}
-			item.HookToken = ""
-			item.SignedCall = ""
-			out.Approvals = append(out.Approvals, item)
-		}
-		return approvalRows.Err()
+		return nil
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrSpaceNotFound
@@ -329,82 +302,11 @@ func (db *Database) CancelPersonalAgentTaskRunForOwner(ctx context.Context, user
 		if _, err := tx.ExecContext(ctx, `UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW() WHERE run_id=$1 AND state IN ('queued','leased','dispatched')`, runID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE agent_run_tool_approvals SET state='denied',decided_by_user_id=$2,decided_at=NOW() WHERE run_id=$1 AND state='pending'`, runID, userID); err != nil {
-			return err
-		}
 		if _, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW() WHERE run_id=$1 AND state='attached'`, runID); err != nil {
 			return err
 		}
 		if err := releasePersonalAgentRuntimeReservationsTx(ctx, tx, runID); err != nil {
 			return err
-		}
-		return nil // Account event trigger publishes the state change.
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrSpaceNotFound
-	}
-	return out, err
-}
-
-func (db *Database) RetryPersonalAgentTaskRunForOwner(ctx context.Context, userID, runID string) (*SpaceRun, error) {
-	out := &SpaceRun{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		previous := &SpaceRun{}
-		if err := scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs r
-			WHERE r.id=$1
-			AND EXISTS(SELECT 1 FROM misty_ask_identities a WHERE a.id=r.agent_id AND a.owner_user_id=$2 AND a.deleted_at IS NULL)
-			AND r.owner_user_id=$2
-			FOR UPDATE`, runID, userID), previous); err != nil {
-			return err
-		}
-		legacyFailedTools := false
-		if previous.State == "completed" {
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_run_steps WHERE run_id=$1 AND state='failed')`, previous.ID).Scan(&legacyFailedTools); err != nil {
-				return err
-			}
-		}
-		if previous.State != "failed" && previous.State != "canceled" && previous.State != "completed_with_errors" && !legacyFailedTools {
-			return ErrSpaceConflict
-		}
-		if _, err := askExecutionContextTx(ctx, tx, userID, previous.SpaceID, previous.AgentID); err != nil {
-			return err
-		}
-		var task *SpaceTask
-		if previous.SourceTaskID != "" {
-			task = &SpaceTask{}
-			if err := scanSpaceTask(tx.QueryRowContext(ctx, `SELECT `+spaceTaskColumns+` FROM space_tasks WHERE id=$1 AND assignee_agent_id=$2 AND archived_at IS NULL`, previous.SourceTaskID, previous.AgentID), task); err != nil {
-				return err
-			}
-		}
-		newID := "run_" + uuid.NewString()
-		if err := scanSpaceRun(tx.QueryRowContext(ctx, `INSERT INTO space_runs(
-			id,space_id,resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,result,
-			requesting_member_id,source_conversation_id,source_type,agent_id,capability_id,outputs,artifacts,retry_of_run_id,
-			agent_version_id,attempt,source_task_id,action_envelope,conversation_scope_kind,scope_conversation_id,source_message_id,
-			owner_user_id,initial_run_mode,effective_run_mode,agent_version_snapshot,parent_run_id,delegation_depth,context_bindings)
-			SELECT $1,NULL,'agent',r.agent_id,$2,$2,'retry','queued',r.input,'{}'::jsonb,
-			$2,r.source_conversation_id,r.source_type,r.agent_id,r.capability_id,'{}'::jsonb,'[]'::jsonb,r.id,
-			r.agent_version_id,1,r.source_task_id,r.action_envelope,r.conversation_scope_kind,r.scope_conversation_id,r.source_message_id,
-			$2,r.initial_run_mode,r.initial_run_mode,r.agent_version_snapshot,r.parent_run_id,r.delegation_depth,r.context_bindings
-			FROM space_runs r WHERE r.id=$3 RETURNING `+spaceRunColumns, newID, userID, previous.ID), out); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO agent_run_contexts(id,run_id,owner_user_id,space_id,device_id,kind,opaque_ref,display_name,capabilities,metadata,expires_at)
-			SELECT 'context_'||gen_random_uuid(),$1,$2,NULL,device_id,kind,opaque_ref,display_name,capabilities,metadata,NOW()+INTERVAL '24 hours'
-			FROM agent_run_contexts WHERE run_id=$3 AND state='attached' AND expires_at>NOW()`, out.ID, userID, previous.ID); err != nil {
-			return err
-		}
-		jobTrigger := "direct_instruction"
-		if task != nil {
-			jobTrigger = "task_assignment"
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO agent_run_jobs(run_id,space_id,task_id,agent_id,trigger_kind) VALUES($1,NULLIF($2,''),NULLIF($3,''),$4,$5)`, out.ID, out.SpaceID, out.SourceTaskID, out.AgentID, jobTrigger); err != nil {
-			return err
-		}
-		if task != nil {
-			if _, err := insertTaskActivityTx(ctx, tx, SpaceTaskActivity{SpaceID: task.SpaceID, TaskID: task.ID, ActorKind: "agent", ActorAgentID: out.AgentID, RunID: out.ID, Kind: "progress", Message: "Queued to retry this task", Metadata: mustJSON(map[string]any{"retry_of_run_id": previous.ID})}); err != nil {
-				return err
-			}
 		}
 		return nil // Account event trigger publishes the state change.
 	})

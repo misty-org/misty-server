@@ -42,15 +42,15 @@ func (s *Service) advanceLocked(ctx context.Context, session *Session) error {
 		if GatewayModelSupportsReasoning(ctx, session.ModelID) {
 			effort = session.ReasoningEffort
 		}
-		selectedProvider, providerErr = NewGatewayProviderForModelWithReasoning(session.ModelID, effort)
+		selectedProvider, providerErr = NewGatewayProviderForModelWithReasoning(s.models, session.ModelID, effort)
 		if providerErr != nil {
 			return providerErr
 		}
 	}
 	provider, model := TestingProviderStatus(selectedProvider)
-	idempotencyKey := fmt.Sprintf("%s:%d", session.ID, session.nextSequence+1)
+	idempotencyKey := fmt.Sprintf("%s:turn:%d:step:%d", session.ID, session.BillingTurnSequence, session.ProviderCallsThisTurn)
 	if session.BillingScope != "" {
-		idempotencyKey = fmt.Sprintf("%s:%d", session.BillingScope, session.ProviderCallsThisTurn)
+		idempotencyKey = fmt.Sprintf("%s:step:%d", session.BillingScope, session.ProviderCallsThisTurn)
 	}
 	var reservation *UsageReservation
 	var err error
@@ -59,7 +59,7 @@ func (s *Service) advanceLocked(ctx context.Context, session *Session) error {
 		if billingUserID == "" {
 			billingUserID = session.UserID
 		}
-		reservation, err = ReserveUsage(s.meter, billingUserID, session.SpaceID, idempotencyKey, hostedAIMeterAgent, provider, model, estimateRequestTokens(request), MaxModelOutputTokens)
+		reservation, err = ReserveMeasuredUsage(s.meter, billingUserID, idempotencyKey, provider, model, map[string]int64{"input_bytes": int64(TestingRequestSizeBytes(request)), "output_tokens": MaxModelOutputTokens}, "")
 		if err != nil {
 			return err
 		}
@@ -200,17 +200,12 @@ func providerCallLimit(session *Session) int {
 	return MaxProviderCallsPerTurn
 }
 
-func estimateRequestTokens(request ModelRequest) int64 {
-	characters := TestingRequestSizeBytes(request)
-	return int64(characters/4 + 256)
-}
-
 func TestingRequestSizeBytes(request ModelRequest) int {
 	characters := 0
 	// The system prompt and the Space blocks are part of the payload the provider
 	// is sent, so they have to be counted here. Omitting them made the
 	// MaxProviderRequestBytes guard blind to context size, and made
-	// estimateRequestTokens under-reserve credits by the whole prompt.
+	// native input measurements omit the whole prompt.
 	characters += len(request.SystemPrompt) + len(request.SpaceCard) + len(request.SpaceRecords)
 	for _, message := range request.Messages {
 		characters += len(message.Content)

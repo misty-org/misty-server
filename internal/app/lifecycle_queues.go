@@ -20,8 +20,8 @@ func runLifecycleQueues(ctx context.Context, server *Server) {
 			if err != nil {
 				return recaps, err
 			}
-			tasks, err := server.AI.ProcessDueScheduledTasks(ctx, now, 25)
-			return recaps + tasks, err
+			workflows, err := server.AI.ProcessDueWorkflowSchedules(ctx, now, 25)
+			return recaps + workflows, err
 		}
 	}
 	if server.Spaces != nil {

@@ -24,7 +24,7 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 	err = chi.Walk(server.Router, func(method, path string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		normalized := strings.TrimPrefix(strings.TrimPrefix(path, "/api/"), "/v1/")
 		normalized = "/" + strings.TrimLeft(normalized, "/")
-		for _, retired := range []string{"/stripe/webhook", "/billing/trial/start", "/billing/credit-checkout-session", "/apps", "/me/apps", "/app-runtime", "/me/routines", "/me/routine-runs", "/automations", "/waitlist", "/activepieces", "/capabilities", "/me/sdk-targets", "/me/sdk-runs", "/me/capability-approvals", "/self-host", "/internal/self-host", "/billing/self-host-entitlement"} {
+		for _, retired := range []string{"/stripe/webhook", "/billing/trial/start", "/billing/credit-checkout-session", "/apps", "/me/apps", "/app-runtime", "/me/routines", "/me/routine-runs", "/automations", "/waitlist", "/activepieces", "/capabilities", "/me/sdk-targets", "/me/sdk-runs", "/me/capability-approvals", "/me/agent-approvals", "/me/agent-invocations", "/mcp/connections", "/studio", "/self-host", "/internal/self-host", "/billing/self-host-entitlement"} {
 			if normalized == retired || strings.HasPrefix(normalized, retired+"/") {
 				t.Errorf("retired route remains: %s %s", method, path)
 			}
@@ -38,7 +38,7 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"/sync/ws", "/sync/vault", "/sync/devices", "/sync/control", "/spaces", "/mcp/connections", "/me/agent-approvals", "/me/agent-invocations/{runID}/approvals/{approvalID}", "/internal/agent-runtime/runs/{runID}/tools"} {
+	for _, required := range []string{"/sync/ws", "/sync/vault", "/sync/devices", "/sync/control", "/spaces", "/internal/agent-runtime/runs/{runID}/tools"} {
 		if !found[required] {
 			t.Errorf("retained route missing: %s", required)
 		}

@@ -23,8 +23,10 @@ export function modelTimeout(budget: ExecutionBudget, now: number, legacyDeadlin
 
 export function accumulateModelUsage(previous: LanguageModelUsage | undefined, next: LanguageModelUsage): LanguageModelUsage {
   if (!previous) return next;
-  // Preserve unavailable details as unavailable; no synthetic token estimate.
-  const sum = (left: number | undefined, right: number | undefined) => left === undefined && right === undefined ? undefined : (left ?? 0) + (right ?? 0);
+  // A total is authoritative only when every contributing call reported it.
+  // Root SDK aggregates may omit details that nested visual calls do report;
+  // adding the known subset would falsely contradict the per-call receipts.
+  const sum = (left: number | undefined, right: number | undefined) => left === undefined || right === undefined ? undefined : left + right;
   return {
     inputTokens: sum(previous.inputTokens, next.inputTokens),
     outputTokens: sum(previous.outputTokens, next.outputTokens),

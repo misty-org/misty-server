@@ -12,7 +12,6 @@ import (
 
 const (
 	MaxLibraryAlbums     = 500
-	MaxLibraryGroups     = 100
 	MaxLibraryGroupRules = 12
 )
 

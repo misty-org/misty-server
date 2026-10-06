@@ -119,20 +119,11 @@ func NewAPIRateLimiter() *APIRateLimiter {
 			// Provider fan-out: each of these makes an upstream call on Misty's own
 			// credentials, so abuse burns third-party quota and can get the app
 			// rate limited or banned rather than merely costing us CPU.
-			"POST /spaces/{spaceID}/integrations/discord/link":               {Limit: 5, Window: time.Minute},
-			"POST /spaces/{spaceID}/integrations/discord/link/{id}/sync":     {Limit: 10, Window: time.Minute},
-			"POST /spaces/{spaceID}/integrations/discord/link/{id}/publish":  {Limit: 20, Window: time.Minute},
-			"POST /spaces/{spaceID}/integrations/discord/links":              {Limit: 5, Window: time.Minute},
-			"POST /spaces/{spaceID}/integrations/discord/links/{id}/sync":    {Limit: 10, Window: time.Minute},
-			"POST /spaces/{spaceID}/integrations/discord/links/{id}/publish": {Limit: 20, Window: time.Minute},
-			"GET /spaces/{spaceID}/integrations/notion/sources":              {Limit: 10, Window: time.Minute},
-			"GET /spaces/{spaceID}/integrations/notion/search":               {Limit: 20, Window: time.Minute},
-			"POST /spaces/{spaceID}/integrations/notion/pages":               {Limit: 20, Window: time.Minute},
-			"POST /spaces/{spaceID}/calendar/sync":                           {Limit: 6, Window: time.Minute},
+			"POST /spaces/{spaceID}/calendar/sync": {Limit: 6, Window: time.Minute},
 
 			// OAuth start is cheap for us but creates state rows and drives users
 			// at a third-party consent screen.
-			"POST /spaces/{spaceID}/integrations/{provider}/authorize": {Limit: 10, Window: time.Minute},
+			"POST /connections/{provider}/authorize": {Limit: 10, Window: time.Minute},
 		},
 		TestingLimiters: make(map[string]*SlidingWindowLimiter),
 	}
@@ -191,13 +182,6 @@ func (l *SlidingWindowLimiter) purgeExpired(cutoff time.Time) {
 	}
 }
 
-// TrackedKeys reports how many callers this limiter is holding state for.
-func (l *SlidingWindowLimiter) TrackedKeys() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.history)
-}
-
 func (l *APIRateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions || isAgentRuntimeCallback(r) {
@@ -250,3 +234,10 @@ func (l *APIRateLimiter) policyFor(method, path string) RateLimitPolicy {
 // fewer route shapes; anything beyond this is a caller inventing paths, and
 // those share one overflow bucket instead of allocating unboundedly.
 const TestingMaxTrackedRoutes = 512
+
+// TrackedKeys reports how many callers this limiter is holding state for.
+func (l *SlidingWindowLimiter) TrackedKeys() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.history)
+}

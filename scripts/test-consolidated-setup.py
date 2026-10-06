@@ -276,7 +276,7 @@ except subprocess.CalledProcessError as e:
     print(e.stderr[-4000:] if e.stderr else "")
     raise
 finally:
-    subprocess.run(["docker", "rm", "-f", setup, pg, legacy], capture_output=True)
+    subprocess.run(["docker", "rm", "-fv", setup, pg, legacy], capture_output=True)
     subprocess.run(["docker", "network", "rm", name], capture_output=True)
     import shutil
 

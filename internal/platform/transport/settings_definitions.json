@@ -8,7 +8,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.startup.view",
@@ -19,7 +19,7 @@
     "default": "browser",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "enum": ["browser", "files", "agents"],
     "legacyValues": ["browser", "files", "agents"]
   },
@@ -29,10 +29,10 @@
     "page": "general",
     "section": "general",
     "key": "workspace_default_tab_index",
-    "default": "home",
+    "default": "browser",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "enum": ["home", "browser", "files", "agents"],
     "legacyValues": ["home", "browser", "files", "agents"]
   },
@@ -56,7 +56,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.appearance.compact_mode_enabled",
@@ -67,7 +67,7 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.appearance.thumbnail_previews_enabled",
@@ -78,7 +78,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.appearance.panel_opacity",
@@ -89,7 +89,7 @@
     "default": 0.82,
     "owner": "account",
     "type": "number",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "min": 0,
     "max": 1
   },
@@ -102,7 +102,7 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.appearance.dim_inactive_panes",
@@ -113,7 +113,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.zoom",
@@ -124,7 +124,7 @@
     "default": 1,
     "owner": "account",
     "type": "number",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "min": 0.5,
     "max": 2
   },
@@ -148,7 +148,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.notifications.badge_count_enabled",
@@ -159,7 +159,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.notifications.sound_notifications_enabled",
@@ -170,7 +170,7 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.notifications.quiet_hours_enabled",
@@ -181,7 +181,7 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.notifications.digest_notifications_enabled",
@@ -192,7 +192,7 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.notifications.desktop_notifications_enabled",
@@ -214,7 +214,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.privacy.anonymous_usage_analytics_enabled",
@@ -225,7 +225,7 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.privacy.anonymous_error_reporting_enabled",
@@ -236,7 +236,7 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "app.updates.automatic",
@@ -269,7 +269,7 @@
     "default": "google",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "enum": ["google", "duckduckgo", "bing", "brave", "startpage"],
     "legacyValues": ["google", "duckduckgo", "bing", "brave", "startpage"]
   },
@@ -293,7 +293,7 @@
     "default": "",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "browser.externalLinks",
@@ -304,7 +304,18 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
+  },
+  {
+    "id": "browser.bookmarksBar",
+    "label": "Show bookmarks bar",
+    "page": "browser",
+    "section": "general",
+    "key": "browser_bookmarks_bar",
+    "default": true,
+    "owner": "account",
+    "type": "boolean",
+    "platforms": ["desktop"]
   },
   {
     "id": "browser.statusBubble",
@@ -315,7 +326,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "browser.downloads.directory",
@@ -337,7 +348,7 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "browser.privacy.page_state_restore",
@@ -381,7 +392,7 @@
     "default": "home",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "enum": ["home", "chat", "journal", "planner", "library"]
   },
   {
@@ -393,7 +404,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "spaces.agenda.roadmap",
@@ -404,7 +415,7 @@
     "default": true,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "files.view",
@@ -415,7 +426,7 @@
     "default": "list",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "enum": ["list", "grid"],
     "legacyValues": ["list", "grid"]
   },
@@ -428,7 +439,7 @@
     "default": "open",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "enum": ["open", "preview", "details"],
     "legacyValues": ["open", "preview", "details"]
   },
@@ -441,7 +452,7 @@
     "default": false,
     "owner": "account",
     "type": "boolean",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "files.startingFolder",
@@ -464,6 +475,19 @@
     "owner": "account",
     "type": "string",
     "platforms": ["desktop"]
+  },
+  {
+    "id": "files.devices.sessionDays",
+    "label": "Keep devices connected for",
+    "page": "devices",
+    "section": "files",
+    "key": "device_session_days",
+    "default": "30",
+    "owner": "account",
+    "type": "string",
+    "platforms": ["desktop"],
+    "keywords": ["session", "LAN", "pair", "clipboard", "expire"],
+    "enum": ["1", "7", "30", "90"]
   },
   {
     "id": "files.indexing.automatic_file_discovery_enabled",
@@ -533,7 +557,30 @@
     "default": "",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
+  },
+  {
+    "id": "agents.collaboration_mode",
+    "label": "Start new conversations in",
+    "page": "agents-defaults",
+    "section": "agent",
+    "key": "default_collaboration_mode",
+    "default": "act",
+    "owner": "account",
+    "type": "string",
+    "platforms": ["desktop"],
+    "enum": ["act", "plan"]
+  },
+  {
+    "id": "agents.plan_deep_thinking",
+    "label": "Think harder while planning",
+    "page": "agents-defaults",
+    "section": "agent",
+    "key": "plan_deep_thinking",
+    "default": false,
+    "owner": "account",
+    "type": "boolean",
+    "platforms": ["desktop"]
   },
   {
     "id": "agents.reasoning",
@@ -544,7 +591,7 @@
     "default": "",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "enum": ["", "none", "minimal", "low", "medium", "high", "xhigh"]
   },
   {
@@ -556,7 +603,7 @@
     "default": 0.15,
     "owner": "account",
     "type": "number",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "min": 0,
     "max": 0.4
   },
@@ -569,7 +616,7 @@
     "default": "none",
     "owner": "account",
     "type": "string",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "enum": ["none", "outline", "border"]
   },
   {
@@ -582,7 +629,7 @@
     "default": "[]",
     "type": "string",
     "owner": "account",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "maxLength": 65536,
     "format": "json"
   },
@@ -595,7 +642,7 @@
     "default": "[]",
     "type": "string",
     "owner": "account",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "maxLength": 65536,
     "format": "json"
   },
@@ -608,7 +655,7 @@
     "default": true,
     "type": "boolean",
     "owner": "account",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "agents.companion.size",
@@ -619,7 +666,7 @@
     "default": 100,
     "type": "number",
     "owner": "account",
-    "platforms": ["desktop", "web"],
+    "platforms": ["desktop"],
     "min": 50,
     "max": 200
   },
@@ -632,7 +679,7 @@
     "default": false,
     "type": "boolean",
     "owner": "account",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "agents.companion.model",
@@ -643,7 +690,7 @@
     "default": "",
     "type": "string",
     "owner": "account",
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "files.openWith",
@@ -656,7 +703,20 @@
     "type": "string",
     "format": "json",
     "maxLength": 65536,
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
+  },
+  {
+    "id": "collections.tabs.navigator",
+    "label": "Navigation tab order",
+    "page": "appearance",
+    "section": "collections",
+    "key": "navigator_tab_order",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "format": "json",
+    "maxLength": 4096,
+    "platforms": ["desktop"]
   },
   {
     "id": "collections.tabs.space",
@@ -669,7 +729,7 @@
     "type": "string",
     "format": "json",
     "maxLength": 4096,
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "collections.tabs.chat",
@@ -682,7 +742,7 @@
     "type": "string",
     "format": "json",
     "maxLength": 4096,
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "collections.tabs.journal",
@@ -695,7 +755,7 @@
     "type": "string",
     "format": "json",
     "maxLength": 4096,
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "collections.tabs.planner",
@@ -708,7 +768,7 @@
     "type": "string",
     "format": "json",
     "maxLength": 4096,
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "collections.tabs.library",
@@ -721,7 +781,7 @@
     "type": "string",
     "format": "json",
     "maxLength": 4096,
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
   },
   {
     "id": "collections.tabs.agents",
@@ -734,6 +794,79 @@
     "type": "string",
     "format": "json",
     "maxLength": 4096,
-    "platforms": ["desktop", "web"]
+    "platforms": ["desktop"]
+  },
+  {
+    "id": "extensions.installations",
+    "label": "Installed extensions",
+    "page": "browser",
+    "section": "extensions",
+    "key": "installations",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "platforms": ["desktop"],
+    "format": "json",
+    "maxLength": 524288
+  },
+  {
+    "id": "extensions.pins",
+    "label": "Pinned extensions",
+    "page": "browser",
+    "section": "extensions",
+    "key": "pins",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "platforms": ["desktop"],
+    "format": "json",
+    "maxLength": 8192
+  },
+  {
+    "id": "extensions.pins_expanded",
+    "label": "Show pinned extensions",
+    "page": "browser",
+    "section": "extensions",
+    "key": "pins_expanded",
+    "default": true,
+    "owner": "account",
+    "type": "boolean",
+    "platforms": ["desktop"]
+  },
+  {
+    "id": "extensions.agent_access",
+    "label": "Allow agents to use extensions",
+    "page": "browser",
+    "section": "extensions",
+    "key": "agent_access",
+    "default": true,
+    "owner": "account",
+    "type": "boolean",
+    "platforms": ["desktop"]
+  },
+  {
+    "id": "extensions.view",
+    "label": "Extensions view",
+    "page": "browser",
+    "section": "extensions",
+    "key": "view",
+    "default": "list",
+    "owner": "account",
+    "type": "string",
+    "platforms": ["desktop"],
+    "enum": ["list", "grid"]
+  },
+  {
+    "id": "collections.tabs.extensions",
+    "label": "Extension sections",
+    "page": "browser",
+    "section": "collections",
+    "key": "extensions_tabs_json",
+    "default": "[]",
+    "owner": "account",
+    "type": "string",
+    "format": "json",
+    "maxLength": 4096,
+    "platforms": ["desktop"]
   }
 ]

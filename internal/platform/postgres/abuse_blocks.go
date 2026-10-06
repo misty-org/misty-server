@@ -61,15 +61,6 @@ func (db *Database) ActiveAbuseBlocks(ctx context.Context) ([]AbuseBlock, error)
 	return blocks, err
 }
 
-// ClearAbuseBlock lifts a block, for operator intervention when a legitimate
-// caller is caught.
-func (db *Database) ClearAbuseBlock(ctx context.Context, key string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `DELETE FROM abuse_blocks WHERE block_key=$1`, key)
-		return err
-	})
-}
-
 func (db *Database) SubscribeAbuseBlockEvents(ctx context.Context) (<-chan struct{}, func(), error) {
 	return db.SubscribeWorkerEvents(ctx, "abuse-blocks")
 }

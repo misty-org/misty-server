@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/kannachi323/misty/server/internal/cloudusage"
 
 	"github.com/lib/pq"
 )
@@ -189,7 +190,7 @@ func (db *Store) BrowserSyncWorkspaceDelta(ctx context.Context, userID, vault, d
 	if out.Slots, err = scanSlots(slots); err != nil {
 		return nil, err
 	}
-	return out, tx.Commit()
+	return out, cloudusage.Commit(ctx, tx)
 }
 
 func (db *Store) BrowserSyncWorkspaceSnapshot(ctx context.Context, userID, vault, device, workspace string) (*SyncWorkspaceSnapshot, error) {
@@ -226,7 +227,7 @@ func (db *Store) BrowserSyncWorkspaceSnapshot(ctx context.Context, userID, vault
 		}
 		out.LastChange = &c
 	}
-	return out, tx.Commit()
+	return out, cloudusage.Commit(ctx, tx)
 }
 
 type SyncSlot struct {
@@ -251,10 +252,10 @@ func (db *Store) BrowserSyncSlot(ctx context.Context, userID, vault, device, wor
 	out := &SyncSlot{WorkspaceID: workspace, ViewNodeID: tab, Slot: slot}
 	err = tx.QueryRowContext(ctx, `SELECT version,key_epoch,ciphertext FROM browser_sync_slots WHERE vault_id=$1 AND workspace_id=$2 AND view_node_id=$3 AND slot_kind=$4`, vault, workspace, tab, slot).Scan(&out.Version, &out.KeyEpoch, &out.Ciphertext)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, tx.Commit()
+		return nil, cloudusage.Commit(ctx, tx)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return out, tx.Commit()
+	return out, cloudusage.Commit(ctx, tx)
 }

@@ -71,7 +71,7 @@ func (s *SpacesService) GlobalVisualSearch() http.HandlerFunc {
 			hit.AccountID, hit.Source = userID, "server"
 			hits = append(hits, hit)
 		}
-		if smartHits, searchErr := s.database.SearchSmartLibraryHybrid(userID, "", query, vector, limit); searchErr == nil {
+		if smartHits, searchErr := s.database.SearchSmartLibraryHybrid(userID, "", query, vector, limit, configuredEmbeddingModel(r.Context(), s.searchAnalyzer, userID)); searchErr == nil {
 			for _, item := range smartHits {
 				title := item.Description
 				if title == "" {
@@ -85,7 +85,7 @@ func (s *SpacesService) GlobalVisualSearch() http.HandlerFunc {
 			if !space.Permissions["library.view"] || len(hits) >= limit {
 				continue
 			}
-			items, searchErr := s.database.SearchSpaceLibraryIntelligence(r.Context(), userID, space.ID, query, vector, min(20, limit-len(hits)))
+			items, searchErr := s.database.SearchSpaceLibraryIntelligence(r.Context(), userID, space.ID, query, vector, min(20, limit-len(hits)), configuredEmbeddingModel(r.Context(), s.searchAnalyzer, userID))
 			if searchErr != nil {
 				continue
 			}
@@ -93,7 +93,7 @@ func (s *SpacesService) GlobalVisualSearch() http.HandlerFunc {
 				appendHit(globalSearchHit{ID: "library:" + item.ID, Kind: "library", Title: item.DisplayName, Body: item.Caption, Keywords: item.Tags, Href: "/spaces/" + url.PathEscape(space.ID) + "/library?item=" + url.QueryEscape(item.ID), SpaceID: space.ID, SpaceName: space.Name, CanonicalID: "library:" + item.ID, Score: .8, SemanticScore: .8})
 			}
 		}
-		if indexed, searchErr := s.database.SearchAIRetrieval(r.Context(), userID, query, vector, limit); searchErr == nil {
+		if indexed, searchErr := s.database.SearchAIRetrieval(r.Context(), userID, query, vector, limit, "", configuredEmbeddingModel(r.Context(), s.searchAnalyzer, userID)); searchErr == nil {
 			for _, item := range indexed {
 				kind := item.SourceKind
 				if kind == "provider" {

@@ -1,17 +1,23 @@
 package api
 
+import "encoding/json"
+
 type mistyConversationMessage struct {
-	ID          string                        `json:"id"`
-	Role        string                        `json:"role"`
-	Mode        string                        `json:"mode"`
-	Content     string                        `json:"content"`
-	CreatedAt   string                        `json:"createdAt"`
-	State       string                        `json:"state"`
-	Retryable   bool                          `json:"retryable,omitempty"`
-	Action      *mistyConversationAction      `json:"action,omitempty"`
-	Attachments []mistyConversationAttachment `json:"attachments,omitempty"`
+	Artifact     json.RawMessage               `json:"artifact,omitempty"`
+	InvocationID string                        `json:"invocationId,omitempty"`
+	ID           string                        `json:"id"`
+	Role         string                        `json:"role"`
+	Mode         string                        `json:"mode"`
+	Content      string                        `json:"content"`
+	CreatedAt    string                        `json:"createdAt"`
+	State        string                        `json:"state"`
+	Retryable    bool                          `json:"retryable,omitempty"`
+	Action       *mistyConversationAction      `json:"action,omitempty"`
+	Attachments  []mistyConversationAttachment `json:"attachments,omitempty"`
 	// Source marks turns Misty started on its own, such as "scheduled_task".
 	Source string `json:"source,omitempty"`
+	// CompactedAfter marks the last message the model now sees only as notes.
+	CompactedAfter bool `json:"compactedAfter,omitempty"`
 }
 
 type mistyConversationAttachment struct {
@@ -48,19 +54,10 @@ type mistyConversation struct {
 	OriginHref    string                     `json:"originHref,omitempty"`
 	Privacy       string                     `json:"privacyBoundary,omitempty"`
 	ModelID       string                     `json:"modelId"`
+	ModelOverride string                     `json:"modelOverride,omitempty"`
 	Reasoning     string                     `json:"reasoningEffort,omitempty"`
 	CreatedAt     string                     `json:"createdAt"`
 	UpdatedAt     string                     `json:"updatedAt"`
 	Messages      []mistyConversationMessage `json:"messages"`
 	Remote        bool                       `json:"remote"`
-}
-
-type mistyContextReference struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"`
-	Title     string `json:"title"`
-	Href      string `json:"href,omitempty"`
-	SpaceID   string `json:"spaceId,omitempty"`
-	SpaceName string `json:"spaceName,omitempty"`
-	Attached  bool   `json:"attached,omitempty"`
 }

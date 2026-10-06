@@ -2,15 +2,12 @@ package api
 
 import (
 	"encoding/base64"
-	"errors"
 	"net"
 	"strings"
 	"testing"
 
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 func TestSpaceLinkEncryptionRoundTrip(t *testing.T) {
@@ -65,37 +62,3 @@ func TestValidGoogleDriveTarget(t *testing.T) {
 	}
 }
 
-func TestSpaceTargetFingerprintDoesNotExposeTarget(t *testing.T) {
-	target := "https://drive.google.com/file/d/secret/view"
-	fingerprint := SpaceTargetFingerprint(target)
-	if len(fingerprint) != 16 || strings.Contains(fingerprint, "secret") {
-		t.Fatalf("unsafe fingerprint %q", fingerprint)
-	}
-}
-
-func TestAgentMentionFailuresAreSafeAndActionable(t *testing.T) {
-	tests := []struct {
-		name   string
-		err    error
-		code   string
-		reason string
-	}{
-		{name: "personal hosted AI", err: serveragent.HostedAILimitReachedError{Required: 10, Available: 2, Scope: "personal"}, code: "hosted_ai_limit_reached", reason: "personal_ai_limit_reached"},
-		{name: "Space hosted AI", err: serveragent.HostedAILimitReachedError{Required: 10, Available: 2, Scope: "space"}, code: "hosted_ai_limit_reached", reason: "space_ai_limit_reached"},
-		{name: "integration", err: db.ErrWorkflowIntegrationRequired, code: "integration_required"},
-		{name: "permission", err: db.ErrLibraryForbidden, code: "forbidden"},
-		{name: "removed", err: db.ErrAgentNotFound, code: "resource_unavailable"},
-		{name: "internal", err: errors.New("provider secret detail"), code: "run_failed"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			failure := TestingAgentMentionFailureFromError("agent_one", test.err)
-			if failure.AgentID != "agent_one" || failure.Code != test.code || failure.Reason != test.reason || failure.Message == "" {
-				t.Fatalf("agentMentionFailureFromError() = %#v", failure)
-			}
-			if strings.Contains(failure.Message, "provider secret detail") {
-				t.Fatalf("failure leaked internal error: %#v", failure)
-			}
-		})
-	}
-}

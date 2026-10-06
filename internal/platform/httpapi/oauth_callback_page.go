@@ -128,14 +128,6 @@ var (
 		Hint:   "Start the connection again. If it keeps happening the provider app configuration needs attention.",
 		Status: http.StatusBadGateway,
 	}
-	// The authorization was fine; the account's plan does not allow another
-	// cloud connection.
-	TestingOAuthCloudConnectionLimit = TestingOAuthCallbackFailure{
-		Reason: "cloud_connection_limit",
-		Detail: "Basic accounts can connect one cloud account.",
-		Hint:   "Disconnect the existing cloud account, or upgrade your plan, then try again.",
-		Status: http.StatusForbidden,
-	}
 	// Everything upstream worked; persisting the connection did not.
 	TestingOAuthNotSaved = TestingOAuthCallbackFailure{
 		Reason: "not_saved",
@@ -182,9 +174,6 @@ func TestingProviderRefusalDetail(r *http.Request) string {
 // providerDisplayName prefers the catalog's branded name and falls back to the
 // raw identifier, which may be anything at all since it comes from the URL.
 func providerDisplayName(provider string) string {
-	if definition, ok := TestingProviderOAuthCatalog[provider]; ok {
-		return definition.Name
-	}
 	if definition, ok := TestingCloudOAuthCatalog[provider]; ok {
 		return definition.Name
 	}

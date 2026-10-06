@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -62,9 +61,6 @@ func (s *SpacesService) providerAccessToken(ctx context.Context, userID, spaceID
 }
 
 func providerRefreshDefinition(provider string) (providerOAuthDefinition, bool) {
-	if definition, exists := TestingProviderOAuthCatalog[provider]; exists {
-		return definition, true
-	}
 	connected, exists := TestingConnectedAccountOAuthCatalog[provider]
 	if !exists {
 		return providerOAuthDefinition{}, false
@@ -73,54 +69,15 @@ func providerRefreshDefinition(provider string) (providerOAuthDefinition, bool) 
 		ID: connected.ID, Name: connected.Name,
 		AuthorizeURL: connected.AuthorizeURL, TokenURL: connected.TokenURL,
 		ClientIDEnv: connected.ClientIDEnv, ClientSecretEnv: connected.ClientSecretEnv,
-		PKCE: !connected.DisablePKCE,
+		PKCE: true,
 	}, true
 }
 
-func exchangeProviderCode(ctx context.Context, definition providerOAuthDefinition, code, verifier, redirect string) (providerTokenEnvelope, []byte, error) {
-	values := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {redirect}, "client_id": {TestingProviderOAuthClientID(definition)}, "client_secret": {TestingProviderOAuthClientSecret(definition)}}
-	if definition.PKCE {
-		values.Set("code_verifier", verifier)
-	}
-	var request *http.Request
-	if definition.ID == "notion" {
-		encoded, _ := json.Marshal(map[string]string{"grant_type": "authorization_code", "code": code, "redirect_uri": redirect})
-		request, _ = http.NewRequestWithContext(ctx, http.MethodPost, definition.TokenURL, bytes.NewReader(encoded))
-		request.Header.Set("Content-Type", "application/json")
-		request.SetBasicAuth(values.Get("client_id"), values.Get("client_secret"))
-	} else {
-		request, _ = http.NewRequestWithContext(ctx, http.MethodPost, definition.TokenURL, strings.NewReader(values.Encode()))
-		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
-	request.Header.Set("Accept", "application/json")
-	response, err := (&http.Client{Timeout: 20 * time.Second}).Do(request)
-	if err != nil {
-		return providerTokenEnvelope{}, nil, err
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	if err != nil || response.StatusCode < 200 || response.StatusCode >= 300 {
-		return providerTokenEnvelope{}, nil, fmt.Errorf("token exchange returned %s", response.Status)
-	}
-	var token providerTokenEnvelope
-	if err := json.Unmarshal(raw, &token); err != nil {
-		return token, raw, err
-	}
-	return token, raw, nil
-}
 
 func refreshProviderToken(ctx context.Context, definition providerOAuthDefinition, refreshToken string) (providerTokenEnvelope, []byte, error) {
 	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}, "client_id": {TestingProviderOAuthClientID(definition)}, "client_secret": {TestingProviderOAuthClientSecret(definition)}}
-	var request *http.Request
-	if definition.ID == "notion" {
-		encoded, _ := json.Marshal(map[string]string{"grant_type": "refresh_token", "refresh_token": refreshToken})
-		request, _ = http.NewRequestWithContext(ctx, http.MethodPost, definition.TokenURL, bytes.NewReader(encoded))
-		request.Header.Set("Content-Type", "application/json")
-		request.SetBasicAuth(values.Get("client_id"), values.Get("client_secret"))
-	} else {
-		request, _ = http.NewRequestWithContext(ctx, http.MethodPost, definition.TokenURL, strings.NewReader(values.Encode()))
-		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
+	request, _ := http.NewRequestWithContext(ctx, http.MethodPost, definition.TokenURL, strings.NewReader(values.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Accept", "application/json")
 	response, err := (&http.Client{Timeout: 20 * time.Second}).Do(request)
 	if err != nil {
@@ -141,38 +98,6 @@ func refreshProviderToken(ctx context.Context, definition providerOAuthDefinitio
 	return token, raw, nil
 }
 
-func fetchProviderAccountIdentity(ctx context.Context, provider string, token providerTokenEnvelope) (string, string) {
-	endpoint, method := "", http.MethodGet
-	switch provider {
-	case "google":
-		endpoint = "https://openidconnect.googleapis.com/v1/userinfo"
-	case "discord":
-		endpoint = "https://discord.com/api/v10/users/@me"
-	default:
-		return "", ""
-	}
-	request, _ := http.NewRequestWithContext(ctx, method, endpoint, nil)
-	kind := token.TokenType
-	if kind == "" {
-		kind = "Bearer"
-	}
-	request.Header.Set("Authorization", kind+" "+token.AccessToken)
-	request.Header.Set("Accept", "application/json")
-	response, err := (&http.Client{Timeout: 15 * time.Second}).Do(request)
-	if err != nil {
-		return "", ""
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", ""
-	}
-	raw, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	var value map[string]any
-	_ = json.Unmarshal(raw, &value)
-	id := firstProviderString(value, "id", "account_id", "sub")
-	name := firstProviderString(value, "displayName", "name", "email", "login", "userPrincipalName")
-	return id, name
-}
 
 func firstProviderString(value map[string]any, keys ...string) string {
 	for _, key := range keys {
@@ -183,28 +108,6 @@ func firstProviderString(value map[string]any, keys ...string) string {
 	return ""
 }
 
-func providerAccountIdentity(provider string, token providerTokenEnvelope, raw []byte) (string, string) {
-	if token.Team != nil {
-		return token.Team.ID, token.Team.Name
-	}
-	if token.WorkspaceID != "" {
-		return token.WorkspaceID, token.WorkspaceName
-	}
-	var values map[string]any
-	_ = json.Unmarshal(raw, &values)
-	for _, pair := range [][2]string{{"account_id", "account_name"}, {"user_id", "user_name"}, {"guild_id", "guild_name"}} {
-		id, _ := values[pair[0]].(string)
-		name, _ := values[pair[1]].(string)
-		if id != "" {
-			return id, name
-		}
-	}
-	return "", ""
-}
-
-func TestingProviderCallbackURL(r *http.Request, provider string) string {
-	return requestPublicAPIBase(r) + "/oauth/providers/" + url.PathEscape(provider) + "/callback"
-}
 
 func configuredPublicAPIBase() string {
 	base := strings.TrimRight(strings.TrimSpace(envconfig.Getenv("MISTY_PUBLIC_API_URL")), "/")

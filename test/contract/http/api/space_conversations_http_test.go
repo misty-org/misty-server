@@ -3,6 +3,10 @@ package api
 import (
 	"context"
 	"encoding/base64"
+)
+
+
+import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,18 +20,6 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
-
-// newConversationTestRouter mounts only the conversation endpoints this test
-// exercises, matching the routes registered in mountSpacesRoutes.
-func newConversationTestRouter(t *testing.T, spaces *SpacesService) *chi.Mux {
-	t.Helper()
-	router := chi.NewRouter()
-	router.MethodFunc(http.MethodGet, "/spaces/{spaceID}/conversations", spaces.Conversations())
-	router.MethodFunc(http.MethodPost, "/spaces/{spaceID}/conversations", spaces.Conversations())
-	router.MethodFunc(http.MethodPatch, "/spaces/{spaceID}/conversations/{conversationID}", spaces.Conversation())
-	router.MethodFunc(http.MethodGet, "/spaces/{spaceID}/conversations/{conversationID}/messages", spaces.ConversationMessages())
-	return router
-}
 
 func newConversationTestBearerToken(t *testing.T, database *db.Database, userID string) string {
 	t.Helper()
@@ -71,6 +63,18 @@ func performConversationRequest(t *testing.T, router *chi.Mux, method, path, tok
 	return rec
 }
 
+// newConversationTestRouter mounts only the conversation endpoints this test
+// exercises, matching the routes registered in mountSpacesRoutes.
+func newConversationTestRouter(t *testing.T, spaces *SpacesService) *chi.Mux {
+	t.Helper()
+	router := chi.NewRouter()
+	router.MethodFunc(http.MethodGet, "/spaces/{spaceID}/conversations", spaces.Conversations())
+	router.MethodFunc(http.MethodPost, "/spaces/{spaceID}/conversations", spaces.Conversations())
+	router.MethodFunc(http.MethodPatch, "/spaces/{spaceID}/conversations/{conversationID}", spaces.Conversation())
+	router.MethodFunc(http.MethodGet, "/spaces/{spaceID}/conversations/{conversationID}/messages", spaces.ConversationMessages())
+	return router
+}
+
 // TestConversationHTTPAccessControl guards, at the HTTP handler layer, the
 // security property the user asked about explicitly: a user only ever sees
 // conversations they own or are a member of. This complements the existing
@@ -105,7 +109,7 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		t.Fatalf("CreateUser(outsider) error = %v", err)
 	}
 
-	space, err := database.CreateSpace(ctx, owner.ID, "Conversations")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Conversations")
 	if err != nil {
 		t.Fatalf("CreateSpace(owner) error = %v", err)
 	}
@@ -113,7 +117,7 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 	// member and spacemate both join the Space, but only member is added to
 	// the conversation below. outsider never joins the Space at all.
 	for _, invited := range []*db.User{member, spacemate} {
-		invite, inviteErr := database.InviteToSpace(ctx, owner.ID, space.ID, invited.Email)
+		invite, inviteErr := database.TestingInviteToSpace(ctx, owner.ID, space.ID, invited.Email)
 		if inviteErr != nil {
 			t.Fatalf("InviteToSpace(%s) error = %v", invited.Email, inviteErr)
 		}

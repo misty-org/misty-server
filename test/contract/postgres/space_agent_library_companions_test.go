@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
+
+
+import ()
 
 func TestSpaceAgentReadsUpdatesAndPromotesLibraryItems(t *testing.T) {
 	database := openTestDatabase(t)
@@ -18,7 +20,7 @@ func TestSpaceAgentReadsUpdatesAndPromotesLibraryItems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Library Tool Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Library Tool Space")
 	if err != nil {
 		t.Fatal(err)
 	}

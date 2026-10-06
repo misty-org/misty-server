@@ -34,6 +34,7 @@ type persistedSessionState struct {
 	ID                    string            `json:"id"`
 	UserID                string            `json:"userId"`
 	BillingUserID         string            `json:"billingUserId"`
+	BillingTurnSequence   int64             `json:"billingTurnSequence"`
 	BillingScope          string            `json:"billingScope"`
 	ModelID               string            `json:"modelId,omitempty"`
 	ReasoningEffort       string            `json:"reasoningEffort,omitempty"`
@@ -72,6 +73,7 @@ func TestingMarshalPersistentSession(session *Session) (json.RawMessage, error) 
 		UserID:                session.UserID,
 		BillingUserID:         session.BillingUserID,
 		BillingScope:          session.BillingScope,
+		BillingTurnSequence:   session.BillingTurnSequence,
 		ModelID:               session.ModelID,
 		ReasoningEffort:       session.ReasoningEffort,
 		SystemPrompt:          session.SystemPrompt,
@@ -126,6 +128,7 @@ func TestingUnmarshalPersistentSession(raw json.RawMessage, expectedID, expected
 		UserID:                state.UserID,
 		BillingUserID:         state.BillingUserID,
 		BillingScope:          state.BillingScope,
+		BillingTurnSequence:   state.BillingTurnSequence,
 		ModelID:               state.ModelID,
 		ReasoningEffort:       state.ReasoningEffort,
 		SystemPrompt:          state.SystemPrompt,

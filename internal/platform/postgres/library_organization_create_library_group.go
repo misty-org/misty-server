@@ -7,32 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
 )
-
-func (db *Database) CreateLibraryGroup(ctx context.Context, userID, spaceID, name string, rules LibraryGroupRules) (*LibraryGroup, error) {
-	name = strings.TrimSpace(name)
-	if name == "" || len([]rune(name)) > 120 || validateLibraryGroupRules(rules) != nil {
-		return nil, ErrLibraryInvalid
-	}
-	raw, _ := json.Marshal(rules)
-	out := &LibraryGroup{ID: "group_" + uuid.NewString(), SpaceID: spaceID, Name: name, Rules: rules, CreatedByUserID: userID, Version: 1}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryEdit); err != nil {
-			return err
-		}
-		var count int
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM space_library_groups WHERE space_id=$1`, spaceID).Scan(&count); err != nil {
-			return err
-		}
-		if count >= MaxLibraryGroups {
-			return ErrLibraryInvalid
-		}
-		return tx.QueryRowContext(ctx, `INSERT INTO space_library_groups(id,space_id,name,rules,created_by_user_id) VALUES($1,$2,$3,$4,$5) RETURNING created_at,updated_at`, out.ID, spaceID, name, raw, userID).Scan(&out.CreatedAt, &out.UpdatedAt)
-	})
-	return out, mapLibraryConstraintError(err)
-}
 
 func (db *Database) LibraryGroupItems(ctx context.Context, userID, spaceID, groupID string, limit int) ([]SpaceLibraryItem, error) {
 	if limit < 1 || limit > 200 {

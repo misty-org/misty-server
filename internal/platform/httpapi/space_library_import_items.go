@@ -47,23 +47,7 @@ func (s *SpaceLibraryService) ImportItems() http.HandlerFunc {
 				return
 			}
 		}
-		usage, err := s.database.SpaceStorageUsage(r.Context(), userID, body.DestinationSpaceID)
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		var required int64
-		for _, item := range items {
-			required += item.ByteSize
-		}
-		if required > usage.PersonalRemainingBytes {
-			writeLibraryError(w, db.ErrPersonalStorageQuota)
-			return
-		}
-		if required > usage.SpaceRemainingBytes {
-			writeLibraryError(w, db.ErrSpaceStorageQuota)
-			return
-		}
+		// Each copy obtains account admission through the storage adapter.
 		imported := make([]db.SpaceLibraryItem, 0, len(items))
 		for _, item := range items {
 			result, importErr := s.copyLibraryItem(r.Context(), userID, sourceSpaceID, body.DestinationSpaceID, item, true)
@@ -110,23 +94,7 @@ func (s *SpaceLibraryService) DuplicateItems() http.HandlerFunc {
 				return
 			}
 		}
-		usage, err := s.database.SpaceStorageUsage(r.Context(), userID, spaceID)
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		var required int64
-		for _, source := range items {
-			required += source.ByteSize
-		}
-		if required > usage.PersonalRemainingBytes {
-			writeLibraryError(w, db.ErrPersonalStorageQuota)
-			return
-		}
-		if required > usage.SpaceRemainingBytes {
-			writeLibraryError(w, db.ErrSpaceStorageQuota)
-			return
-		}
+		// Each copy obtains account admission through the storage adapter.
 		duplicated := make([]db.SpaceLibraryItem, 0, len(items))
 		for _, source := range items {
 			item, err := s.copyLibraryItem(r.Context(), userID, spaceID, spaceID, source, false)

@@ -69,19 +69,6 @@ func TestingValidateAIDeviceContext(id, opaqueScope string, metadata map[string]
 	return validateAIInvocationInput(&body)
 }
 
-func TestingAIInvocationJournalIsolation() bool {
-	hub := newAIInvocationHub()
-	first, existing := hub.create("user-a", "conversation-a", "request-a")
-	if existing {
-		return false
-	}
-	second, existing := hub.create("user-a", "conversation-b", "request-a")
-	if !existing || second.ID != first.ID {
-		return false
-	}
-	_, _, _, visible := hub.events("user-b", first.ID, 0)
-	return !visible
-}
 
 func TestingAISearchScore(query, content string) int      { return aiSearchScore(query, content) }
 func TestingAIRelevantChunk(content, query string) string { return aiRelevantChunk(content, query) }

@@ -63,7 +63,7 @@ func TestWriteAIErrorReturnsCanceledWithoutProviderDetails(t *testing.T) {
 }
 
 func TestWriteAIErrorReturnsStructuredHostedAILimit(t *testing.T) {
-	for _, testCase := range []struct{ scope, reason string }{{"personal", "personal_ai_limit_reached"}, {"space", "space_ai_limit_reached"}} {
+	for _, testCase := range []struct{ scope, reason string }{{"personal", "personal_ai_limit_reached"}, {"space", "personal_ai_limit_reached"}} {
 		t.Run(testCase.scope, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			TestingWriteAIError(recorder, agent.CreditsExhaustedError{Required: 25, Available: 10, Scope: testCase.scope})

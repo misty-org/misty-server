@@ -5,9 +5,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	fixture := newNoteFixture(t, "account-export")
@@ -17,7 +19,7 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := fixture.database.CreateSpaceMessage(
+	if _, _, err := fixture.database.TestingCreateSpaceMessage(
 		fixture.ctx,
 		fixture.creator,
 		fixture.spaceID,

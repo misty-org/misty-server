@@ -9,30 +9,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func TestCreateUserNormalizesEmailAndCreatesLicense(t *testing.T) {
-	database := openIntegrationDatabase(t)
-
-	user, err := database.CreateUser("Ada", "  Ada@Example.com ", "password123")
-	if err != nil {
-		t.Fatalf("CreateUser() error = %v", err)
-	}
-	if user.Email != "ada@example.com" {
-		t.Fatalf("user.Email = %q, want %q", user.Email, "ada@example.com")
-	}
-
-	license, err := database.GetLicenseByUserID(user.ID)
-	if err != nil || license == nil {
-		t.Fatalf("GetLicenseByUserID() error = %v, license = %#v", err, license)
-	}
-	if license.ID != user.LicenseID {
-		t.Fatalf("license.ID = %q, want %q", license.ID, user.LicenseID)
-	}
-
-	if _, err := database.CreateUser("Ada Duplicate", "ada@example.com", "password123"); err == nil {
-		t.Fatal("CreateUser() succeeded for duplicate email")
-	}
-}
-
 func TestSessionCRUDAndExpiry(t *testing.T) {
 	database := openIntegrationDatabase(t)
 
@@ -68,32 +44,6 @@ func TestSessionCRUDAndExpiry(t *testing.T) {
 
 	if err := database.DeleteSession(tokenHash); err != nil {
 		t.Fatalf("DeleteSession() error = %v", err)
-	}
-}
-
-func TestLicenseCompatibilityReadDoesNotPerformBillingMutation(t *testing.T) {
-	database := openIntegrationDatabase(t)
-
-	user, err := database.CreateUser("Trial Repo User", "trial-repo@example.com", "password123")
-	if err != nil {
-		t.Fatalf("CreateUser() error = %v", err)
-	}
-
-	expiredAt := time.Now().Add(-time.Hour)
-	if _, err := database.Conn.Exec(`
-		UPDATE licenses
-		SET tier = $2, status = $3, expires_at = $4, trial_started_at = $5
-		WHERE user_id = $1
-	`, user.ID, db.TierPro, db.LicenseStatusTrialing, expiredAt, expiredAt.Add(-24*time.Hour)); err != nil {
-		t.Fatalf("license update error = %v", err)
-	}
-
-	license, err := database.GetLicenseByUserID(user.ID)
-	if err != nil || license == nil {
-		t.Fatalf("GetLicenseByUserID() error = %v, license = %#v", err, license)
-	}
-	if license.Tier != db.TierPro || license.Status != db.LicenseStatusTrialing || license.ExpiresAt == nil {
-		t.Fatalf("public read mutated private billing state = %#v", license)
 	}
 }
 

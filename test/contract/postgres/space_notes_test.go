@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 type noteFixture struct {
 	database *Database
@@ -40,12 +42,12 @@ func newNoteFixture(t *testing.T, prefix string) noteFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Note Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Note Space")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, user := range []string{creator.ID, member.ID} {
-		invite, inviteErr := database.InviteToSpace(ctx, owner.ID, space.ID, userEmail(t, database, user))
+		invite, inviteErr := database.TestingInviteToSpace(ctx, owner.ID, space.ID, userEmail(t, database, user))
 		if inviteErr != nil {
 			t.Fatal(inviteErr)
 		}

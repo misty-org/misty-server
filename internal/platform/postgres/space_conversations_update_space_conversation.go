@@ -77,35 +77,6 @@ func (db *Database) UpdateSpaceConversation(ctx context.Context, userID, spaceID
 	return out, err
 }
 
-func (db *Database) DeleteDisconnectedDiscordConversation(
-	ctx context.Context,
-	userID, spaceID, conversationID string,
-) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
-			return err
-		}
-		participantUserIDs, err := humanMemberIDsForConversationTx(ctx, tx, conversationID)
-		if err != nil {
-			return err
-		}
-		result, err := tx.ExecContext(ctx, `DELETE FROM space_conversations
-			WHERE id=$1 AND space_id=$2 AND origin='discord' AND integration_status='disconnected'`,
-			conversationID, spaceID)
-		if err != nil {
-			return err
-		}
-		if changed, _ := result.RowsAffected(); changed != 1 {
-			return ErrSpaceNotFound
-		}
-		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "conversation.deleted",
-			conversationID, map[string]any{
-				"conversation_id": conversationID, "participant_user_ids": participantUserIDs,
-			})
-		return err
-	})
-}
-
 func (db *Database) SpaceConversationMessages(ctx context.Context, userID, spaceID, conversationID string, before int64, limit int) ([]SpaceMessage, error) {
 	if limit < 1 || limit > 100 {
 		limit = 50

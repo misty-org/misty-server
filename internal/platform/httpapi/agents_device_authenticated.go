@@ -2,13 +2,16 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/kannachi323/misty/server/internal/accounts"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
+	"github.com/kannachi323/misty/server/internal/platform/security"
 	"io"
 	"net/http"
 	"strconv"
@@ -21,6 +24,18 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
+type deviceRequestContextKey struct{}
+
+type deviceRequestIdentity struct {
+	UserID   string
+	DeviceID string
+	State    string
+	Key      []byte
+}
+
+// DeviceAuthenticated requires the account session AND a fresh signature by the
+// unified device key over the exact request, prefixed with its domain string.
+// Legacy keys (made in the webview before the unified identity) are refused.
 func (s *AgentsService) DeviceAuthenticated(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
@@ -42,15 +57,15 @@ func (s *AgentsService) DeviceAuthenticated(next http.HandlerFunc) http.HandlerF
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
-		publicKeyText, err := s.database.TrustedDevicePublicKey(userID, deviceID)
+		publicKeyText, state, err := s.database.UnifiedDeviceKey(r.Context(), userID, deviceID)
 		if err != nil {
-			writeAgentError(w, err)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "device_identity_required", "message": "Register this device again to continue."})
 			return
 		}
-		publicKey, keyErr := decodeDeviceBase64(publicKeyText)
-		signature, signatureErr := decodeDeviceBase64(signatureText)
+		publicKey, keyOK := decodeDevicePublicKey(publicKeyText)
+		signature, signatureErr := base64.StdEncoding.DecodeString(signatureText)
 		canonical := TestingDeviceSignaturePayload(r.Method, r.URL.EscapedPath(), timestampText, nonce, body)
-		if keyErr != nil || signatureErr != nil || len(publicKey) != ed25519.PublicKeySize || len(signature) != ed25519.SignatureSize || !ed25519.Verify(ed25519.PublicKey(publicKey), []byte(canonical), signature) {
+		if !keyOK || signatureErr != nil || len(signature) != ed25519.SignatureSize || !ed25519.Verify(ed25519.PublicKey(publicKey), unifiedDeviceRequestMessage(canonical), signature) {
 			http.Error(w, "invalid device authentication", http.StatusUnauthorized)
 			return
 		}
@@ -58,8 +73,25 @@ func (s *AgentsService) DeviceAuthenticated(next http.HandlerFunc) http.HandlerF
 			http.Error(w, "device request already used", http.StatusConflict)
 			return
 		}
-		next(w, r)
+		identity := deviceRequestIdentity{UserID: userID, DeviceID: deviceID, State: state, Key: publicKey}
+		next(w, r.WithContext(context.WithValue(r.Context(), deviceRequestContextKey{}, identity)))
 	}
+}
+
+func requestDevice(r *http.Request) (deviceRequestIdentity, bool) {
+	identity, ok := r.Context().Value(deviceRequestContextKey{}).(deviceRequestIdentity)
+	return identity, ok
+}
+
+// requireAdmittedDevice limits a signed route to devices already added to the
+// account with a vault-root grant.
+func requireAdmittedDevice(w http.ResponseWriter, r *http.Request) (deviceRequestIdentity, bool) {
+	identity, ok := requestDevice(r)
+	if !ok || identity.State != "admitted" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "device_not_added", "message": "Add this device to your account first."})
+		return deviceRequestIdentity{}, false
+	}
+	return identity, true
 }
 
 func TestingDeviceSignaturePayload(method, path, timestamp, nonce string, body []byte) string {
@@ -67,6 +99,9 @@ func TestingDeviceSignaturePayload(method, path, timestamp, nonce string, body [
 	return fmt.Sprintf("%s\n%s\n%s\n%s\n%x", strings.ToUpper(method), path, timestamp, nonce, bodyDigest)
 }
 
+// RegisterDevice records this install's unified device key as pending. The
+// body carries a proof signed by that key, so nobody can register a key they
+// do not hold. A pending device can do nothing until it is added.
 func (s *AgentsService) RegisterDevice() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
@@ -74,35 +109,53 @@ func (s *AgentsService) RegisterDevice() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Name             string          `json:"name"`
-			PublicKey        string          `json:"publicKey"`
-			KeyAlgorithm     string          `json:"keyAlgorithm"`
-			Capabilities     json.RawMessage `json:"capabilities"`
-			Platform         string          `json:"platform"`
-			P2PEndpointID    string          `json:"p2pEndpointId"`
-			ProtocolVersions json.RawMessage `json:"protocolVersions"`
+			Name          string          `json:"name"`
+			PublicKey     string          `json:"publicKey"`
+			Platform      string          `json:"platform"`
+			P2PEndpointID string          `json:"p2pEndpointId"`
+			OSVersion     string          `json:"osVersion"`
+			AppVersion    string          `json:"appVersion"`
+			Capabilities  json.RawMessage `json:"capabilities"`
+			IssuedAt      int64           `json:"issuedAt"`
+			Proof         string          `json:"proof"`
 		}
-		if decodeAIJSON(w, r, &body) != nil || !TestingValidDeviceRegistrationV2(body.Name, body.PublicKey, body.KeyAlgorithm, body.Platform, body.P2PEndpointID, body.ProtocolVersions, body.Capabilities) {
+		if decodeAIJSON(w, r, &body) != nil {
+			return
+		}
+		body.Name = strings.TrimSpace(body.Name)
+		platform := normalizedDevicePlatform(body.Platform)
+		if len(body.Capabilities) == 0 {
+			body.Capabilities = json.RawMessage(`{}`)
+		}
+		if !validDeviceName(body.Name) || platform == "" || !validJSONObject(body.Capabilities) || containsLocalPath(body.Capabilities) || containsClipboardValue(body.Capabilities) ||
+			!verifyDeviceRegistrationProof(userID, body.PublicKey, body.P2PEndpointID, body.IssuedAt, body.Proof) {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		device, err := s.database.RegisterTrustedDevice(userID, strings.TrimSpace(body.Name), strings.TrimSpace(body.PublicKey), normalizedDevicePlatform(body.Platform), strings.TrimSpace(body.P2PEndpointID), normalizedProtocolVersions(body.ProtocolVersions), body.Capabilities)
+		session := ""
+		if sid := accounts.SessionID(r); sid != "" {
+			session = security.HashToken(sid)
+		}
+		device, err := s.database.RegisterUnifiedDevice(r.Context(), userID, body.Name, body.PublicKey, body.P2PEndpointID, platform,
+			db.CleanDeviceVersion(body.OSVersion), db.CleanDeviceVersion(body.AppVersion), session, body.Capabilities)
 		writeAgentResult(w, device, err, http.StatusCreated)
 	}
 }
 
+// ListDevices returns the account's devices with their signed policies and
+// who is online. Addresses are never listed.
 func (s *AgentsService) ListDevices() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
 		if !ok {
 			return
 		}
-		devices, err := s.database.TrustedDevices(userID)
+		devices, err := s.database.AccountDevices(r.Context(), userID)
 		if err != nil {
 			writeAgentError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"devices": devices})
+		writeJSON(w, http.StatusOK, map[string]any{"devices": devices, "presence": s.devices().snapshot(userID)})
 	}
 }
 
@@ -125,23 +178,8 @@ func (s *AgentsService) HeartbeatDevice() http.HandlerFunc {
 	}
 }
 
-func (s *AgentsService) RevokeDevice() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		deviceID := chi.URLParam(r, "deviceID")
-		if !deviceIDPattern.MatchString(deviceID) {
-			http.Error(w, "invalid request", http.StatusBadRequest)
-			return
-		}
-		if err := s.database.RevokeTrustedDevice(userID, deviceID); err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
-	}
+func validDeviceName(name string) bool {
+	return validText(name, 1, 64) && !strings.ContainsFunc(name, func(value rune) bool { return value < 0x20 || value == 0x7f })
 }
 
 func (s *AgentsService) requireUser(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -182,14 +220,18 @@ func writeAgentError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"code": "permission_denied", "message": "Your current Space access does not allow that action."})
 	case errors.Is(err, db.ErrDeviceNotFound), errors.Is(err, db.ErrAgentJobNotFound), errors.Is(err, db.ErrAgentNotFound), errors.Is(err, db.ErrPersonalAgentNotFound), errors.Is(err, db.ErrSpaceNotFound), errors.Is(err, db.ErrLibraryNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found", "message": "The selected item is no longer available in this Space."})
-	case errors.Is(err, db.ErrPairingNotFound), errors.Is(err, db.ErrDevicePair):
-		writeJSON(w, http.StatusNotFound, map[string]string{"code": "pairing_not_found"})
-	case errors.Is(err, db.ErrPairingExpired):
-		writeJSON(w, http.StatusGone, map[string]string{"code": "pairing_expired"})
-	case errors.Is(err, db.ErrPairingLocked):
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"code": "pairing_locked"})
-	case errors.Is(err, db.ErrPairingState):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "invalid_pairing_state"})
+	case errors.Is(err, db.ErrDeviceKeyRevoked):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "device_removed", "message": "This device was removed from your account."})
+	case errors.Is(err, db.ErrDeviceNotAdmitted):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "device_not_added", "message": "Add this device to your account first."})
+	case errors.Is(err, db.ErrDeviceListConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "device_list_conflict", "message": "Your devices changed. Misty will try again."})
+	case errors.Is(err, db.ErrDeviceVaultMissing):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "sync_setup_required", "message": "Set up sync to add devices."})
+	case errors.Is(err, db.ErrDeviceAdmissionState):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "admission_state", "message": "This approval ended. Start again from the new device."})
+	case errors.Is(err, db.ErrDevicePolicyStale):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "device_policy_stale", "message": "A newer setting already applies."})
 	case errors.Is(err, db.ErrPersonalAgentConflict), errors.Is(err, db.ErrLibraryConflict):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict", "message": "That item changed while the Agent was working. Please retry."})
 	case errors.Is(err, db.ErrSpaceConflict):
@@ -197,9 +239,9 @@ func writeAgentError(w http.ResponseWriter, err error) {
 	case errors.Is(err, db.ErrSpaceInvalid), errors.Is(err, db.ErrLibraryInvalid):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "invalid_tool_input", "message": "The requested values are not valid for this action."})
 	case errors.Is(err, db.ErrPersonalStorageQuota):
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "reason": "personal_storage_limit_reached", "message": "Your personal storage limit has been reached."})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "reason": "personal_storage_limit_reached", "message": "Your account has reached its cloud storage limit."})
 	case errors.Is(err, db.ErrSpaceStorageQuota):
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "reason": "space_storage_limit_reached", "message": "This Space has reached its storage limit."})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "reason": "personal_storage_limit_reached", "message": "Your account has reached its cloud storage limit."})
 	case errors.Is(err, db.ErrLibraryQuota):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "message": "Storage quota has been reached."})
 	case errors.Is(err, db.ErrLibraryReauthentication):
@@ -233,19 +275,9 @@ func hostedAILimitScope(err error) (string, bool) {
 	return "", false
 }
 
-func hostedAILimitReason(scope string) string {
-	if scope == "space" {
-		return "space_ai_limit_reached"
-	}
-	return "personal_ai_limit_reached"
-}
+func hostedAILimitReason(_ string) string { return "personal_ai_limit_reached" }
 
-func hostedAILimitMessage(scope string) string {
-	if scope == "space" {
-		return "This Space has used all of its weekly AI agent usage."
-	}
-	return "Your weekly AI agent usage is fully used."
-}
+func hostedAILimitMessage(_ string) string { return "Your account has used its available AI budget." }
 
 func validText(value string, min, max int) bool {
 	length := utf8.RuneCountInString(strings.TrimSpace(value))

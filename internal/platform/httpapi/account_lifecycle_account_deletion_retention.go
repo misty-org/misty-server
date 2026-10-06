@@ -8,7 +8,6 @@ import (
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,34 +83,6 @@ func (s *SpacesService) BeginAccountDeletion() http.HandlerFunc {
 			"request":      request,
 			"status_token": statusToken,
 		})
-	}
-}
-
-func (s *SpacesService) AccountDeletionStatus() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			RequestID   string `json:"request_id"`
-			StatusToken string `json:"status_token"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		request, err := s.database.AccountDeletionStatus(
-			r.Context(), strings.TrimSpace(body.RequestID),
-			security.HashToken(strings.TrimSpace(body.StatusToken)),
-		)
-		if errors.Is(err, db.ErrAccountDeletionToken) {
-			writeJSON(w, http.StatusNotFound, map[string]string{
-				"code": "account_deletion_not_found",
-			})
-			return
-		}
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusOK, request)
 	}
 }
 

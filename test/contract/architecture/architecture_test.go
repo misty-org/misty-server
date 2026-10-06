@@ -19,7 +19,7 @@ import (
 
 func TestRepositoryLayout(t *testing.T) {
 	root := repositoryRoot(t)
-	for _, name := range []string{"accounts", "billingadapter", "sync", "spaces", "journal", "library", "discovery", "agents", "workflows", "integrations"} {
+	for _, name := range []string{"accounts", "billingadapter", "sync", "spaces", "library", "agents", "workflows", "integrations"} {
 		requireDirectory(t, filepath.Join(root, "internal", name))
 	}
 	for _, legacy := range []string{"api", "db", "agent", "billing", "workflow"} {

@@ -60,7 +60,7 @@ templ stateCounts(groups [][]db.ConsoleStateCount) {
 }
 
 templ jobsPage(v jobsView) {
-	@pageHeader("Jobs", "Scheduled tasks, AI invocations, agent runs and library reindexing")
+	@pageHeader("Jobs", "Workflow schedules, AI invocations, agent runs and library reindexing")
 	if v.Err != "" {
 		@problem(v.Err)
 	}

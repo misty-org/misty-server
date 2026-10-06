@@ -19,9 +19,6 @@ func (s *SpacesService) ProcessAgentRuntimeDeliveries(ctx context.Context, limit
 	if err := s.database.ExpireAIUserInterventions(ctx); err != nil {
 		return 0, err
 	}
-	if err := s.database.ExpireSDKToolApprovals(ctx); err != nil {
-		return 0, err
-	}
 	waits, err := s.database.AIInvocationDeviceWaitsReady(ctx, 20)
 	if err != nil {
 		return 0, err
@@ -71,7 +68,7 @@ func (s *SpacesService) ProcessAgentRuntimeDeliveries(ctx context.Context, limit
 					deliveryErr = nil
 				}
 			}
-			if deliveryErr != nil && (delivery.Attempts >= 3 || errors.Is(deliveryErr, db.ErrSpaceInvalid) || errors.Is(deliveryErr, db.ErrAppRuntimeForbidden) || errors.Is(deliveryErr, db.ErrSpaceForbidden) || errors.Is(deliveryErr, db.ErrDeviceNotFound)) {
+			if deliveryErr != nil && (delivery.Attempts >= 3 || errors.Is(deliveryErr, db.ErrSpaceInvalid) || errors.Is(deliveryErr, db.ErrSpaceForbidden) || errors.Is(deliveryErr, db.ErrDeviceNotFound)) {
 				terminal = true
 			}
 		}
@@ -83,15 +80,6 @@ func (s *SpacesService) ProcessAgentRuntimeDeliveries(ctx context.Context, limit
 				failure = json.RawMessage(`{"type":"invocation.failed","state":"failed","code":"workflow_start_unconfirmed","error":"The original workflow start could not be confirmed. Misty stopped automatic retries to avoid submitting duplicate work."}`)
 			}
 			_, eventErr := s.database.CommitAIInvocationEvent(finishCtx, delivery.UserID, delivery.RunID, "delivery-failed:"+delivery.ID, "invocation.failed", failure, "failed")
-			if eventErr == nil {
-				if record, lookupErr := s.database.AIInvocationByID(finishCtx, delivery.UserID, delivery.RunID); lookupErr != nil {
-					eventErr = lookupErr
-				} else if record.SurfaceID == "routine" {
-					eventErr = s.retireRemovedInvocation(finishCtx, record)
-				} else if record.SurfaceID == "sdk" {
-					eventErr = s.completeSDKInvocation(finishCtx, record, false)
-				}
-			}
 			if eventErr != nil && !errors.Is(eventErr, db.ErrSpaceConflict) {
 				finishCancel()
 				return completed, eventErr
@@ -110,22 +98,9 @@ func (s *SpacesService) ProcessAgentRuntimeDeliveries(ctx context.Context, limit
 }
 
 func (s *SpacesService) prepareInvocationDelivery(ctx context.Context, record *db.AIInvocationRecord) error {
-	if record.SurfaceID == "routine" {
-		return db.ErrSpaceInvalid
-	}
-	if record.SurfaceID == "sdk" {
-		return db.ErrSpaceInvalid
-	}
 	var body aiInvocationInput
 	if json.Unmarshal(record.RequestPayload, &body) != nil {
 		return db.ErrSpaceInvalid
-	}
-	bound, err := db.ContextWithPersistedAppAuthority(ctx, record.RequestPayload)
-	if err != nil {
-		return err
-	}
-	if err := s.database.ValidateAppExecutionAuthority(bound, db.AppAuthorityFromContext(bound), record.UserID, record.SpaceID, "ai.write"); err != nil {
-		return err
 	}
 	if err := s.database.BindAIConversationAttachments(ctx, record.UserID, record.ConversationID, record.ID, body.AttachmentIDs); err != nil {
 		return err
@@ -145,7 +120,7 @@ func (s *SpacesService) prepareInvocationDelivery(ctx context.Context, record *d
 		if found {
 			continue
 		}
-		if _, err := s.database.AttachAIInvocationContext(ctx, record.UserID, record.ID, record.SpaceID, target.DeviceID, target.Kind, target.OpaqueRef, target.DisplayName, target.Capabilities, target.Metadata); err != nil {
+		if _, err := s.database.AttachAIInvocationContext(ctx, record.UserID, record.ID, record.SpaceID, target.DeviceID, target.Kind, target.OpaqueRef, target.DisplayName, target.Capabilities, target.Metadata, runGrantRecord(target.RunGrant)); err != nil {
 			return err
 		}
 	}
@@ -161,12 +136,6 @@ func (s *SpacesService) deliverAgentContinuation(ctx context.Context, delivery d
 		if err := s.agentRuntime.Cancel(ctx, payload.RuntimeID, delivery.RunID); err != nil {
 			return err
 		}
-		if record, err := s.database.AIInvocationByID(ctx, delivery.UserID, delivery.RunID); err == nil && record.SurfaceID == "routine" {
-			return s.retireRemovedInvocation(ctx, record)
-		}
-		if record, err := s.database.AIInvocationByID(ctx, delivery.UserID, delivery.RunID); err == nil && record.SurfaceID == "sdk" {
-			return s.completeSDKInvocation(ctx, record, true)
-		}
 		return nil
 	}
 	if delivery.Operation == "runtime.reconcile" {
@@ -178,18 +147,7 @@ func (s *SpacesService) deliverAgentContinuation(ctx context.Context, delivery d
 			if payload.ObservedAfter == nil {
 				return db.ErrSpaceInvalid
 			}
-			sdk, err := s.database.RecordAIInvocationRuntimeStatus(ctx, delivery.UserID, delivery.RunID, payload.RuntimeID, status, *payload.ObservedAfter)
-			if err != nil || !sdk {
-				return err
-			}
-			record, err := s.database.AIInvocationByID(ctx, delivery.UserID, delivery.RunID)
-			if err != nil {
-				return err
-			}
-			if record.SurfaceID == "routine" {
-				return s.retireRemovedInvocation(ctx, record)
-			}
-			return s.completeSDKInvocation(ctx, record, false)
+			return s.database.RecordAIInvocationRuntimeStatus(ctx, delivery.UserID, delivery.RunID, payload.RuntimeID, status, *payload.ObservedAfter)
 		}
 		return s.database.RecordAgentRuntimeStatus(ctx, delivery.RunID, payload.RuntimeID, status)
 	}
@@ -224,25 +182,21 @@ func (s *SpacesService) deliverAgentContinuation(ctx context.Context, delivery d
 		}
 		return err
 	}
-	if delivery.Operation != "approval.resume" && delivery.Operation != "device.resume" {
+	if delivery.Operation != "device.resume" {
 		return db.ErrSpaceInvalid
 	}
 	current, err := s.database.AgentContinuationCurrent(ctx, delivery, payload)
 	if err != nil || !current {
 		return err
 	}
-	if delivery.Operation == "approval.resume" {
-		err = s.agentRuntime.ResumeApproval(ctx, payload.HookToken, delivery.RunID, payload.ApprovalID, payload.Approved)
-	} else {
-		if isAIInvocationRuntimeID(delivery.RunID) && payload.Available {
-			authorized, checkErr := s.database.AIInvocationDeviceResumeAuthorized(ctx, delivery, payload)
-			if checkErr != nil {
-				return checkErr
-			}
-			payload.Available = authorized
+	if isAIInvocationRuntimeID(delivery.RunID) && payload.Available {
+		authorized, checkErr := s.database.AIInvocationDeviceResumeAuthorized(ctx, delivery, payload)
+		if checkErr != nil {
+			return checkErr
 		}
-		err = s.agentRuntime.ResumeDevice(ctx, payload.HookToken, delivery.RunID, payload.Available)
+		payload.Available = authorized
 	}
+	err = s.agentRuntime.ResumeDevice(ctx, payload.HookToken, delivery.RunID, payload.Available)
 	if err != nil {
 		// A lost response may follow an accepted hook. A later wait or terminal
 		// transition is durable evidence that this particular continuation advanced.

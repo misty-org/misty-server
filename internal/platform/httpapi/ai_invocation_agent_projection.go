@@ -46,6 +46,10 @@ func (s *SpacesService) projectLinkedAIInvocationStarted(ctx context.Context, ru
 func (s *SpacesService) projectLinkedAIInvocationEvent(ctx context.Context, run *db.SpaceRun, nodeID, state, phase string, output json.RawMessage) {
 	if _, id := s.restoreLinkedAIInvocation(ctx, run); id == "" {
 		return
+	} else if db.CompactionNode(nodeID) {
+		if state == "running" {
+			s.aiInvocations.append(id, compactionStatusEvent())
+		}
 	} else if strings.HasPrefix(nodeID, "tool:") {
 		toolName := strings.TrimPrefix(phase, "using_")
 		toolName = strings.ReplaceAll(toolName, "_", ".")
@@ -64,29 +68,6 @@ func (s *SpacesService) projectLinkedAIInvocationEvent(ctx context.Context, run 
 		if json.Unmarshal(output, &value) == nil && strings.TrimSpace(value.TextDelta) != "" {
 			s.aiInvocations.append(id, aiInvocationEvent{Type: "response.delta", Delta: value.TextDelta})
 		}
-	}
-}
-
-func (s *SpacesService) projectLinkedAIInvocationApproval(ctx context.Context, run *db.SpaceRun, toolName string, approval ...*db.AgentToolApproval) {
-	if _, id := s.restoreLinkedAIInvocation(ctx, run); id != "" {
-		summary := "Waiting for your approval to use " + strings.ReplaceAll(toolName, ".", " ") + "."
-		approvalID := ""
-		if len(approval) > 0 && approval[0] != nil {
-			approvalID = approval[0].ID
-			if approval[0].Summary != "" {
-				summary = approval[0].Summary
-			}
-		}
-		s.aiInvocations.append(id, aiInvocationEvent{
-			Type:       "assistant.status",
-			Phase:      "approval",
-			Text:       summary,
-			RunID:      run.ID,
-			ToolName:   toolName,
-			Summary:    summary,
-			ID:         approvalID,
-			ArtifactID: approvalID,
-		})
 	}
 }
 
@@ -119,4 +100,9 @@ func (s *SpacesService) completeLinkedAIInvocation(ctx context.Context, run *db.
 		return err
 	}
 	return s.finishAIInvocationRuntimeAnswer(record.UserID, id, prepared.body, strings.TrimSpace(text), prepared.resolved, prepared.prompt)
+}
+
+// compactionStatusEvent tells the person why a long task paused briefly.
+func compactionStatusEvent() aiInvocationEvent {
+	return aiInvocationEvent{Type: "assistant.status", Phase: "compacting", Text: "Summarizing earlier steps to stay within the model's context"}
 }

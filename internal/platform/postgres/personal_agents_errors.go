@@ -39,26 +39,6 @@ type AskIdentity struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
-type AskIdentityVersion struct {
-	ID              string          `json:"id"`
-	AgentID         string          `json:"agent_id"`
-	Version         int64           `json:"version"`
-	Name            string          `json:"name"`
-	Role            string          `json:"role"`
-	Description     string          `json:"description"`
-	Icon            string          `json:"icon"`
-	Avatar          json.RawMessage `json:"avatar"`
-	Instructions    string          `json:"instructions,omitempty"`
-	ModelMode       string          `json:"model_mode"`
-	ModelID         string          `json:"model_id,omitempty"`
-	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
-	DefaultRunMode  string          `json:"default_run_mode"`
-	VoiceID         string          `json:"voice_id"`
-	ChecksumSHA256  string          `json:"checksum_sha256"`
-	CreatedByUserID string          `json:"created_by_user_id"`
-	CreatedAt       time.Time       `json:"created_at"`
-}
-
 const personalAgentColumns = `id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,enabled,system_managed,version,created_at,updated_at`
 
 func scanPersonalAgent(row scanner, out *AskIdentity) error {
@@ -106,10 +86,6 @@ func cancelPersonalAgentRunsTx(ctx context.Context, tx *sql.Tx, agentID, code st
 		WHERE agent_id=$1 AND state IN ('queued','running','cooldown','awaiting_approval','awaiting_device','awaiting_intervention') RETURNING id
 	) UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW()
 	WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, agentID, code); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE agent_run_tool_approvals SET state='denied',decided_at=NOW()
-		WHERE run_id IN (SELECT id FROM space_runs WHERE agent_id=$1 AND state='canceled' AND error_code=$2) AND state='pending'`, agentID, code); err != nil {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW()

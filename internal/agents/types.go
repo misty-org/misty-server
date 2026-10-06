@@ -219,6 +219,9 @@ type ModelUsage struct {
 	OutputTokens      int64 `json:"output_tokens"`
 	ReasoningTokens   int64 `json:"reasoning_tokens"`
 	Estimated         bool  `json:"estimated"`
+	// Runtime aggregates can omit modality details while retaining exact totals.
+	CachedInputTokensMissing bool `json:"-"`
+	ReasoningTokensMissing   bool `json:"-"`
 }
 
 type UsageReservation struct {
@@ -247,6 +250,17 @@ type UsageMeter interface {
 func ReserveUsage(meter UsageMeter, userID, spaceID, idempotencyKey, usageMeter, provider, model string, estimatedInputTokens, maxOutputTokens int64) (*UsageReservation, error) {
 	// Space context never changes the account-wide AI allowance.
 	return meter.Reserve(userID, idempotencyKey, usageMeter, provider, model, estimatedInputTokens, maxOutputTokens)
+}
+
+// ReserveMeasuredUsage forwards native request sizes; the private adapter owns
+// token estimation. Older test/custom meters still receive their native counter.
+func ReserveMeasuredUsage(meter UsageMeter, userID, key, provider, model string, units map[string]int64, commandID string) (*UsageReservation, error) {
+	if m, ok := meter.(interface {
+		ReserveMeasured(string, string, string, string, map[string]int64, string) (*UsageReservation, error)
+	}); ok {
+		return m.ReserveMeasured(userID, key, provider, model, units, commandID)
+	}
+	return meter.Reserve(userID, key, "assistant_ai", provider, model, units["input_tokens"], units["output_tokens"])
 }
 
 type HostedAILimitReachedError struct {

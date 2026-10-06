@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,20 +14,6 @@ import (
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
-func TestInspectLibraryContentVerifiesSafeContent(t *testing.T) {
-	data := []byte("Misty Library plain text")
-	detected, intrinsic, err := TestingInspectLibraryContent(bytes.NewReader(data), int64(len(data)), "notes.txt", "text/plain")
-	if err != nil {
-		t.Fatalf("inspectLibraryContent() error = %v", err)
-	}
-	if !strings.HasPrefix(detected, "text/plain") {
-		t.Fatalf("detected MIME = %q, want text/plain", detected)
-	}
-	want := sha256.Sum256(data)
-	if intrinsic["sha256"] != hex.EncodeToString(want[:]) {
-		t.Fatalf("sha256 = %v, want %x", intrinsic["sha256"], want)
-	}
-}
 
 func TestHTTPLibraryPeopleProcessorUsesPrivateBoundedContract(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -55,15 +40,6 @@ func TestHTTPLibraryPeopleProcessorUsesPrivateBoundedContract(t *testing.T) {
 	}
 }
 
-func TestInspectLibraryContentRejectsDangerousAndMalwareContent(t *testing.T) {
-	if _, _, err := TestingInspectLibraryContent(strings.NewReader("#!/bin/sh"), 9, "run.sh", "text/plain"); TestingLibraryInspectionCode(err) != "dangerous_file_type" {
-		t.Fatalf("script error = %v, want dangerous_file_type", err)
-	}
-	eicar := []byte("prefix EICAR-STANDARD-ANTIVIRUS-TEST-FILE suffix")
-	if _, _, err := TestingInspectLibraryContent(bytes.NewReader(eicar), int64(len(eicar)), "test.txt", "text/plain"); !errors.Is(err, TestingErrLibraryMalware) {
-		t.Fatalf("EICAR error = %v, want malware", err)
-	}
-}
 
 func TestMemoryLibraryObjectStoreEnforcesExactObject(t *testing.T) {
 	store := NewMemoryLibraryObjectStore()

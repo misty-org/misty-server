@@ -4,13 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"testing"
 	"time"
+	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	serveragent "github.com/kannachi323/misty/server/internal/agents"
 )
+
+
+import ()
 
 func TestNativeAgentsPrivacyMemoryAndLeases(t *testing.T) {
 	database := openTestDatabase(t)
+	t.Setenv("MISTY_AGENT_MODEL", serveragent.InitialSelectedModelID)
+	t.Setenv("MISTY_AGENT_MODEL_API_KEY", "")
+	t.Setenv("MISTY_AGENT_MODEL_BASE_URL", "")
 	ctx := context.Background()
 	owner, err := database.CreateUser("Agent owner", "native-owner@example.com", "password123")
 	if err != nil {
@@ -35,7 +42,7 @@ func TestNativeAgentsPrivacyMemoryAndLeases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if agent.ModelMode != "automatic" || agent.ModelID != "openai/gpt-6-astra" || agent.ReasoningEffort != "high" {
+	if agent.ModelMode != "automatic" || agent.ModelID != serveragent.InitialSelectedModelID || agent.ReasoningEffort != "high" {
 		t.Fatalf("unmanaged model: %+v", agent)
 	}
 	if agent.SystemManaged || agent.ID == misty.ID {

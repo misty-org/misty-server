@@ -32,7 +32,7 @@ func (m completionLimitMeter) Settle(*agent.UsageReservation, string, string, st
 }
 
 func TestRuntimeCompletionLimitTerminatesInvocation(t *testing.T) {
-	for _, scenario := range []string{"success", "incomplete", "transient"} {
+	for _, scenario := range []string{"success", "incomplete", "transient", "blocked", "terminal_transient", "canceled_quota"} {
 		t.Run(scenario, func(t *testing.T) {
 			database := openPresenceTestDatabase(t)
 			owner, err := database.CreateUserWithUsername("Completion test", "limit"+strings.ReplaceAll(uuid.NewString(), "-", "")[:12], uniqueTestEmail("completion-limit"), "password123")
@@ -62,9 +62,16 @@ func TestRuntimeCompletionLimitTerminatesInvocation(t *testing.T) {
 			NewAIService(database, nil).AttachSpacesRuntime(service)
 			var meterErr error = agent.HostedAILimitReachedError{Scope: "personal"}
 			status := scenario
+			if scenario == "canceled_quota" {
+				status = "success"
+			}
 			if scenario == "transient" {
 				meterErr = errors.New("temporary database failure")
 				status = "success"
+			}
+			if scenario == "blocked" || scenario == "terminal_transient" {
+				meterErr = nil
+				status = "incomplete"
 			}
 			service.SetUsageMeter(completionLimitMeter{err: meterErr})
 			router := chi.NewRouter()
@@ -81,10 +88,21 @@ func TestRuntimeCompletionLimitTerminatesInvocation(t *testing.T) {
 				router.ServeHTTP(w, r)
 				return w
 			}
+			if scenario == "canceled_quota" {
+				if err := database.CancelMistyInvocationChildren(t.Context(), owner.ID, id); err != nil {
+					t.Fatal(err)
+				}
+			}
 			response := invoke()
 			record, err := database.AIInvocationByID(t.Context(), owner.ID, id)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if scenario == "canceled_quota" {
+				if response.Code != http.StatusTooManyRequests || record.State != "canceled" {
+					t.Fatalf("canceled accounting denial was acknowledged: %d %s", response.Code, record.State)
+				}
+				return
 			}
 			if scenario == "transient" {
 				if response.Code < 500 || record.State != "running" {
@@ -95,6 +113,13 @@ func TestRuntimeCompletionLimitTerminatesInvocation(t *testing.T) {
 			if response.Code != 200 || record.State != "failed" {
 				t.Fatalf("quota failure left task active: %d %s %s", response.Code, record.State, response.Body)
 			}
+			if scenario == "terminal_transient" {
+				service.SetUsageMeter(completionLimitMeter{err: errors.New("temporary database failure")})
+				if replay := invoke(); replay.Code < 500 {
+					t.Fatalf("terminal transient accounting failure acknowledged: %d %s", replay.Code, replay.Body)
+				}
+				return
+			}
 			if replay := invoke(); replay.Code != 200 {
 				t.Fatalf("completion retry failed: %d %s", replay.Code, replay.Body)
 			}
@@ -104,6 +129,15 @@ func TestRuntimeCompletionLimitTerminatesInvocation(t *testing.T) {
 			}
 			if failed != 1 || completed != 0 {
 				t.Fatalf("terminal events: failed=%d completed=%d", failed, completed)
+			}
+			if scenario == "blocked" {
+				var message string
+				if err := database.Conn.QueryRow(`SELECT payload->>'text' FROM ai_invocation_events WHERE invocation_id=$1 AND event_type='assistant.message'`, id).Scan(&message); err != nil {
+					t.Fatal(err)
+				}
+				if message != "The website requires sign-in." {
+					t.Fatalf("blocked result was replaced: %q", message)
+				}
 			}
 		})
 	}

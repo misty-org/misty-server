@@ -26,7 +26,7 @@ func (s *SmartLibraryService) CompleteReindex() http.HandlerFunc {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "smart_library_disabled", "message": "Semantic indexing is temporarily disabled. No model call was made."})
 			return
 		}
-		if s.analyzer == nil || strings.TrimSpace(s.analyzer.APIKey) == "" {
+		if !s.analyzer.Available() {
 			writeJSON(w, 503, map[string]any{"code": "smart_library_unavailable", "message": "Semantic indexing is not configured."})
 			return
 		}
@@ -143,7 +143,7 @@ func (s *SmartLibraryService) CompleteReindex() http.HandlerFunc {
 			totalUsage.InputTokens += usage.InputTokens
 			totalUsage.CachedInputTokens += usage.CachedInputTokens
 			totalUsage.OutputTokens += usage.OutputTokens
-			_ = s.database.RecordSmartLibrarySemanticUsage(userID, record.FolderID, "reindex", currentEmbeddingModel(), 1, usage.InputTokens, 0, embedErr == nil)
+			_ = s.database.RecordSmartLibrarySemanticUsage(userID, record.FolderID, "reindex", configuredEmbeddingModel(r.Context(), s.analyzer, userID), 1, usage.InputTokens, 0, embedErr == nil)
 			if embedErr != nil || len(embeddings) != 1 {
 				failures[key] = "embedding_failed"
 				continue

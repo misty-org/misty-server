@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"github.com/kannachi323/misty/server/internal/platform/telemetry"
 	"net/http"
 	"testing"
 
@@ -10,7 +11,7 @@ import (
 func TestAuthLifecycle(t *testing.T) {
 	database := openIntegrationDatabase(t)
 
-	registerRec := performJSONRequest(t, api.Register(database), http.MethodPost, "/register", map[string]string{
+	registerRec := performJSONRequest(t, api.RegisterWithTelemetry(database, telemetry.NoopClient{}), http.MethodPost, "/register", map[string]string{
 		"name":     "Ada Lovelace",
 		"username": "ada_lovelace",
 		"email":    "ada@example.com",
@@ -38,7 +39,7 @@ func TestAuthLifecycle(t *testing.T) {
 	if registerMeBody["username"] != "ada_lovelace" {
 		t.Fatalf("register /me username = %#v, want ada_lovelace", registerMeBody["username"])
 	}
-	duplicateUsernameRec := performJSONRequest(t, api.Register(database), http.MethodPost, "/register", map[string]string{
+	duplicateUsernameRec := performJSONRequest(t, api.RegisterWithTelemetry(database, telemetry.NoopClient{}), http.MethodPost, "/register", map[string]string{
 		"name":     "Another Ada",
 		"username": "ADA_LOVELACE",
 		"email":    "another-ada@example.com",
@@ -110,10 +111,10 @@ func TestAuthLifecycle(t *testing.T) {
 func TestAuthHandlersErrorPaths(t *testing.T) {
 	database := openIntegrationDatabase(t)
 
-	if rec := performJSONRequest(t, api.Register(database), http.MethodPost, "/register", map[string]string{"email": "   ", "password": "pw"}); rec.Code != http.StatusBadRequest {
+	if rec := performJSONRequest(t, api.RegisterWithTelemetry(database, telemetry.NoopClient{}), http.MethodPost, "/register", map[string]string{"email": "   ", "password": "pw"}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("register missing email status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
-	if rec := performJSONRequest(t, api.Register(database), http.MethodPost, "/register", map[string]string{"username": "has-dash", "email": "valid@example.com", "password": "pw"}); rec.Code != http.StatusBadRequest {
+	if rec := performJSONRequest(t, api.RegisterWithTelemetry(database, telemetry.NoopClient{}), http.MethodPost, "/register", map[string]string{"username": "has-dash", "email": "valid@example.com", "password": "pw"}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("register invalid username status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 

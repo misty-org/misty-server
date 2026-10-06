@@ -4,9 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"strings"
-	"time"
 )
 
 func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID, memberID string) error {
@@ -33,21 +31,6 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 		if role != "member" {
 			return ErrSpaceInvalid
 		}
-		entitlements, err := entitlementsForUserTx(ctx, tx, memberID, time.Now())
-		if err != nil {
-			return err
-		}
-		if !entitlements.BillingAvailable {
-			return billingadapter.ErrUnavailable
-		}
-		var ownedSpaces int
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM spaces
-			WHERE owner_user_id=$1 AND lifecycle_state<>'deleted'`, memberID).Scan(&ownedSpaces); err != nil {
-			return err
-		}
-		if ownedSpaces >= entitlements.MaxOwnedSpaces {
-			return ErrSpaceOwnershipLimit
-		}
 		var activeReservations int
 		if err := tx.QueryRowContext(ctx, `SELECT
 			(SELECT count(*) FROM space_upload_reservations WHERE space_id=$1 AND state='active')+
@@ -58,8 +41,8 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 			return ErrSpaceConflict
 		}
 		// Ownership transfer deliberately does not validate current storage.
-		// The incoming owner's plan becomes the Space capacity immediately; an
-		// oversized Space remains accessible and is reported as over quota.
+		// Each contributor keeps their account-owned bytes; Space ownership
+		// never transfers cloud usage or introduces a Space allowance.
 		if _, err := tx.ExecContext(ctx, `UPDATE space_members SET role='member' WHERE space_id=$1 AND user_id=$2`, spaceID, ownerID); err != nil {
 			return err
 		}
@@ -72,7 +55,7 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 		if _, err := tx.ExecContext(ctx, `UPDATE security_domains SET owner_user_id=$1,version=version+1,updated_at=NOW() WHERE space_id=$2 AND kind='space'`, memberID, spaceID); err != nil {
 			return err
 		}
-		_, err = recordSpaceEventTx(ctx, tx, spaceID, ownerID, "owner.transferred", memberID, map[string]any{})
+		_, err := recordSpaceEventTx(ctx, tx, spaceID, ownerID, "owner.transferred", memberID, map[string]any{})
 		return err
 	})
 }
@@ -117,39 +100,8 @@ func validateMessageWithReferences(content []MessageSpan, referenceCount int) er
 	return nil
 }
 
-func messagePreview(content []MessageSpan) string {
-	var builder strings.Builder
-	for _, span := range content {
-		if span.Type == "text" {
-			builder.WriteString(span.Text)
-		} else if span.Type == "mention" {
-			builder.WriteString("@")
-			builder.WriteString(span.Label)
-		} else if span.Type == "link" {
-			builder.WriteString(span.Label)
-		}
-	}
-	preview := []rune(strings.TrimSpace(builder.String()))
-	if len(preview) > 180 {
-		preview = append(preview[:177], '.', '.', '.')
-	}
-	return string(preview)
-}
-
-func (db *Database) CreateSpaceMessage(ctx context.Context, userID, spaceID string, content []MessageSpan, fileNodeIDs []string) (*SpaceMessage, []string, error) {
-	return db.CreateSpaceMessageWithReferences(ctx, userID, spaceID, content, fileNodeIDs, nil, nil, "")
-}
-
-func (db *Database) CreateSpaceMessageWithReferences(ctx context.Context, userID, spaceID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID string) (*SpaceMessage, []string, error) {
-	return db.CreateSpaceMessageWithReferencesAndClientNonce(ctx, userID, spaceID, content, fileNodeIDs, attachmentIDs, libraryItemIDs, replyToMessageID, "")
-}
-
 func (db *Database) CreateSpaceMessageWithReferencesAndClientNonce(ctx context.Context, userID, spaceID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID, clientNonce string) (*SpaceMessage, []string, error) {
 	return db.createSpaceMessageWithReferences(ctx, userID, spaceID, "", content, fileNodeIDs, attachmentIDs, libraryItemIDs, replyToMessageID, clientNonce)
-}
-
-func (db *Database) CreateSpaceConversationMessageWithReferences(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID string) (*SpaceMessage, []string, error) {
-	return db.CreateSpaceConversationMessageWithReferencesAndClientNonce(ctx, userID, spaceID, conversationID, content, fileNodeIDs, attachmentIDs, libraryItemIDs, replyToMessageID, "")
 }
 
 func (db *Database) CreateSpaceConversationMessageWithReferencesAndClientNonce(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID, clientNonce string) (*SpaceMessage, []string, error) {

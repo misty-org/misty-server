@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/kannachi323/misty/server/internal/cloudusage"
 	"time"
 
 	"github.com/lib/pq"
@@ -97,7 +98,7 @@ func (db *Store) CreateBrowserSyncTicket(ctx context.Context, userID, vaultID, d
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return cloudusage.Commit(ctx, tx)
 }
 func (db *Store) ConsumeBrowserSyncTicket(ctx context.Context, hash string) (*SyncConnectionIdentity, error) {
 	var i SyncConnectionIdentity
@@ -147,7 +148,7 @@ func (db *Store) BrowserSyncConnect(ctx context.Context, i SyncConnectionIdentit
 	if err = notifySync(ctx, tx, i.UserID, i.VaultID, "browser-presence"); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return cloudusage.Commit(ctx, tx)
 }
 
 // BrowserSyncProgress records a changed applied cursor or readiness; callers
@@ -180,31 +181,7 @@ func (db *Store) BrowserSyncProgress(ctx context.Context, i SyncConnectionIdenti
 			return false, err
 		}
 	}
-	return caughtUp, tx.Commit()
-}
-
-// BrowserSyncHeartbeat is the per-heartbeat liveness write used before
-// instance leases. It remains for callers that still refresh a connection.
-func (db *Store) BrowserSyncHeartbeat(ctx context.Context, i SyncConnectionIdentity, connectionID string, applied int64, ready bool, epochs ...string) error {
-	if !validSyncID(connectionID) || applied < 0 || applied > SyncMaxCounter {
-		return ErrSyncInvalid
-	}
-	result, err := db.Conn.ExecContext(ctx, `INSERT INTO browser_sync_connections(connection_id,vault_id,device_id,ready,applied_sequence)
- SELECT $4,w.vault_id,d.device_id,$6,$5 FROM browser_sync_vaults w JOIN browser_sync_devices d USING(vault_id)
- WHERE w.user_id=$1 AND w.vault_id=$2 AND d.device_id=$3 AND d.revoked_at IS NULL AND $5<=w.head_sequence
- ON CONFLICT(connection_id) DO UPDATE SET ready=EXCLUDED.ready,applied_sequence=EXCLUDED.applied_sequence,expires_at=clock_timestamp()+interval '45 seconds',last_seen_at=clock_timestamp()
- WHERE browser_sync_connections.vault_id=EXCLUDED.vault_id AND browser_sync_connections.device_id=EXCLUDED.device_id`, i.UserID, i.VaultID, i.DeviceID, connectionID, applied, ready)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return ErrSyncForbidden
-	}
-	return nil
+	return caughtUp, cloudusage.Commit(ctx, tx)
 }
 
 // BrowserSyncDisconnect removes a closed socket's row and keeps the device's
@@ -219,7 +196,7 @@ func (db *Store) BrowserSyncDisconnect(ctx context.Context, i SyncConnectionIden
  RETURNING c.vault_id,c.device_id,clock_timestamp() AS last_seen_at`, connectionID, i.VaultID, i.DeviceID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return cloudusage.Commit(ctx, tx)
 }
 func (db *Store) BrowserSyncPresence(ctx context.Context, userID, vaultID string) ([]SyncPresence, error) {
 	rows, err := db.Conn.QueryContext(ctx, `SELECT d.device_id,COALESCE(bool_or(`+syncConnectionLive+`),false),
@@ -297,7 +274,7 @@ func (db *Store) RenewBrowserSyncInstance(ctx context.Context, instanceID string
 	if err != nil {
 		return 0, err
 	}
-	return removed + legacy, tx.Commit()
+	return removed + legacy, cloudusage.Commit(ctx, tx)
 }
 
 // ReleaseBrowserSyncInstance ends this process's lease on shutdown so its
@@ -318,7 +295,7 @@ func (db *Store) ReleaseBrowserSyncInstance(ctx context.Context, instanceID stri
  RETURNING c.vault_id,c.device_id,c.last_seen_at`, instanceID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return cloudusage.Commit(ctx, tx)
 }
 
 // sweepSyncConnections runs a DELETE ... RETURNING vault_id,device_id,last_seen_at,

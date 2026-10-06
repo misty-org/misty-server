@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
@@ -59,20 +59,15 @@ func TestMediaIndexValidationFoldsTinyFinalTail(t *testing.T) {
 
 func TestEmbedMediaTextsRetriesTransientFailure(t *testing.T) {
 	var calls atomic.Int32
-	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	runtime := modelruntime.TestingNewFake(t, func(call modelruntime.TestingCall) (int, any) {
 		if calls.Add(1) == 1 {
-			http.Error(w, "temporary upstream failure", http.StatusBadGateway)
-			return
+			return http.StatusBadGateway, map[string]any{"code": "model_call_failed", "upstream_status": 502}
 		}
 		vector := make([]float64, serveragent.SmartLibraryEmbeddingDims)
 		vector[0] = 1
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data":  []any{map[string]any{"embedding": vector}},
-			"usage": map[string]any{"prompt_tokens": 3},
-		})
-	}))
-	defer gateway.Close()
-	analyzer := &serveragent.SmartLibraryAnalyzer{APIKey: "test", BaseURL: gateway.URL}
+		return http.StatusOK, map[string]any{"embeddings": [][]float64{vector}, "usage": map[string]int{"inputTokens": 3}}
+	})
+	analyzer := &serveragent.SmartLibraryAnalyzer{Models: runtime.Client}
 	vectors, _, err := TestingEmbedMediaTexts(context.Background(), analyzer, []string{"grocery store aisle"})
 	if err != nil || len(vectors) != 1 || len(vectors[0]) != serveragent.SmartLibraryEmbeddingDims {
 		t.Fatalf("vectors=%d err=%v", len(vectors), err)

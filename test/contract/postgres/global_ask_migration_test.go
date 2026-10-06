@@ -4,15 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 // Reconstruct the pre-migration names inside one transaction. The test never
 // rolls back an applied migration or touches a developer database.
@@ -23,7 +25,7 @@ func TestGlobalAskMigrationPreservesAskAndSelectivelyPurgesLegacy(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Ask migration")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Ask migration")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +80,8 @@ ALTER TABLE misty_ask_identities ADD COLUMN source_space_agent_id text;
 ALTER TABLE misty_ask_conversations ADD COLUMN personal_agent_id text;
 ALTER TABLE misty_ask_identities RENAME TO personal_agents;
 ALTER TABLE misty_ask_identity_versions RENAME TO personal_agent_versions;
-ALTER TABLE misty_ask_mcp_tools RENAME TO personal_agent_mcp_tools;
+CREATE TABLE personal_agent_mcp_tools(id text);
+CREATE TABLE object_deletion_jobs(object_key text PRIMARY KEY, not_before timestamptz, created_by_user_id text);
 ALTER TABLE misty_ask_conversations RENAME TO agent_conversations;
 ALTER TABLE misty_ask_conversation_events RENAME TO agent_conversation_events;`); err != nil {
 			return err
@@ -98,10 +101,6 @@ SELECT id,user_id,'user_message','{"text":"history"}' FROM agent_conversations W
 			return err
 		}
 		if err := exec(`INSERT INTO agent_run_jobs(run_id,space_id,agent_id) VALUES('retired-test-run',$1,'retired-test-agent')`, space.ID); err != nil {
-			return err
-		}
-		if err := exec(`INSERT INTO agent_run_tool_approvals(id,run_id,owner_user_id,tool_call_id,tool_name,impact,arguments_hash,signed_call,hook_token)
-VALUES('preserved-approval',$1,$2,'call','mail.send','consequential','hash','signed','hook'),('retired-approval','retired-test-run',$2,'call','mail.send','consequential','hash','signed','old-hook')`, run.ID, owner.ID); err != nil {
 			return err
 		}
 		if err := exec(`INSERT INTO ai_invocations(id,user_id,conversation_id,surface_id,mode,trigger_kind,state,idempotency_key,agent_run_id)
@@ -157,8 +156,6 @@ VALUES('retired-effect',$1,'retired-test-agent','retired-test-run','mail.send','
 			{`SELECT COUNT(*) FROM misty_ask_conversations WHERE user_id='` + owner.ID + `'`, 2},
 			{`SELECT COUNT(*) FROM misty_ask_conversation_events`, 2},
 			{`SELECT COUNT(*) FROM agent_run_jobs WHERE run_id='retired-test-run'`, 0},
-			{`SELECT COUNT(*) FROM agent_run_tool_approvals WHERE id='retired-approval'`, 0},
-			{`SELECT COUNT(*) FROM agent_run_tool_approvals WHERE id='preserved-approval'`, 1},
 			{`SELECT COUNT(*) FROM ai_invocations WHERE id='retired-invocation'`, 0},
 			{`SELECT COUNT(*) FROM ai_invocations WHERE id='preserved-invocation'`, 1},
 			{`SELECT COUNT(*) FROM connected_accounts WHERE id='` + connectionID + `'`, 1},

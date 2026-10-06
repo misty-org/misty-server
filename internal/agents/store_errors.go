@@ -32,6 +32,7 @@ type Session struct {
 	ID                    string
 	UserID                string
 	BillingUserID         string
+	BillingTurnSequence   int64 `json:"billingTurnSequence"`
 	BillingScope          string
 	ModelID               string
 	ReasoningEffort       string
@@ -84,10 +85,6 @@ func NewSessionStoreWithPersistence(ttl time.Duration, persistence SessionPersis
 		sessions:   make(map[string]*sessionEntry),
 		persist:    persistence,
 	}
-}
-
-func (s *SessionStore) Create(userID string) *Session {
-	return s.CreateWithBilling(userID, userID)
 }
 
 func (s *SessionStore) CreateWithBilling(userID, billingUserID string) *Session {
@@ -181,34 +178,6 @@ func (s *SessionStore) releaseEntry(entry *sessionEntry) {
 	s.mu.Lock()
 	entry.active--
 	s.mu.Unlock()
-}
-
-func (s *SessionStore) Cancel(id, userID string) error {
-	entry := s.acquireEntry(context.Background(), id, userID)
-	if entry == nil || entry.userID != userID {
-		if entry != nil {
-			s.releaseEntry(entry)
-		}
-		return ErrSessionNotFound
-	}
-	defer s.releaseEntry(entry)
-
-	entry.cancelMu.Lock()
-	if entry.cancel != nil {
-		entry.cancel()
-	}
-	entry.cancelMu.Unlock()
-
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	beforeEvents := len(entry.session.Events)
-	if !entry.session.Canceled {
-		entry.session.Canceled = true
-		entry.session.appendEvent(AgentEvent{Type: EventError, Message: "session canceled"})
-	}
-	entry.session.UpdatedAt = s.TestingNow()
-	s.persistUpdatedSession(context.Background(), entry.session, persistentEvents(len(entry.session.Messages), len(entry.session.ToolResults), beforeEvents, entry.session))
-	return nil
 }
 
 // Forget removes an owned session from process memory after its durable

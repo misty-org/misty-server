@@ -1,19 +1,13 @@
 package agent
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
 	"strings"
-	"time"
 
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 )
 
@@ -29,48 +23,19 @@ type MediaTranscriptSegment struct {
 	Text    string `json:"text"`
 }
 
-type mediaTranscriptionResponse struct {
-	Text              string  `json:"text"`
-	Language          string  `json:"language"`
-	DurationInSeconds float64 `json:"durationInSeconds"`
-	Segments          []struct {
-		Start float64 `json:"startSecond"`
-		End   float64 `json:"endSecond"`
-		Text  string  `json:"text"`
-	} `json:"segments"`
-}
-
-// TranscribeAgentVoice is the short-lived voice-turn boundary. The caller
-// owns the bytes and discards them as soon as this returns; Misty persists
-// only the resulting text transcript.
-func (a *SmartLibraryAnalyzer) TranscribeAgentVoice(ctx context.Context, audio []byte, mimeType string, durationMS int64) (string, string, int64, error) {
-	text, language, usage, err := a.TranscribeAgentVoiceWithUsage(ctx, audio, mimeType, durationMS)
-	return text, language, usage.DurationMS, err
-}
-
 type AgentVoiceUsage struct {
 	Model      string
 	DurationMS int64
 }
 
-func (a *SmartLibraryAnalyzer) TranscribeAgentVoiceWithUsage(ctx context.Context, audio []byte, mimeType string, durationMS int64) (string, string, AgentVoiceUsage, error) {
-	return transcribeAgentVoice(ctx, audio, durationMS, func(model string) ([]MediaTranscriptSegment, ModelUsage, string, int64, error) {
-		return a.transcribeMediaWithModel(ctx, audio, mimeType, durationMS, model)
-	})
-}
-
-func transcribeAgentVoice(ctx context.Context, audio []byte, durationMS int64, call func(string) ([]MediaTranscriptSegment, ModelUsage, string, int64, error)) (string, string, AgentVoiceUsage, error) {
+func transcribeAgentVoiceModels(ctx context.Context, audio []byte, durationMS int64, model, fallback string, call func(string) ([]MediaTranscriptSegment, ModelUsage, string, int64, error)) (string, string, AgentVoiceUsage, error) {
 	if len(audio) == 0 || len(audio) > 10<<20 || durationMS <= 0 || durationMS > 60_000 {
 		return "", "", AgentVoiceUsage{}, errors.New("invalid voice recording")
 	}
-	model := strings.TrimSpace(envconfig.Getenv("AGENT_TRANSCRIPTION_MODEL"))
-	if model == "" || !strings.HasPrefix(model, "openai/") {
-		model = "openai/gpt-4o-mini-transcribe"
-	}
 	segments, _, language, actualDurationMS, err := call(model)
 	var billingFailure *voiceBillingError
-	if err != nil && !errors.As(err, &billingFailure) && ctx.Err() == nil && model != MediaSearchTranscriptionFallbackModel {
-		model = MediaSearchTranscriptionFallbackModel
+	if err != nil && !errors.As(err, &billingFailure) && ctx.Err() == nil && fallback != "" && model != fallback {
+		model = fallback
 		segments, _, language, actualDurationMS, err = call(model)
 	}
 	if err != nil {
@@ -92,84 +57,11 @@ func transcribeAgentVoice(ctx context.Context, audio []byte, durationMS int64, c
 	return text, strings.TrimSpace(language), AgentVoiceUsage{Model: model, DurationMS: actualDurationMS}, nil
 }
 
-func (a *SmartLibraryAnalyzer) GenerateAgentSpeech(ctx context.Context, text, voice string) ([]byte, string, error) {
-	audio, mime, _, err := a.GenerateAgentSpeechWithUsage(ctx, text, voice)
-	return audio, mime, err
-}
-
-// SpeechProviderError contains only safe routing metadata, never provider response bodies.
+// SpeechProviderError carries only the provider's status, never its response body.
 type SpeechProviderError struct{ Status int }
 
 func (e *SpeechProviderError) Error() string {
-	return fmt.Sprintf("AI Gateway speech status %d", e.Status)
-}
-
-func (a *SmartLibraryAnalyzer) GenerateAgentSpeechWithUsage(ctx context.Context, text, voice string) ([]byte, string, AgentVoiceUsage, error) {
-	text = strings.TrimSpace(text)
-	voice = strings.TrimSpace(voice)
-	if text == "" || len([]rune(text)) > 6_000 || voice == "" {
-		return nil, "", AgentVoiceUsage{}, errors.New("invalid speech request")
-	}
-	payload, err := json.Marshal(map[string]any{"text": text, "voice": voice, "outputFormat": "pcm"})
-	if err != nil {
-		return nil, "", AgentVoiceUsage{}, err
-	}
-	key := strings.TrimSpace(a.APIKey)
-	if key == "" {
-		return nil, "", AgentVoiceUsage{}, errors.New("AI Gateway key is required")
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(a.embeddingBaseURL(), "/")+"/speech-model", bytes.NewReader(payload))
-	if err != nil {
-		return nil, "", AgentVoiceUsage{}, err
-	}
-	request.Header.Set("Authorization", "Bearer "+key)
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("ai-gateway-protocol-version", "0.0.1")
-	request.Header.Set("ai-speech-model-specification-version", "4")
-	request.Header.Set("ai-model-id", AgentSpeechModel)
-	client := a.Client
-	if client == nil {
-		client = &http.Client{Timeout: 90 * time.Second}
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		return nil, "", AgentVoiceUsage{}, err
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, (32<<20)+1))
-	if err != nil || len(raw) > 32<<20 {
-		return nil, "", AgentVoiceUsage{}, errors.New("speech response too large or incomplete")
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, "", AgentVoiceUsage{}, &SpeechProviderError{Status: response.StatusCode}
-	}
-	var decoded struct {
-		Audio string `json:"audio"`
-	}
-	if json.Unmarshal(raw, &decoded) != nil || decoded.Audio == "" {
-		return nil, "", AgentVoiceUsage{}, errors.New("invalid speech response")
-	}
-	audio, err := base64.StdEncoding.DecodeString(decoded.Audio)
-	if err != nil || len(audio) == 0 || len(audio)%2 != 0 || len(audio) > 24<<20 {
-		return nil, "", AgentVoiceUsage{}, errors.New("invalid speech audio")
-	}
-	// OpenAI PCM is mono, 24 kHz, signed 16-bit little endian. Wrap it in
-	// WAV for native/web audio playback and meter the actual generated samples.
-	wav := make([]byte, 44+len(audio))
-	copy(wav, "RIFF")
-	binary.LittleEndian.PutUint32(wav[4:], uint32(36+len(audio)))
-	copy(wav[8:], "WAVEfmt ")
-	binary.LittleEndian.PutUint32(wav[16:], 16)
-	binary.LittleEndian.PutUint16(wav[20:], 1)
-	binary.LittleEndian.PutUint16(wav[22:], 1)
-	binary.LittleEndian.PutUint32(wav[24:], 24000)
-	binary.LittleEndian.PutUint32(wav[28:], 48000)
-	binary.LittleEndian.PutUint16(wav[32:], 2)
-	binary.LittleEndian.PutUint16(wav[34:], 16)
-	copy(wav[36:], "data")
-	binary.LittleEndian.PutUint32(wav[40:], uint32(len(audio)))
-	copy(wav[44:], audio)
-	return wav, "audio/wav", AgentVoiceUsage{Model: AgentSpeechModel, DurationMS: (int64(len(audio)) + 47) / 48}, nil
+	return fmt.Sprintf("speech provider status %d", e.Status)
 }
 
 func (a *SmartLibraryAnalyzer) TranscribeMedia(ctx context.Context, audio []byte, mimeType string, chunkDurationMS int64) ([]MediaTranscriptSegment, ModelUsage, error) {
@@ -180,18 +72,20 @@ func (a *SmartLibraryAnalyzer) TranscribeMedia(ctx context.Context, audio []byte
 	if model == "" {
 		model = MediaSearchTranscriptionModel
 	}
-	segments, usage, _, _, err := a.transcribeMediaWithModel(ctx, audio, mimeType, chunkDurationMS, model)
+	configured, primaryModel, fallback, configErr := a.transcriptionModels(ctx, "media-transcription", "media-transcription-fallback", model, envOrDefault("MEDIA_SEARCH_TRANSCRIPTION_FALLBACK_MODEL", MediaSearchTranscriptionFallbackModel))
+	if configErr != nil {
+		return nil, ModelUsage{}, configErr
+	}
+	a = configured
+	model = primaryModel
+	segments, usage, _, _, err := a.transcribeRole(ctx, "media-transcription", audio, mimeType, chunkDurationMS, model)
 	if err == nil && len(segments) > 0 {
 		return TestingCoalesceTranscriptSegments(segments), usage, nil
 	}
-	fallback := strings.TrimSpace(envconfig.Getenv("MEDIA_SEARCH_TRANSCRIPTION_FALLBACK_MODEL"))
-	if fallback == "" {
-		fallback = MediaSearchTranscriptionFallbackModel
-	}
-	if a.BillingError() != nil || ctx.Err() != nil || fallback == model {
+	if a.BillingError() != nil || ctx.Err() != nil || fallback == "" || fallback == model {
 		return segments, usage, err
 	}
-	fallbackSegments, fallbackUsage, _, _, fallbackErr := a.transcribeMediaWithModel(ctx, audio, mimeType, chunkDurationMS, fallback)
+	fallbackSegments, fallbackUsage, _, _, fallbackErr := a.transcribeRole(ctx, "media-transcription-fallback", audio, mimeType, chunkDurationMS, fallback)
 	usage.InputTokens += fallbackUsage.InputTokens
 	usage.OutputTokens += fallbackUsage.OutputTokens
 	if fallbackErr != nil {
@@ -200,58 +94,35 @@ func (a *SmartLibraryAnalyzer) TranscribeMedia(ctx context.Context, audio []byte
 	return TestingCoalesceTranscriptSegments(fallbackSegments), usage, nil
 }
 
-func (a *SmartLibraryAnalyzer) transcribeMediaWithModel(ctx context.Context, audio []byte, mimeType string, chunkDurationMS int64, model string) (resultSegments []MediaTranscriptSegment, resultUsage ModelUsage, resultLanguage string, resultDuration int64, resultErr error) {
-	payload, err := json.Marshal(map[string]any{"audio": base64.StdEncoding.EncodeToString(audio), "mediaType": mimeType})
-	if err != nil {
-		return nil, ModelUsage{}, "", 0, err
-	}
-
-	key := strings.TrimSpace(a.APIKey)
-	if key == "" {
-		return nil, ModelUsage{}, "", 0, errors.New("AI Gateway key is required")
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(a.embeddingBaseURL(), "/")+"/transcription-model", bytes.NewReader(payload))
-	if err != nil {
-		return nil, ModelUsage{}, "", 0, err
-	}
-	request.Header.Set("Authorization", "Bearer "+key)
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("ai-gateway-protocol-version", "0.0.1")
-	request.Header.Set("ai-transcription-model-specification-version", "4")
-	request.Header.Set("ai-model-id", model)
-	client := a.Client
-	if client == nil {
-		client = &http.Client{Timeout: 90 * time.Second}
-	}
+// transcribeWithRoute transcribes one chunk through the agent runtime and
+// meters it by audio duration: transcription models report no tokens.
+func (a *SmartLibraryAnalyzer) transcribeWithRoute(ctx context.Context, route modelruntime.Route, audio []byte, mimeType string, chunkDurationMS int64, model string) ([]MediaTranscriptSegment, ModelUsage, string, int64, error) {
 	attempt, err := a.billing.Begin(ctx, "library.transcription", model, map[string]int64{"audio_ms": chunkDurationMS})
 	if err != nil {
 		return nil, ModelUsage{}, "", 0, err
 	}
-	success := false
-	defer func() {
-		if e := attempt.Finish(ctx, success, map[string]int64{"audio_ms": resultDuration}, resultDuration <= 0); e != nil {
-			resultErr = e
+	result, callErr := a.Models.Transcribe(ctx, route, model, mimeType, audio)
+	actualDurationMS := int64(0)
+	if callErr == nil && result.DurationInSeconds != nil {
+		seconds := *result.DurationInSeconds
+		if math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds < 0 || seconds > 3600 {
+			callErr = errors.New("invalid transcription duration")
+		} else {
+			actualDurationMS = int64(math.Ceil(seconds * 1000))
 		}
-	}()
-	response, err := client.Do(request)
-	if err != nil {
+	}
+	if err := attempt.Finish(ctx, callErr == nil, map[string]int64{"audio_ms": actualDurationMS}, actualDurationMS <= 0); err != nil {
 		return nil, ModelUsage{}, "", 0, err
 	}
-	defer response.Body.Close()
-	success = response.StatusCode >= 200 && response.StatusCode < 300
-	raw, err := io.ReadAll(io.LimitReader(response.Body, (2<<20)+1))
-	if err != nil || len(raw) > 2<<20 {
-		return nil, ModelUsage{}, "", 0, errors.New("transcription response too large or incomplete")
+	if callErr != nil {
+		var failure *modelruntime.Error
+		if errors.As(callErr, &failure) && failure.UpstreamStatus > 0 {
+			return nil, ModelUsage{}, "", 0, &SpeechProviderError{Status: failure.UpstreamStatus}
+		}
+		return nil, ModelUsage{}, "", 0, callErr
 	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, ModelUsage{}, "", 0, fmt.Errorf("AI Gateway transcription status %d: %s", response.StatusCode, strings.TrimSpace(string(raw[:min(len(raw), 256)])))
-	}
-	var decoded mediaTranscriptionResponse
-	if err = json.Unmarshal(raw, &decoded); err != nil {
-		return nil, ModelUsage{}, "", 0, fmt.Errorf("invalid transcription response: %w", err)
-	}
-	segments := make([]MediaTranscriptSegment, 0, len(decoded.Segments))
-	for _, segment := range decoded.Segments {
+	segments := make([]MediaTranscriptSegment, 0, len(result.Segments))
+	for _, segment := range result.Segments {
 		text := strings.TrimSpace(segment.Text)
 		start := max(0, int64(segment.Start*1000))
 		end := min(chunkDurationMS, max(start+1, int64(segment.End*1000)))
@@ -259,16 +130,12 @@ func (a *SmartLibraryAnalyzer) transcribeMediaWithModel(ctx context.Context, aud
 			segments = append(segments, MediaTranscriptSegment{StartMS: start, EndMS: end, Text: text})
 		}
 	}
-	if len(segments) == 0 && strings.TrimSpace(decoded.Text) != "" {
-		segments = append(segments, MediaTranscriptSegment{StartMS: 0, EndMS: chunkDurationMS, Text: strings.TrimSpace(decoded.Text)})
+	if len(segments) == 0 && strings.TrimSpace(result.Text) != "" {
+		segments = append(segments, MediaTranscriptSegment{StartMS: 0, EndMS: chunkDurationMS, Text: strings.TrimSpace(result.Text)})
 	}
-	// Gateway's transcription response currently omits token usage. Record an
-	// audio-duration estimate so the product cost ledger is still meaningful.
-	if math.IsNaN(decoded.DurationInSeconds) || math.IsInf(decoded.DurationInSeconds, 0) || decoded.DurationInSeconds < 0 || decoded.DurationInSeconds > 3600 {
-		return nil, ModelUsage{}, "", 0, errors.New("invalid transcription duration")
-	}
-	actualDurationMS := int64(math.Ceil(decoded.DurationInSeconds * 1000))
-	return segments, ModelUsage{InputTokens: int64(float64(chunkDurationMS) / 1000.0 * 3.0)}, decoded.Language, actualDurationMS, nil
+	// Record an audio-duration token estimate so the product cost ledger
+	// stays meaningful.
+	return segments, ModelUsage{InputTokens: int64(float64(chunkDurationMS) / 1000.0 * 3.0)}, result.Language, actualDurationMS, nil
 }
 
 func TestingCoalesceTranscriptSegments(input []MediaTranscriptSegment) []MediaTranscriptSegment {

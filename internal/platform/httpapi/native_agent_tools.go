@@ -28,7 +28,7 @@ func nativeAgentToolDescriptors() []agenttools.Descriptor {
 	list.Approval = agenttools.ApprovalNone
 	manage := base
 	manage.Name = "agents.configure"
-	manage.Description = "Create, update, or delete a global personal agent when the user requests agent configuration. For update, provide the current version from agents.list. Browser workspace tools and model policy are automatic. Never delete the default Misty agent. Deletion requires an explicit request to delete the named agent, not just stop its task."
+	manage.Description = "Create, update, or delete a global personal agent when the user requests agent configuration. For update, provide the current version from agents_list. Browser workspace tools and model policy are automatic. Never delete the default Misty agent. Deletion requires an explicit request to delete the named agent, not just stop its task."
 	manage.Risk = serveragent.RiskWrite
 	manage.Approval = agenttools.ApprovalExplicitIntent
 	manage.AuditEvent = "agents.configured"

@@ -12,22 +12,6 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func (hub *aiInvocationHub) create(userID, conversationID, idempotencyKey string) (*aiInvocationRecord, bool) {
-	hub.mu.Lock()
-	defer hub.mu.Unlock()
-	hub.pruneLocked()
-	key := userID + ":" + idempotencyKey
-	if id := hub.idempotency[key]; id != "" {
-		if existing := hub.invocations[id]; existing != nil {
-			return existing, true
-		}
-	}
-	now := time.Now().UTC()
-	record := &aiInvocationRecord{ID: "invocation_" + uuid.NewString(), OwnerUserID: userID, ConversationID: conversationID, State: "queued", CreatedAt: now, ExpiresAt: now.Add(aiInvocationTTL), Notify: make(chan struct{})}
-	hub.invocations[record.ID] = record
-	hub.idempotency[key] = record.ID
-	return record, false
-}
 
 func (hub *aiInvocationHub) append(id string, event aiInvocationEvent) error {
 	return hub.appendReceipt(id, event, "event:"+uuid.NewString())
@@ -121,22 +105,6 @@ func (hub *aiInvocationHub) cancel(id string) error {
 	return hub.append(id, aiInvocationEvent{Type: "invocation.canceled", State: "canceled"})
 }
 
-func (hub *aiInvocationHub) events(userID, id string, cursor int) ([]aiInvocationEvent, string, <-chan struct{}, bool) {
-	hub.mu.Lock()
-	defer hub.mu.Unlock()
-	record := hub.invocations[id]
-	if record == nil || record.OwnerUserID != userID || time.Now().After(record.ExpiresAt) {
-		return nil, "", nil, false
-	}
-	if cursor < 0 {
-		cursor = 0
-	}
-	if cursor > len(record.Events) {
-		cursor = len(record.Events)
-	}
-	events := append([]aiInvocationEvent(nil), record.Events[cursor:]...)
-	return events, record.State, record.Notify, true
-}
 
 func (hub *aiInvocationHub) cancelForUser(userID, id string) (string, bool) {
 	hub.mu.Lock()

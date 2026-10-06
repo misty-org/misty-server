@@ -10,14 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// SpaceMemberAvatarMeta permission-checks the requester and target within a Space
-// and returns the member's avatar version (0 when unset). The bytes themselves are
-// streamed from the object store (R2).
-func (db *Database) SpaceMemberAvatarMeta(ctx context.Context, requestingUserID, spaceID, memberID string) (int64, error) {
-	avatar, err := db.SpaceMemberAvatarReference(ctx, requestingUserID, spaceID, memberID)
-	return avatar.Version, err
-}
-
 func (db *Database) SpaceMemberAvatarReference(ctx context.Context, requestingUserID, spaceID, memberID string) (UserAvatarReference, error) {
 	var avatar UserAvatarReference
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
@@ -34,12 +26,6 @@ func (db *Database) SpaceMemberAvatarReference(ctx context.Context, requestingUs
 		return err
 	})
 	return avatar, err
-}
-
-func (db *Database) InviteToSpace(ctx context.Context, ownerID, spaceID, email string) (*SpaceInvitation, error) {
-	return db.InviteToSpaceWithToken(
-		ctx, ownerID, spaceID, email, "legacy-"+strings.ReplaceAll(uuid.NewString(), "-", ""),
-	)
 }
 
 func (db *Database) InviteToSpaceWithToken(

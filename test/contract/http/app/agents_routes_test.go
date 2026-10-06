@@ -26,7 +26,7 @@ func TestAgentRoutesRequireAuthentication(t *testing.T) {
 	for _, path := range []string{
 		"/api/devices",
 		"/api/spaces/space-1/tasks",
-		"/api/spaces/space-1/calendar/events",
+		"/api/spaces/space-1/calendar/sources",
 		"/api/ai/models",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -65,7 +65,6 @@ func TestCustomAgentMutationAndInvocationRoutesAreAbsent(t *testing.T) {
 		{http.MethodPost, "/api/agents/delegate", http.StatusNotFound},
 		{http.MethodPut, "/api/agents/personal-1/mcp-tools", http.StatusNotFound},
 		{http.MethodGet, "/api/agents/personal-1/mcp-executions", http.StatusNotFound},
-		{http.MethodPost, "/api/agent-voice/speech", http.StatusUnauthorized},
 		{http.MethodPost, "/api/spaces/space-1/conversations/direct", http.StatusMethodNotAllowed},
 	}
 	for _, test := range tests {

@@ -46,15 +46,7 @@ func scanConnectedAccount(row interface{ Scan(...any) error }, item *ConnectedAc
 
 func (db *Database) ConnectedAccounts(ctx context.Context, userID string) ([]ConnectedAccount, error) {
 	items := []ConnectedAccount{}
-	if authority := AppAuthorityFromContext(ctx); authority != nil {
-		if authority.UserID != userID || authority.SpaceID != "" {
-			return nil, ErrAppRuntimeForbidden
-		}
-	}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		if err := validateAppExecutionAuthorityTx(ctx, tx, AppAuthorityFromContext(ctx), userID, ""); err != nil {
-			return err
-		}
 		rows, err := tx.QueryContext(ctx, `SELECT `+connectedAccountColumns+`
 			FROM connected_accounts WHERE user_id=$1 AND revoked_at IS NULL
 			ORDER BY provider,account_display,id`, userID)
@@ -76,15 +68,7 @@ func (db *Database) ConnectedAccounts(ctx context.Context, userID string) ([]Con
 
 func (db *Database) ConnectedAccount(ctx context.Context, userID, id string) (*ConnectedAccount, error) {
 	item := &ConnectedAccount{}
-	if authority := AppAuthorityFromContext(ctx); authority != nil {
-		if authority.UserID != userID || authority.SpaceID != "" {
-			return nil, ErrAppRuntimeForbidden
-		}
-	}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		if err := validateAppExecutionAuthorityTx(ctx, tx, AppAuthorityFromContext(ctx), userID, ""); err != nil {
-			return err
-		}
 		return scanConnectedAccount(tx.QueryRowContext(ctx, `SELECT `+connectedAccountColumns+`
 			FROM connected_accounts WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`, id, userID), item)
 	})
@@ -96,15 +80,7 @@ func (db *Database) ConnectedAccount(ctx context.Context, userID, id string) (*C
 
 func (db *Database) ConnectedAccountByIdentity(ctx context.Context, userID, provider, accountID string) (*ConnectedAccount, error) {
 	item := &ConnectedAccount{}
-	if authority := AppAuthorityFromContext(ctx); authority != nil {
-		if authority.UserID != userID || authority.SpaceID != "" {
-			return nil, ErrAppRuntimeForbidden
-		}
-	}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		if err := validateAppExecutionAuthorityTx(ctx, tx, AppAuthorityFromContext(ctx), userID, ""); err != nil {
-			return err
-		}
 		return scanConnectedAccount(tx.QueryRowContext(ctx, `SELECT `+connectedAccountColumns+`
 			FROM connected_accounts WHERE user_id=$1 AND provider=$2 AND account_id=$3`,
 			userID, provider, accountID), item)
@@ -149,40 +125,7 @@ func (db *Database) SaveConnectedAccount(ctx context.Context, item ConnectedAcco
 	return &item, err
 }
 
-func (db *Database) UpdateConnectedAccountCredential(ctx context.Context, item ConnectedAccount) error {
-	return db.TestingWithRLSContext(ctx, userRLSSettings(item.UserID), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE connected_accounts SET
-			credential_ciphertext=$1,credential_nonce=$2,key_version=$3,expires_at=$4,
-			status='active',last_error_code='',last_refreshed_at=NOW(),updated_at=NOW()
-			WHERE id=$5 AND user_id=$6 AND revoked_at IS NULL`, item.CredentialCiphertext,
-			item.CredentialNonce, item.KeyVersion, item.ExpiresAt, item.ID, item.UserID)
-		if err != nil {
-			return err
-		}
-		if changed, _ := result.RowsAffected(); changed != 1 {
-			return ErrSpaceNotFound
-		}
-		return nil
-	})
-}
 
-func (db *Database) SetConnectedAccountHealth(ctx context.Context, userID, id, status, errorCode string) error {
-	if status != "active" && status != "needs_attention" {
-		return ErrSpaceInvalid
-	}
-	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE connected_accounts
-			SET status=$1,last_error_code=$2,updated_at=NOW()
-			WHERE id=$3 AND user_id=$4 AND revoked_at IS NULL`, status, errorCode, id, userID)
-		if err != nil {
-			return err
-		}
-		if changed, _ := result.RowsAffected(); changed != 1 {
-			return ErrSpaceNotFound
-		}
-		return nil
-	})
-}
 
 func (db *Database) RevokeConnectedAccount(ctx context.Context, userID, id string) error {
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {

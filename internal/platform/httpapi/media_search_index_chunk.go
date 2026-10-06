@@ -26,7 +26,7 @@ func (s *MediaSearchService) IndexChunk() http.HandlerFunc {
 			writeJSON(w, 503, map[string]any{"code": "media_search_disabled", "message": "Media Search is temporarily disabled."})
 			return
 		}
-		if s.analyzer == nil || strings.TrimSpace(s.analyzer.APIKey) == "" {
+		if !s.analyzer.Available() {
 			writeJSON(w, 503, map[string]any{"code": "media_search_unavailable", "message": "Media Search is not configured."})
 			return
 		}
@@ -118,7 +118,7 @@ func (s *MediaSearchService) IndexChunk() http.HandlerFunc {
 				}
 			}
 			for i, item := range transcript {
-				segments = append(segments, db.MediaSearchSegment{AssetID: body.AssetID, Kind: "spoken", ChunkIndex: body.ChunkIndex, StartMS: body.StartMS + item.StartMS, EndMS: minInt64(body.EndMS, body.StartMS+item.EndMS), Content: item.Text, Transcript: item.Text, Embedding: vectors[i], EmbeddingModel: serveragent.SmartLibraryEmbeddingModel, Metadata: map[string]any{"source": "audio_transcript"}})
+				segments = append(segments, db.MediaSearchSegment{AssetID: body.AssetID, Kind: "spoken", ChunkIndex: body.ChunkIndex, StartMS: body.StartMS + item.StartMS, EndMS: minInt64(body.EndMS, body.StartMS+item.EndMS), Content: item.Text, Transcript: item.Text, Embedding: vectors[i], EmbeddingModel: configuredEmbeddingModel(r.Context(), analyzer, userID), Metadata: map[string]any{"source": "audio_transcript"}})
 			}
 		}
 		if len(frames) > 0 {
@@ -177,7 +177,7 @@ func (s *MediaSearchService) IndexChunk() http.HandlerFunc {
 				if content == "" {
 					continue
 				}
-				segments = append(segments, db.MediaSearchSegment{AssetID: body.AssetID, Kind: "visual", ChunkIndex: body.ChunkIndex, StartMS: visualStart, EndMS: visualEnd, Content: content, VisualDescription: item.Description, VisibleText: item.VisibleText, Embedding: byID[frame.AssetID], EmbeddingModel: serveragent.SmartLibraryEmbeddingModel, Metadata: map[string]any{"frameTimestampMs": timestamp, "primarySubject": item.PrimarySubject, "tags": item.Tags, "characters": item.Characters, "applications": item.Applications, "objects": item.Objects, "scenes": item.Scenes}})
+				segments = append(segments, db.MediaSearchSegment{AssetID: body.AssetID, Kind: "visual", ChunkIndex: body.ChunkIndex, StartMS: visualStart, EndMS: visualEnd, Content: content, VisualDescription: item.Description, VisibleText: item.VisibleText, Embedding: byID[frame.AssetID], EmbeddingModel: configuredEmbeddingModel(r.Context(), analyzer, userID), Metadata: map[string]any{"frameTimestampMs": timestamp, "primarySubject": item.PrimarySubject, "tags": item.Tags, "characters": item.Characters, "applications": item.Applications, "objects": item.Objects, "scenes": item.Scenes}})
 			}
 		}
 		if err = s.database.CompleteMediaSearchChunk(userID, body.DeviceID, body.AssetID, body.ChunkIndex, body.EndMS, segments); err != nil {

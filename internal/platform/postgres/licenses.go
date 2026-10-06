@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"log"
 	"time"
 )
@@ -12,10 +11,8 @@ type Tier string
 
 const (
 	TierBasic Tier = "basic"
-	// TierPersonal is retained only for interpreting historical purchases.
-	TierPersonal Tier = "personal"
-	TierPro      Tier = "pro"
-	TierMax      Tier = "max"
+	TierPro   Tier = "pro"
+	TierMax   Tier = "max"
 )
 
 const (
@@ -54,41 +51,6 @@ func createLicenseTx(tx *sql.Tx, licenseID string, userID string, tier Tier, sta
 	}
 
 	return license, nil
-}
-
-func (db *Database) GetLicenseByUserID(userID string) (*License, error) {
-	var lic License
-	var expiresAt sql.NullTime
-	var trialStartedAt sql.NullTime
-	var legacyTier sql.NullString
-
-	err := db.TestingWithRLSContext(context.Background(), userRLSSettings(userID), func(tx *sql.Tx) error {
-		return tx.QueryRowContext(
-			context.Background(),
-			`SELECT id, user_id, tier, status, expires_at, trial_started_at, license_device, legacy_tier FROM licenses WHERE user_id = $1`,
-			userID,
-		).Scan(&lic.ID, &lic.UserID, &lic.Tier, &lic.Status, &expiresAt, &trialStartedAt, &lic.LicenseDevice, &legacyTier)
-	})
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		log.Println("Failed to get license:", err)
-		return nil, err
-	}
-
-	if expiresAt.Valid {
-		lic.ExpiresAt = &expiresAt.Time
-	}
-	if trialStartedAt.Valid {
-		lic.TrialStartedAt = &trialStartedAt.Time
-	}
-	if legacyTier.Valid {
-		value := Tier(legacyTier.String)
-		lic.LegacyTier = &value
-	}
-
-	return &lic, nil
 }
 
 func (db *Database) UpdateLicenseDevice(userID, device string) error {

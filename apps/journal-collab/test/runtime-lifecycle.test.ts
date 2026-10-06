@@ -30,6 +30,41 @@ const bindings = {
   MISTY_INTERNAL_API_BASE: "https://api.invalid",
 };
 
+test("service bootstrap publishes note content before any editor connects and recovers old bindings", async () => {
+  const projections = [];
+  const runtime = createRuntime(undefined, {outboundService: async request => {
+    assert.equal(request.url,"https://api.invalid/internal/journal/note-projections");
+    const body = await request.text();
+    const signature = createHmac("sha256",Buffer.from(bindings.JOURNAL_COLLAB_PROJECTION_SECRET,"base64"))
+      .update(`${request.headers.get("X-Misty-Timestamp")}\n`).update(body).digest("base64url");
+    assert.equal(request.headers.get("X-Misty-Signature"),signature);
+    projections.push(JSON.parse(body));
+    return new Response("{}");
+  }});
+  try {
+    const room = await roomStub(runtime,"NOTE_ROOM","unopened-note");
+    const payload = {title:"Agent research",markdown:"Verified source: https://excalidraw.com"};
+    let response = await controlResponse(room,"bootstrap",payload,"note-unopened");
+    assert.equal(response.status,200);
+    assert.ok(projections.some(item => item.note_id === "note-unopened" && item.markdown === payload.markdown));
+    response = await controlResponse(room,"bootstrap",{...payload,markdown:"Must not overwrite"},"note-unopened");
+    assert.deepEqual(await response.json(),{ok:true,initialized:false});
+    assert.equal(projections.at(-1).markdown,payload.markdown);
+    response = await controlResponse(room,"bootstrap",payload,"note-other");
+    assert.equal(response.status,409);
+    const historical = await roomStub(runtime,"NOTE_ROOM","historical-note");
+    await control(historical,"bootstrap",payload);
+    const before = projections.length;
+    response = await controlResponse(historical,"bootstrap",payload,"note-historical");
+    assert.equal(response.status,200);
+    assert.equal(projections.length,before+1);
+    assert.equal(projections.at(-1).note_id,"note-historical");
+    assert.equal(projections.at(-1).markdown,payload.markdown);
+  } finally {
+    await runtime.dispose();
+  }
+});
+
 test("fresh tickets reconnect the same named collaborator without ghost presence", async () => {
   const runtime = createRuntime();
   let providerA;
@@ -288,7 +323,7 @@ test("DrawingRoom starts empty and rejects note-only bootstrap", async () => {
   }
 });
 
-function createRuntime(persistence) {
+function createRuntime(persistence, options = {}) {
   return new Miniflare({
     modules: true,
     scriptPath: path.resolve("dist/index.js"),
@@ -300,6 +335,7 @@ function createRuntime(persistence) {
     },
     durableObjectsPersist: persistence,
     bindings,
+    ...options,
   });
 }
 
@@ -392,8 +428,8 @@ async function control(room, command, payload) {
   return response.json();
 }
 
-async function controlResponse(room, command, payload) {
-  const body = JSON.stringify({ command, payload });
+async function controlResponse(room, command, payload, resourceID) {
+  const body = JSON.stringify({ command, payload, ...(resourceID ? {resource_id:resourceID} : {}) });
   const timestamp = String(Math.floor(Date.now() / 1_000));
   const signature = createHmac("sha256", controlSecret)
     .update(`${timestamp}\n`)

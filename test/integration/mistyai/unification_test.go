@@ -3,13 +3,15 @@ package mistyai_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/kannachi323/misty/server/test/testkit"
 	"strings"
 	"testing"
 	"time"
-
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	"github.com/kannachi323/misty/server/test/testkit"
 )
+
+
+import ()
 
 func TestPrivateActivityDelegationAndRevocation(t *testing.T) {
 	database := testkit.OpenDatabase(t)
@@ -22,7 +24,7 @@ func TestPrivateActivityDelegationAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Misty test")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Misty test")
 	if err != nil {
 		t.Fatal(err)
 	}

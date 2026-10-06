@@ -83,21 +83,3 @@ func (db *Database) ConsumeAuthHandoffToken(hashedToken string, now time.Time) (
 	}
 	return userID, redirectPath, nil
 }
-
-// DeleteExpiredAuthHandoffTokens keeps the table from accumulating rows that can
-// never be redeemed. Consumption already deletes on the happy path; this only
-// reaps tokens that were minted and never used.
-func (db *Database) DeleteExpiredAuthHandoffTokens(now time.Time) error {
-	err := db.TestingWithRLSContext(context.Background(), TestingServiceRLSSettings(), func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(
-			context.Background(),
-			`DELETE FROM auth_handoff_tokens WHERE expires_at <= $1`,
-			now,
-		)
-		return err
-	})
-	if err != nil {
-		log.Println("Failed to delete expired auth handoff tokens:", err)
-	}
-	return err
-}

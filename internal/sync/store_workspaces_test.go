@@ -239,49 +239,6 @@ func TestBrowserSyncWorkspaceDeltaSnapshotAndSlots(t *testing.T) {
 	}
 }
 
-func TestBrowserSyncWorkspaceRemoteClaimRequests(t *testing.T) {
-	store, vault, d := setupWorkspaceVault(t)
-	ctx := context.Background()
-	a, b := d[0], d[1]
-	if err := store.EnableBrowserSyncWorkspaceMode(ctx, "owner", vault); err != nil {
-		t.Fatal(err)
-	}
-	version := 1
-	for _, dev := range d {
-		if _, err := store.ControlBrowserSyncDevice(ctx, "owner", SyncDeviceControl{DeviceID: dev.grant.DeviceID, ControlVersion: &version}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Remote requests require the target to be online.
-	if err := store.BrowserSyncHeartbeat(ctx, SyncConnectionIdentity{UserID: "owner", VaultID: vault, DeviceID: b.grant.DeviceID}, uuid.NewString(), 0, true); err != nil {
-		t.Fatal(err)
-	}
-	workspaceA := a.grant.DeviceID
-	request, err := store.ControlBrowserSyncDevice(ctx, "owner", SyncDeviceControl{DeviceID: b.grant.DeviceID, Activate: true, WorkspaceID: &workspaceA})
-	if err != nil || request == "" {
-		t.Fatalf("activation request: %q %v", request, err)
-	}
-	// A claim for a different workspace under the request's ID is stale.
-	if r, err := store.ClaimBrowserSyncWorkspace(ctx, "owner", b.claim(vault, request)); err == nil || r != nil {
-		// The shared workspace is never claimable.
-		t.Fatalf("shared workspace claim: %+v %v", r, err)
-	}
-	b.counter--
-	if r, err := store.ClaimBrowserSyncWorkspace(ctx, "owner", b.claim(b.grant.DeviceID, request)); err != nil || r.Reason != SyncDiscardStaleClaim {
-		t.Fatalf("mismatched workspace claim: %+v %v", r, err)
-	}
-	next, err := store.ControlBrowserSyncDevice(ctx, "owner", SyncDeviceControl{DeviceID: b.grant.DeviceID, Activate: true, WorkspaceID: &workspaceA})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r, err := store.ClaimBrowserSyncWorkspace(ctx, "owner", b.claim(workspaceA, next)); err != nil || r.Discarded {
-		t.Fatalf("requested claim: %+v %v", r, err)
-	}
-	if workspaceDrivers(t, store, vault)[workspaceA] != b.grant.DeviceID {
-		t.Fatal("requested claim did not take effect")
-	}
-}
-
 func TestBrowserSyncBlobsStayInVault(t *testing.T) {
 	store, vault, d := setupWorkspaceVault(t)
 	ctx := context.Background()

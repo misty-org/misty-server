@@ -8,8 +8,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/browseractions"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
@@ -139,8 +137,8 @@ func TestAgentToolboxActionJournalResumesUndispatchedDeviceAction(t *testing.T) 
 	}
 	action := AgentToolboxAction{IdempotencyKey: "device-action", UserID: user.ID, ToolName: "browser.click", AuditEvent: "browser.click", Risk: "write", Source: "contract", Request: json.RawMessage(`{}`)}
 	if _, err := database.JournalAgentToolboxAction(ctx, action, func() (json.RawMessage, error) {
-		return nil, errors.Join(ErrAgentToolboxNotAttempted, browseractions.ErrStale)
-	}); !errors.Is(err, ErrAgentToolboxNotAttempted) || !errors.Is(err, browseractions.ErrStale) || errors.Is(err, ErrAgentToolboxActionUnknown) {
+		return nil, errors.Join(ErrAgentToolboxNotAttempted, errStaleSnapshot)
+	}); !errors.Is(err, ErrAgentToolboxNotAttempted) || !errors.Is(err, errStaleSnapshot) || errors.Is(err, ErrAgentToolboxActionUnknown) {
 		t.Fatalf("stale pre-dispatch rejection was lost: %v", err)
 	}
 	result, err := database.JournalAgentToolboxAction(ctx, action, func() (json.RawMessage, error) { return json.RawMessage(`{"attempted":true}`), nil })
@@ -148,3 +146,5 @@ func TestAgentToolboxActionJournalResumesUndispatchedDeviceAction(t *testing.T) 
 		t.Fatalf("did not resume: %v", err)
 	}
 }
+
+var errStaleSnapshot = errors.New("browser_snapshot_stale")

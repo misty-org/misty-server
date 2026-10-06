@@ -116,23 +116,9 @@ func agentMetadata(value db.SmartLibraryReindexAsset) serveragent.SmartLibraryMe
 	return serveragent.SmartLibraryMetadata{AssetID: value.AssetID, ContentType: value.Metadata.ContentType, PrimarySubject: value.Metadata.PrimarySubject, Description: value.Description, Tags: value.Tags, SearchTerms: value.Metadata.SearchTerms, Entities: value.Metadata.Entities, Characters: value.Metadata.Characters, Brands: value.Metadata.Brands, Applications: value.Metadata.Applications, Objects: value.Metadata.Objects, Scenes: value.Metadata.Scenes, Activities: value.Metadata.Activities, Colors: value.Metadata.Colors, VisibleText: value.Metadata.VisibleText, Topics: value.Metadata.Topics, SuggestedCollections: value.Collections, Confidence: 1}
 }
 
-func currentEmbeddingModel() string {
-	if value := strings.TrimSpace(envconfig.Getenv("SMART_LIBRARY_EMBEDDING_MODEL")); value != "" {
-		return value
-	}
-	return serveragent.SmartLibraryEmbeddingModel
-}
-
-func semanticModelName(analyzer *serveragent.SmartLibraryAnalyzer, available bool) any {
-	if !available {
-		return nil
-	}
-	return currentEmbeddingModel()
-}
-
 func (s *SmartLibraryService) cachedQueryEmbedding(ctx context.Context, userID, query string) ([]float64, *hostedSemanticQueryOperation, error) {
 	normalized := strings.ToLower(strings.Join(strings.Fields(query), " "))
-	cacheKey := sha256.Sum256([]byte(userID + "\x00" + normalized))
+	cacheKey := sha256.Sum256([]byte(userID + "\x00" + configuredEmbeddingModel(ctx, s.analyzer, userID) + "\x00" + normalized))
 	userKey := sha256.Sum256([]byte(userID))
 	now := time.Now()
 	s.searchMu.Lock()
@@ -167,7 +153,7 @@ func (s *SmartLibraryService) cachedQueryEmbedding(ctx context.Context, userID, 
 	if operation != nil {
 		usage = operation.Usage
 	}
-	_ = s.database.RecordSmartLibrarySemanticUsage(userID, "", "semantic_query", currentEmbeddingModel(), 1, usage.InputTokens, 0, err == nil)
+	_ = s.database.RecordSmartLibrarySemanticUsage(userID, "", "semantic_query", configuredEmbeddingModel(ctx, s.analyzer, userID), 1, usage.InputTokens, 0, err == nil)
 	if err != nil {
 		return nil, nil, err
 	}

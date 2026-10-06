@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestFirstOwnedSpaceBecomesTheProtectedDefault(t *testing.T) {
 	database := openTestDatabase(t)
@@ -71,7 +73,7 @@ func TestDefaultSpaceCannotBeTransferred(t *testing.T) {
 		t.Fatal(err)
 	}
 	space := createTestSpace(t, database, ctx, owner.ID, "Home")
-	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
 	if err != nil {
 		t.Fatal(err)
 	}

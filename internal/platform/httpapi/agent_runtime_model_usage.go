@@ -8,13 +8,13 @@ import (
 
 func agentRuntimeModelUsage(output json.RawMessage) serveragent.ModelUsage {
 	type runtimeUsage struct {
-		InputTokens       int64 `json:"inputTokens"`
-		OutputTokens      int64 `json:"outputTokens"`
+		InputTokens       *int64 `json:"inputTokens"`
+		OutputTokens      *int64 `json:"outputTokens"`
 		InputTokenDetails struct {
-			CacheReadTokens int64 `json:"cacheReadTokens"`
+			CacheReadTokens *int64 `json:"cacheReadTokens"`
 		} `json:"inputTokenDetails"`
 		OutputTokenDetails struct {
-			ReasoningTokens int64 `json:"reasoningTokens"`
+			ReasoningTokens *int64 `json:"reasoningTokens"`
 		} `json:"outputTokenDetails"`
 	}
 	var envelope struct {
@@ -29,11 +29,24 @@ func agentRuntimeModelUsage(output json.RawMessage) serveragent.ModelUsage {
 	}
 	var value runtimeUsage
 	if json.Unmarshal(raw, &value) != nil {
-		// Vercel Workflow redacts intermediate per-step token counts. Treat that
-		// as unavailable usage; the unredacted aggregate arrives on completion.
+		// Public lifecycle records redact keys containing "token". Only raw signed
+		// callback counters are authoritative; redacted or malformed usage is unavailable.
 		return serveragent.ModelUsage{Estimated: true}
 	}
-	return serveragent.ModelUsage{InputTokens: value.InputTokens, CachedInputTokens: value.InputTokenDetails.CacheReadTokens,
-		OutputTokens: value.OutputTokens, ReasoningTokens: value.OutputTokenDetails.ReasoningTokens,
-		Estimated: value.InputTokens == 0 && value.OutputTokens == 0}
+	if value.InputTokens == nil || value.OutputTokens == nil || *value.InputTokens < 0 || *value.OutputTokens < 0 || *value.InputTokens > 1_000_000_000 || *value.OutputTokens > 1_000_000_000 {
+		return serveragent.ModelUsage{Estimated: true}
+	}
+	result := serveragent.ModelUsage{InputTokens: *value.InputTokens, OutputTokens: *value.OutputTokens,
+		CachedInputTokensMissing: value.InputTokenDetails.CacheReadTokens == nil, ReasoningTokensMissing: value.OutputTokenDetails.ReasoningTokens == nil,
+		Estimated: *value.InputTokens == 0 && *value.OutputTokens == 0}
+	if value.InputTokenDetails.CacheReadTokens != nil {
+		result.CachedInputTokens = *value.InputTokenDetails.CacheReadTokens
+	}
+	if value.OutputTokenDetails.ReasoningTokens != nil {
+		result.ReasoningTokens = *value.OutputTokenDetails.ReasoningTokens
+	}
+	if result.CachedInputTokens < 0 || result.CachedInputTokens > result.InputTokens || result.ReasoningTokens < 0 || result.ReasoningTokens > result.OutputTokens {
+		return serveragent.ModelUsage{Estimated: true}
+	}
+	return result
 }

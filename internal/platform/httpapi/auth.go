@@ -12,10 +12,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func Register(database *db.Database) http.HandlerFunc {
-	return RegisterWithTelemetry(database, telemetry.NoopClient{})
-}
-
 func RegisterWithTelemetry(database *db.Database, analytics telemetry.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

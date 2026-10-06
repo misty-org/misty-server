@@ -100,38 +100,17 @@ func exchangeConnectedAccountCode(ctx context.Context, definition ConnectedAccou
 		"client_id":     {connectedAccountClientID(definition)},
 		"client_secret": {connectedAccountClientSecret(definition)}, "code_verifier": {verifier},
 	}
-	if definition.DisablePKCE {
-		values.Del("code_verifier")
-	}
 	return requestConnectedAccountToken(ctx, definition, values)
 }
 
-func refreshConnectedAccountToken(ctx context.Context, definition ConnectedAccountOAuthDefinition, refreshToken string) (providerTokenEnvelope, error) {
-	if refreshToken == "" {
-		return providerTokenEnvelope{}, errors.New("refresh token is missing")
-	}
-	values := url.Values{
-		"grant_type": {"refresh_token"}, "refresh_token": {refreshToken},
-		"client_id":     {connectedAccountClientID(definition)},
-		"client_secret": {connectedAccountClientSecret(definition)},
-	}
-	return requestConnectedAccountToken(ctx, definition, values)
-}
 
 func requestConnectedAccountToken(ctx context.Context, definition ConnectedAccountOAuthDefinition, values url.Values) (providerTokenEnvelope, error) {
-	if definition.TokenAuthBasic {
-		values.Del("client_id")
-		values.Del("client_secret")
-	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, definition.TokenURL, strings.NewReader(values.Encode()))
 	if err != nil {
 		return providerTokenEnvelope{}, err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Accept", "application/json")
-	if definition.TokenAuthBasic {
-		request.SetBasicAuth(connectedAccountClientID(definition), connectedAccountClientSecret(definition))
-	}
 	response, err := connectedAccountHTTPClient(20 * time.Second).Do(request)
 	if err != nil {
 		return providerTokenEnvelope{}, err
@@ -156,21 +135,11 @@ func fetchConnectedAccountIdentity(ctx context.Context, definition ConnectedAcco
 	if method == "" {
 		method = http.MethodGet
 	}
-	identityURL := definition.IdentityURL
-	if definition.IdentityTokenQuery {
-		separator := "?"
-		if strings.Contains(identityURL, "?") {
-			separator = "&"
-		}
-		identityURL += separator + "access_token=" + url.QueryEscape(token.AccessToken)
-	}
-	request, err := http.NewRequestWithContext(ctx, method, identityURL, nil)
+	request, err := http.NewRequestWithContext(ctx, method, definition.IdentityURL, nil)
 	if err != nil {
 		return "", ""
 	}
-	if !definition.IdentityTokenQuery {
-		request.Header.Set("Authorization", firstNonempty(token.TokenType, "Bearer")+" "+token.AccessToken)
-	}
+	request.Header.Set("Authorization", firstNonempty(token.TokenType, "Bearer")+" "+token.AccessToken)
 	request.Header.Set("Accept", "application/json")
 	if method == http.MethodPost {
 		request.Header.Set("Content-Type", "application/json")

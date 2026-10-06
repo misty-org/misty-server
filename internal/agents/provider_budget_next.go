@@ -27,13 +27,6 @@ func (p *BudgetedProvider) TestingRecordSpend(response ModelResponse) {
 	p.spentTokens += tokens
 }
 
-// SpentTokens reports billable tokens observed since start, for monitoring.
-func (p *BudgetedProvider) SpentTokens() int64 {
-	p.TestingMu.Lock()
-	defer p.TestingMu.Unlock()
-	return p.spentTokens
-}
-
 // NextContext preserves cancellation for providers that support it.
 func (p *BudgetedProvider) NextContext(ctx context.Context, request ModelRequest) (ModelResponse, error) {
 	release, err := p.acquire()

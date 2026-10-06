@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestMistyMemoryIsExplicitPrivateScopedAndControllable(t *testing.T) {
 	database := openTestDatabase(t)
@@ -19,11 +21,11 @@ func TestMistyMemoryIsExplicitPrivateScopedAndControllable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	family, err := database.CreateSpace(ctx, owner.ID, "Memory Family")
+	family, err := database.TestingCreateSpace(ctx, owner.ID, "Memory Family")
 	if err != nil {
 		t.Fatal(err)
 	}
-	work, err := database.CreateSpace(ctx, owner.ID, "Memory Work")
+	work, err := database.TestingCreateSpace(ctx, owner.ID, "Memory Work")
 	if err != nil {
 		t.Fatal(err)
 	}

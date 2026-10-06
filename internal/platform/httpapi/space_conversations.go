@@ -109,23 +109,10 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		var socialBinding *db.SocialBinding
-		if candidate, _, socialErr := s.database.SocialManualSendContext(r.Context(), userID, spaceID, conversationID); socialErr == nil {
-			socialBinding = candidate
-		} else if socialErr == db.ErrSpaceForbidden || (socialErr != nil && socialErr != db.ErrSpaceNotFound) {
-			writeSpaceError(w, socialErr)
-			return
-		}
 		message, _, err := s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
-		}
-		if socialBinding != nil {
-			if _, queueErr := s.database.QueueSocialManualCommand(r.Context(), userID, spaceID, conversationID, body.Content, body.ClientNonce); queueErr != nil {
-				writeSpaceError(w, queueErr)
-				return
-			}
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"message": message})
 	}

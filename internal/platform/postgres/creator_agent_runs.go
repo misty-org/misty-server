@@ -44,9 +44,6 @@ func validAgentRunMode(mode string) bool { return mode == "ask" || mode == "auto
 // that snapshots the Agent and queues its durable work.
 func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spaceID, agentID string, input CreatorAgentRunInput) (*SpaceRun, error) {
 	spaceID = "" // Retained argument for older callers; content destinations are independent.
-	if err := db.ValidateAppExecutionAuthority(ctx, AppAuthorityFromContext(ctx), ownerUserID, spaceID, "ai.write"); err != nil {
-		return nil, err
-	}
 	input.Instruction = strings.TrimSpace(input.Instruction)
 	input.Mode = strings.ToLower(strings.TrimSpace(input.Mode))
 	input.ConversationTarget = strings.TrimSpace(input.ConversationTarget)
@@ -179,62 +176,18 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 			"ai_invocation_id": input.AIInvocationID, "ai_conversation_id": input.AIConversationID,
 			"ai_idempotency_key": input.AIIdempotencyKey, "parent_invocation_id": input.ParentInvocationID,
 		})
-		boundInput, bindErr := bindAppAuthority(ctx, runInput)
-		if bindErr != nil {
-			return bindErr
-		}
-		runInput = boundInput
-		if input.ParentRunID != "" || input.AIInvocationID != "" || input.ParentInvocationID != "" {
-			// A delegated or invocation-linked child cannot shed its source app ceiling.
-			var parentInput json.RawMessage
-			var parentErr error
-			if input.ParentRunID != "" {
-				parentErr = tx.QueryRowContext(ctx, `SELECT input FROM space_runs WHERE id=$1 AND owner_user_id=$2`, input.ParentRunID, ownerUserID).Scan(&parentInput)
-			} else {
-				parentInvocationID := input.AIInvocationID
-				if parentInvocationID == "" {
-					parentInvocationID = input.ParentInvocationID
-				}
-				parentErr = tx.QueryRowContext(ctx, `SELECT request_payload FROM ai_invocations WHERE id=$1 AND user_id=$2`, parentInvocationID, ownerUserID).Scan(&parentInput)
-			}
-			if parentErr != nil {
-				return parentErr
-			}
-			authority, err := AppAuthorityFromPayload(parentInput)
-			if err != nil {
-				return err
-			}
-			if authority != nil {
-				var values map[string]any
-				if json.Unmarshal(runInput, &values) != nil {
-					return ErrSpaceInvalid
-				}
-				values["_misty_authority"] = authority
-				runInput = mustJSON(values)
-			}
-		}
 		trigger := "direct_instruction"
 		if input.ParentRunID != "" || input.ParentInvocationID != "" {
 			trigger = "delegated"
 		}
 		if err := scanSpaceRun(tx.QueryRowContext(ctx, `INSERT INTO space_runs(
 			id,space_id,resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,result,
-			requesting_member_id,source_conversation_id,source_type,agent_id,capability_id,outputs,artifacts,agent_version_id,source_message_id,
+			requesting_member_id,source_conversation_id,source_type,agent_id,outputs,artifacts,agent_version_id,source_message_id,
 			attempt,conversation_scope_kind,scope_conversation_id,owner_user_id,initial_run_mode,effective_run_mode,
-			agent_version_snapshot,parent_run_id,delegation_depth,context_bindings,action_envelope)
-			VALUES($1,NULLIF($2,''),'agent',$3,$4,$4,$5,'queued',$6,'{}'::jsonb,$4,NULLIF($7,''),$8,$3,'companion','{}'::jsonb,'[]'::jsonb,NULL,NULLIF($9,''),
-			1,'everyone',NULL,$4,$10,$10,$11,NULLIF($12,''),$13,$14,'{}'::jsonb) RETURNING `+spaceRunColumns,
+			agent_version_snapshot,parent_run_id,delegation_depth,context_bindings)
+			VALUES($1,NULLIF($2,''),'agent',$3,$4,$4,$5,'queued',$6,'{}'::jsonb,$4,NULLIF($7,''),$8,$3,'{}'::jsonb,'[]'::jsonb,NULL,NULLIF($9,''),
+			1,'everyone',NULL,$4,$10,$10,$11,NULLIF($12,''),$13,$14) RETURNING `+spaceRunColumns,
 			out.ID, spaceID, agentID, ownerUserID, trigger, runInput, input.ConversationTarget, input.SourceType, input.SourceMessageID, mode, snapshot, input.ParentRunID, depth, contextBindings), out); err != nil {
-			return err
-		}
-		pinParentID := input.ParentRunID
-		if pinParentID == "" {
-			pinParentID = input.AIInvocationID
-			if pinParentID == "" {
-				pinParentID = input.ParentInvocationID
-			}
-		}
-		if err := pinAgentSDKCapabilitiesTx(ctx, tx, out.ID, ownerUserID, spaceID, pinParentID, runInput); err != nil {
 			return err
 		}
 		for _, ref := range input.ContextReferences {

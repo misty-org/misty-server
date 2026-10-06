@@ -56,14 +56,6 @@ func (db *Database) LibraryPeoplePolicy(ctx context.Context, userID, spaceID str
 	return out, err
 }
 
-func (db *Database) UpdateLibraryPeoplePolicy(ctx context.Context, userID, spaceID string, version int64, facesEnabled, petsEnabled bool) (*LibraryIntelligencePolicy, error) {
-	current, err := db.LibraryPeoplePolicy(ctx, userID, spaceID)
-	if err != nil {
-		return nil, err
-	}
-	return db.UpdateLibraryIntelligencePolicy(ctx, userID, spaceID, version, facesEnabled, petsEnabled, current.AIEnabled, current.SemanticSearch)
-}
-
 func (db *Database) UpdateLibraryIntelligencePolicy(ctx context.Context, userID, spaceID string, version int64, facesEnabled, petsEnabled, aiEnabled, semanticSearch bool) (*LibraryIntelligencePolicy, error) {
 	if version < 0 {
 		return nil, ErrLibraryInvalid

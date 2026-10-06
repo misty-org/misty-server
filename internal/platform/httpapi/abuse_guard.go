@@ -169,13 +169,6 @@ func (g *AbuseGuard) purgeLocked(now time.Time) {
 	}
 }
 
-// TrackedKeys reports how many callers have strike records.
-func (g *AbuseGuard) TrackedKeys() int {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return len(g.strikes)
-}
-
 // WithStore attaches persistence and loads any blocks already in force, so a
 // freshly started process does not forgive callers the previous one blocked.
 func (g *AbuseGuard) WithStore(ctx context.Context, store AbuseBlockStore) *AbuseGuard {
@@ -258,4 +251,11 @@ func writeAbuseRejection(w http.ResponseWriter, retryAfter time.Duration, messag
 	seconds := retryAfterSeconds(retryAfter)
 	w.Header().Set("Retry-After", strconv.Itoa(seconds))
 	http.Error(w, message, http.StatusTooManyRequests)
+}
+
+// TrackedKeys reports how many callers have strike records.
+func (g *AbuseGuard) TrackedKeys() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return len(g.strikes)
 }

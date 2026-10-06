@@ -82,10 +82,6 @@ func (s *SmartLibraryService) Rescan() http.HandlerFunc {
 	}
 }
 
-func (s *SmartLibraryService) Search() http.HandlerFunc {
-	return s.searchHandler(true)
-}
-
 func (s *SmartLibraryService) GlobalSearch() http.HandlerFunc {
 	return s.searchHandler(false)
 }
@@ -117,7 +113,7 @@ func (s *SmartLibraryService) searchHandler(folderFromPath bool) http.HandlerFun
 		var vector []float64
 		var semanticOperation *hostedSemanticQueryOperation
 		semanticAvailable := false
-		if s.analyzer != nil && strings.TrimSpace(s.analyzer.APIKey) != "" && !strings.EqualFold(strings.TrimSpace(envconfig.Getenv("SMART_LIBRARY_SEARCH_EMERGENCY_DISABLE")), "true") {
+		if s.analyzer.Available() && !strings.EqualFold(strings.TrimSpace(envconfig.Getenv("SMART_LIBRARY_SEARCH_EMERGENCY_DISABLE")), "true") {
 			var embedErr error
 			vector, semanticOperation, embedErr = s.cachedQueryEmbedding(r.Context(), userID, body.Query)
 			if semanticOperation != nil {
@@ -129,7 +125,7 @@ func (s *SmartLibraryService) searchHandler(folderFromPath bool) http.HandlerFun
 			}
 			semanticAvailable = embedErr == nil
 		}
-		hits, err := s.database.SearchSmartLibraryHybrid(userID, folderID, body.Query, vector, min(max(body.Limit, 1), 50))
+		hits, err := s.database.SearchSmartLibraryHybrid(userID, folderID, body.Query, vector, min(max(body.Limit, 1), 50), configuredEmbeddingModel(r.Context(), s.analyzer, userID))
 		if !s.writeFolderError(w, err) {
 			return
 		}
@@ -139,7 +135,12 @@ func (s *SmartLibraryService) searchHandler(folderFromPath bool) http.HandlerFun
 				return
 			}
 		}
-		writeJSON(w, 200, map[string]any{"hits": hits, "queryModel": semanticModelName(s.analyzer, semanticAvailable), "indexVersion": serveragent.SmartLibraryIndexVersion, "semanticAvailable": semanticAvailable})
+		writeJSON(w, 200, map[string]any{"hits": hits, "queryModel": func() any {
+			if !semanticAvailable {
+				return nil
+			}
+			return configuredEmbeddingModel(r.Context(), s.analyzer, userID)
+		}(), "indexVersion": serveragent.SmartLibraryIndexVersion, "semanticAvailable": semanticAvailable})
 	}
 }
 
@@ -153,25 +154,6 @@ func (s *SmartLibraryService) Delete() http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
-func (s *SmartLibraryService) IndexStatus() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		folderID := strings.TrimSpace(r.URL.Query().Get("folderId"))
-		if folderID != "" && !TestingValidOpaqueID(folderID, "slf_") {
-			http.Error(w, "invalid request", 400)
-			return
-		}
-		status, err := s.database.SmartLibraryIndexStatusForUser(userID, folderID, currentEmbeddingModel(), serveragent.SmartLibraryIndexVersion)
-		if !s.writeFolderError(w, err) {
-			return
-		}
-		writeJSON(w, 200, map[string]any{"currentVersion": status.CurrentVersion, "embeddingModel": status.EmbeddingModel, "outdatedAssets": status.OutdatedAssets, "failedAssets": status.FailedAssets, "upgradeNeeded": status.OutdatedAssets > 0})
 	}
 }
 
@@ -196,7 +178,7 @@ func (s *SmartLibraryService) PlanReindex() http.HandlerFunc {
 		if body.Limit == 0 {
 			body.Limit = 100
 		}
-		job, err := s.database.PlanSmartLibraryReindex(userID, body.FolderID, body.Cursor, currentEmbeddingModel(), serveragent.SmartLibraryIndexVersion, body.Limit)
+		job, err := s.database.PlanSmartLibraryReindex(userID, body.FolderID, body.Cursor, configuredEmbeddingModel(r.Context(), s.analyzer, userID), serveragent.SmartLibraryIndexVersion, body.Limit)
 		if !s.writeFolderError(w, err) {
 			return
 		}

@@ -2,10 +2,13 @@ package db
 
 import (
 	"encoding/json"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"testing"
 	"time"
+	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestRecoveryPreservesRuntimeAndExactDeviceWait(t *testing.T) {
 	database := openTestDatabase(t)
@@ -14,7 +17,7 @@ func TestRecoveryPreservesRuntimeAndExactDeviceWait(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Recovery")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Recovery")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,25 +11,42 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 const (
-	GatewayModelCatalogVersion = "gateway-live-v2"
-	InitialSelectedModelID     = DefaultFrontierModelID
-	InitialSelectedModelName   = "GPT-6 Astra"
+	InitialSelectedModelID   = DefaultFrontierModelID
+	InitialSelectedModelName = "GPT-6 Astra"
 )
 
 var ErrModelUnavailable = errors.New("agent model unavailable")
 
 type GatewayModel struct {
-	ID                           string   `json:"id"`
-	Name                         string   `json:"name"`
-	Capabilities                 []string `json:"capabilities"`
-	InputRateMilliUSDPerMillion  int64    `json:"-"`
-	CachedRateMilliUSDPerMillion int64    `json:"-"`
-	OutputRateMilliUSDPerMillion int64    `json:"-"`
-	HasTokenPricing              bool     `json:"-"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Capabilities []string `json:"capabilities"`
+	// ContextWindow is the model's input limit in tokens, when the Gateway
+	// reports one.
+	ContextWindow int `json:"context_window,omitempty"`
+}
+
+// DefaultContextWindow is assumed for models whose window is unknown, such as
+// an account's own non-Gateway models. It is deliberately conservative.
+const DefaultContextWindow = 128_000
+
+// ModelContextWindow is the context window runs compact against.
+func ModelContextWindow(ctx context.Context, modelID string) int {
+	models, err := GatewayModels(ctx)
+	if err != nil {
+		return DefaultContextWindow
+	}
+	for _, model := range models {
+		if model.ID == strings.TrimSpace(modelID) && model.ContextWindow > 0 {
+			return model.ContextWindow
+		}
+	}
+	return DefaultContextWindow
 }
 
 var gatewayCatalogCache struct {
@@ -39,6 +56,9 @@ var gatewayCatalogCache struct {
 }
 
 func GatewayModels(ctx context.Context) ([]GatewayModel, error) {
+	if _, err := envconfig.AgentModel(); err != nil {
+		return nil, err
+	}
 	gatewayCatalogCache.Lock()
 	if time.Now().Before(gatewayCatalogCache.expiresAt) && len(gatewayCatalogCache.models) > 0 {
 		models := append([]GatewayModel(nil), gatewayCatalogCache.models...)
@@ -99,16 +119,15 @@ func GatewayModelSupportsReasoning(ctx context.Context, modelID string) bool {
 	return false
 }
 
-func NewGatewayProviderForModelWithReasoning(modelID, reasoningEffort string) (ModelProvider, error) {
+func NewGatewayProviderForModelWithReasoning(models *modelruntime.Client, modelID, reasoningEffort string) (ModelProvider, error) {
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" || strings.ContainsAny(modelID, "\r\n\t ") || len(modelID) > 200 {
 		return nil, errors.New("invalid gateway model")
 	}
-	apiKey := firstEnv("AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN")
-	if apiKey == "" {
-		return nil, errors.New("AI gateway is not configured")
+	if !models.Enabled() {
+		return nil, modelruntime.ErrUnavailable
 	}
-	return NewOpenAIProvider(OpenAIProviderConfig{APIKey: apiKey, BaseURL: envOrDefault("AI_GATEWAY_BASE_URL", TestingDefaultVercelAIBaseURL), Model: modelID, ProviderName: ProviderVercelAI, ReasoningEffort: strings.TrimSpace(reasoningEffort)}), nil
+	return NewRuntimeProvider(models, modelruntime.Instance(), modelID, ProviderVercelAI, reasoningEffort), nil
 }
 
 func configuredGatewayModels() []GatewayModel {
@@ -135,7 +154,44 @@ func configuredGatewayModels() []GatewayModel {
 	return out
 }
 
+// gatewayCatalogItem is one entry of the Gateway's public model list.
+type gatewayCatalogItem struct {
+	ID            string          `json:"id"`
+	Name          string          `json:"name"`
+	Type          string          `json:"type"`
+	Tags          []string        `json:"tags"`
+	Capabilities  json.RawMessage `json:"capabilities"`
+	ContextWindow int             `json:"context_window"`
+}
+
 func TestingFetchGatewayModels(ctx context.Context) ([]GatewayModel, error) {
+	items, err := fetchGatewayCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]GatewayModel, 0, len(items))
+	for _, item := range items {
+		itemType := strings.ToLower(strings.TrimSpace(item.Type))
+		if itemType != "" && !strings.Contains(itemType, "language") && !strings.Contains(itemType, "chat") && !strings.Contains(itemType, "text") {
+			continue
+		}
+		capabilities := TestingGatewayCapabilities(item.Capabilities)
+		if len(item.Tags) > 0 {
+			capabilities = append(capabilities, item.Tags...)
+		}
+		// The endpoint's type is authoritative. Adding it to the normalized
+		// capabilities keeps language models with specialized tags (for example
+		// web search only) in the chat catalog.
+		capabilities = append(capabilities, "language")
+		models = append(models, GatewayModel{
+			ID: item.ID, Name: item.Name, Capabilities: normalizedCapabilities(capabilities), ContextWindow: item.ContextWindow,
+		})
+	}
+	return TestingFilterChatModels(models), nil
+}
+
+// fetchGatewayCatalog reads the Gateway's full public model list.
+func fetchGatewayCatalog(ctx context.Context) ([]gatewayCatalogItem, error) {
 	apiKey := firstEnv("AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN")
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(envOrDefault("AI_GATEWAY_BASE_URL", TestingDefaultVercelAIBaseURL), "/")+"/models", nil)
 	if err != nil {
@@ -161,40 +217,10 @@ func TestingFetchGatewayModels(ctx context.Context) ([]GatewayModel, error) {
 		return nil, err
 	}
 	var payload struct {
-		Data []struct {
-			ID           string                     `json:"id"`
-			Name         string                     `json:"name"`
-			Type         string                     `json:"type"`
-			Tags         []string                   `json:"tags"`
-			Capabilities json.RawMessage            `json:"capabilities"`
-			Pricing      map[string]json.RawMessage `json:"pricing"`
-		} `json:"data"`
+		Data []gatewayCatalogItem `json:"data"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, err
 	}
-	models := make([]GatewayModel, 0, len(payload.Data))
-	for _, item := range payload.Data {
-		itemType := strings.ToLower(strings.TrimSpace(item.Type))
-		if itemType != "" && !strings.Contains(itemType, "language") && !strings.Contains(itemType, "chat") && !strings.Contains(itemType, "text") {
-			continue
-		}
-		input, inputOK := TestingGatewayTokenRate(item.Pricing["input"])
-		output, outputOK := TestingGatewayTokenRate(item.Pricing["output"])
-		cached, _ := TestingGatewayTokenRate(firstPricingValue(item.Pricing, "cached_input", "input_cache_read", "cache_read"))
-		capabilities := TestingGatewayCapabilities(item.Capabilities)
-		if len(item.Tags) > 0 {
-			capabilities = append(capabilities, item.Tags...)
-		}
-		// The endpoint's type is authoritative. Adding it to the normalized
-		// capabilities keeps language models with specialized tags (for example
-		// web search only) in the chat catalog.
-		capabilities = append(capabilities, "language")
-		models = append(models, GatewayModel{
-			ID: item.ID, Name: item.Name, Capabilities: normalizedCapabilities(capabilities),
-			InputRateMilliUSDPerMillion: input, CachedRateMilliUSDPerMillion: cached,
-			OutputRateMilliUSDPerMillion: output, HasTokenPricing: inputOK && outputOK,
-		})
-	}
-	return TestingFilterChatModels(models), nil
+	return payload.Data, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -34,6 +35,8 @@ type AgentsService struct {
 	voiceAnalyzer    *serveragent.SmartLibraryAnalyzer
 	voiceLimiter     *SlidingWindowLimiter
 	voiceMetrics     *platformmetrics.Registry
+	deviceHub        *deviceHub
+	deviceHubOnce    sync.Once
 }
 
 func NewAgentsService(database *db.Database) *AgentsService {
@@ -50,6 +53,10 @@ func (s *AgentsService) ClaimWorkflowNodeJob() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
 		if !ok {
+			return
+		}
+		// A device that is not added yet receives no agent jobs.
+		if _, admitted := requireAdmittedDevice(w, r); !admitted {
 			return
 		}
 		deviceID := chi.URLParam(r, "deviceID")

@@ -58,7 +58,7 @@ func (m *Meter) Begin(ctx context.Context, operation, model string, units map[st
 	}
 	// Repeated work is a new physical provider attempt. Re-delivery of its
 	// settlement uses this same persisted key, never another reservation.
-	r, err := m.Service.Reserve(ctx, billingadapter.Request{Version: 1, AccountID: m.Account, Operation: operation, OperationID: m.OperationID, Key: "library-attempt:" + uuid.NewString(), Usage: billingadapter.Usage{Provider: "vercel_ai_gateway", Model: model, Units: units, Estimated: true}})
+	r, err := m.Service.Reserve(ctx, billingadapter.Request{CommandID: m.OperationID, Background: true, Version: 1, AccountID: m.Account, Operation: operation, OperationID: m.OperationID, Key: "library-attempt:" + uuid.NewString(), Usage: billingadapter.Usage{Provider: "vercel_ai_gateway", Model: model, Units: units, Estimated: true}})
 	if err != nil {
 		return nil, m.fail(err)
 	}

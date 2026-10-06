@@ -216,7 +216,3 @@ func (db *Database) CompleteSmartLibraryBatch(userID, batchID string, completion
 	}
 	return db.SmartLibraryFolder(userID, folderID)
 }
-
-func (db *Database) SearchSmartLibrary(userID, folderID, query string, limit int) ([]SmartLibrarySearchHit, error) {
-	return db.SearchSmartLibraryHybrid(userID, folderID, query, nil, limit)
-}

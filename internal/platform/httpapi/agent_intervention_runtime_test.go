@@ -23,9 +23,6 @@ func TestInterventionRuntimeRequiresNegotiationAndAttachedReadGrant(t *testing.T
 	if activeBrowserCapability([]db.AgentDeviceGrant{grant}, "browser.request_user_action") {
 		t.Fatal("legacy tool catalog gained a durable-only capability")
 	}
-	if companionToolNeedsApproval("ask", companionToolImpact("browser.request_user_action")) {
-		t.Fatal("pausing for the user demanded another effect approval")
-	}
 	expired := time.Now().Add(-time.Minute)
 	grant.RevokedAt = &expired
 	if activeBrowserRuntimeCapability([]db.AgentDeviceGrant{grant}, "browser.request_user_action") {

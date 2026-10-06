@@ -53,10 +53,6 @@ func withAgentExecutionRuntime(ctx context.Context, runtimeID string) context.Co
 	return context.WithValue(ctx, agentExecutionRuntimeKey{}, runtimeID)
 }
 
-func (s *SpacesService) agentExecutionContext(ctx context.Context, userID, runID, runtimeID string) (context.Context, context.CancelFunc, error) {
-	return boundedAgentExecutionContext(withAgentExecutionRuntime(ctx, runtimeID), s.database, userID, runID)
-}
-
 func boundedAgentExecutionContext(ctx context.Context, database *db.Database, userID, runID string) (context.Context, context.CancelFunc, error) {
 	runtimeID, _ := ctx.Value(agentExecutionRuntimeKey{}).(string)
 	// Legacy execution has no durable runtime identity and retains its old policy.

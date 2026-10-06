@@ -85,3 +85,26 @@ func TestBrowserSyncControlRequestReachesSocketAndRequiresTargetSignature(t *tes
 		t.Fatal("turning Full sync off disconnected presence")
 	}
 }
+
+func TestBrowserSyncDevicesAdvertiseKnownControlVersionsOnly(t *testing.T) {
+	database, _ := browserSocketTestDatabase(t)
+	ctx := context.Background()
+	root, rootKey, _ := ed25519.GenerateKey(rand.Reader)
+	grant, _ := socketTestGrant(uuid.NewString(), rootKey)
+	wrapper := SyncKeyEnvelope{Version: 1, KDF: "argon2id-m65536-t3-p1", Salt: base64.StdEncoding.EncodeToString(make([]byte, 16)), Nonce: base64.StdEncoding.EncodeToString(make([]byte, 12)), Ciphertext: base64.StdEncoding.EncodeToString(make([]byte, 32))}
+	store := NewStore(database.Conn)
+	if err := store.CreateBrowserSyncVault(ctx, "owner", root, wrapper, grant); err != nil {
+		t.Fatal(err)
+	}
+	// Version 2 also understands nested bookmark folders.
+	for _, version := range []int{1, 2} {
+		if _, err := store.ControlBrowserSyncDevice(ctx, "owner", SyncDeviceControl{DeviceID: grant.DeviceID, ControlVersion: &version}); err != nil {
+			t.Fatalf("version %d: %v", version, err)
+		}
+	}
+	for _, version := range []int{0, 3} {
+		if _, err := store.ControlBrowserSyncDevice(ctx, "owner", SyncDeviceControl{DeviceID: grant.DeviceID, ControlVersion: &version}); err == nil {
+			t.Fatalf("version %d was accepted", version)
+		}
+	}
+}

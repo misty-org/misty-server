@@ -32,27 +32,6 @@ type SettingsProfilePatch struct {
 var ErrSettingsProfileNotFound = errors.New("settings profile not found")
 var ErrSettingsProfileMutation = errors.New("mutation ID was already used for different changes")
 
-func (db *Database) SettingsProfiles(ctx context.Context, userID string) ([]SettingsProfile, error) {
-	rows, err := db.Conn.QueryContext(ctx, `SELECT id,name,schema_version,revision,values_json FROM settings_profiles WHERE user_id=$1 AND NOT deleted ORDER BY name,id`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	profiles := []SettingsProfile{}
-	for rows.Next() {
-		var p SettingsProfile
-		var raw []byte
-		if err = rows.Scan(&p.ID, &p.Name, &p.SchemaVersion, &p.Revision, &raw); err != nil {
-			return nil, err
-		}
-		if err = json.Unmarshal(raw, &p.Values); err != nil {
-			return nil, err
-		}
-		profiles = append(profiles, p)
-	}
-	return profiles, rows.Err()
-}
-
 // AccountPreferencesID is stable across devices and independent of profile selection.
 func AccountPreferencesID(userID string) string {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("misty:account-preferences:"+userID)).String()
@@ -205,27 +184,6 @@ func (db *Database) PatchSettingsProfile(ctx context.Context, userID, id string,
 		}
 	}
 	return p, tx.Commit()
-}
-func (db *Database) DeleteSettingsProfile(ctx context.Context, userID, id string) error {
-	if id == AccountPreferencesID(userID) {
-		return fmt.Errorf("account settings cannot be deleted as a profile")
-	}
-	tx, err := db.Conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `UPDATE settings_profiles SET deleted=true,revision=revision+1,updated_at=now() WHERE id=$1 AND user_id=$2 AND NOT deleted`, id, userID)
-	if err != nil {
-		return err
-	}
-	count, _ := result.RowsAffected()
-	if count > 0 {
-		if err = notifySettingsProfile(ctx, tx, userID, id); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
 }
 func notifySettingsProfile(ctx context.Context, tx *sql.Tx, userID, id string) error {
 	payload, _ := json.Marshal(transport.AccountEvent{UserID: userID, Topic: "settings-profiles", ID: id})

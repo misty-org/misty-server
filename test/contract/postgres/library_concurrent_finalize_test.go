@@ -6,12 +6,15 @@ import (
 	"sync"
 	"testing"
 	"time"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
+
+import ()
+
 func TestConcurrentLibraryFinalizationIsIdempotent(t *testing.T) {
 	database := openTestDatabase(t)
+	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, err := database.CreateUser(
 		"Concurrent Finalize Owner",

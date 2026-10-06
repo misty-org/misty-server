@@ -20,16 +20,10 @@ type voiceProvider interface {
 	Read() (agent.VoiceRealtimeEvent, error)
 	Send(any) error
 	Configure() error
+	SetOutputLimit(int) error
 	Close()
 }
 
-type voiceSessionHooks struct {
-	OperationID string
-	Access      func(context.Context) error
-	Reply       func(context.Context, string) (string, error)
-	Checkpoint  func(context.Context, string, agent.RealtimeVoiceUsage) error
-	Complete    func(context.Context, string, agent.RealtimeVoiceUsage) error
-}
 
 func (s *AgentsService) ownedVoiceReply(ctx context.Context, user, id string) (string, error) {
 	if id == "" || len(id) > 160 {

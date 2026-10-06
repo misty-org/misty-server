@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	MaxSpaceNodes        = 5000
-	MaxMessageChars      = 4000
-	MaxMessageFiles      = 5
+	MaxSpaceNodes   = 5000
+	MaxMessageChars = 4000
+	MaxMessageFiles = 5
+	// Per-object processing bound, independent of any account or Space allowance.
 	MaxSpaceStorageBytes = int64(1_000_000_000)
 )
 
@@ -107,12 +108,8 @@ type SpaceMessage struct {
 	EditedAt            *time.Time             `json:"edited_at,omitempty"`
 	// Provenance for a mirrored message. Absent means Misty-native chat, so
 	// every existing client stays valid and "no origin" reads as "ours".
-	Origin              json.RawMessage `json:"origin,omitempty"`
-	SocialProvider      string          `json:"social_provider,omitempty"`
-	SocialExternalID    string          `json:"social_external_id,omitempty"`
-	SocialDirection     string          `json:"social_direction,omitempty"`
-	SocialDeliveryState string          `json:"social_delivery_state,omitempty"`
-	CreatedAt           time.Time       `json:"created_at"`
+	Origin    json.RawMessage `json:"origin,omitempty"`
+	CreatedAt time.Time       `json:"created_at"`
 }
 
 type SpaceMessageSender struct {
@@ -157,31 +154,6 @@ type SpaceEvent struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
-type SpaceStudioResource struct {
-	ID                      string           `json:"id"`
-	SpaceID                 string           `json:"space_id"`
-	CreatorUserID           string           `json:"creator_user_id"`
-	Kind                    string           `json:"kind"`
-	Name                    string           `json:"name"`
-	Description             string           `json:"description,omitempty"`
-	Icon                    string           `json:"icon,omitempty"`
-	ModelMode               string           `json:"model_mode,omitempty"`
-	ModelID                 string           `json:"model_id,omitempty"`
-	Instructions            string           `json:"instructions,omitempty"`
-	Definition              json.RawMessage  `json:"definition,omitempty"`
-	Enabled                 bool             `json:"enabled"`
-	Status                  string           `json:"status,omitempty"`
-	RuntimeKind             string           `json:"runtime_kind,omitempty"`
-	Version                 int64            `json:"version"`
-	SchedulesEnabled        bool             `json:"schedules_enabled"`
-	StableIdentifier        string           `json:"stable_identifier,omitempty"`
-	ActiveWorkflowVersionID string           `json:"active_workflow_version_id,omitempty"`
-	ActiveWorkflow          *WorkflowVersion `json:"active_workflow,omitempty"`
-	AccessPolicy            json.RawMessage  `json:"access_policy,omitempty"`
-	CreatedAt               time.Time        `json:"created_at"`
-	UpdatedAt               time.Time        `json:"updated_at"`
-}
-
 type SpaceRun struct {
 	ID                    string          `json:"id"`
 	SpaceID               string          `json:"space_id"`
@@ -203,10 +175,6 @@ type SpaceRun struct {
 	SourceMessageID       string          `json:"source_message_id,omitempty"`
 	SourceType            string          `json:"source_type"`
 	AgentID               string          `json:"agent_id,omitempty"`
-	WorkflowIdentifier    string          `json:"workflow_identifier,omitempty"`
-	WorkflowVersionID     string          `json:"workflow_version_id,omitempty"`
-	WorkflowVersion       string          `json:"workflow_version,omitempty"`
-	CapabilityID          string          `json:"capability_id,omitempty"`
 	Progress              int             `json:"progress"`
 	Outputs               json.RawMessage `json:"outputs"`
 	Artifacts             json.RawMessage `json:"artifacts"`
@@ -219,7 +187,6 @@ type SpaceRun struct {
 	Attempt               int             `json:"attempt"`
 	NextRetryAt           *time.Time      `json:"next_retry_at,omitempty"`
 	SourceTaskID          string          `json:"source_task_id,omitempty"`
-	ActionEnvelope        json.RawMessage `json:"action_envelope,omitempty"`
 	RuntimeKind           string          `json:"runtime_kind,omitempty"`
 	RuntimeRunID          string          `json:"runtime_run_id,omitempty"`
 	RuntimePhase          string          `json:"runtime_phase,omitempty"`
@@ -228,7 +195,6 @@ type SpaceRun struct {
 	InitialRunMode        string          `json:"initial_run_mode"`
 	EffectiveRunMode      string          `json:"effective_run_mode"`
 	AgentVersionSnapshot  json.RawMessage `json:"agent_version_snapshot"`
-	ApprovalState         string          `json:"approval_state"`
 	ParentRunID           string          `json:"parent_run_id,omitempty"`
 	DelegationDepth       int             `json:"delegation_depth"`
 	ContextBindings       json.RawMessage `json:"context_bindings"`

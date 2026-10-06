@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
@@ -23,9 +24,10 @@ func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMid
 			defer cancel()
 			return next(executionCtx, invocation, request)
 		}
-		// MCP owns this journal with encrypted replay results. A redacted outer
-		// journal would lose the response on retries.
-		if strings.HasPrefix(descriptor.Name, "mcp.") || descriptor.Name == "spaces.execute" {
+		// MCP and apps.execute own their journals with encrypted replay results,
+		// and routed tools journal inside their Space. An outer journal would
+		// duplicate the effect.
+		if descriptor.Name == appsExecuteTool || descriptor.Locality == agenttools.LocalityRouted {
 			return next(ctx, invocation, request)
 		}
 		if descriptor.Risk == serveragent.RiskRead && !strings.HasPrefix(descriptor.Name, "browser.") {
@@ -67,9 +69,19 @@ func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMid
 			UserID:               invocation.UserID, SpaceID: spaceID, AgentID: invocation.AgentID,
 			AgentInstanceID: invocation.AgentInstanceID, RunID: invocation.RunID, SessionID: invocation.SessionID, ToolName: descriptor.Name,
 			AuditEvent: descriptor.AuditEvent, Risk: descriptor.Risk, Source: invocation.Source, Request: journalRequest,
-			RedactPayload: strings.HasPrefix(descriptor.Name, "mcp."),
+			RedactPayload: false,
 		}, func() (json.RawMessage, error) {
-			return boundedNext()
+			return notAttemptedOnValidation(boundedNext())
 		})
 	}
+}
+
+// Handlers report invalid arguments before any effect, so the model may
+// correct the call instead of the run treating its outcome as unknown.
+func notAttemptedOnValidation(result json.RawMessage, err error) (json.RawMessage, error) {
+	var invalid serveragent.ErrInvalidRequest
+	if errors.As(err, &invalid) || errors.Is(err, agenttools.ErrArgumentsInvalid) {
+		return result, errors.Join(db.ErrAgentToolboxNotAttempted, err)
+	}
+	return result, err
 }

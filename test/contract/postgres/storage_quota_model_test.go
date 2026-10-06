@@ -7,17 +7,19 @@ import (
 	"sync"
 	"testing"
 	"time"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
+
+import ()
+
 func joinQuotaTestSpace(t *testing.T, database *Database, ctx context.Context, owner User, member User, name string) Space {
 	t.Helper()
-	space, err := database.CreateSpace(ctx, owner.ID, name)
+	space, err := database.TestingCreateSpace(ctx, owner.ID, name)
 	if err != nil {
 		t.Fatal(err)
 	}
-	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +63,7 @@ func TestPersonalStorageUsageAggregatesAcrossJoinedSpaces(t *testing.T) {
 	releaseQuota(t, database, ctx, secondReservations)
 }
 
-func TestSpaceStorageCapacityUsesOwnerPlanNotMemberPlan(t *testing.T) {
+func TestSpaceOwnerPlanDoesNotLimitContributorStorage(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
@@ -81,11 +83,11 @@ func TestSpaceStorageCapacityUsesOwnerPlanNotMemberPlan(t *testing.T) {
 	_, err = database.CreateLibraryUpload(ctx, member.ID, space.ID, UploadPurposeLibrary,
 		"overflow.bin", "application/octet-stream", 1, strings.Repeat("f", 64),
 		"library/space-overflow", "space-overflow-token", time.Now().Add(time.Hour))
-	if !errors.Is(err, ErrSpaceStorageQuota) {
-		t.Fatalf("owner-plan Space overflow = %v, want ErrSpaceStorageQuota", err)
+	if err != nil {
+		t.Fatalf("Space owner plan blocked contributor: %v", err)
 	}
 	usage, err := database.SpaceStorageUsage(ctx, member.ID, space.ID)
-	if err != nil || usage.SpaceLimitBytes != BasicStorageBytes || usage.SpaceRemainingBytes != 0 || usage.PersonalLimitBytes != MaxStorageBytes {
+	if err != nil || usage.SpaceLimitBytes != 0 || usage.PersonalLimitBytes != MaxStorageBytes {
 		t.Fatalf("cross-plan storage usage = %#v, %v", usage, err)
 	}
 	releaseQuota(t, database, ctx, reservations)

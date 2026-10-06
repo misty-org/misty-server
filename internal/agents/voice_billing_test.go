@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/kannachi323/misty/server/internal/billingadapter"
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
 type voiceBillingStore struct {
@@ -52,19 +52,16 @@ func TestVoiceBillingSeparatesFallbackAndDoesNotBypassDenial(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			calls := 0
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			runtime := modelruntime.TestingNewFake(t, func(call modelruntime.TestingCall) (int, any) {
 				calls++
 				if calls == 1 {
-					http.Error(w, "unavailable", 503)
-					return
+					return http.StatusBadGateway, map[string]any{"code": "model_call_failed", "upstream_status": 503}
 				}
-				_, _ = w.Write([]byte(`{"text":"Hello","durationInSeconds":2.5}`))
-			}))
-			defer server.Close()
-			t.Setenv("AI_GATEWAY_EMBEDDING_BASE_URL", server.URL)
+				return http.StatusOK, map[string]any{"text": "Hello", "durationInSeconds": 2.5, "segments": []any{}}
+			})
 			t.Setenv("AGENT_TRANSCRIPTION_MODEL", "openai/gpt-4o-mini-transcribe")
 			store, adapter := &voiceBillingStore{}, &voiceBillingAdapter{deny: scenario.deny}
-			analyzer := &SmartLibraryAnalyzer{APIKey: "test", Client: server.Client()}
+			analyzer := &SmartLibraryAnalyzer{Models: runtime.Client}
 			text, _, _, err := analyzer.TranscribeAgentVoiceWithBilling(t.Context(), []byte("audio"), "audio/webm", 1000, &billingadapter.Service{Store: store, Adapter: adapter}, "account")
 			if scenario.deny > 0 && !errors.Is(err, billingadapter.ErrDenied) {
 				t.Fatalf("lost denial: %v", err)

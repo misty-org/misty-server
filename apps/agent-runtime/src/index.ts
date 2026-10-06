@@ -1,6 +1,7 @@
 import express, { type Request } from "express";
 import { rateLimit } from "express-rate-limit";
 import { instanceModelConfig } from "./model-provider.js";
+import { embedCall, generateTextCall, modelCallFailure, transcribeCall } from "./model-calls.js";
 import { vercelHarness as harness } from "./vercel-harness.js";
 import { MISTY_HARNESS_VERSION } from "./harness.js";
 import { controlPlaneURL } from "./control-plane.js";
@@ -24,15 +25,26 @@ app.use("/v1", rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { code: "rate_limited" },
+  // Library indexing makes many short model calls; they have their own budget.
+  skip: (request) => request.path.startsWith("/models/"),
 }));
+const keepRawBody = (request: unknown, _response: unknown, buffer: Buffer) => {
+  (request as RawRequest).rawBody = Buffer.from(buffer);
+};
+// Model calls carry images and audio, so they get a larger body than control
+// calls. They parse first; the general parser skips an already parsed body.
 app.use(
-  express.json({
-    limit: "2mb",
-    verify: (request, _response, buffer) => {
-      (request as RawRequest).rawBody = Buffer.from(buffer);
-    },
+  "/v1/models",
+  rateLimit({
+    windowMs: 60_000,
+    limit: 6_000,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { code: "rate_limited" },
   }),
+  express.json({ limit: "24mb", verify: keepRawBody }),
 );
+app.use(express.json({ limit: "2mb", verify: keepRawBody }));
 
 function reportRuntimeRouteError(operation: string, error: unknown): void {
   console.error(`[misty-agent-runtime] ${operation} failed`, error);
@@ -58,6 +70,28 @@ function authorized(request: RawRequest): boolean {
 app.get("/health", (_request, response) =>
   response.json({ ok: true, runtime: "misty-agent-runtime", adapter_version: harness.version }),
 );
+
+for (const [path, call] of [
+  ["/v1/models/text", generateTextCall],
+  ["/v1/models/embed", embedCall],
+  ["/v1/models/transcribe", transcribeCall],
+] as const) {
+  app.post(path, async (request: RawRequest, response) => {
+    if (!authorized(request))
+      return response.status(401).json({ code: "unauthorized" });
+    const controller = new AbortController();
+    response.on("close", () => {
+      if (!response.writableFinished) controller.abort();
+    });
+    try {
+      return response.json(await call(request.body, controller.signal));
+    } catch (error) {
+      const failure = modelCallFailure(error);
+      if (failure.status >= 500) reportRuntimeRouteError(`model call ${path}`, error);
+      return response.status(failure.status).json(failure.body);
+    }
+  });
+}
 
 app.post("/v1/runs", async (request: RawRequest, response) => {
   if (!authorized(request))
@@ -133,33 +167,6 @@ app.post(
     }
   },
 );
-
-app.post("/v1/approvals/:hookToken", async (request: RawRequest, response) => {
-  if (!authorized(request))
-    return response.status(401).json({ code: "unauthorized" });
-  if (!request.header(signatureHeaders.idempotency))
-    return response.status(400).json({ code: "idempotency_key_required" });
-  const hookToken = Array.isArray(request.params.hookToken)
-    ? request.params.hookToken[0]
-    : request.params.hookToken;
-  if (
-    !hookToken ||
-    typeof request.body?.approved !== "boolean" ||
-    typeof request.body?.approval_id !== "string"
-  ) {
-    return response.status(400).json({ code: "invalid_approval_resume" });
-  }
-  try {
-    await harness.resume({ kind: "approval", token: hookToken, approved: request.body.approved, approvalId: request.body.approval_id });
-    return response.json({ resumed: true });
-  } catch (error) {
-    reportRuntimeRouteError("approval resumption", error);
-    return response.status(409).json({
-      code: "approval_resume_failed",
-      message: "This approval can no longer be resumed.",
-    });
-  }
-});
 
 app.post("/v1/devices/:hookToken", async (request: RawRequest, response) => {
   if (!authorized(request))

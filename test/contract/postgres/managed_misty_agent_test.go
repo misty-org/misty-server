@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestManagedMistyIsSingleFixedAndSupportsBoundedHiddenWorkers(t *testing.T) {
 	database := openTestDatabase(t)
@@ -15,7 +17,7 @@ func TestManagedMistyIsSingleFixedAndSupportsBoundedHiddenWorkers(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Managed Misty Work")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Managed Misty Work")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +55,10 @@ func TestManagedMistyIsSingleFixedAndSupportsBoundedHiddenWorkers(t *testing.T) 
 		})
 		if childErr != nil {
 			t.Fatal(childErr)
+		}
+		command, commandErr := database.BillingCommandForRun(ctx, owner.ID, child.ID)
+		if commandErr != nil || command != "agent-runtime:"+parent.ID {
+			t.Fatalf("child escaped root command: %s %v", command, commandErr)
 		}
 		if child.ParentRunID != parent.ID || child.DelegationDepth != 1 || child.AgentID != misty.ID {
 			t.Fatalf("hidden child = %#v", child)

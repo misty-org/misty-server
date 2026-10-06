@@ -22,7 +22,7 @@ type workerEventHub struct {
 
 func workerQueue(kind string) bool {
 	switch kind {
-	case "library-ai", "library-edit", "library-faces", "note-control", "drawing-control", "drawing-purge", "embedding", "social", "billing", "abuse-blocks", "abuse-retention", "agent-runtime", "agent-tasks", "scheduled", "ai-cleanup", "account-deletion", "rendition-reservations":
+	case "library-ai", "library-edit", "library-faces", "note-control", "drawing-control", "drawing-purge", "embedding", "billing", "abuse-blocks", "abuse-retention", "agent-runtime", "agent-tasks", "scheduled", "ai-cleanup", "account-deletion", "rendition-reservations":
 		return true
 	}
 	return false

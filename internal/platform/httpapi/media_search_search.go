@@ -45,7 +45,7 @@ func (s *MediaSearchService) Search() http.HandlerFunc {
 		if err != nil {
 			vector = nil
 		}
-		hits, err := s.database.SearchMedia(userID, body.DeviceID, body.Query, vector, body.Limit)
+		hits, err := s.database.SearchMedia(userID, body.DeviceID, body.Query, vector, body.Limit, configuredEmbeddingModel(r.Context(), s.analyzer, userID))
 		if err != nil {
 			http.Error(w, "internal error", 500)
 			return
@@ -145,10 +145,10 @@ func (s *MediaSearchService) AdoptLegacyDevice() http.HandlerFunc {
 }
 
 func (s *MediaSearchService) TestingCachedEmbedding(ctx context.Context, userID, deviceID, query string) ([]float64, *hostedSemanticQueryOperation, error) {
-	if s.analyzer == nil || strings.TrimSpace(s.analyzer.APIKey) == "" {
+	if !s.analyzer.Available() {
 		return nil, nil, errors.New("media semantic search is unavailable")
 	}
-	key := sha256.Sum256([]byte(userID + "\x00" + deviceID + "\x00" + strings.ToLower(query)))
+	key := sha256.Sum256([]byte(userID + "\x00" + configuredEmbeddingModel(ctx, s.analyzer, userID) + "\x00" + deviceID + "\x00" + strings.ToLower(query)))
 	s.cacheMu.Lock()
 	cached, found := s.queryCache[key]
 	s.cacheMu.Unlock()

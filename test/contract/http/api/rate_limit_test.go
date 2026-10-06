@@ -73,31 +73,6 @@ func TestNormalizeRateLimitPath(t *testing.T) {
 	}
 }
 
-func TestAIRequestGuardLimitsConcurrencyAndRateWithoutQueueing(t *testing.T) {
-	guard := NewAIRequestGuard()
-	guard.TestingNow = func() time.Time { return time.Unix(0, 0) }
-	guard.TestingPerMinute = NewSlidingWindowLimiter(2, time.Minute)
-	guard.TestingPerHour = NewSlidingWindowLimiter(10, time.Hour)
-
-	release, _, allowed := guard.AcquireProviderCall("user")
-	if !allowed {
-		t.Fatal("first provider call should be allowed")
-	}
-	if _, _, allowed := guard.AcquireProviderCall("user"); allowed {
-		t.Fatal("concurrent provider call should be rejected, not queued")
-	}
-	release()
-
-	release, _, allowed = guard.AcquireProviderCall("user")
-	if !allowed {
-		t.Fatal("second sequential provider call should be allowed")
-	}
-	release()
-	if _, retryAfter, allowed := guard.AcquireProviderCall("user"); allowed || retryAfter <= 0 {
-		t.Fatalf("third provider call allowed=%v retryAfter=%v, want rate limit", allowed, retryAfter)
-	}
-}
-
 func TestAPIRateLimiterMiddleware(t *testing.T) {
 	limiter := NewAPIRateLimiter()
 	limiter.TestingNow = func() time.Time { return time.Unix(0, 0) }

@@ -126,9 +126,6 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 		}
 		// Agents continue account-wide; destination tools recheck content access.
 
-		if _, err := tx.ExecContext(ctx, `UPDATE space_workflows SET schedules_enabled=FALSE WHERE space_id=$1 AND creator_user_id=$2`, spaceID, memberID); err != nil {
-			return err
-		}
 		// Same transaction as the membership delete: a note must never remain
 		// reachable by someone who is no longer a member, not even briefly.
 		if err := handleNoteMembershipLossTx(ctx, tx, spaceID, memberID); err != nil {
@@ -161,9 +158,6 @@ func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) erro
 		}
 		// Agents continue account-wide; destination tools recheck content access.
 
-		if _, err := tx.ExecContext(ctx, `UPDATE space_workflows SET schedules_enabled=FALSE WHERE space_id=$1 AND creator_user_id=$2`, spaceID, userID); err != nil {
-			return err
-		}
 		if err := handleNoteMembershipLossTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}

@@ -10,9 +10,7 @@ import (
 const agentConversationMemoryCharacterLimit = 16_000
 
 type agentConversationContext struct {
-	Transcript         string
-	PreviousUserPrompt string
-	PreviousAgentReply string
+	Transcript string
 }
 
 func (s *SpacesService) agentConversationContext(ctx context.Context, run *db.SpaceRun) (agentConversationContext, error) {
@@ -21,25 +19,7 @@ func (s *SpacesService) agentConversationContext(ctx context.Context, run *db.Sp
 		return agentConversationContext{}, err
 	}
 	conversation := agentConversationContext{}
-	// Messages arrive newest-first. Capture the immediately preceding person
-	// and Agent turns before rendering the full oldest-first transcript.
-	for _, message := range messages {
-		if message.ID == run.SourceMessageID {
-			continue
-		}
-		text := strings.TrimSpace(renderMessageText(message.Content))
-		if text == "" {
-			continue
-		}
-		if message.SenderKind == "agent" && conversation.PreviousAgentReply == "" {
-			conversation.PreviousAgentReply = text
-		} else if message.SenderKind != "agent" && conversation.PreviousUserPrompt == "" {
-			conversation.PreviousUserPrompt = text
-		}
-		if conversation.PreviousAgentReply != "" && conversation.PreviousUserPrompt != "" {
-			break
-		}
-	}
+	// Messages arrive newest-first; render them oldest-first.
 	lines := make([]string, 0, len(messages))
 	for index := len(messages) - 1; index >= 0; index-- {
 		message := messages[index]

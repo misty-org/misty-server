@@ -18,7 +18,6 @@ type agentRuntimeToolCall struct {
 	CallID               string
 	Name                 string
 	Arguments            json.RawMessage
-	ApprovalHookToken    string
 	DeviceHookToken      string
 }
 
@@ -48,6 +47,11 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 	if _, err := s.database.AskIdentityByID(ctx, run.OwnerUserID, run.AgentID); err != nil {
 		return nil, agenttools.Invocation{}, nil, err
 	}
+	if request, err := s.database.AgentMemberRequestForRun(ctx, run.ID); err == nil {
+		return s.memberRequestRuntimeToolbox(ctx, run, request)
+	} else if !errors.Is(err, db.ErrSpaceNotFound) {
+		return nil, agenttools.Invocation{}, nil, err
+	}
 	delegationHandler := func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
 		var input struct {
 			Prompt string `json:"prompt"`
@@ -75,25 +79,15 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 			browserCapabilities[descriptor.Name] = activeBrowserRuntimeCapability(contexts, descriptor.Name)
 		}
 	}
-	providers := s.companionRunProviders(ctx, run)
-	providerHandler := func(ctx context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
-		return s.executeCompanionProviderTool(ctx, run, request)
-	}
-	mcpHandler := func(toolCtx context.Context, _ agenttools.Invocation, tool serveragent.ToolRequest) (json.RawMessage, error) {
-		return s.executeMCPAgentTool(toolCtx, run, tool, false, "space_conversation")
-	}
-	mcpRegistrations, _ := s.appendPersonalAgentMCPTools(ctx, run.OwnerUserID, run.AgentID, nil, nil, mcpHandler)
-	sdkRegistrations, err := s.agentSDKRegistrations(ctx, run)
-	if err != nil {
-		return nil, agenttools.Invocation{}, nil, err
-	}
-	mcpRegistrations = append(mcpRegistrations, sdkRegistrations...)
-	toolbox := spaceAgentToolboxWithBrowserProvidersAndExtra(s.database, browserTabs, browserCapabilities, providers, providerHandler, mcpRegistrations, delegationHandler)
+	connected := append(s.appsToolRegistrations(), agentMemberToolRegistrations(s.database)...)
+	connected = append(connected, s.accountAdminToolRegistrations()...)
+	toolbox := buildAgentToolbox(s.database, agentToolboxOptions{
+		accountLevel: run.SpaceID == "", browserTabs: browserTabs, browserCapabilities: browserCapabilities,
+		delegation: delegationHandler, extra: connected,
+	})
 	names := make([]string, 0, len(toolbox.Descriptors()))
-	explicit := map[string]bool{}
 	for _, descriptor := range toolbox.Descriptors() {
 		names = append(names, descriptor.Name)
-		explicit[descriptor.Name] = true
 	}
 	invocation := agenttools.Invocation{
 		UserID:                run.OwnerUserID,
@@ -103,7 +97,6 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 		Source:                "space_conversation",
 		Trigger:               "message",
 		OriginalInput:         string(run.Input),
-		ExplicitTools:         explicit,
 		DelegatedApproval:     true,
 		ConversationScopeKind: db.ConversationScopeEveryone,
 	}
@@ -117,9 +110,6 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 func (s *SpacesService) executePersonalAgentRuntimeTool(ctx context.Context, run *db.SpaceRun, call agentRuntimeToolCall) (agentRuntimeToolOutcome, error) {
 	if run == nil || strings.TrimSpace(call.CallID) == "" || len(call.CallID) > 200 || len(call.Arguments) == 0 {
 		return agentRuntimeToolOutcome{}, db.ErrSpaceInvalid
-	}
-	if strings.HasPrefix(call.Name, "sdk.") {
-		return s.executeConversationalSDKTool(ctx, run, call)
 	}
 	if call.Name == "browser.request_user_action" && !call.SupportsIntervention {
 		return agentRuntimeToolOutcome{}, db.ErrSpaceForbidden

@@ -180,35 +180,7 @@ func TestAgentDispatchDeviceWaitsWakeOnlyWhenDeviceReturns(t *testing.T) {
 }
 
 // resumableApprovals applies the scan's own unqueued predicate.
-func resumableApprovals(t *testing.T, database *Database) int {
-	t.Helper()
-	var n int
-	if err := database.Conn.QueryRow(`SELECT count(*) FROM agent_run_tool_approvals a JOIN space_runs r ON r.id=a.run_id
-  WHERE a.state IN ('approved','denied') AND r.approval_wait_id=a.id AND r.runtime_phase='approval_resume_pending' AND ` + approvalResumeUnqueued).Scan(&n); err != nil {
-		t.Fatal(err)
-	}
-	return n
-}
 
-func TestAgentDispatchApprovalResumeDoesNotSpinOnQueuedDelivery(t *testing.T) {
-	database := agentDispatchTestDatabase(t)
-	dispatchExec(t, database, `INSERT INTO space_runs(id,state,runtime_phase,approval_wait_id) VALUES('run','running','approval_resume_pending','approval')`)
-	dispatchExec(t, database, `INSERT INTO agent_run_tool_approvals(id,run_id,state,expires_at,decided_at) VALUES('approval','run','approved',now()+interval '1 hour',now())`)
-	if delay, pending := dispatchDue(t, database, "agent-tasks"); !pending || delay != 0 {
-		t.Fatal("decided approval without delivery is not due", delay, pending)
-	}
-	if n := resumableApprovals(t, database); n != 1 {
-		t.Fatal("scan predicate misses the approval", n)
-	}
-	// Once its idempotent delivery exists, another scan cannot advance the run.
-	dispatchExec(t, database, `INSERT INTO agent_runtime_deliveries(id,run_id,operation,state) VALUES('approval.resume:run:approval','run','approval.resume','failed')`)
-	if _, pending := dispatchDue(t, database, "agent-tasks"); pending {
-		t.Fatal("approval with existing delivery keeps the queue due")
-	}
-	if n := resumableApprovals(t, database); n != 0 {
-		t.Fatal("scan still selects an approval it cannot advance", n)
-	}
-}
 
 func TestAgentDispatchJobsRespectAgentExclusivityAndExpiry(t *testing.T) {
 	database := agentDispatchTestDatabase(t)

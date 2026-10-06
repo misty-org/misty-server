@@ -1,35 +1,10 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
-
-func (s *SpacesService) DecidePersonalAgentRunApproval() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, err := sessionUserID(r, s.database)
-		if err != nil || userID == "" {
-			writeAgentRuntimeSessionError(w, err)
-			return
-		}
-		var body struct {
-			Decision string `json:"decision"`
-		}
-		if json.NewDecoder(r.Body).Decode(&body) != nil || (body.Decision != "approve" && body.Decision != "deny") {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_approval_decision"})
-			return
-		}
-		approved := body.Decision == "approve"
-		item, err := s.database.DecideCreatorToolApproval(r.Context(), userID, chi.URLParam(r, "runID"), chi.URLParam(r, "approvalID"), approved)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusAccepted, map[string]any{"approval": item, "runtime_resume_pending": true})
-	}
-}
 
 func (s *SpacesService) PersonalAgentRunDetail() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -64,22 +39,6 @@ func (s *SpacesService) CancelPersonalAgentRun() http.HandlerFunc {
 			cancelPending = s.agentRuntime.Cancel(r.Context(), run.RuntimeRunID, run.ID) != nil
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"run": run, "runtime_cancel_pending": cancelPending})
-	}
-}
-
-func (s *SpacesService) RetryPersonalAgentRun() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, err := sessionUserID(r, s.database)
-		if err != nil || userID == "" {
-			writeAgentRuntimeSessionError(w, err)
-			return
-		}
-		run, err := s.database.RetryPersonalAgentTaskRunForOwner(r.Context(), userID, chi.URLParam(r, "runID"))
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, run)
 	}
 }
 

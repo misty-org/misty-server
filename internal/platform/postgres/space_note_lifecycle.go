@@ -3,12 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
-	"time"
 )
-
-// NoteArchiveWindow is retained for legacy archived_creator_left rows created
-// before native Space notes became membership-wide.
-const NoteArchiveWindow = 30 * 24 * time.Hour
 
 // handleNoteMembershipLossTx runs inside the same transaction that removes a
 // user from a Space, so a note can never be left reachable by someone who is no
@@ -28,26 +23,6 @@ func handleNoteMembershipLossTx(_ context.Context, _ *sql.Tx, _, _ string) error
 // no note-specific work.
 func handleNoteMembershipRestoreTx(_ context.Context, _ *sql.Tx, _, _ string) error {
 	return nil
-}
-
-// PurgeNotesForDeletedAccount preserves collaborative Space notes by assigning
-// their destructive controls to the current Space owner.
-//
-// Misty has no account-deletion flow yet. When one is built it must call this
-// in the same transaction that removes or anonymizes the user, before the row
-// goes away — the creator id is what identifies the notes to purge.
-func (db *Database) PurgeNotesForDeletedAccount(ctx context.Context, userID string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return handleNoteAccountDeletionTx(ctx, tx, userID)
-	})
-}
-
-func handleNoteAccountDeletionTx(ctx context.Context, tx *sql.Tx, userID string) error {
-	_, err := tx.ExecContext(ctx, `UPDATE space_notes n
-		SET creator_user_id=s.owner_user_id,updated_at=NOW()
-		FROM spaces s
-		WHERE n.space_id=s.id AND n.creator_user_id=$1 AND s.owner_user_id<>$1`, userID)
-	return err
 }
 
 // PurgeExpiredNotes deletes archived notes whose retention window has passed,

@@ -7,12 +7,15 @@ import (
 	"strings"
 	"testing"
 	"time"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
+
+import ()
+
 func TestLibraryQuotaUploadDedupAndAttachmentPromotion(t *testing.T) {
 	database := openTestDatabase(t)
+	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, err := database.CreateUser("Library Owner", "library-owner@example.com", "password123")
 	if err != nil {
@@ -73,11 +76,11 @@ func TestLibraryQuotaUploadDedupAndAttachmentPromotion(t *testing.T) {
 	if usage.UsedBytes != 200 {
 		t.Fatalf("promotion double-charged quota: %#v", usage)
 	}
-	message, _, err := database.CreateSpaceMessageWithReferences(ctx, owner.ID, spaceID, nil, nil, []string{attachmentResult.Attachment.ID}, []string{promoted.ID}, "")
+	message, _, err := database.TestingCreateSpaceMessageWithReferences(ctx, owner.ID, spaceID, nil, nil, []string{attachmentResult.Attachment.ID}, []string{promoted.ID}, "")
 	if err != nil {
 		t.Fatalf("CreateSpaceMessageWithReferences(attachment-only) error = %v", err)
 	}
-	reply, _, err := database.CreateSpaceMessageWithReferences(ctx, owner.ID, spaceID, []MessageSpan{{Type: "text", Text: "reply"}}, nil, nil, nil, message.ID)
+	reply, _, err := database.TestingCreateSpaceMessageWithReferences(ctx, owner.ID, spaceID, []MessageSpan{{Type: "text", Text: "reply"}}, nil, nil, nil, message.ID)
 	if err != nil || reply.ReplyToMessageID != message.ID {
 		t.Fatalf("reply = %#v, %v", reply, err)
 	}

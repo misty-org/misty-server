@@ -9,12 +9,6 @@ import (
 // are subsets of input counts. Missing/ambiguous usage must retain its hold.
 type RealtimeVoiceUsage map[string]int64
 
-func RealtimeVoiceEstimate() RealtimeVoiceUsage {
-	return RealtimeVoiceUsage{"input_text_tokens": 16000, "input_audio_tokens": 6000,
-		"output_text_tokens": 4096, "output_audio_tokens": 4096,
-		"transcription_input_tokens": 6000, "transcription_output_tokens": 4096}
-}
-
 func (u RealtimeVoiceUsage) Add(other RealtimeVoiceUsage) {
 	for key, value := range other {
 		u[key] += value

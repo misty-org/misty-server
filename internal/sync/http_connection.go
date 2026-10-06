@@ -185,7 +185,7 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 		if err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
 			return err
 		}
-		return writeSyncJSON(ctx, conn, value)
+		return s.writeMeteredSyncJSON(ctx, conn, identity.UserID, value)
 	}
 	vault, err := s.store.BrowserSyncVault(ctx, identity.UserID)
 	if err != nil || vault == nil {

@@ -1,12 +1,9 @@
-import { readFileSync } from "node:fs";
 import { expect, it, vi } from "vitest";
 import { WorkflowAgent } from "@ai-sdk/workflow";
 import { isStepCount, jsonSchema, simulateReadableStream, tool } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
-import { z } from "zod";
 
-const canonical = JSON.parse(readFileSync(new URL("../../../internal/capabilities/builtins.json", import.meta.url), "utf8")) as Array<{ name: string; inputSchema: any }>;
 const usage = { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } };
 
 function model(call?: { toolName: string; input: string }) {
@@ -18,15 +15,6 @@ function model(call?: { toolName: string; input: string }) {
     return { stream: simulateReadableStream({ chunks, initialDelayInMs: 0, chunkDelayInMs: 0 }) };
   } });
 }
-
-it("the actual pinned workflow adapter reconstructs every canonical SDK schema alongside Zod tools", async () => {
-  const agent = new WorkflowAgent({ model: model(), stopWhen: isStepCount(1), tools: {
-    ...Object.fromEntries(canonical.map((definition, i) => [`capability_${i}`, tool({ inputSchema: jsonSchema(definition.inputSchema), execute: async () => ({}) })])),
-    discover: tool({ inputSchema: z.object({ query: z.string() }), execute: async () => ({}) }),
-  } });
-  const result = await agent.stream({ prompt: "Readiness check" });
-  expect(result.steps[0]?.text).toBe("Ready");
-});
 
 for (const input of [
   { id: "10000000-0000-4000-8000-000000000001", date: "2026-09-08", extra: "forbidden" },

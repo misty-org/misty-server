@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
+	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/platform/transport"
 
 	"github.com/google/uuid"
@@ -53,6 +54,8 @@ func NewBrowserSyncService(database *db.Database) *BrowserSyncService {
 
 func syncErrorCode(err error) (string, int) {
 	switch {
+	case errors.Is(err, billingadapter.ErrDenied):
+		return "account_usage_limit_reached", 402
 	case errors.Is(err, ErrSyncInvalid):
 		return "invalid_sync_request", 400
 	case errors.Is(err, ErrSyncForbidden):
@@ -93,10 +96,6 @@ func (s *BrowserSyncService) user(w http.ResponseWriter, r *http.Request) (strin
 	w.Header().Set("Cache-Control", "no-store")
 	user, ok := accounts.AuthenticatedUser(w, r)
 	if !ok {
-		return "", false
-	}
-	if db.AppAuthorityFromContext(r.Context()) != nil {
-		writeSyncError(w, ErrSyncForbidden)
 		return "", false
 	}
 	return user, true

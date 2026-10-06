@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
+
+
+import ()
 
 func TestSpaceAgentWriteCallbacksAreIdempotent(t *testing.T) {
 	database := openTestDatabase(t)
@@ -21,7 +23,7 @@ func TestSpaceAgentWriteCallbacksAreIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space, err := database.CreateSpace(ctx, owner.ID, "Idempotent Tool Space")
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Idempotent Tool Space")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,11 +82,11 @@ func TestSpaceAgentCannotReadContentFromAnotherSpace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := database.CreateSpace(ctx, owner.ID, "Private Source Space")
+	source, err := database.TestingCreateSpace(ctx, owner.ID, "Private Source Space")
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := database.CreateSpace(ctx, owner.ID, "Target Agent Space")
+	target, err := database.TestingCreateSpace(ctx, owner.ID, "Target Agent Space")
 	if err != nil {
 		t.Fatal(err)
 	}

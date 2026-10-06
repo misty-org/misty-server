@@ -9,80 +9,10 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 
 	"github.com/go-chi/chi/v5"
 )
 
-// connectedAccountAccessTokenForCapability is the server-side token broker for
-// tool adapters. It verifies both ownership and the capability granted during
-// consent. Long-lived account credentials never cross the API boundary.
-func (s *SpacesService) connectedAccountAccessTokenForCapability(ctx context.Context, userID, connectionID, capability string) (string, string, error) {
-	item, err := s.database.ConnectedAccount(ctx, userID, connectionID)
-	if err != nil {
-		return "", "", err
-	}
-	if item.RevokedAt != nil {
-		return "", "", db.ErrSpaceForbidden
-	}
-	if capability = strings.ToLower(strings.TrimSpace(capability)); capability == "" || !containsString(item.Capabilities, capability) {
-		return "", "", db.ErrSpaceForbidden
-	}
-	plaintext, err := s.decryptConnectedAccountSecret(item.Provider, item.CredentialCiphertext, item.CredentialNonce)
-	if err != nil {
-		_ = s.database.SetConnectedAccountHealth(ctx, userID, item.ID, "needs_attention", "credential_invalid")
-		return "", "", errors.New("connected account credential is invalid")
-	}
-	var token providerTokenEnvelope
-	if json.Unmarshal(plaintext, &token) != nil || token.AccessToken == "" {
-		_ = s.database.SetConnectedAccountHealth(ctx, userID, item.ID, "needs_attention", "credential_invalid")
-		return "", "", errors.New("connected account credential is invalid")
-	}
-	if item.Status == "active" && (item.ExpiresAt == nil || item.ExpiresAt.After(time.Now().UTC().Add(5*time.Minute))) {
-		return token.AccessToken, firstNonempty(token.TokenType, "Bearer"), nil
-	}
-	definition, exists := TestingConnectedAccountOAuthCatalog[item.Provider]
-	if !exists || token.RefreshToken == "" {
-		_ = s.database.SetConnectedAccountHealth(ctx, userID, item.ID, "needs_attention", "reauthorization_required")
-		return "", "", errors.New("connected account requires reauthorization")
-	}
-	refreshed, err := refreshConnectedAccountToken(ctx, definition, token.RefreshToken)
-	if err != nil {
-		_ = s.database.SetConnectedAccountHealth(ctx, userID, item.ID, "needs_attention", "refresh_failed")
-		return "", "", err
-	}
-	if refreshed.RefreshToken == "" {
-		refreshed.RefreshToken = token.RefreshToken
-	}
-	encoded, _ := json.Marshal(refreshed)
-	item.CredentialCiphertext, item.CredentialNonce, err = s.encryptConnectedAccountSecret(item.Provider, encoded)
-	if err != nil {
-		return "", "", err
-	}
-	item.KeyVersion = s.keyVer
-	if refreshed.ExpiresIn > 0 {
-		value := time.Now().UTC().Add(time.Duration(refreshed.ExpiresIn) * time.Second)
-		item.ExpiresAt = &value
-	}
-	if err := s.database.UpdateConnectedAccountCredential(ctx, *item); err != nil {
-		return "", "", err
-	}
-	return refreshed.AccessToken, firstNonempty(refreshed.TokenType, "Bearer"), nil
-}
-
-// TestingEncryptConnectedAccountAccessToken creates an encrypted credential
-// fixture without exposing production token-decryption paths to API callers.
-func (s *SpacesService) TestingEncryptConnectedAccountAccessToken(provider, accessToken string) ([]byte, []byte, error) {
-	encoded, err := json.Marshal(providerTokenEnvelope{
-		AccessToken:  strings.TrimSpace(accessToken),
-		RefreshToken: "testing-refresh-token",
-		TokenType:    "Bearer",
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	return s.encryptConnectedAccountSecret(provider, encoded)
-}
 
 func (s *SpacesService) DeleteConnectedAccount() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -100,16 +30,6 @@ func (s *SpacesService) DeleteConnectedAccount() http.HandlerFunc {
 		if plaintext, decryptErr := s.decryptConnectedAccountSecret(item.Provider, item.CredentialCiphertext, item.CredentialNonce); decryptErr == nil {
 			var token providerTokenEnvelope
 			if json.Unmarshal(plaintext, &token) == nil && token.AccessToken != "" {
-				if item.Provider == "figma" {
-					bindings, _ := s.database.FigmaBindingsForConnection(r.Context(), userID, connectionID)
-					provider := s.figmaProvider(token.AccessToken)
-					for _, binding := range bindings {
-						subscriptions, _ := s.database.FigmaWebhookSubscriptions(r.Context(), binding.ID)
-						for _, subscription := range subscriptions {
-							_ = provider.DeleteWebhook(r.Context(), subscription.WebhookID)
-						}
-					}
-				}
 				if item.Provider == "google" {
 					if revokeConnectedGoogleAccount(r.Context(), token.AccessToken) == nil {
 						revocation = "provider_revoked"
@@ -119,12 +39,6 @@ func (s *SpacesService) DeleteConnectedAccount() http.HandlerFunc {
 				} else {
 					revocation = "provider_session_not_revocable_local_credentials_erased"
 				}
-			}
-		}
-		if item.Provider == "figma" {
-			if cleanupErr := s.database.DisableFigmaBindingsForConnection(r.Context(), userID, connectionID); cleanupErr != nil {
-				writeSpaceError(w, cleanupErr)
-				return
 			}
 		}
 		if err := s.database.RevokeConnectedAccount(r.Context(), userID, connectionID); err != nil {

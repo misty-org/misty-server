@@ -51,7 +51,7 @@ func OpenDatabase(t testing.TB) *db.Database {
 		)
 	}
 
-	database := &db.Database{Conn: connection}
+	database := &db.Database{Conn: connection, DSN: config.dsn()}
 	lockConnection, err := database.Conn.Conn(t.Context())
 	if err != nil {
 		t.Fatalf("failed to reserve test database lock connection: %v", err)

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestUpdateSpaceConversationRestrictedToCreator(t *testing.T) {
 	database := openTestDatabase(t)
@@ -25,7 +27,7 @@ func TestUpdateSpaceConversationRestrictedToCreator(t *testing.T) {
 	}
 	space := createTestSpace(t, database, ctx, owner.ID, "Conversation updates")
 	for _, invited := range []*User{member, outsider} {
-		invite, inviteErr := database.InviteToSpace(ctx, owner.ID, space.ID, invited.Email)
+		invite, inviteErr := database.TestingInviteToSpace(ctx, owner.ID, space.ID, invited.Email)
 		if inviteErr != nil {
 			t.Fatalf("InviteToSpace(%s) error = %v", invited.Email, inviteErr)
 		}

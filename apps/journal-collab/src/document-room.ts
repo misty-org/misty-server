@@ -271,6 +271,20 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
     ) {
       return jsonResponse({ code: "invalid_command" }, 400);
     }
+    // Agent-created notes may be initialized before any editor opens a socket.
+    // Bind the signed service request so their projections can be published.
+    // Older service requests remain compatible, but cannot change a binding.
+    if (envelope.resource_id !== undefined) {
+      if (typeof envelope.resource_id !== "string" || !envelope.resource_id.trim() || envelope.resource_id.length > 200) {
+        return jsonResponse({ code: "invalid_resource_id" }, 400);
+      }
+      const resourceID = envelope.resource_id.trim();
+      const existing = await this.ctx.storage.get<string>("resourceID");
+      if (existing && existing !== resourceID) {
+        return jsonResponse({ code: "resource_mismatch" }, 409);
+      }
+      await this.ctx.storage.put("resourceID", resourceID);
+    }
     return this.handleControl(envelope.command, envelope.payload);
   }
 
@@ -419,6 +433,9 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
         if (
           (await this.ctx.storage.get<boolean>(BOOTSTRAP_APPLIED_KEY)) === true
         ) {
+          // An older bootstrap may have persisted content before its resource
+          // binding existed. Retry publication without replacing that content.
+          await this.publishNoteProjection();
           return jsonResponse({ ok: true, initialized: false });
         }
 

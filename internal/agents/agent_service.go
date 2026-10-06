@@ -8,13 +8,17 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/kannachi323/misty/server/internal/aimodels"
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
 type Service struct {
-	store    *SessionStore
-	provider ModelProvider
-	policy   PermissionPolicy
-	meter    UsageMeter
+	store         *SessionStore
+	provider      ModelProvider
+	policy        PermissionPolicy
+	meter         UsageMeter
+	modelResolver aimodels.Resolver
+	models        *modelruntime.Client
 }
 
 type ToolExecutor func(context.Context, ToolRequest) (json.RawMessage, error)
@@ -32,20 +36,6 @@ const MaxToolRounds = 12
 // ErrToolRoundLimit is returned when a run exceeds MaxToolRounds.
 var ErrToolRoundLimit = errors.New("agent run exceeded its tool round limit")
 
-// CompleteWithToolsContext runs the same agent session/tool protocol used by
-// interactive chat, but dispatches each manifest-authorized request through a
-// server-owned executor. This is the bridge used by automated Agent tasks;
-// finite provider/tool limits remain enforced by the Session service.
-//
-// systemPrompt carries the selected Agent's identity and approved instructions.
-// It must not be folded into the user message: the prompt builder surfaces it
-// as agent_instructions_and_context, and the persona rule refuses to adopt any
-// identity that does not arrive through that field. Callers with no Agent
-// identity of their own pass an empty string.
-func (s *Service) CompleteWithToolsContext(ctx context.Context, userID, billingUserID, systemPrompt, prompt string, tier AgentTier, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
-	return s.CompleteWithToolsForSpaceContext(ctx, userID, billingUserID, "", systemPrompt, prompt, tier, manifest, execute)
-}
-
 func (s *Service) CompleteWithToolsForSpaceContext(ctx context.Context, userID, billingUserID, spaceID, systemPrompt, prompt string, tier AgentTier, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
 	spaceID = strings.TrimSpace(spaceID)
 	if spaceID != "" {
@@ -54,10 +44,11 @@ func (s *Service) CompleteWithToolsForSpaceContext(ctx context.Context, userID, 
 		billingUserID = userID
 	}
 	if execute == nil || len(manifest.Tools) == 0 {
-		// The plain completion path has no session to carry the identity, so it
-		// is the one place the two prompts have to travel together.
-		merged := strings.TrimSpace(strings.TrimSpace(systemPrompt) + "\n\n" + prompt)
-		text, _, err := s.CompleteWithTierForSpaceContext(ctx, billingUserID, spaceID, merged, "automation_ai", tier)
+		// A read-only completion still needs its instructions in the provider's
+		// authoritative field. Folding them into the user message loses them to
+		// the persona/injection rules in buildAgentPrompt.
+		tier = NormalizeAgentTier(tier)
+		text, _, err := s.completeWithProviderContext(ctx, billingUserID, spaceID, systemPrompt, prompt, "automation_ai", TestingResolveAgentProvider(s.provider, tier), tier)
 		return ToolCompletion{Text: text}, err
 	}
 	session := s.CreateSessionWithBillingAndSpace(userID, billingUserID, spaceID)
@@ -123,37 +114,43 @@ func (s *Service) CompleteWithToolsForSpaceContext(ctx context.Context, userID, 
 	}
 }
 
-func (s *Service) Complete(userID, prompt, meterName string) (string, UsageSettlement, error) {
-	return s.CompleteWithTier(userID, prompt, meterName, TierLow)
-}
-
-func (s *Service) CompleteWithTier(userID, prompt, meterName string, tier AgentTier) (string, UsageSettlement, error) {
-	return s.CompleteWithTierContext(context.Background(), userID, prompt, meterName, tier)
-}
-
 func (s *Service) CompleteWithTierContext(ctx context.Context, userID, prompt, meterName string, tier AgentTier) (string, UsageSettlement, error) {
 	return s.CompleteWithTierForSpaceContext(ctx, userID, "", prompt, meterName, tier)
 }
 
 func (s *Service) CompleteWithTierForSpaceContext(ctx context.Context, userID, spaceID, prompt, meterName string, tier AgentTier) (string, UsageSettlement, error) {
-	return s.completeWithProviderContext(ctx, userID, spaceID, prompt, meterName, TestingResolveAgentProvider(s.provider, NormalizeAgentTier(tier)), NormalizeAgentTier(tier))
+	return s.completeWithProviderContext(ctx, userID, spaceID, "", prompt, meterName, TestingResolveAgentProvider(s.provider, NormalizeAgentTier(tier)), NormalizeAgentTier(tier))
 }
 
-func (s *Service) completeWithProviderContext(ctx context.Context, userID, spaceID, prompt, meterName string, selectedProvider ModelProvider, tier AgentTier) (string, UsageSettlement, error) {
+func (s *Service) completeWithProviderContext(ctx context.Context, userID, spaceID, systemPrompt, prompt, meterName string, selectedProvider ModelProvider, tier AgentTier) (string, UsageSettlement, error) {
+	if s.modelResolver != nil {
+		config, configErr := s.modelResolver(ctx, userID, "routing")
+		if configErr != nil {
+			return "", UsageSettlement{}, configErr
+		}
+		if config != nil {
+			var providerErr error
+			selectedProvider, providerErr = accountCompletionProvider(s.models, config)
+			if providerErr != nil {
+				return "", UsageSettlement{}, providerErr
+			}
+		}
+	}
 	prompt = strings.TrimSpace(prompt)
+	systemPrompt = strings.TrimSpace(systemPrompt)
 	if prompt == "" {
 		return "", UsageSettlement{}, ErrInvalidRequest("prompt is required")
 	}
-	if len(prompt) > MaxUserMessageBytes {
+	if len(prompt)+len(systemPrompt) > MaxUserMessageBytes {
 		return "", UsageSettlement{}, ErrInvalidRequest("prompt is too large")
 	}
-	request := ModelRequest{SessionID: uuid.NewString(), UserID: userID, AgentTier: tier, Mode: ModeAsk, Messages: []Message{{Role: RoleUser, Content: prompt}}}
+	request := ModelRequest{SessionID: uuid.NewString(), UserID: userID, SystemPrompt: systemPrompt, AgentTier: tier, Mode: ModeAsk, Messages: []Message{{Role: RoleUser, Content: prompt}}}
 	provider, model := TestingProviderStatus(selectedProvider)
 	idempotencyKey := "completion:" + request.SessionID
 	var reservation *UsageReservation
 	var err error
 	if s.meter != nil && provider != ProviderMock {
-		reservation, err = ReserveUsage(s.meter, userID, spaceID, idempotencyKey, meterName, provider, model, estimateRequestTokens(request), MaxModelOutputTokens)
+		reservation, err = ReserveMeasuredUsage(s.meter, userID, idempotencyKey, provider, model, map[string]int64{"input_bytes": int64(TestingRequestSizeBytes(request)), "output_tokens": MaxModelOutputTokens}, "")
 		if err != nil {
 			return "", UsageSettlement{}, err
 		}
@@ -185,6 +182,12 @@ func WithUsageMeter(meter UsageMeter) ServiceOption {
 	return func(service *Service) { service.meter = meter }
 }
 
+// WithModelRuntime sends per-request model choices (an account's own
+// connection or a picked Gateway model) through the agent runtime.
+func WithModelRuntime(models *modelruntime.Client) ServiceOption {
+	return func(service *Service) { service.models = models }
+}
+
 func NewService(store *SessionStore, provider ModelProvider, options ...ServiceOption) *Service {
 	if store == nil {
 		store = NewSessionStore(0)
@@ -203,10 +206,6 @@ func NewService(store *SessionStore, provider ModelProvider, options ...ServiceO
 	return service
 }
 
-func (s *Service) Store() *SessionStore {
-	return s.store
-}
-
 func (s *Service) ProviderStatus() (string, string) {
 	return s.ProviderStatusForTier(TierLow)
 }
@@ -220,10 +219,6 @@ func TestingProviderStatus(provider ModelProvider) (string, string) {
 		return info.ProviderName(), info.ModelName()
 	}
 	return ProviderMock, "mock"
-}
-
-func (s *Service) CreateSession(userID string) *Session {
-	return s.store.Create(userID)
 }
 
 func (s *Service) CreateSessionWithBillingAndSpace(userID, billingUserID, spaceID string) *Session {
@@ -252,8 +247,4 @@ func (s *Service) SetSessionSystemPrompt(sessionID, userID, systemPrompt string)
 		session.SystemPrompt = strings.TrimSpace(systemPrompt)
 		return nil
 	})
-}
-
-func (s *Service) CreateSessionForJob(userID, billingUserID, jobID string) *Session {
-	return s.store.CreateWithBillingScope(userID, billingUserID, "agent-job:"+jobID)
 }

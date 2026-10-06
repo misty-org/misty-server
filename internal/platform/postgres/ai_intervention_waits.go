@@ -27,12 +27,6 @@ func scanIntervention(row interface{ Scan(...any) error }, w *AIInterventionWait
 	return row.Scan(&w.ID, &w.RunID, &w.ScopeID, &w.DeviceID, &w.Action, &w.Reason, &w.State, &w.ExpiresAt, &w.TargetLabel)
 }
 
-// This capability pauses before a browser action. It never retries a send or
-// treats a user's readiness confirmation as proof of delivery/account identity.
-// AwaitAIUserIntervention preserves the existing public quick-AI interface.
-func (db *Database) AwaitAIUserIntervention(ctx context.Context, user, run, runtime, call, hook, scope, action, reason, digest string) (*AIInterventionWait, error) {
-	return db.AwaitAgentUserIntervention(ctx, user, run, runtime, call, hook, scope, action, reason, digest)
-}
 func (db *Database) AwaitAgentUserIntervention(ctx context.Context, user, run, runtime, call, hook, scope, action, reason, digest string) (*AIInterventionWait, error) {
 	if call == "" || len(call) > 200 || hook == "" || len(hook) > 500 || len(scope) < 8 || len(scope) > 256 || len(reason) < 1 || len(reason) > 1000 || len(digest) != 64 {
 		return nil, ErrSpaceInvalid
@@ -94,7 +88,7 @@ func (db *Database) AwaitAgentUserIntervention(ctx context.Context, user, run, r
 		}
 		*out = AIInterventionWait{TargetLabel: label, ID: uuid.NewString(), RunID: run, ScopeID: scope, DeviceID: device, Action: action, Reason: reason, State: "pending", ExpiresAt: expiry}
 		var invocationID, spaceRunID any
-		if sdkRunIdentity(run) {
+		if invocationRunIdentity(run) {
 			invocationID = run
 		} else {
 			spaceRunID = run
@@ -113,9 +107,6 @@ func aiInterventionTargetValidTx(ctx context.Context, tx *sql.Tx, id string) (bo
 	return valid, err
 }
 func (db *Database) AIUserInterventions(ctx context.Context, user string) ([]AIInterventionWait, error) {
-	if AppAuthorityFromContext(ctx) != nil {
-		return nil, ErrAppRuntimeForbidden
-	}
 	out := []AIInterventionWait{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `SELECT w.id,w.run_id,w.scope_id,w.device_id,w.action,w.reason,w.state,w.expires_at,w.target_label FROM ai_intervention_waits w JOIN `+interventionRunsSQL+` r ON r.id=w.run_id AND r.user_id=w.user_id WHERE w.user_id=$1 AND w.state='pending' AND r.state='awaiting_intervention' ORDER BY w.created_at LIMIT 100`, user)
@@ -135,9 +126,6 @@ func (db *Database) AIUserInterventions(ctx context.Context, user string) ([]AII
 	return out, err
 }
 func (db *Database) DecideAIUserIntervention(ctx context.Context, user, id string, ready bool) error {
-	if AppAuthorityFromContext(ctx) != nil {
-		return ErrAppRuntimeForbidden
-	}
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		var run, runtime, hook, state string
 		var expired bool
@@ -179,7 +167,7 @@ func (db *Database) DecideAIUserIntervention(ctx context.Context, user, id strin
 		if err := agentInterventionStateTx(ctx, tx, user, run, id, "running", "intervention_resume_pending", "The user-action wait ended. Rechecking the original target before continuing."); err != nil {
 			return err
 		}
-		return queueAgentContinuationTx(ctx, tx, user, run, "intervention.resume", id, AgentContinuation{RuntimeID: runtime, HookToken: hook, ApprovalID: id, Available: state == "ready"})
+		return queueAgentContinuationTx(ctx, tx, user, run, "intervention.resume", id, AgentContinuation{RuntimeID: runtime, HookToken: hook, WaitID: id, Available: state == "ready"})
 	})
 }
 func (db *Database) ExpireAIUserInterventions(ctx context.Context) error {
@@ -213,7 +201,7 @@ func (db *Database) ExpireAIUserInterventions(ctx context.Context) error {
 func (db *Database) AIUserInterventionContinuation(ctx context.Context, delivery AgentRuntimeDelivery, p AgentContinuation) (bool, bool, error) {
 	current, allowed := false, false
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ai_intervention_waits w JOIN `+interventionRunsSQL+` r ON r.id=w.run_id AND r.user_id=w.user_id WHERE w.id=$1 AND w.run_id=$2 AND w.user_id=$3 AND w.runtime_run_id=$4 AND r.runtime_run_id=w.runtime_run_id AND w.hook_token=$5 AND w.state IN ('ready','declined','expired') AND w.consumed_at IS NULL AND r.state='running')`, p.ApprovalID, delivery.RunID, delivery.UserID, p.RuntimeID, p.HookToken).Scan(&current); err != nil || !current {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ai_intervention_waits w JOIN `+interventionRunsSQL+` r ON r.id=w.run_id AND r.user_id=w.user_id WHERE w.id=$1 AND w.run_id=$2 AND w.user_id=$3 AND w.runtime_run_id=$4 AND r.runtime_run_id=w.runtime_run_id AND w.hook_token=$5 AND w.state IN ('ready','declined','expired') AND w.consumed_at IS NULL AND r.state='running')`, p.WaitID, delivery.RunID, delivery.UserID, p.RuntimeID, p.HookToken).Scan(&current); err != nil || !current {
 			return err
 		}
 		if !p.Available {
@@ -226,7 +214,7 @@ func (db *Database) AIUserInterventionContinuation(ctx context.Context, delivery
 			return err
 		}
 		var err error
-		allowed, err = aiInterventionTargetValidTx(ctx, tx, p.ApprovalID)
+		allowed, err = aiInterventionTargetValidTx(ctx, tx, p.WaitID)
 		return err
 	})
 	return current, allowed, err

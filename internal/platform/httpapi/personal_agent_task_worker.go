@@ -14,26 +14,6 @@ import (
 // a pass that made progress is not mistaken for lock contention.
 func (s *SpacesService) ProcessPersonalAgentTasks(ctx context.Context, workerID string, limit int) (int, error) {
 	processed := 0
-	decided, err := s.database.CreatorToolApprovalResumesUnqueued(ctx, 20)
-	if err != nil {
-		return processed, err
-	}
-	for _, approval := range decided {
-		if err := s.database.QueueAgentApprovalResume(ctx, approval.ID); err != nil {
-			return processed, err
-		}
-		processed++
-	}
-	expired, err := s.database.ExpireCreatorToolApprovals(ctx, 20)
-	if err != nil {
-		return processed, err
-	}
-	for _, approval := range expired {
-		if err := s.database.QueueAgentApprovalResume(ctx, approval.ID); err != nil {
-			return processed, err
-		}
-		processed++
-	}
 	deviceWaits, err := s.database.AgentDeviceWaitsReady(ctx, 20)
 	if err != nil {
 		return processed, err

@@ -6,34 +6,30 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/kannachi323/misty/server/internal/billingadapter"
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
 func TestLibraryBillsFallbackAndEmbeddingSeparately(t *testing.T) {
 	for _, deny := range []int{0, 1, 2} {
 		t.Run([]string{"admitted", "primary denied", "fallback denied"}[deny], func(t *testing.T) {
 			calls := 0
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			runtime := modelruntime.TestingNewFake(t, func(call modelruntime.TestingCall) (int, any) {
 				calls++
 				if calls == 1 {
-					http.Error(w, "unavailable", 503)
-					return
+					return http.StatusBadGateway, map[string]any{"code": "model_call_failed", "upstream_status": 503}
 				}
-				if r.URL.Path == "/embeddings" {
-					_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"embedding": make([]float64, SmartLibraryEmbeddingDims)}}, "usage": map[string]int{"prompt_tokens": 13}})
-					return
+				if call.Path == "/v1/models/embed" {
+					return http.StatusOK, map[string]any{"embeddings": [][]float64{make([]float64, SmartLibraryEmbeddingDims)}, "usage": map[string]int{"inputTokens": 13}}
 				}
 				metadata := SmartLibraryMetadata{AssetID: "one", ContentType: "text", PrimarySubject: "Garden plan", Description: "A detailed garden plan describing flowers and vegetable beds.", Tags: []string{"garden", "flowers", "plants", "soil", "beds"}, SearchTerms: []string{"garden plan", "flowers", "plants", "soil", "beds"}, Objects: []string{"flowers", "plants", "soil"}, Confidence: 0.9}
-				body, _ := json.Marshal(map[string]any{"assets": []SmartLibraryMetadata{metadata}})
-				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(body)}}}, "usage": map[string]any{"prompt_tokens": 123, "completion_tokens": 17, "prompt_tokens_details": map[string]int{"cached_tokens": 20}}})
-			}))
-			defer server.Close()
+				return http.StatusOK, map[string]any{"object": map[string]any{"assets": []SmartLibraryMetadata{metadata}}, "usage": map[string]int{"inputTokens": 123, "cachedInputTokens": 20, "outputTokens": 17}}
+			})
 			store, adapter := &voiceBillingStore{}, &voiceBillingAdapter{deny: deny}
-			base := &SmartLibraryAnalyzer{APIKey: "test", BaseURL: server.URL, Client: server.Client()}
+			base := &SmartLibraryAnalyzer{Models: runtime.Client}
 			analyzer := base.WithBilling(&billingadapter.Service{Adapter: adapter, Store: store}, "account", "job")
 			result, err := analyzer.Analyze(t.Context(), []SmartLibraryAsset{{AssetID: "one", AssetKind: "text", MimeType: "text/plain", ExtractedText: "Garden plan"}})
 			if deny > 0 {
@@ -104,11 +100,10 @@ func TestLibraryCompletionSurvivesInterruptionAndOutage(t *testing.T) {
 			store, adapter := &libraryCompletionStore{fail: fail}, &libraryOutageAdapter{}
 			client := &http.Client{Transport: voiceTransport(func(*http.Request) (*http.Response, error) {
 				cancel()
-				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"usage":{"prompt_tokens":9,"completion_tokens":2}}`)), Header: make(http.Header)}, nil
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(embeddingFixture(9))), Header: make(http.Header)}, nil
 			})}
-			a := (&SmartLibraryAnalyzer{APIKey: "test", Client: client}).WithBilling(&billingadapter.Service{Adapter: adapter, Store: store}, "account", "job")
-			var result any
-			err := a.requestAt(ctx, "https://provider.test/chat/completions", map[string]any{"model": "model", "max_tokens": 10, "messages": "hello"}, nil, &result)
+			a := (&SmartLibraryAnalyzer{Models: modelruntime.New("https://runtime.test", []byte(strings.Repeat("s", 32)), client)}).WithBilling(&billingadapter.Service{Adapter: adapter, Store: store}, "account", "job")
+			_, _, err := a.Embed(ctx, []string{"hello"})
 			if store.completionCanceled {
 				t.Fatal("cancellation discarded completion")
 			}
@@ -126,33 +121,35 @@ func TestLibraryCompletionSurvivesInterruptionAndOutage(t *testing.T) {
 }
 
 func TestLibraryDisabledBillingNeedsNoStore(t *testing.T) {
-	a := (&SmartLibraryAnalyzer{APIKey: "test", Client: &http.Client{Transport: voiceTransport(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
-	})}}).WithBilling(&billingadapter.Service{Adapter: billingadapter.Disabled{}}, "account", "job")
-	var result any
-	if err := a.requestAt(t.Context(), "https://provider.test/chat/completions", map[string]any{"model": "model"}, nil, &result); err != nil {
+	client := &http.Client{Transport: voiceTransport(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(embeddingFixture(1))), Header: make(http.Header)}, nil
+	})}
+	a := (&SmartLibraryAnalyzer{Models: modelruntime.New("https://runtime.test", []byte(strings.Repeat("s", 32)), client)}).WithBilling(&billingadapter.Service{Adapter: billingadapter.Disabled{}}, "account", "job")
+	if _, _, err := a.Embed(t.Context(), []string{"hello"}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func embeddingFixture(tokens int) string {
+	raw, _ := json.Marshal(map[string]any{"embeddings": [][]float64{make([]float64, SmartLibraryEmbeddingDims)}, "usage": map[string]int{"inputTokens": tokens}})
+	return string(raw)
 }
 
 func TestLibraryTranscriptionBillsEachModelAndStopsOnDenial(t *testing.T) {
 	for _, deny := range []int{0, 1, 2} {
 		t.Run([]string{"admitted", "primary denied", "fallback denied"}[deny], func(t *testing.T) {
 			calls := 0
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			runtime := modelruntime.TestingNewFake(t, func(call modelruntime.TestingCall) (int, any) {
 				calls++
 				if calls == 1 {
-					http.Error(w, "unavailable", 503)
-					return
+					return http.StatusBadGateway, map[string]any{"code": "model_call_failed", "upstream_status": 503}
 				}
-				_, _ = w.Write([]byte(`{"text":"Hello","durationInSeconds":2.5}`))
-			}))
-			defer server.Close()
-			t.Setenv("AI_GATEWAY_EMBEDDING_BASE_URL", server.URL)
+				return http.StatusOK, map[string]any{"text": "Hello", "durationInSeconds": 2.5, "segments": []any{}}
+			})
 			t.Setenv("MEDIA_SEARCH_TRANSCRIPTION_MODEL", MediaSearchTranscriptionModel)
 			t.Setenv("MEDIA_SEARCH_TRANSCRIPTION_FALLBACK_MODEL", MediaSearchTranscriptionFallbackModel)
 			store, adapter := &voiceBillingStore{}, &voiceBillingAdapter{deny: deny}
-			analyzer := (&SmartLibraryAnalyzer{APIKey: "test", Client: server.Client()}).WithBilling(&billingadapter.Service{Store: store, Adapter: adapter}, "account", "media-job")
+			analyzer := (&SmartLibraryAnalyzer{Models: runtime.Client}).WithBilling(&billingadapter.Service{Store: store, Adapter: adapter}, "account", "media-job")
 			segments, _, err := analyzer.TranscribeMedia(t.Context(), []byte("audio"), "audio/mpeg", 3000)
 			if deny > 0 {
 				if !errors.Is(err, billingadapter.ErrDenied) || calls != deny-1 {

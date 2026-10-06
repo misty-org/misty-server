@@ -24,6 +24,9 @@ export MISTY_BILLING_TEST_DSN="host=127.0.0.1 port=$misty_test_port user=postgre
 # The session contract suite separately verifies this ordinary RLS role.
 export DB_USER=misty_app DB_PASSWORD=misty-isolated-runtime
 export DB_HOST="$TEST_DB_HOST" DB_PORT="$TEST_DB_PORT" DB_NAME="$TEST_DB_NAME" DB_SSLMODE=disable
+# Test fixtures opt into their own billing endpoints. Never inherit the live
+# development adapter when testing writes against this disposable database.
+export MISTY_BILLING_ADAPTER=none
 cd "$misty_test_root"
 python3 - "$misty_test_container" <<'PY'
 import os, pathlib, subprocess, sys

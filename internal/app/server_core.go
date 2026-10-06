@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 	"github.com/kannachi323/misty/server/internal/platform/email"
 	"github.com/kannachi323/misty/server/internal/platform/metrics"
 	"github.com/kannachi323/misty/server/internal/platform/telemetry"
@@ -36,6 +37,7 @@ type Server struct {
 	HealthMonitor            *healthMonitor
 	Metrics                  *metrics.Registry
 	AIAnalyzer               *serveragent.SmartLibraryAnalyzer
+	Models                   *modelruntime.Client
 	AI                       *api.AIService
 	AgentRuntime             api.AgentRuntimeConfig
 	BrowserSync              *browsersync.BrowserSyncService
@@ -79,6 +81,12 @@ func CreateServer() (*Server, error) {
 		return nil, err
 	}
 	usageMeter := serveragent.BillingMeter{Service: s.Database.BillingService()}
+	// Every model call goes through the agent runtime and the AI SDK.
+	models, err := modelruntime.FromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("configure AI model runtime: %w", err)
+	}
+	s.Models = models
 	s.AIAgent = serveragent.NewService(
 		// The embodied companion and Agents both use misty_ask_conversations as their
 		// durable task-thread store. Keeping the runtime wired to the database is
@@ -87,12 +95,15 @@ func CreateServer() (*Server, error) {
 		// Every paid model call in the process passes through this ceiling, so
 		// no path can run up an unbounded provider bill.
 		serveragent.NewBudgetedProvider(
-			serveragent.NewAgentProviderFromEnv(),
+			serveragent.NewAgentProvider(models),
 			serveragent.ProviderBudgetFromEnv(),
 		),
 		serveragent.WithUsageMeter(usageMeter),
+		serveragent.WithModelRuntime(models),
 	)
 	s.AIAnalyzer = &serveragent.SmartLibraryAnalyzer{
+		Models: models,
+		// The Gateway key here only opens realtime voice sockets.
 		APIKey:  strings.TrimSpace(envconfig.Getenv("AI_GATEWAY_API_KEY")),
 		BaseURL: strings.TrimSpace(envconfig.Getenv("AI_GATEWAY_BASE_URL")),
 	}
@@ -148,6 +159,9 @@ func CreateServer() (*Server, error) {
 		return nil, fmt.Errorf("configure Agent runtime: %w", err)
 	}
 	s.Spaces.SetAgentRuntime(agentRuntime)
+	s.Spaces.SetModels(models)
+	s.AIAnalyzer.ModelResolver = s.Spaces.ResolveAIModel
+	s.AIAgent.SetModelResolver(s.Spaces.ResolveAIModel)
 	s.AgentRuntime = agentRuntime
 	s.Spaces.SetUsageMeter(usageMeter)
 	s.Spaces.SetLibraryProvider(s.Library)

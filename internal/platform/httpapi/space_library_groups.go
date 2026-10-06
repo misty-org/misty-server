@@ -28,20 +28,6 @@ func (s *SpaceLibraryService) Groups() http.HandlerFunc {
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
-		case http.MethodPost:
-			var body struct {
-				Name  string               `json:"name"`
-				Rules db.LibraryGroupRules `json:"rules"`
-			}
-			if decodeJSON(w, r, &body) != nil {
-				return
-			}
-			group, err := s.database.CreateLibraryGroup(r.Context(), userID, spaceID, body.Name, body.Rules)
-			if err != nil {
-				writeLibraryError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusCreated, group)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}

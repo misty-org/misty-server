@@ -8,15 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type ProviderOAuthState struct {
-	UserID             string
-	SpaceID            string
-	Provider           string
-	VerifierCiphertext []byte
-	VerifierNonce      []byte
-	ReturnTo           string
-	ExpiresAt          time.Time
-}
 
 type ProviderCredential struct {
 	ID             string
@@ -32,32 +23,6 @@ type ProviderCredential struct {
 	ExpiresAt      *time.Time
 }
 
-func (db *Database) CreateProviderOAuthState(ctx context.Context, stateHash string, item ProviderOAuthState) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, item.UserID, item.SpaceID, PermissionIntegrationsManage); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO provider_oauth_states(state_hash,user_id,space_id,provider,verifier_ciphertext,verifier_nonce,return_to,expires_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, stateHash, item.UserID, item.SpaceID, item.Provider, item.VerifierCiphertext, item.VerifierNonce, item.ReturnTo, item.ExpiresAt)
-		return err
-	})
-}
-
-// ConsumeProviderOAuthState is atomic and single-use. Expired or replayed
-// states deliberately look like missing records.
-func (db *Database) ConsumeProviderOAuthState(ctx context.Context, stateHash string) (*ProviderOAuthState, error) {
-	out := &ProviderOAuthState{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `UPDATE provider_oauth_states SET consumed_at=NOW()
-			WHERE state_hash=$1 AND consumed_at IS NULL AND expires_at>NOW()
-			RETURNING user_id,space_id,provider,verifier_ciphertext,verifier_nonce,return_to,expires_at`, stateHash).
-			Scan(&out.UserID, &out.SpaceID, &out.Provider, &out.VerifierCiphertext, &out.VerifierNonce, &out.ReturnTo, &out.ExpiresAt)
-	})
-	if err == sql.ErrNoRows {
-		return nil, ErrSpaceNotFound
-	}
-	return out, err
-}
 
 func (db *Database) SaveProviderCredential(ctx context.Context, item ProviderCredential, displayName string, scopes []string) (*SpaceIntegration, error) {
 	if item.ID == "" {
@@ -102,8 +67,6 @@ func (db *Database) ProviderCredential(ctx context.Context, userID, spaceID, int
 			  AND (
 			    c.user_id=$2
 			    OR EXISTS(SELECT 1 FROM spaces s WHERE s.id=$3 AND s.owner_user_id=$2)
-			    OR EXISTS(SELECT 1 FROM provider_shared_resources r
-			      WHERE r.integration_id=c.integration_id AND r.space_id=$3 AND r.status='active')
 			  )`, integrationID, userID, spaceID).
 			Scan(&out.ID, &out.IntegrationID, &out.SpaceID, &out.UserID, &out.Provider, &out.Ciphertext, &out.Nonce, &out.KeyVersion, &out.AccountID, &out.AccountDisplay, &out.ExpiresAt)
 	})
@@ -121,26 +84,6 @@ func (db *Database) UpdateProviderCredentialSecret(ctx context.Context, item Pro
 			return err
 		}
 		if changed, _ := result.RowsAffected(); changed != 1 {
-			return ErrSpaceNotFound
-		}
-		return nil
-	})
-}
-
-func (db *Database) DeleteProviderIntegration(ctx context.Context, userID, integrationID string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var spaceID string
-		if err := tx.QueryRowContext(ctx, `SELECT space_id FROM space_integrations WHERE id=$1`, integrationID).Scan(&spaceID); err != nil {
-			return ErrSpaceNotFound
-		}
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
-			return err
-		}
-		result, err := tx.ExecContext(ctx, `DELETE FROM space_integrations WHERE id=$1 AND space_id=$2`, integrationID, spaceID)
-		if err != nil {
-			return err
-		}
-		if changed, _ := result.RowsAffected(); changed == 0 {
 			return ErrSpaceNotFound
 		}
 		return nil

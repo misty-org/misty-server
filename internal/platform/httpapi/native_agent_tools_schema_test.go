@@ -6,7 +6,7 @@ import (
 )
 
 func TestNativeAgentToolSchemasRequiredIsArray(t *testing.T) {
-	for _, descriptor := range append(nativeAgentToolDescriptors(), globalAgentSpaceDescriptors()...) {
+	for _, descriptor := range append(nativeAgentToolDescriptors(), spacesListToolDescriptor()) {
 		t.Run(descriptor.Name, func(t *testing.T) {
 			var schema map[string]any
 			if err := json.Unmarshal(descriptor.InputSchema, &schema); err != nil {

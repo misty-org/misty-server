@@ -238,10 +238,3 @@ func (p *BudgetedProvider) refuse(now time.Time) {
 	p.refusals++
 	p.lastRefusal = now
 }
-
-// Refusals reports how many calls the ceiling has rejected, for monitoring.
-func (p *BudgetedProvider) Refusals() int64 {
-	p.TestingMu.Lock()
-	defer p.TestingMu.Unlock()
-	return p.refusals
-}

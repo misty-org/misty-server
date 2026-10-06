@@ -49,13 +49,18 @@ func (db *Database) AIActionAvailable(ctx context.Context, userID, surfaceID, ac
 }
 
 type AIUserSettings struct {
-	Enabled                bool      `json:"enabled"`
-	CursorCompanionEnabled bool      `json:"cursor_companion_enabled"`
-	MemoryEnabled          bool      `json:"memory_enabled"`
-	RetentionDays          int       `json:"retention_days"`
-	PurgeState             string    `json:"purge_state"`
-	DisabledAt             time.Time `json:"disabled_at,omitempty"`
-	UpdatedAt              time.Time `json:"updated_at"`
+	Enabled                bool `json:"enabled"`
+	CursorCompanionEnabled bool `json:"cursor_companion_enabled"`
+	MemoryEnabled          bool `json:"memory_enabled"`
+	// AppActionsAsk pauses sends, shares, deletes and payments in connected
+	// apps until the user approves them in chat.
+	AppActionsAsk bool `json:"app_actions_ask"`
+	// ScreenLocation is where agents open a screen: separate, window or ask.
+	ScreenLocation string    `json:"screen_location"`
+	RetentionDays  int       `json:"retention_days"`
+	PurgeState     string    `json:"purge_state"`
+	DisabledAt     time.Time `json:"disabled_at,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type AISurfacePreference struct {
@@ -70,13 +75,13 @@ type AISurfacePreference struct {
 }
 
 func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettings, []AISurfacePreference, error) {
-	settings := AIUserSettings{Enabled: true, CursorCompanionEnabled: true, MemoryEnabled: true, RetentionDays: 30, PurgeState: "none"}
+	settings := AIUserSettings{Enabled: true, CursorCompanionEnabled: true, MemoryEnabled: true, AppActionsAsk: true, ScreenLocation: "separate", RetentionDays: 30, PurgeState: "none"}
 	preferences := []AISurfacePreference{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		var disabledAt sql.NullTime
 		err := tx.QueryRowContext(ctx, `
-			SELECT enabled,cursor_companion_enabled,memory_enabled,retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
-		`, userID).Scan(&settings.Enabled, &settings.CursorCompanionEnabled, &settings.MemoryEnabled, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
+			SELECT enabled,cursor_companion_enabled,memory_enabled,app_actions_ask,screen_location,retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
+		`, userID).Scan(&settings.Enabled, &settings.CursorCompanionEnabled, &settings.MemoryEnabled, &settings.AppActionsAsk, &settings.ScreenLocation, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -104,6 +109,27 @@ func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettin
 		return rows.Err()
 	})
 	return settings, preferences, err
+}
+
+// SetAIAppActionsAsk changes only the connected-app approval setting.
+func (db *Database) SetAIAppActionsAsk(ctx context.Context, userID string, ask bool) error {
+	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO ai_user_settings(user_id,app_actions_ask) VALUES($1,$2)
+			ON CONFLICT(user_id) DO UPDATE SET app_actions_ask=EXCLUDED.app_actions_ask,updated_at=NOW()`, userID, ask)
+		return err
+	})
+}
+
+// SetAIScreenLocation changes only where agents open a screen.
+func (db *Database) SetAIScreenLocation(ctx context.Context, userID, location string) error {
+	if location != "separate" && location != "window" && location != "ask" {
+		return ErrSpaceInvalid
+	}
+	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO ai_user_settings(user_id,screen_location) VALUES($1,$2)
+			ON CONFLICT(user_id) DO UPDATE SET screen_location=EXCLUDED.screen_location,updated_at=NOW()`, userID, location)
+		return err
+	})
 }
 
 func (db *Database) UpdateAISettings(ctx context.Context, userID string, enabled bool, retentionDays int, cursorCompanionEnabled, memoryEnabled bool) (AIUserSettings, error) {
@@ -289,7 +315,8 @@ func (db *Database) verifyAICleanupJob(ctx context.Context, jobID, userID string
 }
 
 // PurgeExpiredAITransients enforces the 24-hour ceiling for unaccepted quick
-// transforms while preserving invocations that own an applied artifact.
+// transforms while preserving applied artifacts and retained conversation history.
+// Retaining history never extends invocation/device authority, which still expires.
 func (db *Database) PurgeExpiredAITransients(ctx context.Context, limit int) (int64, error) {
 	if limit < 1 || limit > 1000 {
 		limit = 250
@@ -300,6 +327,14 @@ func (db *Database) PurgeExpiredAITransients(ctx context.Context, limit int) (in
 			DELETE FROM ai_invocations WHERE id IN (
 				SELECT i.id FROM ai_invocations i
 				WHERE i.expires_at<=NOW()
+				  AND NOT (i.mode IN ('drawer','companion') AND EXISTS(
+				    SELECT 1 FROM misty_ask_conversations c
+				    LEFT JOIN ai_user_settings prefs ON prefs.user_id=c.user_id
+				    WHERE c.id=i.conversation_id AND c.user_id=i.user_id
+				      AND c.deleted_at IS NULL AND c.retention_expires_at>NOW()
+				      AND COALESCE(prefs.enabled,true)
+				      AND i.created_at+COALESCE(prefs.retention_days,30)*INTERVAL '1 day'>NOW()
+				  ))
 				  AND NOT EXISTS(SELECT 1 FROM ai_artifacts a WHERE a.invocation_id=i.id AND a.state='applied')
 				ORDER BY i.expires_at LIMIT $1
 			)

@@ -2,14 +2,10 @@ package db
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
-
-	"github.com/google/uuid"
 
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
@@ -27,107 +23,6 @@ type WorkflowRunStep struct {
 	StartedAt    *time.Time      `json:"started_at,omitempty"`
 	CompletedAt  *time.Time      `json:"completed_at,omitempty"`
 	UpdatedAt    time.Time       `json:"updated_at"`
-}
-
-func (db *Database) WorkflowRunSteps(ctx context.Context, userID, runID string) ([]WorkflowRunStep, error) {
-	items := []WorkflowRunStep{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT s.id,s.run_id,s.node_id,s.state,s.attempt,s.input,s.output,COALESCE(s.error_code,''),COALESCE(s.error_message,''),s.started_at,s.completed_at,s.updated_at
-			FROM space_run_steps s JOIN space_runs r ON r.id=s.run_id WHERE s.run_id=$1 AND r.requesting_member_id=$2 ORDER BY s.updated_at,s.node_id`, runID, userID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item WorkflowRunStep
-			if err := rows.Scan(&item.ID, &item.RunID, &item.NodeID, &item.State, &item.Attempt, &item.Input, &item.Output, &item.ErrorCode, &item.ErrorMessage, &item.StartedAt, &item.CompletedAt, &item.UpdatedAt); err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return rows.Err()
-	})
-	return items, err
-}
-
-func (db *Database) CompletedWorkflowStepOutputs(ctx context.Context, userID, runID string) (map[string]json.RawMessage, error) {
-	outputs := map[string]json.RawMessage{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT s.node_id,s.output FROM space_run_steps s JOIN space_runs r ON r.id=s.run_id WHERE s.run_id=$1 AND r.requesting_member_id=$2 AND s.state IN ('completed','completed_with_errors')`, runID, userID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var nodeID string
-			var output []byte
-			if err := rows.Scan(&nodeID, &output); err != nil {
-				return err
-			}
-			outputs[nodeID] = json.RawMessage(output)
-		}
-		return rows.Err()
-	})
-	return outputs, err
-}
-
-func (db *Database) EnsureWorkflowNodeApproval(ctx context.Context, runID, nodeID, actionKind string, input json.RawMessage) (bool, error) {
-	digestBytes := sha256.Sum256(append([]byte(nodeID+":"+actionKind+":"), input...))
-	digest := hex.EncodeToString(digestBytes[:])
-	approved := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var userID, spaceID string
-		if err := tx.QueryRowContext(ctx, `SELECT requesting_member_id,COALESCE(space_id,'') FROM space_runs WHERE id=$1 AND state IN ('running','awaiting_approval') FOR UPDATE`, runID).Scan(&userID, &spaceID); err != nil {
-			return err
-		}
-		var state string
-		err := tx.QueryRowContext(ctx, `SELECT state FROM space_run_actions WHERE run_id=$1 AND action_kind=$2 AND details->>'node_id'=$3 AND details->>'action_digest'=$4 ORDER BY created_at DESC LIMIT 1`, runID, actionKind, nodeID, digest).Scan(&state)
-		if err == nil {
-			approved = state == "approved" || state == "completed"
-			if !approved && state == "proposed" {
-				_, err = tx.ExecContext(ctx, `UPDATE space_runs SET state='awaiting_approval',updated_at=NOW() WHERE id=$1`, runID)
-			}
-			return err
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		actionID, approvalID := "runaction_"+uuid.NewString(), "runapproval_"+uuid.NewString()
-		details := mustJSON(map[string]any{"node_id": nodeID, "action_digest": digest, "input": json.RawMessage(input)})
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_run_actions(id,run_id,action_kind,summary,details,destructive,state) VALUES($1,$2,$3,$4,$5,TRUE,'proposed')`, actionID, runID, actionKind, "Approve "+actionKind, details); err != nil {
-			return err
-		}
-		proposed := mustJSON([]map[string]any{{"node_id": nodeID, "action_kind": actionKind, "action_digest": digest, "input": json.RawMessage(input)}})
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_run_approvals(id,run_id,requested_from_user_id,action_summary,proposed_actions) VALUES($1,$2,$3,$4,$5)`, approvalID, runID, userID, "Approve "+actionKind, proposed); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='awaiting_approval',updated_at=NOW() WHERE id=$1`, runID); err != nil {
-			return err
-		}
-		return nil
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrSpaceNotFound
-	}
-	return approved, err
-}
-
-// NotifyWorkflowResult acknowledges a private notification node for the run's
-// requesting member. The node records nothing beyond the run's own checkpoint:
-// the Space inbox it once wrote to had no reader.
-func (db *Database) NotifyWorkflowResult(ctx context.Context, runID, nodeID string, payload json.RawMessage) (string, error) {
-	eventID := "workflow_node_" + uuid.NewString()
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var owned bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_runs WHERE id=$1 AND requesting_member_id=misty_rls_user_id())`, runID).Scan(&owned); err != nil {
-			return err
-		}
-		if !owned {
-			return ErrSpaceNotFound
-		}
-		return nil
-	})
-	return eventID, err
 }
 
 func (db *Database) CheckpointWorkflowStep(ctx context.Context, runID string, event workflowv2.StepEvent) error {
@@ -156,10 +51,6 @@ func (db *Database) CheckpointWorkflowStep(ctx context.Context, runID string, ev
 			_, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='running',attempt=$2,next_retry_at=NULL,updated_at=NOW() WHERE id=$1 AND state IN ('queued','running','cooldown')`, runID, event.Attempt)
 			return err
 		}
-		if event.State == workflowv2.StepAwaitingApproval {
-			_, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='awaiting_approval',next_retry_at=NULL,updated_at=NOW() WHERE id=$1 AND state IN ('running','awaiting_approval')`, runID)
-			return err
-		}
 		return nil
 	})
 }
@@ -183,100 +74,3 @@ func workflowErrorCode(err error) string {
 	return "node_failed"
 }
 
-func (db *Database) JournalWorkflowAction(ctx context.Context, runID, nodeID, idempotencyKey, provider string, risk workflowv2.Risk, request json.RawMessage, execute func() (json.RawMessage, error)) (json.RawMessage, error) {
-	if len(request) == 0 {
-		request = json.RawMessage(`{}`)
-	}
-	if runID == "" || nodeID == "" || idempotencyKey == "" || execute == nil || !json.Valid(request) {
-		return nil, ErrSpaceInvalid
-	}
-	var existing json.RawMessage
-	claimed := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		inserted, err := tx.ExecContext(ctx, `INSERT INTO space_workflow_action_journal(idempotency_key,run_id,node_id,provider,risk,state,request)
-   VALUES($1,$2,$3,$4,$5,'started',$6) ON CONFLICT DO NOTHING`, idempotencyKey, runID, nodeID, provider, risk, request)
-		if err != nil {
-			return err
-		}
-		n, err := inserted.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if n == 1 {
-			claimed = true
-			return nil
-		}
-		var state, existingRun, existingNode, existingProvider, existingRisk string
-		var same bool
-		if err := tx.QueryRowContext(ctx, `SELECT state,result,run_id,node_id,provider,risk,request=$2::jsonb FROM space_workflow_action_journal WHERE idempotency_key=$1 FOR UPDATE`, idempotencyKey, request).Scan(&state, &existing, &existingRun, &existingNode, &existingProvider, &existingRisk, &same); err != nil {
-			return err
-		}
-		if existingRun != runID || existingNode != nodeID || existingProvider != provider || existingRisk != string(risk) || !same {
-			return ErrSpaceConflict
-		}
-		switch state {
-		case "completed":
-			return nil
-		case "started":
-			return ErrAgentToolboxActionInProgress
-		case "unknown":
-			return ErrAgentToolboxActionUnknown
-		case "failed":
-			if risk != workflowv2.RiskRead {
-				return ErrAgentToolboxActionUnknown
-			}
-			_, err := tx.ExecContext(ctx, `UPDATE space_workflow_action_journal SET state='started',updated_at=NOW() WHERE idempotency_key=$1`, idempotencyKey)
-			claimed = err == nil
-			return err
-		default:
-			return ErrSpaceConflict
-		}
-	})
-	if err != nil {
-		return nil, err
-	}
-	if !claimed {
-		return existing, nil
-	}
-	result, executeErr := execute()
-	if len(result) == 0 || !json.Valid(result) {
-		result = json.RawMessage(`{}`)
-		if executeErr == nil {
-			executeErr = workflowv2.ErrOutputInvalid
-		}
-	}
-	state, code := "completed", ""
-	if executeErr != nil {
-		state, code = "failed", workflowErrorCode(executeErr)
-		if risk != workflowv2.RiskRead {
-			state, code = "unknown", "tool_outcome_unknown"
-		}
-	}
-	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancel()
-	err = db.TestingSpaceTx(finishCtx, func(tx *sql.Tx) error {
-		updated, err := tx.ExecContext(finishCtx, `UPDATE space_workflow_action_journal SET state=$1,result=$2,error_code=NULLIF($3,''),updated_at=NOW() WHERE idempotency_key=$4 AND state='started'`, state, result, code, idempotencyKey)
-		if err != nil {
-			return err
-		}
-		n, err := updated.RowsAffected()
-		if err == nil && n != 1 {
-			return ErrAgentToolboxActionUnknown
-		}
-		return err
-	})
-	if err != nil {
-		return nil, errors.Join(ErrAgentToolboxActionUnknown, err)
-	}
-	if state == "unknown" {
-		return nil, errors.Join(ErrAgentToolboxActionUnknown, executeErr)
-	}
-	return result, executeErr
-}
-
-func (db *Database) ReleaseWorkflowResourceLease(ctx context.Context, runID, nodeID, resourceKey string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `DELETE FROM space_workflow_resource_leases WHERE resource_key=$1 AND run_id=$2 AND node_id=$3`, resourceKey, runID, nodeID)
-		return err
-	})
-}

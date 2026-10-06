@@ -44,15 +44,17 @@ func TestBuiltInSpaceTemplatesHaveStableBetaContracts(t *testing.T) {
 }
 
 func TestNormalizeSetupProvidersRejectsUnknownAndDeduplicates(t *testing.T) {
-	got, err := TestingNormalizeSetupProviders([]string{"notion", "discord", "NOTION", "google"})
+	got, err := TestingNormalizeSetupProviders([]string{"google", " GOOGLE "})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"discord", "google", "notion"}; !reflect.DeepEqual(got, want) {
+	if want := []string{"google"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("providers = %#v, want %#v", got, want)
 	}
-	if _, err := TestingNormalizeSetupProviders([]string{"slack"}); err == nil {
-		t.Fatal("unknown beta provider was accepted")
+	for _, retired := range []string{"notion", "discord", "slack"} {
+		if _, err := TestingNormalizeSetupProviders([]string{retired}); err == nil {
+			t.Fatalf("retired provider %q was accepted", retired)
+		}
 	}
 }
 

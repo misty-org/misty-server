@@ -22,7 +22,6 @@ const (
 const (
 	NoteRoleCreator = "creator"
 	NoteRoleEditor  = "editor"
-	NoteRoleViewer  = "viewer"
 )
 
 // NoteAccess is the single answer to "what may this user do with this note".

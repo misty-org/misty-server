@@ -27,11 +27,28 @@ type AIInvocationContext struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
-func (db *Database) AttachAIInvocationContext(ctx context.Context, userID, invocationID, spaceID, deviceID, kind, opaqueRef, displayName string, capabilities, metadata json.RawMessage) (*AIInvocationContext, error) {
+// DeviceRunGrantRecord is the signed grant a context keeps so its device jobs
+// can carry it to the target device, which verifies it again.
+type DeviceRunGrantRecord struct {
+	Payload           []byte
+	Signature         string
+	RequesterDeviceID string
+}
+
+func (db *Database) AttachAIInvocationContext(ctx context.Context, userID, invocationID, spaceID, deviceID, kind, opaqueRef, displayName string, capabilities, metadata json.RawMessage, grants ...*DeviceRunGrantRecord) (*AIInvocationContext, error) {
+	var grant *DeviceRunGrantRecord
+	if len(grants) > 0 {
+		grant = grants[0]
+	}
+	var grantPayload []byte
+	var grantSignature, grantRequester string
+	if grant != nil {
+		grantPayload, grantSignature, grantRequester = grant.Payload, grant.Signature, grant.RequesterDeviceID
+	}
 	spaceID = ""
 	kind, opaqueRef, displayName = strings.TrimSpace(kind), strings.TrimSpace(opaqueRef), strings.TrimSpace(displayName)
 	capabilities, err := normalizeDeviceAgentCapabilities(capabilities)
-	if err != nil || kind != "browser_tab" || opaqueRef == "" || len(opaqueRef) > 512 || !browserOnlyAgentCapabilities(capabilities) {
+	if err != nil || opaqueRef == "" || len(opaqueRef) > 512 || !DeviceContextCapabilitiesAllowed(kind, capabilities) {
 		return nil, ErrSpaceInvalid
 	}
 	if len(metadata) == 0 {
@@ -60,9 +77,9 @@ func (db *Database) AttachAIInvocationContext(ctx context.Context, userID, invoc
 			}
 			return ErrDeviceNotFound
 		}
-		return tx.QueryRowContext(ctx, `INSERT INTO ai_invocation_contexts(id,invocation_id,user_id,space_id,device_id,kind,opaque_ref,display_name,capabilities,metadata)
-			VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10)
-			RETURNING state,expires_at,created_at,updated_at`, out.ID, out.InvocationID, out.UserID, out.SpaceID, out.DeviceID, out.Kind, out.OpaqueRef, out.DisplayName, out.Capabilities, out.Metadata).
+		return tx.QueryRowContext(ctx, `INSERT INTO ai_invocation_contexts(id,invocation_id,user_id,space_id,device_id,kind,opaque_ref,display_name,capabilities,metadata,run_grant_payload,run_grant_signature,requester_device_id)
+			VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,NULLIF($12,''),NULLIF($13,''))
+			RETURNING state,expires_at,created_at,updated_at`, out.ID, out.InvocationID, out.UserID, out.SpaceID, out.DeviceID, out.Kind, out.OpaqueRef, out.DisplayName, out.Capabilities, out.Metadata, grantPayload, grantSignature, grantRequester).
 			Scan(&out.State, &out.ExpiresAt, &out.CreatedAt, &out.UpdatedAt)
 	})
 	return out, err

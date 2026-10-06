@@ -10,8 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const CreditMeterMediaSearchMinute = "media_search_minute"
-
 const LegacyMediaSearchDeviceID = "device_00000000000000000000000000000000"
 
 type MediaSearchAsset struct {
@@ -183,7 +181,11 @@ func (db *Database) FailMediaSearchChunk(userID, deviceID, assetID string, chunk
 	})
 }
 
-func (db *Database) SearchMedia(userID, deviceID, query string, embedding []float64, limit int) ([]MediaSearchHit, error) {
+func (db *Database) SearchMedia(userID, deviceID, query string, embedding []float64, limit int, embeddingModels ...string) ([]MediaSearchHit, error) {
+	embeddingModel := "google/gemini-embedding-2"
+	if len(embeddingModels) > 0 {
+		embeddingModel = embeddingModels[0]
+	}
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return []MediaSearchHit{}, nil
@@ -202,11 +204,11 @@ func (db *Database) SearchMedia(userID, deviceID, query string, embedding []floa
 		}
 		vector = formatted
 	}
-	sqlQuery := `WITH lexical AS (SELECT id,LEAST(1.0,ts_rank_cd(search_tsv,websearch_to_tsquery('simple',$3))*4.0+CASE WHEN lower(content) LIKE '%'||lower($3)||'%' THEN .45 ELSE 0 END) score FROM media_search_segments WHERE user_id=$1 AND device_id=$2 AND search_tsv@@websearch_to_tsquery('simple',$3) ORDER BY score DESC LIMIT $5), semantic AS (SELECT id,GREATEST(0.0,1.0-(embedding<=>$4::vector)) score FROM media_search_segments WHERE user_id=$1 AND device_id=$2 AND $4 IS NOT NULL AND embedding IS NOT NULL ORDER BY embedding<=>$4::vector LIMIT $5), candidates AS (SELECT id FROM lexical UNION SELECT id FROM semantic) SELECT s.id,s.asset_id,a.media_type,s.segment_kind,s.start_ms,s.end_ms,s.content,s.transcript,s.visual_description,s.visible_text,COALESCE(l.score,0),COALESCE(v.score,0),(CASE WHEN $4 IS NULL THEN COALESCE(l.score,0) ELSE .68*COALESCE(v.score,0)+.32*COALESCE(l.score,0) END) final_score FROM candidates c JOIN media_search_segments s ON s.id=c.id AND s.user_id=$1 AND s.device_id=$2 JOIN media_search_assets a ON a.user_id=s.user_id AND a.device_id=s.device_id AND a.asset_id=s.asset_id LEFT JOIN lexical l ON l.id=s.id LEFT JOIN semantic v ON v.id=s.id ORDER BY final_score DESC,s.start_ms LIMIT $6`
+	sqlQuery := `WITH lexical AS (SELECT id,LEAST(1.0,ts_rank_cd(search_tsv,websearch_to_tsquery('simple',$3))*4.0+CASE WHEN lower(content) LIKE '%'||lower($3)||'%' THEN .45 ELSE 0 END) score FROM media_search_segments WHERE user_id=$1 AND device_id=$2 AND search_tsv@@websearch_to_tsquery('simple',$3) ORDER BY score DESC LIMIT $5), semantic AS (SELECT id,GREATEST(0.0,1.0-(embedding<=>$4::vector)) score FROM media_search_segments WHERE user_id=$1 AND device_id=$2 AND $4 IS NOT NULL AND embedding IS NOT NULL AND embedding_model=$7 ORDER BY embedding<=>$4::vector LIMIT $5), candidates AS (SELECT id FROM lexical UNION SELECT id FROM semantic) SELECT s.id,s.asset_id,a.media_type,s.segment_kind,s.start_ms,s.end_ms,s.content,s.transcript,s.visual_description,s.visible_text,COALESCE(l.score,0),COALESCE(v.score,0),(CASE WHEN $4 IS NULL THEN COALESCE(l.score,0) ELSE .68*COALESCE(v.score,0)+.32*COALESCE(l.score,0) END) final_score FROM candidates c JOIN media_search_segments s ON s.id=c.id AND s.user_id=$1 AND s.device_id=$2 JOIN media_search_assets a ON a.user_id=s.user_id AND a.device_id=s.device_id AND a.asset_id=s.asset_id LEFT JOIN lexical l ON l.id=s.id LEFT JOIN semantic v ON v.id=s.id ORDER BY final_score DESC,s.start_ms LIMIT $6`
 	hits := []MediaSearchHit{}
 	err := db.TestingWithRLSContext(context.Background(), TestingServiceRLSSettings(), func(tx *sql.Tx) error {
 		_, _ = tx.Exec(`SET LOCAL hnsw.iterative_scan='strict_order'`)
-		rows, err := tx.Query(sqlQuery, userID, deviceID, query, vector, max(80, limit*8), limit)
+		rows, err := tx.Query(sqlQuery, userID, deviceID, query, vector, max(80, limit*8), limit, embeddingModel)
 		if err != nil {
 			return err
 		}

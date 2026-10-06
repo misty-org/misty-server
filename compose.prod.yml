@@ -97,12 +97,10 @@ services:
       MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:?set MISTY_AGENT_RUNTIME_CONTROL_SECRET}
       MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
       AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
-      MISTY_AGENT_MODEL_PROVIDER: ${MISTY_AGENT_MODEL_PROVIDER:-gateway}
       MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
-      MISTY_AGENT_MODEL_API_KEY: ${MISTY_AGENT_MODEL_API_KEY:-}
-      MISTY_AGENT_MODEL_BASE_URL: ${MISTY_AGENT_MODEL_BASE_URL:-}
     depends_on:
       agent-runtime-setup:
         condition: service_completed_successfully
@@ -127,17 +125,13 @@ services:
         required: false
       - path: .env/prod/integrations/ai.env
         required: false
-      - path: .env/prod/integrations/discord.env
+      - path: .env/prod/composio.env
+        required: false
+      - path: .env/prod/integrations/composio.env
         required: false
       - path: .env/prod/integrations/dropbox.env
         required: false
       - path: .env/prod/integrations/email.env
-        required: false
-      - path: .env/prod/integrations/figma.env
-        required: false
-      - path: .env/prod/integrations/github.env
-        required: false
-      - path: .env/prod/integrations/instagram.env
         required: false
       - path: .env/prod/integrations/google.env
         required: false

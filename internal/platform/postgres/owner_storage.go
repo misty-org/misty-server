@@ -3,17 +3,20 @@ package db
 import (
 	"context"
 	"database/sql"
+	"github.com/kannachi323/misty/server/internal/cloudusage"
+	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 	"time"
 )
 
 // StorageQuotaDimension is the additive, explicit representation used by new
 // clients. The older flat fields remain populated on the containing response.
 type StorageQuotaDimension struct {
-	UsedBytes      int64 `json:"used_bytes"`
-	ReservedBytes  int64 `json:"reserved_bytes"`
-	LimitBytes     int64 `json:"limit_bytes"`
-	RemainingBytes int64 `json:"remaining_bytes"`
-	OverQuota      bool  `json:"over_quota"`
+	PercentageUsed float64 `json:"percentage_used"`
+	UsedBytes      int64   `json:"used_bytes"`
+	ReservedBytes  int64   `json:"reserved_bytes"`
+	LimitBytes     int64   `json:"limit_bytes"`
+	RemainingBytes int64   `json:"remaining_bytes"`
+	OverQuota      bool    `json:"over_quota"`
 }
 
 // OwnerStorageUsage is retained as the public compatibility type and method
@@ -36,9 +39,6 @@ type OwnerStorageUsage struct {
 	Personal           StorageQuotaDimension    `json:"personal"`
 }
 
-// PersonalStorageUsage is the preferred domain name for new callers.
-type PersonalStorageUsage = OwnerStorageUsage
-
 type OwnerSpaceStorageUsage struct {
 	SpaceID       string `json:"space_id"`
 	Name          string `json:"name"`
@@ -47,33 +47,17 @@ type OwnerSpaceStorageUsage struct {
 }
 
 func personalStorageUsageTx(ctx context.Context, tx *sql.Tx, userID string) (OwnerStorageUsage, error) {
-	entitlements, err := entitlementsForUserTx(ctx, tx, userID, time.Now())
+	adapter, err := envconfig.BillingAdapter()
 	if err != nil {
 		return OwnerStorageUsage{}, err
 	}
-	out := OwnerStorageUsage{OwnerUserID: userID, UserID: userID, Version: 1, Spaces: []OwnerSpaceStorageUsage{}}
-	if err := tx.QueryRowContext(ctx, `SELECT
-		COALESCE((SELECT sum(c.logical_bytes)
-			FROM space_storage_contributions c JOIN spaces s ON s.id=c.space_id
-			WHERE c.user_id=$1 AND c.state IN ('active','recovery') AND s.lifecycle_state='active'),0),
-		COALESCE((SELECT sum(r.reserved_bytes)
-			FROM space_upload_reservations r JOIN spaces s ON s.id=r.space_id
-			WHERE r.user_id=$1 AND r.state='active' AND s.lifecycle_state='active'),0)
-		+ COALESCE((SELECT sum(r.reserved_bytes)
-			FROM space_rendition_reservations r JOIN spaces s ON s.id=r.space_id
-			WHERE r.user_id=$1 AND r.state='active' AND s.lifecycle_state='active'),0)`, userID).
-		Scan(&out.UsedBytes, &out.ReservedBytes); err != nil {
+	measured, err := cloudusage.Check(ctx, tx, adapter, userID, "storage.check", nil)
+	if err != nil {
 		return OwnerStorageUsage{}, err
 	}
-	out.BillingAvailable = entitlements.BillingAvailable
-	out.LimitBytes = entitlements.PersonalStorageLimitBytes
-	out.RemainingBytes = remainingStorageBytes(out.UsedBytes, out.ReservedBytes, out.LimitBytes)
-	out.OverQuota = out.UsedBytes+out.ReservedBytes > out.LimitBytes
-	out.Personal = StorageQuotaDimension{
-		UsedBytes: out.UsedBytes, ReservedBytes: out.ReservedBytes,
-		LimitBytes: out.LimitBytes, RemainingBytes: out.RemainingBytes,
-		OverQuota: out.OverQuota,
-	}
+	out := OwnerStorageUsage{OwnerUserID: userID, UserID: userID, Version: 1, Spaces: []OwnerSpaceStorageUsage{}, BillingAvailable: true,
+		UsedBytes: measured.UsedBytes, ReservedBytes: measured.ReservedBytes, LimitBytes: measured.LimitBytes, RemainingBytes: measured.RemainingBytes, OverQuota: measured.OverQuota}
+	out.Personal = StorageQuotaDimension{UsedBytes: measured.UsedBytes, ReservedBytes: measured.ReservedBytes, LimitBytes: measured.LimitBytes, RemainingBytes: measured.RemainingBytes, OverQuota: measured.OverQuota, PercentageUsed: measured.PercentageUsed}
 	return out, nil
 }
 
@@ -111,8 +95,4 @@ func (db *Database) OwnerStorageUsage(ctx context.Context, userID string) (*Owne
 		return rows.Err()
 	})
 	return &out, err
-}
-
-func (db *Database) PersonalStorageUsage(ctx context.Context, userID string) (*PersonalStorageUsage, error) {
-	return db.OwnerStorageUsage(ctx, userID)
 }

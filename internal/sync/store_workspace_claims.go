@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/kannachi323/misty/server/internal/cloudusage"
 
 	"github.com/google/uuid"
 )
@@ -71,7 +72,7 @@ func (db *Store) ClaimBrowserSyncWorkspace(ctx context.Context, userID string, c
 	if err = notifySync(ctx, w.tx, userID, c.VaultID, "browser-presence"); err != nil {
 		return nil, err
 	}
-	if err = w.tx.Commit(); err != nil {
+	if err = cloudusage.Commit(ctx, w.tx); err != nil {
 		return nil, err
 	}
 	return &SyncReceipt{OperationID: c.OperationID, Sequence: w.head}, nil

@@ -12,12 +12,12 @@ import (
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 )
 
-func TestStorageEntitlementsNeverDefaultToUnlimited(t *testing.T) {
+func TestDisabledBillingDoesNotInventStoragePolicy(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "development")
 	t.Setenv("MISTY_BILLING_ADAPTER", "none")
 	limits, err := entitlementsForUserTx(context.Background(), nil, "account", time.Now())
-	if err != nil || limits.PersonalStorageLimitBytes != 2_000_000_000 || limits.SpaceStorageLimitBytes != 2_000_000_000 {
-		t.Fatalf("finite default limits: %+v, %v", limits, err)
+	if err != nil || limits.PersonalStorageLimitBytes != 0 || limits.SpaceStorageLimitBytes != 0 {
+		t.Fatalf("disabled billing metadata: %+v, %v", limits, err)
 	}
 }
 

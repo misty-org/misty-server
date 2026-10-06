@@ -135,7 +135,7 @@ func TestSpaceRoutesShareOneBudgetPerRouteShape(t *testing.T) {
 	allowed := 0
 	for i := 0; i < 100; i++ {
 		// A different Space each time must not mint a fresh sync budget: the
-		// upstream Google/Discord cost is per call, not per Space.
+		// upstream calendar cost is per call, not per Space.
 		path := fmt.Sprintf("/spaces/space_%036d/calendar/sync", i)
 		request := httptest.NewRequest(http.MethodPost, path, nil)
 		request.RemoteAddr = "203.0.113.7:1234"
@@ -152,12 +152,9 @@ func TestSpaceRoutesShareOneBudgetPerRouteShape(t *testing.T) {
 
 func TestProviderRoutesNormalizeToTheirPolicy(t *testing.T) {
 	cases := map[string]string{
-		"/api/spaces/space_abcdefabcdefabcdef/calendar/sync":                                       "/spaces/{spaceID}/calendar/sync",
-		"/spaces/space_abcdefabcdefabcdef/integrations/discord/link":                               "/spaces/{spaceID}/integrations/discord/link",
-		"/spaces/space_abcdefabcdefabcdef/integrations/discord/link/discordlink_x1x2x3x4x5x6/sync": "/spaces/{spaceID}/integrations/discord/link/{id}/sync",
-		"/spaces/space_abcdefabcdefabcdef/integrations/notion/search":                              "/spaces/{spaceID}/integrations/notion/search",
-		"/spaces/space_abcdefabcdefabcdef/integrations/discord/authorize":                          "/spaces/{spaceID}/integrations/{provider}/authorize",
-		"/spaces/space_abcdefabcdefabcdef/tasks/calendar":                                          "/spaces/{spaceID}/tasks/calendar",
+		"/api/spaces/space_abcdefabcdefabcdef/calendar/sync": "/spaces/{spaceID}/calendar/sync",
+		"/connections/google/authorize":                      "/connections/{provider}/authorize",
+		"/spaces/space_abcdefabcdefabcdef/tasks/calendar":    "/spaces/{spaceID}/tasks/calendar",
 	}
 	for input, want := range cases {
 		if got := TestingNormalizeRateLimitPath(input); got != want {

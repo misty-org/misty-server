@@ -12,10 +12,9 @@ import (
 )
 
 const (
-	DrawingLifecycleActive   = "active"
-	DrawingLifecycleDeleting = "deleting"
-	DrawingRoleCreator       = "creator"
-	DrawingRoleEditor        = "editor"
+	DrawingLifecycleActive = "active"
+	DrawingRoleCreator     = "creator"
+	DrawingRoleEditor      = "editor"
 )
 
 // DrawingAccess is the authoritative capability set for one caller.

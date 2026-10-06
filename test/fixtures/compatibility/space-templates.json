@@ -18,8 +18,7 @@
     "description": "Organize a class project from brief to delivery.",
     "version": 1,
     "recommended_integrations": [
-      "google",
-      "notion"
+      "google"
     ],
     "seed_summary": {
       "task_count": 3,
@@ -39,8 +38,7 @@
     "description": "Keep an early team aligned around customers and outcomes.",
     "version": 1,
     "recommended_integrations": [
-      "google",
-      "notion"
+      "google"
     ],
     "seed_summary": {
       "task_count": 3,
@@ -60,8 +58,7 @@
     "description": "Collect sources, coordinate work, and track outputs.",
     "version": 1,
     "recommended_integrations": [
-      "google",
-      "notion"
+      "google"
     ],
     "seed_summary": {
       "task_count": 3,
@@ -80,9 +77,7 @@
     "name": "Game Development",
     "description": "Coordinate a small game team around the next playable build.",
     "version": 1,
-    "recommended_integrations": [
-      "discord"
-    ],
+    "recommended_integrations": [],
     "seed_summary": {
       "task_count": 3,
       "note_count": 1,
@@ -103,10 +98,7 @@
     "name": "Creative Team",
     "description": "Move a shared brief through review and delivery.",
     "version": 1,
-    "recommended_integrations": [
-      "discord",
-      "notion"
-    ],
+    "recommended_integrations": [],
     "seed_summary": {
       "task_count": 3,
       "note_count": 1,

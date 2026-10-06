@@ -2,23 +2,20 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 
 	. "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
 func TestSmartLibraryAnalyzerRoutesLowConfidenceToSingleFallback(t *testing.T) {
 	var mu sync.Mutex
 	models := []string{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&request)
-		model, _ := request["model"].(string)
+	runtime := modelruntime.TestingNewFake(t, func(call modelruntime.TestingCall) (int, any) {
+		model, _ := call.Body["model"].(string)
 		mu.Lock()
 		models = append(models, model)
 		mu.Unlock()
@@ -26,7 +23,7 @@ func TestSmartLibraryAnalyzerRoutesLowConfidenceToSingleFallback(t *testing.T) {
 		if model == SmartLibraryFallbackModel {
 			confidence = .9
 		}
-		content, _ := json.Marshal(map[string]any{"assets": []map[string]any{{
+		assets := []map[string]any{{
 			"assetId": "asset_1", "contentType": "product photograph", "primarySubject": "blue ceramic cup",
 			"description": "A blue ceramic cup on a wooden table beside a bright window.",
 			"tags":        []string{"blue", "ceramic", "cup", "table", "product"}, "searchTerms": []string{"blue cup", "ceramic mug", "tabletop product", "kitchenware", "window light"},
@@ -34,11 +31,10 @@ func TestSmartLibraryAnalyzerRoutesLowConfidenceToSingleFallback(t *testing.T) {
 			"objects": []string{"cup", "table", "window"}, "scenes": []string{"tabletop"}, "activities": []string{},
 			"colors": []string{"blue", "brown"}, "visibleText": []string{}, "topics": []string{"kitchenware"},
 			"suggestedCollections": []string{"Product photos"}, "confidence": confidence,
-		}}})
-		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]any{"content": string(content)}}}, "usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5}})
-	}))
-	defer server.Close()
-	analyzer := SmartLibraryAnalyzer{APIKey: "key", BaseURL: server.URL, ConfidenceThreshold: .55}
+		}}
+		return http.StatusOK, map[string]any{"object": map[string]any{"assets": assets}, "usage": map[string]int{"inputTokens": 10, "outputTokens": 5}}
+	})
+	analyzer := SmartLibraryAnalyzer{Models: runtime.Client, ConfidenceThreshold: .55}
 	result, err := analyzer.Analyze(context.Background(), []SmartLibraryImage{{AssetID: "asset_1", AssetKind: "image", MimeType: "image/jpeg", Bytes: []byte("preview")}})
 	if err != nil {
 		t.Fatal(err)
@@ -59,35 +55,20 @@ func TestSmartLibraryAnalyzerNeverRoutesToPremiumModels(t *testing.T) {
 	}
 }
 
-func TestSmartLibraryMultimodalEmbeddingUsesGatewayPartsAnd768Dimensions(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/embeddings" {
-			t.Fatalf("path=%s", r.URL.Path)
+func TestSmartLibraryMultimodalEmbeddingSendsTheImageAnd768Dimensions(t *testing.T) {
+	runtime := modelruntime.TestingNewFake(t, func(call modelruntime.TestingCall) (int, any) {
+		images, _ := call.Body["images"].([]any)
+		values, _ := call.Body["values"].([]any)
+		if call.Path != "/v1/models/embed" || call.Body["model"] != SmartLibraryEmbeddingModel || call.Body["dimensions"] != float64(SmartLibraryEmbeddingDims) || len(values) != 1 || len(images) != 1 {
+			t.Fatalf("call=%s %v", call.Path, call.Body)
 		}
-		var request struct {
-			Model      string `json:"model"`
-			Dimensions int    `json:"dimensions"`
-			Input      []struct {
-				Type     string `json:"type"`
-				Text     string `json:"text"`
-				ImageURL struct {
-					URL string `json:"url"`
-				} `json:"image_url"`
-			} `json:"input"`
+		image, _ := images[0].(map[string]any)
+		if values[0] == "" || image["mediaType"] != "image/jpeg" || image["data"] == "" {
+			t.Fatalf("missing multimodal content: %v", call.Body)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Fatal(err)
-		}
-		if request.Model != SmartLibraryEmbeddingModel || request.Dimensions != SmartLibraryEmbeddingDims || len(request.Input) != 2 || request.Input[0].Type != "text" || request.Input[1].Type != "image_url" {
-			t.Fatalf("request=%+v", request)
-		}
-		if request.Input[0].Text == "" || request.Input[1].ImageURL.URL == "" {
-			t.Fatalf("missing multimodal content: %+v", request)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"embedding": make([]float64, SmartLibraryEmbeddingDims)}}, "usage": map[string]any{"prompt_tokens": 266}})
-	}))
-	defer server.Close()
-	analyzer := SmartLibraryAnalyzer{APIKey: "key", BaseURL: server.URL}
+		return http.StatusOK, map[string]any{"embeddings": [][]float64{make([]float64, SmartLibraryEmbeddingDims)}, "usage": map[string]int{"inputTokens": 266}}
+	})
+	analyzer := SmartLibraryAnalyzer{Models: runtime.Client}
 	asset := SmartLibraryAsset{AssetID: "asset_1", AssetKind: "image", MimeType: "image/jpeg", Bytes: []byte("preview")}
 	metadata := SmartLibraryMetadata{AssetID: "asset_1", PrimarySubject: "desktop", Description: "A desktop interface with mascot artwork"}
 	embeddings, usage, err := analyzer.EmbedAssets(context.Background(), []SmartLibraryAsset{asset}, map[string]SmartLibraryMetadata{"asset_1": metadata})

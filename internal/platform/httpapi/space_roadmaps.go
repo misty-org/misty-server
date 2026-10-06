@@ -77,13 +77,6 @@ func (s *SpacesService) SpaceRoadmapNodeDefinitions() http.HandlerFunc {
 		}
 		spaceID := chi.URLParam(r, "spaceID")
 		switch r.Method {
-		case http.MethodGet:
-			items, err := s.database.SpaceRoadmapNodeDefinitions(r.Context(), userID, spaceID)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"node_definitions": items})
 		case http.MethodPost:
 			var body db.SpaceRoadmapNodeDefinition
 			if decodeJSON(w, r, &body) != nil {

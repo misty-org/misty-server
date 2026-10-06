@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"time"
@@ -95,16 +96,24 @@ func (db *Database) QueueAIInvocationDeviceNodeJob(ctx context.Context, userID, 
 		var contextID, deviceID string
 		var contextCapabilities json.RawMessage
 		var contextExpiresAt time.Time
-		if err := tx.QueryRowContext(ctx, `SELECT c.id,c.device_id,c.capabilities,c.expires_at FROM ai_invocations i
+		var grantPayload []byte
+		var grantSignature sql.NullString
+		if err := tx.QueryRowContext(ctx, `SELECT c.id,c.device_id,c.capabilities,c.expires_at,c.run_grant_payload,c.run_grant_signature FROM ai_invocations i
 			JOIN ai_invocation_contexts c ON c.invocation_id=i.id AND c.user_id=$1
 				AND c.opaque_ref=$3 AND c.state='attached' AND c.expires_at>NOW() AND c.capabilities ? $4
 			JOIN trusted_devices d ON d.id=c.device_id AND d.user_id=$1 AND d.revoked_at IS NULL AND d.last_seen_at>NOW()-INTERVAL '90 seconds'
-			WHERE i.id=$2 AND i.user_id=$1 AND i.state IN ('running','awaiting_approval') ORDER BY c.updated_at DESC LIMIT 1`, userID, invocationID, scopeID, capability).Scan(&contextID, &deviceID, &contextCapabilities, &contextExpiresAt); errors.Is(err, sql.ErrNoRows) {
+			WHERE i.id=$2 AND i.user_id=$1 AND i.state IN ('running','awaiting_approval') ORDER BY c.updated_at DESC LIMIT 1`, userID, invocationID, scopeID, capability).Scan(&contextID, &deviceID, &contextCapabilities, &contextExpiresAt, &grantPayload, &grantSignature); errors.Is(err, sql.ErrNoRows) {
 			return ErrDeviceNotFound
 		} else if err != nil {
 			return err
 		}
-		contextConfig := mustJSON(map[string]any{"contextId": contextID, "contextCapabilities": contextCapabilities, "contextExpiresAt": contextExpiresAt})
+		contextData := map[string]any{"contextId": contextID, "contextCapabilities": contextCapabilities, "contextExpiresAt": contextExpiresAt}
+		// The target device re-verifies the requesting device's signed grant
+		// before it acts; the server only carries it.
+		if len(grantPayload) > 0 && grantSignature.Valid {
+			contextData["runGrant"] = map[string]string{"payload": base64.StdEncoding.EncodeToString(grantPayload), "signature": grantSignature.String}
+		}
+		contextConfig := mustJSON(contextData)
 		return scanWorkflowDeviceJob(tx.QueryRowContext(ctx, `INSERT INTO workflow_device_node_jobs(id,invocation_id,node_id,attempt,user_id,scope_id,operation,input,config,input_schema,output_schema,ai_context_id,assigned_device_id,deadline_at,runtime_run_id,required_capability)
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb||$10::jsonb,$11,$12,$13,$14,$15,$16,$17)
 			ON CONFLICT(invocation_id,node_id,attempt) WHERE invocation_id IS NOT NULL DO UPDATE SET invocation_id=EXCLUDED.invocation_id

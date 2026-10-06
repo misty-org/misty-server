@@ -8,15 +8,18 @@ const scheduleOwnerEnabled = `COALESCE((SELECT s.enabled FROM ai_user_settings s
 
 // Idle schedules use the next_run_at index. A running claim is due again only
 // when its lease lapses; a running row without a lease cannot be claimed.
-func scheduleDeadline(table string) string {
-	return `(SELECT t.next_run_at AS due FROM ` + table + ` t WHERE t.enabled AND t.state<>'running' AND ` + scheduleOwnerEnabled + `
+func scheduleDeadline(table, claimable string) string {
+	return `(SELECT t.next_run_at AS due FROM ` + table + ` t WHERE t.enabled AND t.state<>'running' AND ` + scheduleOwnerEnabled + claimable + `
   ORDER BY t.next_run_at LIMIT 1)
  UNION ALL
  (SELECT GREATEST(t.next_run_at,t.lease_until) AS due FROM ` + table + ` t WHERE t.enabled AND t.state='running' AND t.lease_until IS NOT NULL
-  AND ` + scheduleOwnerEnabled + ` ORDER BY 1 LIMIT 1)`
+  AND ` + scheduleOwnerEnabled + claimable + ` ORDER BY 1 LIMIT 1)`
 }
 
-var scheduledWorkerDeadline = `SELECT min(due) FROM (` + scheduleDeadline("ai_recaps") + ` UNION ALL ` + scheduleDeadline("scheduled_tasks") + `) pending`
+// A turned-off workflow keeps its schedule, but the claim skips it.
+const workflowEnabled = ` AND EXISTS(SELECT 1 FROM agent_methods m WHERE m.id=t.method_id AND m.user_id=t.user_id AND m.enabled)`
+
+var scheduledWorkerDeadline = `SELECT min(due) FROM (` + scheduleDeadline("ai_recaps", "") + ` UNION ALL ` + scheduleDeadline("workflow_schedules", workflowEnabled) + `) pending`
 
 const aiCleanupWorkerDeadline = `SELECT available_at FROM ai_cleanup_jobs
  WHERE state IN ('queued','failed') AND attempts<20 ORDER BY available_at,created_at LIMIT 1`

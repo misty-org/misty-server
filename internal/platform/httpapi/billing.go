@@ -97,11 +97,6 @@ func GetBillingUsage(database *db.Database) http.HandlerFunc {
 	return getBillingUsage(database, true)
 }
 
-// GetAIUsage reads only the account allowance, independent of Space storage.
-func GetAIUsage(database *db.Database) http.HandlerFunc {
-	return getBillingUsage(database, false)
-}
-
 func getBillingUsage(database *db.Database, includeStorage bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -120,9 +115,9 @@ func getBillingUsage(database *db.Database, includeStorage bool) http.HandlerFun
 			return
 		}
 		ai, _ := summary["ai"].(map[string]any)
-		ratio, _ := ai["used_ratio"].(float64)
-		personal := map[string]any{"ai": ai}
-		response := map[string]any{"enabled": database.BillingService().Adapter.Enabled(), "plan": summary["tier"], "personal": personal, "billing": summary["billing"], "agent_usage": map[string]any{"percentage_used": ratio * 100, "available": ai["available"], "paused": ai["paused"], "reset_at": ai["reset_at"], "plan": summary["tier"]}}
+		percentage, _ := ai["percentage_used"].(float64)
+		personal := map[string]any{"ai": ai, "sync": summary["sync"]}
+		response := map[string]any{"enabled": database.BillingService().Adapter.Enabled(), "plan": summary["tier"], "personal": personal, "account": personal, "entitlements": summary["entitlements"], "billing": summary["billing"], "agent_usage": map[string]any{"percentage_used": percentage, "unit": ai["unit"], "used": ai["used"], "reserved": ai["reserved"], "limit": ai["limit"], "remaining": ai["remaining"], "available": ai["available"], "paused": ai["paused"], "reset_at": ai["reset_at"], "plan": summary["tier"]}}
 		if !includeStorage {
 			writeJSON(w, http.StatusOK, response)
 			return
@@ -132,22 +127,9 @@ func getBillingUsage(database *db.Database, includeStorage bool) http.HandlerFun
 			http.Error(w, "storage usage unavailable", 503)
 			return
 		}
-		spaces, err := database.ListSpaces(r.Context(), userID)
-		if err != nil {
-			http.Error(w, "Space usage unavailable", 503)
-			return
-		}
-		spaceUsage := []map[string]any{}
-		for _, space := range spaces {
-			usage, e := database.SpaceStorageUsage(r.Context(), userID, space.ID)
-			if e != nil {
-				http.Error(w, "Space usage unavailable", 503)
-				return
-			}
-			spaceUsage = append(spaceUsage, map[string]any{"space_id": space.ID, "name": space.Name, "role": space.Role, "owner_user_id": space.OwnerUserID, "storage": usage})
-		}
 		personal["storage"] = storage.Personal
-		response["storage"], response["spaces"], response["entitlements"] = storage, spaceUsage, summary["entitlements"]
+		personal["cloud_storage"] = storage.Personal
+		response["storage"] = storage
 		writeJSON(w, http.StatusOK, response)
 	}
 }

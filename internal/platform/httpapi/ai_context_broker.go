@@ -61,7 +61,8 @@ func (broker aiContextBroker) retrieveAccount(ctx context.Context, userID, query
 	if query == "" || limit <= 0 {
 		return nil, nil
 	}
-	indexed, indexErr := broker.database.SearchAIRetrieval(ctx, userID, query, embedding, limit, spaceID)
+	embeddingModel := "google/gemini-embedding-2"; if len(spaceIDs)>1 { embeddingModel=spaceIDs[1] }
+ indexed, indexErr := broker.database.SearchAIRetrieval(ctx, userID, query, embedding, limit, spaceID, embeddingModel)
 	if indexErr != nil {
 		return nil, indexErr
 	}
@@ -168,9 +169,6 @@ func (broker aiContextBroker) resolve(ctx context.Context, userID string, refere
 	resolved := make([]aiResolvedContext, 0, len(references))
 	seen := map[string]bool{}
 	for _, reference := range references {
-		if err := authorizeAppContextReference(ctx, broker.database, userID, reference); err != nil {
-			return nil, err
-		}
 		reference.Kind = strings.ToLower(strings.TrimSpace(reference.Kind))
 		reference.ID = strings.TrimSpace(reference.ID)
 		if reference.Kind == "" || reference.ID == "" {

@@ -30,13 +30,6 @@ const (
 	httpShutdownGrace = 20 * time.Second
 )
 
-// streamingRoutePrefixes are paths that hold a connection open far longer than
-// a JSON call. They must never inherit the short write deadline.
-var streamingRoutePrefixes = []string{
-	"/api/realtime", "/api/spaces",
-	"/v1/realtime", "/v1/spaces",
-}
-
 // isWebSocketRequest reports whether the client asked to upgrade the
 // connection. Upgraded connections take over the socket, so any write deadline
 // the HTTP layer set would eventually kill an otherwise healthy session.

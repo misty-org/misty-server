@@ -5,9 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/google/uuid"
+	"github.com/kannachi323/misty/server/internal/cloudusage"
 	"strings"
 	"unicode/utf8"
 )
+
+// maxSyncControlVersion is the newest device capability level: 1 accepts
+// device controls, 2 also understands nested bookmark folders.
+const maxSyncControlVersion = 2
 
 type SyncDeviceControl struct {
 	DeviceID       string  `json:"device_id"`
@@ -25,7 +30,7 @@ type SyncDeviceControl struct {
 // Device controls are account-owned. Activation is a short-lived request to
 // the target; only its signed native mutation can actually take over.
 func (db *Store) ControlBrowserSyncDevice(ctx context.Context, user string, c SyncDeviceControl) (string, error) {
-	if !validSyncID(c.DeviceID) || (c.DisplayName != nil && (!utf8.ValidString(*c.DisplayName) || len(*c.DisplayName) > 160 || strings.TrimSpace(*c.DisplayName) == "")) || (c.Platform != nil && len(*c.Platform) > 32) || (c.ControlVersion != nil && *c.ControlVersion != 1) || (c.OSVersion != nil && (!utf8.ValidString(*c.OSVersion) || len(*c.OSVersion) > 64)) || (c.WorkspaceID != nil && (!validSyncID(*c.WorkspaceID) || !c.Activate)) {
+	if !validSyncID(c.DeviceID) || (c.DisplayName != nil && (!utf8.ValidString(*c.DisplayName) || len(*c.DisplayName) > 160 || strings.TrimSpace(*c.DisplayName) == "")) || (c.Platform != nil && len(*c.Platform) > 32) || (c.ControlVersion != nil && (*c.ControlVersion < 1 || *c.ControlVersion > maxSyncControlVersion)) || (c.OSVersion != nil && (!utf8.ValidString(*c.OSVersion) || len(*c.OSVersion) > 64)) || (c.WorkspaceID != nil && (!validSyncID(*c.WorkspaceID) || !c.Activate)) {
 		return "", ErrSyncInvalid
 	}
 	tx, err := db.Conn.BeginTx(ctx, nil)
@@ -90,11 +95,19 @@ func (db *Store) ControlBrowserSyncDevice(ctx context.Context, user string, c Sy
 	if err != nil {
 		return "", err
 	}
+	// A device has one name everywhere: renaming its sync workspace renames
+	// the device record that sync, agents and file sharing all show.
+	if c.DisplayName != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE trusted_devices SET name=$4,name_updated_at=clock_timestamp(),updated_at=clock_timestamp()
+			WHERE user_id=$1 AND vault_id=$2::text AND sync_device_id=$3::text AND admission_state<>'revoked'`, user, vault, c.DeviceID, *c.DisplayName); err != nil {
+			return "", err
+		}
+	}
 	// Publish with the commit: no periodic reconcile backs up a lost hint.
 	if err = notifySync(ctx, tx, user, vault, "browser-presence"); err != nil {
 		return "", err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = cloudusage.Commit(ctx, tx); err != nil {
 		return "", err
 	}
 	id, _ := request.(string)

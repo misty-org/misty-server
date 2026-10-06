@@ -37,33 +37,8 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 	})
 }
 
-func (db *Database) CreateSpaceAgentMessage(ctx context.Context, billingUserID, spaceID, agentID, text string) (*SpaceMessage, error) {
-	return db.createSpaceAgentMessageWithMembership(ctx, billingUserID, spaceID, "", agentID, []MessageSpan{{Type: "text", Text: strings.TrimSpace(text)}}, false)
-}
-
-func (db *Database) CreateSpaceConversationAgentMessage(ctx context.Context, billingUserID, spaceID, conversationID, agentID, text string) (*SpaceMessage, error) {
-	return db.createSpaceAgentMessageWithMembership(ctx, billingUserID, spaceID, conversationID, agentID, []MessageSpan{{Type: "text", Text: strings.TrimSpace(text)}}, false)
-}
-
-func (db *Database) CreateSpaceConversationAgentMessageWithSourceLink(ctx context.Context, billingUserID, spaceID, conversationID, agentID, text, sourceConversationID string) (*SpaceMessage, error) {
-	url := "/spaces/" + spaceID + "/chat"
-	if sourceConversationID != "" {
-		url += "?conversation=" + sourceConversationID
-	}
-	content := []MessageSpan{{Type: "text", Text: strings.TrimSpace(text)}, {Type: "text", Text: "\n\n"}, {Type: "link", Label: "Open source conversation", URL: url}}
-	return db.createSpaceAgentMessageWithMembership(ctx, billingUserID, spaceID, conversationID, agentID, content, false)
-}
-
-func (db *Database) CreateMistySpaceMessage(ctx context.Context, userID, spaceID, text string) (*SpaceMessage, error) {
-	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, "", "", []MessageSpan{{Type: "text", Text: strings.TrimSpace(text)}}, false)
-}
-
 func (db *Database) CreateMistySpaceMessageWithContent(ctx context.Context, userID, spaceID string, content []MessageSpan) (*SpaceMessage, error) {
 	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, "", "", content, false)
-}
-
-func (db *Database) CreateMistySpaceConversationMessage(ctx context.Context, userID, spaceID, conversationID, text string) (*SpaceMessage, error) {
-	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, conversationID, "", []MessageSpan{{Type: "text", Text: strings.TrimSpace(text)}}, false)
 }
 
 func (db *Database) CreateMistySpaceConversationMessageWithContent(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan) (*SpaceMessage, error) {

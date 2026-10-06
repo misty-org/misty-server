@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
+
+
+import ()
 
 func TestLibraryProviderImportPersistsProvenanceAndEnforcesImportPermission(t *testing.T) {
 	database := openTestDatabase(t)
@@ -17,7 +19,7 @@ func TestLibraryProviderImportPersistsProvenanceAndEnforcesImportPermission(t *t
 	owner, _ := database.CreateUser("Provider Import Owner", "provider-import-owner@example.com", "password123")
 	member, _ := database.CreateUser("Provider Import Member", "provider-import-member@example.com", "password123")
 	space := createTestSpace(t, database, ctx, owner.ID, "Provider Imports")
-	invite, err := database.InviteToSpace(ctx, owner.ID, space.ID, member.Email)
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
 	if err != nil {
 		t.Fatal(err)
 	}

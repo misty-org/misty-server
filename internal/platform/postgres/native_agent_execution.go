@@ -16,7 +16,7 @@ type AgentExecutionLease struct {
 
 func (db *Database) AcquireAgentExecution(ctx context.Context, userID string, input AgentExecutionLease) error {
 	input.SpaceID = ""
-	if AppAuthorityFromContext(ctx) != nil || input.TaskID == "" || len(input.TaskID) > 128 || input.WindowLabel == "" || len(input.WindowLabel) > 128 {
+	if input.TaskID == "" || len(input.TaskID) > 128 || input.WindowLabel == "" || len(input.WindowLabel) > 128 {
 		return ErrSpaceForbidden
 	}
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {

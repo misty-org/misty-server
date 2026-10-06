@@ -1,26 +1,32 @@
 import { expect, it } from "vitest";
 import { serialToolLifecycle } from "../src/serial-tool-lifecycle.js";
 
-it("blocks the current batch after a pre-dispatch rejection and can start a fresh inspection turn", async () => {
+it("declines the rest of a paused response and resumes for the next model turn", async () => {
   const order = serialToolLifecycle();
   await order.start("stale-click", async () => {});
-  const queued = expect(order.start("dependent-write", async () => { throw new Error("must not execute"); })).rejects.toThrow("browser_reinspection_required");
-  order.requestReinspection();
-  expect(order.resumeForReinspection()).toBe(false);
+  let dependentStarted = false;
+  const queued = order.start("dependent-write", async () => { dependentStarted = true; });
+  order.pause("A fresh observation is required before another action.");
+  expect(order.resume()).toBe(false);
   await order.finish("stale-click", async () => {});
   await queued;
-  expect(order.resumeForReinspection()).toBe(true);
+  expect(dependentStarted).toBe(false);
+  expect(order.declined("dependent-write")).toContain("tool_not_attempted");
+  await order.finish("dependent-write", async () => {});
+  expect(order.resume()).toBe(true);
   await order.start("fresh-inspection", async () => {});
+  expect(order.declined("fresh-inspection")).toBeUndefined();
   await order.finish("fresh-inspection", async () => {});
 });
 
 it("never recovers when the rejection checkpoint itself is uncertain", async () => {
   const order = serialToolLifecycle();
   await order.start("stale-click", async () => {});
-  order.requestReinspection();
+  order.pause("A fresh observation is required before another action.");
   await expect(order.finish("stale-click", async () => { throw new Error("checkpoint failed"); })).rejects.toThrow();
-  expect(order.resumeForReinspection()).toBe(false);
-  await expect(order.start("next", async () => {})).rejects.toThrow("tool_sequence_stopped");
+  expect(order.resume()).toBe(false);
+  await order.start("next", async () => {});
+  expect(order.declined("next")).toContain("tool_sequence_stopped");
 });
 
 it("holds later tool starts behind a durable approval/device wait and its end checkpoint", async () => {
@@ -38,12 +44,12 @@ it("holds later tool starts behind a durable approval/device wait and its end ch
   await order.finish("note", async () => { events.push("note:end"); });
 });
 
-it("releases queued calls with a stop after an uncertain effect or checkpoint failure", async () => {
+it("declines queued calls with a stop after an uncertain effect or checkpoint failure", async () => {
   for (const checkpointFails of [false, true]) {
     const order = serialToolLifecycle();
     await order.start("send", async () => {});
     let dependentStarted = false;
-    const later = expect(order.start("follow-up", async () => { dependentStarted = true; })).rejects.toThrow("tool_sequence_stopped");
+    const later = order.start("follow-up", async () => { dependentStarted = true; });
     if (checkpointFails) {
       await expect(order.finish("send", async () => { throw new Error("lost checkpoint response"); })).rejects.toThrow("lost checkpoint");
     } else {
@@ -52,7 +58,11 @@ it("releases queued calls with a stop after an uncertain effect or checkpoint fa
     }
     await later;
     expect(dependentStarted).toBe(false);
-    await expect(order.start("next-model-turn", async () => {})).rejects.toThrow("tool_sequence_stopped");
+    expect(order.declined("follow-up")).toContain("tool_sequence_stopped");
+    await order.finish("follow-up", async () => {});
+    expect(order.resume()).toBe(false);
+    await order.start("next-model-turn", async () => {});
+    expect(order.declined("next-model-turn")).toContain("tool_sequence_stopped");
   }
 });
 
@@ -68,4 +78,22 @@ it("rejects duplicate in-flight identities without releasing the original call",
   await later;
   expect(started).toBe(true);
   await order.finish("next", async () => {});
+});
+
+it("holds queued typing after a dispatched click until a fresh observation turn", async () => {
+  const order = serialToolLifecycle();
+  const dispatched: string[] = [];
+  await order.start("click", async () => { dispatched.push("click"); });
+  const oldTyping = order.start("type-old-frame", async () => { dispatched.push("wrong typing"); });
+  await order.finish("click", async () => { order.pause("A fresh screenshot is required before another action."); });
+  await oldTyping;
+  expect(order.declined("type-old-frame")).toContain("tool_not_attempted");
+  await order.finish("type-old-frame", async () => {});
+  expect(dispatched).toEqual(["click"]);
+  expect(order.resume()).toBe(true);
+  await order.start("fresh-frame", async () => { dispatched.push("capture"); });
+  await order.finish("fresh-frame", async () => {});
+  await order.start("type-fresh-frame", async () => { dispatched.push("type"); });
+  await order.finish("type-fresh-frame", async () => {});
+  expect(dispatched).toEqual(["click", "capture", "type"]);
 });

@@ -38,33 +38,6 @@ type LibraryIntelligenceResult struct {
 	Version    int
 }
 
-func (db *Database) QueueLibraryIntelligenceForItem(ctx context.Context, userID, spaceID, itemID string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryView); err != nil {
-			return err
-		}
-		var aiEnabled, semanticEnabled bool
-		if err := tx.QueryRowContext(ctx, `SELECT ai_enabled,semantic_search_enabled FROM space_library_intelligence_policies WHERE space_id=$1`, spaceID).Scan(&aiEnabled, &semanticEnabled); errors.Is(err, sql.ErrNoRows) {
-			return nil
-		} else if err != nil {
-			return err
-		}
-		if !aiEnabled && !semanticEnabled {
-			return nil
-		}
-		var domainID string
-		if err := tx.QueryRowContext(ctx, `SELECT f.security_domain_id FROM space_library_items i JOIN library_files f ON f.id=i.file_id WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready'`, itemID, spaceID).Scan(&domainID); errors.Is(err, sql.ErrNoRows) {
-			return ErrLibraryNotFound
-		} else if err != nil {
-			return err
-		}
-		payload, _ := json.Marshal(map[string]bool{"ai": aiEnabled, "semantic": semanticEnabled})
-		_, err := tx.ExecContext(ctx, `INSERT INTO library_processing_jobs(id,security_domain_id,space_id,job_kind,target_kind,target_id,payload,priority,billing_user_id) VALUES($1,$2,$3,'ai','space_library_item',$4,$5,4,$6)
-			ON CONFLICT(job_kind,target_kind,target_id) DO UPDATE SET payload=EXCLUDED.payload,billing_user_id=EXCLUDED.billing_user_id,state=CASE WHEN library_processing_jobs.state IN ('leased','running') THEN library_processing_jobs.state ELSE 'queued' END,error_code=NULL,available_at=NOW(),updated_at=NOW()`, "job_"+uuid.NewString(), domainID, spaceID, itemID, payload, userID)
-		return err
-	})
-}
-
 func (db *Database) ClaimLibraryIntelligenceJob(ctx context.Context, workerID string, lease time.Duration) (*LibraryIntelligenceJob, error) {
 	if workerID == "" || lease < time.Second || lease > 10*time.Minute {
 		return nil, ErrLibraryInvalid
@@ -165,13 +138,17 @@ func (db *Database) FailLibraryIntelligenceJob(ctx context.Context, job *Library
 	})
 }
 
-func (db *Database) SearchSpaceLibraryIntelligence(ctx context.Context, userID, spaceID, query string, embedding []float64, limit int) ([]SpaceLibraryItem, error) {
+func (db *Database) SearchSpaceLibraryIntelligence(ctx context.Context, userID, spaceID, query string, embedding []float64, limit int, embeddingModels ...string) ([]SpaceLibraryItem, error) {
 	query = strings.TrimSpace(query)
 	if query == "" || len([]rune(query)) > 256 || len(embedding) != 0 && (len(embedding) != 768 || !validFiniteVector(embedding)) {
 		return nil, ErrLibraryInvalid
 	}
 	if limit < 1 || limit > 100 {
 		limit = 50
+	}
+	embeddingModel := "google/gemini-embedding-2"
+	if len(embeddingModels) > 0 {
+		embeddingModel = embeddingModels[0]
 	}
 	items := []SpaceLibraryItem{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
@@ -189,11 +166,11 @@ func (db *Database) SearchSpaceLibraryIntelligence(ctx context.Context, userID, 
 		statement := `WITH lexical AS (
 			SELECT space_library_item_id,LEAST(1.0,ts_rank_cd(search_tsv,websearch_to_tsquery('simple',$2))*4.0) score FROM space_library_search_documents WHERE space_id=$1 AND state='ready' AND search_tsv@@websearch_to_tsquery('simple',$2) ORDER BY score DESC LIMIT $4
 		), semantic AS (
-			SELECT space_library_item_id,GREATEST(0.0,1.0-(embedding<=>$3::vector)) score FROM space_library_search_documents WHERE space_id=$1 AND state='ready' AND $3 IS NOT NULL AND embedding IS NOT NULL ORDER BY embedding<=>$3::vector LIMIT $4
+			SELECT space_library_item_id,GREATEST(0.0,1.0-(embedding<=>$3::vector)) score FROM space_library_search_documents WHERE space_id=$1 AND state='ready' AND $3 IS NOT NULL AND embedding IS NOT NULL AND embedding_model=$5 ORDER BY embedding<=>$3::vector LIMIT $4
 		), candidates AS (SELECT space_library_item_id FROM lexical UNION SELECT space_library_item_id FROM semantic), ranked AS (
 			SELECT c.space_library_item_id,(CASE WHEN $3 IS NULL THEN COALESCE(l.score,0) ELSE .68*COALESCE(s.score,0)+.32*COALESCE(l.score,0) END) score FROM candidates c LEFT JOIN lexical l USING(space_library_item_id) LEFT JOIN semantic s USING(space_library_item_id)
 		) ` + libraryItemSelect + ` JOIN ranked ON ranked.space_library_item_id=i.id WHERE i.space_id=$1 AND i.lifecycle_state='ready' AND i.hidden=FALSE ORDER BY ranked.score DESC,i.id LIMIT $4`
-		rows, err := tx.QueryContext(ctx, statement, spaceID, query, vector, limit)
+		rows, err := tx.QueryContext(ctx, statement, spaceID, query, vector, limit, embeddingModel)
 		if err != nil {
 			return err
 		}

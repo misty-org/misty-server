@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/kannachi323/misty/server/internal/cloudusage"
 	"github.com/kannachi323/misty/server/internal/platform/transport"
 
 	"github.com/google/uuid"
@@ -162,7 +163,7 @@ func (db *Store) CreateBrowserSyncVault(ctx context.Context, userID string, root
 	if err = ensureBrowserSyncWorkspaces(ctx, tx, grant.VaultID, grant.DeviceID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return cloudusage.Commit(ctx, tx)
 }
 func (db *Store) EnrollBrowserSyncDevice(ctx context.Context, userID string, g SyncDeviceGrant) error {
 	if !validSyncID(g.VaultID) || !validSyncID(g.DeviceID) {
@@ -205,7 +206,7 @@ func (db *Store) EnrollBrowserSyncDevice(ctx context.Context, userID string, g S
 	if err = notifySync(ctx, tx, userID, g.VaultID, "browser-presence"); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return cloudusage.Commit(ctx, tx)
 }
 
 type SyncPublishOptions struct {
@@ -261,7 +262,7 @@ func (db *Store) PublishBrowserSync(ctx context.Context, userID string, m SyncMu
 		if string(oldHash) != string(digest[:]) {
 			return nil, ErrSyncOperationConflict
 		}
-		if err = tx.Commit(); err != nil {
+		if err = cloudusage.Commit(ctx, tx); err != nil {
 			return nil, err
 		}
 		return &SyncReceipt{OperationID: m.OperationID, Sequence: oldSequence, Discarded: discarded}, nil
@@ -302,7 +303,7 @@ func (db *Store) PublishBrowserSync(ctx context.Context, userID string, m SyncMu
 		if err != nil {
 			return nil, err
 		}
-		if err = tx.Commit(); err != nil {
+		if err = cloudusage.Commit(ctx, tx); err != nil {
 			return nil, err
 		}
 		return &SyncReceipt{OperationID: m.OperationID, Sequence: head, Discarded: true}, nil
@@ -339,7 +340,7 @@ func (db *Store) PublishBrowserSync(ctx context.Context, userID string, m SyncMu
 	if err != nil {
 		return nil, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = cloudusage.Commit(ctx, tx); err != nil {
 		return nil, err
 	}
 	return &SyncReceipt{OperationID: m.OperationID, Sequence: sequence}, nil
@@ -404,7 +405,7 @@ func (db *Store) ReplayBrowserSync(ctx context.Context, userID, vaultID, deviceI
 	if len(out.Events) == 0 && after < out.HeadSequence {
 		out.CheckpointRequired = true
 	}
-	if err = tx.Commit(); err != nil {
+	if err = cloudusage.Commit(ctx, tx); err != nil {
 		return nil, err
 	}
 	return out, nil

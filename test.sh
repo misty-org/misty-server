@@ -142,6 +142,9 @@ SQL
 fi
 
 ./scripts/check-go-file-sizes.sh
+# Billing contracts configure their own endpoints; ordinary database fixtures
+# must not send usage from the test database to the development billing service.
+export MISTY_BILLING_ADAPTER=none
 # Database-backed packages share this one disposable database. Keep package
 # execution serial so one package cannot truncate or reseed beneath another.
 go test -p 1 ./... -count=1 "$@"

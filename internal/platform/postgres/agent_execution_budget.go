@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -28,13 +27,12 @@ func (db *Database) AgentRunExecutionBudget(ctx context.Context, userID, runID, 
 	}
 	var out *AgentExecutionBudget
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		var state, spaceID, pinnedRuntime, scope string
-		var payload json.RawMessage
-		query := `SELECT state,COALESCE(space_id,''),COALESCE(runtime_run_id,''),input,'ai.write' FROM space_runs WHERE id=$1 AND owner_user_id=$2 FOR UPDATE`
+		var state, spaceID, pinnedRuntime string
+		query := `SELECT state,COALESCE(space_id,''),COALESCE(runtime_run_id,'') FROM space_runs WHERE id=$1 AND owner_user_id=$2 FOR UPDATE`
 		if strings.HasPrefix(runID, "invocation_") {
-			query = `SELECT state,COALESCE(space_id,''),COALESCE(runtime_run_id,''),request_payload,CASE WHEN surface_id='sdk' THEN 'capabilities.invoke' ELSE 'ai.write' END FROM ai_invocations WHERE id=$1 AND user_id=$2 AND COALESCE(agent_run_id,'')='' FOR UPDATE`
+			query = `SELECT state,COALESCE(space_id,''),COALESCE(runtime_run_id,'') FROM ai_invocations WHERE id=$1 AND user_id=$2 AND COALESCE(agent_run_id,'')='' FOR UPDATE`
 		}
-		if err := tx.QueryRowContext(ctx, query, runID, userID).Scan(&state, &spaceID, &pinnedRuntime, &payload, &scope); err != nil {
+		if err := tx.QueryRowContext(ctx, query, runID, userID).Scan(&state, &spaceID, &pinnedRuntime); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrSpaceForbidden
 			}
@@ -43,18 +41,12 @@ func (db *Database) AgentRunExecutionBudget(ctx context.Context, userID, runID, 
 		if pinnedRuntime != runtimeID || (begin && state != "running") {
 			return ErrSpaceForbidden
 		}
-		authority, err := AppAuthorityFromPayload(payload)
-		if err != nil {
-			return err
-		}
-		if err = validateAppExecutionAuthorityTx(ctx, tx, authority, userID, spaceID, scope); err != nil {
-			return err
-		}
 		if spaceID != "" {
-			if _, err = requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
+			if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 				return err
 			}
 		}
+		var err error
 		out, err = agentRunExecutionBudgetTx(ctx, tx, runID, begin)
 		return err
 	})

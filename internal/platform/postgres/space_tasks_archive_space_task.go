@@ -207,29 +207,3 @@ func (db *Database) InvalidateSpaceCalendarEvents(ctx context.Context, sourceID 
 		return err
 	})
 }
-
-func (db *Database) CalendarSourcesNeedingReconciliation(ctx context.Context, limit int) ([]SpaceCalendarSource, error) {
-	if limit < 1 || limit > 500 {
-		limit = 100
-	}
-	out := []SpaceCalendarSource{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT `+calendarSourceColumns+` FROM space_calendar_sources
-			WHERE execution_owner='go' AND status IN ('pending','active','needs_attention') AND disabled_at IS NULL AND
-			(last_reconciled_at IS NULL OR last_reconciled_at<NOW()-INTERVAL '15 minutes' OR watch_expires_at IS NULL OR watch_expires_at<NOW()+INTERVAL '24 hours')
-			ORDER BY COALESCE(last_reconciled_at,'epoch'),id LIMIT $1`, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item SpaceCalendarSource
-			if err := scanCalendarSource(rows, &item); err != nil {
-				return err
-			}
-			out = append(out, item)
-		}
-		return rows.Err()
-	})
-	return out, err
-}

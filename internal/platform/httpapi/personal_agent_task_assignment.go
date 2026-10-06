@@ -36,21 +36,9 @@ func (s *SpacesService) resolveAssignedTaskToolbox(ctx context.Context, run *db.
 		}},
 	}
 	requested := []string{toolboxTasksQuery, "tasks.update_assigned", "task.activity.write", "attached_files.read"}
-	for _, descriptor := range globalAgentSpaceDescriptors() {
-		descriptor.Sources = []string{"task_assignment"}
-		descriptor.Triggers = []string{"task_assignment"}
-		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: func(toolCtx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
-			return executeGlobalAgentSpaceTool(toolCtx, s.database, invocation, request)
-		}})
-		requested = append(requested, descriptor.Name)
-	}
-	sdk, err := s.agentSDKRegistrations(ctx, run)
-	if err != nil {
-		return nil, agenttools.Invocation{}, serveragent.ToolManifest{}, err
-	}
-	for _, registration := range sdk {
-		registration.Descriptor.Sources = []string{"task_assignment"}
-		registration.Descriptor.Triggers = []string{"task_assignment"}
+	// The assigned task keeps its own tasks.query; other Misty data is reachable
+	// in any Space the owner can access.
+	for _, registration := range routedSpaceRegistrations(s.database, toolboxTasksQuery) {
 		registrations = append(registrations, registration)
 		requested = append(requested, registration.Descriptor.Name)
 	}
@@ -66,10 +54,10 @@ func (s *SpacesService) resolveAssignedTaskToolbox(ctx context.Context, run *db.
 			requested = append(requested, descriptor.Name)
 		}
 	}
-	mcpHandler := func(toolCtx context.Context, _ agenttools.Invocation, tool serveragent.ToolRequest) (json.RawMessage, error) {
-		return s.executeMCPAgentTool(toolCtx, run, tool, false, "task_assignment")
+	for _, registration := range s.appsToolRegistrations() {
+		registrations = append(registrations, registration)
+		requested = append(requested, registration.Descriptor.Name)
 	}
-	registrations, requested = s.appendPersonalAgentMCPTools(ctx, run.RequestingMemberID, run.AgentID, registrations, requested, mcpHandler)
 	toolbox, err := agenttools.New(registrations...)
 	if err != nil {
 		return nil, agenttools.Invocation{}, serveragent.ToolManifest{}, err
@@ -120,15 +108,6 @@ func assignedTaskActivityToolDescriptor() agenttools.Descriptor {
 
 func authorizePersonalAgentTaskTool(database *db.Database) agenttools.Authorizer {
 	return func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor) (bool, error) {
-		if allowed, err := authorizeAppRuntimeTool(ctx, database, invocation, descriptor); err != nil || !allowed {
-			return false, err
-		}
-		if strings.HasPrefix(descriptor.Name, "mcp.") {
-			return authorizeMCPAgentTool(ctx, database, invocation, descriptor)
-		}
-		if descriptor.ProviderBinding != nil {
-			return authorizeAgentSDKTool(ctx, database, invocation, descriptor)
-		}
 		if _, err := database.AskIdentityByID(ctx, invocation.UserID, invocation.AgentID); err != nil {
 			return false, err
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/kannachi323/misty/server/internal/cloudusage"
 	"regexp"
 )
 
@@ -19,7 +20,7 @@ const (
 )
 
 var (
-	syncRecordCollections = map[string]bool{"bookmarks": true, "tab_groups": true, "history": true}
+	syncRecordCollections = map[string]bool{"bookmarks": true, "tab_groups": true, "history": true, "extension_sync": true}
 	syncRecordKeyPattern  = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
@@ -109,7 +110,7 @@ func (db *Store) PullBrowserSyncRecords(ctx context.Context, userID, vault, devi
 	} else if !out.More {
 		out.Cursor = head
 	}
-	return out, tx.Commit()
+	return out, cloudusage.Commit(ctx, tx)
 }
 
 // PushBrowserSyncRecords applies each write whose base version matches the
@@ -197,7 +198,7 @@ func (db *Store) PushBrowserSyncRecords(ctx context.Context, userID, vault, devi
 	if err = notifyRecords(ctx, tx, userID, collection); err != nil {
 		return nil, 0, err
 	}
-	return results, head, tx.Commit()
+	return results, head, cloudusage.Commit(ctx, tx)
 }
 
 // MarkBrowserSyncRecordsCapable records that a device keeps bookmarks in the
@@ -220,7 +221,7 @@ func (db *Store) MarkBrowserSyncRecordsCapable(ctx context.Context, userID, vaul
 	if err = notifySync(ctx, tx, userID, vault, "browser-presence"); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return cloudusage.Commit(ctx, tx)
 }
 
 // sharedWorkspaceRetired: every active device keeps bookmarks in the cold store,

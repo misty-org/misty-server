@@ -9,7 +9,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/kannachi323/misty/server/internal/aimodels"
 	"github.com/kannachi323/misty/server/internal/library"
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
 const (
@@ -98,13 +100,24 @@ type SmartLibraryEmbedding struct {
 }
 
 type SmartLibraryAnalyzer struct {
-	billing                     *library.Meter
+	billing        *library.Meter
+	ModelResolver  aimodels.Resolver
+	account        string
+	roleConfigs    map[string]*aimodels.Resolved
+	realtimeConfig *aimodels.Resolved
+	// Models makes every Library model call through the agent runtime.
+	Models *modelruntime.Client
+	// APIKey, BaseURL and Client open the realtime voice socket, the one model
+	// connection Go makes itself.
 	APIKey, BaseURL             string
 	PrimaryModel, FallbackModel string
 	EmbeddingModel              string
 	Client                      *http.Client
 	ConfidenceThreshold         float64
 }
+
+// Available reports whether Library model calls can run.
+func (a *SmartLibraryAnalyzer) Available() bool { return a != nil && a.Models.Enabled() }
 
 func (a *SmartLibraryAnalyzer) Analyze(ctx context.Context, assets []SmartLibraryAsset) (SmartLibraryAnalysis, error) {
 	if len(assets) == 0 || len(assets) > SmartLibraryMaxBatchSize {
@@ -115,6 +128,17 @@ func (a *SmartLibraryAnalyzer) Analyze(ctx context.Context, assets []SmartLibrar
 			return SmartLibraryAnalysis{}, err
 		}
 	}
+	clone := *a
+ clone.roleConfigs = map[string]*aimodels.Resolved{}
+ fallbackEnabled := true
+ for _, role := range []string{"library", "library-fallback"} {
+  config, configErr := a.roleConfig(ctx, role)
+  if role == "library-fallback" && errors.Is(configErr, aimodels.ErrDisabled) { fallbackEnabled = false; continue }
+  if configErr != nil { return SmartLibraryAnalysis{}, configErr }
+  clone.roleConfigs[role] = config
+  if config != nil { if role == "library" { clone.PrimaryModel = config.Model } else { clone.FallbackModel = config.Model } }
+ }
+ a = &clone
 	primaryModel := a.primaryModel()
 	fallbackModel := a.fallbackModel()
 	primary, usage, err := a.analyzeWithModel(ctx, primaryModel, assets)
@@ -133,8 +157,8 @@ func (a *SmartLibraryAnalyzer) Analyze(ctx context.Context, assets []SmartLibrar
 		if err != nil && reason == "" {
 			reason = "primary_request_failed"
 		}
-		if reason == "" && shouldRunVisualEntityAudit(result) {
-			audit, auditUsage, auditErr := a.analyzeWithModelPrompt(ctx, fallbackModel, []SmartLibraryAsset{asset}, visualEntityAuditPrompt)
+		if fallbackEnabled && reason == "" && shouldRunVisualEntityAudit(result) {
+			audit, auditUsage, auditErr := a.analyzeWithModelPromptRole(ctx, "library-fallback", fallbackModel, []SmartLibraryAsset{asset}, visualEntityAuditPrompt)
 			if billingErr := a.BillingError(); billingErr != nil {
 				return analysis, billingErr
 			}
@@ -158,7 +182,8 @@ func (a *SmartLibraryAnalyzer) Analyze(ctx context.Context, assets []SmartLibrar
 			analysis.Results = append(analysis.Results, result)
 			continue
 		}
-		fallback, fallbackUsage, fallbackErr := a.analyzeWithModel(ctx, fallbackModel, []SmartLibraryAsset{asset})
+		if !fallbackEnabled { analysis.Failures[asset.AssetID] = "analysis_quality_failed"; continue }
+		fallback, fallbackUsage, fallbackErr := a.analyzeWithModelPromptRole(ctx, "library-fallback", fallbackModel, []SmartLibraryAsset{asset}, TestingRichMetadataPrompt)
 		if billingErr := a.BillingError(); billingErr != nil {
 			return analysis, billingErr
 		}
@@ -188,7 +213,7 @@ func (a *SmartLibraryAnalyzer) EmbedQuery(ctx context.Context, query string) ([]
 	if query == "" || len(query) > 512 || utf8.RuneCountInString(query) > 256 {
 		return nil, ModelUsage{}, errors.New("invalid semantic query")
 	}
-	vectors, usage, err := a.embedGateway(ctx, []string{"task: search result | query: " + query}, nil)
+	vectors, usage, err := a.embedGateway(ctx, []string{"task: search result | query: " + query})
 	if err != nil || len(vectors) != 1 {
 		return nil, usage, err
 	}
@@ -221,6 +246,10 @@ func (a *SmartLibraryAnalyzer) EmbedAssets(ctx context.Context, assets []SmartLi
 	if len(assets) == 0 {
 		return nil, ModelUsage{}, nil
 	}
+	_, model, routeErr := a.embeddingRoute(ctx)
+	if routeErr != nil {
+		return nil, ModelUsage{}, routeErr
+	}
 	results := make([]SmartLibraryEmbedding, 0, len(assets))
 	var total ModelUsage
 	for _, asset := range assets {
@@ -232,22 +261,22 @@ func (a *SmartLibraryAnalyzer) EmbedAssets(ctx context.Context, assets []SmartLi
 		var usage ModelUsage
 		var err error
 		switch {
-		case len(asset.Bytes) > 0 && (asset.MimeType == "image/jpeg" || asset.MimeType == "image/png"):
+		case !strings.HasPrefix(model, "openai/text-embedding-") && len(asset.Bytes) > 0 && (asset.MimeType == "image/jpeg" || asset.MimeType == "image/png"):
 			var vector []float64
 			vector, usage, err = a.embedImageV1(ctx, value, asset)
 			vectors = [][]float64{vector}
 		default:
-			vectors, usage, err = a.embedGateway(ctx, []string{value}, nil)
+			vectors, usage, err = a.embedGateway(ctx, []string{value})
 		}
 		total.InputTokens += usage.InputTokens
 		if err != nil {
 			return nil, total, err
 		}
 		if len(vectors) != 1 {
-			return nil, total, errors.New("gateway returned an unexpected embedding count")
+			return nil, total, errors.New("embedding model returned an unexpected embedding count")
 		}
 		inputHash := sha256.Sum256([]byte(value + "\x00" + asset.MimeType + "\x00" + string(asset.Bytes)))
-		results = append(results, SmartLibraryEmbedding{AssetID: asset.AssetID, Model: a.embeddingModel(), Version: SmartLibraryIndexVersion, InputHash: hex.EncodeToString(inputHash[:]), Vector: vectors[0]})
+		results = append(results, SmartLibraryEmbedding{AssetID: asset.AssetID, Model: model, Version: SmartLibraryIndexVersion, InputHash: hex.EncodeToString(inputHash[:]), Vector: vectors[0]})
 	}
 	return results, total, nil
 }

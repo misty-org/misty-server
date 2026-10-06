@@ -10,10 +10,8 @@ import (
 )
 
 var (
-	ErrSyncWorkspaceVersion   = errors.New("sync workspace version changed")
-	ErrSyncWorkspaceNotDriver = errors.New("sync workspace driven by another device")
-	ErrSyncWorkspaceMode      = errors.New("sync workspace protocol not enabled for this vault")
-	ErrSyncWorkspaceSnapshot  = errors.New("sync workspace snapshot required")
+	ErrSyncWorkspaceMode     = errors.New("sync workspace protocol not enabled for this vault")
+	ErrSyncWorkspaceSnapshot = errors.New("sync workspace snapshot required")
 )
 
 // syncWorkspaceProtocol is the socket protocol for workspaces. Version 3
@@ -33,9 +31,8 @@ const (
 
 // Slot kinds are protocol constants shared with native clients.
 const (
-	SyncSlotHistory        int16 = 1
-	SyncSlotPageState      int16 = 2
-	SyncSlotSessionStorage int16 = 3
+	SyncSlotHistory   int16 = 1
+	SyncSlotPageState int16 = 2
 	// A device's website sign-in data lives in these slots on its workspace's root
 	// node. Its lease holder (the workspace's driver) is the only one who may write it.
 	SyncSlotSigninFirst int16 = 4

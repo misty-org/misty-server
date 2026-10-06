@@ -109,11 +109,6 @@ func (db *Database) BeginAccountDeletion(
 			return err
 		}
 
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE space_workflows SET schedules_enabled=FALSE
-			WHERE creator_user_id=$1`, userID); err != nil {
-			return err
-		}
 		if err := disableAccountAgentsTx(ctx, tx, userID); err != nil {
 			return err
 		}
@@ -122,23 +117,6 @@ func (db *Database) BeginAccountDeletion(
 			       last_error_code,created_at,updated_at,completed_at
 			FROM account_deletion_requests WHERE id=$1`, requestID), out)
 	})
-	return out, err
-}
-
-func (db *Database) AccountDeletionStatus(
-	ctx context.Context, requestID, statusTokenHash string,
-) (*AccountDeletionRequest, error) {
-	out := &AccountDeletionRequest{}
-	err := db.TestingWithRLSContext(ctx, TestingServiceRLSSettings(), func(tx *sql.Tx) error {
-		return scanAccountDeletionRequest(tx.QueryRowContext(ctx, `
-			SELECT id,user_id,status,purge_after,provider_revocation_status,
-			       last_error_code,created_at,updated_at,completed_at
-			FROM account_deletion_requests
-			WHERE id=$1 AND status_token_hash=$2`, requestID, statusTokenHash), out)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrAccountDeletionToken
-	}
 	return out, err
 }
 

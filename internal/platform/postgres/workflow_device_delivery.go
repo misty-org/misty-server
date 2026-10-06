@@ -110,7 +110,7 @@ func (db *Database) ClaimWorkflowDeviceNodeJob(userID, deviceID string, lease ti
 }
 
 func deviceAuthorityDenied(err error) bool {
-	return errors.Is(err, ErrSpaceForbidden) || errors.Is(err, ErrAppRuntimeForbidden) || errors.Is(err, ErrAgentExecutionTimeLimit) || errors.Is(err, ErrSpaceNotFound)
+	return errors.Is(err, ErrSpaceForbidden) || errors.Is(err, ErrAgentExecutionTimeLimit) || errors.Is(err, ErrSpaceNotFound)
 }
 
 func (db *Database) BeginWorkflowDeviceNodeJob(userID, deviceID, jobID, token string) (*WorkflowDeviceNodeJob, error) {

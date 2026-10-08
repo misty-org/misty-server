@@ -41,3 +41,13 @@ func (db *Database) DevicePolicyAllows(ctx context.Context, userID, deviceID, su
 	})
 	return allowed, err
 }
+
+// DeviceClipboardEnabled reports whether a device's latest signed policy turns
+// the shared clipboard on. A device with no policy yet has it off.
+func (db *Database) DeviceClipboardEnabled(ctx context.Context, userID, deviceID string) (bool, error) {
+	enabled := false
+	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM device_policies WHERE device_id=$1 AND user_id=$2 AND clipboard)`, deviceID, userID).Scan(&enabled)
+	})
+	return enabled, err
+}

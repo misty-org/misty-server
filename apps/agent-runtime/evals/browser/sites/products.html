@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Inventory · Page <span>1</span></title>
+<style>body{font:15px system-ui;margin:32px}td,th{padding:4px 12px;text-align:left}</style></head>
+<body><h1>Warehouse inventory</h1><table><thead><tr><th>SKU</th><th>Product</th><th>Price</th><th>In stock</th></tr></thead><tbody id="rows"></tbody></table>
+<nav aria-label="Pages"><button id="prev">Previous page</button> <span id="page">Page 1 of 2</span> <button id="next">Next page</button></nav>
+<script>
+const names=["Desk lamp","Notebook","Stapler","Monitor arm","Cable kit","Ergonomic mouse","Keyboard","Webcam","Headset","Chair mat","USB hub","Whiteboard","Markers","Desk fan","Plant pot","Laptop stand","Mug","Pen set","Sticky notes","Paper tray","Bookend","Clipboard","Tape","Scissors","Calculator","Lamp bulb","Wrist rest","Phone stand","Label maker","Shredder"];
+const items=names.map((n,i)=>({sku:'NW-'+(100+i),name:n,price:((i*7.3)%45+3).toFixed(2),stock:(i%4===0)?0:(i*3)%17+1}));
+window.__evalItems=items;let page=0;
+function render(){document.getElementById('rows').innerHTML=items.slice(page*15,page*15+15).map(it=>'<tr><td>'+it.sku+'</td><td>'+it.name+'</td><td>$'+it.price+'</td><td>'+(it.stock?it.stock:'Out of stock')+'</td></tr>').join('');document.getElementById('page').textContent='Page '+(page+1)+' of 2';document.title='Inventory · Page '+(page+1)}
+document.getElementById('next').onclick=()=>{page=1;render()};document.getElementById('prev').onclick=()=>{page=0;render()};render();
+</script></body></html>

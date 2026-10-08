@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/websocket"
 	agent "github.com/kannachi323/misty/server/internal/agents"
 	"net/http"
@@ -140,4 +141,102 @@ func TestVoiceConversationLivePCM(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// Opt-in: the real realtime model, through the server actor, routes a
+// question about the screen to show_on_screen, work to start_task, and small
+// talk to no tool at all. Typed turns stand in for speech.
+func TestVoiceConversationLiveRoutesScreenQuestions(t *testing.T) {
+	if os.Getenv("MISTY_REALTIME_CONVERSATION_LIVE") != "1" {
+		t.Skip("requires MISTY_REALTIME_CONVERSATION_LIVE=1 and a configured gateway")
+	}
+	a := &agent.SmartLibraryAnalyzer{APIKey: os.Getenv("AI_GATEWAY_API_KEY")}
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+	defer cancel()
+	provider, err := a.OpenVoiceRealtime(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer provider.Close()
+	hooks := conversationHooks{Operation: "realtime-voice:routing-live", History: "[]", Access: func(context.Context) error { return nil }, Input: func(context.Context, int) error { return nil }, Reserve: func(context.Context, agent.RealtimeVoiceUsage) error { return nil }, Settle: func(context.Context, agent.RealtimeVoiceUsage) error { return nil }, Checkpoint: func(context.Context, string, agent.RealtimeVoiceUsage) error { return nil }, Save: func(context.Context, string, string, string, bool, time.Time) error { return nil }, Tool: func(_ context.Context, name string) (string, error) {
+		if name == "get_context" {
+			return "[]", nil
+		}
+		return `{"state":"none"}`, nil
+	}, TaskID: func() string { return "" }, Bind: func(context.Context, string, string, string) (string, error) {
+		return `{"state":"completed","note":"live routing check; nothing was admitted"}`, nil
+	}}
+	finished := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		defer close(finished)
+		runConversationSession(ctx, c, provider, hooks)
+	}))
+	defer server.Close()
+	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	read := func() map[string]any {
+		t.Helper()
+		_ = client.SetReadDeadline(time.Now().Add(45 * time.Second))
+		var e map[string]any
+		if err := client.ReadJSON(&e); err != nil {
+			t.Fatal(err)
+		}
+		if e["type"] == "error" {
+			t.Fatal(e)
+		}
+		return e
+	}
+	if e := read(); e["type"] != "ready" {
+		t.Fatal(e)
+	}
+	routes := map[string]string{} // prompt → tool, and how much it said around the hand-off
+	for _, c := range []struct{ prompt, want string }{
+		{"where's the push button on my screen?", "show_on_screen"},
+		{"walk me through committing my changes in the app I have open", "show_on_screen"},
+		{"please push my branch to github for me", "start_task"},
+		{"thanks, how's your day going?", ""},
+	} {
+		_ = client.WriteJSON(map[string]string{"type": "turn.begin"})
+		if e := read(); e["type"] != "turn.ready" {
+			t.Fatal(e)
+		}
+		_ = client.WriteJSON(map[string]string{"type": "text.commit", "text": c.prompt})
+		called, spoken, said := "", 0, ""
+		for done := false; !done; {
+			e := read()
+			switch e["type"] {
+			case "audio":
+				spoken += len(e["audio"].(string))
+			case "tool.call":
+				if called == "" {
+					called = e["name"].(string)
+				}
+				_ = client.WriteJSON(map[string]string{"type": "tool.result", "callId": e["callId"].(string), "invocationId": "live-check"})
+			case "audio.done":
+				_ = client.WriteJSON(map[string]string{"type": "playback.done"})
+			case "turn.done":
+				done = true
+				said, _ = e["reply"].(string)
+			}
+		}
+		routes[c.prompt] = fmt.Sprintf("%s (spoken audio bytes: %d) said: %q", called, spoken, said)
+		if called != c.want {
+			t.Errorf("%q called %q, want %q", c.prompt, called, c.want)
+		}
+		if called != "" && (spoken > 0 || strings.TrimSpace(said) != "") {
+			t.Errorf("%q announced its hand-off: %q", c.prompt, said)
+		}
+	}
+	raw, _ := json.Marshal(routes)
+	t.Log(string(raw))
+	client.Close()
+	<-finished
 }

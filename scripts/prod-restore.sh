@@ -12,11 +12,12 @@ identity="${2:?Pass the age identity file that decrypts backups}"
 [ "${MISTY_RESTORE_CONFIRMED:-}" = yes ] || { echo "Restore replaces production data; rerun with --yes." >&2; exit 1; }
 [ -r "$identity" ] || { echo "Cannot read age identity $identity." >&2; exit 1; }
 : "${MISTY_BACKUP_BUCKET:?Set MISTY_BACKUP_BUCKET}"
-: "${R2_ENDPOINT:?Set R2_ENDPOINT}" "${R2_ACCESS_KEY:?Set R2_ACCESS_KEY}" "${R2_SECRET_KEY:?Set R2_SECRET_KEY}"
+: "${R2_ENDPOINT:?Set R2_ENDPOINT}"
 : "${DB_MIGRATION_USER:?Set DB_MIGRATION_USER}" "${DB_NAME:?Set DB_NAME}"
 command -v age >/dev/null || { echo "Install age (apt install age) to decrypt backups." >&2; exit 1; }
 
 source "$(dirname "$0")/prod-backup-common.sh"
+backup_credentials
 
 if [ "$backup" = latest ]; then
   backup=$(rclone lsf --dirs-only "r2:$MISTY_BACKUP_BUCKET" | tr -d / | grep -E '^[0-9]{8}T[0-9]{6}Z$' | sort | tail -n 1)

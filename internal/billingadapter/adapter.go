@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 var (
@@ -31,6 +32,7 @@ type Request struct {
 	Background     bool       `json:"background,omitempty"`
 	Customer       *Customer  `json:"customer,omitempty"`
 	Selection      *Selection `json:"selection,omitempty"`
+	Referral       *Referral  `json:"referral,omitempty"`
 	Version        int        `json:"version"`
 	AccountID      string     `json:"account_id"`
 	Operation      string     `json:"operation"`
@@ -45,6 +47,15 @@ type Customer struct {
 	Email string `json:"email"`
 	Name  string `json:"name"`
 }
+
+// Referral attributes a new account to the account whose link it joined
+// through. The server reports its abuse signals; billing decides.
+type Referral struct {
+	ReferrerID    string `json:"referrer_id"`
+	EmailVerified bool   `json:"email_verified"`
+	SameDevice    bool   `json:"same_device"`
+	SameNetwork   bool   `json:"same_network"`
+}
 type Selection struct {
 	Product  string `json:"product"`
 	Interval string `json:"interval"`
@@ -54,6 +65,27 @@ type Decision struct {
 	ReservationID string          `json:"reservation_id,omitempty"`
 	Summary       json.RawMessage `json:"summary,omitempty"`
 }
+
+// Denial is a refused admission with the limit that refused it: "window" (the
+// 5-hour limit), "weekly", "monthly", "command", "service", "model" or
+// "email". It matches ErrDenied.
+type Denial struct {
+	Limit    string     `json:"denied_by,omitempty"`
+	ResetsAt *time.Time `json:"resets_at,omitempty"`
+}
+
+func (d *Denial) Error() string        { return "billing admission denied: " + d.Limit }
+func (d *Denial) Is(target error) bool { return target == ErrDenied }
+
+// DenialFrom reads the refusal details billing returned, if any.
+func DenialFrom(summary json.RawMessage) *Denial {
+	d := &Denial{}
+	if len(summary) > 0 {
+		_ = json.Unmarshal(summary, d)
+	}
+	return d
+}
+
 type Adapter interface {
 	Enabled() bool
 	Do(context.Context, string, Request) (Decision, error)
@@ -72,8 +104,11 @@ func validate(action string, r Request) error {
 		return ErrInvalid
 	}
 	switch action {
-	case "check", "reserve", "settle", "settle_group", "release_group", "release", "refund", "summary", "checkout", "portal", "close", "provision":
+	case "check", "reserve", "settle", "settle_group", "release_group", "release", "refund", "summary", "checkout", "portal", "close", "provision", "referral":
 	default:
+		return ErrInvalid
+	}
+	if action == "referral" && (r.Referral == nil || strings.TrimSpace(r.Referral.ReferrerID) == "" || len(r.Referral.ReferrerID) > 256 || r.Referral.ReferrerID == r.AccountID) {
 		return ErrInvalid
 	}
 	if r.Customer != nil && (len(r.Customer.Email) > 320 || len(r.Customer.Name) > 256) {

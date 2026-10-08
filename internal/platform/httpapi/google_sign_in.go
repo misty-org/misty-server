@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -25,8 +26,8 @@ const googleSignInCookie = "misty_google_sign_in"
 type googleSignInStore interface {
 	CreateGoogleSignInFlow(context.Context, db.GoogleSignInFlow) error
 	AdvanceGoogleSignInFlow(context.Context, string, string, string) (db.GoogleSignInFlow, error)
-	FinishGoogleSignInFlow(context.Context, string, string, string) error
-	ConsumeGoogleSignInFlow(context.Context, string) (*db.GoogleSignInFlow, error)
+	FinishGoogleSignInFlow(context.Context, string, string, string, string) error
+	ConsumeGoogleSignInFlow(context.Context, string, string) (*db.GoogleSignInFlow, error)
 	GoogleUser(string, string, string) (*db.User, error)
 	GetUserByID(string) (*db.User, error)
 	CreateGoogleReauthenticationToken(context.Context, string, string) error
@@ -38,7 +39,12 @@ type GoogleSignInService struct {
 	startURL string
 	validate func(context.Context, string, string) (*idtoken.Payload, error)
 	session  func(http.ResponseWriter, *http.Request, *db.User)
+	// verification marks Google accounts verified and records signup signals.
+	verification *AccountVerification
 }
+
+// SetVerification lets Google sign-ins mark their (Google-verified) email.
+func (s *GoogleSignInService) SetVerification(v *AccountVerification) { s.verification = v }
 
 func NewGoogleSignInService(database *db.Database) (*GoogleSignInService, error) {
 	s := &GoogleSignInService{store: database, validate: idtoken.Validate}
@@ -195,10 +201,18 @@ func (s *GoogleSignInService) Callback() http.HandlerFunc {
 				}
 			}
 		}
+		completion, completionHash := "", ""
+		if errorCode == "" {
+			if completion, err = newGoogleCompletionCode(); err != nil {
+				userID, errorCode = "", "google_sign_in_failed"
+			} else {
+				completionHash = security.HashToken(completion)
+			}
+		}
 		// Persist a terminal result even if the browser disconnects while exchanging.
 		finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 		defer finishCancel()
-		if err = s.store.FinishGoogleSignInFlow(finishCtx, flow.StateHash, userID, errorCode); err != nil {
+		if err = s.store.FinishGoogleSignInFlow(finishCtx, flow.StateHash, userID, errorCode, completionHash); err != nil {
 			googleSignInPage(w, 500, "Could not finish sign-in. Return to Misty and try again.")
 			return
 		}
@@ -206,8 +220,51 @@ func (s *GoogleSignInService) Callback() http.HandlerFunc {
 			googleSignInPage(w, 400, googleSignInError(errorCode))
 			return
 		}
-		googleSignInPage(w, 200, "You're signed in. Return to Misty to continue. You can close this tab.")
+		googleSignInCompletePage(w, completion)
 	}
+}
+
+// The completion code binds a finished Google sign-in to the browser that
+// finished it. Misty receives it through its misty:// link on this computer,
+// or the person types it. Ambiguous characters are left out of the alphabet.
+const googleCompletionAlphabet = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
+const googleCompletionLength = 10
+
+func newGoogleCompletionCode() (string, error) {
+	code := make([]byte, 0, googleCompletionLength)
+	buffer := make([]byte, 32)
+	limit := byte(256 - 256%len(googleCompletionAlphabet))
+	for len(code) < googleCompletionLength {
+		if _, err := rand.Read(buffer); err != nil {
+			return "", err
+		}
+		for _, value := range buffer {
+			if value < limit && len(code) < googleCompletionLength {
+				code = append(code, googleCompletionAlphabet[int(value)%len(googleCompletionAlphabet)])
+			}
+		}
+	}
+	return string(code), nil
+}
+
+// normalizeGoogleCompletionCode accepts the code as displayed (with a dash)
+// or typed in lower case. Anything else yields "".
+func normalizeGoogleCompletionCode(raw string) string {
+	var code strings.Builder
+	for _, character := range strings.ToUpper(raw) {
+		switch {
+		case character == '-' || character == ' ':
+			continue
+		case strings.ContainsRune(googleCompletionAlphabet, character):
+			code.WriteRune(character)
+		default:
+			return ""
+		}
+	}
+	if code.Len() != googleCompletionLength {
+		return ""
+	}
+	return code.String()
 }
 
 func validGoogleIdentity(p *idtoken.Payload, nonce, clientID string) bool {
@@ -227,16 +284,30 @@ func (s *GoogleSignInService) Complete() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Token string `json:"flow_token"`
+			Token          string `json:"flow_token"`
+			CompletionCode string `json:"completion_code"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		if body.Token == "" || len(body.Token) > 256 {
+		if body.Token == "" || len(body.Token) > 256 || len(body.CompletionCode) > 64 {
 			http.Error(w, "invalid sign-in token", 400)
 			return
 		}
-		flow, err := s.store.ConsumeGoogleSignInFlow(r.Context(), security.HashToken(body.Token))
+		completionHash := ""
+		if strings.TrimSpace(body.CompletionCode) != "" {
+			code := normalizeGoogleCompletionCode(body.CompletionCode)
+			if code == "" {
+				http.Error(w, "That code is not valid. Check the code shown in your browser.", http.StatusBadRequest)
+				return
+			}
+			completionHash = security.HashToken(code)
+		}
+		flow, err := s.store.ConsumeGoogleSignInFlow(r.Context(), security.HashToken(body.Token), completionHash)
+		if errors.Is(err, db.ErrGoogleFlowNeedsCode) {
+			writeJSON(w, http.StatusAccepted, map[string]string{"status": "confirm"})
+			return
+		}
 		if errors.Is(err, db.ErrGoogleFlowInvalid) {
 			http.Error(w, err.Error(), http.StatusGone)
 			return
@@ -275,6 +346,7 @@ func (s *GoogleSignInService) Complete() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]string{"reauthentication_token": token})
 			return
 		}
+		s.verification.AfterSignup(r, user, true)
 		s.session(w, r, user)
 	}
 }
@@ -302,6 +374,19 @@ func googleSignInError(code string) string {
 	default:
 		return "Could not verify your Google account. Return to Misty and try again."
 	}
+}
+
+// googleSignInCompletePage hands the completion code to Misty on this
+// computer through its misty:// link, and shows it for typing as a fallback.
+func googleSignInCompletePage(w http.ResponseWriter, code string) {
+	link := "misty://auth/google/complete?code=" + url.QueryEscape(code)
+	display := code[:googleCompletionLength/2] + "-" + code[googleCompletionLength/2:]
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=%[1]s"><title>Misty sign-in</title><style>body{background:#111;color:#fff;font:16px system-ui;display:grid;place-items:center;min-height:95vh;margin:0}main{max-width:28rem;margin:2rem;padding:2rem;border:1px solid #444;border-radius:12px}p{color:#ccc;line-height:1.6}a{color:#fff}code{font:600 1.4rem ui-monospace,monospace;letter-spacing:.08em;color:#fff}</style><main><h1>Misty sign-in</h1><p>Google confirmed your account. Misty finishes signing in when it opens. <a href="%[1]s">Open Misty</a></p><p>If Misty doesn't open, enter this code in Misty on this computer: <code>%[2]s</code></p><p>Never share this code. If you didn't start signing in to Misty on this computer, close this tab.</p></main></html>`, html.EscapeString(link), html.EscapeString(display))
 }
 
 func googleSignInPage(w http.ResponseWriter, status int, message string) {

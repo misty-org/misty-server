@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kannachi323/misty/server/internal/accounts"
 	"github.com/kannachi323/misty/server/internal/platform/email"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/kannachi323/misty/server/internal/platform/security"
@@ -98,6 +99,10 @@ func (s *PasswordResetService) Reset() http.HandlerFunc {
 		}
 		if body.NewPassword == "" {
 			http.Error(w, "new_password is required", http.StatusBadRequest)
+			return
+		}
+		if err := accounts.ValidateNewPassword(body.NewPassword); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 

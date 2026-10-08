@@ -55,7 +55,7 @@ func TestAccountOpenAICompanionConfigurationToolsAndMeasuredUsage(t *testing.T) 
 		t.Fatalf("configuration: %+v %v", event, err)
 	}
 	config := (<-commands)["session"].(map[string]any)
-	if len(config["tools"].([]any)) != 5 {
+	if len(config["tools"].([]any)) != 6 {
 		t.Fatal("companion tool declarations lost")
 	}
 	if err := voice.Send(map[string]any{"type": "conversation-item-create", "item": map[string]string{"type": "text-message", "role": "user", "text": "Check my task"}}); err != nil {

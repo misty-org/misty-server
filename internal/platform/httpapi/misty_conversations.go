@@ -80,6 +80,13 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 					return
 				}
 				modelID = requestedModel
+			} else if routes, err := s.database.AIModelRoutes(r.Context(), userID); err == nil {
+				// No explicit pick: new chats follow the account's Thinking sense.
+				for _, route := range routes {
+					if route.Role == "agent" && route.Enabled && route.Model != "" && agent.FrontierModelAvailable(r.Context(), route.Model) {
+						modelID = route.Model
+					}
+				}
 			}
 			var conversationID string
 			var err error
@@ -198,6 +205,10 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 				ModelID         *string `json:"model_id"`
 				ReasoningEffort *string `json:"reasoning_effort"`
 				SpaceID         *string `json:"space_id"`
+				// One of the conversation's own agent's folders; empty returns it to Recents.
+				FolderID *string `json:"folder_id"`
+				// True records that the user has now seen the conversation.
+				Read *bool `json:"read"`
 			}
 			if err := decodeAIJSON(w, r, &body); err != nil {
 				http.Error(w, "invalid request", http.StatusBadRequest)
@@ -210,6 +221,22 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 					return
 				}
 				response["spaceId"] = ""
+			}
+			if body.FolderID != nil {
+				folderID := strings.TrimSpace(*body.FolderID)
+				if err := s.database.FileAgentConversation(r.Context(), userID, conversationID, folderID); err != nil {
+					writeConversationFolderError(w, err)
+					return
+				}
+				response["folderId"] = folderID
+			}
+			if body.Read != nil && *body.Read {
+				readAt, err := s.database.MarkAgentConversationRead(r.Context(), userID, conversationID)
+				if err != nil {
+					TestingWriteAIError(w, err)
+					return
+				}
+				response["lastReadAt"] = readAt.UTC().Format(time.RFC3339Nano)
 			}
 			if body.Title != nil {
 				title := cleanMistyTitle(*body.Title)
@@ -366,11 +393,11 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 			modelID = summary.ModelOverride
 		}
 		return mistyConversation{
-			ID: summary.ID, AgentID: summary.AgentID, Title: cleanMistyTitle(summary.Title),
+			ID: summary.ID, AgentID: summary.AgentID, FolderID: summary.FolderID, Title: cleanMistyTitle(summary.Title),
 			SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
 			OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, ModelOverride: summary.ModelOverride, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
 			CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),
-			UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), Messages: messages, Remote: true,
+			UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true,
 		}, nil
 	}
 	transcript, err := s.runtime.Transcript(r.Context(), summary.ID, userID)
@@ -400,12 +427,20 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 		modelID = summary.ModelOverride
 	}
 	return mistyConversation{
-		ID: summary.ID, AgentID: summary.AgentID, Title: cleanMistyTitle(summary.Title),
+		ID: summary.ID, AgentID: summary.AgentID, FolderID: summary.FolderID, Title: cleanMistyTitle(summary.Title),
 		SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
 		OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, ModelOverride: summary.ModelOverride, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
 		CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),
-		UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), Messages: messages, Remote: true,
+		UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true,
 	}, nil
+}
+
+// formatReadAt renders a conversation's read time; never read is empty.
+func formatReadAt(readAt *time.Time) string {
+	if readAt == nil {
+		return ""
+	}
+	return readAt.UTC().Format(time.RFC3339Nano)
 }
 
 // markCompactedAfter flags the last message of the newest summarized turn, so

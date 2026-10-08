@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Assignment 3 – Response</title>
+<style>body{font:16px Georgia,serif;margin:40px;max-width:720px}#doc{border:1px solid #999;min-height:240px;padding:16px}[role=toolbar] button{margin-right:6px}</style></head>
+<body><h1>Assignment 3: Photosynthesis</h1>
+<p id="prompt">Question: In your own words, explain the two stages of photosynthesis. Add a heading named Answer, then write at least three bullet points, then click Save.</p>
+<div role="toolbar" aria-label="Formatting"><button id="h2">Heading</button><button id="ul">Bulleted list</button><button id="save">Save</button></div>
+<div id="doc" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Response document"></div>
+<p id="status" role="status">Not saved</p>
+<script>
+window.__evalState={saved:null};
+document.getElementById('h2').onclick=()=>document.execCommand('formatBlock',false,'h2');
+document.getElementById('ul').onclick=()=>document.execCommand('insertUnorderedList');
+document.getElementById('save').onclick=()=>{const d=document.getElementById('doc');window.__evalState.saved={html:d.innerHTML,text:d.innerText};document.getElementById('status').textContent='Saved'};
+</script></body></html>

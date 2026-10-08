@@ -18,12 +18,31 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 	providers []string,
 	idempotencyKey string,
 ) (*CreateSpaceResult, error) {
+	return db.CreateSpaceFromSource(ctx, userID, name, templateID, "", providers, idempotencyKey)
+}
+
+// CreateSpaceFromSource creates a Space from a built-in or personal template,
+// or, when sourceSpaceID is set, from the structure of a Space the caller
+// belongs to. The Space, its tasks and its collections commit together; notes
+// count toward cloud storage, so they are added afterwards and a failure there
+// leaves the Space in place with SeedIncomplete set.
+func (db *Database) CreateSpaceFromSource(
+	ctx context.Context,
+	userID, name, templateID, sourceSpaceID string,
+	providers []string,
+	idempotencyKey string,
+) (*CreateSpaceResult, error) {
 	name, err := normalizeSpaceName(name)
 	if err != nil {
 		return nil, err
 	}
-	template, ok := TestingTemplateByID(templateID)
-	if !ok {
+	sourceSpaceID = strings.TrimSpace(sourceSpaceID)
+	template := &templateDefinition{}
+	if sourceSpaceID != "" {
+		templateID = "space:" + sourceSpaceID
+	} else if curated, ok := TestingTemplateByID(templateID); ok {
+		template = curated
+	} else {
 		template, err = db.personalTemplateDefinition(ctx, userID, templateID)
 		if errors.Is(err, ErrSpaceNotFound) {
 			return nil, ErrSpaceInvalid
@@ -47,12 +66,16 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 	if len(idempotencyKey) > 200 {
 		return nil, ErrSpaceInvalid
 	}
+	// A built-in template resolves "" to "blank"; a copied Space has no template row.
+	templateKey := template.ID
+	if templateKey == "" {
+		templateKey = templateID
+	}
 	fingerprintInput, _ := json.Marshal(struct {
 		Name      string   `json:"name"`
 		Template  string   `json:"template"`
 		Providers []string `json:"providers"`
-		Apps      []string `json:"apps"`
-	}{Name: name, Template: template.ID, Providers: providers, Apps: nil})
+	}{Name: name, Template: templateKey, Providers: providers})
 	fingerprintDigest := sha256.Sum256(fingerprintInput)
 	fingerprint := hex.EncodeToString(fingerprintDigest[:])
 	existingSpaceID := ""
@@ -75,6 +98,14 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
+		}
+		if sourceSpaceID != "" {
+			captured, err := captureSpaceStructureTx(ctx, tx, userID, sourceSpaceID, AllTemplateParts)
+			if err != nil {
+				return err
+			}
+			captured.ID = templateID
+			template = &captured
 		}
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`,
 			"spaces:owner:"+userID); err != nil {
@@ -105,11 +136,11 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 				return err
 			}
 		}
-		if err := seedSpaceTemplateTx(ctx, tx, result.Space.ID, userID, *template); err != nil {
+		if err := seedSpaceStructureTx(ctx, tx, result.Space.ID, userID, *template); err != nil {
 			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, result.Space.ID, userID, "space.created", result.Space.ID, map[string]any{
-			"name": name, "template_id": template.ID, "integration_providers": providers,
+			"name": name, "template_id": templateKey, "integration_providers": providers,
 		}); err != nil {
 			return err
 		}
@@ -135,10 +166,20 @@ func (db *Database) CreateSpaceWithTemplateIdempotent(
 		}
 		return &CreateSpaceResult{Space: *space, Setup: *setup}, nil
 	}
+	if len(template.Notes) > 0 {
+		// Notes count toward cloud storage, whose commit checks billing. Keep that
+		// out of the Space's own transaction so it can never block creation.
+		if err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+			return seedSpaceNotesTx(ctx, tx, result.Space.ID, userID, template.Notes)
+		}); err != nil {
+			result.SeedIncomplete = true
+		}
+	}
 	return result, nil
 }
 
-func seedSpaceTemplateTx(ctx context.Context, tx *sql.Tx, spaceID, userID string, template templateDefinition) error {
+// seedSpaceStructureTx adds a template's tasks and collections.
+func seedSpaceStructureTx(ctx context.Context, tx *sql.Tx, spaceID, userID string, template templateDefinition) error {
 	if len(template.Tasks) > 0 {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_task_counters(space_id,last_number) VALUES($1,$2)`, spaceID, len(template.Tasks)); err != nil {
 			return err
@@ -153,28 +194,37 @@ func seedSpaceTemplateTx(ctx context.Context, tx *sql.Tx, spaceID, userID string
 			}
 		}
 	}
-	for _, name := range template.Collections {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_albums(id,space_id,name,description,created_by_user_id)
-			VALUES($1,$2,$3,'',$4)`, "album_"+uuid.NewString(), spaceID, name, userID); err != nil {
+	// Collections keep the template's order: they share one creation time.
+	for index, name := range template.Collections {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_albums(id,space_id,name,description,created_by_user_id,position)
+			VALUES($1,$2,$3,'',$4,$5)`, "album_"+uuid.NewString(), spaceID, name, userID, int64(index+1)*1024); err != nil {
 			return err
 		}
 	}
-	if template.NoteTitle == "" {
-		return nil
+	return nil
+}
+
+// seedSpaceNotesTx adds a template's notes; the collaboration service applies
+// each note's Markdown through its bootstrap command.
+func seedSpaceNotesTx(ctx context.Context, tx *sql.Tx, spaceID, userID string, notes []templateNote) error {
+	for _, note := range notes {
+		noteID := "note_" + uuid.NewString()
+		plain := strings.TrimSpace(strings.ReplaceAll(note.Markdown, "#", ""))
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_notes
+			(id,space_id,creator_user_id,title_projection,plain_text_projection)
+			VALUES($1,$2,$3,$4,$5)`, noteID, spaceID, userID, note.Title, plain); err != nil {
+			return err
+		}
+		payload, _ := json.Marshal(map[string]any{"markdown": note.Markdown, "title": note.Title})
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_note_control_outbox(id,note_id,command,payload)
+			VALUES($1,$2,'bootstrap',$3)`, "notectl_"+uuid.NewString(), noteID, payload); err != nil {
+			return err
+		}
+		if err := recordNoteEventTx(ctx, tx, spaceID, userID, "note.created", noteID, nil); err != nil {
+			return err
+		}
 	}
-	noteID := "note_" + uuid.NewString()
-	plain := strings.TrimSpace(strings.ReplaceAll(template.NoteMarkdown, "#", ""))
-	if _, err := tx.ExecContext(ctx, `INSERT INTO space_notes
-		(id,space_id,creator_user_id,title_projection,plain_text_projection)
-		VALUES($1,$2,$3,$4,$5)`, noteID, spaceID, userID, template.NoteTitle, plain); err != nil {
-		return err
-	}
-	payload, _ := json.Marshal(map[string]any{"markdown": template.NoteMarkdown, "title": template.NoteTitle})
-	if _, err := tx.ExecContext(ctx, `INSERT INTO space_note_control_outbox(id,note_id,command,payload)
-		VALUES($1,$2,'bootstrap',$3)`, "notectl_"+uuid.NewString(), noteID, payload); err != nil {
-		return err
-	}
-	return recordNoteEventTx(ctx, tx, spaceID, userID, "note.created", noteID, nil)
+	return nil
 }
 
 func jsonNumber(value int) string {

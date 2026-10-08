@@ -23,7 +23,9 @@ describe("tool outcome policy", () => {
   });
 
   it("stops any call once the run loses its authority or budget", () => {
-    for (const error of ["permission_denied: This run is no longer authorized to use that tool.", "agent_execution_time_limit: allowance used", "tool_sequence_stopped: earlier failure"]) {
+    for (const error of ["permission_denied: This run is no longer authorized to use that tool.", "agent_execution_time_limit: allowance used", "tool_sequence_stopped: earlier failure",
+      // The device the person picked dropped out: they pick another.
+      "device_offline: Mac mini went offline. Pick another device and ask again."]) {
       expect(endsRun(error)).toBe(true);
       expect(classifyToolOutcome({ success: false, readOnly: true, rejected: true, error }).kind).toBe("stop");
     }

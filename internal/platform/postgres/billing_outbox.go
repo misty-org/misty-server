@@ -56,7 +56,7 @@ func (s BillingOutbox) Enqueue(ctx context.Context, e billingadapter.Entry) erro
 	return nil
 }
 func (s BillingOutbox) Pending(ctx context.Context, limit int) ([]billingadapter.Entry, error) {
-	rows, err := s.executor(ctx).QueryContext(ctx, `SELECT id,action,payload FROM billing_adapter_outbox WHERE delivered_at IS NULL AND available_at<=now() ORDER BY created_at,id LIMIT $1`, min(max(limit, 1), 100))
+	rows, err := s.executor(ctx).QueryContext(ctx, `SELECT id,action,payload FROM billing_adapter_outbox WHERE delivered_at IS NULL AND rejected_at IS NULL AND available_at<=now() ORDER BY created_at,id LIMIT $1`, min(max(limit, 1), 100))
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +74,13 @@ func (s BillingOutbox) Pending(ctx context.Context, limit int) ([]billingadapter
 		result = append(result, e)
 	}
 	return result, rows.Err()
+}
+
+// Rejected parks a delivery billing refused as invalid or conflicting for
+// operator review; retrying the same payload can never succeed.
+func (s BillingOutbox) Rejected(ctx context.Context, id, reason string) error {
+	_, err := s.executor(ctx).ExecContext(ctx, `UPDATE billing_adapter_outbox SET rejected_at=now(),rejection=$2 WHERE id=$1 AND delivered_at IS NULL`, id, reason)
+	return err
 }
 func (s BillingOutbox) Delivered(ctx context.Context, id string) error {
 	_, err := s.executor(ctx).ExecContext(ctx, `UPDATE billing_adapter_outbox SET delivered_at=now() WHERE id=$1 AND delivered_at IS NULL`, id)

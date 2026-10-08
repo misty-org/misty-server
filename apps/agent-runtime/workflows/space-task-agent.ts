@@ -5,12 +5,14 @@ import { browserReinspectionInstruction } from "../src/browser-reinspection.js";
 import { summarizeOlderSteps } from "../src/compaction-step.js";
 import { applyCompaction, CLEAR_AT, clearOldToolResults, COMPACT_AT, contextWindow, estimateInputTokens, messageBytes, planCompaction } from "../src/context-compaction.js";
 import type { RuntimeIdentity } from "../src/control-plane.js";
-import { activateRuntime, checkpoint, complete, fetchContext, fetchExecutionBudget, takeSteering } from "../src/control-plane-steps.js";
+import { activateRuntime, admitModelTurn, checkpoint, complete, fetchContext, fetchExecutionBudget, takeSteering } from "../src/control-plane-steps.js";
 import { MISTY_HARNESS_VERSION, type HarnessCompletion, type HarnessExecution } from "../src/harness.js";
 import { InstanceModel } from "../src/instance-model.js";
 import { discoverRemoteMCPTools } from "../src/mcp-runtime.js";
 import { accumulateModelUsage, modelTimeout, modelTurnLimit } from "../src/model-budget.js";
 import { initialMessages } from "../src/model-input.js";
+import { pruneStalePageSnapshots, withCacheBreakpoint } from "../src/prompt-cache.js";
+import { runBrowserReplay, validReplay } from "../src/browser-replay.js";
 import { catalogTools, modelCatalog } from "../src/model-tools.js";
 import { classifyRuntimeError } from "../src/runtime-errors.js";
 import { serialToolLifecycle } from "../src/serial-tool-lifecycle.js";
@@ -32,6 +34,8 @@ export interface SpaceTaskWorkflowInput {
  * its real name; Misty's gateway authorizes, journals and executes each call.
  * The model reports the outcome with misty_finish_task.
  */
+const usageWrapUpInstruction = "Usage note from Misty: this account just reached an AI usage limit, so this task has only a little room left. Finish now in as few steps as possible. If the task cannot be completed, call misty_finish_task and report exactly what is done and what remains.";
+
 export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   "use workflow";
   if (input.adapterVersion && input.adapterVersion !== MISTY_HARNESS_VERSION) throw new FatalError("harness_version_unavailable");
@@ -108,6 +112,7 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   // The agent swallows errors thrown from its step hooks, so a failed settlement
   // checkpoint is held here and rethrown once the call returns.
   let hookFailure: unknown;
+  let wrappingUp = false;
   const agent = new WorkflowAgent({
     id: "misty-space-task-agent",
     model: new InstanceModel(context.model_id, identity),
@@ -118,8 +123,8 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     // deadline after durable tool waits. The aggregate loop below owns the cap.
     stopWhen: isStepCount(1),
     maxRetries: 2,
-    // Match the Go admission ceiling (agents.MaxModelOutputTokens).
-    maxOutputTokens: 2_200,
+    // Match the Go admission ceiling (agents.MaxAgentTurnOutputTokens).
+    maxOutputTokens: 8_192,
     reasoning: context.reasoning_effort === "max" ? undefined : context.reasoning_effort || undefined,
     telemetry: { isEnabled: true, recordInputs: false, recordOutputs: false, functionId: "misty.space-task-agent" },
     experimental_onStepStart: async ({ stepNumber }) => {
@@ -165,6 +170,20 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       runtimeContext: { mistyRunId: input.mistyRunId },
     };
     let messages: ModelMessage[] = initialMessages(context);
+    if (!explaining && validReplay(context.browser_replay)) {
+      // A workflow that ran before replays its saved browser steps without a
+      // model; the agent takes over at the first step the page no longer matches.
+      const replay = await runBrowserReplay(context.browser_replay, {
+        run: (callId, name, value) => execution.executeCapability(callId, name, value),
+        checkpoint: execution.checkpoint,
+        available: (name) => advertised.has(name),
+      });
+      if (replay.kind === "completed" || replay.kind === "handoff") return await finish({ status: "success", text: replay.text });
+      if (replay.kind === "stopped") {
+        return await finish({ status: "incomplete", text: replay.text, error_code: "tool_sequence_stopped", error_message: replay.text });
+      }
+      if (replay.note) messages.push({ role: "user", content: replay.note });
+    }
     const window = contextWindow(context.context_window_tokens);
     let lastInputTokens = 0;
     let lastSentBytes = 0;
@@ -172,6 +191,9 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     // Keeps the next call inside the model's window: clear old tool results
     // first, then summarize older steps (see src/context-compaction.ts).
     const manageContext = async () => {
+      // Stale page snapshots go first, in batches that keep most turns cached.
+      const pruned = pruneStalePageSnapshots(messages);
+      if (pruned.dropped) messages = pruned.messages;
       let estimate = lastInputTokens > 0 ? estimateInputTokens(lastInputTokens, lastSentBytes, messages) : messageBytes(messages) / 4;
       if (estimate > window * CLEAR_AT) {
         const before = messageBytes(messages);
@@ -201,12 +223,18 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       // Admission (billing's hold for this turn) happens before the model call and
       // outside the agent's hooks, so a refusal stops the call instead of being
       // swallowed while the model runs unmetered.
-      await execution.checkpoint({
+      const admission = await admitModelTurn(identity, {
         node_id: `model:${modelTurn + 1}`, state: "running", phase: "thinking", progress: Math.min(85, 10 + modelTurn * 6),
         // Native serialized payload size only. Billing estimates tokens/rates.
         output: { input_bytes: new TextEncoder().encode(JSON.stringify({ system: instructions, messages, tools: explaining ? [] : catalog.tools })).byteLength },
       });
-      const current = await agent.stream({ messages, ...shared, timeout: modelTimeout(budget, Date.now(), legacyDeadline) });
+      // Past a usage limit the run may finish on a small grace; ask the model,
+      // once, to wrap up rather than start new work.
+      if (admission.over_limit && !wrappingUp) {
+        wrappingUp = true;
+        messages.push({ role: "user", content: usageWrapUpInstruction });
+      }
+      const current = await agent.stream({ messages: withCacheBreakpoint(messages, context.model_id), ...shared, timeout: modelTimeout(budget, Date.now(), legacyDeadline) });
       if (hookFailure) throw hookFailure;
       lastInputTokens = current.steps.at(-1)?.usage?.inputTokens ?? 0;
       result = { ...current, steps: [...(result?.steps ?? []), ...current.steps], totalUsage: accumulateModelUsage(result?.totalUsage, current.totalUsage) };
@@ -229,6 +257,11 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   } catch (error) {
     if (order.stoppedReason) return await finish(stopped());
     const failure = classifyRuntimeError(error);
+    if (failure.code === "usage_limit_reached") {
+      // Out of usage mid-task is a pause, not a failure: keep what was done.
+      const sofar = result ? finalText(result.steps) : "";
+      return await finish({ status: "incomplete", text: [sofar, failure.message].filter(Boolean).join("\n\n"), error_code: failure.code, error_message: failure.message });
+    }
     await finish({ status: "failed", text: "", error_code: failure.code, error_message: failure.message });
     throw new FatalError(failure.message);
   }

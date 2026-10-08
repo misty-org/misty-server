@@ -67,6 +67,8 @@ def main():
                 service = subprocess.Popen([str(binary)], stdout=log, stderr=log, env={
                     **env, "BILLING_DATABASE_URL": dsn + " user=misty_billing_runtime password=runtime-test-password",
                     "BILLING_LISTEN_ADDR": address, "MISTY_BILLING_SECRET": secret,
+                    # Built-in prices only: the contract must not depend on the network.
+                    "MISTY_BILLING_MODEL_CATALOG_URL": "off",
                 })
                 for _ in range(100):
                     if service.poll() is not None:

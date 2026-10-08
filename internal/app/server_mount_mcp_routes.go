@@ -13,6 +13,7 @@ func (s *Server) mountMCPRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.Post(prefix+"/me/app-requests/{requestID}", spaces.AppRequestControl())
 	s.Router.Post(prefix+"/me/app-requests/{requestID}/link", spaces.AppRequestLink())
 	s.Router.Post(prefix+"/me/screen-model/{jobID}", spaces.ScreenModel())
+	s.Router.Post(prefix+"/me/companion/refine-point/{invocationID}", spaces.CompanionRefinePoint())
 	// Collaboration: Plan/Act mode, agent questions, plans and goals.
 	s.Router.Get(prefix+"/me/conversations/{conversationID}/collaboration", spaces.ConversationCollaboration())
 	s.Router.Put(prefix+"/me/conversations/{conversationID}/mode", spaces.ConversationModeControl())

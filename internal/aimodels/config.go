@@ -22,6 +22,8 @@ type Role struct {
 var Roles = []Role{
 	{"agent", true},
 	{"vision", true},
+	// Reading and acting on web pages; empty means the run's vision model.
+	{"browsing", true},
 	{"routing", true},
 	{"realtime", false},
 	{"library", true},
@@ -47,7 +49,8 @@ type Sense struct {
 // Misty's defaults.
 var Senses = []Sense{
 	{"thinking", "Thinking", "Conversations, planning and using tools.", "thinking", []string{"agent"}},
-	{"seeing", "Seeing", "Reading screenshots, using the browser and describing your files.", "seeing", []string{"vision", "library"}},
+	{"seeing", "Seeing", "Reading screenshots, acting on screens and describing your files.", "seeing", []string{"vision", "library"}},
+	{"browsing", "Browsing", "Reading and filling in web pages, and the helpers that work through several pages at once. Uses your Seeing model unless you choose one.", "thinking", []string{"browsing"}},
 	{"listening", "Listening", "Turning voice notes and audio files into text.", "listening", []string{"transcription", "media-transcription"}},
 	{"speaking", "Speaking", "The companion's live voice.", "speaking", []string{"realtime"}},
 }

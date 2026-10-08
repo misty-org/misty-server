@@ -34,15 +34,37 @@ func PersonalSpaceTemplates(database *db.Database) http.HandlerFunc {
 			Name        string `json:"name"`
 			Description string `json:"description"`
 			SpaceID     string `json:"space_id"`
+			// What to capture from space_id; everything when omitted.
+			Include *db.TemplateParts `json:"include"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		item, err := database.SavePersonalSpaceTemplate(r.Context(), userID, id, body.SpaceID, body.Name, body.Description)
+		parts := db.AllTemplateParts
+		if body.Include != nil {
+			parts = *body.Include
+		}
+		item, err := database.SavePersonalSpaceTemplate(r.Context(), userID, id, body.SpaceID, body.Name, body.Description, parts)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, item)
+	}
+}
+
+// SpacePeople lists the people the caller already shares a Space with.
+func SpacePeople(database *db.Database) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := authenticatedUser(w, r, database)
+		if !ok {
+			return
+		}
+		people, err := database.SpacePeople(r.Context(), userID)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"people": people})
 	}
 }

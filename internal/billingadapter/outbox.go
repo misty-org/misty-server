@@ -3,6 +3,7 @@ package billingadapter
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 )
 
@@ -69,7 +70,15 @@ func (r Reliable) FlushBatch(ctx context.Context, limit int) (int, error) {
 			return processed, ctx.Err()
 		}
 		if _, err = r.Adapter.Do(ctx, e.Action, e.Request); err != nil {
-			if err = r.Store.Retry(ctx, e.ID, time.Now().Add(time.Minute)); err != nil {
+			rejecter, parks := r.Store.(interface {
+				Rejected(context.Context, string, string) error
+			})
+			if parks && (errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict)) {
+				log.Printf("billing %s %s rejected; parked for review: %v", e.Action, e.ID, err)
+				if err = rejecter.Rejected(ctx, e.ID, err.Error()); err != nil {
+					return processed, err
+				}
+			} else if err = r.Store.Retry(ctx, e.ID, time.Now().Add(time.Minute)); err != nil {
 				return processed, err
 			}
 		} else if err = r.Store.Delivered(ctx, e.ID); err != nil {

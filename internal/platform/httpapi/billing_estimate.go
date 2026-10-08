@@ -41,7 +41,7 @@ func EstimateAIUsage(database *db.Database) http.HandlerFunc {
 			return
 		}
 		key := "estimate:" + uuid.NewString()
-		decision, err := adapter.Do(r.Context(), "check", billingadapter.Request{Version: 1, AccountID: user, Operation: "agent.model", OperationID: key, Key: key, Usage: billingadapter.Usage{Model: model, Units: map[string]int64{"input_bytes": int64(len(body.Text)), "output_tokens": agent.MaxModelOutputTokens}, Estimated: true}})
+		decision, err := adapter.Do(r.Context(), "check", billingadapter.Request{Version: 1, AccountID: user, Operation: "agent.model", OperationID: key, Key: key, Usage: billingadapter.Usage{Model: model, Units: map[string]int64{"input_bytes": int64(len(body.Text)), "output_tokens": agent.MaxAgentTurnOutputTokens}, Estimated: true}})
 		if err != nil && !errors.Is(err, billingadapter.ErrDenied) {
 			writeBillingError(w, err)
 			return

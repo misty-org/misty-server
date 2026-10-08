@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lib/pq"
 	"strings"
 	"time"
 
@@ -55,12 +56,20 @@ type AIUserSettings struct {
 	// AppActionsAsk pauses sends, shares, deletes and payments in connected
 	// apps until the user approves them in chat.
 	AppActionsAsk bool `json:"app_actions_ask"`
-	// ScreenLocation is where agents open a screen: separate, window or ask.
-	ScreenLocation string    `json:"screen_location"`
-	RetentionDays  int       `json:"retention_days"`
-	PurgeState     string    `json:"purge_state"`
-	DisabledAt     time.Time `json:"disabled_at,omitempty"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	// ScreenLocation is where agents open a new screen: window (a new tab in the
+	// user's Misty window, the default), separate (an agent window) or ask.
+	ScreenLocation string `json:"screen_location"`
+	// AgentBlockSensitive keeps agents from acting on banking, crypto, payment
+	// and adult sites; AgentBlockedSites adds the account's own.
+	AgentBlockSensitive bool     `json:"agent_block_sensitive"`
+	AgentBlockedSites   []string `json:"agent_blocked_sites"`
+	// KeepAwakeForAgents keeps a computer from idling to sleep while an agent
+	// works on it.
+	KeepAwakeForAgents bool      `json:"keep_awake_for_agents"`
+	RetentionDays      int       `json:"retention_days"`
+	PurgeState         string    `json:"purge_state"`
+	DisabledAt         time.Time `json:"disabled_at,omitempty"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 type AISurfacePreference struct {
@@ -75,13 +84,13 @@ type AISurfacePreference struct {
 }
 
 func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettings, []AISurfacePreference, error) {
-	settings := AIUserSettings{Enabled: true, CursorCompanionEnabled: true, MemoryEnabled: true, AppActionsAsk: true, ScreenLocation: "separate", RetentionDays: 30, PurgeState: "none"}
+	settings := AIUserSettings{Enabled: true, CursorCompanionEnabled: true, MemoryEnabled: true, AppActionsAsk: true, ScreenLocation: "window", AgentBlockSensitive: true, AgentBlockedSites: []string{}, KeepAwakeForAgents: true, RetentionDays: 30, PurgeState: "none"}
 	preferences := []AISurfacePreference{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		var disabledAt sql.NullTime
 		err := tx.QueryRowContext(ctx, `
-			SELECT enabled,cursor_companion_enabled,memory_enabled,app_actions_ask,screen_location,retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
-		`, userID).Scan(&settings.Enabled, &settings.CursorCompanionEnabled, &settings.MemoryEnabled, &settings.AppActionsAsk, &settings.ScreenLocation, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
+			SELECT enabled,cursor_companion_enabled,memory_enabled,app_actions_ask,screen_location,agent_block_sensitive,agent_blocked_sites,keep_awake_for_agents,retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
+		`, userID).Scan(&settings.Enabled, &settings.CursorCompanionEnabled, &settings.MemoryEnabled, &settings.AppActionsAsk, &settings.ScreenLocation, &settings.AgentBlockSensitive, pq.Array(&settings.AgentBlockedSites), &settings.KeepAwakeForAgents, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -116,6 +125,39 @@ func (db *Database) SetAIAppActionsAsk(ctx context.Context, userID string, ask b
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO ai_user_settings(user_id,app_actions_ask) VALUES($1,$2)
 			ON CONFLICT(user_id) DO UPDATE SET app_actions_ask=EXCLUDED.app_actions_ask,updated_at=NOW()`, userID, ask)
+		return err
+	})
+}
+
+// SetAIAgentSiteBlocks changes which sites agents may not act on. Sites are
+// already normalized hosts; nil leaves a value as it is.
+func (db *Database) SetAIAgentSiteBlocks(ctx context.Context, userID string, sensitive *bool, sites []string) error {
+	if len(sites) > 200 {
+		return ErrSpaceInvalid
+	}
+	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO ai_user_settings(user_id) VALUES($1) ON CONFLICT(user_id) DO NOTHING`, userID); err != nil {
+			return err
+		}
+		if sensitive != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE ai_user_settings SET agent_block_sensitive=$2,updated_at=NOW() WHERE user_id=$1`, userID, *sensitive); err != nil {
+				return err
+			}
+		}
+		if sites != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE ai_user_settings SET agent_blocked_sites=$2,updated_at=NOW() WHERE user_id=$1`, userID, pq.Array(sites)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// SetAIKeepAwake changes whether computers stay awake while agents work on them.
+func (db *Database) SetAIKeepAwake(ctx context.Context, userID string, keepAwake bool) error {
+	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO ai_user_settings(user_id,keep_awake_for_agents) VALUES($1,$2)
+			ON CONFLICT(user_id) DO UPDATE SET keep_awake_for_agents=EXCLUDED.keep_awake_for_agents,updated_at=NOW()`, userID, keepAwake)
 		return err
 	})
 }

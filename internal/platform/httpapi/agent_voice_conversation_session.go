@@ -65,7 +65,7 @@ func parseConversationTool(e agent.VoiceRealtimeEvent) (conversationTool, error)
 		if t.Instruction != "" {
 			return t, errors.New("unexpected voice tool arguments")
 		}
-	case "start_task", "steer_task":
+	case "start_task", "show_on_screen", "steer_task":
 		if t.Instruction == "" || len(t.Instruction) > 4000 {
 			return t, errors.New("missing voice instruction")
 		}

@@ -122,7 +122,7 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 	if !hasToolboxTool(childToolbox, "notes.search") || childInvocation.UserID != bob.ID || childInvocation.SpaceID != space.ID || childInvocation.DelegatedApproval {
 		t.Fatalf("delegated invocation = %#v", childInvocation)
 	}
-	if err := service.meterPersonalAgentRuntimeModel(ctx, child, "model:1", workflowv2.StepRunning, json.RawMessage(`{"input_bytes":64}`)); err != nil {
+	if _, err := service.meterPersonalAgentRuntimeModel(ctx, child, "model:1", workflowv2.StepRunning, json.RawMessage(`{"input_bytes":64}`)); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.settlePersonalAgentRuntimeUsage(ctx, child, "success", json.RawMessage(`{}`)); err != nil {

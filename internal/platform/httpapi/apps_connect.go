@@ -35,6 +35,9 @@ func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.I
 		return appsConnectResult(app, ok, err)
 	}
 	name := s.appsName(ctx, invocation.UserID, app)
+	if policy := s.searchAppPolicy(ctx, invocation); !policy.mayConnect(app) {
+		return nil, serveragent.ErrInvalidRequest(policy.refusal(name))
+	}
 	pending, err := s.database.OpenAgentAppRequest(ctx, db.AgentAppRequest{
 		OwnerUserID: invocation.UserID, RunID: invocation.RunID, Kind: "connect", Subject: app,
 		Title: "Connect " + name, Summary: "Sign in to " + name + " so Misty can continue.",

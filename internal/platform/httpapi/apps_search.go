@@ -51,11 +51,11 @@ func (s *SpacesService) appsSearch(ctx context.Context, invocation agenttools.In
 	if err != nil {
 		return nil, appsError(err)
 	}
-	return json.Marshal(appsSearchView(result))
+	return json.Marshal(appsSearchView(result, s.searchAppPolicy(ctx, invocation)))
 }
 
 // appsSearchView keeps what the model needs to plan and call tools.
-func appsSearchView(result composio.SearchResult) map[string]any {
+func appsSearchView(result composio.SearchResult, searchApps searchAppPolicy) map[string]any {
 	tasks := []map[string]any{}
 	for _, item := range result.Results {
 		task := map[string]any{"task": item.UseCase, "tools": item.PrimaryToolSlugs, "apps": item.Toolkits}
@@ -99,7 +99,7 @@ func appsSearchView(result composio.SearchResult) map[string]any {
 			app["accounts"] = accounts
 		}
 		if !status.HasActiveConnection {
-			app["next"] = "Call apps_connect with app " + status.Toolkit + " before running its tools."
+			app["next"] = searchApps.next(status.Toolkit)
 		}
 		apps = append(apps, app)
 	}

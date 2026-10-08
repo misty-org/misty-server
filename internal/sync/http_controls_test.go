@@ -96,13 +96,13 @@ func TestBrowserSyncDevicesAdvertiseKnownControlVersionsOnly(t *testing.T) {
 	if err := store.CreateBrowserSyncVault(ctx, "owner", root, wrapper, grant); err != nil {
 		t.Fatal(err)
 	}
-	// Version 2 also understands nested bookmark folders.
-	for _, version := range []int{1, 2} {
+	// Version 2 also understands nested bookmark folders; 3, pinned tabs.
+	for version := 1; version <= maxSyncControlVersion; version++ {
 		if _, err := store.ControlBrowserSyncDevice(ctx, "owner", SyncDeviceControl{DeviceID: grant.DeviceID, ControlVersion: &version}); err != nil {
 			t.Fatalf("version %d: %v", version, err)
 		}
 	}
-	for _, version := range []int{0, 3} {
+	for _, version := range []int{0, maxSyncControlVersion + 1} {
 		if _, err := store.ControlBrowserSyncDevice(ctx, "owner", SyncDeviceControl{DeviceID: grant.DeviceID, ControlVersion: &version}); err == nil {
 			t.Fatalf("version %d was accepted", version)
 		}

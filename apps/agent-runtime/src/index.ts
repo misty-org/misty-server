@@ -1,7 +1,8 @@
 import express, { type Request } from "express";
 import { rateLimit } from "express-rate-limit";
 import { instanceModelConfig } from "./model-provider.js";
-import { embedCall, generateTextCall, modelCallFailure, transcribeCall } from "./model-calls.js";
+import { embedCall, generateTextCall, modelCallFailure, speechCall, transcribeCall } from "./model-calls.js";
+import { webSearchCall } from "./web-search.js";
 import { vercelHarness as harness } from "./vercel-harness.js";
 import { MISTY_HARNESS_VERSION } from "./harness.js";
 import { controlPlaneURL } from "./control-plane.js";
@@ -18,10 +19,15 @@ interface RawRequest extends Request {
 instanceModelConfig();
 const app = express();
 // Throttle before body parsing and signature verification. Do not trust caller-
-// supplied forwarding headers to choose a different rate-limit bucket.
+// supplied forwarding headers to choose a different rate-limit bucket. Every
+// legitimate call comes from the Misty API, one address shared by all users,
+// so only failed requests (bad signatures, invalid input) count: floods without
+// the secret are stopped while real traffic is never throttled here. Each user
+// is rate limited by the API before their work reaches the runtime.
 app.use("/v1", rateLimit({
   windowMs: 60_000,
   limit: 600,
+  skipSuccessfulRequests: true,
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { code: "rate_limited" },
@@ -38,6 +44,7 @@ app.use(
   rateLimit({
     windowMs: 60_000,
     limit: 6_000,
+    skipSuccessfulRequests: true,
     standardHeaders: "draft-8",
     legacyHeaders: false,
     message: { code: "rate_limited" },
@@ -75,6 +82,8 @@ for (const [path, call] of [
   ["/v1/models/text", generateTextCall],
   ["/v1/models/embed", embedCall],
   ["/v1/models/transcribe", transcribeCall],
+  ["/v1/models/speech", speechCall],
+  ["/v1/models/search", webSearchCall],
 ] as const) {
   app.post(path, async (request: RawRequest, response) => {
     if (!authorized(request))

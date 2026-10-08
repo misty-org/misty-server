@@ -39,6 +39,7 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			return
 		}
 
+		verifiedAt, verifyErr := database.EmailVerifiedAt(r.Context(), userID)
 		summary, billingErr := accountBillingSummary(r.Context(), database, userID)
 		if billingErr != nil {
 			summary = map[string]any{"tier": "basic", "status": "active", "trial_eligible": false, "billing": map[string]any{"kind": "unavailable", "customer_portal_available": false}}
@@ -60,6 +61,7 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			"trial_eligible":   summary["trial_eligible"],
 			"license_device":   "",
 			"billing":          summary["billing"],
+			"email_verified":   verifyErr == nil && verifiedAt != nil,
 		})
 	}
 }

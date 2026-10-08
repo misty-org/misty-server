@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "misty-clipboard",
+  "main": "src/index.ts",
+  "workers_dev": true,
+  "compatibility_date": "2026-06-25",
+
+  "observability": { "enabled": true },
+
+  // One room per account. The room keeps the recent clip ring and pushes new
+  // clips to the account's connected devices. It only ever holds ciphertext.
+  "durable_objects": {
+    "bindings": [{ "name": "CLIPBOARD_ROOM", "class_name": "ClipboardRoom" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ClipboardRoom"] }],
+
+  // Clip blobs: end-to-end encrypted, addressed by the SHA-256 of their bytes.
+  // The bucket's lifecycle rule deletes objects after one day
+  // (see docker/cloudflare-init.sh).
+  "r2_buckets": [{ "binding": "CLIPS", "bucket_name": "misty-clipboard" }],
+
+  "vars": {
+    // Non-secret configuration. CLIPBOARD_TICKET_PUBLIC_KEY (and the optional
+    // CLIPBOARD_TICKET_PUBLIC_KEY_PREVIOUS) are set with `wrangler secret put`.
+    "CLIPBOARD_TICKET_ISSUER": "misty-api",
+    "CLIPBOARD_TICKET_AUDIENCE": "misty-clipboard",
+  },
+}

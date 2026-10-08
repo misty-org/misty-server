@@ -6,9 +6,16 @@
  * response so the model can plan again from what it saw. Declined calls never
  * execute: their tool reports the declined reason to the model instead. Start
  * never throws for a declined call, because the adapter would reject the whole
- * response instead of reporting that one call. */
+ * response instead of reporting that one call.
+ *
+ * Concurrent calls (read-only server and provider tools, which hold no durable
+ * wait) run alongside each other: each waits only for the calls before it that
+ * were not concurrent, and the next other call waits for all of them. */
 export function serialToolLifecycle() {
+  // Settles when every call before the latest non-concurrent call has finished.
   let tail: Promise<void> = Promise.resolve();
+  // Concurrent calls started since the latest non-concurrent call.
+  let reads: Promise<void>[] = [];
   let stoppedReason = "";
   let pausedReason = "";
   const releases = new Map<string, () => void>();
@@ -32,10 +39,18 @@ export function serialToolLifecycle() {
     },
     /** The error a declined call reports instead of executing. */
     declined(id: string): string | undefined { return declined.get(id); },
-    async start(id: string, checkpoint: () => Promise<void>) {
+    async start(id: string, checkpoint: () => Promise<void>, concurrent = false) {
       if (releases.has(id)) throw new Error("duplicate_tool_call_id");
-      const previous = tail;
-      tail = new Promise<void>((resolve) => releases.set(id, resolve));
+      const done = new Promise<void>((resolve) => releases.set(id, resolve));
+      let previous: Promise<unknown>;
+      if (concurrent) {
+        previous = tail;
+        reads.push(done);
+      } else {
+        previous = Promise.all([tail, ...reads]);
+        reads = [];
+        tail = done;
+      }
       try {
         await previous;
         if (stoppedReason || pausedReason) {

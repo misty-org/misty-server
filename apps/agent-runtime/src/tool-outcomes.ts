@@ -36,7 +36,8 @@ export type ToolOutcome =
   /** The run stops: the outcome needs the user, or the run lost its authority. */
   | { kind: "stop"; reason: string };
 
-const runEndingCodes = ["authorization_or_state_changed", "agent_execution_time_limit", "agent_model_turn_limit", "permission_denied"];
+// device_offline: the device the person picked dropped out; they pick another.
+const runEndingCodes = ["authorization_or_state_changed", "agent_execution_time_limit", "agent_model_turn_limit", "permission_denied", "device_offline"];
 
 const handoffDefaults: Record<string, string> = {
   screen_requested: "Misty is opening a screen and will continue this conversation with it attached.",

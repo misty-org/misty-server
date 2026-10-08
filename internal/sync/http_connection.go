@@ -14,7 +14,7 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func (s *BrowserSyncService) serveConnection(parent context.Context, conn *websocket.Conn, identity SyncConnectionIdentity, after int64, version int) {
+func (s *BrowserSyncService) serveConnection(parent context.Context, conn *websocket.Conn, identity SyncConnectionIdentity, after int64, version int, batching bool) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	// A fenced process closes every socket, including this one.
@@ -56,7 +56,7 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 		defer close(done)
 		defer cancel()
 		defer conn.Close()
-		s.writeConnection(ctx, conn, identity, connectionID, after, events, outgoing, resume, watches)
+		s.writeConnection(ctx, conn, identity, connectionID, after, events, outgoing, resume, watches, batching)
 	}()
 	defer func() { cancel(); _ = conn.Close(); <-done }()
 	// Liveness is the socket itself (pings and the process lease). The database
@@ -106,7 +106,7 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 		}
 		if version == syncWorkspaceProtocol && isWorkspaceFrame(frame.Type) {
 			bounded, stop := context.WithTimeout(ctx, 10*time.Second)
-			ok := s.handleWorkspaceFrame(bounded, identity, frame, send, watches)
+			ok := s.handleWorkspaceFrame(bounded, identity, frame, send, watches, batching)
 			stop()
 			if !ok {
 				return
@@ -180,7 +180,7 @@ func (s *BrowserSyncService) serveConnection(parent context.Context, conn *webso
 	}
 }
 
-func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocket.Conn, identity SyncConnectionIdentity, connectionID string, cursor int64, events <-chan db.AccountEvent, outgoing <-chan any, resume <-chan int64, watches <-chan workspaceWatch) {
+func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocket.Conn, identity SyncConnectionIdentity, connectionID string, cursor int64, events <-chan db.AccountEvent, outgoing <-chan any, resume <-chan int64, watches <-chan workspaceWatch, batching bool) {
 	write := func(value any) error {
 		if err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
 			return err
@@ -196,6 +196,31 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 		welcome["protocol_version"] = syncWorkspaceProtocol
 	}
 	if write(welcome) != nil {
+		return
+	}
+	// The batching policy follows the welcome and is resent only when the
+	// account's sync frequency (or anything else that changes it) moves.
+	var lastPolicy []byte
+	policy := func() error {
+		if !batching {
+			return nil
+		}
+		bounded, stop := context.WithTimeout(ctx, 5*time.Second)
+		// Unreadable preferences still yield the base policy (see
+		// batchPolicyFrame); a settings outage never disconnects sync.
+		frame, _ := s.batchPolicyFrame(bounded, identity.UserID)
+		stop()
+		lanes, _ := json.Marshal(frame["policy"].(map[string]any)["lanes"])
+		if bytes.Equal(lanes, lastPolicy) {
+			return nil
+		}
+		if err = write(frame); err != nil {
+			return err
+		}
+		lastPolicy = lanes
+		return nil
+	}
+	if policy() != nil {
 		return
 	}
 	workspaces := &workspacePusher{service: s, identity: identity, write: write, watched: map[string]int64{}}
@@ -349,6 +374,11 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 			}
 			if event.Topic == "browser-presence" {
 				if presence() != nil {
+					return
+				}
+			}
+			if event.Topic == "settings-profiles" || event.Topic == "reset" {
+				if policy() != nil {
 					return
 				}
 			}

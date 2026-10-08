@@ -35,7 +35,7 @@ func TestAppsSearchViewSpeaksMistyToolNames(t *testing.T) {
 		"tool_schemas":{"GOOGLEDRIVE_CREATE_FILE_FROM_TEXT":{"toolkit":"googledrive","description":"Create a file","input_schema":{"type":"object"},"hasFullSchema":true},"GOOGLEDRIVE_FIND_FOLDER":{"toolkit":"googledrive","hasFullSchema":false}}}`), &result); err != nil {
 		t.Fatal(err)
 	}
-	encoded, _ := json.Marshal(appsSearchView(result))
+	encoded, _ := json.Marshal(appsSearchView(result, searchAppPolicy{}))
 	text := string(encoded)
 	for _, want := range []string{"apps_execute after apps_schemas", `"input_schema":{"type":"object"}`, "Call apps_schemas for this tool", "Call apps_connect with app googledrive"} {
 		if !strings.Contains(text, want) {
@@ -78,5 +78,23 @@ func TestAppsBoundedKeepsResultsSmall(t *testing.T) {
 	var bounded map[string]any
 	if err := json.Unmarshal(appsBounded(large), &bounded); err != nil || bounded["truncated"] != true || len(bounded["preview"].(string)) > appsResultLimit+8 {
 		t.Fatalf("large result was not bounded: %v", err)
+	}
+}
+
+func TestSearchAppsNeedTheUserToNameThem(t *testing.T) {
+	quiet := searchAppPolicy{webSearch: true, request: "Research a vegetarian weight-loss guide for an exam"}
+	if quiet.mayConnect("exa") || !quiet.mayConnect("googledrive") {
+		t.Fatal("an unnamed search app may connect, or an ordinary app may not")
+	}
+	if next := quiet.next("exa"); !strings.Contains(next, "web_search") || strings.Contains(next, "apps_connect") {
+		t.Fatalf("unnamed search app next = %q", next)
+	}
+	named := searchAppPolicy{webSearch: true, request: "Use Exa to find recent papers"}
+	if !named.mayConnect("exa") || !strings.Contains(named.next("exa"), "apps_connect") {
+		t.Fatal("a search app the user named cannot connect")
+	}
+	offered := searchAppPolicy{offer: true, request: "Find recent papers"}
+	if !offered.mayConnect("tavily") || !strings.Contains(offered.next("tavily"), "Offer it only if") {
+		t.Fatal("Offer search apps does not let the agent offer one")
 	}
 }

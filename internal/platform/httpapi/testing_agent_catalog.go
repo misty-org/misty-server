@@ -28,7 +28,7 @@ func TestingAgentCatalogToolNames() []string {
 	add(buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, delegation: noop, extra: extra}).Descriptors())
 	add(spaceAgentToolbox(nil).Descriptors())
 	add(browserToolDescriptors())
-	for _, name := range []string{appsSearchTool, appsSchemasTool, appsConnectedTool, appsConnectTool, appsExecuteTool, screenOpenTool, screenLookTool} {
+	for _, name := range []string{webSearchTool, appsSearchTool, appsSchemasTool, appsConnectedTool, appsConnectTool, appsExecuteTool, screenOpenTool, screenLookTool} {
 		seen[name] = true
 	}
 	names := make([]string, 0, len(seen))

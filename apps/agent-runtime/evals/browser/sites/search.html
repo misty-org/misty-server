@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Findly</title><style>body{font:15px system-ui;margin:32px;max-width:720px}li{margin:12px 0}</style></head>
+<body><h1>Findly</h1><form action="/search.html" role="search"><label for="q">Search</label> <input id="q" name="q" type="search"> <button>Search</button></form>
+<ol id="results"></ol>
+<script>
+const docs=[["a1","SunCore panels: 25-year product warranty","SunCore's residential panels carry a 25-year product warranty and 30-year performance guarantee."],
+["a2","Helio Plus review: strong output, 15-year warranty","Helio Plus offers a 15-year product warranty, shorter than most rivals."],
+["a3","Brightwave announces 40-year warranty","Brightwave now backs its panels with a 40-year product warranty, the longest we found."],
+["a4","How solar warranties work","Product warranties cover defects; performance guarantees cover output loss."],
+["a5","Gardening with succulents","Succulents need little water."]];
+const q=new URLSearchParams(location.search).get('q')||'';document.getElementById('q').value=q;
+if(q){const words=q.toLowerCase().split(/\W+/).filter(w=>w.length>2);const hits=docs.filter(d=>words.some(w=>(d[1]+d[2]).toLowerCase().includes(w)));
+document.getElementById('results').innerHTML=hits.map(d=>'<li><a href="/articles/'+d[0]+'.html">'+d[1]+'</a><p>'+d[2].slice(0,60)+'…</p></li>').join('')||'<li>No results</li>'}
+</script></body></html>

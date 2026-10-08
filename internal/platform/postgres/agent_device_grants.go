@@ -32,15 +32,18 @@ var deviceAgentCapabilities = map[string]bool{
 	"project.patch": true, "project.diff": true, "project.status": true, "project.checks": true, "git.commit": true, "git.push": true, "terminal.execute": true,
 	"browser.interact": true, "browser.inspect": true, "browser.visual": true, "browser.navigate": true, "browser.click": true, "browser.type": true, "browser.select": true, "browser.scroll": true,
 	"browser.downloads.list": true, "browser.upload": true, "browser.act": true, "browser.confirm_high_risk": true,
+	"browser.snapshot": true, "browser.find": true, "browser.extract": true, "browser.wait_for": true, "browser.steps": true, "browser.fill_form": true, "browser.skill": true, "browser.spawn_tabs": true,
 	"tabs.list": true, "tabs.open": true, "bookmarks.list": true, "bookmarks.add": true,
+	// Opens an agent session in another device's browser (docs/design/agents-on-devices/BRIEF.md).
+	"browser.session": true,
 }
 
 // deviceContextCapabilities are what each kind of desktop grant may allow.
 var deviceContextCapabilities = map[string]map[string]bool{
 	"local_folder": {"files.list": true, "files.read": true, "files.send": true},
 	// A chat's own device accepts files another of the person's devices sends.
-	"inbox": {"files.receive": true},
-	"workspace":    {"tabs.list": true, "tabs.open": true, "bookmarks.list": true, "bookmarks.add": true},
+	"inbox":     {"files.receive": true},
+	"workspace": {"tabs.list": true, "tabs.open": true, "bookmarks.list": true, "bookmarks.add": true, "browser.session": true},
 }
 
 // DeviceContextCapabilitiesAllowed reports whether a desktop grant asks only

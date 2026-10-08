@@ -51,6 +51,10 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 		agentID = "misty-unified"
 	}
 	configData := map[string]any{"agentId": agentID}
+	// The device refuses to act on these sites before any input is sent.
+	if settings, _, err := s.database.AISettings(ctx, invocation.UserID); err == nil {
+		configData["siteBlocks"] = map[string]any{"sensitive": settings.AgentBlockSensitive, "sites": settings.AgentBlockedSites}
+	}
 	if isAIInvocationRuntimeID(invocation.RunID) {
 		record, lookupErr := s.database.AIInvocationByID(ctx, invocation.UserID, invocation.RunID)
 		if lookupErr != nil {
@@ -79,7 +83,7 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 		if tool.Name == screenActTool {
 			configData["surface"] = surface
 		}
-		configData["taskId"] = body.TaskID
+		configData["taskId"] = scopeTaskID(body, input.ScopeID)
 		if body.AgentID != "" {
 			configData["agentId"] = body.AgentID
 		}
@@ -108,6 +112,49 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 		}
 	} else if tool.Name == "browser.upload" {
 		return nil, db.ErrSpaceForbidden
+	}
+	if tool.Name == "browser.extract" {
+		// Reject a bad instruction or schema before the device reads the page.
+		if _, _, err := validBrowserExtractRequest(tool.Arguments); err != nil {
+			return nil, err
+		}
+	}
+	if tool.Name == "browser.upload" && !validBrowserUploadTarget(tool.Arguments) {
+		return nil, db.ErrSpaceInvalid
+	}
+	if browserPageActTools[tool.Name] {
+		approval, waiting, err := s.browserPageStepsApproval(ctx, invocation, tool, input.ScopeID)
+		if err != nil {
+			return nil, err
+		}
+		if waiting != nil {
+			return waiting, nil
+		}
+		if err := s.useAgentActionApproval(ctx, invocation.UserID, approval); err != nil {
+			return nil, err
+		}
+	}
+	if tool.Name == screenActTool {
+		var act struct {
+			Goal               string `json:"goal"`
+			AllowConsequential bool   `json:"allowConsequential"`
+		}
+		_ = json.Unmarshal(tool.Arguments, &act)
+		if act.AllowConsequential {
+			// Sending, buying, deleting or changing access on screen follows the
+			// same "Ask before acting" approval card as app actions.
+			approval, waiting, err := s.confirmAgentAction(ctx, invocation, "screen.act:"+input.ScopeID, act.Goal,
+				"On screen: "+truncateAgentRuntimeText(act.Goal, 180), act.Goal)
+			if err != nil {
+				return nil, err
+			}
+			if waiting != nil {
+				return waiting, nil
+			}
+			if err := s.useAgentActionApproval(ctx, invocation.UserID, approval); err != nil {
+				return nil, err
+			}
+		}
 	}
 	config := TestingMustAPIRawJSON(configData)
 	var job *db.WorkflowDeviceNodeJob
@@ -143,6 +190,9 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 	}
 	switch current.State {
 	case "completed":
+		if tool.Name == "browser.extract" {
+			return s.browserExtract(ctx, invocation, current.ID, tool.Arguments, current.Output)
+		}
 		return current.Output, nil
 	case "uncertain":
 		if browserObservation(tool.Name) {
@@ -174,7 +224,20 @@ func browserObservation(operation string) bool {
 	case "browser.inspect", "browser.visual", "browser.downloads.list", "browser.workspace.visual":
 		return true
 	}
-	return false
+	return browserPageReadTools[operation]
+}
+
+// validBrowserUploadTarget requires exactly one file input: a snapshot ref or
+// an inspection elementRef.
+func validBrowserUploadTarget(raw json.RawMessage) bool {
+	var target struct {
+		ElementRef string `json:"elementRef"`
+		Ref        string `json:"ref"`
+	}
+	if json.Unmarshal(raw, &target) != nil {
+		return false
+	}
+	return (target.ElementRef != "") != (target.Ref != "")
 }
 
 func browserObservationFailure(code string) error {
@@ -238,6 +301,10 @@ func (s *SpacesService) stopBrowserDeviceTool(userID, jobID, operation string) (
 	}
 	switch job.State {
 	case "completed":
+		if operation == "browser.extract" {
+			// The page was read but the run stopped before extraction.
+			return nil, browserObservationFailure("browser_extract_interrupted")
+		}
 		return job.Output, nil
 	case "canceled":
 		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)

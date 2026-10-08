@@ -10,5 +10,5 @@
     "types": ["node"],
     "plugins": [{ "name": "workflow" }]
   },
-  "include": ["src", "workflows", "nitro.config.ts", "test"]
+  "include": ["src", "workflows", "nitro.config.ts", "test", "evals"]
 }

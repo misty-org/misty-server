@@ -3,6 +3,7 @@ import type {
   EmbeddingModelV4,
   LanguageModelV4,
   LanguageModelV4CallOptions,
+  SpeechModelV4,
   TranscriptionModelV4,
 } from "@ai-sdk/provider";
 import { createGateway } from "ai";
@@ -41,7 +42,7 @@ function openAI(env: Environment) {
   return createOpenAI({ apiKey: openAIKey(env) });
 }
 
-function instanceGateway(env: Environment = process.env) {
+export function instanceGateway(env: Environment = process.env) {
   return createGateway({
     apiKey: env.AI_GATEWAY_API_KEY?.trim() || env.VERCEL_OIDC_TOKEN?.trim() || undefined,
     baseURL: env.AI_GATEWAY_BASE_URL?.trim() || undefined,
@@ -106,6 +107,21 @@ export async function resolveEmbeddingModel(
 ): Promise<EmbeddingModelV4> {
   if (directOpenAI(modelId, env)) return openAI(env).embedding(modelId.slice("openai/".length));
   return instanceGateway(env).embeddingModel(modelId);
+}
+
+export async function resolveSpeechModel(
+  modelId: string,
+  env: Environment = process.env,
+): Promise<SpeechModelV4> {
+  // ElevenLabs speaks the voice pipeline on Misty's own key.
+  if (modelId.startsWith("elevenlabs/")) {
+    const apiKey = env.ELEVENLABS_API_KEY?.trim();
+    if (!apiKey) throw new Error("ELEVENLABS_API_KEY is not configured");
+    const { createElevenLabs } = await import("@ai-sdk/elevenlabs");
+    return createElevenLabs({ apiKey }).speech(modelId.slice("elevenlabs/".length));
+  }
+  if (directOpenAI(modelId, env)) return openAI(env).speech(modelId.slice("openai/".length));
+  return instanceGateway(env).speechModel(modelId);
 }
 
 export async function resolveTranscriptionModel(

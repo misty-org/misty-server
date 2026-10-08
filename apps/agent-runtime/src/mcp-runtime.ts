@@ -1,10 +1,7 @@
-import {
-  Client as MCPClient,
-  StreamableHTTPClientTransport,
-} from "@misty/mcp-client-runtime";
+import type { Client as MCPClient } from "@misty/mcp-client-runtime";
 import { controlPlaneRequest } from "./control-plane.js";
 import { ControlPlaneError } from "./control-plane-error.js";
-import { resolveMCPEndpoint } from "./mcp-endpoint.js";
+import { closeRunSession, rememberRunAccess, runClient } from "./mcp-sessions.js";
 import { rethrowStepError } from "./runtime-errors.js";
 import type {
   MCPRunAccess,
@@ -35,17 +32,11 @@ export async function requestMCPToolExecution(
   ) {
     throw new Error("Misty returned invalid MCP access credentials");
   }
-  const endpoint = resolveMCPEndpoint(context.controlPlaneURL, access.mcp_path);
-  const client = new MCPClient(
-    { name: "misty-vercel-agent-runtime", version: "1.0.0" },
-    { versionNegotiation: { mode: "auto" } },
-  );
-  const transport = new StreamableHTTPClientTransport(endpoint, {
-    authProvider: { token: async () => access.access_token },
-  });
+  rememberRunAccess(context.mistyRunId, context.controlPlaneURL, access);
+  const client = await runClient(context.mistyRunId, context.controlPlaneURL);
+  let response: Awaited<ReturnType<typeof client.callTool>>;
   try {
-    await client.connect(transport);
-    const response = await client.callTool({
+    response = await client.callTool({
       name,
       arguments: input as Record<string, unknown>,
       _meta: {
@@ -53,47 +44,50 @@ export async function requestMCPToolExecution(
         "misty/device_hook_token": deviceHookToken,
       },
     });
-    const meta = response._meta as Record<string, unknown> | undefined;
-    const waitCount = Number(meta?.["misty/device_wait"] === true) + Number(Boolean(meta?.["misty/intervention_wait"]));
-    if (waitCount > 1 || (waitCount > 0 && (response.isError || response.structuredContent !== undefined))) {
-      return {tool_error:{code:"invalid_tool_outcome",message:"The tool returned contradictory wait or completion outcomes."}};
-    }
-    if (meta?.["misty/intervention_wait"]) return { intervention_wait: meta["misty/intervention_wait"] as {id:string;action:string;reason:string} };
-    if (meta?.["misty/device_wait"] === true) return { device_wait: true };
-    if (response.isError) {
-      const detail = response.content
-        .filter(
-          (item): item is Extract<typeof item, { type: "text" }> =>
-            item.type === "text",
-        )
-        .map((item) => item.text)
-        .join("; ")
-        .slice(0, 500);
-      return {
-        tool_error: {
-          code: "tool_execution_failed",
-          message: detail || "Misty could not complete this tool call.",
-        },
-      };
-    }
-    if (response.structuredContent !== undefined) {
-      return { result: response.structuredContent };
-    }
-    const text = response.content.find((item) => item.type === "text");
-    if (!text || text.type !== "text" || !text.text)
-      return {
-        tool_error: {
-          code: "missing_tool_result",
-          message: "The provider returned no execution result.",
-        },
-      };
-    try {
-      return { result: JSON.parse(text.text) as unknown };
-    } catch {
-      return { result: text.text };
-    }
-  } finally {
-    await client.close().catch(() => undefined);
+  } catch (error) {
+    // Never reuse a session whose connection or bearer failed mid-call; the
+    // next call exchanges a new bearer and connects again.
+    closeRunSession(context.mistyRunId, context.controlPlaneURL);
+    throw error;
+  }
+  const meta = response._meta as Record<string, unknown> | undefined;
+  const waitCount = Number(meta?.["misty/device_wait"] === true) + Number(Boolean(meta?.["misty/intervention_wait"]));
+  if (waitCount > 1 || (waitCount > 0 && (response.isError || response.structuredContent !== undefined))) {
+    return {tool_error:{code:"invalid_tool_outcome",message:"The tool returned contradictory wait or completion outcomes."}};
+  }
+  if (meta?.["misty/intervention_wait"]) return { intervention_wait: meta["misty/intervention_wait"] as {id:string;action:string;reason:string} };
+  if (meta?.["misty/device_wait"] === true) return { device_wait: true };
+  if (response.isError) {
+    const detail = response.content
+      .filter(
+        (item): item is Extract<typeof item, { type: "text" }> =>
+          item.type === "text",
+      )
+      .map((item) => item.text)
+      .join("; ")
+      .slice(0, 500);
+    return {
+      tool_error: {
+        code: "tool_execution_failed",
+        message: detail || "Misty could not complete this tool call.",
+      },
+    };
+  }
+  if (response.structuredContent !== undefined) {
+    return { result: response.structuredContent };
+  }
+  const text = response.content.find((item) => item.type === "text");
+  if (!text || text.type !== "text" || !text.text)
+    return {
+      tool_error: {
+        code: "missing_tool_result",
+        message: "The provider returned no execution result.",
+      },
+    };
+  try {
+    return { result: JSON.parse(text.text) as unknown };
+  } catch {
+    return { result: text.text };
   }
 }
 
@@ -126,33 +120,41 @@ export async function discoverRemoteMCPTools(
   ) {
     throw new Error("Misty returned invalid MCP access credentials");
   }
-  const client = new MCPClient(
-    { name: "misty-vercel-agent-runtime", version: "1.0.0" },
-    { versionNegotiation: { mode: "auto" } },
-  );
-  const transport = new StreamableHTTPClientTransport(
-    resolveMCPEndpoint(context.controlPlaneURL, access.mcp_path),
-    { authProvider: { token: async () => access.access_token } },
-  );
+  // The run's first tool calls reuse this bearer and connection.
+  rememberRunAccess(context.mistyRunId, context.controlPlaneURL, access);
+  let client: MCPClient;
   try {
-    await client.connect(transport);
+    client = await runClient(context.mistyRunId, context.controlPlaneURL);
+  } catch (error) {
+    closeRunSession(context.mistyRunId, context.controlPlaneURL);
+    throw error;
+  }
+  try {
     const tools = await collectToolPages((cursor) =>
       client.listTools(cursor ? { cursor } : undefined),
     );
     return {
       supported: true,
-      tools: tools.map((item) => ({
-        name: item.name,
-        description: (item.description || item.title || item.name).slice(
-          0,
-          2_000,
-        ),
-        inputSchema: normalizeToolInputSchema(item.inputSchema as Record<string, unknown>),
-        readOnly: item.annotations?.readOnlyHint === true,
-      })),
+      tools: tools.map((item) => {
+        const readOnly = item.annotations?.readOnlyHint === true;
+        const locality = (item._meta as Record<string, unknown> | undefined)?.["misty/locality"];
+        return {
+          name: item.name,
+          description: (item.description || item.title || item.name).slice(
+            0,
+            2_000,
+          ),
+          inputSchema: normalizeToolInputSchema(item.inputSchema as Record<string, unknown>),
+          readOnly,
+          // Device tools and anything that waits for the person stay serial:
+          // a run holds one durable wait at a time.
+          concurrent: readOnly && (locality === "server" || locality === "provider") && item.name !== "browser.request_user_action",
+        };
+      }),
     };
-  } finally {
-    await client.close().catch(() => undefined);
+  } catch (error) {
+    closeRunSession(context.mistyRunId, context.controlPlaneURL);
+    throw error;
   }
 }
 

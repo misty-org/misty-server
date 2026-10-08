@@ -1,9 +1,10 @@
 import type { LanguageModelV4, LanguageModelV4CallOptions } from "@ai-sdk/provider";
-import { embedMany, generateText, jsonSchema, Output, transcribe, type ModelMessage } from "ai";
+import { embedMany, generateSpeech, generateText, jsonSchema, Output, transcribe, type ModelMessage } from "ai";
 import { z } from "zod";
 import {
   resolveConfiguredModel,
   resolveEmbeddingModel,
+  resolveSpeechModel,
   resolveTranscriptionModel,
   type ModelRoute,
 } from "./model-provider.js";
@@ -64,6 +65,20 @@ const transcribeRequest = z.object({
   audio: base64,
 });
 
+// Spoken replies for the voice pipeline: raw 24 kHz 16-bit mono PCM, the
+// format the voice session already streams to the app.
+const speechRequest = z.object({
+  route,
+  model: modelId,
+  text: z.string().min(1).max(8000),
+  // An OpenAI voice name or an ElevenLabs voice ID.
+  voice: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+  // A reply spoken sentence by sentence: its neighbours keep the delivery
+  // continuous across the joins (ElevenLabs only).
+  previousText: z.string().max(4000).optional(),
+  nextText: z.string().max(4000).optional(),
+});
+
 export class ModelCallError extends Error {
   constructor(
     readonly status: number,
@@ -81,7 +96,7 @@ function parse<T extends z.ZodTypeAny>(schema: T, body: unknown): z.infer<T> {
 }
 
 /** Applies the reasoning Go admitted to each language-model call. */
-class RoutedModel implements LanguageModelV4 {
+export class RoutedModel implements LanguageModelV4 {
   readonly specificationVersion = "v4" as const;
   readonly provider = "misty.routed";
   readonly supportedUrls = {};
@@ -195,6 +210,26 @@ export async function transcribeCall(body: unknown, signal?: AbortSignal) {
       text: segment.text,
     })),
   };
+}
+
+export async function speechCall(body: unknown, signal?: AbortSignal) {
+  const request = parse(speechRequest, body);
+  const elevenLabs = request.model.startsWith("elevenlabs/");
+  const result = await generateSpeech({
+    model: await resolveSpeechModel(request.model),
+    text: request.text,
+    // ElevenLabs picks its default voice when none is configured.
+    voice: request.voice ?? (elevenLabs ? undefined : "alloy"),
+    // OpenAI's "pcm" is 24 kHz; ElevenLabs needs the rate spelled out.
+    outputFormat: elevenLabs ? "pcm_24000" : "pcm",
+    ...(elevenLabs && (request.previousText || request.nextText)
+      ? { providerOptions: { elevenlabs: { previousText: request.previousText, nextText: request.nextText } } }
+      : {}),
+    maxRetries: 1,
+    abortSignal: signal,
+  });
+  // Billing charges speech by input characters, which the caller already knows.
+  return { audio: Buffer.from(result.audio.uint8Array).toString("base64"), mediaType: result.audio.mediaType };
 }
 
 /** Provider failures keep only a status: response bodies may echo credentials. */

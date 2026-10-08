@@ -17,15 +17,15 @@ func TestSettingsProfilesSchemaMatchesClient(t *testing.T) {
 	}
 }
 func TestSettingsProfilesRejectUnknownAndInvalidValues(t *testing.T) {
-	for _, values := range []map[string]any{{"credentials": "secret"}, {"browser.searchEngine": "invalid"}, {"files.hidden": "true"}, {"app.appearance.panel_opacity": 2.0}} {
+	for _, values := range []map[string]any{{"credentials": "secret"}, {"browser.searchEngine": "invalid"}, {"browser.searchSuggestions": "true"}, {"app.zoom": 3.0}} {
 		if ValidateProfilePatch(values, nil) == nil {
 			t.Fatalf("accepted invalid values: %v", values)
 		}
 	}
-	if err := ValidateProfilePatch(map[string]any{"browser.searchEngine": "bing", "files.hidden": true, "browser.downloads.directory": "/tmp", "app.zoom": 1.25, "app.shortcuts.bindings": "[]"}, nil); err != nil {
+	if err := ValidateProfilePatch(map[string]any{"browser.searchEngine": "bing", "browser.searchSuggestions": true, "browser.downloads.directory": "/tmp", "app.zoom": 1.25, "app.shortcuts.bindings": "[]"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if ValidateProfilePatch(map[string]any{"files.hidden": true}, []string{"files.hidden"}) == nil {
+	if ValidateProfilePatch(map[string]any{"browser.searchSuggestions": true}, []string{"browser.searchSuggestions"}) == nil {
 		t.Fatal("accepted contradictory patch")
 	}
 	if ValidateProfilePatch(nil, []string{"unknown"}) == nil {
@@ -47,18 +47,5 @@ func TestCollectionTabOrderPreferences(t *testing.T) {
 	}
 	if err := ValidateProfilePatch(map[string]any{"collections.tabs.navigator": `["browser","home","agents","files","extensions","spaces"]`}, nil); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestExtensionPinPreferences(t *testing.T) {
-	for _, raw := range []string{`[]`, `[3,7]`} {
-		if err := ValidateProfilePatch(map[string]any{"extensions.pins": raw}, nil); err != nil {
-			t.Fatalf("rejected pins %s: %v", raw, err)
-		}
-	}
-	for _, raw := range []string{`{}`, `["3"]`, `[1.5]`, `[-1]`, `[{"id":3}]`} {
-		if ValidateProfilePatch(map[string]any{"extensions.pins": raw}, nil) == nil {
-			t.Fatalf("accepted invalid pins %s", raw)
-		}
 	}
 }

@@ -36,6 +36,11 @@ meters the call; the runtime calls it through the AI SDK on Misty's own keys
 and reports usage. Provider errors return a status, never the provider's
 response body.
 
+`POST /v1/models/search` (`src/web-search.ts`) backs the agents' `web.search`
+tool. It runs one of the AI Gateway's search tools (Parallel, Perplexity or
+Exa) on Misty's Gateway key, even for OpenAI models, and returns the results
+in one shape.
+
 ## Worlds
 
 - Local development: omit `WORKFLOW_TARGET_WORLD` to use Workflow's local world.

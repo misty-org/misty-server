@@ -182,7 +182,8 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 		system += "\n\n" + agentExecutionGuidance + "\n\nCurrent time: " + now.Format(time.RFC3339) + "; timezone: " + timezone + "." + agentCapabilityGuidance(allowedTools, false)
 
 		_ = s.database.TouchPersonalAgentTaskRuntime(r.Context(), run.ID, body.RuntimeRunID, "reading_context", 5)
-		routes, routeErr := s.database.FreezeAIModelRoutes(r.Context(), run.OwnerUserID, run.ID, defaultAIRoutes(membership.ModelID, membership.ReasoningEffort), nil)
+		planned, forced := planRoutes(r.Context(), s.database, run.OwnerUserID, defaultAIRoutes(membership.ModelID, membership.ReasoningEffort))
+		routes, routeErr := s.database.FreezeAIModelRoutes(r.Context(), run.OwnerUserID, run.ID, planned, nil, forced)
 		if routeErr != nil {
 			writeAIProviderError(w, routeErr)
 			return
@@ -321,7 +322,7 @@ func (s *SpacesService) AgentRuntimeEvent() http.HandlerFunc {
 		if err != nil {
 			if strings.HasPrefix(body.NodeID, "model:") && body.State == "completed" {
 				if stopped, _, lookupErr := s.database.PersonalAgentTaskRuntimeRecord(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID); lookupErr == nil && (stopped.State == "canceled" || stopped.State == "completed" || stopped.State == "completed_with_errors" || stopped.State == "failed") {
-					if settleErr := s.meterPersonalAgentRuntimeModel(r.Context(), stopped, body.NodeID, workflowv2.StepCompleted, body.Output); settleErr != nil {
+					if _, settleErr := s.meterPersonalAgentRuntimeModel(r.Context(), stopped, body.NodeID, workflowv2.StepCompleted, body.Output); settleErr != nil {
 						writeAgentError(w, settleErr)
 						return
 					}
@@ -355,8 +356,10 @@ func (s *SpacesService) AgentRuntimeEvent() http.HandlerFunc {
 		if body.Attempt < 1 {
 			body.Attempt = 1
 		}
+		overLimit := false
 		if strings.HasPrefix(body.NodeID, "model:") {
-			if err := s.meterPersonalAgentRuntimeModel(r.Context(), run, body.NodeID, state, rawModelOutput); err != nil {
+			var err error
+			if overLimit, err = s.meterPersonalAgentRuntimeModel(r.Context(), run, body.NodeID, state, rawModelOutput); err != nil {
 				writeAgentError(w, err)
 				return
 			}
@@ -370,6 +373,6 @@ func (s *SpacesService) AgentRuntimeEvent() http.HandlerFunc {
 			return
 		}
 		s.projectLinkedAIInvocationEvent(r.Context(), run, body.NodeID, body.State, body.Phase, body.Output)
-		writeJSON(w, http.StatusOK, map[string]bool{"accepted": true})
+		writeJSON(w, http.StatusOK, map[string]bool{"accepted": true, "over_limit": overLimit})
 	}
 }

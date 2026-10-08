@@ -256,18 +256,18 @@ func (s *SpacesService) Spaces() http.HandlerFunc {
 				"owner_storage": storage})
 		case http.MethodPost:
 			var body struct {
-				Name                 string         `json:"name"`
-				TemplateID           string         `json:"template_id"`
-				IntegrationProviders []string       `json:"integration_providers"`
-				AppIDs               []string       `json:"app_ids"`
-				AppPermissions       map[string]int `json:"app_permissions"`
+				Name       string `json:"name"`
+				TemplateID string `json:"template_id"`
+				// Copies the structure of a Space the caller belongs to instead.
+				SourceSpaceID        string   `json:"source_space_id"`
+				IntegrationProviders []string `json:"integration_providers"`
 			}
 			if decodeJSON(w, r, &body) != nil {
 				return
 			}
-			result, err := s.database.CreateSpaceWithTemplateIdempotent(
-				r.Context(), userID, body.Name, body.TemplateID, body.IntegrationProviders,
-				r.Header.Get("Idempotency-Key"),
+			result, err := s.database.CreateSpaceFromSource(
+				r.Context(), userID, body.Name, body.TemplateID, body.SourceSpaceID,
+				body.IntegrationProviders, r.Header.Get("Idempotency-Key"),
 			)
 			if err != nil {
 				writeSpaceError(w, err)

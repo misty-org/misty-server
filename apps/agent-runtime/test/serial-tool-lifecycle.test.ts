@@ -97,3 +97,37 @@ it("holds queued typing after a dispatched click until a fresh observation turn"
   await order.finish("type-fresh-frame", async () => {});
   expect(dispatched).toEqual(["click", "capture", "type"]);
 });
+
+it("runs concurrent reads together, after earlier writes and before later ones", async () => {
+  const order = serialToolLifecycle();
+  const events: string[] = [];
+  await order.start("write-1", async () => { events.push("write-1:start"); });
+  const readA = order.start("read-a", async () => { events.push("read-a:start"); }, true);
+  const readB = order.start("read-b", async () => { events.push("read-b:start"); }, true);
+  const write2 = order.start("write-2", async () => { events.push("write-2:start"); });
+  await Promise.resolve();
+  // Reads wait for the write before them.
+  expect(events).toEqual(["write-1:start"]);
+  await order.finish("write-1", async () => {});
+  await Promise.all([readA, readB]);
+  expect(events).toEqual(["write-1:start", "read-a:start", "read-b:start"]);
+  // The next write waits for every read.
+  await order.finish("read-b", async () => {});
+  await Promise.resolve();
+  expect(events).not.toContain("write-2:start");
+  await order.finish("read-a", async () => {});
+  await write2;
+  expect(events.at(-1)).toBe("write-2:start");
+  await order.finish("write-2", async () => {});
+});
+
+it("declines concurrent reads queued behind a stopped write", async () => {
+  const order = serialToolLifecycle();
+  await order.start("send", async () => {});
+  const read = order.start("read", async () => {}, true);
+  order.stop("Delivery is uncertain");
+  await order.finish("send", async () => {});
+  await read;
+  expect(order.declined("read")).toContain("tool_sequence_stopped");
+  await order.finish("read", async () => {});
+});

@@ -211,6 +211,60 @@ func (c *Client) Transcribe(ctx context.Context, route Route, model, mediaType s
 	return result, err
 }
 
+// SearchRequest runs one web search through the AI Gateway's search tools.
+// Model is the small model that issues the search call; Engine is parallel,
+// perplexity or exa.
+type SearchRequest struct {
+	Model      string   `json:"model"`
+	Engine     string   `json:"engine"`
+	Query      string   `json:"query"`
+	MaxResults int      `json:"maxResults"`
+	Domains    []string `json:"domains,omitempty"`
+	Recency    string   `json:"recency,omitempty"`
+}
+
+type SearchHit struct {
+	Title     string `json:"title"`
+	URL       string `json:"url"`
+	Snippet   string `json:"snippet"`
+	Published string `json:"published,omitempty"`
+}
+
+type SearchResult struct {
+	Engine  string      `json:"engine"`
+	Results []SearchHit `json:"results"`
+	Usage   Usage       `json:"usage"`
+}
+
+func (c *Client) Search(ctx context.Context, request SearchRequest) (SearchResult, error) {
+	var result SearchResult
+	err := c.post(ctx, "/v1/models/search", request, &result)
+	return result, err
+}
+
+// SpeechRequest speaks text for the voice pipeline. The runtime returns raw
+// 24 kHz 16-bit mono PCM; billing charges speech by input characters.
+type SpeechRequest struct {
+	Route Route  `json:"route"`
+	Model string `json:"model"`
+	Text  string `json:"text"`
+	Voice string `json:"voice,omitempty"`
+	// The neighbouring sentences of a reply spoken in pieces, so the delivery
+	// stays continuous across the joins.
+	PreviousText string `json:"previousText,omitempty"`
+	NextText     string `json:"nextText,omitempty"`
+}
+
+func (c *Client) Speak(ctx context.Context, request SpeechRequest) ([]byte, error) {
+	var result struct {
+		Audio string `json:"audio"`
+	}
+	if err := c.post(ctx, "/v1/models/speech", request, &result); err != nil {
+		return nil, err
+	}
+	return base64.StdEncoding.DecodeString(result.Audio)
+}
+
 // Error is a failed model call. It never contains a provider response body.
 type Error struct {
 	Status         int

@@ -121,3 +121,70 @@ func TestAIModelSensesAreIsolatedAndFrozenPerRun(t *testing.T) {
 		t.Fatal("a conversation override leaked into another role", vision)
 	}
 }
+
+func TestPlanForcedModelBeatsEveryChoice(t *testing.T) {
+	database := aiProviderTestDB(t)
+	ctx := context.Background()
+	thinking, _ := aimodels.FindSense("thinking")
+	if err := database.SaveAIModelSense(ctx, "owner", thinking, "openai/flagship"); err != nil {
+		t.Fatal(err)
+	}
+	defaults := []aimodels.Route{}
+	for _, role := range aimodels.Roles {
+		defaults = append(defaults, aimodels.Route{Role: role.ID, Model: "openai/default", Reasoning: "high", Enabled: true})
+	}
+	// Basic runs Thinking on the fast model, whatever the account or the
+	// conversation picked; other roles keep their choices.
+	if _, err := database.FreezeAIModelRoutes(ctx, "owner", "basic-run", defaults, map[string]string{"agent": "openai/conversation-pick"}, map[string]string{"agent": "openai/fast"}); err != nil {
+		t.Fatal(err)
+	}
+	if agent, _ := database.AIModelRunRoute(ctx, "owner", "basic-run", "agent"); agent.Model != "openai/fast" || agent.Reasoning != "high" {
+		t.Fatal("the plan's model did not win", agent)
+	}
+	if library, _ := database.AIModelRunRoute(ctx, "owner", "basic-run", "library"); library.Model != "openai/default" {
+		t.Fatal("a role the plan does not force changed", library)
+	}
+}
+
+func TestBrowsingFollowsSeeingUntilChosen(t *testing.T) {
+	database := aiProviderTestDB(t)
+	ctx := context.Background()
+	seeing, _ := aimodels.FindSense("seeing")
+	browsing, _ := aimodels.FindSense("browsing")
+	if err := database.SaveAIModelSense(ctx, "owner", seeing, "google/gemini-x"); err != nil {
+		t.Fatal(err)
+	}
+	defaults := []aimodels.Route{}
+	for _, role := range aimodels.Roles {
+		model := "openai/default"
+		if role.ID == "browsing" {
+			model = ""
+		}
+		defaults = append(defaults, aimodels.Route{Role: role.ID, Model: model, Reasoning: "low", Enabled: true})
+	}
+	if _, err := database.FreezeAIModelRoutes(ctx, "owner", "run-follow", defaults, nil); err != nil {
+		t.Fatal(err)
+	}
+	if route, err := database.AIModelBrowsingRoute(ctx, "owner", "run-follow"); err != nil || route.Model != "google/gemini-x" || route.Role != "browsing" {
+		t.Fatal("browsing did not follow the run's Seeing model", route, err)
+	}
+	if err := database.SaveAIModelSense(ctx, "owner", browsing, "openai/fast-x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.FreezeAIModelRoutes(ctx, "owner", "run-chosen", defaults, nil); err != nil {
+		t.Fatal(err)
+	}
+	if route, _ := database.AIModelBrowsingRoute(ctx, "owner", "run-chosen"); route.Model != "openai/fast-x" {
+		t.Fatal("the account's Browsing choice did not win", route)
+	}
+	// The earlier run stays frozen, and a run frozen before browsing existed falls back.
+	if route, _ := database.AIModelBrowsingRoute(ctx, "owner", "run-follow"); route.Model != "google/gemini-x" {
+		t.Fatal("a running task changed with account preferences", route)
+	}
+	if _, err := database.Conn.Exec(`DELETE FROM ai_model_run_routes WHERE run_id='run-follow' AND role='browsing'`); err != nil {
+		t.Fatal(err)
+	}
+	if route, err := database.AIModelBrowsingRoute(ctx, "owner", "run-follow"); err != nil || route.Model != "google/gemini-x" {
+		t.Fatal("a run without a browsing route did not use its vision route", route, err)
+	}
+}

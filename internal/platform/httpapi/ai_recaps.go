@@ -14,7 +14,7 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-var aiRecapSurfaceIDs = map[string]bool{"global": true, "home": true, "activity": true}
+var aiRecapSurfaceIDs = map[string]bool{"global": true, "activity": true}
 
 func (s *AIService) Recaps() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

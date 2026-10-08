@@ -16,6 +16,7 @@ func (db *Database) accountStore() accounts.Store {
 }
 
 var ErrInvalidUsername = accounts.ErrInvalidUsername
+var ErrInvalidPassword = accounts.ErrInvalidPassword
 var ErrUsernameTaken = accounts.ErrUsernameTaken
 var ErrEmailTaken = accounts.ErrEmailTaken
 var ErrProviderConflict = accounts.ErrProviderConflict

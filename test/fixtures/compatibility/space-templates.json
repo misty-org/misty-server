@@ -1,132 +1,316 @@
 [
   {
     "id": "blank",
-    "name": "Blank Space",
-    "description": "Start with a clean Space.",
+    "name": "Blank",
+    "description": "Start with an empty Space.",
     "version": 1,
-    "recommended_integrations": [],
+    "icon": "square",
+    "suggested_name": "",
     "seed_summary": {
       "task_count": 0,
       "note_count": 0,
       "collection_count": 0
     },
-    "app_ids": []
-  },
-  {
-    "id": "student-project",
-    "name": "Student Project",
-    "description": "Organize a class project from brief to delivery.",
-    "version": 1,
-    "recommended_integrations": [
-      "google"
-    ],
-    "seed_summary": {
-      "task_count": 3,
-      "note_count": 1,
-      "collection_count": 3
-    },
-    "app_ids": [
-      "chat",
-      "journal",
-      "planner",
-      "library"
-    ]
+    "seed_preview": {
+      "tasks": [],
+      "notes": [],
+      "collections": []
+    }
   },
   {
     "id": "startup",
     "name": "Startup",
     "description": "Keep an early team aligned around customers and outcomes.",
     "version": 1,
-    "recommended_integrations": [
-      "google"
-    ],
+    "icon": "rocket",
+    "suggested_name": "Startup",
     "seed_summary": {
       "task_count": 3,
       "note_count": 1,
       "collection_count": 3
     },
-    "app_ids": [
-      "chat",
-      "journal",
-      "planner",
-      "library"
-    ]
+    "seed_preview": {
+      "tasks": [
+        "Define this week's outcome",
+        "Talk to a first user",
+        "Assign owners"
+      ],
+      "notes": [
+        "Company snapshot"
+      ],
+      "collections": [
+        "Product",
+        "Customer Research",
+        "Brand \u0026 Pitch"
+      ]
+    }
   },
   {
     "id": "research",
     "name": "Research",
-    "description": "Collect sources, coordinate work, and track outputs.",
+    "description": "Collect sources, coordinate work and track outputs.",
     "version": 1,
-    "recommended_integrations": [
-      "google"
-    ],
+    "icon": "flask",
+    "suggested_name": "Research",
     "seed_summary": {
       "task_count": 3,
       "note_count": 1,
       "collection_count": 3
     },
-    "app_ids": [
-      "chat",
-      "journal",
-      "planner",
-      "library"
-    ]
+    "seed_preview": {
+      "tasks": [
+        "Write the research question",
+        "Collect key sources",
+        "Set the next checkpoint"
+      ],
+      "notes": [
+        "Research plan"
+      ],
+      "collections": [
+        "Papers",
+        "Data",
+        "Outputs"
+      ]
+    }
   },
   {
-    "id": "game-development",
-    "name": "Game Development",
-    "description": "Coordinate a small game team around the next playable build.",
+    "id": "student-project",
+    "name": "Student project",
+    "description": "Organize a class project from brief to delivery.",
     "version": 1,
-    "recommended_integrations": [],
+    "icon": "graduation-cap",
+    "suggested_name": "Class project",
     "seed_summary": {
       "task_count": 3,
       "note_count": 1,
       "collection_count": 3
     },
-    "app_ids": [
-      "chat",
-      "journal",
-      "planner",
-      "library",
-      "files",
-      "code",
-      "terminal"
-    ]
+    "seed_preview": {
+      "tasks": [
+        "Agree on the goal",
+        "Divide responsibilities",
+        "Set the first deadline"
+      ],
+      "notes": [
+        "Project brief"
+      ],
+      "collections": [
+        "Research",
+        "Drafts",
+        "Final Deliverables"
+      ]
+    }
   },
   {
     "id": "creative-team",
-    "name": "Creative Team",
+    "name": "Creative team",
     "description": "Move a shared brief through review and delivery.",
     "version": 1,
-    "recommended_integrations": [],
+    "icon": "palette",
+    "suggested_name": "Creative team",
     "seed_summary": {
       "task_count": 3,
       "note_count": 1,
       "collection_count": 4
     },
-    "app_ids": [
-      "chat",
-      "journal",
-      "planner",
-      "library"
-    ]
+    "seed_preview": {
+      "tasks": [
+        "Agree on the brief",
+        "Assign initial deliverables",
+        "Set a review date"
+      ],
+      "notes": [
+        "Creative brief"
+      ],
+      "collections": [
+        "Briefs",
+        "Inspiration",
+        "Work in Progress",
+        "Final"
+      ]
+    }
+  },
+  {
+    "id": "game-development",
+    "name": "Game development",
+    "description": "Coordinate a small team around the next playable build.",
+    "version": 1,
+    "icon": "gamepad",
+    "suggested_name": "Game studio",
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 3
+    },
+    "seed_preview": {
+      "tasks": [
+        "Define a playable milestone",
+        "Assign core roles",
+        "Schedule a playtest"
+      ],
+      "notes": [
+        "Game brief"
+      ],
+      "collections": [
+        "Art",
+        "Audio",
+        "Builds \u0026 References"
+      ]
+    }
   },
   {
     "id": "family",
     "name": "Family",
     "description": "Keep family plans and important material together.",
     "version": 1,
-    "recommended_integrations": [],
+    "icon": "users",
+    "suggested_name": "Family",
     "seed_summary": {
       "task_count": 0,
       "note_count": 1,
       "collection_count": 1
     },
-    "app_ids": [
-      "chat",
-      "planner",
-      "journal",
-      "library"
-    ]
+    "seed_preview": {
+      "tasks": [],
+      "notes": [
+        "Family notes"
+      ],
+      "collections": [
+        "Important documents"
+      ]
+    }
+  },
+  {
+    "id": "trip",
+    "name": "Trip",
+    "description": "Plan a trip together: dates, bookings and the packing list.",
+    "version": 1,
+    "icon": "plane",
+    "suggested_name": "Trip",
+    "seed_summary": {
+      "task_count": 4,
+      "note_count": 1,
+      "collection_count": 2
+    },
+    "seed_preview": {
+      "tasks": [
+        "Pick the dates",
+        "Book travel",
+        "Book a place to stay",
+        "Share the packing list"
+      ],
+      "notes": [
+        "Itinerary"
+      ],
+      "collections": [
+        "Bookings",
+        "Photos"
+      ]
+    }
+  },
+  {
+    "id": "event",
+    "name": "Event",
+    "description": "Run an event from the guest list to the day itself.",
+    "version": 1,
+    "icon": "calendar-heart",
+    "suggested_name": "Event",
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 2
+    },
+    "seed_preview": {
+      "tasks": [
+        "Set the date and venue",
+        "Send invitations",
+        "Confirm vendors"
+      ],
+      "notes": [
+        "Run of show"
+      ],
+      "collections": [
+        "Contracts",
+        "Inspiration"
+      ]
+    }
+  },
+  {
+    "id": "client-work",
+    "name": "Client work",
+    "description": "Share a project with a client: scope, deliverables and feedback.",
+    "version": 1,
+    "icon": "briefcase",
+    "suggested_name": "Client project",
+    "seed_summary": {
+      "task_count": 3,
+      "note_count": 1,
+      "collection_count": 2
+    },
+    "seed_preview": {
+      "tasks": [
+        "Confirm the scope",
+        "Agree on milestones",
+        "Schedule the kickoff"
+      ],
+      "notes": [
+        "Statement of work"
+      ],
+      "collections": [
+        "Deliverables",
+        "Feedback"
+      ]
+    }
+  },
+  {
+    "id": "household",
+    "name": "Household",
+    "description": "Share chores, bills and the documents a home runs on.",
+    "version": 1,
+    "icon": "home",
+    "suggested_name": "Home",
+    "seed_summary": {
+      "task_count": 2,
+      "note_count": 1,
+      "collection_count": 2
+    },
+    "seed_preview": {
+      "tasks": [
+        "List recurring bills",
+        "Split weekly chores"
+      ],
+      "notes": [
+        "House notes"
+      ],
+      "collections": [
+        "Warranties \u0026 Manuals",
+        "Bills"
+      ]
+    }
+  },
+  {
+    "id": "book-club",
+    "name": "Book club",
+    "description": "Pick the next read, schedule meetups and keep the discussion.",
+    "version": 1,
+    "icon": "book-open",
+    "suggested_name": "Book club",
+    "seed_summary": {
+      "task_count": 2,
+      "note_count": 1,
+      "collection_count": 1
+    },
+    "seed_preview": {
+      "tasks": [
+        "Vote on the next book",
+        "Schedule the meetup"
+      ],
+      "notes": [
+        "Reading list"
+      ],
+      "collections": [
+        "Notes \u0026 Quotes"
+      ]
+    }
   }
 ]

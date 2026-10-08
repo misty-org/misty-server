@@ -31,8 +31,6 @@ func TestTablesHaveRowLevelSecurityEnabled(t *testing.T) {
 		"media_search_segments",
 		"trusted_devices",
 		"trusted_device_request_nonces",
-		"user_home_activity",
-		"user_app_activity",
 		"spaces",
 		"space_members",
 		"space_invitations",

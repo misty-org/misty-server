@@ -46,6 +46,16 @@ func (s *SpacesService) executeAIInvocationMCPTool(ctx context.Context, access *
 		ID: call.CallID, Name: call.Name, Arguments: call.Arguments,
 	})
 	if errors.Is(err, workflowv2.ErrDeviceUnavailable) && errors.Is(err, db.ErrAgentToolboxNotAttempted) {
+		// Another device's session never waits: the person picks another device.
+		var body aiInvocationInput
+		_ = json.Unmarshal(access.record.RequestPayload, &body)
+		var input struct {
+			ScopeID string `json:"scopeId"`
+		}
+		_ = json.Unmarshal(call.Arguments, &input)
+		if name, remote := s.remoteScopeDevice(ctx, access.record.UserID, body, input.ScopeID); remote {
+			return nil, deviceOfflineError{name: name, reason: "went offline."}
+		}
 		return nil, s.aiBrowserDeviceWait(ctx, access, call, true)
 	}
 	if errors.Is(err, db.ErrAgentToolboxActionUnknown) {

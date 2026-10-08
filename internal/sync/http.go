@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -37,6 +38,10 @@ type BrowserSyncService struct {
 	// revalidateEvery bounds how long a socket outlives a revoked account
 	// session; zero means syncSessionRevalidation.
 	revalidateEvery time.Duration
+	// batchPolicy is the base batching policy sent to batching clients.
+	batchPolicy BatchPolicy
+	// publishes limits how often each device may publish.
+	publishes publishLimiter
 }
 
 const syncSessionRevalidation = 10 * time.Minute
@@ -49,7 +54,11 @@ func (s *BrowserSyncService) sessionRevalidation() time.Duration {
 }
 
 func NewBrowserSyncService(database *db.Database) *BrowserSyncService {
-	return &BrowserSyncService{database: database, store: NewStore(database.Conn), workspaces: newWorkspaceCaches(256 << 20), instanceID: uuid.NewString()}
+	policy, err := batchPolicyFromEnv()
+	if err != nil {
+		log.Printf("browser sync batching uses its defaults: %v", err)
+	}
+	return &BrowserSyncService{database: database, store: NewStore(database.Conn), workspaces: newWorkspaceCaches(256 << 20), instanceID: uuid.NewString(), batchPolicy: policy}
 }
 
 func syncErrorCode(err error) (string, int) {
@@ -253,6 +262,9 @@ func (s *BrowserSyncService) Connect() http.HandlerFunc {
 		}
 		token := r.URL.Query().Get("ticket")
 		protocol := r.URL.Query().Get("protocol")
+		// The client batches its edits and understands batch_policy and
+		// sync_rate_limited. Only the workspace protocol batches.
+		batching := r.URL.Query().Get("batching") == "1" && protocol == strconv.Itoa(syncWorkspaceProtocol)
 		if protocol != "" && protocol != "1" && protocol != strconv.Itoa(syncWorkspaceProtocol) {
 			transport.WriteJSON(w, 426, map[string]string{"code": "sync_protocol_unsupported"})
 			return
@@ -310,6 +322,6 @@ func (s *BrowserSyncService) Connect() http.HandlerFunc {
 				return
 			}
 		}
-		s.serveConnection(r.Context(), conn, *identity, auth.After, version)
+		s.serveConnection(r.Context(), conn, *identity, auth.After, version, batching)
 	}
 }

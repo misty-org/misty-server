@@ -3,9 +3,12 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/kannachi323/misty/server/internal/accounts"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"github.com/kannachi323/misty/server/internal/platform/telemetry"
@@ -13,6 +16,11 @@ import (
 )
 
 func RegisterWithTelemetry(database *db.Database, analytics telemetry.Client) http.HandlerFunc {
+	return RegisterWithVerification(database, analytics, nil)
+}
+
+// RegisterWithVerification also sends the new account's email verification.
+func RegisterWithVerification(database *db.Database, analytics telemetry.Client, verification *AccountVerification) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Name     string `json:"name"`
@@ -30,6 +38,10 @@ func RegisterWithTelemetry(database *db.Database, analytics telemetry.Client) ht
 		body.Email = strings.TrimSpace(body.Email)
 		if body.Email == "" {
 			http.Error(w, "email and password required", http.StatusBadRequest)
+			return
+		}
+		if err := accounts.ValidateNewPassword(body.Password); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -66,6 +78,7 @@ func RegisterWithTelemetry(database *db.Database, analytics telemetry.Client) ht
 			}
 		}
 
+		verification.AfterSignup(r, user, false)
 		writeAuthSession(w, r, database, user, http.StatusCreated)
 	}
 }
@@ -84,20 +97,46 @@ func Login(database *db.Database) http.HandlerFunc {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
+		if blocked, retryAfter := loginFailures.Blocked(body.Email, time.Now()); blocked {
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(retryAfter)))
+			http.Error(w, "too many sign-in attempts; try again later", http.StatusTooManyRequests)
+			return
+		}
 
 		user, hash, err := database.GetUserByEmail(body.Email)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		if user == nil || user.Provider != "misty" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(body.Password)) != nil {
+		if user == nil || user.Provider != "misty" {
+			// Spend the same bcrypt work as a real check, so response time does
+			// not reveal which email addresses have password accounts.
+			_ = bcrypt.CompareHashAndPassword(unknownAccountHash(), []byte(body.Password))
+			loginFailures.Fail(body.Email, time.Now())
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
+		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(body.Password)) != nil {
+			loginFailures.Fail(body.Email, time.Now())
+			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			return
+		}
+		loginFailures.Succeed(body.Email)
 
 		writeAuthSession(w, r, database, user, http.StatusOK)
 	}
 }
+
+// unknownAccountHash is a bcrypt hash of a random value at the default cost,
+// compared against when no password account matches the email.
+var unknownAccountHash = sync.OnceValue(func() []byte {
+	secret, _ := security.GenerateSecureToken()
+	hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+	if err != nil {
+		return []byte("$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinval")
+	}
+	return hash
+})
 
 func writeAuthSession(
 	w http.ResponseWriter,

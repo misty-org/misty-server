@@ -28,6 +28,15 @@ func TestInterventionRuntimeRequiresNegotiationAndAttachedReadGrant(t *testing.T
 	if activeBrowserRuntimeCapability([]db.AgentDeviceGrant{grant}, "browser.request_user_action") {
 		t.Fatal("revoked grant exposed a wait")
 	}
+	// The Misty window and the desktop can wait for the user too.
+	screen := db.AgentDeviceGrant{Capabilities: json.RawMessage(`["browser.workspace.visual","browser.act"]`), ExpiresAt: time.Now().Add(time.Hour)}
+	if !activeBrowserRuntimeCapability([]db.AgentDeviceGrant{screen}, "browser.request_user_action") {
+		t.Fatal("visual screen control cannot request user help")
+	}
+	act := db.AgentDeviceGrant{Capabilities: json.RawMessage(`["browser.act"]`), ExpiresAt: time.Now().Add(time.Hour)}
+	if activeBrowserRuntimeCapability([]db.AgentDeviceGrant{act}, "browser.request_user_action") {
+		t.Fatal("a grant that cannot see the screen exposed a wait")
+	}
 }
 func TestPendingSpaceInterventionCannotExecuteAnotherTool(t *testing.T) {
 	service := &SpacesService{}

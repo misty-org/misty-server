@@ -215,9 +215,12 @@ func TestingAllowedCORSOrigins() []string {
 		"tauri://localhost",
 		"http://tauri.localhost",
 		"https://tauri.localhost",
-		"http://localhost:5173",
-		"http://127.0.0.1:5173",
 		"https://apps.mistysys.com",
+	}
+	// Local development servers are credentialed origins only outside
+	// production; anything on the user's machine could otherwise serve them.
+	if !productionEnvironment() {
+		origins = append(origins, "http://localhost:5173", "http://127.0.0.1:5173")
 	}
 	for _, origin := range strings.Split(envconfig.Getenv("MISTY_ALLOWED_ORIGINS"), ",") {
 		origin = strings.TrimSpace(origin)
@@ -254,11 +257,18 @@ var allowedCORSRequestHeaders = []string{
 	"X-Misty-Library-Reauthentication",
 }
 
+func productionEnvironment() bool {
+	return strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production")
+}
+
 func TestingIsAllowedCORSOrigin(origin string) bool {
 	for _, allowed := range TestingAllowedCORSOrigins() {
 		if strings.EqualFold(origin, allowed) {
 			return true
 		}
+	}
+	if productionEnvironment() {
+		return false
 	}
 	parsed, err := url.Parse(origin)
 	if err != nil || parsed.Scheme != "http" || !TestingIsLocalhostHostname(parsed.Hostname()) || parsed.Path != "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
@@ -277,6 +287,8 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.MethodFunc(http.MethodGet, prefix+"/settings", aiService.Settings())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/settings", aiService.Settings())
 	s.Router.Put(prefix+"/settings/app-actions", aiService.AppActionsSetting())
+	s.Router.Put(prefix+"/settings/agent-sites", aiService.AgentSitesSetting())
+	s.Router.Put(prefix+"/settings/keep-awake", aiService.KeepAwakeSetting())
 	s.Router.Put(prefix+"/settings/screen-location", aiService.ScreenLocationSetting())
 	s.Router.Get(prefix+"/memories", aiService.Memories())
 	s.Router.Delete(prefix+"/memories/{memoryID}", aiService.Memory())
@@ -295,6 +307,8 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Get(prefix+"/activity", aiService.MistyActivity())
 	s.Router.Post(prefix+"/invocations", aiService.CreateInvocation())
 	s.Router.Get(prefix+"/invocations/{invocationID}/events", aiService.InvocationEvents())
+	s.Router.Get(prefix+"/invocations/{invocationID}/progress", aiService.InvocationProgress())
+	s.Router.Get(prefix+"/invocations/{invocationID}/state", aiService.InvocationState())
 	s.Router.Post(prefix+"/invocations/{invocationID}/cancel", aiService.CancelInvocation())
 	s.Router.Post(prefix+"/invocations/{invocationID}/steering", aiService.SteerInvocation())
 	s.Router.Post(prefix+"/invocations/{invocationID}/feedback", aiService.InvocationFeedback())
@@ -320,6 +334,11 @@ func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {
 	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/conversations", aiService.MistyConversations())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/misty/conversations/{conversationID}", aiService.MistyConversation())
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/misty/conversations/{conversationID}", aiService.MistyConversation())
+	s.Router.MethodFunc(http.MethodGet, prefix+"/misty/onboarding", aiService.AgentOnboarding())
+	s.Router.MethodFunc(http.MethodGet, prefix+"/misty/conversation-folders", aiService.MistyConversationFolders())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/conversation-folders", aiService.MistyConversationFolders())
+	s.Router.MethodFunc(http.MethodPatch, prefix+"/misty/conversation-folders/{folderID}", aiService.MistyConversationFolder())
+	s.Router.MethodFunc(http.MethodDelete, prefix+"/misty/conversation-folders/{folderID}", aiService.MistyConversationFolder())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/attachments", aiService.MistyAttachments())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/attachments/{attachmentID}/finalize", aiService.MistyAttachment())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/misty/attachments/{attachmentID}", aiService.MistyAttachment())

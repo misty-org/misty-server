@@ -114,7 +114,8 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 		err    error
 	}
 	browserDone := make(chan browserOutcome, 1)
-	browserCtx, cancelBrowser := context.WithTimeout(ctx, 5*time.Second)
+	// Generous bounds: the hooks run this package alongside every other suite.
+	browserCtx, cancelBrowser := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelBrowser()
 	go func() {
 		result, executeErr := api.TestingExecuteAIInvocationSpaceTool(
@@ -125,7 +126,7 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 	}()
 	var claimed *WorkflowDeviceNodeJob
 	var token string
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for {
 		claimed, token, err = database.ClaimWorkflowDeviceNodeJob(user.ID, device.ID, time.Minute)
 		if err == nil {

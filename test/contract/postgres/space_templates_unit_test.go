@@ -15,30 +15,42 @@ func TestBuiltInSpaceTemplatesHaveStableBetaContracts(t *testing.T) {
 		if template.Version != 1 {
 			t.Fatalf("template %q version = %d, want 1", template.ID, template.Version)
 		}
-		if template.RecommendedIntegrations == nil {
-			t.Fatalf("template %q recommended integrations encoded as null", template.ID)
+		if template.Icon == "" {
+			t.Fatalf("template %q has no icon", template.ID)
+		}
+		preview := template.SeedPreview
+		if preview.Tasks == nil || preview.Notes == nil || preview.Collections == nil {
+			t.Fatalf("template %q seed preview encodes null lists: %#v", template.ID, preview)
+		}
+		if len(preview.Tasks) != template.SeedSummary.TaskCount ||
+			len(preview.Notes) != template.SeedSummary.NoteCount ||
+			len(preview.Collections) != template.SeedSummary.CollectionCount {
+			t.Fatalf("template %q preview %#v disagrees with summary %#v", template.ID, preview, template.SeedSummary)
 		}
 	}
 	wantIDs := []string{
 		"blank",
-		"student-project",
 		"startup",
 		"research",
-		"game-development",
+		"student-project",
 		"creative-team",
+		"game-development",
 		"family",
+		"trip",
+		"event",
+		"client-work",
+		"household",
+		"book-club",
 	}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("template IDs = %#v, want %#v", gotIDs, wantIDs)
 	}
-	if templates[0].SeedSummary.TaskCount != 0 ||
-		templates[0].SeedSummary.NoteCount != 0 ||
-		templates[0].SeedSummary.CollectionCount != 0 {
-		t.Fatalf("Blank seed summary = %#v, want empty", templates[0].SeedSummary)
+	if templates[0].SeedSummary != (SpaceTemplateSeedSummary{}) || templates[0].SuggestedName != "" {
+		t.Fatalf("Blank = %#v, want no starter content or name", templates[0])
 	}
-	for _, template := range templates[1 : len(templates)-1] {
-		if template.SeedSummary.TaskCount != 3 || template.SeedSummary.NoteCount != 1 {
-			t.Fatalf("template %q seed summary = %#v", template.ID, template.SeedSummary)
+	for _, template := range templates[1:] {
+		if template.SuggestedName == "" || template.SeedSummary.NoteCount != 1 {
+			t.Fatalf("template %q = %#v", template.ID, template)
 		}
 	}
 }
@@ -78,17 +90,26 @@ func TestBuiltInSpaceTemplateStarterContent(t *testing.T) {
 			if !ok {
 				t.Fatalf("template %q is missing", test.id)
 			}
-			if !reflect.DeepEqual(template.Tasks, test.tasks) {
-				t.Fatalf("tasks = %#v, want %#v", template.Tasks, test.tasks)
+			tasks := template.SeedPreview.Tasks
+			if len(tasks) == 0 {
+				tasks = nil
 			}
-			if template.NoteTitle != test.noteTitle {
-				t.Fatalf("note title = %q, want %q", template.NoteTitle, test.noteTitle)
+			if !reflect.DeepEqual(tasks, test.tasks) {
+				t.Fatalf("tasks = %#v, want %#v", tasks, test.tasks)
 			}
-			if !reflect.DeepEqual(template.Collections, test.collections) {
-				t.Fatalf("collections = %#v, want %#v", template.Collections, test.collections)
+			noteTitle := ""
+			if len(template.SeedPreview.Notes) > 0 {
+				noteTitle = template.SeedPreview.Notes[0]
 			}
-			if template.NoteTitle != "" && template.NoteMarkdown == "" {
-				t.Fatal("planning note has no seed content")
+			if noteTitle != test.noteTitle {
+				t.Fatalf("note title = %q, want %q", noteTitle, test.noteTitle)
+			}
+			collections := template.SeedPreview.Collections
+			if len(collections) == 0 {
+				collections = nil
+			}
+			if !reflect.DeepEqual(collections, test.collections) {
+				t.Fatalf("collections = %#v, want %#v", collections, test.collections)
 			}
 		})
 	}

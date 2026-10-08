@@ -161,9 +161,9 @@ func TestUnifiedDeviceAdmissionNeedsVaultRootSignature(t *testing.T) {
 		t.Fatalf("admit: %d %s", response.Code, response.Body.String())
 	}
 	second := f.register("Second")
-	// A pending device receives no agent jobs.
-	if response := f.signed(second, http.MethodPost, "/devices/"+second.id+"/workflow-node-jobs/claim", map[string]any{"protocolVersion": 2}); response.Code != http.StatusForbidden {
-		t.Fatalf("pending device claimed jobs: %d", response.Code)
+	// A pending device may poll for jobs; only work it asked for on itself reaches it.
+	if response := f.signed(second, http.MethodPost, "/devices/"+second.id+"/workflow-node-jobs/claim", map[string]any{"protocolVersion": 2}); response.Code == http.StatusForbidden || response.Code == http.StatusUnauthorized {
+		t.Fatalf("pending device could not poll its own jobs: %d", response.Code)
 	}
 	// A list that is not exactly the next version is refused.
 	if response := f.admit(second, 1, []testDevice{first, second}, f.root); response.Code != http.StatusConflict {
@@ -271,6 +271,14 @@ func TestRunGrantsLimitWhatAgentsMayDoOnADevice(t *testing.T) {
 	}
 	if err := check([]map[string]any{cross}); err != nil {
 		t.Fatalf("cross-device work the target allows: %v", err)
+	}
+	// A device not added yet may let agents work on itself, and nowhere else.
+	third := f.register("Third")
+	if err := check([]map[string]any{folder(third, runGrant(third.key, f.userID, third.id, third.id, []string{"files.list", "files.read"}, []string{"scope-1"}))}); err != nil {
+		t.Fatalf("a pending device working on itself: %v", err)
+	}
+	if err := check([]map[string]any{folder(second, runGrant(third.key, f.userID, third.id, second.id, []string{"files.list", "files.read"}, []string{"scope-1"}))}); err == nil {
+		t.Fatal("a pending device reached another device")
 	}
 	// Only a device can open its own inbox.
 	inbox := map[string]any{"device_id": second.id, "kind": "inbox", "opaque_ref": "inbox:" + second.id, "capabilities": []string{"files.receive"},

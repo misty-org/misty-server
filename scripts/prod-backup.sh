@@ -9,11 +9,12 @@ umask 077
 
 : "${MISTY_BACKUP_BUCKET:?Set MISTY_BACKUP_BUCKET}"
 : "${MISTY_BACKUP_AGE_RECIPIENT:?Set MISTY_BACKUP_AGE_RECIPIENT (an age public key)}"
-: "${R2_ENDPOINT:?Set R2_ENDPOINT}" "${R2_ACCESS_KEY:?Set R2_ACCESS_KEY}" "${R2_SECRET_KEY:?Set R2_SECRET_KEY}"
+: "${R2_ENDPOINT:?Set R2_ENDPOINT}"
 : "${DB_MIGRATION_USER:?Set DB_MIGRATION_USER}" "${DB_NAME:?Set DB_NAME}"
 command -v age >/dev/null || { echo "Install age (apt install age) to encrypt backups." >&2; exit 1; }
 
 source "$(dirname "$0")/prod-backup-common.sh"
+backup_credentials
 
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 dir=".misty/backups/$stamp"
@@ -43,7 +44,8 @@ fi
 (cd "$dir" && sha256sum ./*.age manifest.txt > SHA256SUMS)
 
 echo "Uploading to r2:$MISTY_BACKUP_BUCKET/$stamp"
-rclone copy "/work/$dir" "r2:$MISTY_BACKUP_BUCKET/$stamp"
+# --immutable refuses to replace an existing object; each run uses a new prefix.
+rclone copy --immutable "/work/$dir" "r2:$MISTY_BACKUP_BUCKET/$stamp"
 
 # Keep the three newest local copies; R2 lifecycle rules handle remote retention.
 find .misty/backups -mindepth 1 -maxdepth 1 -type d -name '20*Z' | sort -r | tail -n +4 |

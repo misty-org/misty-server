@@ -30,7 +30,7 @@ func activeBrowserGrantTabs(grants []db.AgentDeviceGrant) []string {
 			continue
 		}
 		var capabilities []string
-		if json.Unmarshal(grant.Capabilities, &capabilities) != nil || !containsString(capabilities, "browser.inspect") {
+		if json.Unmarshal(grant.Capabilities, &capabilities) != nil || (!containsString(capabilities, "browser.inspect") && !containsString(capabilities, "browser.snapshot")) {
 			continue
 		}
 		var metadata struct {

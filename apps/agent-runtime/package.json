@@ -9,10 +9,14 @@
     "start": "node .output/server/index.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "eval:pointing": "vitest run --config evals/pointing/vitest.config.ts",
     "world:setup": "bootstrap",
-    "postinstall": "node scripts/patch-workflow-schema.ts"
+    "postinstall": "node scripts/patch-workflow-schema.ts",
+    "eval:browser": "vitest run --config evals/browser/vitest.config.ts",
+    "trace": "node evals/browser/trace.ts"
   },
   "dependencies": {
+    "@ai-sdk/elevenlabs": "3.0.30",
     "@ai-sdk/openai": "4.0.46",
     "@ai-sdk/provider": "4.0.7",
     "@ai-sdk/workflow": "1.0.67",

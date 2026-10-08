@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -13,6 +14,9 @@ import (
 type Reservation struct {
 	ID        string  `json:"id"`
 	Admission Request `json:"admission"`
+	// OverLimit means the work was admitted past a limit to let its command
+	// finish; the caller should wrap up.
+	OverLimit bool `json:"over_limit,omitempty"`
 }
 type DurableStore interface {
 	Store
@@ -25,6 +29,9 @@ type DurableStore interface {
 type Service struct {
 	Adapter Adapter
 	Store   DurableStore
+	// Gate refuses AI admission before billing is asked, for checks only the
+	// server can make (an unverified email). It returns a *Denial.
+	Gate func(context.Context, Request) error
 }
 
 func keyID(account, key string) string {
@@ -43,6 +50,11 @@ func (s Service) Reserve(ctx context.Context, req Request) (*Reservation, error)
 	if s.Store == nil {
 		return nil, errors.New("billing admission storage is required")
 	}
+	if s.Gate != nil {
+		if err := s.Gate(ctx, req); err != nil {
+			return nil, err
+		}
+	}
 	prior, err := s.Store.Reservation(ctx, req)
 	if err != nil {
 		return nil, err
@@ -57,7 +69,11 @@ func (s Service) Reserve(ctx context.Context, req Request) (*Reservation, error)
 	if err != nil {
 		return nil, err
 	}
-	reservation := Reservation{ID: decision.ReservationID, Admission: req}
+	var admitted struct {
+		OverLimit bool `json:"over_limit"`
+	}
+	_ = json.Unmarshal(decision.Summary, &admitted)
+	reservation := Reservation{ID: decision.ReservationID, Admission: req, OverLimit: admitted.OverLimit}
 	if err = s.Store.SaveReservation(ctx, reservation); err != nil {
 		return nil, err
 	}

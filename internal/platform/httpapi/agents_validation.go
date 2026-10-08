@@ -37,6 +37,7 @@ type AgentsService struct {
 	voiceMetrics     *platformmetrics.Registry
 	deviceHub        *deviceHub
 	deviceHubOnce    sync.Once
+	claimWaits       deviceClaimWaits
 }
 
 func NewAgentsService(database *db.Database) *AgentsService {
@@ -55,14 +56,18 @@ func (s *AgentsService) ClaimWorkflowNodeJob() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		// A device that is not added yet receives no agent jobs.
-		if _, admitted := requireAdmittedDevice(w, r); !admitted {
+		// Jobs come only from contexts whose run grant was checked, so a device
+		// that is not added yet only receives work it asked for on itself.
+		if _, ok := requestDevice(r); !ok {
+			http.Error(w, "device signature required", http.StatusUnauthorized)
 			return
 		}
 		deviceID := chi.URLParam(r, "deviceID")
 		// Older hosts can drain legacy jobs but cannot claim begin-aware work.
 		body := struct {
 			ProtocolVersion int `json:"protocolVersion"`
+			// WaitMs holds the claim open until a job is queued (at most 25 s).
+			WaitMs int `json:"waitMs"`
 		}{ProtocolVersion: 1}
 		if r.ContentLength != 0 && decodeAIJSON(w, r, &body) != nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)
@@ -72,8 +77,25 @@ func (s *AgentsService) ClaimWorkflowNodeJob() http.HandlerFunc {
 			http.Error(w, "unsupported device protocol", http.StatusBadRequest)
 			return
 		}
+		if body.WaitMs < 0 || time.Duration(body.WaitMs)*time.Millisecond > maxDeviceClaimWait {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
 		w.Header().Set("Cache-Control", "no-store")
-		job, token, err := s.database.ClaimWorkflowDeviceNodeJob(userID, deviceID, time.Minute, body.ProtocolVersion)
+		wait := time.Duration(body.WaitMs) * time.Millisecond
+		if wait > 0 && !s.claimWaits.acquire(userID+":"+deviceID) {
+			wait = 0
+		} else if wait > 0 {
+			defer s.claimWaits.release(userID + ":" + deviceID)
+		}
+		job, token, err := claimDeviceJobWithin(r.Context(), s.database, userID, deviceID, body.ProtocolVersion, wait)
+		if r.Context().Err() != nil {
+			// The device hung up while its claim was held: put the job back.
+			if err == nil && job != nil {
+				_ = s.database.ReleaseUnstartedWorkflowDeviceNodeJob(userID, deviceID, job.ID, token)
+			}
+			return
+		}
 		if errors.Is(err, db.ErrAgentJobNotFound) {
 			w.WriteHeader(http.StatusNoContent)
 			return

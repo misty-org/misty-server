@@ -57,7 +57,7 @@ func TestScreenGuidanceOffersOnDemandScreensInsteadOfAModeChoice(t *testing.T) {
 	}
 }
 
-func TestBrowserActIsTheOnlyWayToActOnAPage(t *testing.T) {
+func TestBrowserActActsWhenNoPageToolsAreGranted(t *testing.T) {
 	var act bool
 	for _, descriptor := range browserToolDescriptors() {
 		if descriptor.Name == screenActTool {
@@ -85,7 +85,7 @@ func TestDesktopScreensUseBrowserActWithMistysOwnCursor(t *testing.T) {
 		t.Fatal(desktop)
 	}
 	screens := agentCapabilityGuidance([]string{"screen.open", "screen.look"}, false)
-	if !strings.Contains(screens, "target desktop") {
+	if !strings.Contains(screens, "desktop for another app") {
 		t.Fatal(screens)
 	}
 }

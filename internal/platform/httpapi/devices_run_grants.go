@@ -10,9 +10,11 @@ import (
 )
 
 // Every device context an agent chat attaches carries a run grant signed by
-// the device that asked (docs/design/devices/BRIEF.md). Work on another device
-// also needs both devices added and the target's own policy to allow the
-// surface. The runtime may request less than a grant, never more.
+// the device that asked (docs/design/devices/BRIEF.md). A signed-in device may
+// let agents work on itself before it is added: that reaches only the computer
+// the person is at. Work on another device also needs both devices added and
+// the target's own policy to allow the surface. The runtime may request less
+// than a grant, never more.
 
 var errDeviceGrantRequired = errors.New("a signed device grant is required")
 
@@ -72,12 +74,12 @@ func verifyDeviceContextGrants(ctx context.Context, database *db.Database, userI
 		if json.Unmarshal(deviceContext.Capabilities, &capabilities) != nil || !grant.allows(deviceContext.OpaqueRef, capabilities) {
 			return errDeviceGrantRequired
 		}
-		// Agent work needs an added device, even on the device itself.
-		if requesterState != "admitted" {
-			return errDeviceGrantRequired
-		}
 		if grant.TargetDeviceID == requester {
 			continue
+		}
+		// Reaching another device needs this one added.
+		if requesterState != "admitted" {
+			return errDeviceGrantRequired
 		}
 		if deviceContext.Kind == "inbox" {
 			// Only a device can let files arrive in its own inbox.

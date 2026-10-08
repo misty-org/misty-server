@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 )
 
@@ -65,6 +66,12 @@ func ValidateProfilePatch(values map[string]any, unset []string) error {
 			}
 			if v, ok := value.(string); ok && len(v) <= maxLength {
 				valid = len(d.Enum) == 0
+				if d.ID == "app.appearance.accent" {
+					valid = accentColorPattern.MatchString(v)
+				}
+				if d.ID == "app.appearance.theme_light_start" || d.ID == "app.appearance.theme_dark_start" {
+					valid = themeTimePattern.MatchString(v)
+				}
 				if d.Format == "json" {
 					valid = validStructuredPreference(d.ID, v)
 				}
@@ -86,28 +93,23 @@ func ValidateProfilePatch(values map[string]any, unset []string) error {
 	return nil
 }
 
+// accentColorPattern accepts an empty value (no accent) or a lowercase #rrggbb color.
+var accentColorPattern = regexp.MustCompile(`^(#[0-9a-f]{6})?$`)
+
+// themeTimePattern is a local 24-hour "HH:MM" for the scheduled theme.
+var themeTimePattern = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
+
 func validStructuredPreference(id, raw string) bool {
 	var value any
 	if json.Unmarshal([]byte(raw), &value) != nil {
 		return false
 	}
-	if id == "files.openWith" {
-		entries, ok := value.(map[string]any)
-		if !ok {
-			return false
-		}
-		for _, path := range entries {
-			if text, ok := path.(string); !ok || len(text) > 4096 {
-				return false
-			}
-		}
-		return true
-	}
 	entries, ok := value.([]any)
 	if !ok {
 		return false
 	}
-	if strings.HasPrefix(id, "collections.tabs.") {
+	// Tab orders and hidden navigation destinations are short lists of slugs.
+	if strings.HasPrefix(id, "collections.tabs.") || id == "app.navigation.hidden" || id == "browser.toolbarHidden" {
 		if len(entries) > 40 {
 			return false
 		}
@@ -123,16 +125,6 @@ func validStructuredPreference(id, raw string) bool {
 				}
 			}
 			seen[tab] = true
-		}
-		return true
-	}
-	if id == "extensions.pins" {
-		// Installation IDs, matching the client's safe-integer filter.
-		for _, entry := range entries {
-			pin, ok := entry.(float64)
-			if !ok || pin < 0 || pin > 1<<53-1 || pin != math.Trunc(pin) {
-				return false
-			}
 		}
 		return true
 	}
@@ -153,6 +145,24 @@ func validStructuredPreference(id, raw string) bool {
 					}
 				}
 			}
+		case "browser.siteStyles":
+			host, _ := item["host"].(string)
+			css, cssOK := item["css"].(string)
+			_, darkOK := item["dark"].(bool)
+			if host == "" || len(host) > 253 || !cssOK || len(css) > 32768 || !darkOK {
+				return false
+			}
+		case "browser.contentBlockingAllowedSites":
+			host, _ := item["host"].(string)
+			if host == "" || len(host) > 253 {
+				return false
+			}
+		case "browser.siteZoom":
+			host, _ := item["host"].(string)
+			factor, ok := item["factor"].(float64)
+			if host == "" || len(host) > 253 || !ok || math.IsNaN(factor) || factor < 0.25 || factor > 5 {
+				return false
+			}
 		case "app.layout.presets":
 			if _, ok := item["id"].(string); !ok {
 				return false
@@ -163,7 +173,8 @@ func validStructuredPreference(id, raw string) bool {
 			positions := map[string]bool{"left": true, "right": true, "top": true, "bottom": true}
 			nav, _ := item["navigation"].(string)
 			tabs, _ := item["tabs"].(string)
-			if !positions[nav] || !positions[tabs] || nav == tabs {
+			// Tabs may share navigation's edge; they then sit inside it.
+			if !positions[nav] || !positions[tabs] {
 				return false
 			}
 		}

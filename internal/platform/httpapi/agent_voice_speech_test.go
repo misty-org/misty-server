@@ -37,3 +37,11 @@ func TestAgentSpeechBoundsUnicodeWithoutChangingStoredReply(t *testing.T) {
 		t.Fatal("stored reply changed")
 	}
 }
+
+func TestAgentSpeechLeavesWalkthroughMarkersForThePointer(t *testing.T) {
+	payload, _ := json.Marshal(map[string]string{"text": "open the source control menu. [POINT:285,11:open Source Control:screen1] [GUIDE:1/3]"})
+	text, err := agentSpeechText("completed", []db.AIInvocationEventRecord{{EventType: "assistant.message", Payload: payload}})
+	if err != nil || text != "open the source control menu." {
+		t.Fatalf("text = %q, err = %v", text, err)
+	}
+}

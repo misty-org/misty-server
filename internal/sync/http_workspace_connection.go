@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/kannachi323/misty/server/internal/platform/metrics"
 )
 
 // Workspace-protocol (v2) connections watch only the workspaces their client asks for —
@@ -26,16 +28,33 @@ func isWorkspaceFrame(kind string) bool {
 	return false
 }
 
-func (s *BrowserSyncService) handleWorkspaceFrame(ctx context.Context, identity SyncConnectionIdentity, frame syncClientFrame, send func(any) bool, watches chan<- workspaceWatch) bool {
+func (s *BrowserSyncService) handleWorkspaceFrame(ctx context.Context, identity SyncConnectionIdentity, frame syncClientFrame, send func(any) bool, watches chan<- workspaceWatch, batching bool) bool {
 	fail := func(request, operation string, err error) bool {
 		code, _ := syncErrorCode(err)
 		return send(map[string]any{"type": "workspace_error", "request_id": request, "operation_id": operation, "code": code})
+	}
+	// Batching clients keep a turned-away publish queued and wait as asked;
+	// nothing is applied.
+	limited := func(request, operation string) bool {
+		if !batching {
+			return false
+		}
+		ok, wait := s.publishes.take(identity.DeviceID, time.Now())
+		if ok {
+			return false
+		}
+		metrics.RecordSyncMessage(ctx, "out", "rate_limited", 0)
+		send(map[string]any{"type": "workspace_error", "request_id": request, "operation_id": operation, "code": "sync_rate_limited", "retry_after_ms": wait.Milliseconds()})
+		return true
 	}
 	switch frame.Type {
 	case "publish_workspace":
 		op := frame.WorkspaceOp
 		if op == nil || op.VaultID != identity.VaultID || op.DeviceID != identity.DeviceID {
 			return fail(frame.RequestID, "", ErrSyncForbidden)
+		}
+		if limited(frame.RequestID, op.OperationID) {
+			return true
 		}
 		receipt, err := s.store.PublishBrowserSyncWorkspace(ctx, identity.UserID, *op)
 		if err != nil {
@@ -92,6 +111,9 @@ func (s *BrowserSyncService) handleWorkspaceFrame(ctx context.Context, identity 
 		}
 		return send(map[string]any{"type": "records", "request_id": frame.RequestID, "listing": page})
 	case "records_push":
+		if limited(frame.RequestID, "") {
+			return true
+		}
 		results, cursor, err := s.store.PushBrowserSyncRecords(ctx, identity.UserID, identity.VaultID, identity.DeviceID, frame.Collection, frame.Writes)
 		if err != nil {
 			return fail(frame.RequestID, "", err)

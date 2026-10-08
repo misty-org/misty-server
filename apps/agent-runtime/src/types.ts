@@ -1,6 +1,8 @@
 export interface SpaceTaskContext {
  /** Only retained to reject stale routine submissions. */
  routine_execution?: unknown;
+  /** A workflow's saved browser steps, replayed before any model call. */
+  browser_replay?: unknown;
   run_id: string;
   agent_id: string;
   space_id: string;
@@ -25,7 +27,7 @@ export interface SpaceTaskContext {
   attached_sources: unknown[];
   companion_mode?: "team" | "auto";
   companion_explanation?: boolean;
-  display_captures?: Array<NonNullable<SpaceTaskContext["capture"]> & { screen: string; primary: boolean; captured_at?: number; display_id?: number; source?: string }>;
+  display_captures?: Array<NonNullable<SpaceTaskContext["capture"]> & { screen: string; primary: boolean; captured_at?: number; display_id?: number; source?: string; controls?: ScreenControl[] }>;
   capture?: {
     id: string;
     name: string;
@@ -70,6 +72,21 @@ export interface MCPRemoteTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** Read-only and run on the server or a provider, never a device: it holds
+   * no durable wait, so it may run alongside other such reads. */
+  concurrent?: boolean;
   /** Misty's read-only annotation; a failed read is always safe to retry. */
   readOnly?: boolean;
+}
+
+/** One of Misty's own visible controls, in its capture's pixels; x and y are its center. */
+export interface ScreenControl {
+  label: string;
+  role: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** "hover" when the control is invisible until the pointer is over it. */
+  reveal?: "hover";
 }

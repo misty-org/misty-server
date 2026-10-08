@@ -128,11 +128,17 @@ func (s *AgentsService) runVoiceConversation(ctx context.Context, client *websoc
 			if err != nil {
 				return "", err
 			}
-			if r.ConversationID != conversation || (name == "start_task" && r.IdempotencyKey != key) || (name != "start_task" && id != boundTask) {
+			if r.ConversationID != conversation || (voiceToolAdmits(name) && r.IdempotencyKey != key) || (!voiceToolAdmits(name) && id != boundTask) {
 				return "", errors.New("invalid voice task binding")
 			}
 			boundTask = id
 			return status(ctx)
 		},
 	})
+}
+
+// voiceToolAdmits reports a voice tool whose client admits a new invocation
+// under the call's idempotency key, rather than acting on the bound task.
+func voiceToolAdmits(name string) bool {
+	return name == "start_task" || name == "show_on_screen"
 }

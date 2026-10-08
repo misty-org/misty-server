@@ -17,6 +17,8 @@ export interface ModelCatalog {
   mistyName(modelName: string): string;
   modelName(mistyName: string): string | undefined;
   readOnly(modelName: string): boolean;
+  /** Read-only server or provider tools that may run alongside each other. */
+  concurrent(modelName: string): boolean;
 }
 
 /** Names every catalog tool once, avoiding the runtime's own tool names. */
@@ -38,6 +40,7 @@ export function modelCatalog(descriptors: MCPRemoteTool[], reserved: string[]): 
     mistyName: (name) => byModelName.get(name)?.name ?? name,
     modelName: (name) => byMistyName.get(name),
     readOnly: (name) => byModelName.get(name)?.readOnly === true,
+    concurrent: (name) => byModelName.get(name)?.concurrent === true,
   };
 }
 

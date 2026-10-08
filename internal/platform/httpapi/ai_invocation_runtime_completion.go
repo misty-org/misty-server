@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 		State        string          `json:"state"`
 		Phase        string          `json:"phase"`
 		Output       json.RawMessage `json:"output"`
+		ErrorMessage string          `json:"error_message"`
 	}
 	if !readAgentRuntimeRequest(s.agentRuntime, w, r, &body) {
 		return
@@ -28,7 +30,7 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 		// measured accounting checkpoint; never restore task/device authority.
 		if strings.HasPrefix(body.NodeID, "model:") && body.State == "completed" {
 			if stopped, lookupErr := s.database.AIInvocationRuntimeRecord(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID); lookupErr == nil && aiInvocationTerminal(stopped.State) {
-				if settleErr := s.meterAIInvocationRuntimeModel(r.Context(), stopped, body.NodeID, body.State, body.Output); settleErr != nil {
+				if _, settleErr := s.meterAIInvocationRuntimeModel(r.Context(), stopped, body.NodeID, body.State, body.Output); settleErr != nil {
 					writeAgentError(w, settleErr)
 					return
 				}
@@ -43,8 +45,10 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_event_state"})
 		return
 	}
+	overLimit := false
 	if strings.HasPrefix(body.NodeID, "model:") {
-		if err := s.meterAIInvocationRuntimeModel(r.Context(), record, body.NodeID, body.State, body.Output); err != nil {
+		var err error
+		if overLimit, err = s.meterAIInvocationRuntimeModel(r.Context(), record, body.NodeID, body.State, body.Output); err != nil {
 			writeAgentError(w, err)
 			return
 		}
@@ -70,7 +74,19 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 			} else if body.State == "failed" {
 				eventType = "tool.failed"
 			}
-			appendEvent(aiInvocationEvent{Type: eventType, ToolCallID: strings.TrimPrefix(body.NodeID, "tool:"), ToolName: toolName})
+			event := aiInvocationEvent{Type: eventType, ToolCallID: strings.TrimPrefix(body.NodeID, "tool:"), ToolName: toolName}
+			if body.State != "running" {
+				var timing struct {
+					DurationMS int64 `json:"duration_ms"`
+				}
+				if json.Unmarshal(body.Output, &timing) == nil && timing.DurationMS > 0 {
+					event.DurationMS = timing.DurationMS
+				}
+				if body.State == "failed" {
+					event.Error = truncateAgentRuntimeText(strings.TrimSpace(body.ErrorMessage), 300)
+				}
+			}
+			appendEvent(event)
 		}
 		if strings.HasPrefix(body.NodeID, "model:") && body.State == "completed" {
 			var output struct {
@@ -89,7 +105,7 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 		writeAgentError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"accepted": true})
+	writeJSON(w, http.StatusOK, map[string]bool{"accepted": true, "over_limit": overLimit})
 }
 
 // Terminal checkpoints change phase to working/tool_failed; output retains the
@@ -155,6 +171,8 @@ func (s *SpacesService) agentRuntimeCompleteAIInvocation(w http.ResponseWriter, 
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "invocation_stream_unavailable"})
 		return
 	}
+	// Sub-agents still running when their parent finishes are stopped.
+	s.cancelDelegatedChildren(context.WithoutCancel(r.Context()), record.UserID, record.ID)
 	if body.Status == "success" {
 		unconfirmed, checkErr := s.database.AgentRunHasUnconfirmedEffects(r.Context(), record.UserID, record.ID)
 		if checkErr != nil {
@@ -234,6 +252,8 @@ func (s *SpacesService) agentRuntimeCompleteAIInvocation(w http.ResponseWriter, 
 		writeAgentError(w, err)
 		return
 	}
+	// A workflow run that only used the browser can be replayed next time.
+	s.recordBrowserWorkflowReplay(context.WithoutCancel(r.Context()), record, prepared.body)
 	writeJSON(w, http.StatusOK, map[string]any{"run_id": record.ID, "state": "completed"})
 }
 
@@ -321,5 +341,6 @@ func (s *SpacesService) finishAIInvocationRuntimeAnswer(userID, invocationID str
 			return err
 		}
 	}
+	retitleAfterFirstReply(s.database, s.agent, userID, body, answer)
 	return s.aiInvocations.complete(invocationID)
 }

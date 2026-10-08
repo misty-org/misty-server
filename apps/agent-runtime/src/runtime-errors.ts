@@ -2,13 +2,16 @@ import { FatalError, RetryableError } from "workflow";
 import { ControlPlaneError } from "./control-plane-error.js";
 import { classifyMCPTransportError } from "./mcp-errors.js";
 
+/** Billing refusals: the run stops with the reason the person can act on. */
+export const usageRefusals = new Set(["billing_admission_denied", "hosted_ai_limit_reached", "usage_limit_reached", "email_unverified"]);
+
 /** Step failures retry only for transient control-plane or transport errors. */
 export function rethrowStepError(error: unknown): never {
   if (error instanceof ControlPlaneError) {
     if (error.code === "agent_model_turn_limit" || error.code === "agent_execution_time_limit") throw new FatalError(error.code);
     // Usage refusals keep their code, so the run fails with the reason the person
     // can act on rather than a generic authorization error.
-    if (error.code === "billing_admission_denied" || error.code === "hosted_ai_limit_reached") throw new FatalError(error.code);
+    if (usageRefusals.has(error.code)) throw new FatalError(error.code);
     if (error.transient) {
       throw new RetryableError("Misty's control plane is temporarily unavailable.", {
         retryAfter: error.status === 429 ? 5_000 : 1_000,
@@ -45,6 +48,12 @@ export function classifyRuntimeError(error: unknown): { code: string; message: s
   }
   if (normalized.includes("timeout") || normalized.includes("timed out") || normalized.includes("aborted")) {
     return { code: "agent_runtime_timeout", message: "Misty timed out before completing this request." };
+  }
+  if (normalized.includes("usage_limit_reached")) {
+    return { code: "usage_limit_reached", message: "Misty paused here because an AI usage limit was reached. It can pick up from this point once your limit refills." };
+  }
+  if (normalized.includes("email_unverified")) {
+    return { code: "email_unverified", message: "Confirm your email to start using AI. Check your inbox for the link." };
   }
   if (normalized.includes("billing_admission_denied")) {
     return { code: "billing_admission_denied", message: "Your account's AI usage is paused, so Misty couldn't run this. Check Account usage." };

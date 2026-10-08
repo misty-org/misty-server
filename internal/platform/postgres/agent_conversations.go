@@ -7,6 +7,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lib/pq"
+
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 )
 
@@ -84,6 +86,7 @@ func (db *Database) SaveAgentSession(ctx context.Context, conversationID, userID
 type AgentSessionSummary struct {
 	HasLegacySession bool   `json:"-"`
 	AgentID          string `json:"agent_id,omitempty"`
+	FolderID         string `json:"folder_id,omitempty"`
 	ID               string `json:"id"`
 	Title            string `json:"title"`
 	Active           bool   `json:"active"`
@@ -98,6 +101,8 @@ type AgentSessionSummary struct {
 	ReasoningEffort  string    `json:"reasoning_effort,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
+	// LastReadAt is when the user last saw the conversation; nil if never.
+	LastReadAt *time.Time `json:"last_read_at,omitempty"`
 }
 
 // ListAgentSessions returns the account's retained sessions, newest first.
@@ -109,7 +114,7 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, title, active_until > NOW(), ''::text,
-				conversation_kind,origin_surface,origin_href,privacy_boundary,model_id,model_override,reasoning_effort,created_at,updated_at,COALESCE(agent_id,''),state <> '{}'::jsonb
+				conversation_kind,origin_surface,origin_href,privacy_boundary,model_id,model_override,reasoning_effort,created_at,updated_at,COALESCE(agent_id,''),state <> '{}'::jsonb,COALESCE(folder_id,''),last_read_at
 			FROM misty_ask_conversations
 			WHERE user_id = $1 AND deleted_at IS NULL
 			ORDER BY updated_at DESC
@@ -120,7 +125,7 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 		defer rows.Close()
 		for rows.Next() {
 			var item AgentSessionSummary
-			if err := rows.Scan(&item.ID, &item.Title, &item.Active, &item.SpaceID, &item.ConversationKind, &item.OriginSurface, &item.OriginHref, &item.PrivacyBoundary, &item.ModelID, &item.ModelOverride, &item.ReasoningEffort, &item.CreatedAt, &item.UpdatedAt, &item.AgentID, &item.HasLegacySession); err != nil {
+			if err := rows.Scan(&item.ID, &item.Title, &item.Active, &item.SpaceID, &item.ConversationKind, &item.OriginSurface, &item.OriginHref, &item.PrivacyBoundary, &item.ModelID, &item.ModelOverride, &item.ReasoningEffort, &item.CreatedAt, &item.UpdatedAt, &item.AgentID, &item.HasLegacySession, &item.FolderID, &item.LastReadAt); err != nil {
 				return err
 			}
 			items = append(items, item)
@@ -275,6 +280,45 @@ func (db *Database) RenameAgentSession(ctx context.Context, userID, conversation
 		}
 		return nil
 	})
+}
+
+// TitleAgentSessionIfUnchanged sets a generated title only while the
+// conversation still has one of its placeholder titles, so a rename by the
+// person, on any device, always wins. It reports whether the title changed.
+func (db *Database) TitleAgentSessionIfUnchanged(ctx context.Context, userID, conversationID, title string, placeholders []string) (bool, error) {
+	changed := false
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `
+			UPDATE misty_ask_conversations
+			SET title = $1
+			WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL AND title = ANY($4) AND title <> $1
+		`, title, conversationID, userID, pq.Array(placeholders))
+		if err != nil {
+			return err
+		}
+		rows, err := result.RowsAffected()
+		changed = rows > 0
+		return err
+	})
+	return changed, err
+}
+
+// MarkAgentConversationRead records that the user has seen the conversation as of
+// now. It leaves updated_at alone, so reading never reorders the sidebar.
+func (db *Database) MarkAgentConversationRead(ctx context.Context, userID, conversationID string) (time.Time, error) {
+	var readAt time.Time
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, `
+			UPDATE misty_ask_conversations SET last_read_at = NOW()
+			WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+			RETURNING last_read_at
+		`, conversationID, userID).Scan(&readAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			return serveragent.ErrPersistedSessionNotFound
+		}
+		return err
+	})
+	return readAt, err
 }
 
 // DeleteAgentConversation is the user-facing retention escape hatch. The

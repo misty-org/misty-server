@@ -71,12 +71,15 @@ export function toolMonitor({ catalog, order, checkpoint, rejected }: ToolMonito
       return inspection ? [inspection] : all;
     },
     onStart: ({ toolCall }: { toolCall: ToolCall }) => order.start(toolCall.toolCallId, async () => {
+      // Misty announces a read-only call itself when the call arrives, so a
+      // read costs one checkpoint, on finish (agent_runtime_tool_start.go).
+      if (catalog.readOnly(toolCall.toolName)) return;
       const name = catalog.mistyName(toolCall.toolName);
       await checkpoint({
         node_id: `tool:${toolCall.toolCallId}`, state: "running", phase: `using_${name.replaceAll(".", "_")}`, progress: 40,
         input: typeof toolCall.input === "object" && toolCall.input !== null ? toolCall.input as Record<string, unknown> : {},
       });
-    }),
+    }, catalog.concurrent(toolCall.toolName)),
     onEnd: (event: ToolEnd) => order.finish(event.toolCall.toolCallId, async () => {
       const { toolCall } = event;
       if (order.declined(toolCall.toolCallId)) return;

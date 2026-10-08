@@ -81,12 +81,14 @@ func googleTestDatabase(t *testing.T) *Database {
 			t.Fatal(err)
 		}
 	}
-	migration, err := migrationFiles.ReadFile("migrations/20271001000000_google_sign_in.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = scoped.Exec(strings.Split(string(migration), "-- +goose Down")[0]); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"20271001000000_google_sign_in.sql", "20271007020000_google_sign_in_device_binding.sql"} {
+		migration, err := migrationFiles.ReadFile("migrations/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = scoped.Exec(strings.Split(string(migration), "-- +goose Down")[0]); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return &Database{Conn: scoped}
 }
@@ -136,10 +138,10 @@ func TestGoogleFlowExpiryAndSingleUse(t *testing.T) {
 	if err = db.CreateGoogleSignInFlow(ctx, flow); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.ConsumeGoogleSignInFlow(ctx, state); !errors.Is(err, ErrGoogleFlowInvalid) {
+	if _, err = db.ConsumeGoogleSignInFlow(ctx, state, ""); !errors.Is(err, ErrGoogleFlowInvalid) {
 		t.Fatal("state redeemed session")
 	}
-	if value, err := db.ConsumeGoogleSignInFlow(ctx, poll); err != nil || value != nil {
+	if value, err := db.ConsumeGoogleSignInFlow(ctx, poll, ""); err != nil || value != nil {
 		t.Fatalf("pending: %v %v", value, err)
 	}
 	if _, err = db.AdvanceGoogleSignInFlow(ctx, state, "pending", "started"); err != nil {
@@ -151,8 +153,12 @@ func TestGoogleFlowExpiryAndSingleUse(t *testing.T) {
 	if _, err = db.AdvanceGoogleSignInFlow(ctx, state, "started", "exchanging"); err != nil {
 		t.Fatal(err)
 	}
-	if err = db.FinishGoogleSignInFlow(ctx, state, user.ID, ""); err != nil {
+	completion := security.HashToken("ABCDEFGHJK")
+	if err = db.FinishGoogleSignInFlow(ctx, state, user.ID, "", completion); err != nil {
 		t.Fatal(err)
+	}
+	if value, err := db.ConsumeGoogleSignInFlow(ctx, poll, ""); !errors.Is(err, ErrGoogleFlowNeedsCode) || value != nil {
+		t.Fatalf("redeemed without the browser's code: %v %v", value, err)
 	}
 	var winners atomic.Int32
 	var wg sync.WaitGroup
@@ -160,7 +166,7 @@ func TestGoogleFlowExpiryAndSingleUse(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			value, err := db.ConsumeGoogleSignInFlow(ctx, poll)
+			value, err := db.ConsumeGoogleSignInFlow(ctx, poll, completion)
 			if err == nil && value != nil {
 				winners.Add(1)
 				if value.UserID != user.ID {
@@ -182,7 +188,7 @@ func TestGoogleFlowExpiryAndSingleUse(t *testing.T) {
 	if _, err = db.AdvanceGoogleSignInFlow(ctx, state, "pending", "started"); !errors.Is(err, ErrGoogleFlowInvalid) {
 		t.Fatal("expired flow launched")
 	}
-	if _, err = db.ConsumeGoogleSignInFlow(ctx, poll); !errors.Is(err, ErrGoogleFlowInvalid) {
+	if _, err = db.ConsumeGoogleSignInFlow(ctx, poll, completion); !errors.Is(err, ErrGoogleFlowInvalid) {
 		t.Fatal("expired flow redeemed")
 	}
 }

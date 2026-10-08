@@ -18,6 +18,7 @@ import (
 
 type googleFlowStub struct {
 	flow       db.GoogleSignInFlow
+	completion string
 	phase      string
 	user       *db.User
 	accountErr error
@@ -40,21 +41,31 @@ func (f *googleFlowStub) AdvanceGoogleSignInFlow(_ context.Context, state, from,
 	f.phase = to
 	return f.flow, nil
 }
-func (f *googleFlowStub) FinishGoogleSignInFlow(_ context.Context, state, user, code string) error {
+func (f *googleFlowStub) FinishGoogleSignInFlow(_ context.Context, state, user, code, completion string) error {
 	if state != f.flow.StateHash || f.phase != "exchanging" {
 		return db.ErrGoogleFlowInvalid
 	}
 	f.flow.UserID = user
 	f.flow.ErrorCode = code
+	f.completion = completion
 	f.phase = "ready"
 	return nil
 }
-func (f *googleFlowStub) ConsumeGoogleSignInFlow(_ context.Context, poll string) (*db.GoogleSignInFlow, error) {
+func (f *googleFlowStub) ConsumeGoogleSignInFlow(_ context.Context, poll, completion string) (*db.GoogleSignInFlow, error) {
 	if poll != f.flow.PollHash || f.phase == "consumed" {
 		return nil, db.ErrGoogleFlowInvalid
 	}
 	if f.phase != "ready" {
 		return nil, nil
+	}
+	if f.flow.ErrorCode == "" {
+		if completion == "" {
+			return nil, db.ErrGoogleFlowNeedsCode
+		}
+		if completion != f.completion {
+			f.phase = "consumed"
+			return nil, db.ErrGoogleFlowInvalid
+		}
 	}
 	f.phase = "consumed"
 	return &f.flow, nil
@@ -163,9 +174,13 @@ func TestGoogleSignInRoundTrip(t *testing.T) {
 			}
 			launch, _ := url.Parse(flow.URL)
 			state := launch.Query().Get("state")
-			poll := func(token string) *httptest.ResponseRecorder {
+			poll := func(token string, code ...string) *httptest.ResponseRecorder {
 				w := httptest.NewRecorder()
-				body, _ := json.Marshal(map[string]string{"flow_token": token})
+				request := map[string]string{"flow_token": token}
+				if len(code) > 0 {
+					request["completion_code"] = code[0]
+				}
+				body, _ := json.Marshal(request)
 				service.Complete()(w, httptest.NewRequest("POST", "/v1/auth/google/complete", strings.NewReader(string(body))))
 				return w
 			}
@@ -217,7 +232,25 @@ func TestGoogleSignInRoundTrip(t *testing.T) {
 			if callback(cookies[0]).Code != 400 || exchanges != before {
 				t.Fatal("callback replay accepted")
 			}
-			complete := poll(flow.Token)
+			code := ""
+			if outcome == "success" {
+				page := result.Body.String()
+				_, rest, found := strings.Cut(page, "misty://auth/google/complete?code=")
+				code, _, _ = strings.Cut(rest, `"`)
+				if !found || normalizeGoogleCompletionCode(code) == "" || !strings.Contains(page, `http-equiv="refresh"`) {
+					t.Fatalf("completion page has no deep link: %s", page)
+				}
+				// Holding only the polling secret, as whoever sent the link
+				// would, must not redeem the session.
+				if pending := poll(flow.Token); pending.Code != 202 || !strings.Contains(pending.Body.String(), "confirm") || sessions != 0 {
+					t.Fatalf("session redeemed without the browser's code: %d", pending.Code)
+				}
+				if poll(flow.Token, "not-a-code").Code != 400 || sessions != 0 {
+					t.Fatal("malformed code accepted")
+				}
+				code = strings.ToLower(code[:5]) + "-" + code[5:]
+			}
+			complete := poll(flow.Token, code)
 			want = 409
 			if outcome == "success" {
 				want = 200
@@ -235,6 +268,35 @@ func TestGoogleSignInRoundTrip(t *testing.T) {
 				t.Fatal("completion replay accepted")
 			}
 		})
+	}
+}
+
+func TestGoogleSignInWrongCodeEndsTheFlow(t *testing.T) {
+	store := &googleFlowStub{flow: db.GoogleSignInFlow{PollHash: "poll", ExpiresAt: time.Now().Add(time.Minute)}, phase: "ready", completion: "right"}
+	if _, err := store.ConsumeGoogleSignInFlow(context.Background(), "poll", "wrong"); !errors.Is(err, db.ErrGoogleFlowInvalid) {
+		t.Fatal("wrong code accepted")
+	}
+	if _, err := store.ConsumeGoogleSignInFlow(context.Background(), "poll", "right"); !errors.Is(err, db.ErrGoogleFlowInvalid) {
+		t.Fatal("flow survived a wrong code")
+	}
+}
+
+func TestGoogleCompletionCodes(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		code, err := newGoogleCompletionCode()
+		if err != nil || len(code) != googleCompletionLength || normalizeGoogleCompletionCode(code) != code || seen[code] {
+			t.Fatalf("bad code %q %v", code, err)
+		}
+		seen[code] = true
+	}
+	for _, raw := range []string{"", "ABCDE", "ABCDE-FGHJK-M", "ABCDE-FGHJ0", "ABCDE_FGHJK"} {
+		if normalizeGoogleCompletionCode(raw) != "" {
+			t.Fatalf("accepted %q", raw)
+		}
+	}
+	if normalizeGoogleCompletionCode("abcde-fghjk") != "ABCDEFGHJK" {
+		t.Fatal("display form rejected")
 	}
 }
 

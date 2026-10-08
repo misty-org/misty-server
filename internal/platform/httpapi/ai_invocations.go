@@ -21,59 +21,22 @@ const (
 	maxAIInvocationPrompt = 32 << 10
 )
 
-type aiSelectionSnapshot struct {
-	Kind        string         `json:"kind"`
-	Content     string         `json:"content,omitempty"`
-	Object      map[string]any `json:"object"`
-	Anchors     map[string]any `json:"anchors,omitempty"`
-	ContentHash string         `json:"contentHash"`
-}
-
-type aiCaptureAttachment struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	MimeType    string `json:"mime_type"`
-	DataURL     string `json:"data_url"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
-	ContentHash string `json:"content_hash"`
-}
-
-type aiDisplayCapture struct {
-	aiCaptureAttachment
-	CapturedAt int64  `json:"captured_at,omitempty"`
-	DisplayID  uint32 `json:"display_id,omitempty"`
-	Source     string `json:"source,omitempty"`
-	Screen     string `json:"screen"`
-	Primary    bool   `json:"primary"`
-}
-
-type aiInvocationDeviceContext struct {
-	DeviceID     string          `json:"device_id"`
-	Kind         string          `json:"kind"`
-	OpaqueRef    string          `json:"opaque_ref"`
-	DisplayName  string          `json:"display_name,omitempty"`
-	Capabilities json.RawMessage `json:"capabilities"`
-	Metadata     json.RawMessage `json:"metadata,omitempty"`
-	// RunGrant is signed by the device that asked for this context.
-	RunGrant *signedDeviceRecord `json:"run_grant,omitempty"`
-}
-
 type aiInvocationInput struct {
-	MethodVersionID       string                      `json:"method_version_id,omitempty"`
-	MethodInputs          map[string]any              `json:"method_inputs,omitempty"`
-	SkillVersionIDs       []string                    `json:"skill_version_ids,omitempty"`
-	CompanionMode         string                      `json:"companion_mode,omitempty"`
-	CompanionModel        string                      `json:"companion_model,omitempty"`
+	MethodVersionID string         `json:"method_version_id,omitempty"`
+	MethodInputs    map[string]any `json:"method_inputs,omitempty"`
+	SkillVersionIDs []string       `json:"skill_version_ids,omitempty"`
+	CompanionMode   string         `json:"companion_mode,omitempty"`
+	CompanionModel  string         `json:"companion_model,omitempty"`
+	CompanionIntent string         `json:"companion_intent,omitempty"` // "teach": explain and point at the screens, no tools
 	// ModelOverride pins a new conversation's Thinking model with its first
 	// message; an existing conversation sets it with PATCH instead.
-	ModelOverride string `json:"model_override,omitempty"`
+	ModelOverride         string                      `json:"model_override,omitempty"`
 	DisplayCaptures       []aiDisplayCapture          `json:"display_captures,omitempty"`
 	ThinkingMode          string                      `json:"thinking_mode,omitempty"`
 	TaskID                string                      `json:"task_id,omitempty"`
 	AgentID               string                      `json:"agent_id,omitempty"`
 	ExecutionMode         string                      `json:"execution_mode,omitempty"`
-	CollaborationMode string `json:"collaboration_mode,omitempty"` // "plan" or "act"; frozen at admission
+	CollaborationMode     string                      `json:"collaboration_mode,omitempty"` // "plan" or "act"; frozen at admission
 	WindowLabel           string                      `json:"window_label,omitempty"`
 	Mode                  string                      `json:"mode"`
 	SurfaceID             string                      `json:"surface_id"`
@@ -90,27 +53,46 @@ type aiInvocationInput struct {
 	ConversationID        string                      `json:"conversation_id,omitempty"`
 	IdempotencyKey        string                      `json:"idempotency_key"`
 	Timezone              string                      `json:"timezone,omitempty"`
+	// NotebookKey and DelegatedFrom are set by the server for sub-agents
+	// (agents_delegate); requests from clients never carry them.
+	NotebookKey   string `json:"notebook_key,omitempty"`
+	DelegatedFrom string `json:"delegated_from,omitempty"`
+	// CurrentTab is the Misty browser tab in front of the user when they wrote,
+	// so "this page" has a referent. Its title and address are untrusted page data.
+	CurrentTab *aiCurrentTab `json:"current_tab,omitempty"`
+}
+
+type aiCurrentTab struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
 }
 
 type aiInvocationEvent struct {
-	ID         string      `json:"id"`
-	Type       string      `json:"type"`
-	State      string      `json:"state,omitempty"`
-	Delta      string      `json:"delta,omitempty"`
-	Text       string      `json:"text,omitempty"`
-	Phase      string      `json:"phase,omitempty"`
-	Summary    string      `json:"summary,omitempty"`
-	ArtifactID string      `json:"artifactId,omitempty"`
-	RunID      string      `json:"runId,omitempty"`
-	ToolCallID string      `json:"toolCallId,omitempty"`
-	ToolName   string      `json:"toolName,omitempty"`
-	Citation   *aiCitation `json:"citation,omitempty"`
-	Artifact   *aiArtifact `json:"artifact,omitempty"`
-	AppRequest *appRequest `json:"appRequest,omitempty"`
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	State      string `json:"state,omitempty"`
+	Delta      string `json:"delta,omitempty"`
+	Text       string `json:"text,omitempty"`
+	Phase      string `json:"phase,omitempty"`
+	Summary    string `json:"summary,omitempty"`
+	ArtifactID string `json:"artifactId,omitempty"`
+	RunID      string `json:"runId,omitempty"`
+	ToolCallID string `json:"toolCallId,omitempty"`
+	ToolName   string `json:"toolName,omitempty"`
+	// Activity and DurationMS describe a tool call for the reply's timeline.
+	Activity   *aiToolActivity `json:"activity,omitempty"`
+	DurationMS int64           `json:"durationMs,omitempty"`
+	Citation   *aiCitation     `json:"citation,omitempty"`
+	Artifact   *aiArtifact     `json:"artifact,omitempty"`
+	AppRequest *appRequest     `json:"appRequest,omitempty"`
 	// ScreenRequest asks the desktop to open a screen and continue the task.
 	ScreenRequest *screenRequest `json:"screenRequest,omitempty"`
+	// Notebook is the run's plan and findings after a notebook write.
+	Notebook *aiNotebookEvent `json:"notebook,omitempty"`
+	// Delegation lists a run's sub-agents and their progress.
+	Delegation *aiDelegationEvent `json:"delegation,omitempty"`
 	aiCollaborationEventFields
-	Error         string         `json:"error,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 type aiArtifact struct {
@@ -172,6 +154,8 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
+		// Only the server links a run to a parent's notebook or delegation.
+		body.NotebookKey, body.DelegatedFrom = "", ""
 		if _, err := resolveInvocationMethod(r.Context(), s.database, userID, &body); err != nil {
 			writeAgentMethodError(w, err)
 			return
@@ -334,6 +318,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "model_unavailable", "message": "Misty’s model is temporarily unavailable. Please try again."})
 			return
 		}
+		reasoning = companionAdmissionReasoning(body, reasoning)
 		available, err := s.database.AIActionAvailable(r.Context(), userID, body.SurfaceID, actionID, modelID)
 		if err != nil {
 			TestingWriteAIError(w, err)
@@ -367,8 +352,8 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		}
 		now := time.Now().UTC()
 		stored, created, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-			DispatchRuntime: true,
-			ID:              "invocation_" + uuid.NewString(), UserID: userID, SpaceID: spaceID, ConversationID: conversationID,
+			DispatchRuntime: true, ModelTurnLimit: planTurnLimit(r.Context(), s.database, userID),
+			ID: "invocation_" + uuid.NewString(), UserID: userID, SpaceID: spaceID, ConversationID: conversationID,
 			SurfaceID: body.SurfaceID, Mode: body.Mode, Trigger: body.Trigger, State: "queued",
 			IdempotencyKey: body.IdempotencyKey, RequestPayload: requestPayload, ExpiresAt: now.Add(aiInvocationTTL),
 		})
@@ -377,7 +362,8 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			return
 		}
 		if created && s.providerSettings != nil {
-			if _, routeErr := s.database.FreezeAIModelRoutes(r.Context(), userID, stored.ID, defaultAIRoutes(modelID, reasoning), modelOverrides); routeErr != nil {
+			planned, forced := planRoutes(r.Context(), s.database, userID, defaultAIRoutes(modelID, reasoning))
+			if _, routeErr := s.database.FreezeAIModelRoutes(r.Context(), userID, stored.ID, planned, modelOverrides, forced); routeErr != nil {
 				writeAIProviderError(w, routeErr)
 				return
 			}
@@ -387,18 +373,20 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "load invocation stream"})
 			return
 		}
+		if created {
+			titleNewConversation(s.database, s.runtime, userID, conversationID, body)
+		}
 		if !created {
 			writeAIInvocationCreated(w, record)
 			return
 		}
+		s.recordInvocationOnboarding(r.Context(), userID, body)
 		if modelFallbackNotice {
 			s.invocations.append(stored.ID, aiInvocationEvent{Type: "assistant.status", Text: "The previous model retired, so Misty switched this conversation to the frontier default.", Phase: "model_fallback"})
 		}
 		writeAIInvocationCreated(w, record)
 	}
 }
-
-
 
 func writeAIInvocationCreated(w http.ResponseWriter, record *aiInvocationRecord) {
 	writeJSON(w, http.StatusAccepted, map[string]any{
@@ -464,6 +452,10 @@ func (s *AIService) CancelInvocation() http.HandlerFunc {
 		if err := s.database.CancelMistyInvocationChildren(r.Context(), userID, stored.ID); err != nil {
 			writeSpaceError(w, err)
 			return
+		}
+		if s.providerSettings != nil {
+			// Sub-agents stop with the run that started them.
+			s.providerSettings.cancelDelegatedChildren(r.Context(), userID, stored.ID)
 		}
 		if !aiInvocationTerminal(stored.State) && stored.AgentRunID != "" {
 			if run, cancelErr := s.database.CancelPersonalAgentTaskRunForOwner(r.Context(), userID, stored.AgentRunID); cancelErr == nil && run.RuntimeRunID != "" {

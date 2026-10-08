@@ -19,3 +19,13 @@ it("recaptures workspace input only when the host confirms no dispatch", () => {
     expect(requiresBrowserReinspection("browser.workspace.interact", result)).toBe(false);
   }
 });
+
+it("refreshes the snapshot when page steps were rejected before dispatch", () => {
+  const stale = { status: "failure", reason: "browser_snapshot_stale", attempted: false };
+  for (const name of ["browser.steps", "browser.fill_form"]) {
+    expect(requiresBrowserReinspection(name, stale)).toBe(true);
+    expect(requiresBrowserReinspection(name, { ...stale, attempted: true })).toBe(false);
+    expect(browserReinspectionTool(name)).toBe("browser.snapshot");
+  }
+  expect(browserReinspectionInstruction("browser.snapshot")).toContain("browser_snapshot");
+});

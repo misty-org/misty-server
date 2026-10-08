@@ -11,14 +11,25 @@ type SpaceTemplateSeedSummary struct {
 	CollectionCount int `json:"collection_count"`
 }
 
+// SpaceTemplateSeedPreview names exactly what a template creates, so the
+// create dialog can show it before anything exists.
+type SpaceTemplateSeedPreview struct {
+	Tasks       []string `json:"tasks"`
+	Notes       []string `json:"notes"`
+	Collections []string `json:"collections"`
+}
+
 type SpaceTemplate struct {
-	AppIDs                  []string                 `json:"app_ids"`
-	ID                      string                   `json:"id"`
-	Name                    string                   `json:"name"`
-	Description             string                   `json:"description"`
-	Version                 int                      `json:"version"`
-	RecommendedIntegrations []string                 `json:"recommended_integrations"`
-	SeedSummary             SpaceTemplateSeedSummary `json:"seed_summary"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	Version       int    `json:"version"`
+	Icon          string `json:"icon"`
+	SuggestedName string `json:"suggested_name"`
+	// Personal templates are saved by the person from one of their Spaces.
+	Personal    bool                     `json:"personal,omitempty"`
+	SeedSummary SpaceTemplateSeedSummary `json:"seed_summary"`
+	SeedPreview SpaceTemplateSeedPreview `json:"seed_preview"`
 }
 
 type SpaceSetup struct {
@@ -30,95 +41,128 @@ type SpaceSetup struct {
 type CreateSpaceResult struct {
 	Space Space      `json:"space"`
 	Setup SpaceSetup `json:"setup"`
+	// SeedIncomplete reports that the Space exists but some starter content
+	// (its notes) could not be added.
+	SeedIncomplete bool `json:"seed_incomplete,omitempty"`
 }
 
+type templateNote struct {
+	Title    string `json:"title"`
+	Markdown string `json:"markdown"`
+}
+
+// templateDefinition is what a template seeds. Personal templates store the
+// same shape as JSON.
 type templateDefinition struct {
 	SpaceTemplate
-	Tasks        []string
-	NoteTitle    string
-	NoteMarkdown string
-	Collections  []string
+	Tasks       []string       `json:"tasks"`
+	Notes       []templateNote `json:"notes"`
+	Collections []string       `json:"collections"`
+}
+
+func (t *templateDefinition) finish() {
+	t.Tasks = nonNilStrings(t.Tasks)
+	t.Collections = nonNilStrings(t.Collections)
+	if t.Notes == nil {
+		t.Notes = []templateNote{}
+	}
+	notes := make([]string, 0, len(t.Notes))
+	for _, note := range t.Notes {
+		notes = append(notes, note.Title)
+	}
+	t.SeedSummary = SpaceTemplateSeedSummary{
+		TaskCount: len(t.Tasks), NoteCount: len(t.Notes), CollectionCount: len(t.Collections),
+	}
+	t.SeedPreview = SpaceTemplateSeedPreview{
+		// Copies that stay empty lists, never null, for a template with none.
+		Tasks: append([]string{}, t.Tasks...), Notes: notes,
+		Collections: append([]string{}, t.Collections...),
+	}
+}
+
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}
+
+func outlineNote(title string, headings ...string) templateNote {
+	var markdown strings.Builder
+	markdown.WriteString("# " + title + "\n")
+	for _, heading := range headings {
+		markdown.WriteString("\n## " + heading + "\n")
+	}
+	return templateNote{Title: title, Markdown: markdown.String()}
+}
+
+func builtIn(id, name, description, icon, suggested string, tasks []string, note templateNote, collections []string) templateDefinition {
+	notes := []templateNote{}
+	if note.Title != "" {
+		notes = append(notes, note)
+	}
+	return templateDefinition{
+		SpaceTemplate: SpaceTemplate{ID: id, Name: name, Description: description, Version: 1, Icon: icon, SuggestedName: suggested},
+		Tasks:         tasks, Notes: notes, Collections: collections,
+	}
 }
 
 var builtInSpaceTemplates = []templateDefinition{
-	{SpaceTemplate: SpaceTemplate{ID: "blank", Name: "Blank Space", Description: "Start with a clean Space.", Version: 1}},
-	{
-		SpaceTemplate: SpaceTemplate{ID: "student-project", Name: "Student Project", Description: "Organize a class project from brief to delivery.", Version: 1, RecommendedIntegrations: []string{"google"}},
-		Tasks:         []string{"Agree on the goal", "Divide responsibilities", "Set the first deadline"},
-		NoteTitle:     "Project brief",
-		NoteMarkdown:  "# Project brief\n\n## Objective\n\n## Requirements\n\n## Roles\n\n## Sources\n",
-		Collections:   []string{"Research", "Drafts", "Final Deliverables"},
-	},
-	{
-		SpaceTemplate: SpaceTemplate{ID: "startup", Name: "Startup", Description: "Keep an early team aligned around customers and outcomes.", Version: 1, RecommendedIntegrations: []string{"google"}},
-		Tasks:         []string{"Define this week's outcome", "Talk to a first user", "Assign owners"},
-		NoteTitle:     "Company snapshot",
-		NoteMarkdown:  "# Company snapshot\n\n## Problem\n\n## Customer\n\n## Solution\n\n## Milestone\n",
-		Collections:   []string{"Product", "Customer Research", "Brand & Pitch"},
-	},
-	{
-		SpaceTemplate: SpaceTemplate{ID: "research", Name: "Research", Description: "Collect sources, coordinate work, and track outputs.", Version: 1, RecommendedIntegrations: []string{"google"}},
-		Tasks:         []string{"Write the research question", "Collect key sources", "Set the next checkpoint"},
-		NoteTitle:     "Research plan",
-		NoteMarkdown:  "# Research plan\n\n## Question\n\n## Hypothesis\n\n## Method\n\n## Responsibilities\n",
-		Collections:   []string{"Papers", "Data", "Outputs"},
-	},
-	{
-		SpaceTemplate: SpaceTemplate{ID: "game-development", Name: "Game Development", Description: "Coordinate a small game team around the next playable build.", Version: 1},
-		Tasks:         []string{"Define a playable milestone", "Assign core roles", "Schedule a playtest"},
-		NoteTitle:     "Game brief",
-		NoteMarkdown:  "# Game brief\n\n## Premise\n\n## Player loop\n\n## Art direction\n\n## Milestone\n",
-		Collections:   []string{"Art", "Audio", "Builds & References"},
-	},
-	{
-		SpaceTemplate: SpaceTemplate{ID: "creative-team", Name: "Creative Team", Description: "Move a shared brief through review and delivery.", Version: 1},
-		Tasks:         []string{"Agree on the brief", "Assign initial deliverables", "Set a review date"},
-		NoteTitle:     "Creative brief",
-		NoteMarkdown:  "# Creative brief\n\n## Goal\n\n## Audience\n\n## Tone\n\n## Deliverables\n\n## References\n",
-		Collections:   []string{"Briefs", "Inspiration", "Work in Progress", "Final"},
-	},
+	builtIn("blank", "Blank", "Start with an empty Space.", "square", "", nil, templateNote{}, nil),
+	builtIn("startup", "Startup", "Keep an early team aligned around customers and outcomes.", "rocket", "Startup",
+		[]string{"Define this week's outcome", "Talk to a first user", "Assign owners"},
+		outlineNote("Company snapshot", "Problem", "Customer", "Solution", "Milestone"),
+		[]string{"Product", "Customer Research", "Brand & Pitch"}),
+	builtIn("research", "Research", "Collect sources, coordinate work and track outputs.", "flask", "Research",
+		[]string{"Write the research question", "Collect key sources", "Set the next checkpoint"},
+		outlineNote("Research plan", "Question", "Hypothesis", "Method", "Responsibilities"),
+		[]string{"Papers", "Data", "Outputs"}),
+	builtIn("student-project", "Student project", "Organize a class project from brief to delivery.", "graduation-cap", "Class project",
+		[]string{"Agree on the goal", "Divide responsibilities", "Set the first deadline"},
+		outlineNote("Project brief", "Objective", "Requirements", "Roles", "Sources"),
+		[]string{"Research", "Drafts", "Final Deliverables"}),
+	builtIn("creative-team", "Creative team", "Move a shared brief through review and delivery.", "palette", "Creative team",
+		[]string{"Agree on the brief", "Assign initial deliverables", "Set a review date"},
+		outlineNote("Creative brief", "Goal", "Audience", "Tone", "Deliverables", "References"),
+		[]string{"Briefs", "Inspiration", "Work in Progress", "Final"}),
+	builtIn("game-development", "Game development", "Coordinate a small team around the next playable build.", "gamepad", "Game studio",
+		[]string{"Define a playable milestone", "Assign core roles", "Schedule a playtest"},
+		outlineNote("Game brief", "Premise", "Player loop", "Art direction", "Milestone"),
+		[]string{"Art", "Audio", "Builds & References"}),
+	builtIn("family", "Family", "Keep family plans and important material together.", "users", "Family",
+		nil, outlineNote("Family notes"), []string{"Important documents"}),
+	builtIn("trip", "Trip", "Plan a trip together: dates, bookings and the packing list.", "plane", "Trip",
+		[]string{"Pick the dates", "Book travel", "Book a place to stay", "Share the packing list"},
+		outlineNote("Itinerary", "Dates", "Getting there", "Where we're staying", "Day by day"),
+		[]string{"Bookings", "Photos"}),
+	builtIn("event", "Event", "Run an event from the guest list to the day itself.", "calendar-heart", "Event",
+		[]string{"Set the date and venue", "Send invitations", "Confirm vendors"},
+		outlineNote("Run of show", "Schedule", "Vendors", "Guests", "Day-of contacts"),
+		[]string{"Contracts", "Inspiration"}),
+	builtIn("client-work", "Client work", "Share a project with a client: scope, deliverables and feedback.", "briefcase", "Client project",
+		[]string{"Confirm the scope", "Agree on milestones", "Schedule the kickoff"},
+		outlineNote("Statement of work", "Scope", "Deliverables", "Timeline", "Contacts"),
+		[]string{"Deliverables", "Feedback"}),
+	builtIn("household", "Household", "Share chores, bills and the documents a home runs on.", "home", "Home",
+		[]string{"List recurring bills", "Split weekly chores"},
+		outlineNote("House notes", "Bills", "Chores", "Contacts", "Wi-Fi and codes"),
+		[]string{"Warranties & Manuals", "Bills"}),
+	builtIn("book-club", "Book club", "Pick the next read, schedule meetups and keep the discussion.", "book-open", "Book club",
+		[]string{"Vote on the next book", "Schedule the meetup"},
+		outlineNote("Reading list", "Now reading", "Up next", "Finished"),
+		[]string{"Notes & Quotes"}),
 }
 
 func init() {
-	builtInSpaceTemplates = append(builtInSpaceTemplates, templateDefinition{SpaceTemplate: SpaceTemplate{ID: "family", Name: "Family", Description: "Keep family plans and important material together.", Version: 1}, NoteTitle: "Family notes", NoteMarkdown: "# Family notes\n", Collections: []string{"Important documents"}})
-
 	for index := range builtInSpaceTemplates {
-		template := &builtInSpaceTemplates[index]
-		switch template.ID {
-		case "blank":
-			template.AppIDs = []string{}
-		case "family":
-			template.AppIDs = []string{"chat", "planner", "journal", "library"}
-		case "startup":
-			template.AppIDs = []string{"chat", "journal", "planner", "library"}
-		case "game-development":
-			template.AppIDs = []string{"chat", "journal", "planner", "library", "files", "code", "terminal"}
-		default:
-			template.AppIDs = []string{"chat", "journal", "planner", "library"}
-		}
-		template.SeedSummary = SpaceTemplateSeedSummary{
-			TaskCount: len(template.Tasks), NoteCount: boolCount(template.NoteTitle != ""),
-			CollectionCount: len(template.Collections),
-		}
+		builtInSpaceTemplates[index].finish()
 	}
-}
-
-func boolCount(value bool) int {
-	if value {
-		return 1
-	}
-	return 0
 }
 
 func BuiltInSpaceTemplates() []SpaceTemplate {
 	out := make([]SpaceTemplate, 0, len(builtInSpaceTemplates))
 	for _, template := range builtInSpaceTemplates {
-		item := template.SpaceTemplate
-		item.RecommendedIntegrations = append([]string(nil), item.RecommendedIntegrations...)
-		if item.RecommendedIntegrations == nil {
-			item.RecommendedIntegrations = []string{}
-		}
-		out = append(out, item)
+		out = append(out, template.SpaceTemplate)
 	}
 	return out
 }

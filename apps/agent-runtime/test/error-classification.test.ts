@@ -10,6 +10,14 @@ import { classifyRuntimeError, recoverableToolError, visibleErrorMessage } from 
 import { classifyToolOutcome, incompleteToolResultText, stoppedAtModelTurnLimit, toolFailureSignature } from "../src/tool-outcomes.js";
 
 describe("runtime error classification", () => {
+  it("names usage refusals so a run pauses instead of failing generically", () => {
+    expect(classifyRuntimeError(new Error("usage_limit_reached")).code).toBe("usage_limit_reached");
+    expect(classifyRuntimeError(new Error("email_unverified")).message).toMatch(/Confirm your email/);
+    // A refusal is not transient: retrying the step cannot succeed until a limit refills.
+    expect(new ControlPlaneError(402, "limit", "usage_limit_reached").transient).toBe(false);
+    expect(new ControlPlaneError(503, "down", "usage_limit_reached").transient).toBe(false);
+  });
+
   it("preserves a safe native browser failure without exposing its raw details", () => {
     expect(visibleErrorMessage(new Error("browser_webview_unavailable: private diagnostic details"))).toBe(
       "The local browser view is unavailable. Reopen the browser view and retry the task.",

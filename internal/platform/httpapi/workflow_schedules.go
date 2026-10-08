@@ -19,8 +19,13 @@ import (
 // so earlier scheduled turns still read as scheduled.
 const scheduledRunTrigger = "scheduled_task"
 
+// continuationTrigger marks a turn the desktop sent to resume a request after
+// the person answered a card (connected an app, approved, shared a screen).
+// The conversation shows it as an event line, not as something they typed.
+const continuationTrigger = "continuation"
+
 func mistyTurnSource(trigger string) string {
-	if trigger == scheduledRunTrigger || trigger == goalContinuationTrigger {
+	if trigger == scheduledRunTrigger || trigger == goalContinuationTrigger || trigger == continuationTrigger {
 		return trigger
 	}
 	return ""
@@ -215,6 +220,7 @@ func (s *AIService) startWorkflowScheduleRun(ctx context.Context, item db.Workfl
 	if !created || invocation.RuntimeRunID != "" {
 		return nil
 	}
+	s.recordInvocationOnboarding(ctx, item.UserID, body)
 	if _, err := s.agentRuntime.Start(ctx, invocation.ID); err != nil {
 		s.invocations.fail(invocation.ID, "Misty could not start the agent runtime. Please try again.")
 		return fail(err)

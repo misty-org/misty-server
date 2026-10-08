@@ -11,8 +11,9 @@ import (
 )
 
 // maxSyncControlVersion is the newest device capability level: 1 accepts
-// device controls, 2 also understands nested bookmark folders.
-const maxSyncControlVersion = 2
+// device controls, 2 also understands nested bookmark folders, 3 also
+// understands pinned tabs.
+const maxSyncControlVersion = 3
 
 type SyncDeviceControl struct {
 	DeviceID       string  `json:"device_id"`

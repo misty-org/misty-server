@@ -11,6 +11,9 @@ import (
 
 var agentSpeechPoint = regexp.MustCompile(`\[POINT:[^\]\r\n]*\]`)
 
+// agentSpeechGuide marks a walkthrough step; it is for the pointer, not the ear.
+var agentSpeechGuide = regexp.MustCompile(`\[GUIDE:\d+/\d+\]`)
+
 func agentSpeechText(state string, events []db.AIInvocationEventRecord) (string, error) {
 	if state != "completed" {
 		return "", errors.New("reply is not complete")
@@ -28,7 +31,7 @@ func agentSpeechText(state string, events []db.AIInvocationEventRecord) (string,
 		}
 		text = message.Text
 	}
-	text = strings.TrimSpace(agentSpeechPoint.ReplaceAllString(text, ""))
+	text = strings.TrimSpace(agentSpeechGuide.ReplaceAllString(agentSpeechPoint.ReplaceAllString(text, ""), ""))
 	if text == "" {
 		return "", errors.New("empty reply")
 	}

@@ -31,6 +31,18 @@ describe("tool monitor", () => {
     expect(modelCatalog([{ name: "misty.finish_task", description: "", inputSchema: schema }], ["misty_finish_task"]).tools[0]?.modelName).toBe("misty_finish_task_2");
   });
 
+  it("checkpoints a read once, on finish, and a write on start and finish", async () => {
+    const order = serialToolLifecycle();
+    const saved: string[] = [];
+    const monitor = toolMonitor({ catalog, order, rejected: new Set(), checkpoint: async (event) => { saved.push(`${event.node_id}:${event.state}`); } });
+    for (const [id, toolName] of [["read", "notes_search"], ["write", "notes_update"]] as const) {
+      const toolCall = { toolCallId: id, toolName, input: {} };
+      await monitor.onStart({ toolCall });
+      await monitor.onEnd({ toolCall, durationMs: 1, success: true, output: { ok: true } });
+    }
+    expect(saved).toEqual(["tool:read:completed", "tool:write:running", "tool:write:completed"]);
+  });
+
   it("lets the model correct a rejected write, then stops when it repeats it unchanged", async () => {
     const { order, monitor, call } = setup(new Set(["first", "second"]));
     await call("first", "notes_update", { success: false, error: "tool_execution_failed: pass space for this change" }, { id: "n1" });

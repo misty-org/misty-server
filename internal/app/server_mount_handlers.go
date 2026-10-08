@@ -77,12 +77,15 @@ func (s *Server) MountHandlers() error {
 		}
 		agentsService.SetConnectedDevices(connectedDevicesConfig)
 	}
-	registerHandler := api.RegisterWithTelemetry(s.Database, s.Telemetry)
+	verification := api.NewAccountVerification(s.Database, s.EmailSender)
+	s.Database.BillingService().Gate = verification.Gate
+	registerHandler := api.RegisterWithVerification(s.Database, s.Telemetry, verification)
 	loginHandler := api.Login(s.Database)
 	googleSignIn, err := api.NewGoogleSignInService(s.Database)
 	if err != nil {
 		return err
 	}
+	googleSignIn.SetVerification(verification)
 	logoutHandler := api.Logout(s.Database)
 	forgotPasswordHandler := passwordResetService.Forgot()
 	startResetHandler := passwordResetService.Start()
@@ -116,9 +119,13 @@ func (s *Server) MountHandlers() error {
 		s.Router.Get(prefix+"/auth/reset/start", startResetHandler)
 		s.Router.Get(prefix+"/auth/reset/validate", validateResetTokenHandler)
 		s.Router.Post(prefix+"/auth/reset", resetPasswordHandler)
+		s.Router.Get(prefix+"/auth/verify/start", verification.Verify())
 		s.Router.Post(prefix+"/auth/handoff", mintHandoffHandler)
 		s.Router.Get(prefix+"/auth/handoff/start", startHandoffHandler)
 		s.Router.Get(prefix+"/me", api.GetMe(s.Database))
+		s.Router.Post(prefix+"/me/email/verify", verification.Resend())
+		s.Router.Get(prefix+"/me/referral", verification.Referral())
+		s.Router.Post(prefix+"/me/referral/claim", verification.ClaimReferral())
 		s.Router.Get(prefix+"/me/library-lock", api.LibraryLockPassword(s.Database))
 		s.Router.Post(prefix+"/me/library-lock", api.LibraryLockPassword(s.Database))
 		s.Router.Get(prefix+"/sync/vault", browserSync.Vault())
@@ -141,11 +148,10 @@ func (s *Server) MountHandlers() error {
 		s.Router.Post(prefix+"/me/space-templates", api.PersonalSpaceTemplates(s.Database))
 		s.Router.Put(prefix+"/me/space-templates/{templateID}", api.PersonalSpaceTemplates(s.Database))
 		s.Router.Delete(prefix+"/me/space-templates/{templateID}", api.PersonalSpaceTemplates(s.Database))
+		s.Router.Get(prefix+"/me/space-people", api.SpacePeople(s.Database))
 		s.Router.Get(prefix+"/me/agent-interventions", s.Spaces.AIUserInterventionControl())
 		s.Router.Post(prefix+"/me/agent-interventions/{waitID}", s.Spaces.AIUserInterventionControl())
 
-		s.Router.Get(prefix+"/me/home", api.HomeDashboard(s.Database))
-		s.Router.Post(prefix+"/me/home/apps", api.RecordHomeAppActivity(s.Database))
 		s.Router.Put(prefix+"/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
 		s.Router.Post(prefix+"/billing/checkout-session", api.CreateCheckoutSession(s.Database))
 		s.Router.Post(prefix+"/billing/portal-session", api.CreatePortalSession(s.Database))

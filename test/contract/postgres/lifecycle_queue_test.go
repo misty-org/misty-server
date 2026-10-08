@@ -41,7 +41,7 @@ func TestScheduledAndCleanupQueuesFollowAccountAISwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.UpsertAIRecap(ctx, user.ID, AIRecap{SurfaceID: "home", Enabled: true, Cadence: "daily", LocalTime: "08:00", Timezone: "UTC", Prompt: "Summarize"}, time.Now()); err != nil {
+	if _, err := database.UpsertAIRecap(ctx, user.ID, AIRecap{SurfaceID: "activity", Enabled: true, Cadence: "daily", LocalTime: "08:00", Timezone: "UTC", Prompt: "Summarize"}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	lifecycleHint(t, scheduled)

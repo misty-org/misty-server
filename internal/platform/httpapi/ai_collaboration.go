@@ -176,7 +176,7 @@ func admitCollaboration(ctx context.Context, database *db.Database, user string,
 		} else if err := database.SetConversationMode(ctx, user, body.ConversationID, body.CollaborationMode); err != nil {
 			return err
 		}
-		if body.Trigger == "message" || body.Trigger == "selection" {
+		if body.Trigger == "message" || body.Trigger == "selection" || body.Trigger == continuationTrigger {
 			_ = database.SetAgentQuestionState(ctx, user, body.ConversationID, "", "superseded")
 		}
 	}

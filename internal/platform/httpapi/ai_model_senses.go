@@ -62,7 +62,35 @@ func (s *SpacesService) AIModelSenses() http.HandlerFunc {
 			if catalogErr != nil {
 				options = []agent.SenseModel{}
 			}
-			senses = append(senses, aiSense{Sense: sense, Model: modelRoute(routes, primary).Model, DefaultModel: modelRoute(defaults, primary).Model, Options: options})
+			if sense.Kind == "thinking" || sense.Kind == "seeing" {
+				for i := range options {
+					options[i].PaidOnly = !planAllowsModel(r.Context(), s.database, user, options[i].ID)
+				}
+			}
+			defaultModel := modelRoute(defaults, primary).Model
+			if sense.Kind == "thinking" || sense.Kind == "seeing" {
+				// The default shown is the one the plan actually runs.
+				planned, forced := planRoutes(r.Context(), s.database, user, defaults)
+				defaultModel = modelRoute(planned, primary).Model
+				if model, ok := forced[primary]; ok {
+					defaultModel = model
+				}
+			}
+			senses = append(senses, aiSense{Sense: sense, Model: modelRoute(routes, primary).Model, DefaultModel: defaultModel, Options: options})
+		}
+		// Browsing follows Seeing until the account picks a model for it.
+		for i := range senses {
+			if senses[i].ID != "browsing" {
+				continue
+			}
+			for _, other := range senses {
+				if other.ID == "seeing" {
+					senses[i].DefaultModel = other.DefaultModel
+					if other.Model != "" {
+						senses[i].DefaultModel = other.Model
+					}
+				}
+			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"senses": senses})
 	}
@@ -92,6 +120,10 @@ func (s *SpacesService) AIModelSense() http.HandlerFunc {
 			writeAIProviderError(w, db.ErrSpaceInvalid)
 			return
 		}
+		if (sense.Kind == "thinking" || sense.Kind == "seeing") && !planAllowsModel(r.Context(), s.database, user, body.Model) {
+			writeJSON(w, http.StatusPaymentRequired, map[string]string{"code": "plan_model", "message": "This model is part of paid plans. Basic uses the fast model."})
+			return
+		}
 		if err := s.database.SaveAIModelSense(r.Context(), user, sense, body.Model); err != nil {
 			writeAIProviderError(w, err)
 			return
@@ -107,7 +139,8 @@ func defaultAIRoutes(model, reasoning string) []aimodels.Route {
 	if reasoning == "" {
 		reasoning = "low"
 	}
-	defaults := map[string]string{"agent": model, "vision": model, "routing": envOr("MISTY_AI_LOW_MODEL", agent.TestingDefaultAgentLowGatewayModel), "realtime": agent.AgentRealtimeModel, "library": envOr("SMART_LIBRARY_PRIMARY_MODEL", agent.SmartLibraryPrimaryModel), "library-fallback": envOr("SMART_LIBRARY_FALLBACK_MODEL", agent.SmartLibraryFallbackModel), "embedding": envOr("SMART_LIBRARY_EMBEDDING_MODEL", agent.SmartLibraryEmbeddingModel), "transcription": envOr("AGENT_TRANSCRIPTION_MODEL", "openai/gpt-4o-mini-transcribe"), "transcription-fallback": agent.MediaSearchTranscriptionFallbackModel, "media-transcription": envOr("MEDIA_SEARCH_TRANSCRIPTION_MODEL", agent.MediaSearchTranscriptionModel), "media-transcription-fallback": envOr("MEDIA_SEARCH_TRANSCRIPTION_FALLBACK_MODEL", agent.MediaSearchTranscriptionFallbackModel), "speech": agent.AgentSpeechModel}
+	// Browsing is empty by default: it follows the run's vision route.
+	defaults := map[string]string{"agent": model, "vision": model, "browsing": "", "routing": envOr("MISTY_AI_LOW_MODEL", agent.TestingDefaultAgentLowGatewayModel), "realtime": agent.AgentRealtimeModel, "library": envOr("SMART_LIBRARY_PRIMARY_MODEL", agent.SmartLibraryPrimaryModel), "library-fallback": envOr("SMART_LIBRARY_FALLBACK_MODEL", agent.SmartLibraryFallbackModel), "embedding": envOr("SMART_LIBRARY_EMBEDDING_MODEL", agent.SmartLibraryEmbeddingModel), "transcription": envOr("AGENT_TRANSCRIPTION_MODEL", "openai/gpt-4o-mini-transcribe"), "transcription-fallback": agent.MediaSearchTranscriptionFallbackModel, "media-transcription": envOr("MEDIA_SEARCH_TRANSCRIPTION_MODEL", agent.MediaSearchTranscriptionModel), "media-transcription-fallback": envOr("MEDIA_SEARCH_TRANSCRIPTION_FALLBACK_MODEL", agent.MediaSearchTranscriptionFallbackModel), "speech": agent.AgentSpeechModel}
 	result := make([]aimodels.Route, 0, len(aimodels.Roles))
 	for _, role := range aimodels.Roles {
 		effort := ""
@@ -229,7 +262,13 @@ func (s *SpacesService) runtimeModelBilling(ctx context.Context, user, run, node
 	if db.ScreenPlanningNode(node) {
 		role = "vision"
 	}
-	r, err := s.database.AIModelRunRoute(ctx, user, run, role)
+	var r aimodels.Route
+	var err error
+	if db.BrowsingNode(node) {
+		r, err = s.database.AIModelBrowsingRoute(ctx, user, run)
+	} else {
+		r, err = s.database.AIModelRunRoute(ctx, user, run, role)
+	}
 	if err != nil {
 		return "", "", err
 	}

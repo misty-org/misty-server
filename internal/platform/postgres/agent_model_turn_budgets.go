@@ -59,7 +59,7 @@ func (db *Database) ReserveAgentModelTurn(ctx context.Context, userID, runID, ru
 		// the run's agent turns.
 		if !TurnFreeModelNode(nodeID) {
 			var consumed int
-			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM agent_model_turn_claims WHERE run_id=$1 AND node_id NOT LIKE 'model:screen:%' AND node_id NOT LIKE 'model:compact:%'`, runID).Scan(&consumed); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM agent_model_turn_claims WHERE run_id=$1 AND node_id NOT LIKE 'model:screen:%' AND node_id NOT LIKE 'model:compact:%' AND node_id NOT LIKE 'model:browse:%'`, runID).Scan(&consumed); err != nil {
 				return err
 			}
 			if consumed >= limit {
@@ -86,6 +86,10 @@ func invocationModelTurnLimitTx(ctx context.Context, tx *sql.Tx, record AIInvoca
 		return 0, err
 	}
 	if (input.Mode != "agent" && input.Mode != "auto" && input.Mode != "team") || input.AgentID == "" || input.TaskID == "" || input.WindowLabel == "" {
+		// Higher plans may take more model turns per request; the runtime caps 120.
+		if record.ModelTurnLimit > ordinaryLimit {
+			return min(record.ModelTurnLimit, 120), nil
+		}
 		return ordinaryLimit, nil
 	}
 	if err := validateNativeAgentExecutionTx(ctx, tx, record.UserID, record.SpaceID, record.RequestPayload); err != nil {
@@ -106,8 +110,14 @@ func CompactionNode(nodeID string) bool {
 	return strings.HasPrefix(nodeID, "model:compact:")
 }
 
+// BrowsingNode reports a model call made for the run's page tools (such as
+// browser_extract), billed on its browsing route.
+func BrowsingNode(nodeID string) bool {
+	return strings.HasPrefix(nodeID, "model:browse:")
+}
+
 // TurnFreeModelNode reports a metered model call that does not spend one of
 // the run's model turns.
 func TurnFreeModelNode(nodeID string) bool {
-	return ScreenPlanningNode(nodeID) || CompactionNode(nodeID)
+	return ScreenPlanningNode(nodeID) || CompactionNode(nodeID) || BrowsingNode(nodeID)
 }

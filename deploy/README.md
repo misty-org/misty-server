@@ -179,15 +179,26 @@ the first boot; a missing security setting logs a warning instead of failing.
 `misty server prod backup` dumps Misty's and the workflow database with
 `pg_dump` (and billing's, when the misty-billing stack runs on the same host), streams each
 dump straight into `age` (plaintext never touches the disk), and uploads the
-ciphertext to the R2 bucket named by `MISTY_BACKUP_BUCKET` using the `R2_*`
-credentials. Set `MISTY_BACKUP_AGE_RECIPIENT` to an age public key and keep the
-matching private key **off** the VPS. The VPS needs Docker and `age`
-(`apt install age`); `rclone` runs in a container. The three newest encrypted
-copies also stay under `server/.misty/backups/`.
+ciphertext to the R2 bucket named by `MISTY_BACKUP_BUCKET`. Set
+`MISTY_BACKUP_AGE_RECIPIENT` to an age public key and keep the matching private
+key **off** the VPS. The VPS needs Docker and `age` (`apt install age`); `rclone`
+runs in a container. The three newest encrypted copies also stay under
+`server/.misty/backups/`.
+
+Backups must stay recoverable if the VPS itself is compromised, so keep them out
+of reach of anything running there:
+
+- Use a bucket of their own, not `R2_BUCKET`.
+- Create an R2 API token with Object Read & Write on that bucket only, and set
+  it as `MISTY_BACKUP_R2_ACCESS_KEY` and `MISTY_BACKUP_R2_SECRET_KEY`. Without
+  them the backup falls back to the API's `R2_*` key and logs a `SECURITY:` line.
+- Add a bucket lock rule so no token can delete or overwrite a backup during
+  its retention period, for example
+  `npx wrangler r2 bucket lock add misty-backups --name nightly --retention-days 30`.
+  Retention there replaces a lifecycle rule that deletes earlier.
 
 Run it nightly with the units in [`systemd/`](systemd/) (edit `User` and
-`WorkingDirectory` first). Configure an R2 lifecycle rule on the bucket for
-retention, for example deleting objects after 30 days.
+`WorkingDirectory` first).
 
 Restore onto a running stack, or onto a fresh VPS after one `misty server prod up`:
 

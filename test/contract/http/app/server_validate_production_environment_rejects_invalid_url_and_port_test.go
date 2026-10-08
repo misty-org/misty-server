@@ -113,6 +113,19 @@ func TestAllowedCORSOriginAcceptsViteLoopbackPorts(t *testing.T) {
 	}
 }
 
+func TestProductionCORSRejectsLoopbackOrigins(t *testing.T) {
+	t.Setenv("MISTY_ENVIRONMENT", "production")
+	t.Setenv("MISTY_ALLOWED_ORIGINS", "")
+	for _, origin := range []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://127.0.0.1:5200", "http://[::1]:5175"} {
+		if TestingIsAllowedCORSOrigin(origin) {
+			t.Fatalf("production accepted credentialed origin %q", origin)
+		}
+	}
+	if !TestingIsAllowedCORSOrigin("tauri://localhost") {
+		t.Fatal("production rejected the desktop app origin")
+	}
+}
+
 func TestCORSAllowsAppOrigins(t *testing.T) {
 	configureJournalCollabForTest(t)
 	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")

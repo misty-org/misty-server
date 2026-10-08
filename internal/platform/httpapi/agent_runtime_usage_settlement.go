@@ -18,22 +18,24 @@ func aiInvocationRuntimeUsageKey(invocationID string) string {
 	return "agent-runtime:" + invocationID + ":model:aggregate"
 }
 
-func (s *SpacesService) meterPersonalAgentRuntimeModel(ctx context.Context, run *db.SpaceRun, nodeID string, state workflowv2.StepState, raw json.RawMessage) error {
+// meterPersonalAgentRuntimeModel reserves or settles one model turn. overLimit
+// reports a turn admitted past a usage limit, so the runtime can wrap up.
+func (s *SpacesService) meterPersonalAgentRuntimeModel(ctx context.Context, run *db.SpaceRun, nodeID string, state workflowv2.StepState, raw json.RawMessage) (bool, error) {
 	if state == workflowv2.StepCompleted {
-		return completeRuntimeModelTurn(ctx, s.usageMeter, run.RequestingMemberID, run.ID, nodeID, raw)
+		return false, completeRuntimeModelTurn(ctx, s.usageMeter, run.RequestingMemberID, run.ID, nodeID, raw)
 	}
 	if state != workflowv2.StepRunning {
-		return nil
+		return false, nil
 	}
 	if err := s.database.ReserveAgentModelTurn(ctx, run.OwnerUserID, run.ID, run.RuntimeRunID, nodeID); err != nil {
-		return err
+		return false, err
 	}
 	if s.usageMeter == nil {
-		return nil
+		return false, nil
 	}
 	membership, err := s.database.AskExecutionContext(ctx, run.RequestingMemberID, run.SpaceID, run.AgentID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	membership = runtimeSnapshotMembership(run, membership)
 	model := strings.TrimSpace(membership.ModelID)
@@ -42,14 +44,14 @@ func (s *SpacesService) meterPersonalAgentRuntimeModel(ctx context.Context, run 
 	}
 	commandID, err := s.database.BillingCommandForRun(ctx, run.RequestingMemberID, run.ID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	provider, selectedModel, routeErr := s.runtimeModelBilling(ctx, run.OwnerUserID, run.ID, nodeID, model)
 	if routeErr != nil {
-		return routeErr
+		return false, routeErr
 	}
-	_, err = serveragent.ReserveMeasuredUsage(s.usageMeter, run.RequestingMemberID, "agent-runtime:"+run.ID+":model:"+nodeID, provider, selectedModel, runtimeAdmissionUnits(raw), commandID)
-	return err
+	reservation, err := serveragent.ReserveMeasuredUsage(s.usageMeter, run.RequestingMemberID, "agent-runtime:"+run.ID+":model:"+nodeID, provider, selectedModel, runtimeAdmissionUnits(raw), commandID)
+	return reservation != nil && reservation.OverLimit, err
 }
 
 func (s *SpacesService) settlePersonalAgentRuntimeUsage(ctx context.Context, run *db.SpaceRun, status string, raw json.RawMessage) error {
@@ -86,18 +88,18 @@ func (s *SpacesService) settlePersonalAgentRuntimeUsage(ctx context.Context, run
 	return err
 }
 
-func (s *SpacesService) meterAIInvocationRuntimeModel(ctx context.Context, record *db.AIInvocationRecord, nodeID string, state string, raw json.RawMessage) error {
+func (s *SpacesService) meterAIInvocationRuntimeModel(ctx context.Context, record *db.AIInvocationRecord, nodeID string, state string, raw json.RawMessage) (bool, error) {
 	if record != nil && state == "completed" {
-		return completeRuntimeModelTurn(ctx, s.usageMeter, record.UserID, record.ID, nodeID, raw)
+		return false, completeRuntimeModelTurn(ctx, s.usageMeter, record.UserID, record.ID, nodeID, raw)
 	}
 	if record == nil || state != "running" {
-		return nil
+		return false, nil
 	}
 	if err := s.database.ReserveAgentModelTurn(ctx, record.UserID, record.ID, record.RuntimeRunID, nodeID); err != nil {
-		return err
+		return false, err
 	}
 	if s.usageMeter == nil {
-		return nil
+		return false, nil
 	}
 	modelID := aiInvocationMeteredModel(record)
 	commandID := "agent-runtime:" + record.ID
@@ -106,10 +108,10 @@ func (s *SpacesService) meterAIInvocationRuntimeModel(ctx context.Context, recor
 	}
 	provider, selectedModel, routeErr := s.runtimeModelBilling(ctx, record.UserID, record.ID, nodeID, modelID)
 	if routeErr != nil {
-		return routeErr
+		return false, routeErr
 	}
-	_, err := serveragent.ReserveMeasuredUsage(s.usageMeter, record.UserID, "agent-runtime:"+record.ID+":model:"+nodeID, provider, selectedModel, runtimeAdmissionUnits(raw), commandID)
-	return err
+	reservation, err := serveragent.ReserveMeasuredUsage(s.usageMeter, record.UserID, "agent-runtime:"+record.ID+":model:"+nodeID, provider, selectedModel, runtimeAdmissionUnits(raw), commandID)
+	return reservation != nil && reservation.OverLimit, err
 }
 
 func (s *SpacesService) settleAIInvocationRuntimeUsage(record *db.AIInvocationRecord, status string, raw json.RawMessage) error {
@@ -158,7 +160,7 @@ func completeRuntimeModelTurn(ctx context.Context, meter serveragent.UsageMeter,
 }
 
 func runtimeAdmissionUnits(raw json.RawMessage) map[string]int64 {
-	units := map[string]int64{"output_tokens": serveragent.MaxModelOutputTokens}
+	units := map[string]int64{"output_tokens": serveragent.MaxAgentTurnOutputTokens}
 	var input struct {
 		Bytes *int64 `json:"input_bytes"`
 	}

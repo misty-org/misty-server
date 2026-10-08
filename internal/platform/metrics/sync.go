@@ -53,7 +53,10 @@ func RecordSyncMessage(ctx context.Context, direction, kind string, size int) {
 		"watch_workspace", "unwatch_workspace", "claim", "publish_workspace", "workspace_ack",
 		"workspace_current", "workspace_delta", "workspace_error", "workspace_snapshot", "slot",
 		"slot_get", "blob_put", "blob_get", "records_pull", "records_push",
-		"blob_ack", "blobs", "records", "records_ack", "ping", "pong":
+		"blob_ack", "blobs", "records", "records_ack", "ping", "pong",
+		// batch_policy: batching timings sent to the client. rate_limited: an
+		// op or push turned away because its device exceeded its budget.
+		"batch_policy", "rate_limited":
 	default:
 		kind = "other"
 	}

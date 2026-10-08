@@ -25,9 +25,16 @@ type SpaceInvitationSender interface {
 	) error
 }
 
+// EmailVerificationSender confirms a new account owns its email before it can
+// use AI.
+type EmailVerificationSender interface {
+	SendEmailVerification(ctx context.Context, recipientEmail, verifyLink string) error
+}
+
 type Sender interface {
 	PasswordResetSender
 	SpaceInvitationSender
+	EmailVerificationSender
 }
 
 type LogSender struct{}
@@ -45,6 +52,11 @@ func (LogSender) SendSpaceInvitationEmail(
 		"Space invitation email to %s from %s for %s: %s",
 		recipientEmail, inviterName, spaceName, invitationLink,
 	)
+	return nil
+}
+
+func (LogSender) SendEmailVerification(_ context.Context, recipientEmail, verifyLink string) error {
+	log.Printf("email verification to %s: %s", recipientEmail, verifyLink)
 	return nil
 }
 
@@ -156,4 +168,15 @@ func (s *MailjetSender) SendSpaceInvitationEmail(
 	return s.sendMessage(
 		ctx, recipientEmail, "", subject, textBody, htmlBody, "Space invitation",
 	)
+}
+
+func (s *MailjetSender) SendEmailVerification(ctx context.Context, recipientEmail, verifyLink string) error {
+	if strings.TrimSpace(recipientEmail) == "" || strings.TrimSpace(verifyLink) == "" {
+		return fmt.Errorf("recipient email and verification link are required")
+	}
+	escaped := html.EscapeString(verifyLink)
+	return s.sendMessage(ctx, recipientEmail, "", "Confirm your email for Misty",
+		fmt.Sprintf("Confirm this email to start using Misty's AI. The link expires in 24 hours.\n\n%s\n", verifyLink),
+		fmt.Sprintf("<p>Confirm this email to start using Misty's AI. The link expires in 24 hours.</p><p><a href=\"%s\">Confirm your email</a></p><p>If the link does not open, copy this address into your browser:</p><p>%s</p>", escaped, escaped),
+		"email verification")
 }

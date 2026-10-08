@@ -20,7 +20,9 @@ const (
 	screenActTool        = "browser.act"
 	screenModelBodyLimit = 12 << 20
 	screenModelMaxOutput = 6000
-	screenModelMaxCalls  = 40
+	// One act job runs a whole goal for up to four minutes, waiting between
+	// moves without model calls; this caps runaway planners, not normal play.
+	screenModelMaxCalls = 80
 )
 
 // ScreenModel answers one OpenAI-style chat completion for a live act job.
@@ -60,7 +62,7 @@ func (s *SpacesService) ScreenModel() http.HandlerFunc {
 			return
 		}
 		node := "model:screen:" + job.ID + ":" + strconv.Itoa(call)
-		if err := s.meterAIInvocationRuntimeModel(r.Context(), record, node, "running", TestingMustAPIRawJSON(map[string]any{"input_bytes": len(raw)})); err != nil {
+		if _, err := s.meterAIInvocationRuntimeModel(r.Context(), record, node, "running", TestingMustAPIRawJSON(map[string]any{"input_bytes": len(raw)})); err != nil {
 			writeJSON(w, http.StatusPaymentRequired, map[string]string{"code": "screen_model_budget", "message": "The task's model allowance is used up."})
 			return
 		}
@@ -78,7 +80,7 @@ func (s *SpacesService) ScreenModel() http.HandlerFunc {
 		if err != nil {
 			completion = map[string]any{}
 		}
-		_ = s.meterAIInvocationRuntimeModel(context.WithoutCancel(r.Context()), record, node, "completed", TestingMustAPIRawJSON(completion))
+		_, _ = s.meterAIInvocationRuntimeModel(context.WithoutCancel(r.Context()), record, node, "completed", TestingMustAPIRawJSON(completion))
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "screen_model_failed", "message": "The screen model could not answer. Try again."})
 			return

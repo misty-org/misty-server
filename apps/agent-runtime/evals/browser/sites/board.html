@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Sprint board</title>
+<style>body{font:15px system-ui;margin:24px}.cols{display:flex;gap:16px}.col{border:1px solid #ccc;padding:8px;width:260px;min-height:200px}.card{border:1px solid #999;margin:6px 0;padding:6px}[role=menu]{border:1px solid #333;background:#fff;position:absolute;padding:4px}</style></head>
+<body><h1>Sprint 14</h1><div class="cols" id="cols"></div><div id="menu" role="menu" hidden></div>
+<script>
+const cards=[{id:1,title:'Write report',col:'Todo',owner:'Unassigned'},{id:2,title:'Fix login bug',col:'Doing',owner:'Grace'},{id:3,title:'Plan offsite',col:'Todo',owner:'Unassigned'}];
+window.__evalState={cards};const COLS=['Todo','Doing','Done'];const OWNERS=['Unassigned','Ada','Grace','Linus'];
+function render(){document.getElementById('cols').innerHTML=COLS.map(c=>'<section class="col" aria-label="'+c+'"><h2>'+c+'</h2>'+cards.filter(k=>k.col===c).map(k=>'<article class="card" aria-label="'+k.title+'"><h3>'+k.title+'</h3><label>Owner <select data-owner="'+k.id+'">'+OWNERS.map(o=>'<option'+(o===k.owner?' selected':'')+'>'+o+'</option>').join('')+'</select></label> <button data-move="'+k.id+'" aria-haspopup="menu">Move</button></article>').join('')+'</section>').join('')}
+document.addEventListener('change',e=>{const id=e.target.dataset?.owner;if(id){cards.find(k=>k.id==id).owner=e.target.value}});
+document.addEventListener('click',e=>{const id=e.target.dataset?.move;const menu=document.getElementById('menu');
+ if(id){const r=e.target.getBoundingClientRect();menu.style.left=r.left+'px';menu.style.top=r.bottom+scrollY+'px';menu.innerHTML=COLS.map(c=>'<div role="menuitem" tabindex="0" data-to="'+c+'" data-card="'+id+'">Move to '+c+'</div>').join('');menu.hidden=false;return}
+ const to=e.target.dataset?.to;if(to){cards.find(k=>k.id==e.target.dataset.card).col=to;menu.hidden=true;render();return}
+ if(!menu.contains(e.target))menu.hidden=true});
+render();
+</script></body></html>

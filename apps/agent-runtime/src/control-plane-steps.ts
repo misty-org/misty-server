@@ -53,6 +53,20 @@ export async function checkpoint(identity: RuntimeIdentity, event: HarnessCheckp
   }
 }
 
+/**
+ * Admits a model turn (billing's hold for it). `over_limit` means the run is
+ * finishing past a usage limit on its grace: it should wrap up.
+ */
+export async function admitModelTurn(identity: RuntimeIdentity, event: HarnessCheckpoint): Promise<{ over_limit: boolean }> {
+  "use step";
+  try {
+    const response = await controlPlaneRequest<{ over_limit?: boolean } | undefined>(identity, "events", { attempt: 1, output: {}, ...event }, `${identity.mistyRunId}:event:${event.node_id}:${event.state}`);
+    return { over_limit: response?.over_limit === true };
+  } catch (error) {
+    rethrowStepError(error);
+  }
+}
+
 export async function complete(identity: RuntimeIdentity, result: HarnessCompletion): Promise<void> {
   "use step";
   try {

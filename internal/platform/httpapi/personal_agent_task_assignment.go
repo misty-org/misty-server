@@ -54,7 +54,7 @@ func (s *SpacesService) resolveAssignedTaskToolbox(ctx context.Context, run *db.
 			requested = append(requested, descriptor.Name)
 		}
 	}
-	for _, registration := range s.appsToolRegistrations() {
+	for _, registration := range append(s.webSearchToolRegistrations(ctx, run.RequestingMemberID), s.appsToolRegistrations()...) {
 		registrations = append(registrations, registration)
 		requested = append(requested, registration.Descriptor.Name)
 	}

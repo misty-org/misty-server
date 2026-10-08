@@ -3,6 +3,7 @@ import { ControlPlaneError } from "./control-plane-error.js";
 import { agentDeviceHook } from "./device.js";
 import { classifyMCPTransportError } from "./mcp-errors.js";
 import { requestMCPToolExecution } from "./mcp-runtime.js";
+import { cachedRunAccess } from "./mcp-sessions.js";
 import { recoverableToolError, rethrowStepError } from "./runtime-errors.js";
 import { continueToolExecution, type ToolExecutionResponse } from "./tool-execution.js";
 import type { MCPRunAccess, RuntimeToolContext } from "./types.js";
@@ -35,10 +36,13 @@ async function requestToolExecution(
   idempotencyKey: string,
 ): Promise<ToolExecutionResponse> {
   "use step";
+  const started = Date.now();
   try {
     let access: MCPRunAccess;
     try {
-      access = await controlPlaneRequest<MCPRunAccess>(context, "mcp-token", { intervention_wait_version: 1 }, `${context.mistyRunId}:mcp-token:${callId}`);
+      // The run's bearer is reused while it has more than a minute left.
+      access = cachedRunAccess(context.mistyRunId, context.controlPlaneURL)
+        ?? await controlPlaneRequest<MCPRunAccess>(context, "mcp-token", { intervention_wait_version: 1 }, `${context.mistyRunId}:mcp-token:${callId}`);
     } catch (error) {
       // This fallback only happens before an MCP tool call starts, so a rolling
       // deploy cannot duplicate a consequential action.
@@ -49,7 +53,11 @@ async function requestToolExecution(
       }
       throw error;
     }
-    return await requestMCPToolExecution(context, access, callId, name, input, deviceHookToken);
+    const authorized = Date.now();
+    const response = await requestMCPToolExecution(context, access, callId, name, input, deviceHookToken);
+    // One line per call for the trace tool (evals/browser/trace.ts); never arguments or results.
+    console.info(`[misty-agent-runtime] tool_timing ${JSON.stringify({ run: context.mistyRunId, call: callId, tool: name, token_ms: authorized - started, mcp_ms: Date.now() - authorized })}`);
+    return response;
   } catch (error) {
     const recoverable = recoverableToolError(error);
     if (recoverable) return { tool_error: recoverable };

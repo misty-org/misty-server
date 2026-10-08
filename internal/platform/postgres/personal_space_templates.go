@@ -5,36 +5,51 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/google/uuid"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-type SpaceTemplateApp struct {
-	AppID           string          `json:"app_id"`
-	ReleaseMetadata json.RawMessage `json:"release_metadata"`
-}
+// PersonalSpaceTemplate is a template someone saved from one of their Spaces.
+// It is served in the same shape as a built-in template.
 type PersonalSpaceTemplate struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"`
-	Description string             `json:"description"`
-	Apps        []SpaceTemplateApp `json:"apps"`
-	Version     int                `json:"version"`
-	CreatedAt   time.Time          `json:"created_at"`
-	UpdatedAt   time.Time          `json:"updated_at"`
+	SpaceTemplate
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func scanPersonalSpaceTemplate(row rowScanner) (PersonalSpaceTemplate, error) {
+// storedTemplate is the personal_space_templates.definition column.
+type storedTemplate struct {
+	Tasks       []string       `json:"tasks"`
+	Notes       []templateNote `json:"notes"`
+	Collections []string       `json:"collections"`
+}
+
+const personalTemplateColumns = `id,name,description,definition,version,created_at,updated_at`
+
+func scanPersonalSpaceTemplate(row rowScanner) (PersonalSpaceTemplate, templateDefinition, error) {
 	var item PersonalSpaceTemplate
 	var raw []byte
+	var stored storedTemplate
 	err := row.Scan(&item.ID, &item.Name, &item.Description, &raw, &item.Version, &item.CreatedAt, &item.UpdatedAt)
 	if err == nil {
-		err = json.Unmarshal(raw, &item.Apps)
+		err = json.Unmarshal(raw, &stored)
 	}
-	return item, err
+	if err != nil {
+		return item, templateDefinition{}, err
+	}
+	definition := templateDefinition{
+		SpaceTemplate: SpaceTemplate{
+			ID: item.ID, Name: item.Name, Description: item.Description, Version: item.Version,
+			Icon: "bookmark", SuggestedName: item.Name, Personal: true,
+		},
+		Tasks: stored.Tasks, Notes: stored.Notes, Collections: stored.Collections,
+	}
+	definition.finish()
+	item.SpaceTemplate = definition.SpaceTemplate
+	return item, definition, nil
 }
-
-const personalTemplateColumns = `id,name,description,apps,version,created_at,updated_at`
 
 func (db *Database) PersonalSpaceTemplates(ctx context.Context, userID string) ([]PersonalSpaceTemplate, error) {
 	items := []PersonalSpaceTemplate{}
@@ -45,7 +60,7 @@ func (db *Database) PersonalSpaceTemplates(ctx context.Context, userID string) (
 		}
 		defer rows.Close()
 		for rows.Next() {
-			item, err := scanPersonalSpaceTemplate(rows)
+			item, _, err := scanPersonalSpaceTemplate(rows)
 			if err != nil {
 				return err
 			}
@@ -55,7 +70,10 @@ func (db *Database) PersonalSpaceTemplates(ctx context.Context, userID string) (
 	})
 	return items, err
 }
-func (db *Database) SavePersonalSpaceTemplate(ctx context.Context, userID, id, spaceID, name, description string) (*PersonalSpaceTemplate, error) {
+
+// SavePersonalSpaceTemplate creates a template from spaceID, or renames an
+// existing one. Giving spaceID on an update captures that Space again.
+func (db *Database) SavePersonalSpaceTemplate(ctx context.Context, userID, id, spaceID, name, description string, parts TemplateParts) (*PersonalSpaceTemplate, error) {
 	name, description = strings.TrimSpace(name), strings.TrimSpace(description)
 	if name == "" || len([]rune(name)) > 80 || len([]rune(description)) > 1000 {
 		return nil, ErrSpaceInvalid
@@ -75,23 +93,27 @@ func (db *Database) SavePersonalSpaceTemplate(ctx context.Context, userID, id, s
 				return ErrSpaceNotFound
 			}
 		}
-		var raw []byte
+		// Nil keeps the stored definition on an update.
+		var definition any
 		if spaceID != "" {
-			if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
+			captured, err := captureSpaceStructureTx(ctx, tx, userID, spaceID, parts)
+			if err != nil {
 				return err
 			}
-			raw = []byte("[]")
+			raw, _ := json.Marshal(storedTemplate{Tasks: captured.Tasks, Notes: captured.Notes, Collections: captured.Collections})
+			definition = string(raw)
 		}
 		var err error
 		if create {
-			item, err = scanPersonalSpaceTemplate(tx.QueryRowContext(ctx, `INSERT INTO personal_space_templates(id,user_id,name,description,apps) VALUES($1,$2,$3,$4,$5) RETURNING `+personalTemplateColumns, id, userID, name, description, raw))
+			item, _, err = scanPersonalSpaceTemplate(tx.QueryRowContext(ctx, `INSERT INTO personal_space_templates(id,user_id,name,description,definition) VALUES($1,$2,$3,$4,$5::jsonb) RETURNING `+personalTemplateColumns, id, userID, name, description, definition))
 		} else {
-			item, err = scanPersonalSpaceTemplate(tx.QueryRowContext(ctx, `UPDATE personal_space_templates SET name=$3,description=$4,apps=COALESCE($5::jsonb,apps),version=version+1,updated_at=NOW() WHERE id=$1 AND user_id=$2 RETURNING `+personalTemplateColumns, id, userID, name, description, raw))
+			item, _, err = scanPersonalSpaceTemplate(tx.QueryRowContext(ctx, `UPDATE personal_space_templates SET name=$3,description=$4,definition=COALESCE($5::jsonb,definition),version=version+1,updated_at=NOW() WHERE id=$1 AND user_id=$2 RETURNING `+personalTemplateColumns, id, userID, name, description, definition))
 		}
 		return err
 	})
 	return &item, err
 }
+
 func (db *Database) DeletePersonalSpaceTemplate(ctx context.Context, userID, id string) error {
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `DELETE FROM personal_space_templates WHERE id=$1 AND user_id=$2`, id, userID)
@@ -108,11 +130,12 @@ func (db *Database) DeletePersonalSpaceTemplate(ctx context.Context, userID, id 
 		return nil
 	})
 }
+
 func (db *Database) personalTemplateDefinition(ctx context.Context, userID, id string) (*templateDefinition, error) {
-	var item PersonalSpaceTemplate
+	var definition templateDefinition
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		var err error
-		item, err = scanPersonalSpaceTemplate(tx.QueryRowContext(ctx, `SELECT `+personalTemplateColumns+` FROM personal_space_templates WHERE id=$1 AND user_id=$2`, id, userID))
+		_, definition, err = scanPersonalSpaceTemplate(tx.QueryRowContext(ctx, `SELECT `+personalTemplateColumns+` FROM personal_space_templates WHERE id=$1 AND user_id=$2`, id, userID))
 		return err
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -121,9 +144,5 @@ func (db *Database) personalTemplateDefinition(ctx context.Context, userID, id s
 	if err != nil {
 		return nil, err
 	}
-	ids := []string{}
-	for _, app := range item.Apps {
-		ids = append(ids, app.AppID)
-	}
-	return &templateDefinition{SpaceTemplate: SpaceTemplate{ID: item.ID, Name: item.Name, Description: item.Description, Version: item.Version, AppIDs: ids}}, nil
+	return &definition, nil
 }

@@ -111,7 +111,7 @@ func (a *HTTP) Do(ctx context.Context, action string, input Request) (Decision, 
 		return Decision{}, ErrUnavailable
 	}
 	if denied || !result.Allowed {
-		return result, ErrDenied
+		return result, DenialFrom(result.Summary)
 	}
 	if action == "reserve" && strings.TrimSpace(result.ReservationID) == "" {
 		return Decision{}, ErrUnavailable

@@ -126,7 +126,7 @@ func TestScreenModelPassThroughForALiveActJob(t *testing.T) {
 	if len(forwarded) != 25 || forwarded[0]["model"] != "openai/gpt-6-luna" || forwarded[0]["maxOutputTokens"] != float64(6000) || forwarded[0]["route"].(map[string]any)["provider"] != "instance" {
 		t.Fatalf("forwarded %d calls, first %v", len(forwarded), forwarded[0])
 	}
-	if response := call("40"); response.Code != http.StatusBadRequest {
+	if response := call("80"); response.Code != http.StatusBadRequest {
 		t.Fatalf("call beyond the job's limit: %d", response.Code)
 	}
 	if _, err := database.FinishWorkflowDeviceNodeJob(user.ID, device.ID, job.ID, token, "completed", json.RawMessage(`{"status":"done"}`), ""); err != nil {

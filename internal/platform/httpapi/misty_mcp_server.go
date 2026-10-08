@@ -179,6 +179,9 @@ func (s *SpacesService) callPersonalAgentMCPTool(ctx context.Context, access *mc
 	}
 	call := mcpRuntimeToolCall(access.claims.RuntimeRunID, descriptor.Name, request)
 	call.SupportsIntervention = access.claims.InterventionWaits
+	if announcesToolStart(descriptor) {
+		s.announcePersonalAgentToolStart(ctx, access.run, call)
+	}
 	outcome, err := s.executePersonalAgentRuntimeTool(ctx, access.run, call)
 	if err != nil {
 		var intervention *aiInterventionRequired
@@ -201,7 +204,13 @@ func (s *SpacesService) callPersonalAgentMCPTool(ctx context.Context, access *mc
 
 func (s *SpacesService) callAIInvocationMCPTool(ctx context.Context, access *mcpRuntimeAccess, descriptor agenttools.Descriptor, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	call := mcpRuntimeToolCall(access.claims.RuntimeRunID, descriptor.Name, request)
+	if announcesToolStart(descriptor) {
+		s.announceAIInvocationToolStart(ctx, access.record, call)
+	}
 	result, err := s.executeAIInvocationMCPTool(ctx, access, call)
+	if err == nil {
+		s.recordAIInvocationToolActivity(access.record, call, result)
+	}
 	if err != nil {
 		var intervention *aiInterventionRequired
 		if errors.As(err, &intervention) {
@@ -264,11 +273,14 @@ func mcpToolError(err error) *mcp.CallToolResult {
 		return mcpStructuredResult(json.RawMessage(`{"status":"failure","reason":"browser_snapshot_stale","attempted":false,"message":"The screenshot was consumed or became stale. No input was dispatched. Call browser_workspace_visual to capture the current control surface, then decide the next action with its new documentId. Capture again after every action, including clicking before typing."}`))
 	}
 	if errors.Is(err, errBrowserSnapshotStale) {
-		return mcpStructuredResult(json.RawMessage(`{"status":"failure","reason":"browser_snapshot_stale","attempted":false,"message":"The page changed or the inspection was already consumed. No action was dispatched. Call browser_inspect again and use its new references before deciding the next action."}`))
+		return mcpStructuredResult(json.RawMessage(`{"status":"failure","reason":"browser_snapshot_stale","attempted":false,"message":"The page changed since it was read. No action was dispatched. Read it again with browser_snapshot (or browser_inspect, if that is what you used) and use its new references before deciding the next action."}`))
 	}
 	message := "Misty could not complete this tool call."
 	var invalid serveragent.ErrInvalidRequest
-	if errors.Is(err, errBrowserObservationFailed) {
+	var offline deviceOfflineError
+	if errors.As(err, &offline) {
+		message = offline.Error()
+	} else if errors.Is(err, errBrowserObservationFailed) {
 		message = "browser_observation_failed: The page could not be observed; the agent window may be paused or closed. Observe it again once; if that also fails, report the browser problem."
 	} else if errors.Is(err, errBrowserWebviewUnavailable) {
 		message = "browser_webview_unavailable: The local browser view is unavailable. Reopen the browser view and retry the task."

@@ -73,13 +73,9 @@ func (s *Service) SummarizeConversation(ctx context.Context, userID, previous, t
 	if err == nil && summary == "" {
 		err = errors.New("the model returned empty conversation notes")
 	}
-	if reservation != nil {
-		if err != nil {
-			_ = s.meter.Release(reservation)
-		} else if _, settleErr := s.meter.Settle(reservation, key+":settle", "conversation_summary", provider, model, modelUsage(result.Usage)); settleErr != nil {
-			_ = s.meter.Release(reservation)
-			return "", "", settleErr
-		}
+	// An empty summary still used the model; it is charged like any call.
+	if settleErr := FinishMeteredCall(s.meter, reservation, key+":settle", "conversation_summary", provider, model, result.Usage, err); settleErr != nil && err == nil {
+		return "", "", settleErr
 	}
 	if err != nil {
 		return "", "", err

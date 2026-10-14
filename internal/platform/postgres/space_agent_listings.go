@@ -3,25 +3,29 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
 )
 
-// SpaceAgentListing is one member's agent published to a Space. Other members'
-// agents can send it requests while the listing accepts them.
+// SpaceAgentListing is an agent's membership in the one Space it lives in. It
+// says whose agent it is and how it takes requests from the Space's other
+// members and their agents.
 type SpaceAgentListing struct {
-	SpaceID         string    `json:"space_id"`
-	SpaceName       string    `json:"space_name"`
-	AgentID         string    `json:"agent_id"`
-	AgentName       string    `json:"agent_name"`
-	AgentRole       string    `json:"agent_role"`
-	OwnerUserID     string    `json:"owner_user_id"`
-	OwnerName       string    `json:"owner_name"`
-	Description     string    `json:"description"`
-	AcceptPolicy    string    `json:"accept_policy"`
-	MaxOpenRequests int       `json:"max_open_requests"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	SpaceID         string          `json:"space_id"`
+	SpaceName       string          `json:"space_name"`
+	AgentID         string          `json:"agent_id"`
+	AgentName       string          `json:"agent_name"`
+	AgentRole       string          `json:"agent_role"`
+	AgentAvatar     json.RawMessage `json:"agent_avatar"`
+	SystemManaged   bool            `json:"system_managed"`
+	OwnerUserID     string          `json:"owner_user_id"`
+	OwnerName       string          `json:"owner_name"`
+	Description     string          `json:"description"`
+	AcceptPolicy    string          `json:"accept_policy"`
+	MaxOpenRequests int             `json:"max_open_requests"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 type SpaceAgentListingInput struct {
@@ -37,22 +41,22 @@ var (
 	ErrAgentRequestLimit       = errors.New("agent request limit reached")
 )
 
-const spaceAgentListingColumns = `l.space_id,s.name,l.agent_id,a.name,a.role,l.owner_user_id,COALESCE(u.name,''),l.description,l.accept_policy,l.max_open_requests,l.updated_at`
+const spaceAgentListingColumns = `l.space_id,s.name,l.agent_id,a.name,a.role,a.avatar,a.system_managed,l.owner_user_id,COALESCE(u.name,''),l.description,l.accept_policy,l.max_open_requests,l.updated_at`
 
 // Only listings whose agent is enabled and whose owner is still a member of an
 // active Space are visible or reachable.
 const spaceAgentListingJoins = ` FROM space_agent_listings l
 	JOIN spaces s ON s.id=l.space_id AND s.lifecycle_state='active'
 	JOIN space_members owner_member ON owner_member.space_id=l.space_id AND owner_member.user_id=l.owner_user_id
-	JOIN misty_ask_identities a ON a.id=l.agent_id AND a.owner_user_id=l.owner_user_id AND a.enabled AND a.deleted_at IS NULL
+	JOIN misty_ask_identities a ON a.id=l.agent_id AND a.owner_user_id=l.owner_user_id AND a.space_id=l.space_id AND a.enabled AND a.deleted_at IS NULL
 	LEFT JOIN users u ON u.id=l.owner_user_id`
 
 func scanSpaceAgentListing(row interface{ Scan(...any) error }, out *SpaceAgentListing) error {
-	return row.Scan(&out.SpaceID, &out.SpaceName, &out.AgentID, &out.AgentName, &out.AgentRole, &out.OwnerUserID, &out.OwnerName, &out.Description, &out.AcceptPolicy, &out.MaxOpenRequests, &out.UpdatedAt)
+	return row.Scan(&out.SpaceID, &out.SpaceName, &out.AgentID, &out.AgentName, &out.AgentRole, &out.AgentAvatar, &out.SystemManaged, &out.OwnerUserID, &out.OwnerName, &out.Description, &out.AcceptPolicy, &out.MaxOpenRequests, &out.UpdatedAt)
 }
 
-// SaveSpaceAgentListing publishes the caller's own agent to a Space they
-// belong to, or updates how it accepts requests.
+// SaveSpaceAgentListing updates how the caller's agent takes requests in the
+// Space it lives in. Agents join a Space by moving there, not by listing.
 func (db *Database) SaveSpaceAgentListing(ctx context.Context, userID, spaceID, agentID string, input SpaceAgentListingInput) (*SpaceAgentListing, error) {
 	input.Description = strings.TrimSpace(input.Description)
 	input.AcceptPolicy = strings.TrimSpace(input.AcceptPolicy)
@@ -71,11 +75,16 @@ func (db *Database) SaveSpaceAgentListing(ctx context.Context, userID, spaceID, 
 			return err
 		}
 		var owned bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM misty_ask_identities WHERE id=$1 AND owner_user_id=$2 AND enabled AND deleted_at IS NULL)`, agentID, userID).Scan(&owned); err != nil {
+		var agentSpaceID string
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM misty_ask_identities WHERE id=$1 AND owner_user_id=$2 AND enabled AND deleted_at IS NULL),
+			COALESCE((SELECT space_id FROM misty_ask_identities WHERE id=$1 AND owner_user_id=$2),'')`, agentID, userID).Scan(&owned, &agentSpaceID); err != nil {
 			return err
 		}
 		if !owned {
 			return ErrPersonalAgentNotFound
+		}
+		if agentSpaceID != spaceID {
+			return ErrAgentListingUnavailable
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_agent_listings(space_id,agent_id,owner_user_id,description,accept_policy,max_open_requests)
 			VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(space_id,agent_id) DO UPDATE SET description=EXCLUDED.description,
@@ -92,11 +101,12 @@ func (db *Database) SaveSpaceAgentListing(ctx context.Context, userID, spaceID, 
 	return out, err
 }
 
-// DeleteSpaceAgentListing unpublishes the caller's agent. Open requests stop
-// at their next tool call because every call re-checks the listing.
+// DeleteSpaceAgentListing stops the caller's agent taking requests in its
+// Space. It stays a member. Open requests stop at their next tool call because
+// every call re-checks the listing.
 func (db *Database) DeleteSpaceAgentListing(ctx context.Context, userID, spaceID, agentID string) error {
 	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `DELETE FROM space_agent_listings WHERE space_id=$1 AND agent_id=$2 AND owner_user_id=$3`, spaceID, agentID, userID)
+		result, err := tx.ExecContext(ctx, `UPDATE space_agent_listings SET accept_policy='off',updated_at=NOW() WHERE space_id=$1 AND agent_id=$2 AND owner_user_id=$3`, spaceID, agentID, userID)
 		if err != nil {
 			return err
 		}
@@ -111,7 +121,7 @@ func (db *Database) DeleteSpaceAgentListing(ctx context.Context, userID, spaceID
 	})
 }
 
-// SpaceAgentListings lists agents published to one Space, or to every Space
+// SpaceAgentListings lists the agent members of one Space, or of every Space
 // the caller belongs to when spaceID is empty.
 func (db *Database) SpaceAgentListings(ctx context.Context, userID, spaceID string) ([]SpaceAgentListing, error) {
 	items := []SpaceAgentListing{}

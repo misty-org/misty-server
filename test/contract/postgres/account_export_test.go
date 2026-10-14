@@ -63,11 +63,13 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if export.FormatVersion != 2 || len(export.Spaces) != 2 ||
+	// The fixture Space, "Creator Home" and the personal Space from sign-up.
+	if export.FormatVersion != 2 || len(export.Spaces) != 3 ||
 		len(export.Journal) != 2 || len(export.Messages) != 1 ||
 		len(export.Assets) != 1 || export.Assets[0].Kind != "library" ||
 		len(export.Agents) != 1 || len(export.Agents[0].Versions) != 1 ||
-		len(export.Agents[0].Memberships) != 0 {
+		len(export.Agents[0].Memberships) != 1 || export.Agents[0].SpaceID == "" ||
+		export.Agents[0].Memberships[0].SpaceID != export.Agents[0].SpaceID {
 		t.Fatalf("portable export = %#v", export)
 	}
 	raw, err := json.Marshal(export)

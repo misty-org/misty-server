@@ -91,10 +91,23 @@ func validateDeviceJobTargetTx(ctx context.Context, tx *sql.Tx, job *WorkflowDev
 			if err := validateNativeAgentExecutionTx(ctx, tx, job.UserID, spaceID, payload); err != nil {
 				return err
 			}
-			if input.Mode == "user" && job.RequiredCapability != "browser.inspect" && job.RequiredCapability != "browser.visual" && job.RequiredCapability != "browser.downloads.list" {
+			// A session this device opened for another device's request has its
+			// own live task here; its tabs need neither the asking window nor an
+			// agent-mode request.
+			remote := false
+			if strings.HasPrefix(job.RequiredCapability, "browser.") {
+				if remote, err = remoteSessionScopeTx(ctx, tx, job.UserID, deviceID, job.ScopeID); err != nil {
+					return err
+				}
+			}
+			// Acting in a page needs a live agent task. Folders, tabs and
+			// bookmarks follow their grants instead.
+			if input.Mode == "user" && strings.HasPrefix(job.RequiredCapability, "browser.") && job.RequiredCapability != "browser.session" && !userModeBrowserCapability[job.RequiredCapability] && !remote {
 				return ErrSpaceForbidden
 			}
-			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ai_invocation_contexts c WHERE c.id=$1 AND c.invocation_id=$2 AND c.user_id=$3 AND c.metadata->>'window_label'=$4)`, job.ContextID, job.RunID, job.UserID, input.WindowLabel).Scan(&valid)
+			// A browser tab belongs to the window that started the request.
+			err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ai_invocation_contexts c WHERE c.id=$1 AND c.invocation_id=$2 AND c.user_id=$3
+ AND (c.kind<>'browser_tab' OR $5 OR c.metadata->>'window_label'=$4))`, job.ContextID, job.RunID, job.UserID, input.WindowLabel, remote).Scan(&valid)
 			if err != nil {
 				return err
 			}
@@ -126,4 +139,28 @@ func validateDeviceJobTargetTx(ctx context.Context, tx *sql.Tx, job *WorkflowDev
 		}
 	}
 	return nil
+}
+
+// remoteSessionScopeTx reports whether a scope is a tab this device opened for
+// another device's request (docs/design/agents-on-devices/BRIEF.md): returned
+// by a completed browser.session job on this device, or by a sub-agent's
+// browser.spawn_tabs job whose parent was such a tab. The proof is the job's
+// stored output, never anything the request says about the tab.
+func remoteSessionScopeTx(ctx context.Context, tx *sql.Tx, userID, deviceID, scope string) (bool, error) {
+	var remote bool
+	err := tx.QueryRowContext(ctx, `WITH sessions AS (
+ SELECT tab->>'opaque_ref' AS scope FROM workflow_device_node_jobs s, jsonb_array_elements(COALESCE(s.output->'tabs','[]'::jsonb)) tab
+ WHERE s.user_id=$1 AND s.assigned_device_id=$2 AND s.state='completed' AND s.operation='browser.session' AND s.completed_at>NOW()-INTERVAL '24 hours')
+SELECT EXISTS(SELECT 1 FROM sessions WHERE scope=$3) OR EXISTS(
+ SELECT 1 FROM workflow_device_node_jobs c, jsonb_array_elements(COALESCE(c.output->'tabs','[]'::jsonb)) tab
+ WHERE c.user_id=$1 AND c.assigned_device_id=$2 AND c.state='completed' AND c.operation='browser.spawn_tabs' AND c.completed_at>NOW()-INTERVAL '24 hours'
+ AND tab->>'opaque_ref'=$3 AND c.scope_id IN (SELECT scope FROM sessions))`, userID, deviceID, scope).Scan(&remote)
+	return remote, err
+}
+
+// userModeBrowserCapability lists the read-only browser operations a run in
+// user mode may use; acting stays with agent mode.
+var userModeBrowserCapability = map[string]bool{
+	"browser.inspect": true, "browser.visual": true, "browser.downloads.list": true,
+	"browser.snapshot": true, "browser.find": true, "browser.extract": true, "browser.wait_for": true,
 }

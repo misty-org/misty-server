@@ -17,6 +17,8 @@ func publicAgentRuntimeFailure(code, _ string) string {
 		return "Misty stopped because access or task state changed. Please try again."
 	case "model_provider_credit_exhausted":
 		return "Misty's AI provider has no available credit. The server administrator needs to add credit or configure another provider."
+	case "model_provider_key_invalid":
+		return "Misty's AI provider rejected its API key. The server administrator needs to replace the key."
 	case "model_gateway_unavailable":
 		return "Misty's model providers are temporarily unavailable. Please try again shortly."
 	default:
@@ -34,6 +36,9 @@ func (s *SpacesService) completeAIInvocationRecap(ctx context.Context, record *d
 	}
 	if body.Trigger == scheduledRunTrigger {
 		return s.completeWorkflowScheduleInvocation(ctx, record, runErr)
+	}
+	if body.Trigger == inboundTaskTrigger {
+		return s.completeInboundTask(ctx, record, answer, runErr)
 	}
 	if body.Trigger != "schedule" {
 		return nil

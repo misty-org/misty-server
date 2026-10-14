@@ -2,7 +2,6 @@ package api
 
 import (
 	"crypto/ed25519"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
@@ -69,12 +68,6 @@ func decodeConnectedDeviceSecret(name string) ([]byte, error) {
 func connectedDeviceKeyID(publicKey ed25519.PublicKey) string {
 	digest := sha256.Sum256(publicKey)
 	return base64.RawURLEncoding.EncodeToString(digest[:9])
-}
-
-func (c ConnectedDevicesConfig) hashPairingSecret(secret string) string {
-	mac := hmac.New(sha256.New, c.PairingPepper)
-	mac.Write([]byte(strings.ToUpper(strings.TrimSpace(secret))))
-	return fmt.Sprintf("%x", mac.Sum(nil))
 }
 
 func (c ConnectedDevicesConfig) valid() bool {

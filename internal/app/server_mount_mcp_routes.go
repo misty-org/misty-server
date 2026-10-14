@@ -9,6 +9,8 @@ func (s *Server) mountMCPRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.Get(prefix+"/integrations/apps/catalog", spaces.AppCatalog())
 	s.Router.Post(prefix+"/integrations/apps/connect", spaces.ConnectApp())
 	s.Router.Delete(prefix+"/integrations/apps/connections/{accountID}", spaces.DisconnectApp())
+	// Git for projects: one step against the person's GitHub repository.
+	s.Router.Post(prefix+"/integrations/github/git", spaces.GitHubGit())
 	s.Router.Get(prefix+"/me/app-requests/{requestID}", spaces.AppRequestControl())
 	s.Router.Post(prefix+"/me/app-requests/{requestID}", spaces.AppRequestControl())
 	s.Router.Post(prefix+"/me/app-requests/{requestID}/link", spaces.AppRequestLink())

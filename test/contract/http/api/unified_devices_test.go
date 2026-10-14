@@ -280,10 +280,10 @@ func TestRunGrantsLimitWhatAgentsMayDoOnADevice(t *testing.T) {
 	if err := check([]map[string]any{folder(second, runGrant(third.key, f.userID, third.id, second.id, []string{"files.list", "files.read"}, []string{"scope-1"}))}); err == nil {
 		t.Fatal("a pending device reached another device")
 	}
-	// Only a device can open its own inbox.
+	// Device inboxes are gone: files go to the Space Library, never to another device.
 	inbox := map[string]any{"device_id": second.id, "kind": "inbox", "opaque_ref": "inbox:" + second.id, "capabilities": []string{"files.receive"},
 		"run_grant": runGrant(first.key, f.userID, first.id, second.id, []string{"files.receive"}, []string{"inbox:" + second.id})}
 	if err := check([]map[string]any{inbox}); err == nil {
-		t.Fatal("one device opened another device's inbox")
+		t.Fatal("an inbox grant was accepted")
 	}
 }

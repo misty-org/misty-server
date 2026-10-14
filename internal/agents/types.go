@@ -45,6 +45,11 @@ const (
 
 const MaxModelOutputTokens int64 = 2200
 
+// MaxAgentTurnOutputTokens caps one model call of a runtime agent run, which
+// may write a whole document, table or form answer in a single tool call.
+// Billing holds this much per turn and settles what the call used.
+const MaxAgentTurnOutputTokens int64 = 8192
+
 const (
 	MaxUserMessageBytes      = 32 << 10
 	MaxToolResultsPerRequest = 8
@@ -225,7 +230,9 @@ type ModelUsage struct {
 }
 
 type UsageReservation struct {
-	Billing          *billingadapter.Reservation
+	Billing *billingadapter.Reservation
+	// OverLimit: admitted past a usage limit on the command's grace.
+	OverLimit        bool
 	ID               string
 	ReservedMicrousd int64
 	ReservedCredits  int64

@@ -1,0 +1,4 @@
+.page { width: 1200px; margin: 0 auto; }
+.columns { display: flex; }
+.columns section { width: 400px; padding: 20px; }
+h1 { font-size: 64px; }

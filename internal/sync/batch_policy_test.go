@@ -5,30 +5,25 @@ import (
 	"time"
 )
 
-func TestBatchPolicyPresetsScaleEveryLaneButContended(t *testing.T) {
-	base := defaultBatchPolicy()
-	saver := base.resolve("saver", 7)
-	lanes := saver["lanes"].(map[string]BatchLane)
-	if got := lanes["workspace"]; got != (BatchLane{QuietMs: 4_000, MaxWaitMs: 30_000, MaxEdits: 100}) {
-		t.Fatalf("saver workspace lane = %+v", got)
+func TestBatchPolicyFrameIsTheClampedBaseForEveryone(t *testing.T) {
+	base := BatchPolicy{Revision: 3, Lanes: map[string]BatchLane{
+		"workspace": {QuietMs: 1_000, MaxWaitMs: 5_000, MaxEdits: 50},
+		"history":   {QuietMs: 10, MaxWaitMs: 5, MaxEdits: 5_000},
+	}}
+	policy := base.frame()["policy"].(map[string]any)
+	if policy["revision"] != int64(3) {
+		t.Fatalf("revision = %v", policy["revision"])
 	}
-	if got := lanes["contended"]; got != base.Lanes["contended"] {
-		t.Fatalf("contended lane must not scale, got %+v", got)
+	lanes := policy["lanes"].(map[string]BatchLane)
+	if lanes["workspace"] != (BatchLane{QuietMs: 1_000, MaxWaitMs: 5_000, MaxEdits: 50}) {
+		t.Fatalf("workspace lane changed: %+v", lanes["workspace"])
 	}
-	// History under saver: 10 s × 4 and 60 s × 6, clamped to the client's bounds.
-	if got := lanes["history"]; got != (BatchLane{QuietMs: 40_000, MaxWaitMs: 300_000, MaxEdits: 400}) {
-		t.Fatalf("saver history lane = %+v", got)
+	// Out-of-range operator values are clamped to what clients accept.
+	if got := lanes["history"]; got.QuietMs != 100 || got.MaxWaitMs < got.QuietMs || got.MaxEdits != 1_000 {
+		t.Fatalf("history lane not clamped: %+v", got)
 	}
-	live := base.resolve("live", 7)["lanes"].(map[string]BatchLane)
-	if got := live["workspace"]; got != (BatchLane{QuietMs: 250, MaxWaitMs: 1_000, MaxEdits: 25}) {
-		t.Fatalf("live workspace lane = %+v", got)
-	}
-	unknown := base.resolve("turbo", 7)
-	if unknown["preset"] != "balanced" {
-		t.Fatalf("unknown preset resolved to %v", unknown["preset"])
-	}
-	if saver["revision"].(int64) != 1<<32|7 {
-		t.Fatalf("revision = %v", saver["revision"])
+	if base.frame()["type"] != "batch_policy" {
+		t.Fatal("wrong frame type")
 	}
 }
 

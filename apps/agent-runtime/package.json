@@ -13,6 +13,7 @@
     "world:setup": "bootstrap",
     "postinstall": "node scripts/patch-workflow-schema.ts",
     "eval:browser": "vitest run --config evals/browser/vitest.config.ts",
+    "eval:code": "vitest run --config evals/code/vitest.config.ts",
     "trace": "node evals/browser/trace.ts"
   },
   "dependencies": {

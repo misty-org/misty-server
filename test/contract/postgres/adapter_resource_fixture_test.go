@@ -53,7 +53,7 @@ func useResourceAdapterFixture(t *testing.T, database *Database) {
 		}
 		if req.Operation == "storage.check" || req.Operation == "storage.rendition" || req.Operation == "storage.commit" {
 			u := req.Usage.Units
-			used := u["object_bytes"] + u["database_bytes"] + u["sync_bytes"]
+			used := u["object_bytes"] + u["database_bytes"]
 			remaining := max(int64(0), limit-used-u["reserved_bytes"])
 			requested := u["requested_bytes"]
 			if req.Operation == "storage.rendition" && requested == 0 {

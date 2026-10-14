@@ -156,6 +156,9 @@ func (s *SpaceLibraryService) InitiateUpload() http.HandlerFunc {
 			SHA256         string `json:"sha256"`
 			Purpose        string `json:"purpose"`
 			ConversationID string `json:"conversation_id"`
+			// Agent marks a file the caller's agent made; it is saved to the
+			// agent's Space with this provenance.
+			Agent *db.AgentArtifactProvenance `json:"agent"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -179,7 +182,7 @@ func (s *SpaceLibraryService) InitiateUpload() http.HandlerFunc {
 		}
 		objectKey := "library/" + strings.ReplaceAll(uuid.NewString(), "-", "")
 		expiresAt := time.Now().Add(libraryUploadLifetime).UTC()
-		upload, err := s.database.CreateLibraryUploadForConversation(r.Context(), userID, chi.URLParam(r, "spaceID"), body.ConversationID, body.Purpose, body.Filename, body.MIMEType, body.ByteSize, body.SHA256, objectKey, security.HashToken(token), expiresAt)
+		upload, err := s.database.CreateLibraryUploadWithProvenance(r.Context(), userID, chi.URLParam(r, "spaceID"), body.ConversationID, body.Purpose, body.Filename, body.MIMEType, body.ByteSize, body.SHA256, objectKey, security.HashToken(token), expiresAt, body.Agent)
 		if err != nil {
 			writeLibraryError(w, err)
 			return

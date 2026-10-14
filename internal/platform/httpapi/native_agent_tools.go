@@ -28,11 +28,11 @@ func nativeAgentToolDescriptors() []agenttools.Descriptor {
 	list.Approval = agenttools.ApprovalNone
 	manage := base
 	manage.Name = "agents.configure"
-	manage.Description = "Create, update, or delete a global personal agent when the user requests agent configuration. For update, provide the current version from agents_list. Browser workspace tools and model policy are automatic. Never delete the default Misty agent. Deletion requires an explicit request to delete the named agent, not just stop its task."
+	manage.Description = "Create, update, or delete a personal agent when the user requests agent configuration. Every agent lives in one Space: `space` (name or id from spaces_list) picks it; omit it to create in the personal Space or keep an agent where it is. For update, provide the current version from agents_list. Browser workspace tools and model policy are automatic. Never delete or move the default Misty agent. Deletion requires an explicit request to delete the named agent, not just stop its task."
 	manage.Risk = serveragent.RiskWrite
 	manage.Approval = agenttools.ApprovalExplicitIntent
 	manage.AuditEvent = "agents.configured"
-	manage.InputSchema = schema(map[string]any{"operation": map[string]any{"type": "string", "enum": []string{"create", "update", "delete"}}, "agent_id": text, "version": map[string]any{"type": "integer", "minimum": 1}, "name": text, "role": text, "description": text, "instructions": text, "avatar_emoji": map[string]any{"type": "string", "maxLength": 32}, "enabled": map[string]any{"type": "boolean"}}, []string{"operation"})
+	manage.InputSchema = schema(map[string]any{"operation": map[string]any{"type": "string", "enum": []string{"create", "update", "delete"}}, "agent_id": text, "version": map[string]any{"type": "integer", "minimum": 1}, "name": text, "role": text, "description": text, "instructions": text, "avatar_emoji": map[string]any{"type": "string", "maxLength": 32}, "enabled": map[string]any{"type": "boolean"}, "space": map[string]any{"type": "string", "minLength": 1, "maxLength": 200}}, []string{"operation"})
 	return []agenttools.Descriptor{list, manage}
 }
 
@@ -57,6 +57,7 @@ func executeNativeAgentTool(ctx context.Context, database *db.Database, i agentt
 		ModelMode       *string `json:"model_mode"`
 		ModelID         *string `json:"model_id"`
 		ReasoningEffort *string `json:"reasoning_effort"`
+		Space           string  `json:"space"`
 	}
 	if json.Unmarshal(r.Arguments, &input) != nil || input.Operation != "create" && input.Operation != "update" && input.Operation != "delete" {
 		return nil, db.ErrSpaceInvalid
@@ -73,7 +74,7 @@ func executeNativeAgentTool(ctx context.Context, database *db.Database, i agentt
 		if err != nil {
 			return nil, err
 		}
-		profile = db.AgentProfileInput{Name: a.Name, Role: a.Role, Description: a.Description, Instructions: a.Instructions, Icon: a.Icon, Avatar: a.Avatar, ModelMode: a.ModelMode, ModelID: a.ModelID, ReasoningEffort: a.ReasoningEffort, Enabled: a.Enabled, Version: input.Version}
+		profile = db.AgentProfileInput{SpaceID: a.SpaceID, Name: a.Name, Role: a.Role, Description: a.Description, Instructions: a.Instructions, Icon: a.Icon, Avatar: a.Avatar, ModelMode: a.ModelMode, ModelID: a.ModelID, ReasoningEffort: a.ReasoningEffort, Enabled: a.Enabled, Version: input.Version}
 	} else {
 		input.AgentID = ""
 	}
@@ -103,6 +104,17 @@ func executeNativeAgentTool(ctx context.Context, database *db.Database, i agentt
 	}
 	if input.ReasoningEffort != nil {
 		profile.ReasoningEffort = *input.ReasoningEffort
+	}
+	if reference := strings.TrimSpace(input.Space); reference != "" {
+		spaces, err := database.ListSpaces(ctx, i.UserID)
+		if err != nil {
+			return nil, err
+		}
+		targets, err := routedSpaceTargets(spaces, i.UserID, reference, false, false)
+		if err != nil {
+			return nil, err
+		}
+		profile.SpaceID = targets[0].ID
 	}
 	if profile.ModelMode == "automatic" {
 		profile.ModelID = ""

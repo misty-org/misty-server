@@ -66,7 +66,7 @@ func (s *Service) advanceLocked(ctx context.Context, session *Session) error {
 	}
 	response, err := nextProvider(ctx, selectedProvider, request)
 	if err != nil {
-		if reservation != nil {
+		if reservation != nil && releasableProviderFailure(err) {
 			_ = s.meter.Release(reservation)
 		}
 		if errors.Is(err, context.Canceled) {
@@ -81,7 +81,7 @@ func (s *Service) advanceLocked(ctx context.Context, session *Session) error {
 	if reservation != nil {
 		settlement, err = s.meter.Settle(reservation, idempotencyKey+":settle", hostedAIMeterAgent, provider, model, response.Usage)
 		if err != nil {
-			_ = s.meter.Release(reservation)
+			// The settlement is durable in the outbox; never release used work.
 			return err
 		}
 	}

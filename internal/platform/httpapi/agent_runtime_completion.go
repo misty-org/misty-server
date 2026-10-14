@@ -64,6 +64,9 @@ func (s *SpacesService) publishPersonalAgentTaskCompletion(ctx context.Context, 
 }
 
 func (s *SpacesService) publishPersonalAgentCompletion(ctx context.Context, run *db.SpaceRun, task *db.SpaceTask, text string) error {
+	if request := s.mentionRequestForRun(ctx, run); request != nil {
+		return s.publishMentionReply(ctx, run, request, text)
+	}
 	if run.SourceTaskID != "" {
 		return s.publishPersonalAgentTaskCompletion(ctx, run, task, text)
 	}

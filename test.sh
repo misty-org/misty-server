@@ -141,7 +141,6 @@ SQL
   } | "${DEV_COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$ADMIN_DB_USER" -d "$TEST_DB_NAME" >/dev/null
 fi
 
-./scripts/check-go-file-sizes.sh
 # Billing contracts configure their own endpoints; ordinary database fixtures
 # must not send usage from the test database to the development billing service.
 export MISTY_BILLING_ADAPTER=none

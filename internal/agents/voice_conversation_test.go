@@ -42,7 +42,7 @@ func TestVoiceConversationRoutesScreenQuestionsToShowOnScreen(t *testing.T) {
 			t.Fatal("show_on_screen takes only the closed question")
 		}
 	}
-	if !found || !strings.Contains(config["instructions"].(string), "call show_on_screen") {
+	if !found || !strings.Contains(config["instructions"].(string), "call show_on_screen") || !strings.Contains(config["instructions"].(string), "warm, patient teacher") {
 		t.Fatal("screen questions must route to show_on_screen")
 	}
 }

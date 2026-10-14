@@ -46,7 +46,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 		_, err := database.AttachAIInvocationContext(ctx, owner.ID, record.ID, "", device.ID, kind, ref, name, json.RawMessage(capabilities), nil)
 		return err
 	}
-	if err := attach("local_folder", "scope_reports", "Reports", `["files.list","files.read"]`); err != nil {
+	if err := attach("local_folder", "scope_reports", "Reports", `["files.list","files.read","files.send"]`); err != nil {
 		t.Fatal(err)
 	}
 	if err := attach("workspace", "workspace:misty-browser", "Misty browser", `["tabs.list","tabs.open","bookmarks.list","bookmarks.add"]`); err != nil {
@@ -74,7 +74,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	for _, registration := range service.deviceToolRegistrations(ctx, &record) {
 		tools[registration.Descriptor.Name] = registration.Handler
 	}
-	for _, name := range []string{filesListTool, filesReadTool, tabsListTool, tabsOpenTool, bookmarksListTool, bookmarksAddTool} {
+	for _, name := range []string{filesListTool, filesReadTool, filesSendTool, tabsListTool, tabsOpenTool, bookmarksListTool, bookmarksAddTool} {
 		if tools[name] == nil {
 			t.Fatalf("chat with folder and workspace grants lacks %s", name)
 		}
@@ -98,7 +98,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	var input, operation string
 	for deadline := time.Now().Add(10 * time.Second); jobID == "" && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
 		_ = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-			return tx.QueryRowContext(ctx, `SELECT id,input::text,operation FROM workflow_device_node_jobs WHERE invocation_id=$1`, record.ID).Scan(&jobID, &input, &operation)
+			return tx.QueryRowContext(ctx, `SELECT id,input::text,operation FROM workflow_device_node_jobs WHERE invocation_id=$1 AND operation=$2`, record.ID, filesReadTool).Scan(&jobID, &input, &operation)
 		})
 	}
 	if jobID == "" || operation != filesReadTool || !strings.Contains(input, `"scopeId": "scope_reports"`) && !strings.Contains(input, `"scopeId":"scope_reports"`) {
@@ -118,6 +118,28 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		t.Fatal("files.read did not return after the device finished")
 	}
+
+	// Sending a file asks the computer to save it to the Space Library: the job
+	// names only the folder and the file, never another computer.
+	sent := make(chan error, 1)
+	sendCtx, cancelSend := context.WithCancel(ctx)
+	defer cancelSend()
+	go func() {
+		_, err := tools[filesSendTool](sendCtx, invocation, agent.ToolRequest{ID: "c2", Name: filesSendTool, Arguments: json.RawMessage(`{"folder":"Reports","path":"q3.txt"}`)})
+		sent <- err
+	}()
+	var sendInput string
+	for deadline := time.Now().Add(10 * time.Second); sendInput == "" && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		_ = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+			return tx.QueryRowContext(ctx, `SELECT input::text FROM workflow_device_node_jobs WHERE invocation_id=$1 AND operation=$2`, record.ID, filesSendTool).Scan(&sendInput)
+		})
+	}
+	var sendArguments map[string]any
+	if json.Unmarshal([]byte(sendInput), &sendArguments) != nil || len(sendArguments) != 2 || sendArguments["scopeId"] != "scope_reports" || sendArguments["relativePath"] != "q3.txt" {
+		t.Fatalf("files.send job input = %q", sendInput)
+	}
+	cancelSend()
+	<-sent
 
 	// A chat without grants gets no device tools.
 	plain, _, _ := database.CreateAIInvocationRecord(context.Background(), db.AIInvocationRecord{

@@ -1,0 +1,269 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+
+	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agenttools"
+	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+)
+
+// browserToolScopeID reads the scope a browser tool acts on.
+func browserToolScopeID(raw json.RawMessage) (string, error) {
+	var input struct {
+		ScopeID string `json:"scopeId"`
+	}
+	if json.Unmarshal(raw, &input) != nil || len(input.ScopeID) < 8 {
+		return "", db.ErrSpaceInvalid
+	}
+	return input.ScopeID, nil
+}
+
+// browserToolSchema returns the input schema of a known browser tool.
+func browserToolSchema(name string) (json.RawMessage, error) {
+	var schema json.RawMessage
+	for _, descriptor := range browserToolDescriptors() {
+		if descriptor.Name == name {
+			schema = descriptor.InputSchema
+			break
+		}
+	}
+	if len(schema) == 0 {
+		return nil, workflowv2.ErrCapabilityDenied
+	}
+	return schema, nil
+}
+
+// browserToolConfig starts the device config with the agent and the account's site blocks.
+func (s *SpacesService) browserToolConfig(ctx context.Context, invocation agenttools.Invocation) map[string]any {
+	agentID := invocation.AgentID
+	if agentID == "" {
+		agentID = "misty-unified"
+	}
+	configData := map[string]any{"agentId": agentID}
+	// The device refuses to act on these sites before any input is sent.
+	if settings, _, err := s.database.AISettings(ctx, invocation.UserID); err == nil {
+		configData["siteBlocks"] = map[string]any{"sensitive": settings.AgentBlockSensitive, "sites": settings.AgentBlockedSites}
+		configData["confirmKinds"] = browserConfirmKinds(settings)
+	}
+	return configData
+}
+
+// browserToolSurface reports where a workspace scope runs: the Misty window, or the desktop.
+func browserToolSurface(body aiInvocationInput, scopeID string) string {
+	// A goal on a workspace scope runs on the Misty window, or on the desktop
+	// with Misty's own cursor; either needs the same foreground task.
+	surface := "browser"
+	for _, target := range body.DeviceContexts {
+		var metadata map[string]any
+		_ = json.Unmarshal(target.Metadata, &metadata)
+		if target.OpaqueRef == scopeID && metadata["workspace_control"] == true {
+			surface = "workspace"
+			if metadata["desktop_control"] == true {
+				surface = "desktop"
+			}
+		}
+	}
+	return surface
+}
+
+// applyAIInvocationBrowserConfig adds the surface, task, agent and upload details of an
+// AI invocation run to configData, and rejects tools the invocation may not use.
+func (s *SpacesService) applyAIInvocationBrowserConfig(
+	ctx context.Context,
+	invocation agenttools.Invocation,
+	tool serveragent.ToolRequest,
+	scopeID string,
+	configData map[string]any,
+) error {
+	record, lookupErr := s.database.AIInvocationByID(ctx, invocation.UserID, invocation.RunID)
+	if lookupErr != nil {
+		return lookupErr
+	}
+	var body aiInvocationInput
+	_ = json.Unmarshal(record.RequestPayload, &body)
+	surface := browserToolSurface(body, scopeID)
+	if strings.HasPrefix(tool.Name, "browser.workspace.") || (tool.Name == screenActTool && surface != "browser") {
+		if body.ExecutionMode != "agent" || body.WindowLabel != "main" || body.TaskID == "" || surface == "browser" {
+			return db.ErrSpaceForbidden
+		}
+	}
+	if tool.Name == screenActTool {
+		configData["surface"] = surface
+	}
+	configData["taskId"] = scopeTaskID(body, scopeID)
+	if body.AgentID != "" {
+		configData["agentId"] = body.AgentID
+	}
+	if tool.Name == "browser.upload" {
+		return s.applyBrowserUploadConfig(ctx, invocation, record.ConversationID, body, tool.Arguments, configData)
+	}
+	return nil
+}
+
+// applyBrowserUploadConfig checks an upload source and adds it to configData.
+func (s *SpacesService) applyBrowserUploadConfig(
+	ctx context.Context,
+	invocation agenttools.Invocation,
+	conversationID string,
+	body aiInvocationInput,
+	raw json.RawMessage,
+	configData map[string]any,
+) error {
+	upload, err := parseBrowserUploadSource(raw)
+	if err != nil {
+		return err
+	}
+	if upload.DownloadID != "" {
+		// Download reuse is restricted to a live personal-agent task. The
+		// native boundary also verifies task ownership and pinned bytes.
+		if body.AgentID == "" || body.TaskID == "" {
+			return db.ErrSpaceForbidden
+		}
+		if err := authorizeNativeAgentBrowserScope(ctx, s.database, invocation, upload.SourceScopeID); err != nil {
+			return err
+		}
+		configData["downloadUpload"] = upload
+		return nil
+	}
+	file, lookupErr := s.database.AIConversationAttachment(ctx, invocation.UserID, upload.AttachmentID)
+	if lookupErr != nil || file.LifecycleState != "ready" || file.ConversationID != conversationID || file.InvocationID == "" {
+		return db.ErrSpaceForbidden
+	}
+	configData["upload"] = map[string]any{"id": file.ID, "name": file.DisplayName, "mimeType": file.MIMEType, "byteSize": file.ByteSize, "sha256": file.SHA256}
+	return nil
+}
+
+// validateBrowserToolArguments rejects a bad extract or upload request before the device acts.
+func validateBrowserToolArguments(tool serveragent.ToolRequest) error {
+	if tool.Name == "browser.extract" {
+		// Reject a bad instruction or schema before the device reads the page.
+		if _, _, err := validBrowserExtractRequest(tool.Arguments); err != nil {
+			return err
+		}
+	}
+	if tool.Name == "browser.upload" && !validBrowserUploadTarget(tool.Arguments) {
+		return db.ErrSpaceInvalid
+	}
+	return nil
+}
+
+// approveBrowserPageSteps returns the waiting result while page steps need approval.
+func (s *SpacesService) approveBrowserPageSteps(
+	ctx context.Context,
+	invocation agenttools.Invocation,
+	tool serveragent.ToolRequest,
+	scopeID string,
+) (json.RawMessage, error) {
+	approval, waiting, err := s.browserPageStepsApproval(ctx, invocation, tool, scopeID)
+	if err != nil {
+		return nil, err
+	}
+	if waiting != nil {
+		return waiting, nil
+	}
+	return nil, s.useAgentActionApproval(ctx, invocation.UserID, approval)
+}
+
+// approveScreenAct asks before a consequential on-screen action. It returns the
+// waiting result while the approval is pending.
+func (s *SpacesService) approveScreenAct(
+	ctx context.Context,
+	invocation agenttools.Invocation,
+	tool serveragent.ToolRequest,
+	scopeID string,
+) (json.RawMessage, error) {
+	var act struct {
+		Goal               string `json:"goal"`
+		AllowConsequential bool   `json:"allowConsequential"`
+	}
+	_ = json.Unmarshal(tool.Arguments, &act)
+	if !act.AllowConsequential {
+		return nil, nil
+	}
+	// Sending, buying, deleting or changing access on screen follows the
+	// same "Ask before acting" approval card as app actions.
+	approval, waiting, err := s.confirmAgentAction(ctx, invocation, "screen.act:"+scopeID, act.Goal,
+		"On screen: "+truncateAgentRuntimeText(act.Goal, 180), act.Goal)
+	if err != nil {
+		return nil, err
+	}
+	if waiting != nil {
+		return waiting, nil
+	}
+	return nil, s.useAgentActionApproval(ctx, invocation.UserID, approval)
+}
+
+// queueBrowserDeviceJob queues the device job for a browser tool. A canceled
+// job that never started is re-armed so the tool can still run.
+func (s *SpacesService) queueBrowserDeviceJob(
+	ctx context.Context,
+	invocation agenttools.Invocation,
+	tool serveragent.ToolRequest,
+	scopeID string,
+	schema json.RawMessage,
+	configData map[string]any,
+) (*db.WorkflowDeviceNodeJob, error) {
+	config := TestingMustAPIRawJSON(configData)
+	var job *db.WorkflowDeviceNodeJob
+	var err error
+	if isAIInvocationRuntimeID(invocation.RunID) {
+		job, err = s.database.QueueAIInvocationDeviceNodeJob(
+			ctx, invocation.UserID, invocation.RunID, "browser_tool_"+tool.ID, 1,
+			scopeID, tool.Name, tool.Name, tool.Arguments, config,
+			schema, agentToolObjectOutputSchema(),
+		)
+	} else {
+		job, err = s.database.QueueWorkflowDeviceNodeJob(
+			ctx, invocation.UserID, invocation.RunID, "browser_tool_"+tool.ID, 1,
+			scopeID, tool.Name, tool.Name, tool.Arguments, config,
+			schema, agentToolObjectOutputSchema(),
+		)
+	}
+	if errors.Is(err, db.ErrDeviceNotFound) {
+		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if job.State == "canceled" && job.ControlVersion == 2 && job.ExecutionStartedAt == nil {
+		job, err = s.database.RearmUnstartedBrowserJob(ctx, invocation.UserID, job)
+		if err != nil {
+			return nil, errors.Join(db.ErrAgentToolboxNotAttempted, err)
+		}
+	}
+	return job, nil
+}
+
+// awaitBrowserDeviceJob waits for a queued device job and maps its final state to the tool result.
+func (s *SpacesService) awaitBrowserDeviceJob(
+	ctx context.Context,
+	invocation agenttools.Invocation,
+	tool serveragent.ToolRequest,
+	job *db.WorkflowDeviceNodeJob,
+) (json.RawMessage, error) {
+	current, err := waitForDeviceJob(ctx, s.database, invocation.UserID, job.ID, job.DeadlineAt)
+	if err != nil {
+		return s.stopBrowserDeviceTool(invocation.UserID, job.ID, tool.Name)
+	}
+	switch current.State {
+	case "completed":
+		if tool.Name == "browser.extract" {
+			return s.browserExtract(ctx, invocation, current.ID, tool.Arguments, current.Output)
+		}
+		return current.Output, nil
+	case "uncertain":
+		if browserObservation(tool.Name) {
+			return nil, browserObservationFailure(current.ErrorCode)
+		}
+		return nil, db.ErrAgentToolboxActionUnknown
+	case "canceled":
+		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
+	default:
+		return nil, browserDeviceFailureForOperation(current.ErrorCode, current.Operation)
+	}
+}

@@ -25,7 +25,7 @@ const scheduledRunTrigger = "scheduled_task"
 const continuationTrigger = "continuation"
 
 func mistyTurnSource(trigger string) string {
-	if trigger == scheduledRunTrigger || trigger == goalContinuationTrigger || trigger == continuationTrigger {
+	if trigger == scheduledRunTrigger || trigger == goalContinuationTrigger || trigger == continuationTrigger || trigger == inboundTaskTrigger {
 		return trigger
 	}
 	return ""
@@ -35,6 +35,9 @@ type workflowScheduleInput struct {
 	db.ScheduleTiming
 	Inputs  map[string]any `json:"inputs"`
 	Enabled *bool          `json:"enabled"`
+	// DeviceID picks the computer whose Misty browser runs it; "" means none.
+	// Absent keeps the current choice.
+	DeviceID *string `json:"device_id"`
 }
 
 // WorkflowSchedule sets or removes a workflow's schedule.
@@ -106,8 +109,14 @@ func saveWorkflowSchedule(ctx context.Context, database *db.Database, userID, me
 	if body.Enabled == nil && existing != nil {
 		enabled = existing.Enabled
 	}
+	deviceID := ""
+	if body.DeviceID != nil {
+		deviceID = strings.TrimSpace(*body.DeviceID)
+	} else if existing != nil {
+		deviceID = existing.DeviceID
+	}
 	return database.SaveWorkflowSchedule(ctx, userID, conversationID, db.WorkflowSchedule{
-		MethodID: methodID, ScheduleTiming: body.ScheduleTiming, Inputs: body.Inputs, Enabled: enabled,
+		MethodID: methodID, ScheduleTiming: body.ScheduleTiming, Inputs: body.Inputs, Enabled: enabled, DeviceID: deviceID,
 	}, now)
 }
 
@@ -149,6 +158,11 @@ func (s *AIService) startWorkflowScheduleRun(ctx context.Context, item db.Workfl
 	fail := func(err error) error {
 		_ = s.database.CompleteWorkflowScheduleRun(ctx, item, err, now)
 		return err
+	}
+	if item.DeviceID != "" {
+		// Browser work runs on the chosen computer, never here: the run waits
+		// for Misty there, which starts it with its own grant.
+		return s.database.AwaitWorkflowScheduleDevice(ctx, item, now)
 	}
 	available, err := s.database.AIActionAvailable(ctx, item.UserID, "global", "ask", agent.InitialSelectedModelID)
 	if err != nil || !available {

@@ -12,6 +12,7 @@ import { discoverRemoteMCPTools } from "../src/mcp-runtime.js";
 import { accumulateModelUsage, modelTimeout, modelTurnLimit } from "../src/model-budget.js";
 import { initialMessages } from "../src/model-input.js";
 import { pruneStalePageSnapshots, withCacheBreakpoint } from "../src/prompt-cache.js";
+import { pruneStaleCodeResults } from "../src/code-context.js";
 import { runBrowserReplay, validReplay } from "../src/browser-replay.js";
 import { catalogTools, modelCatalog } from "../src/model-tools.js";
 import { classifyRuntimeError } from "../src/runtime-errors.js";
@@ -194,6 +195,9 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       // Stale page snapshots go first, in batches that keep most turns cached.
       const pruned = pruneStalePageSnapshots(messages);
       if (pruned.dropped) messages = pruned.messages;
+      // So do superseded file reads and old command output in code projects.
+      const code = pruneStaleCodeResults(messages);
+      if (code.dropped) messages = code.messages;
       let estimate = lastInputTokens > 0 ? estimateInputTokens(lastInputTokens, lastSentBytes, messages) : messageBytes(messages) / 4;
       if (estimate > window * CLEAR_AT) {
         const before = messageBytes(messages);

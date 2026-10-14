@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -45,17 +43,16 @@ func batchingSocketDial(t *testing.T, database *db.Database, base string, g Sync
 	return c
 }
 
-// policyOf reads a batch_policy frame's preset and workspace quiet period.
-func policyOf(t *testing.T, frame map[string]json.RawMessage) (string, int64) {
+// quietOf reads a batch_policy frame's workspace quiet period.
+func quietOf(t *testing.T, frame map[string]json.RawMessage) int64 {
 	t.Helper()
 	var policy struct {
-		Preset string               `json:"preset"`
-		Lanes  map[string]BatchLane `json:"lanes"`
+		Lanes map[string]BatchLane `json:"lanes"`
 	}
 	if err := json.Unmarshal(frame["policy"], &policy); err != nil {
 		t.Fatal(err)
 	}
-	return policy.Preset, policy.Lanes["workspace"].QuietMs
+	return policy.Lanes["workspace"].QuietMs
 }
 
 // noFrame fails if a frame of kind arrives within d.
@@ -75,17 +72,8 @@ func noFrame(t *testing.T, c *websocket.Conn, kind string, d time.Duration) {
 	}
 }
 
-func TestBrowserSyncBatchingPolicyFollowsTheAccountAndOnlyReachesBatchingClients(t *testing.T) {
+func TestBrowserSyncBatchingPolicyIsTheBaseAndOnlyReachesBatchingClients(t *testing.T) {
 	database, _ := browserSocketTestDatabase(t)
-	ctx := context.Background()
-	// The isolated sync schema has no account settings until this adds them.
-	raw, err := os.ReadFile(filepath.Join("..", "platform", "postgres", "migrations", "20270927000000_settings_profiles.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = database.Conn.Exec(strings.Split(string(raw), "-- +goose Down")[0]); err != nil {
-		t.Fatal(err)
-	}
 	store := NewStore(database.Conn)
 	grant, key := socketTestVault(t, store)
 	service := NewBrowserSyncService(database)
@@ -102,19 +90,9 @@ func TestBrowserSyncBatchingPolicyFollowsTheAccountAndOnlyReachesBatchingClients
 
 	c := batchingSocketDial(t, database, base, grant, key, true)
 	defer c.Close()
-	if preset, quiet := policyOf(t, socketTestRead(t, c, "batch_policy")); preset != "balanced" || quiet != 1_000 {
-		t.Fatalf("first policy = %s, %d ms", preset, quiet)
-	}
-
-	// Choosing Saver reaches the open connection.
-	if _, err := database.CreateSettingsProfile(ctx, "owner", db.AccountPreferencesID("owner"), "Settings", map[string]any{}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.PatchSettingsProfile(ctx, "owner", db.AccountPreferencesID("owner"), db.SettingsProfilePatch{MutationID: uuid.NewString(), Set: map[string]any{SyncFrequencySetting: "saver"}}); err != nil {
-		t.Fatal(err)
-	}
-	if preset, quiet := policyOf(t, socketTestRead(t, c, "batch_policy")); preset != "saver" || quiet != 4_000 {
-		t.Fatalf("policy after Saver = %s, %d ms", preset, quiet)
+	// Every client gets the base timings; each device scales them by its own setting.
+	if quiet := quietOf(t, socketTestRead(t, c, "batch_policy")); quiet != 1_000 {
+		t.Fatalf("first policy = %d ms", quiet)
 	}
 
 	// Over budget: the op is turned away with a wait, and nothing is applied.

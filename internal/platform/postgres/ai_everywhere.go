@@ -53,9 +53,12 @@ type AIUserSettings struct {
 	Enabled                bool `json:"enabled"`
 	CursorCompanionEnabled bool `json:"cursor_companion_enabled"`
 	MemoryEnabled          bool `json:"memory_enabled"`
-	// AppActionsAsk pauses sends, shares, deletes and payments in connected
-	// apps until the user approves them in chat.
+	// AppActionsAsk pauses sends, shares, deletes and payments until the user
+	// approves them: in chat for connected apps, in the island on pages. Off by
+	// default, so agents act on their own.
 	AppActionsAsk bool `json:"app_actions_ask"`
+	// PaymentsAsk pauses paying and buying even while AppActionsAsk is off.
+	PaymentsAsk bool `json:"payments_ask"`
 	// ScreenLocation is where agents open a new screen: window (a new tab in the
 	// user's Misty window, the default), separate (an agent window) or ask.
 	ScreenLocation string `json:"screen_location"`
@@ -84,13 +87,13 @@ type AISurfacePreference struct {
 }
 
 func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettings, []AISurfacePreference, error) {
-	settings := AIUserSettings{Enabled: true, CursorCompanionEnabled: true, MemoryEnabled: true, AppActionsAsk: true, ScreenLocation: "window", AgentBlockSensitive: true, AgentBlockedSites: []string{}, KeepAwakeForAgents: true, RetentionDays: 30, PurgeState: "none"}
+	settings := AIUserSettings{Enabled: true, CursorCompanionEnabled: true, MemoryEnabled: true, PaymentsAsk: true, ScreenLocation: "window", AgentBlockSensitive: true, AgentBlockedSites: []string{}, KeepAwakeForAgents: true, RetentionDays: 30, PurgeState: "none"}
 	preferences := []AISurfacePreference{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		var disabledAt sql.NullTime
 		err := tx.QueryRowContext(ctx, `
-			SELECT enabled,cursor_companion_enabled,memory_enabled,app_actions_ask,screen_location,agent_block_sensitive,agent_blocked_sites,keep_awake_for_agents,retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
-		`, userID).Scan(&settings.Enabled, &settings.CursorCompanionEnabled, &settings.MemoryEnabled, &settings.AppActionsAsk, &settings.ScreenLocation, &settings.AgentBlockSensitive, pq.Array(&settings.AgentBlockedSites), &settings.KeepAwakeForAgents, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
+			SELECT enabled,cursor_companion_enabled,memory_enabled,app_actions_ask,payments_ask,screen_location,agent_block_sensitive,agent_blocked_sites,keep_awake_for_agents,retention_days,purge_state,disabled_at,updated_at FROM ai_user_settings WHERE user_id=$1
+		`, userID).Scan(&settings.Enabled, &settings.CursorCompanionEnabled, &settings.MemoryEnabled, &settings.AppActionsAsk, &settings.PaymentsAsk, &settings.ScreenLocation, &settings.AgentBlockSensitive, pq.Array(&settings.AgentBlockedSites), &settings.KeepAwakeForAgents, &settings.RetentionDays, &settings.PurgeState, &disabledAt, &settings.UpdatedAt)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -120,11 +123,12 @@ func (db *Database) AISettings(ctx context.Context, userID string) (AIUserSettin
 	return settings, preferences, err
 }
 
-// SetAIAppActionsAsk changes only the connected-app approval setting.
-func (db *Database) SetAIAppActionsAsk(ctx context.Context, userID string, ask bool) error {
+// SetAIAppActionsAsk changes only the approval settings; nil leaves a value as it is.
+func (db *Database) SetAIAppActionsAsk(ctx context.Context, userID string, ask, payments *bool) error {
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO ai_user_settings(user_id,app_actions_ask) VALUES($1,$2)
-			ON CONFLICT(user_id) DO UPDATE SET app_actions_ask=EXCLUDED.app_actions_ask,updated_at=NOW()`, userID, ask)
+		_, err := tx.ExecContext(ctx, `INSERT INTO ai_user_settings(user_id,app_actions_ask,payments_ask) VALUES($1,COALESCE($2,false),COALESCE($3,true))
+			ON CONFLICT(user_id) DO UPDATE SET app_actions_ask=COALESCE($2,ai_user_settings.app_actions_ask),
+				payments_ask=COALESCE($3,ai_user_settings.payments_ask),updated_at=NOW()`, userID, ask, payments)
 		return err
 	})
 }

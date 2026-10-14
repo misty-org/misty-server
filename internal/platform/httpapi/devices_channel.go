@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
-	"encoding/hex"
 	"net/http"
 	"sync"
 	"time"
@@ -21,9 +20,6 @@ const (
 	deviceChannelFrameLimit   = 16 << 10
 	deviceChannelPing         = 30 * time.Second
 	deviceChannelReadDeadline = 75 * time.Second
-	deviceAddressMinInterval  = 2 * time.Second
-	deviceAddressHourlyLimit  = 60
-	deviceConnectPerPairLimit = 10
 	deviceChannelBurstLimit   = 32
 )
 
@@ -32,12 +28,11 @@ const (
 var deviceChannelUpgrader = websocket.Upgrader{ReadBufferSize: 4096, WriteBufferSize: 4096,
 	CheckOrigin: func(*http.Request) bool { return true }, HandshakeTimeout: 10 * time.Second}
 
+// deviceChannelFrame is what a device sends. After "authenticate" the device
+// only listens; any other frame is answered with invalid_device_frame.
 type deviceChannelFrame struct {
-	Type       string   `json:"type"`
-	Signature  string   `json:"signature,omitempty"`
-	EndpointID string   `json:"endpointId,omitempty"`
-	Candidates []string `json:"candidates,omitempty"`
-	DeviceID   string   `json:"deviceId,omitempty"`
+	Type      string `json:"type"`
+	Signature string `json:"signature,omitempty"`
 }
 
 // DeviceChannelTicket issues a one-use, 60-second ticket for the device socket.
@@ -69,8 +64,9 @@ func (s *AgentsService) DeviceChannelTicket() http.HandlerFunc {
 	}
 }
 
-// DeviceChannel is the control channel: presence, LAN candidates, connect
-// intents and device-list hints. It never carries file data.
+// DeviceChannel is the control channel: presence, admission, revocation and
+// account-event hints. Devices never reach each other through it; it never
+// carries file data.
 func (s *AgentsService) DeviceChannel() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -94,7 +90,6 @@ func (s *AgentsService) DeviceChannel() http.HandlerFunc {
 			http.Error(w, "device identity required", http.StatusForbidden)
 			return
 		}
-		observedIP := TestingClientIPFromRequest(r)
 		conn, err := deviceChannelUpgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
@@ -120,11 +115,11 @@ func (s *AgentsService) DeviceChannel() http.HandlerFunc {
 			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Device proof required"), time.Now().Add(time.Second))
 			return
 		}
-		s.serveDeviceChannel(r.Context(), conn, identity, hex.EncodeToString(publicKey), observedIP)
+		s.serveDeviceChannel(r.Context(), conn, identity)
 	}
 }
 
-func (s *AgentsService) serveDeviceChannel(parent context.Context, conn *websocket.Conn, identity *db.DeviceChannelIdentity, endpointID, observedIP string) {
+func (s *AgentsService) serveDeviceChannel(parent context.Context, conn *websocket.Conn, identity *db.DeviceChannelIdentity) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	hub := s.devices()
@@ -153,8 +148,7 @@ func (s *AgentsService) serveDeviceChannel(parent context.Context, conn *websock
 	}
 	connection := &deviceConnection{
 		id: uuid.NewString(), userID: identity.UserID, deviceID: identity.DeviceID, admitted: identity.State == "admitted",
-		send: send, close: closeConn, revoke: revoke, connectLog: map[string][]time.Time{},
-		presence: devicePresence{DeviceID: identity.DeviceID, EndpointID: endpointID, NetworkKey: hub.networkKey(observedIP)},
+		send: send, close: closeConn, revoke: revoke, presence: devicePresence{DeviceID: identity.DeviceID},
 	}
 	if !hub.register(connection) {
 		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "Too many devices"), time.Now().Add(time.Second))
@@ -232,8 +226,6 @@ func (s *AgentsService) serveDeviceChannel(parent context.Context, conn *websock
 
 	_ = conn.SetReadDeadline(time.Now().Add(deviceChannelReadDeadline))
 	conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(deviceChannelReadDeadline)) })
-	var lastAddress time.Time
-	addressLog := []time.Time{}
 	windowStart, messages := time.Now(), 0
 	for {
 		var frame deviceChannelFrame
@@ -248,62 +240,8 @@ func (s *AgentsService) serveDeviceChannel(parent context.Context, conn *websock
 		if messages > deviceChannelBurstLimit {
 			return
 		}
-		switch frame.Type {
-		case "address":
-			if !hub.isAdmitted(connection) {
-				send(map[string]any{"type": "error", "code": "device_not_added"})
-				continue
-			}
-			now := time.Now()
-			cutoff := now.Add(-time.Hour)
-			kept := addressLog[:0]
-			for _, at := range addressLog {
-				if at.After(cutoff) {
-					kept = append(kept, at)
-				}
-			}
-			addressLog = kept
-			if now.Sub(lastAddress) < deviceAddressMinInterval || len(addressLog) >= deviceAddressHourlyLimit {
-				// Address flapping: close, and the client backs off before reconnecting.
-				return
-			}
-			lastAddress = now
-			addressLog = append(addressLog, now)
-			candidates, overlay := []string{}, false
-			seen := map[string]bool{}
-			for _, raw := range frame.Candidates {
-				candidate, isOverlay, ok := lanCandidate(raw)
-				if ok && !seen[candidate] && len(candidates) < maxDeviceCandidates {
-					seen[candidate] = true
-					candidates = append(candidates, candidate)
-					overlay = overlay || isOverlay
-				}
-			}
-			hub.setCandidates(connection, candidates, overlay)
-		case "connect":
-			if !hub.isAdmitted(connection) || !deviceIDPattern.MatchString(frame.DeviceID) || frame.DeviceID == identity.DeviceID {
-				send(map[string]any{"type": "error", "code": "device_not_added"})
-				continue
-			}
-			now := time.Now()
-			recent := []time.Time{}
-			for _, at := range connection.connectLog[frame.DeviceID] {
-				if now.Sub(at) < time.Minute {
-					recent = append(recent, at)
-				}
-			}
-			if len(recent) >= deviceConnectPerPairLimit {
-				send(map[string]any{"type": "error", "code": "connect_rate_limited", "deviceId": frame.DeviceID})
-				continue
-			}
-			connection.connectLog[frame.DeviceID] = append(recent, now)
-			state, err := s.database.DeviceAdmissionState(ctx, identity.UserID, frame.DeviceID)
-			if err != nil || state != "admitted" || !hub.connectIntent(connection, frame.DeviceID) {
-				send(map[string]any{"type": "unreachable", "deviceId": frame.DeviceID})
-			}
-		default:
-			send(map[string]any{"type": "error", "code": "invalid_device_frame"})
-		}
+		// The device only listens once authenticated.
+		send(map[string]any{"type": "error", "code": "invalid_device_frame"})
 	}
 }
 

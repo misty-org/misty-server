@@ -33,7 +33,6 @@ type SpacesService struct {
 	avatarStore             LibraryObjectStore
 	aead                    cipher.AEAD
 	keyVer                  int16
-	workers                 sync.Once
 	invitationSender        mistyemail.SpaceInvitationSender
 	invitationBaseURL       string
 	agentRuntime            AgentRuntimeConfig

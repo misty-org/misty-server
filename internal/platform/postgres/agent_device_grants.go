@@ -27,8 +27,7 @@ type AgentDeviceGrant struct {
 
 var deviceAgentCapabilities = map[string]bool{
 	"browser.workspace.visual": true, "browser.workspace.interact": true,
-	"files.read": true, "files.write": true, "files.list": true, "files.search": true, "files.copy": true, "files.move": true, "files.delete": true,
-	"files.send": true, "files.receive": true,
+	"files.read": true, "files.write": true, "files.list": true, "files.search": true, "files.copy": true, "files.move": true, "files.delete": true, "files.send": true,
 	"project.patch": true, "project.diff": true, "project.status": true, "project.checks": true, "git.commit": true, "git.push": true, "terminal.execute": true,
 	"browser.interact": true, "browser.inspect": true, "browser.visual": true, "browser.navigate": true, "browser.click": true, "browser.type": true, "browser.select": true, "browser.scroll": true,
 	"browser.downloads.list": true, "browser.upload": true, "browser.act": true, "browser.confirm_high_risk": true,
@@ -36,14 +35,26 @@ var deviceAgentCapabilities = map[string]bool{
 	"tabs.list": true, "tabs.open": true, "bookmarks.list": true, "bookmarks.add": true,
 	// Opens an agent session in another device's browser (docs/design/agents-on-devices/BRIEF.md).
 	"browser.session": true,
+	// Code projects on the chat's own computer (docs/plans/agent-code-projects.md).
+	"code.read": true, "code.list": true, "code.find": true, "code.search": true, "code.write": true, "code.edit": true,
+	"code.run": true, "code.start": true, "code.logs": true, "code.processes": true, "code.stop": true, "code.preview": true,
+	// Git for projects (docs/plans/agent-git-projects.md).
+	"git.status": true, "git.diff": true, "git.log": true, "git.branch": true, "git.pull": true, "git.pull_request": true,
 }
 
 // deviceContextCapabilities are what each kind of desktop grant may allow.
 var deviceContextCapabilities = map[string]map[string]bool{
 	"local_folder": {"files.list": true, "files.read": true, "files.send": true},
-	// A chat's own device accepts files another of the person's devices sends.
-	"inbox":     {"files.receive": true},
-	"workspace": {"tabs.list": true, "tabs.open": true, "bookmarks.list": true, "bookmarks.add": true, "browser.session": true},
+	"workspace":    {"tabs.list": true, "tabs.open": true, "bookmarks.list": true, "bookmarks.add": true, "browser.session": true},
+	// A project: the code tools, plus reading documents and saving files to
+	// the Space Library the way read-only folders do.
+	"project_folder": {
+		"files.list": true, "files.read": true, "files.send": true,
+		"code.read": true, "code.list": true, "code.find": true, "code.search": true, "code.write": true, "code.edit": true,
+		"code.run": true, "code.start": true, "code.logs": true, "code.processes": true, "code.stop": true, "code.preview": true,
+		"git.status": true, "git.diff": true, "git.log": true, "git.commit": true, "git.branch": true,
+		"git.push": true, "git.pull": true, "git.pull_request": true,
+	},
 }
 
 // DeviceContextCapabilitiesAllowed reports whether a desktop grant asks only

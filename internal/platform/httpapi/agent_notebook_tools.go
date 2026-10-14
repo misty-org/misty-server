@@ -95,18 +95,18 @@ func (s *SpacesService) notebookToolRegistrations(record *db.AIInvocationRecord,
 	}
 }
 
+// notebookMarkdown is the note people keep: the findings. The plan is the
+// agent's own working checklist; people see a plan only in Plan mode.
 func notebookMarkdown(notebook *db.AgentNotebook) string {
-	var out strings.Builder
-	out.WriteString("## Plan\n\n")
-	out.WriteString(strings.TrimSpace(notebook.Plan))
-	out.WriteString("\n\n## Findings\n\n")
-	out.WriteString(strings.TrimSpace(notebook.Findings))
-	return strings.TrimSpace(out.String()) + "\n"
+	return strings.TrimSpace(notebook.Findings) + "\n"
 }
 
-// publishNotebook shows the notebook in the conversation that owns it and
-// mirrors it to a note. Neither step changes the write's own result.
+// publishNotebook shows the notebook's findings in the conversation that owns
+// it and mirrors them to a note. Neither step changes the write's own result.
 func (s *SpacesService) publishNotebook(ctx context.Context, record *db.AIInvocationRecord, notebook *db.AgentNotebook) {
+	if strings.TrimSpace(notebook.Findings) == "" {
+		return
+	}
 	// A sub-agent's notebook belongs to its parent's conversation.
 	target := record
 	if parent, err := s.database.DelegationParent(ctx, record.UserID, record.ID); err == nil && parent != "" {
@@ -121,7 +121,7 @@ func (s *SpacesService) publishNotebook(ctx context.Context, record *db.AIInvoca
 	if _, err := s.aiInvocations.restoreDurable(ctx, *target); err != nil {
 		return
 	}
-	_ = s.aiInvocations.append(target.ID, aiInvocationEvent{Type: "notebook.updated", Notebook: &aiNotebookEvent{Plan: notebook.Plan, Findings: notebook.Findings, NoteID: noteID}})
+	_ = s.aiInvocations.append(target.ID, aiInvocationEvent{Type: "notebook.updated", Notebook: &aiNotebookEvent{Findings: notebook.Findings, NoteID: noteID}})
 }
 
 func (s *SpacesService) mirrorNotebookNote(ctx context.Context, user string, owner *db.AIInvocationRecord, notebook *db.AgentNotebook) string {

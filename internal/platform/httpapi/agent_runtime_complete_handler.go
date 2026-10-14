@@ -30,7 +30,7 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 		if err != nil {
 			existingRun, existingTask, lookupErr := s.database.PersonalAgentTaskRuntimeRecord(r.Context(), runID, body.RuntimeRunID)
 			if lookupErr == nil && (existingRun.State == "completed" || existingRun.State == "completed_with_errors" || existingRun.State == "failed" || existingRun.State == "canceled") {
-				if existingRun.State == "completed" || existingRun.SourceConversationID != "" {
+				if existingRun.State == "completed" || existingRun.SourceConversationID != "" || s.mentionRequestForRun(r.Context(), existingRun) != nil {
 					if publishErr := s.publishPersonalAgentCompletion(r.Context(), existingRun, existingTask, body.Text); publishErr != nil {
 						writeAgentError(w, publishErr)
 						return
@@ -115,7 +115,7 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 			writeAgentError(w, err)
 			return
 		}
-		if state == "completed" || finished.SourceConversationID != "" {
+		if state == "completed" || finished.SourceConversationID != "" || s.mentionRequestForRun(r.Context(), finished) != nil {
 			if err := s.publishPersonalAgentCompletion(r.Context(), finished, task, body.Text); err != nil {
 				writeAgentError(w, err)
 				return

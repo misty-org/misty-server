@@ -229,6 +229,13 @@ func (db *Database) CreateLibraryUpload(ctx context.Context, userID, spaceID, pu
 }
 
 func (db *Database) CreateLibraryUploadForConversation(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time) (*LibraryUpload, error) {
+	return db.CreateLibraryUploadWithProvenance(ctx, userID, spaceID, conversationID, purpose, filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt, nil)
+}
+
+// CreateLibraryUploadWithProvenance starts an upload. With provenance, the
+// uploader's agent made the file and it becomes a Space item of the agent's
+// Space when it finishes.
+func (db *Database) CreateLibraryUploadWithProvenance(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time, provenance *AgentArtifactProvenance) (*LibraryUpload, error) {
 	permission, purposeKnown := UploadPurposePermission(purpose)
 	maxBytes := MaxUploadBytesForPurpose(purpose)
 	if !purposeKnown || byteSize < 1 || byteSize > maxBytes || byteSize > MaxSpaceStorageBytes || len(clientSHA) != 64 || filename == "" || objectKey == "" || tokenHash == "" {
@@ -241,6 +248,11 @@ func (db *Database) CreateLibraryUploadForConversation(ctx context.Context, user
 		}
 		if err := tx.QueryRowContext(ctx, `SELECT security_domain_id FROM spaces WHERE id=$1 FOR SHARE`, spaceID).Scan(&out.SecurityDomainID); err != nil {
 			return err
+		}
+		if provenance != nil {
+			if err := requireAgentArtifactUploadTx(ctx, tx, userID, spaceID, purpose, provenance); err != nil {
+				return err
+			}
 		}
 		if purpose == "attachment" {
 			if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
@@ -261,6 +273,12 @@ func (db *Database) CreateLibraryUploadForConversation(ctx context.Context, user
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_upload_reservations(upload_id,space_id,user_id,reserved_bytes,state,expires_at) VALUES($1,$2,$3,$4,'active',$5)`, out.ID, spaceID, userID, byteSize, expiresAt); err != nil {
 			return err
+		}
+		if provenance != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE space_library_uploads SET agent_id=$2,agent_conversation_id=NULLIF($3,''),agent_run_id=NULLIF($4,''),agent_artifact_kind=$5 WHERE id=$1`,
+				out.ID, provenance.AgentID, provenance.ConversationID, provenance.RunID, provenance.Kind); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE space_storage_usage SET reserved_bytes=reserved_bytes+$1,version=version+1,updated_at=NOW() WHERE space_id=$2`, byteSize, spaceID); err != nil {
 			return err

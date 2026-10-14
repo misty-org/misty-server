@@ -29,15 +29,15 @@ func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testi
 	if err != nil {
 		t.Fatalf("ListSpaces(owner) error = %v", err)
 	}
-	if len(ownerSpaces) != 0 {
-		t.Fatalf("initial owner Spaces = %#v, want onboarding to create one", ownerSpaces)
+	if len(ownerSpaces) != 1 || !ownerSpaces[0].IsDefault || ownerSpaces[0].Name != "Owner's Space" {
+		t.Fatalf("initial owner Spaces = %#v, want the personal Space from sign-up", ownerSpaces)
 	}
 	project, err := database.TestingCreateSpace(ctx, owner.ID, "Project")
 	if err != nil {
 		t.Fatalf("CreateSpace(Project) error = %v", err)
 	}
-	if !project.IsDefault {
-		t.Fatalf("first owned Space = %#v, want default", project)
+	if project.IsDefault {
+		t.Fatalf("created Space = %#v, want only the personal Space as default", project)
 	}
 	renamed, err := database.RenameSpace(ctx, owner.ID, project.ID, "Home base")
 	if err != nil || renamed.Name != "Home base" {
@@ -62,8 +62,8 @@ func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testi
 	}
 
 	memberSpaces, err := database.ListSpaces(ctx, member.ID)
-	if err != nil || len(memberSpaces) != 0 {
-		t.Fatalf("ListSpaces(member) = %#v, %v, want none before onboarding or invite", memberSpaces, err)
+	if err != nil || len(standardSpaces(memberSpaces)) != 0 {
+		t.Fatalf("ListSpaces(member) = %#v, %v, want only the personal Space before an invite", memberSpaces, err)
 	}
 
 	invite, err := database.TestingInviteToSpace(ctx, owner.ID, project.ID, member.Email)
@@ -135,8 +135,9 @@ func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testi
 	if err != nil || projectAfterRemove.IsShared || projectAfterRemove.MemberCount != 1 {
 		t.Fatalf("Space after remove = %#v, %v, want private again", projectAfterRemove, err)
 	}
-	if err := database.DeleteSpace(ctx, owner.ID, project.ID, projectAfterRemove.Name); !errors.Is(err, ErrDefaultSpaceProtected) {
-		t.Fatalf("DeleteSpace(default) error = %v, want ErrDefaultSpaceProtected", err)
+	personal := personalSpace(t, database, ctx, owner.ID)
+	if err := database.DeleteSpace(ctx, owner.ID, personal.ID, personal.Name); !errors.Is(err, ErrDefaultSpaceProtected) {
+		t.Fatalf("DeleteSpace(personal) error = %v, want ErrDefaultSpaceProtected", err)
 	}
 }
 

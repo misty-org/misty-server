@@ -7,6 +7,7 @@ func TestPublicAgentRuntimeProviderFailure(t *testing.T) {
 		code, want string
 	}{
 		{"model_provider_credit_exhausted", "Misty's AI provider has no available credit. The server administrator needs to add credit or configure another provider."},
+		{"model_provider_key_invalid", "Misty's AI provider rejected its API key. The server administrator needs to replace the key."},
 		{"model_gateway_unavailable", "Misty's model providers are temporarily unavailable. Please try again shortly."},
 		{"unknown_provider_failure", "Misty could not complete this request."},
 	} {

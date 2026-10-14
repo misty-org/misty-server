@@ -120,3 +120,89 @@ func TestBrowserSyncSharedWorkspaceRetiresWhenEveryDeviceMoved(t *testing.T) {
 		t.Fatalf("shared write after retirement: %+v %v", r, err)
 	}
 }
+
+// clipboardPolicies adds the device tables the clipboard check reads, in the
+// disposable schema, and turns the clipboard on for `allowed` devices.
+func clipboardPolicies(t *testing.T, store *Store, allowed map[string]bool) {
+	t.Helper()
+	if _, err := store.Conn.Exec(`CREATE TABLE trusted_devices(id text primary key, user_id text not null, sync_device_id text, admission_state text not null);
+		CREATE TABLE device_policies(device_id text primary key, user_id text not null, clipboard boolean not null)`); err != nil {
+		t.Fatal(err)
+	}
+	for device, clipboard := range allowed {
+		id := "device_" + device
+		if _, err := store.Conn.Exec(`INSERT INTO trusted_devices VALUES($1,'owner',$2,'admitted'); INSERT INTO device_policies VALUES($1,'owner',$3)`, id, device, clipboard); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestBrowserSyncClipboardRing(t *testing.T) {
+	store, vault, d := setupWorkspaceVault(t)
+	ctx := context.Background()
+	a, b, c := d[0].grant.DeviceID, d[1].grant.DeviceID, d[2].grant.DeviceID
+	clip := func(fill byte, size int) []SyncRecordWrite {
+		return []SyncRecordWrite{{Key: recordKey(string(rune('a' + fill%6))), Ciphertext: bytes.Repeat([]byte{fill}, size)}}
+	}
+	// No device tables yet means no admitted device has the clipboard on.
+	clipboardPolicies(t, store, map[string]bool{a: true, b: false})
+
+	if _, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, b, "clipboard", clip(1, 10)); !errors.Is(err, ErrSyncForbidden) {
+		t.Fatalf("clipboard off in policy: %v", err)
+	}
+	if _, err := store.PullBrowserSyncRecords(ctx, "owner", vault, c, "clipboard", 0, 0); !errors.Is(err, ErrSyncForbidden) {
+		t.Fatalf("device without a policy read clips: %v", err)
+	}
+	if _, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, a, "clipboard", clip(1, syncClipboardMaxBytes+1)); !errors.Is(err, ErrSyncInvalid) {
+		t.Fatalf("oversized clip accepted: %v", err)
+	}
+	// Clips may be larger than other records, up to the clipboard's limit.
+	results, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, a, "clipboard", clip(0, syncClipboardMaxBytes))
+	if err != nil || !results[0].Applied {
+		t.Fatalf("full-size clip: %+v %v", results, err)
+	}
+	if _, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, a, "bookmarks", clip(2, syncRecordMaxBytes+1)); !errors.Is(err, ErrSyncInvalid) {
+		t.Fatalf("other collections keep their limit: %v", err)
+	}
+	page, err := store.PullBrowserSyncRecords(ctx, "owner", vault, a, "clipboard", 0, 0)
+	if err != nil || len(page.Records) != 1 || len(page.Records[0].Ciphertext) != syncClipboardMaxBytes {
+		t.Fatalf("pull clip: %v %v", page, err)
+	}
+
+	// A day-old clip is never served, and the next write tombstones it.
+	if _, err := store.Conn.Exec(`UPDATE browser_sync_records SET updated_at=now()-interval '25 hours' WHERE collection='clipboard'`); err != nil {
+		t.Fatal(err)
+	}
+	if page, err := store.PullBrowserSyncRecords(ctx, "owner", vault, a, "clipboard", 0, 0); err != nil || len(page.Records) != 0 {
+		t.Fatalf("expired clip served: %+v %v", page, err)
+	}
+	if _, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, a, "clipboard", clip(1, 10)); err != nil {
+		t.Fatal(err)
+	}
+	page, err = store.PullBrowserSyncRecords(ctx, "owner", vault, a, "clipboard", 0, 0)
+	if err != nil || len(page.Records) != 2 {
+		t.Fatalf("after expiry: %+v %v", page, err)
+	}
+	for _, record := range page.Records {
+		if record.Key == recordKey("a") && record.Ciphertext != nil {
+			t.Fatalf("expired clip kept its ciphertext: %+v", record)
+		}
+	}
+
+	// Large clips come a few at a time.
+	for fill := byte(2); fill < 6; fill++ {
+		if _, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, a, "clipboard", clip(fill, 10)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 6; i++ {
+		write := []SyncRecordWrite{{Key: recordKey(string(rune('0' + i))), Ciphertext: []byte("x")}}
+		if _, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, a, "clipboard", write); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err = store.PullBrowserSyncRecords(ctx, "owner", vault, a, "clipboard", 0, 0)
+	if err != nil || len(page.Records) != syncClipboardMaxPage || !page.More {
+		t.Fatalf("clipboard paging: %d records, more=%v, %v", len(page.Records), page.More, err)
+	}
+}

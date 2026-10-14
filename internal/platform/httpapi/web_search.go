@@ -14,9 +14,8 @@ import (
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
-// Misty's own web search. The agent runtime runs the engine the user chose in
-// Settings › Agents through the AI Gateway on Misty's key, so research never
-// asks anyone to sign in to a search service.
+// Misty's own web search. The agent runtime runs the default engine through the AI
+// Gateway on Misty's key, so research never asks anyone to sign in to a search service.
 const (
 	webSearchTool          = "web.search"
 	webSearchDefaultEngine = "parallel"
@@ -25,11 +24,9 @@ const (
 	webSearchTimeout       = 45 * time.Second
 )
 
-var webSearchEngines = []string{"parallel", "perplexity", "exa"}
-
-// webSearchToolRegistrations offer web search unless the user turned it off.
-func (s *SpacesService) webSearchToolRegistrations(ctx context.Context, userID string) []agenttools.Registration {
-	if !s.models.Enabled() || !preferenceBool(s.agentPreferences(ctx, userID), prefWebSearch, true) {
+// webSearchToolRegistrations offer web search whenever the model runtime is on.
+func (s *SpacesService) webSearchToolRegistrations(_ context.Context, _ string) []agenttools.Registration {
+	if !s.models.Enabled() || !webSearchOnByDefault {
 		return nil
 	}
 	return []agenttools.Registration{{Descriptor: webSearchDescriptor(), Handler: s.webSearch}}
@@ -66,15 +63,11 @@ func (s *SpacesService) webSearch(ctx context.Context, invocation agenttools.Inv
 	if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.Query) == "" {
 		return nil, agenttools.ErrArgumentsInvalid
 	}
-	values := s.agentPreferences(ctx, invocation.UserID)
-	if !preferenceBool(values, prefWebSearch, true) {
-		return nil, serveragent.ErrInvalidRequest("Web search is turned off in Settings › Agents. Continue without it.")
-	}
 	if input.MaxResults < 1 || input.MaxResults > 10 {
 		input.MaxResults = webSearchMaxResults
 	}
 	search := modelruntime.SearchRequest{
-		Model: serveragent.WebSearchModel(), Engine: preferenceChoice(values, prefWebSearchEngine, webSearchDefaultEngine, webSearchEngines...),
+		Model: serveragent.WebSearchModel(), Engine: webSearchDefaultEngine,
 		Query: strings.TrimSpace(input.Query), MaxResults: input.MaxResults, Domains: input.Domains, Recency: input.Recency,
 	}
 	callID := request.ID

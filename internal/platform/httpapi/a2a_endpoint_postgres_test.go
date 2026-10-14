@@ -42,7 +42,7 @@ func TestA2AEndpointPostgres(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	researcher, _ := database.SavePersonalAgent(ctx, bob.ID, "", db.AgentProfileInput{Name: "Researcher", Enabled: true})
+	researcher, _ := database.SavePersonalAgent(ctx, bob.ID, "", db.AgentProfileInput{Name: "Researcher", Enabled: true, SpaceID: space.ID})
 	assistant, _ := database.SavePersonalAgent(ctx, alice.ID, "", db.AgentProfileInput{Name: "Assistant", Enabled: true})
 	planner, _ := database.SavePersonalAgent(ctx, alice.ID, "", db.AgentProfileInput{Name: "Planner", Enabled: true})
 	outsiderAgent, _ := database.SavePersonalAgent(ctx, outsider.ID, "", db.AgentProfileInput{Name: "Stranger", Enabled: true})

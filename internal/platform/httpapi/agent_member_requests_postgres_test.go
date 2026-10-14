@@ -62,7 +62,7 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	exec(`INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,'member')`, space.ID, bob.ID)
-	bobAgent, _ := database.SavePersonalAgent(ctx, bob.ID, "", db.AgentProfileInput{Name: "Researcher", Enabled: true})
+	bobAgent, _ := database.SavePersonalAgent(ctx, bob.ID, "", db.AgentProfileInput{Name: "Researcher", Enabled: true, SpaceID: space.ID})
 	aliceAgent, _ := database.SavePersonalAgent(ctx, alice.ID, "", db.AgentProfileInput{Name: "Planner", Enabled: true})
 	aliceRun, err := database.CreateCreatorAgentRun(ctx, alice.ID, "", aliceAgent.ID, db.CreatorAgentRunInput{Instruction: "Plan the launch"})
 	if err != nil {
@@ -103,7 +103,7 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The delegated run gets only Space tools, and Bob pays for its work.
+	// The delegated run gets only Space tools, and Alice pays for the work she asked for.
 	exec(`UPDATE space_runs SET state='running',runtime_run_id='runtime-1' WHERE id=$1`, request.ChildRunID)
 	child, _ := database.SpaceRun(ctx, bob.ID, request.ChildRunID)
 	// The run context freezes Bob's own model routes when the work starts.
@@ -128,16 +128,16 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 	if err := service.settlePersonalAgentRuntimeUsage(ctx, child, "success", json.RawMessage(`{}`)); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(meter.reserved, []string{bob.ID}) || !slices.Equal(meter.completed, []string{bob.ID}) || !slices.Equal(meter.commands, []string{"agent-runtime:" + child.ID}) {
-		t.Fatalf("billing reserved=%v completed=%v commands=%v; want the agent's owner", meter.reserved, meter.completed, meter.commands)
+	if !slices.Equal(meter.reserved, []string{alice.ID}) || !slices.Equal(meter.completed, []string{alice.ID}) || !slices.Equal(meter.commands, []string{"agent-runtime:" + child.ID}) {
+		t.Fatalf("billing reserved=%v completed=%v commands=%v; want the member who asked", meter.reserved, meter.completed, meter.commands)
 	}
 
-	// Unpublishing stops the work at its next tool call.
+	// Turning requests off stops the work at its next tool call.
 	if err := database.DeleteSpaceAgentListing(ctx, bob.ID, space.ID, bobAgent.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := childToolbox.Execute(ctx, childInvocation, agent.ToolRequest{ID: "c1", Name: "notes.search", Arguments: json.RawMessage(`{"query":"launch"}`)}, authorize); err == nil {
-		t.Fatal("unpublished agent kept working")
+		t.Fatal("agent kept working after requests were turned off")
 	}
 
 	// The requester reads the finished reply.

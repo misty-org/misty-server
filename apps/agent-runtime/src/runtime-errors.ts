@@ -70,6 +70,17 @@ export function classifyRuntimeError(error: unknown): { code: string; message: s
       message: "Misty's AI provider has no available credit. The server administrator needs to add credit or configure another provider.",
     };
   }
+  if (
+    normalized.includes("api key has been invalidated") ||
+    normalized.includes("invalid api key") ||
+    normalized.includes("incorrect api key") ||
+    normalized.includes("invalid_api_key")
+  ) {
+    return {
+      code: "model_provider_key_invalid",
+      message: "Misty's AI provider rejected its API key. The server administrator needs to replace the key.",
+    };
+  }
   if (normalized.includes("gatewayinternalservererror") || normalized.includes("service temporarily unavailable")) {
     return { code: "model_gateway_unavailable", message: "Misty's model providers are temporarily unavailable. Please try again shortly." };
   }

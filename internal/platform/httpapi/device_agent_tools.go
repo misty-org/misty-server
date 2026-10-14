@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -30,14 +29,6 @@ const (
 // deviceGrant is one attached device context the tools can reach.
 type deviceGrant struct{ scopeID, name, deviceID, deviceName string }
 
-// deviceInbox is a device in this chat that accepts files sent over the LAN,
-// with the grant it signed for that.
-type deviceInbox struct {
-	deviceID, deviceName, scopeID string
-	grantPayload                  []byte
-	grantSignature                string
-}
-
 func (s *SpacesService) deviceToolRegistrations(ctx context.Context, record *db.AIInvocationRecord) []agenttools.Registration {
 	if record == nil || s.database == nil {
 		return nil
@@ -52,24 +43,26 @@ func (s *SpacesService) deviceToolRegistrations(ctx context.Context, record *db.
 			names[device.ID] = device.Name
 		}
 	}
-	folders, workspaces, inboxes := []deviceGrant{}, []deviceGrant{}, []deviceInbox{}
+	folders, projects, workspaces := []deviceGrant{}, []deviceGrant{}, []deviceGrant{}
 	for _, item := range contexts {
 		grant := deviceGrant{scopeID: item.OpaqueRef, name: item.DisplayName, deviceID: item.DeviceID, deviceName: names[item.DeviceID]}
 		switch item.Kind {
 		case "local_folder":
 			folders = append(folders, grant)
+		case "project_folder":
+			// A project also reads documents (PDFs, sheets) through the folder tools.
+			projects = append(projects, grant)
+			folders = append(folders, grant)
 		case "workspace":
 			workspaces = append(workspaces, grant)
-		case "inbox":
-			payload, signature, grantErr := s.database.AIInvocationContextGrant(ctx, record.UserID, item.ID)
-			if grantErr == nil && len(payload) > 0 {
-				inboxes = append(inboxes, deviceInbox{deviceID: item.DeviceID, deviceName: names[item.DeviceID], scopeID: item.OpaqueRef, grantPayload: payload, grantSignature: signature})
-			}
 		}
 	}
 	registrations := []agenttools.Registration{}
 	if len(folders) > 0 {
-		registrations = append(registrations, s.folderToolRegistrations(folders, inboxes)...)
+		registrations = append(registrations, s.folderToolRegistrations(folders)...)
+	}
+	if len(projects) > 0 {
+		registrations = append(registrations, s.projectToolRegistrations(projects)...)
 	}
 	if len(workspaces) > 0 {
 		registrations = append(registrations, s.workspaceToolRegistrations(workspaces)...)
@@ -92,7 +85,7 @@ func folderLabel(folder deviceGrant) string {
 	return folder.name + " (" + folder.deviceName + ")"
 }
 
-func (s *SpacesService) folderToolRegistrations(folders []deviceGrant, inboxes []deviceInbox) []agenttools.Registration {
+func (s *SpacesService) folderToolRegistrations(folders []deviceGrant) []agenttools.Registration {
 	names := make([]string, 0, len(folders))
 	for _, folder := range folders {
 		names = append(names, folderLabel(folder))
@@ -146,21 +139,12 @@ func (s *SpacesService) folderToolRegistrations(folders []deviceGrant, inboxes [
 		arguments := TestingMustAPIRawJSON(map[string]any{"scopeId": target.scopeID, "relativePath": path})
 		return s.runDeviceTool(ctx, invocation, request.ID, target.scopeID, request.Name, arguments)
 	}
-	registrations := []agenttools.Registration{{Descriptor: list, Handler: handler}, {Descriptor: read, Handler: handler}}
-	if len(inboxes) == 0 {
-		return registrations
-	}
-	destinations := make([]string, 0, len(inboxes))
-	for _, inbox := range inboxes {
-		destinations = append(destinations, inbox.deviceName)
-	}
-	send := deviceToolDescriptor(filesSendTool, "Send one file from a shared folder to another of the user's computers on the same local network. The file goes directly between the computers and lands in Misty's downloads there; only a receipt comes back.",
+	send := deviceToolDescriptor(filesSendTool, "Save one file from a shared folder to this conversation's Space Library, where the user can open it on any of their devices. Only a receipt comes back.",
 		serveragent.RiskWrite, "device.file.sent", agentToolSchema(map[string]any{
 			"folder": folder, "path": path("File path inside the folder, from files_list."),
-			"to": map[string]any{"type": "string", "minLength": 1, "maxLength": 100, "description": "Destination computer: " + strings.Join(destinations, ", ")},
-		}, []string{"folder", "path", "to"}))
+		}, []string{"folder", "path"}))
 	sendHandler := func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
-		var input struct{ Folder, Path, To string }
+		var input struct{ Folder, Path string }
 		if json.Unmarshal(request.Arguments, &input) != nil {
 			return nil, agenttools.ErrArgumentsInvalid
 		}
@@ -172,24 +156,10 @@ func (s *SpacesService) folderToolRegistrations(folders []deviceGrant, inboxes [
 		if err != nil || path == "" {
 			return nil, serveragent.ErrInvalidRequest("name a file inside the folder")
 		}
-		var destination *deviceInbox
-		for index := range inboxes {
-			if inboxes[index].deviceID == strings.TrimSpace(input.To) || strings.EqualFold(inboxes[index].deviceName, strings.TrimSpace(input.To)) {
-				destination = &inboxes[index]
-			}
-		}
-		if destination == nil || destination.deviceID == source.deviceID {
-			return nil, serveragent.ErrInvalidRequest("send to another computer: " + strings.Join(destinations, ", "))
-		}
-		// The source device delivers over the LAN, presenting the grant the
-		// destination signed for its own inbox; the destination checks it.
-		arguments := TestingMustAPIRawJSON(map[string]any{
-			"scopeId": source.scopeID, "relativePath": path, "destinationDeviceId": destination.deviceID, "destinationScopeId": destination.scopeID,
-			"receiveGrant": map[string]string{"payload": base64.StdEncoding.EncodeToString(destination.grantPayload), "signature": destination.grantSignature},
-		})
+		arguments := TestingMustAPIRawJSON(map[string]any{"scopeId": source.scopeID, "relativePath": path})
 		return s.runDeviceTool(ctx, invocation, request.ID, source.scopeID, filesSendTool, arguments)
 	}
-	return append(registrations, agenttools.Registration{Descriptor: send, Handler: sendHandler})
+	return []agenttools.Registration{{Descriptor: list, Handler: handler}, {Descriptor: read, Handler: handler}, {Descriptor: send, Handler: sendHandler}}
 }
 
 func (s *SpacesService) workspaceToolRegistrations(workspaces []deviceGrant) []agenttools.Registration {
@@ -277,15 +247,14 @@ func (s *SpacesService) runDeviceTool(ctx context.Context, invocation agenttools
 // before any effect, so the call can be corrected or another tool used.
 func deviceToolFailure(code string) error {
 	message := map[string]string{
-		"invalid_scope":         "that path is outside the shared folder",
-		"unsupported_content":   "that file type cannot be read as text",
-		"device_unavailable":    "the user's computer is offline",
-		"device_timeout":        "the user's computer did not answer in time",
-		"invalid_url":           "use an http or https address",
-		"workspace_unavailable": "the Misty browser is not open on the user's computer",
-		"destination_unreachable": "the other computer is not on the same local network",
-		"destination_refused":   "the other computer did not accept the file",
-		"device_grant_invalid":  "the user's computer could not confirm this request",
+		"invalid_scope":            "that path is outside the shared folder",
+		"unsupported_content":      "that file type cannot be read as text",
+		"device_unavailable":       "the user's computer is offline",
+		"device_timeout":           "the user's computer did not answer in time",
+		"invalid_url":              "use an http or https address",
+		"workspace_unavailable":    "the Misty browser is not open on the user's computer",
+		"device_grant_invalid":     "the user's computer could not confirm this request",
+		"code_sandbox_unavailable": "the user's computer can't run commands safely (code projects need macOS)",
 	}[code]
 	if message == "" {
 		message = "the user's computer could not do that (" + code + ")"

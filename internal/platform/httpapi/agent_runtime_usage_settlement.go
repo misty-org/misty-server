@@ -18,11 +18,20 @@ func aiInvocationRuntimeUsageKey(invocationID string) string {
 	return "agent-runtime:" + invocationID + ":model:aggregate"
 }
 
+// runPayer is who pays for a run's model use. Work someone asked of another
+// person's agent is billed to the person who asked.
+func runPayer(run *db.SpaceRun) string {
+	if run.BillingUserID != "" {
+		return run.BillingUserID
+	}
+	return run.RequestingMemberID
+}
+
 // meterPersonalAgentRuntimeModel reserves or settles one model turn. overLimit
 // reports a turn admitted past a usage limit, so the runtime can wrap up.
 func (s *SpacesService) meterPersonalAgentRuntimeModel(ctx context.Context, run *db.SpaceRun, nodeID string, state workflowv2.StepState, raw json.RawMessage) (bool, error) {
 	if state == workflowv2.StepCompleted {
-		return false, completeRuntimeModelTurn(ctx, s.usageMeter, run.RequestingMemberID, run.ID, nodeID, raw)
+		return false, completeRuntimeModelTurn(ctx, s.usageMeter, runPayer(run), run.ID, nodeID, raw)
 	}
 	if state != workflowv2.StepRunning {
 		return false, nil
@@ -50,7 +59,7 @@ func (s *SpacesService) meterPersonalAgentRuntimeModel(ctx context.Context, run 
 	if routeErr != nil {
 		return false, routeErr
 	}
-	reservation, err := serveragent.ReserveMeasuredUsage(s.usageMeter, run.RequestingMemberID, "agent-runtime:"+run.ID+":model:"+nodeID, provider, selectedModel, runtimeAdmissionUnits(raw), commandID)
+	reservation, err := serveragent.ReserveMeasuredUsage(s.usageMeter, runPayer(run), "agent-runtime:"+run.ID+":model:"+nodeID, provider, selectedModel, runtimeAdmissionUnits(raw), commandID)
 	return reservation != nil && reservation.OverLimit, err
 }
 
@@ -61,7 +70,7 @@ func (s *SpacesService) settlePersonalAgentRuntimeUsage(ctx context.Context, run
 	if meter, ok := s.usageMeter.(interface {
 		CompleteRuntime(context.Context, string, string, serveragent.ModelUsage) error
 	}); ok {
-		return meter.CompleteRuntime(ctx, run.RequestingMemberID, run.ID, agentRuntimeModelUsage(raw))
+		return meter.CompleteRuntime(ctx, runPayer(run), run.ID, agentRuntimeModelUsage(raw))
 	}
 	membership, err := s.database.AskExecutionContext(ctx, run.RequestingMemberID, run.SpaceID, run.AgentID)
 	if err != nil {
@@ -73,7 +82,7 @@ func (s *SpacesService) settlePersonalAgentRuntimeUsage(ctx context.Context, run
 		model = serveragent.InitialSelectedModelID
 	}
 	key := personalAgentRuntimeUsageKey(run.ID)
-	reservation, err := serveragent.ReserveUsage(s.usageMeter, run.RequestingMemberID, run.SpaceID, key, db.CreditMeterAgentAI, agentRuntimeUsageProvider(), model, 0, serveragent.MaxModelOutputTokens)
+	reservation, err := serveragent.ReserveUsage(s.usageMeter, runPayer(run), run.SpaceID, key, db.CreditMeterAgentAI, agentRuntimeUsageProvider(), model, 0, serveragent.MaxModelOutputTokens)
 	if err != nil {
 		if status == "failed" {
 			return nil

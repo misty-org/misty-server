@@ -162,6 +162,10 @@ type gatewayCatalogItem struct {
 	Tags          []string        `json:"tags"`
 	Capabilities  json.RawMessage `json:"capabilities"`
 	ContextWindow int             `json:"context_window"`
+	Pricing       *struct {
+		Input  string `json:"input"`
+		Output string `json:"output"`
+	} `json:"pricing"`
 }
 
 func TestingFetchGatewayModels(ctx context.Context) ([]GatewayModel, error) {

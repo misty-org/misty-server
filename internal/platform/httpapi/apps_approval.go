@@ -15,14 +15,15 @@ import (
 )
 
 // appsApproval waits for the user's decision on one exact action when the
-// account asks first. It returns the approval to consume, or a result that
-// tells the model the card is still waiting.
+// account asks first, or asks before paying and this action pays. It returns
+// the approval to consume, or a result that tells the model the card is still
+// waiting.
 func (s *SpacesService) appsApproval(ctx context.Context, invocation agenttools.Invocation, info composio.ToolInfo, call appsCall) (*db.AgentAppRequest, json.RawMessage, error) {
 	settings, _, err := s.database.AISettings(ctx, invocation.UserID)
 	if err != nil {
 		return nil, nil, err
 	}
-	if !settings.AppActionsAsk {
+	if !settings.AppActionsAsk && !(settings.PaymentsAsk && appsPaymentAction(info.Slug)) {
 		return nil, nil, nil
 	}
 	title, summary := appsActionSummary(info, call)
@@ -58,6 +59,22 @@ func (s *SpacesService) appsApproval(ctx context.Context, invocation agenttools.
 		return nil, nil, serveragent.ErrInvalidRequest("The user declined “" + title + "”. Do not retry it; continue without it or ask the user.")
 	}
 	return nil, nil, serveragent.ErrInvalidRequest("The approval request expired. Call apps_execute again to ask the user again.")
+}
+
+// appsPaymentWords mark an app action that moves money, by the words of its
+// slug (STRIPE_CREATE_PAYMENT_INTENT, SQUARE_CREATE_ORDER_CHECKOUT).
+var appsPaymentWords = map[string]bool{
+	"PAY": true, "PAYMENT": true, "PAYMENTS": true, "CHARGE": true, "PURCHASE": true, "BUY": true,
+	"CHECKOUT": true, "TRANSFER": true, "PAYOUT": true, "REFUND": true, "CAPTURE": true,
+}
+
+func appsPaymentAction(slug string) bool {
+	for _, word := range strings.Split(strings.ToUpper(slug), "_") {
+		if appsPaymentWords[word] {
+			return true
+		}
+	}
+	return false
 }
 
 // appsActionSummary is the approval card: the app and action, then the exact

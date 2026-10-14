@@ -66,7 +66,8 @@ func TestBrowserEvalCatalogIsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v (regenerate with MISTY_WRITE_BROWSER_EVAL_CATALOG=1)", browserEvalCatalogPath, err)
 	}
-	if !bytes.Equal(got, want) {
+	// A Windows checkout may store the catalog with CRLF line endings.
+	if !bytes.Equal(bytes.ReplaceAll(got, []byte("\r\n"), []byte("\n")), want) {
 		t.Fatal("the browser eval catalog is stale; regenerate it with MISTY_WRITE_BROWSER_EVAL_CATALOG=1")
 	}
 }

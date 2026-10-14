@@ -116,7 +116,7 @@ func getBillingUsage(database *db.Database, includeStorage bool) http.HandlerFun
 		}
 		ai, _ := summary["ai"].(map[string]any)
 		percentage, _ := ai["percentage_used"].(float64)
-		personal := map[string]any{"ai": ai, "sync": summary["sync"]}
+		personal := map[string]any{"ai": ai}
 		response := map[string]any{"enabled": database.BillingService().Adapter.Enabled(), "plan": summary["tier"], "personal": personal, "account": personal, "entitlements": summary["entitlements"], "billing": summary["billing"], "agent_usage": map[string]any{"percentage_used": percentage, "unit": ai["unit"], "used": ai["used"], "reserved": ai["reserved"], "limit": ai["limit"], "remaining": ai["remaining"], "available": ai["available"], "paused": ai["paused"], "reset_at": ai["reset_at"], "plan": summary["tier"]}}
 		if !includeStorage {
 			writeJSON(w, http.StatusOK, response)

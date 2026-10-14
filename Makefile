@@ -43,7 +43,7 @@ vet: ## go vet
 	go vet ./...
 
 sizes: ## Enforce the 500-line file cap
-	./scripts/check-go-file-sizes.sh
+	misty check go-sizes
 
 migrate: ## Apply database migrations
 	./scripts/goose.sh up

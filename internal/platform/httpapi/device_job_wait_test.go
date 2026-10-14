@@ -67,7 +67,7 @@ func TestDeviceJobWaitDoesNotPollAndWakesOnlyForItsJob(t *testing.T) {
 	}()
 	<-ready
 	s.events <- db.AccountEvent{Topic: "job-state", ID: "different"}
-	s.events <- db.AccountEvent{Topic: "settings-profiles"}
+	s.events <- db.AccountEvent{Topic: "runs"}
 	time.Sleep(300 * time.Millisecond)
 	if reads.Load() != 1 {
 		t.Fatalf("idle/unrelated event performed %d reads", reads.Load())

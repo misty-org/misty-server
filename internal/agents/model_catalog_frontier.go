@@ -135,13 +135,30 @@ func gatewayCapabilitiesInclude(capabilities []string, values ...string) bool {
 
 func frontierProvider(modelID string) (string, string) {
 	provider, _, _ := strings.Cut(modelID, "/")
-	names := map[string]string{
-		"openai": "OpenAI", "anthropic": "Anthropic", "google": "Google",
-		"openai-compatible": "OpenAI-compatible",
-		"spacexai":          "xAI", "deepseek": "DeepSeek", "alibaba": "Qwen",
-	}
-	if name := names[provider]; name != "" {
+	if name := providerNames[provider]; name != "" {
 		return provider, name
 	}
-	return provider, strings.ToUpper(provider)
+	// Unlisted makers read as a name, never an all-caps slug.
+	words := strings.Fields(strings.ReplaceAll(provider, "-", " "))
+	for i, word := range words {
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return provider, strings.Join(words, " ")
+}
+
+// providerNames spells each Gateway maker the way the company writes it,
+// never in all caps.
+var providerNames = map[string]string{
+	"alibaba": "Qwen", "amazon": "Amazon", "anthropic": "Anthropic",
+	"arcee-ai": "Arcee", "bytedance": "ByteDance", "callstack": "Callstack",
+	"cohere": "Cohere", "deepseek": "DeepSeek", "fireworks": "Fireworks",
+	"fish-audio": "Fish Audio", "google": "Google", "inception": "Inception",
+	"inclusionai": "InclusionAI", "interfaze": "Interfaze", "meituan": "Meituan",
+	"meta": "Meta", "microsoft": "Microsoft", "minimax": "MiniMax",
+	"mistral": "Mistral", "mixedbread": "Mixedbread", "moonshotai": "Moonshot AI",
+	"nvidia": "Nvidia", "openai": "OpenAI", "openai-compatible": "OpenAI-compatible",
+	"perplexity": "Perplexity", "poolside": "Poolside", "quiverai": "QuiverAI",
+	"sakana": "Sakana AI", "spacexai": "xAI", "stealth": "Stealth",
+	"stepfun": "StepFun", "tencent": "Tencent", "thinkingmachines": "Thinking Machines",
+	"xiaomi": "Xiaomi", "zai": "Z.ai",
 }

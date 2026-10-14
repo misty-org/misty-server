@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +19,6 @@ type fixtureVoiceProvider struct {
 	once          sync.Once
 	limitOverride int
 }
-
 
 func (p *fixtureVoiceProvider) Configure() error { return nil }
 func (p *fixtureVoiceProvider) SetOutputLimit(tokens int) error {
@@ -54,11 +52,8 @@ type voiceSettlement struct {
 type voiceFixture struct {
 	client   *websocket.Conn
 	provider *fixtureVoiceProvider
-	settled  chan voiceSettlement
-	states   chan string
 	finished chan struct{}
 }
-
 
 func (f *voiceFixture) read(t *testing.T) map[string]any {
 	t.Helper()
@@ -69,52 +64,11 @@ func (f *voiceFixture) read(t *testing.T) map[string]any {
 	}
 	return event
 }
-func (f *voiceFixture) send(t *testing.T, event voiceClientEvent) {
-	t.Helper()
-	if err := f.client.WriteJSON(event); err != nil {
-		t.Fatal(err)
-	}
-}
-func (f *voiceFixture) committed(t *testing.T) {
-	t.Helper()
-	f.send(t, voiceClientEvent{Type: "audio.append", Audio: base64.StdEncoding.EncodeToString(make([]byte, 7200))})
-	f.send(t, voiceClientEvent{Type: "audio.commit"})
-	for _, expected := range []string{"input-audio-append", "input-audio-commit"} {
-		select {
-		case e := <-f.provider.sent:
-			if e["type"] != expected {
-				t.Fatal(e)
-			}
-		case <-time.After(3 * time.Second):
-			t.Fatal("missing provider input")
-		}
-	}
-	f.provider.events <- agent.VoiceRealtimeEvent{Type: "audio-committed", ItemID: "audio1"}
-}
+
 func (f *voiceFixture) transcript() {
 	f.provider.events <- agent.VoiceRealtimeEvent{Type: "input-transcription-completed", ItemID: "audio1", Transcript: "What is the label?", Raw: json.RawMessage(`{"usage":{"type":"tokens","input_tokens":15,"output_tokens":10}}`)}
 }
-func (f *voiceFixture) respond(t *testing.T) {
-	t.Helper()
-	f.send(t, voiceClientEvent{Type: "reply", InvocationID: "owned-completed"})
-	for _, expected := range []string{"conversation-item-create", "response-create"} {
-		select {
-		case e := <-f.provider.sent:
-			if e["type"] != expected {
-				t.Fatal(e)
-			}
-		case <-time.After(3 * time.Second):
-			t.Fatal("missing reply")
-		}
-	}
-	f.provider.events <- agent.VoiceRealtimeEvent{Type: "response-created", ResponseID: "reply1"}
-}
+
 func (f *voiceFixture) responseDone(status string) {
 	f.provider.events <- agent.VoiceRealtimeEvent{Type: "response-done", ResponseID: "reply1", Status: status, Raw: json.RawMessage(`{"response":{"usage":{"input_tokens":15,"output_tokens":10,"input_token_details":{"text_tokens":10,"audio_tokens":5,"cached_tokens":0},"output_token_details":{"text_tokens":4,"audio_tokens":6}}}}`)}
 }
-
-
-
-
-
-

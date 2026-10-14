@@ -61,8 +61,8 @@ func (s *AIService) Settings() http.HandlerFunc {
 	}
 }
 
-// AppActionsSetting changes only whether agents ask before sends, shares,
-// deletes and payments in connected apps.
+// AppActionsSetting changes only whether agents ask before acting for the
+// person (ask) and before paying (payments).
 func (s *AIService) AppActionsSetting() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
@@ -70,16 +70,17 @@ func (s *AIService) AppActionsSetting() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Ask *bool `json:"ask"`
+			Ask      *bool `json:"ask"`
+			Payments *bool `json:"payments"`
 		}
 		if decodeAIJSON(w, r, &body) != nil {
 			return
 		}
-		if body.Ask == nil {
+		if body.Ask == nil && body.Payments == nil {
 			TestingWriteAIError(w, db.ErrSpaceInvalid)
 			return
 		}
-		if err := s.database.SetAIAppActionsAsk(r.Context(), userID, *body.Ask); err != nil {
+		if err := s.database.SetAIAppActionsAsk(r.Context(), userID, body.Ask, body.Payments); err != nil {
 			TestingWriteAIError(w, err)
 			return
 		}

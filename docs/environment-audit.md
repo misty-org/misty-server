@@ -281,7 +281,6 @@ variables and deliberate compatibility aliases are called out separately below.
 | `MISTY_DEV_API_TUNNEL_HOSTNAME` | `integrations/cloudflare.env` | `cli/src/server.rs` · `cli/src/cloudflare.rs` |
 | `MISTY_DEV_TUNNEL_HOSTNAME` | `integrations/cloudflare.env` | `cli/src/server.rs` |
 | `PARTYKIT_HOST` | `integrations/cloudflare.env` | `server/internal/app/production_environment.go` · `server/internal/platform/httpapi/journal_collab_config.go` |
-| `MISTY_CLIPBOARD_HOST` | `integrations/cloudflare.env` | `server/internal/platform/httpapi/clipboard_ticket.go` |
 | `MISTY_BILLING_ADAPTER` | `integrations/billing.env` | `server/internal/app/health.go` · `server/internal/platform/config/billing.go` |
 | `MISTY_BILLING_URL` | `integrations/billing.env` | `server/internal/app/health.go` · `server/internal/platform/config/billing.go` |
 | `MISTY_BILLING_SECRET` | `integrations/billing.env` | `server/internal/app/health.go` · `server/internal/platform/config/billing.go` |
@@ -308,9 +307,6 @@ variables and deliberate compatibility aliases are called out separately below.
 | `JOURNAL_COLLAB_ROOM_SALT` | `crypto/journal.env` | `server/internal/platform/httpapi/journal_collab_config.go` |
 | `JOURNAL_COLLAB_TICKET_PRIVATE_KEY` | `crypto/journal.env` | `server/internal/app/production_environment.go` · `server/internal/platform/httpapi/journal_collab_config.go` |
 | `JOURNAL_COLLAB_TICKET_PUBLIC_KEY` | `crypto/journal.env` | `server/apps/journal-collab/src/document-room.ts` |
-| `CLIPBOARD_ROOM_SALT` | `crypto/clipboard.env` | `server/internal/platform/httpapi/clipboard_ticket.go` |
-| `CLIPBOARD_TICKET_PRIVATE_KEY` | `crypto/clipboard.env` | `server/internal/platform/httpapi/clipboard_ticket.go` |
-| `CLIPBOARD_TICKET_PUBLIC_KEY` | `crypto/clipboard.env` | `server/apps/clipboard/src/index.ts` |
 | `MISTY_DEVICE_PAIRING_PEPPER` | `crypto/devices.env` | `server/internal/app/server_mount_drawing_routes.go` · `server/internal/platform/httpapi/connected_devices_config.go` |
 | `MISTY_DEVICE_TICKET_PREVIOUS_PUBLIC_KEYS` | `crypto/devices.env` | `server/internal/platform/httpapi/connected_devices_config.go` |
 | `MISTY_DEVICE_TICKET_PRIVATE_KEY` | `crypto/devices.env` | `server/internal/app/server_mount_drawing_routes.go` · `server/internal/platform/httpapi/connected_devices_config.go` |

@@ -14,6 +14,8 @@ type SenseModel struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Provider string `json:"provider"`
+	// PaidOnly marks a model the account's plan cannot use (set by the API).
+	PaidOnly bool `json:"paid_only,omitempty"`
 }
 
 var senseCatalogCache struct {
@@ -32,7 +34,9 @@ func SenseModels(ctx context.Context, kind string) ([]SenseModel, error) {
 	}
 	out := []SenseModel{}
 	for _, item := range items {
-		if !senseFits(kind, item) {
+		// Billing charges the Gateway's published price; a model without one
+		// could never be admitted, so it is never offered.
+		if !senseFits(kind, item) || item.Pricing == nil || strings.TrimSpace(item.Pricing.Input) == "" && strings.TrimSpace(item.Pricing.Output) == "" && item.Type == "language" {
 			continue
 		}
 		_, provider := frontierProvider(item.ID)

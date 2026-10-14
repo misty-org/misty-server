@@ -15,7 +15,34 @@ func (u RealtimeVoiceUsage) Add(other RealtimeVoiceUsage) {
 	}
 }
 
+// pipelineUsageKeys are the counters the voice pipeline reports: speech-to-text audio
+// milliseconds, text-model tokens and speech characters.
+var pipelineUsageKeys = map[string]bool{"stt_ms": true, "input_tokens": true, "output_tokens": true, "tts_characters": true}
+
+// voicePipelineUsage reads the pipeline's counters, if raw carries them.
+func voicePipelineUsage(raw json.RawMessage) (RealtimeVoiceUsage, bool, error) {
+	var event struct {
+		Usage map[string]int64 `json:"misty_pipeline_usage"`
+	}
+	if json.Unmarshal(raw, &event) != nil || event.Usage == nil {
+		return nil, false, nil
+	}
+	units := RealtimeVoiceUsage{}
+	for key, value := range event.Usage {
+		if !pipelineUsageKeys[key] || value < 0 || value > 10_000_000 {
+			return nil, true, errors.New("invalid voice pipeline usage")
+		}
+		if value > 0 {
+			units[key] = value
+		}
+	}
+	return units, true, nil
+}
+
 func RealtimeResponseUsage(raw json.RawMessage) (RealtimeVoiceUsage, error) {
+	if units, ok, err := voicePipelineUsage(raw); ok {
+		return units, err
+	}
 	var event struct {
 		Response struct {
 			Usage *struct {
@@ -63,6 +90,9 @@ func RealtimeResponseUsage(raw json.RawMessage) (RealtimeVoiceUsage, error) {
 }
 
 func RealtimeTranscriptionUsage(raw json.RawMessage) (RealtimeVoiceUsage, error) {
+	if units, ok, err := voicePipelineUsage(raw); ok {
+		return units, err
+	}
 	var event struct {
 		Usage *struct {
 			Type   string `json:"type"`

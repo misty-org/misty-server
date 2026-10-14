@@ -3,14 +3,11 @@ package db
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 	"time"
+
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestAIConversationTurnsExposeOriginalPromptAndDurableOutcome(t *testing.T) {
 	database := openTestDatabase(t)
@@ -60,22 +57,4 @@ func TestAIConversationTurnsExposeOriginalPromptAndDurableOutcome(t *testing.T) 
 	if err != nil || len(otherTurns) != 0 {
 		t.Fatalf("companion history crossed accounts: %#v, %v", otherTurns, err)
 	}
-}
-
-func containsAISource(hits []AIRetrievalHit, sourceID string) bool {
-	for _, hit := range hits {
-		if hit.SourceID == sourceID {
-			return true
-		}
-	}
-	return false
-}
-
-func containsAIText(hits []AIRetrievalHit, value string) bool {
-	for _, hit := range hits {
-		if strings.Contains(hit.Content, value) {
-			return true
-		}
-	}
-	return false
 }

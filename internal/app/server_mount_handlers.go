@@ -14,10 +14,53 @@ import (
 	"github.com/kannachi323/misty/server/internal/platform/metrics"
 )
 
+// mountDeps holds the services and handlers that MountHandlers builds once and
+// then wires into every public route prefix.
+type mountDeps struct {
+	health         http.HandlerFunc
+	instance       http.HandlerFunc
+	register       http.HandlerFunc
+	login          http.HandlerFunc
+	logout         http.HandlerFunc
+	forgotPassword http.HandlerFunc
+	startReset     http.HandlerFunc
+	validateReset  http.HandlerFunc
+	resetPassword  http.HandlerFunc
+	mintHandoff    http.HandlerFunc
+	startHandoff   http.HandlerFunc
+
+	verification *api.AccountVerification
+	googleSignIn *api.GoogleSignInService
+	browserSync  *browsersync.BrowserSyncService
+	ai           *api.AIService
+	smartLibrary *api.SmartLibraryService
+	mediaSearch  *api.MediaSearchService
+	agents       *api.AgentsService
+}
+
 func (s *Server) MountHandlers() error {
 	if _, err := security.SessionSignerFromEnv(); err != nil {
 		return err
 	}
+	s.mountRequestMiddleware()
+
+	deps, err := s.buildMountDeps()
+	if err != nil {
+		return err
+	}
+
+	// /v1 is the canonical contract. The bare and /api trees remain available
+	// for existing desktop releases.
+	for _, prefix := range []string{"", "/api", "/v1"} {
+		s.mountPublicRoutes(prefix, deps)
+	}
+	s.mountOperationalRoutes()
+
+	return nil
+}
+
+// mountRequestMiddleware installs the router-wide middleware stack.
+func (s *Server) mountRequestMiddleware() {
 	s.Router.Use(cors.Handler(cors.Options{
 		AllowOriginFunc:  func(_ *http.Request, origin string) bool { return TestingIsAllowedCORSOrigin(origin) },
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -45,15 +88,32 @@ func (s *Server) MountHandlers() error {
 	s.Metrics = metrics.New()
 	s.registerDomainGauges(s.Metrics)
 	s.Router.Use(s.Metrics.Middleware)
+}
 
+// buildMountDeps constructs the services and handlers in the order the route
+// table has always depended on.
+func (s *Server) buildMountDeps() (*mountDeps, error) {
 	passwordResetService, err := api.NewPasswordResetService(s.Database, s.EmailSender, s.PasswordResetStartURL, s.PasswordResetRedirectURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	authHandoffService, err := api.NewAuthHandoffService(s.Database, s.AuthHandoffStartURL, s.WebsiteURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	deps := &mountDeps{}
+	if err := s.wireAIServices(deps); err != nil {
+		return nil, err
+	}
+	if err := s.wireAccountHandlers(deps, passwordResetService, authHandoffService); err != nil {
+		return nil, err
+	}
+	s.wireBrowserSync(deps)
+	return deps, nil
+}
+
+// wireAIServices builds the AI, library search, and agents services.
+func (s *Server) wireAIServices(deps *mountDeps) error {
 	aiService := api.NewAIService(s.Database, s.AIAgent)
 	s.AI = aiService
 	aiService.SetAgentRuntime(s.AgentRuntime)
@@ -77,6 +137,16 @@ func (s *Server) MountHandlers() error {
 		}
 		agentsService.SetConnectedDevices(connectedDevicesConfig)
 	}
+	deps.ai = aiService
+	deps.smartLibrary = smartLibraryService
+	deps.mediaSearch = mediaSearchService
+	deps.agents = agentsService
+	return nil
+}
+
+// wireAccountHandlers builds the verification, sign-in, password reset, and
+// handoff handlers, plus the health and instance handlers.
+func (s *Server) wireAccountHandlers(deps *mountDeps, passwordResetService *api.PasswordResetService, authHandoffService *api.AuthHandoffService) error {
 	verification := api.NewAccountVerification(s.Database, s.EmailSender)
 	s.Database.BillingService().Gate = verification.Gate
 	registerHandler := api.RegisterWithVerification(s.Database, s.Telemetry, verification)
@@ -95,103 +165,35 @@ func (s *Server) MountHandlers() error {
 	startHandoffHandler := authHandoffService.Start()
 	healthHandler := s.HealthMonitor.Handler()
 	instanceHandler := api.Instance(s.Database)
+
+	deps.verification = verification
+	deps.googleSignIn = googleSignIn
+	deps.register = registerHandler
+	deps.login = loginHandler
+	deps.logout = logoutHandler
+	deps.forgotPassword = forgotPasswordHandler
+	deps.startReset = startResetHandler
+	deps.validateReset = validateResetTokenHandler
+	deps.resetPassword = resetPasswordHandler
+	deps.mintHandoff = mintHandoffHandler
+	deps.startHandoff = startHandoffHandler
+	deps.health = healthHandler
+	deps.instance = instanceHandler
+	return nil
+}
+
+// wireBrowserSync builds the browser sync service and points its restore step
+// at the AI agent when one is configured.
+func (s *Server) wireBrowserSync(deps *mountDeps) {
 	browserSync := browsersync.NewBrowserSyncService(s.Database)
 	s.BrowserSync = browserSync
+	deps.browserSync = browserSync
 	if s.AIAgent != nil {
 		browserSync.SetRestoreCompleter(func(ctx context.Context, userID, prompt string) (string, error) {
 			text, _, err := s.AIAgent.CompleteWithTierContext(ctx, userID, prompt, "assistant_ai", serveragent.TierLow)
 			return text, err
 		})
 	}
-	mountPublicRoutes := func(prefix string) {
-		s.Router.Get(prefix+"/health", healthHandler)
-		s.Router.Get(prefix+"/instance", instanceHandler)
-		s.Router.Post(prefix+"/register", registerHandler)
-		s.Router.Post(prefix+"/login", loginHandler)
-		s.Router.Get(prefix+"/auth/google", googleSignIn.Available())
-		s.Router.Post(prefix+"/auth/google", googleSignIn.Begin())
-		s.Router.Get(prefix+"/auth/google/start", googleSignIn.Start())
-		s.Router.Get(prefix+"/auth/google/callback", googleSignIn.Callback())
-		s.Router.Post(prefix+"/auth/google/complete", googleSignIn.Complete())
-		s.Router.Post(prefix+"/logout", logoutHandler)
-		s.Router.Post(prefix+"/auth/refresh", api.RefreshSession(s.Database))
-		s.Router.Post(prefix+"/auth/forgot", forgotPasswordHandler)
-		s.Router.Get(prefix+"/auth/reset/start", startResetHandler)
-		s.Router.Get(prefix+"/auth/reset/validate", validateResetTokenHandler)
-		s.Router.Post(prefix+"/auth/reset", resetPasswordHandler)
-		s.Router.Get(prefix+"/auth/verify/start", verification.Verify())
-		s.Router.Post(prefix+"/auth/handoff", mintHandoffHandler)
-		s.Router.Get(prefix+"/auth/handoff/start", startHandoffHandler)
-		s.Router.Get(prefix+"/me", api.GetMe(s.Database))
-		s.Router.Post(prefix+"/me/email/verify", verification.Resend())
-		s.Router.Get(prefix+"/me/referral", verification.Referral())
-		s.Router.Post(prefix+"/me/referral/claim", verification.ClaimReferral())
-		s.Router.Get(prefix+"/me/library-lock", api.LibraryLockPassword(s.Database))
-		s.Router.Post(prefix+"/me/library-lock", api.LibraryLockPassword(s.Database))
-		s.Router.Get(prefix+"/sync/vault", browserSync.Vault())
-		s.Router.Post(prefix+"/sync/vault", browserSync.Vault())
-		s.Router.Get(prefix+"/sync/devices", browserSync.Devices())
-		s.Router.Post(prefix+"/sync/devices", browserSync.Devices())
-		s.Router.Post(prefix+"/sync/control", browserSync.ControlDevice())
-		s.Router.Post(prefix+"/sync/ticket", browserSync.Ticket())
-		s.Router.Get(prefix+"/sync/ws", browserSync.Connect())
-		s.Router.Post(prefix+"/sync/restore/step", browserSync.RestoreStep())
-		s.Router.Put(prefix+"/me/profile", api.UpdateProfile(s.Database))
-		s.Router.Post(prefix+"/me/export", s.Spaces.AccountExportManifest())
-		s.Router.Post(prefix+"/me/deletion", s.Spaces.BeginAccountDeletion())
-		s.Router.MethodFunc(http.MethodGet, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
-		s.Router.MethodFunc(http.MethodPut, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
-		s.Router.Put(prefix+"/me/device", api.UpdateDevice(s.Database))
-		s.Router.Get(prefix+"/me/settings", api.GetSettings(s.Database))
-		s.Router.Put(prefix+"/me/settings", api.UpdateSettings(s.Database))
-		s.Router.Get(prefix+"/me/space-templates", api.PersonalSpaceTemplates(s.Database))
-		s.Router.Post(prefix+"/me/space-templates", api.PersonalSpaceTemplates(s.Database))
-		s.Router.Put(prefix+"/me/space-templates/{templateID}", api.PersonalSpaceTemplates(s.Database))
-		s.Router.Delete(prefix+"/me/space-templates/{templateID}", api.PersonalSpaceTemplates(s.Database))
-		s.Router.Get(prefix+"/me/space-people", api.SpacePeople(s.Database))
-		s.Router.Get(prefix+"/me/agent-interventions", s.Spaces.AIUserInterventionControl())
-		s.Router.Post(prefix+"/me/agent-interventions/{waitID}", s.Spaces.AIUserInterventionControl())
-
-		s.Router.Put(prefix+"/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
-		s.Router.Post(prefix+"/billing/checkout-session", api.CreateCheckoutSession(s.Database))
-		s.Router.Post(prefix+"/billing/portal-session", api.CreatePortalSession(s.Database))
-		s.Router.Get(prefix+"/billing/usage", api.GetBillingUsage(s.Database))
-		s.Router.Post(prefix+"/billing/estimate", api.EstimateAIUsage(s.Database))
-		s.mountAIRoutes(prefix+"/ai", aiService)
-		s.mountMistyRoutes(prefix, aiService)
-		s.mountSmartLibraryRoutes(prefix+"/ai/smart-library", smartLibraryService)
-		s.mountMediaSearchRoutes(prefix+"/ai/media-search", mediaSearchService)
-		s.mountAgentsRoutes(prefix, agentsService)
-		s.mountSpacesRoutes(prefix, s.Spaces, s.Realtime)
-		if s.Library != nil {
-			s.mountLibraryRoutes(prefix, s.Library)
-		}
-	}
-
-	// /v1 is the canonical contract. The bare and /api trees remain available
-	// for existing desktop releases.
-	for _, prefix := range []string{"", "/api", "/v1"} {
-		mountPublicRoutes(prefix)
-	}
-
-	// Unmounted entirely when no token is configured: the output names every
-	// route, its traffic volume, and its error rate.
-	if token := metricsToken(); token != "" {
-		s.Router.Get("/metrics", s.Metrics.Handler(token))
-	}
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/activate", s.Spaces.AgentRuntimeActivate())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/start-receipt", s.Spaces.AgentRuntimeStartReceipt())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/budget", s.Spaces.AgentRuntimeExecutionBudget())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/steering", s.Spaces.AgentRuntimeSteering())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/context", s.Spaces.AgentRuntimeContext())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/model-provider", s.Spaces.AgentRuntimeModelProvider())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/mcp-token", s.Spaces.AgentRuntimeMCPAccess())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/tools", s.Spaces.AgentRuntimeTool())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/events", s.Spaces.AgentRuntimeEvent())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/complete", s.Spaces.AgentRuntimeComplete())
-	s.Router.Post("/mcp", s.Spaces.MistyMCP().ServeHTTP)
-
-	return nil
 }
 
 func (s *Server) mountLibraryRoutes(prefix string, library *api.SpaceLibraryService) {

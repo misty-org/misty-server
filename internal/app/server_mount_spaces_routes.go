@@ -59,6 +59,7 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.Patch(prefix+"/spaces/{spaceID}/roadmaps/{roadmapID}/layout", spaces.SpaceRoadmapLayout())
 	s.Router.Get(prefix+"/spaces/{spaceID}/members", spaces.Members())
 	s.Router.Get(prefix+"/spaces/{spaceID}/agent-listings", spaces.AgentListings())
+	s.Router.Get(prefix+"/spaces/{spaceID}/agent-artifacts", spaces.AgentArtifacts())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/agent-listings/{agentID}", spaces.AgentListing())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/agent-listings/{agentID}", spaces.AgentListing())
 	s.Router.Get(prefix+"/agent-requests/{requestID}", spaces.AgentMemberRequest())
@@ -176,11 +177,11 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 	s.Router.Get(prefix+"/agent-voice/realtime", service.AgentVoiceRealtimeConnect())
 	deviceJobsEnabled := serverFeatureEnabled("MISTY_DEVICE_JOBS_ENABLED")
 	connectedDevicesEnabled := serverConnectedDevicesConfigured()
-	// Devices are always available: adding one is how sync, agents and LAN
-	// file sharing trust it.
+	// Devices are always available: adding one is how sync, agents and the
+	// shared clipboard trust it.
 	s.Router.Post(prefix+"/devices", service.RegisterDevice())
 	s.Router.Get(prefix+"/devices", service.ListDevices())
-	// One device identity for sync, agents and LAN file sharing. Trust changes
+	// One device identity for sync, agents and the shared clipboard. Trust changes
 	// carry signatures the server verifies but cannot produce.
 	s.Router.Get(prefix+"/devices/trust", service.DeviceTrust())
 	s.Router.Get(prefix+"/devices/admission-requests", service.ListAdmissionRequests())
@@ -197,11 +198,6 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 	s.Router.Put(prefix+"/devices/{deviceID}/devices/{targetID}/name", service.DeviceAuthenticated(service.RenameDevice()))
 	s.Router.Put(prefix+"/devices/{deviceID}/policy", service.DeviceAuthenticated(service.StoreDevicePolicy()))
 	s.Router.Post(prefix+"/devices/{deviceID}/remove-device", service.DeviceAuthenticated(service.RemoveDevice()))
-	// The cloud clipboard Worker accepts only tickets signed here; clips are
-	// end-to-end encrypted and never pass through this server.
-	if clipboard, err := api.ClipboardConfigFromEnv(); err == nil {
-		s.Router.Post(prefix+"/devices/{deviceID}/clipboard-ticket", service.DeviceAuthenticated(service.ClipboardTicket(clipboard)))
-	}
 	if connectedDevicesEnabled {
 		// Space peer sessions between accounts still verify server tickets.
 		s.Router.Get(prefix+"/devices/peer-ticket-keys", service.ConnectedDeviceTicketKeys())

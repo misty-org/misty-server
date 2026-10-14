@@ -15,9 +15,9 @@ import (
 )
 
 // The device channel end to end over real WebSockets: a one-use ticket and a
-// fresh device-key signature open it; presence and LAN candidates flow only
-// between added devices; a connect intent sends each device the other's
-// candidates; nothing but LAN addresses is relayed.
+// fresh device-key signature open it; presence flows only between added
+// devices; once authenticated a device only listens, so every frame it sends
+// is refused.
 
 type channelClient struct {
 	t    *testing.T
@@ -78,7 +78,17 @@ func (c *channelClient) next(kind string) map[string]any {
 	return nil
 }
 
-func TestDeviceChannelRoutesPresenceAndCandidatesOnlyBetweenAddedDevices(t *testing.T) {
+// presenceEntry checks a presence entry is exactly a device id and whether it
+// is online: no addresses, endpoints or network hints.
+func presenceEntry(t *testing.T, value any, deviceID string, online bool) {
+	t.Helper()
+	entry, _ := value.(map[string]any)
+	if len(entry) != 2 || entry["deviceId"] != deviceID || entry["online"] != online {
+		t.Fatalf("presence entry = %v, want %s online=%v", value, deviceID, online)
+	}
+}
+
+func TestDeviceChannelRoutesPresenceOnlyBetweenAddedDevices(t *testing.T) {
 	f := newDeviceFixture(t)
 	first := f.register("First")
 	second := f.register("Second")
@@ -112,7 +122,16 @@ func TestDeviceChannelRoutesPresenceAndCandidatesOnlyBetweenAddedDevices(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.next("ready")
+	ready := b.next("ready")
+	if presence, _ := ready["presence"].([]any); len(presence) != 2 {
+		t.Fatalf("ready presence = %v", ready["presence"])
+	} else {
+		presenceEntry(t, presence[0], min(first.id, second.id), true)
+		presenceEntry(t, presence[1], max(first.id, second.id), true)
+	}
+	// A learns B came online.
+	presenceEntry(t, a.next("presence.delta")["device"], second.id, true)
+
 	p, err := f.openChannel(server, pending, pending.key)
 	if err != nil {
 		t.Fatal(err)
@@ -121,47 +140,31 @@ func TestDeviceChannelRoutesPresenceAndCandidatesOnlyBetweenAddedDevices(t *test
 		t.Fatalf("a pending device saw presence: %v", ready)
 	}
 
-	// B's addresses: only LAN candidates survive, and they are not broadcast.
-	if err := b.conn.WriteJSON(map[string]any{"type": "address", "candidates": []string{"192.168.1.20:4040", "8.8.8.8:53", "127.0.0.1:9"}}); err != nil {
-		t.Fatal(err)
+	// Devices only listen: LAN addresses, connect intents and any other frame
+	// are refused, from added and pending devices alike.
+	for _, frame := range []map[string]any{
+		{"type": "address", "candidates": []string{"192.168.1.20:4040"}},
+		{"type": "connect", "deviceId": first.id},
+		{"type": "authenticate", "signature": "x"},
+		{"type": "ping"},
+	} {
+		if err := b.conn.WriteJSON(frame); err != nil {
+			t.Fatal(err)
+		}
+		if reply := b.next("error"); reply["code"] != "invalid_device_frame" {
+			t.Fatalf("%v answered %v", frame["type"], reply)
+		}
 	}
-	delta := a.next("presence.delta")
-	if device, _ := delta["device"].(map[string]any); device["deviceId"] != second.id || device["online"] != true || device["candidates"] != nil {
-		t.Fatalf("presence delta = %v", delta)
-	}
-	// A pending device cannot publish addresses or ask for an introduction.
 	if err := p.conn.WriteJSON(map[string]any{"type": "connect", "deviceId": first.id}); err != nil {
 		t.Fatal(err)
 	}
-	if frame := p.next("error"); frame["code"] != "device_not_added" {
-		t.Fatalf("pending connect = %v", frame)
+	if reply := p.next("error"); reply["code"] != "invalid_device_frame" {
+		t.Fatalf("pending connect = %v", reply)
 	}
 
-	// A wants B: each receives the other's candidates.
-	if err := a.conn.WriteJSON(map[string]any{"type": "address", "candidates": []string{"10.0.0.7:5050"}}); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(100 * time.Millisecond)
-	if err := a.conn.WriteJSON(map[string]any{"type": "connect", "deviceId": second.id}); err != nil {
-		t.Fatal(err)
-	}
-	toA := a.next("candidates")
-	if toA["deviceId"] != second.id || len(toA["addresses"].([]any)) != 1 || toA["addresses"].([]any)[0] != "192.168.1.20:4040" {
-		t.Fatalf("candidates to A = %v", toA)
-	}
-	toB := b.next("candidates")
-	if toB["deviceId"] != first.id || toB["addresses"].([]any)[0] != "10.0.0.7:5050" {
-		t.Fatalf("candidates to B = %v", toB)
-	}
-	// A device that is offline is reported as unreachable.
+	// B going away is presence too.
 	_ = b.conn.Close()
-	time.Sleep(200 * time.Millisecond)
-	if err := a.conn.WriteJSON(map[string]any{"type": "connect", "deviceId": second.id}); err != nil {
-		t.Fatal(err)
-	}
-	if frame := a.next("unreachable"); frame["deviceId"] != second.id {
-		t.Fatalf("offline device = %v", frame)
-	}
+	presenceEntry(t, a.next("presence.delta")["device"], second.id, false)
 
 	// Removing a device closes its socket.
 	now := time.Now().Unix()

@@ -134,11 +134,12 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		message, _, err := s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+		message, agentMentions, err := s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
+		s.startAgentMentionRequests(r.Context(), userID, message, agentMentions)
 		writeJSON(w, http.StatusCreated, map[string]any{"message": message})
 	}
 }

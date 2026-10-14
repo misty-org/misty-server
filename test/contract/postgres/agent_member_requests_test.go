@@ -33,7 +33,7 @@ func newMemberRequestFixture(t *testing.T) memberRequestFixture {
 	}
 	space := createTestSpace(t, database, ctx, alice.ID, "Launch team")
 	addTestSpaceMember(t, database, space.ID, bob.ID)
-	bobAgent, err := database.SavePersonalAgent(ctx, bob.ID, "", AgentProfileInput{Name: "Researcher", Instructions: "Find facts.", Enabled: true})
+	bobAgent, err := database.SavePersonalAgent(ctx, bob.ID, "", AgentProfileInput{Name: "Researcher", Instructions: "Find facts.", Enabled: true, SpaceID: space.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,18 +79,19 @@ func (f memberRequestFixture) request(key string) (*AgentMemberRequest, error) {
 func TestAgentMemberRequestRunsAsTargetOwnerAfterApproval(t *testing.T) {
 	f := newMemberRequestFixture(t)
 	ctx := context.Background()
-	if _, err := f.request("call-1"); !errors.Is(err, ErrAgentListingUnavailable) {
-		t.Fatalf("request to an unpublished agent = %v", err)
-	}
 	if _, err := f.database.SaveSpaceAgentListing(ctx, f.alice.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{}); !errors.Is(err, ErrPersonalAgentNotFound) {
-		t.Fatalf("publishing someone else's agent = %v", err)
+		t.Fatalf("changing someone else's agent = %v", err)
+	}
+	if _, err := f.database.SaveSpaceAgentListing(ctx, f.alice.ID, f.space.ID, f.aliceAgent.ID, SpaceAgentListingInput{}); !errors.Is(err, ErrAgentListingUnavailable) {
+		t.Fatalf("listing an agent in a Space it doesn't live in = %v", err)
+	}
+	// Bob's agent became a member when it moved in, asking first by default.
+	listings, err := f.database.SpaceAgentListings(ctx, f.alice.ID, f.space.ID)
+	if err != nil || len(listings) != 1 || listings[0].AgentID != f.bobAgent.ID || listings[0].OwnerName != "Bob" || listings[0].AcceptPolicy != "ask" {
+		t.Fatalf("listings = %#v, %v", listings, err)
 	}
 	if _, err := f.database.SaveSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{Description: "Answers research questions"}); err != nil {
 		t.Fatal(err)
-	}
-	listings, err := f.database.SpaceAgentListings(ctx, f.alice.ID, "")
-	if err != nil || len(listings) != 1 || listings[0].AgentID != f.bobAgent.ID || listings[0].OwnerName != "Bob" {
-		t.Fatalf("listings = %#v, %v", listings, err)
 	}
 
 	request, err := f.request("call-1")
@@ -101,7 +102,8 @@ func TestAgentMemberRequestRunsAsTargetOwnerAfterApproval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if child.OwnerUserID != f.bob.ID || child.RequestingMemberID != f.bob.ID || child.BillingUserID != f.bob.ID || child.InitiatedByUserID != f.alice.ID {
+	// The work acts as Bob's agent and is billed to Alice, who asked.
+	if child.OwnerUserID != f.bob.ID || child.RequestingMemberID != f.bob.ID || child.BillingUserID != f.alice.ID || child.InitiatedByUserID != f.alice.ID {
 		t.Fatalf("child ownership = owner %s requesting %s billing %s initiated %s", child.OwnerUserID, child.RequestingMemberID, child.BillingUserID, child.InitiatedByUserID)
 	}
 	if child.SpaceID != f.space.ID || child.TriggerKind != "delegated" || child.ParentRunID != f.aliceRun.ID || child.DelegationDepth != 1 || child.AgentID != f.bobAgent.ID || child.InitialRunMode == "full" {
@@ -129,14 +131,10 @@ func TestAgentMemberRequestRunsAsTargetOwnerAfterApproval(t *testing.T) {
 	if err != nil || replay.ID != request.ID || !replay.Replay {
 		t.Fatalf("replayed request = %#v, %v", replay, err)
 	}
-	// Bob pays for his agent's work under its own command; Alice pays only
-	// for her own run.
+	// The delegated work is its own billing command, separate from Alice's run.
 	command, err := f.database.BillingCommandForRun(ctx, f.bob.ID, child.ID)
 	if err != nil || command != "agent-runtime:"+child.ID {
-		t.Fatalf("target owner billing command = %q, %v", command, err)
-	}
-	if _, err := f.database.BillingCommandForRun(ctx, f.alice.ID, child.ID); err == nil {
-		t.Fatal("the requester was billed for the target agent's work")
+		t.Fatalf("delegated work billing command = %q, %v", command, err)
 	}
 	found, err := f.database.AgentMemberRequestForRun(ctx, child.ID)
 	if err != nil || found.ID != request.ID || found.RequesterName != "Alice" {
@@ -175,7 +173,7 @@ func TestAgentMemberRequestLimitsAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := f.database.ValidateAgentMemberRequestRun(ctx, request.ChildRunID); !errors.Is(err, ErrAgentListingUnavailable) {
-		t.Fatalf("unpublished agent kept working: %v", err)
+		t.Fatalf("agent kept working after its owner turned requests off: %v", err)
 	}
 	if _, err := f.database.SaveSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{AcceptPolicy: "off"}); err != nil {
 		t.Fatal(err)
@@ -200,6 +198,11 @@ func TestAgentMemberRequestLimitsAndRevocation(t *testing.T) {
 	}
 	if listings, err := f.database.SpaceAgentListings(ctx, f.alice.ID, f.space.ID); err != nil || len(listings) != 0 {
 		t.Fatalf("a former member's agent is still listed: %#v, %v", listings, err)
+	}
+	// The agent went home to Bob's personal Space.
+	moved, err := f.database.AskIdentityByID(ctx, f.bob.ID, f.bobAgent.ID)
+	if err != nil || moved.SpaceID != personalSpace(t, f.database, ctx, f.bob.ID).ID {
+		t.Fatalf("agent after its owner left = %#v, %v", moved, err)
 	}
 }
 

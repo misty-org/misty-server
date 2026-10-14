@@ -22,6 +22,9 @@ type AgentProfileInput struct {
 	ModelID         string          `json:"model_id"`
 	ReasoningEffort string          `json:"reasoning_effort"`
 	Enabled         bool            `json:"enabled"`
+	// SpaceID is the Space the agent lives in. Empty keeps the current Space,
+	// or the personal Space for a new agent.
+	SpaceID string `json:"space_id,omitempty"`
 	Version         int64           `json:"version,omitempty"`
 }
 
@@ -48,6 +51,7 @@ func (db *Database) PersonalAgents(ctx context.Context, userID string) ([]AskIde
 func (db *Database) SavePersonalAgent(ctx context.Context, userID, id string, input AgentProfileInput) (*AskIdentity, error) {
 	input.Name = strings.TrimSpace(input.Name)
 	input.Role = strings.TrimSpace(input.Role)
+	input.SpaceID = strings.TrimSpace(input.SpaceID)
 	if input.Name == "" || len([]rune(input.Name)) > 80 || len([]rune(input.Role)) > 160 || len(input.Description) > 8000 || len(input.Instructions) > 64000 || len(input.Icon) > 128 || len(input.ModelID) > 200 || len(input.ReasoningEffort) > 32 {
 		return nil, ErrSpaceInvalid
 	}
@@ -63,9 +67,15 @@ func (db *Database) SavePersonalAgent(ctx context.Context, userID, id string, in
 	}
 	out := &AskIdentity{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		if input.SpaceID != "" {
+			if err := requireAgentSpaceMembershipTx(ctx, tx, userID, input.SpaceID); err != nil {
+				return err
+			}
+		}
 		if id == "" {
 			id = "personal_" + uuid.NewString()
-			if err := scanPersonalAgent(tx.QueryRowContext(ctx, `INSERT INTO misty_ask_identities(id,owner_user_id,name,role,description,instructions,icon,avatar,model_mode,model_id,reasoning_effort,enabled,system_managed,default_run_mode,voice_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,FALSE,'ask','alloy') RETURNING `+personalAgentColumns, id, userID, input.Name, input.Role, input.Description, input.Instructions, input.Icon, input.Avatar, input.ModelMode, input.ModelID, input.ReasoningEffort, input.Enabled), out); err != nil {
+			// An empty Space lets the database place the agent in the personal Space.
+			if err := scanPersonalAgent(tx.QueryRowContext(ctx, `INSERT INTO misty_ask_identities(id,owner_user_id,name,role,description,instructions,icon,avatar,model_mode,model_id,reasoning_effort,enabled,system_managed,default_run_mode,voice_id,space_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,FALSE,'ask','alloy',NULLIF($13,'')) RETURNING `+personalAgentColumns, id, userID, input.Name, input.Role, input.Description, input.Instructions, input.Icon, input.Avatar, input.ModelMode, input.ModelID, input.ReasoningEffort, input.Enabled, input.SpaceID), out); err != nil {
 				return err
 			}
 		} else {
@@ -79,10 +89,12 @@ func (db *Database) SavePersonalAgent(ctx context.Context, userID, id string, in
 			if input.Version != out.Version {
 				return ErrPersonalAgentConflict
 			}
-			if out.SystemManaged && (!input.Enabled || input.Name != "Misty") {
+			// Misty's built-in agent always lives in the personal Space.
+			if out.SystemManaged && (!input.Enabled || input.Name != "Misty" || (input.SpaceID != "" && input.SpaceID != out.SpaceID)) {
 				return ErrSpaceInvalid
 			}
-			if err := scanPersonalAgent(tx.QueryRowContext(ctx, `UPDATE misty_ask_identities SET name=$3,role=$4,description=$5,instructions=$6,icon=$7,avatar=$8,model_mode=$9,model_id=$10,reasoning_effort=$11,enabled=$12,version=version+1,updated_at=NOW() WHERE id=$1 AND owner_user_id=$2 RETURNING `+personalAgentColumns, id, userID, input.Name, input.Role, input.Description, input.Instructions, input.Icon, input.Avatar, input.ModelMode, input.ModelID, input.ReasoningEffort, input.Enabled), out); err != nil {
+			// A moved agent's past artifacts stay in the Space they were saved to.
+			if err := scanPersonalAgent(tx.QueryRowContext(ctx, `UPDATE misty_ask_identities SET name=$3,role=$4,description=$5,instructions=$6,icon=$7,avatar=$8,model_mode=$9,model_id=$10,reasoning_effort=$11,enabled=$12,space_id=COALESCE(NULLIF($13,''),space_id),version=version+1,updated_at=NOW() WHERE id=$1 AND owner_user_id=$2 RETURNING `+personalAgentColumns, id, userID, input.Name, input.Role, input.Description, input.Instructions, input.Icon, input.Avatar, input.ModelMode, input.ModelID, input.ReasoningEffort, input.Enabled, input.SpaceID), out); err != nil {
 				return err
 			}
 			if !input.Enabled {

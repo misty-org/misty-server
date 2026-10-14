@@ -1,9 +1,11 @@
 DELETE /ai/agent-methods/{methodID}/schedule
+DELETE /ai/inbound-channels/{channel}
 DELETE /ai/media-search/assets/{assetID}
 DELETE /ai/media-search/devices/{deviceID}
 DELETE /ai/memories/{memoryID}
 DELETE /ai/smart-library/folders/{folderID}
 DELETE /api/ai/agent-methods/{methodID}/schedule
+DELETE /api/ai/inbound-channels/{channel}
 DELETE /api/ai/media-search/assets/{assetID}
 DELETE /api/ai/media-search/devices/{deviceID}
 DELETE /api/ai/memories/{memoryID}
@@ -87,6 +89,7 @@ DELETE /spaces/{spaceID}/roadmaps/{roadmapID}/milestones/{milestoneID}
 DELETE /spaces/{spaceID}/roadmaps/{roadmapID}/nodes/{nodeID}
 DELETE /spaces/{spaceID}/tasks/{taskID}
 DELETE /v1/ai/agent-methods/{methodID}/schedule
+DELETE /v1/ai/inbound-channels/{channel}
 DELETE /v1/ai/media-search/assets/{assetID}
 DELETE /v1/ai/media-search/devices/{deviceID}
 DELETE /v1/ai/memories/{memoryID}
@@ -139,6 +142,7 @@ GET /ai/activity
 GET /ai/agent-methods
 GET /ai/conversations
 GET /ai/conversations/{conversationID}
+GET /ai/inbound-channels
 GET /ai/invocations/{invocationID}/events
 GET /ai/invocations/{invocationID}/progress
 GET /ai/invocations/{invocationID}/state
@@ -152,6 +156,7 @@ GET /ai/smart-library/folders/{folderID}/progress
 GET /ai/smart-library/folders/{folderID}/results
 GET /ai/status
 GET /ai/workflow-schedules
+GET /ai/workflow-schedules/device-runs
 GET /api/a2a/push
 GET /api/a2a/spaces/{spaceID}/agents/{agentID}/.well-known/agent-card.json
 GET /api/agent-requests/{requestID}
@@ -161,6 +166,7 @@ GET /api/ai/activity
 GET /api/ai/agent-methods
 GET /api/ai/conversations
 GET /api/ai/conversations/{conversationID}
+GET /api/ai/inbound-channels
 GET /api/ai/invocations/{invocationID}/events
 GET /api/ai/invocations/{invocationID}/progress
 GET /api/ai/invocations/{invocationID}/state
@@ -174,6 +180,7 @@ GET /api/ai/smart-library/folders/{folderID}/progress
 GET /api/ai/smart-library/folders/{folderID}/results
 GET /api/ai/status
 GET /api/ai/workflow-schedules
+GET /api/ai/workflow-schedules/device-runs
 GET /api/auth/google
 GET /api/auth/google/callback
 GET /api/auth/google/start
@@ -220,6 +227,7 @@ GET /api/spaces
 GET /api/spaces/resolve/{ticket}
 GET /api/spaces/{spaceID}
 GET /api/spaces/{spaceID}/agenda
+GET /api/spaces/{spaceID}/agent-artifacts
 GET /api/spaces/{spaceID}/agent-listings
 GET /api/spaces/{spaceID}/attachments/{attachmentID}/download
 GET /api/spaces/{spaceID}/calendar/google/calendars
@@ -321,6 +329,7 @@ GET /spaces
 GET /spaces/resolve/{ticket}
 GET /spaces/{spaceID}
 GET /spaces/{spaceID}/agenda
+GET /spaces/{spaceID}/agent-artifacts
 GET /spaces/{spaceID}/agent-listings
 GET /spaces/{spaceID}/attachments/{attachmentID}/download
 GET /spaces/{spaceID}/calendar/google/calendars
@@ -385,6 +394,7 @@ GET /v1/ai/activity
 GET /v1/ai/agent-methods
 GET /v1/ai/conversations
 GET /v1/ai/conversations/{conversationID}
+GET /v1/ai/inbound-channels
 GET /v1/ai/invocations/{invocationID}/events
 GET /v1/ai/invocations/{invocationID}/progress
 GET /v1/ai/invocations/{invocationID}/state
@@ -398,6 +408,7 @@ GET /v1/ai/smart-library/folders/{folderID}/progress
 GET /v1/ai/smart-library/folders/{folderID}/results
 GET /v1/ai/status
 GET /v1/ai/workflow-schedules
+GET /v1/ai/workflow-schedules/device-runs
 GET /v1/auth/google
 GET /v1/auth/google/callback
 GET /v1/auth/google/start
@@ -444,6 +455,7 @@ GET /v1/spaces
 GET /v1/spaces/resolve/{ticket}
 GET /v1/spaces/{spaceID}
 GET /v1/spaces/{spaceID}/agenda
+GET /v1/spaces/{spaceID}/agent-artifacts
 GET /v1/spaces/{spaceID}/agent-listings
 GET /v1/spaces/{spaceID}/attachments/{attachmentID}/download
 GET /v1/spaces/{spaceID}/calendar/google/calendars
@@ -606,6 +618,7 @@ POST /ai/smart-library/folders/{folderID}/sample/approve
 POST /ai/smart-library/reindex
 POST /ai/smart-library/reindex/{jobID}/complete
 POST /ai/smart-library/search
+POST /ai/workflow-schedules/{scheduleID}/device-claim
 POST /api/a2a/agents/{agentID}/token
 POST /api/a2a/spaces/{spaceID}/agents/{agentID}
 POST /api/agent-requests/{requestID}/approve
@@ -635,6 +648,7 @@ POST /api/ai/smart-library/folders/{folderID}/sample/approve
 POST /api/ai/smart-library/reindex
 POST /api/ai/smart-library/reindex/{jobID}/complete
 POST /api/ai/smart-library/search
+POST /api/ai/workflow-schedules/{scheduleID}/device-claim
 POST /api/auth/forgot
 POST /api/auth/google
 POST /api/auth/google/complete
@@ -656,6 +670,7 @@ POST /api/devices/{deviceID}/channel-ticket
 POST /api/devices/{deviceID}/heartbeat
 POST /api/devices/{deviceID}/remove-device
 POST /api/integrations/apps/connect
+POST /api/integrations/github/git
 POST /api/internal/journal/note-projections
 POST /api/login
 POST /api/logout
@@ -766,6 +781,7 @@ POST /devices/{deviceID}/channel-ticket
 POST /devices/{deviceID}/heartbeat
 POST /devices/{deviceID}/remove-device
 POST /integrations/apps/connect
+POST /integrations/github/git
 POST /internal/agent-runtime/runs/{runID}/activate
 POST /internal/agent-runtime/runs/{runID}/budget
 POST /internal/agent-runtime/runs/{runID}/complete
@@ -895,6 +911,7 @@ POST /v1/ai/smart-library/folders/{folderID}/sample/approve
 POST /v1/ai/smart-library/reindex
 POST /v1/ai/smart-library/reindex/{jobID}/complete
 POST /v1/ai/smart-library/search
+POST /v1/ai/workflow-schedules/{scheduleID}/device-claim
 POST /v1/auth/forgot
 POST /v1/auth/google
 POST /v1/auth/google/complete
@@ -916,6 +933,7 @@ POST /v1/devices/{deviceID}/channel-ticket
 POST /v1/devices/{deviceID}/heartbeat
 POST /v1/devices/{deviceID}/remove-device
 POST /v1/integrations/apps/connect
+POST /v1/integrations/github/git
 POST /v1/internal/journal/note-projections
 POST /v1/login
 POST /v1/logout
@@ -1007,6 +1025,7 @@ POST /v1/sync/ticket
 POST /v1/sync/vault
 PUT /ai/agent-methods/{methodID}
 PUT /ai/agent-methods/{methodID}/schedule
+PUT /ai/inbound-channels/{channel}
 PUT /ai/memories/{memoryID}
 PUT /ai/preferences/{surfaceID}
 PUT /ai/recaps/{surfaceID}
@@ -1019,6 +1038,7 @@ PUT /ai/settings/screen-location
 PUT /ai/smart-library/folders/{folderID}/assets/{assetID}/tags
 PUT /api/ai/agent-methods/{methodID}
 PUT /api/ai/agent-methods/{methodID}/schedule
+PUT /api/ai/inbound-channels/{channel}
 PUT /api/ai/memories/{memoryID}
 PUT /api/ai/preferences/{surfaceID}
 PUT /api/ai/recaps/{surfaceID}
@@ -1077,6 +1097,7 @@ PUT /spaces/{spaceID}/nodes/{nodeID}
 PUT /spaces/{spaceID}/roadmaps/{roadmapID}/goals/{goalID}/tasks
 PUT /v1/ai/agent-methods/{methodID}
 PUT /v1/ai/agent-methods/{methodID}/schedule
+PUT /v1/ai/inbound-channels/{channel}
 PUT /v1/ai/memories/{memoryID}
 PUT /v1/ai/preferences/{surfaceID}
 PUT /v1/ai/recaps/{surfaceID}

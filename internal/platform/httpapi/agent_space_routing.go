@@ -16,8 +16,9 @@ import (
 
 // Space data tools act inside one Space. Account-level runs use the same tool
 // names with an optional `space` argument: reads without one cover every Space
-// the owner can access, creates default to the personal Space, and changes to
-// existing items name the Space returned with them.
+// the owner can access, creates default to the Space the agent lives in (the
+// personal Space for Misty), and changes to existing items name the Space
+// returned with them.
 const maxRoutedReadSpaces = 25
 
 type globalSpaceCallKey struct{}
@@ -71,7 +72,7 @@ func routedSpaceRegistrations(database *db.Database, except ...string) []agentto
 func spacesListToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
 		Name: "spaces.list", Version: 1, Risk: serveragent.RiskRead, Approval: agenttools.ApprovalNone,
-		Description: "List the Spaces this account can access, including the personal Space. Use a Space's name or id as the `space` argument of other tools.",
+		Description: "List the Spaces this account can access, including the personal Space and the Space you live in. Use a Space's name or id as the `space` argument of other tools.",
 		InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "required": []string{}, "additionalProperties": false}),
 		OutputSchema: agentToolObjectOutputSchema(), Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
 	}
@@ -82,9 +83,10 @@ func listAgentSpaces(ctx context.Context, database *db.Database, invocation agen
 	if err != nil {
 		return nil, err
 	}
+	home := agentHomeSpaceID(ctx, database, invocation)
 	items := make([]map[string]any, 0, len(spaces))
 	for _, space := range spaces {
-		items = append(items, map[string]any{"id": space.ID, "name": space.Name, "personal": space.IsDefault && space.OwnerUserID == invocation.UserID, "shared": space.IsShared})
+		items = append(items, map[string]any{"id": space.ID, "name": space.Name, "personal": space.IsDefault && space.OwnerUserID == invocation.UserID, "shared": space.IsShared, "yours": space.ID == home})
 	}
 	return json.Marshal(map[string]any{"spaces": items})
 }
@@ -106,7 +108,7 @@ func routeSpaceDescriptor(database *db.Database, descriptor agenttools.Descripto
 	hint := "Space name or id. Omit to search every Space you can access."
 	switch {
 	case create:
-		hint = "Space name or id. Omit to use your personal Space."
+		hint = "Space name or id. Omit to use the Space you live in."
 	case !read:
 		hint = "Space name or id of the item or audience, as returned with it."
 	}
@@ -142,6 +144,16 @@ func routedSpaceHandler(database *db.Database, name string, read, create bool) a
 		targets, err := routedSpaceTargets(spaces, invocation.UserID, reference, read, create)
 		if err != nil {
 			return nil, err
+		}
+		if create && reference == "" {
+			// New items go where the agent lives, not always the personal Space.
+			if home := agentHomeSpaceID(ctx, database, invocation); home != "" {
+				for _, space := range spaces {
+					if space.ID == home {
+						targets = []db.Space{space}
+					}
+				}
+			}
 		}
 		toolbox := spaceAgentToolbox(database)
 		inner := serveragent.ToolRequest{ID: request.ID, Name: name, Arguments: arguments}
@@ -259,4 +271,17 @@ func fanOutSpaceRead(ctx context.Context, database *db.Database, toolbox *agentt
 		return nil, workflowv2.ErrCapabilityDenied
 	}
 	return json.Marshal(map[string]any{"spaces": results})
+}
+
+// agentHomeSpaceID is the Space the run's agent lives in, or empty when the
+// run has no agent of the caller's.
+func agentHomeSpaceID(ctx context.Context, database *db.Database, invocation agenttools.Invocation) string {
+	if invocation.AgentID == "" {
+		return ""
+	}
+	spaceID, err := database.AgentSpaceID(ctx, invocation.UserID, invocation.AgentID)
+	if err != nil {
+		return ""
+	}
+	return spaceID
 }

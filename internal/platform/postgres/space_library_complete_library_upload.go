@@ -83,6 +83,9 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 			if err := insertDefaultAliasTx(ctx, tx, spaceID, "library_item", item.ID, userID); err != nil {
 				return err
 			}
+			if err := recordAgentArtifactTx(ctx, tx, upload.ID, item.ID, spaceID, userID); err != nil {
+				return err
+			}
 			result.Item, sourceID, sourceKind = item, item.ID, "library_item"
 		} else if upload.Purpose == UploadPurposeNoteAttachment {
 			// A note asset is deliberately not a Library item and not a message

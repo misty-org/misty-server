@@ -13,8 +13,8 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// The A2A endpoint lets a member's own agent talk to an agent another member
-// published to a shared Space. Callers authenticate as one of their agents
+// The A2A endpoint lets a member's own agent talk to another member's agent
+// in a Space they share. Callers authenticate as one of their agents
 // (see a2a_auth.go). It speaks A2A's JSON-RPC methods and sends every message
 // through the same request service as agents_request, so consent, approval,
 // billing and limits are identical.
@@ -127,7 +127,7 @@ func (s *SpacesService) A2AAgent() http.HandlerFunc {
 		}
 		listing, err := s.a2aListing(r, caller.UserID)
 		if err != nil {
-			writeA2AError(w, call.ID, a2aTaskNotFound, "This agent is not published to a Space you share")
+			writeA2AError(w, call.ID, a2aTaskNotFound, "This agent is not in a Space you share")
 			return
 		}
 		var result any

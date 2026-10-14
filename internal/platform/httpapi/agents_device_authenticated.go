@@ -9,15 +9,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/kannachi323/misty/server/internal/accounts"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
-	"github.com/kannachi323/misty/server/internal/platform/security"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/kannachi323/misty/server/internal/accounts"
+	"github.com/kannachi323/misty/server/internal/billingadapter"
+	"github.com/kannachi323/misty/server/internal/platform/security"
 
 	"github.com/go-chi/chi/v5"
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
@@ -332,13 +333,6 @@ func normalizedDevicePlatform(platform string) string {
 		}
 	}
 	return ""
-}
-
-func normalizedProtocolVersions(raw json.RawMessage) json.RawMessage {
-	if len(raw) == 0 {
-		return json.RawMessage(`[]`)
-	}
-	return raw
 }
 
 func decodeDeviceBase64(value string) ([]byte, error) {

@@ -110,6 +110,17 @@ describe("runtime error classification", () => {
     });
   });
 
+  it.each([
+    new Error("Your API key has been invalidated."),
+    { name: "AI_APICallError", message: "Incorrect API key provided: sk-****." },
+    new Error("Workflow step failed", { cause: { name: "AI_APICallError", message: "Your API key has been invalidated." } }),
+  ])("names a rejected provider key without echoing it", (error) => {
+    expect(classifyRuntimeError(error)).toEqual({
+      code: "model_provider_key_invalid",
+      message: "Misty's AI provider rejected its API key. The server administrator needs to replace the key.",
+    });
+  });
+
   it("recognizes serialized gateway outages without returning private provider data", () => {
     expect(classifyRuntimeError({ name: "GatewayInternalServerError", message: "Service temporarily unavailable", response: "private provider payload" })).toEqual({
       code: "model_gateway_unavailable",

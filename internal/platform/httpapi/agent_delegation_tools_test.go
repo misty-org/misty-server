@@ -72,7 +72,7 @@ func TestNotebookKeysFollowTheParentAndRenderAsMarkdown(t *testing.T) {
 		t.Fatal("a sub-agent should write to its parent's notebook")
 	}
 	markdown := notebookMarkdown(&db.AgentNotebook{Plan: "- [x] one", Findings: "Fact (https://a)"})
-	if markdown != "## Plan\n\n- [x] one\n\n## Findings\n\nFact (https://a)\n" {
+	if markdown != "Fact (https://a)\n" {
 		t.Fatalf("%q", markdown)
 	}
 }

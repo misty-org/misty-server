@@ -100,8 +100,6 @@ func TestCreatorAgentCompletionRequiresExplicitTaskDone(t *testing.T) {
 	}
 }
 
-
-
 func TestAgentTaskDueDatesUseTheCreatorsTimezone(t *testing.T) {
 	if got := api.TestingAgentToolTimezone(`{"instruction":"create a task","timezone":"America/Los_Angeles"}`); got != "America/Los_Angeles" {
 		t.Fatalf("run timezone = %q", got)
@@ -126,13 +124,4 @@ func TestAgentTaskDueDatesUseTheCreatorsTimezone(t *testing.T) {
 	if _, err := api.TestingParseAgentToolTime("2026-08-19T19:00", "Mars/Olympus"); err == nil {
 		t.Fatal("invalid timezone should be rejected")
 	}
-}
-
-func contains(values []string, wanted string) bool {
-	for _, value := range values {
-		if value == wanted {
-			return true
-		}
-	}
-	return false
 }

@@ -2,10 +2,8 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -35,29 +33,15 @@ func (s *MediaSearchService) IndexChunk() http.HandlerFunc {
 			http.Error(w, "invalid request", 400)
 			return
 		}
-		var audio []byte
-		var err error
-		if body.AudioBase64 != nil {
-			audio, err = base64.StdEncoding.DecodeString(*body.AudioBase64)
-			if err != nil || len(audio) > 2<<20 || !TestingValidMP3Preview(audio) {
-				http.Error(w, "invalid audio preview", 400)
-				return
-			}
+		audio, audioOK := decodeIndexAudio(w, body)
+		if !audioOK {
+			return
 		}
-		frames := make([]serveragent.SmartLibraryAsset, 0, len(body.Frames))
-		frameTimes := map[string]int64{}
-		totalBytes := len(audio)
-		for index, frame := range body.Frames {
-			raw, decodeErr := base64.StdEncoding.DecodeString(frame.Base64)
-			totalBytes += len(raw)
-			id := body.AssetID + "_frame_" + strconv.Itoa(index)
-			if decodeErr != nil || frame.MimeType != "image/jpeg" || len(raw) > 512<<10 || !TestingValidJPEGPreview(raw) || frame.TimestampMS < body.StartMS || frame.TimestampMS >= body.EndMS {
-				http.Error(w, "invalid media frame", 400)
-				return
-			}
-			frames = append(frames, serveragent.SmartLibraryAsset{AssetID: id, AssetKind: "image", MimeType: "image/jpeg", Bytes: raw, Metadata: map[string]string{"mediaTimestampMs": fmtInt(frame.TimestampMS)}})
-			frameTimes[id] = frame.TimestampMS
+		frames, frameTimes, frameBytes, framesOK := decodeIndexFrames(w, body)
+		if !framesOK {
+			return
 		}
+		totalBytes := len(audio) + frameBytes
 		if totalBytes > 4<<20 || (len(audio) == 0 && len(frames) == 0) {
 			http.Error(w, "media chunk too large", http.StatusRequestEntityTooLarge)
 			return
@@ -69,118 +53,33 @@ func (s *MediaSearchService) IndexChunk() http.HandlerFunc {
 			return
 		}
 		defer releaseProviderSlot()
-		asset := db.MediaSearchAsset{DeviceID: body.DeviceID, AssetID: body.AssetID, Fingerprint: body.Fingerprint, MediaType: body.MediaType, MimeType: body.MimeType, DurationMS: body.DurationMS}
-		claimed, err := s.database.ClaimMediaSearchChunk(userID, asset, body.ChunkIndex, body.StartMS, body.EndMS)
-		if errors.Is(err, db.ErrMediaChunkBusy) {
-			writeJSON(w, 409, map[string]any{"code": "media_chunk_processing", "message": "This media chunk is already processing."})
+		if !s.claimIndexChunk(w, userID, body) {
 			return
 		}
-		if err != nil {
-			http.Error(w, "internal error", 500)
-			return
+		run := &mediaIndexRun{
+			svc:      s,
+			w:        w,
+			r:        r,
+			analyzer: s.analyzer.WithBilling(s.database.BillingService(), userID, "media-search:"+body.DeviceID+":"+body.AssetID+":"+fmtInt(int64(body.ChunkIndex))+":"+body.Fingerprint),
+			userID:   userID,
+			body:     body,
 		}
-		if !claimed {
-			writeJSON(w, 200, map[string]any{"status": "indexed", "alreadyIndexed": true, "chunkIndex": body.ChunkIndex})
-			return
-		}
-		analyzer := s.analyzer.WithBilling(s.database.BillingService(), userID, "media-search:"+body.DeviceID+":"+body.AssetID+":"+fmtInt(int64(body.ChunkIndex))+":"+body.Fingerprint)
 		segments := []db.MediaSearchSegment{}
-		var totalUsage serveragent.ModelUsage
 		if len(audio) > 0 {
-			transcript, usage, transcribeErr := analyzer.TranscribeMedia(r.Context(), audio, valueOr(body.AudioMimeType, "audio/mpeg"), body.EndMS-body.StartMS)
-			addUsage(&totalUsage, usage)
-			if transcribeErr != nil {
-				_ = s.database.FailMediaSearchChunk(userID, body.DeviceID, body.AssetID, body.ChunkIndex, "transcription_failed")
-				if billingErr := analyzer.BillingError(); billingErr != nil {
-					writeBillingError(w, billingErr)
-					return
-				}
-				writeJSON(w, 502, map[string]any{"code": "transcription_failed", "message": "The agent could not transcribe this chunk."})
+			spoken, spokenOK := run.indexSpoken(audio)
+			if !spokenOK {
 				return
 			}
-			texts := make([]string, len(transcript))
-			for i, item := range transcript {
-				texts[i] = item.Text
-			}
-			vectors := [][]float64{}
-			if len(texts) > 0 {
-				var embedErr error
-				vectors, usage, embedErr = TestingEmbedMediaTexts(r.Context(), analyzer, texts)
-				addUsage(&totalUsage, usage)
-				if embedErr != nil {
-					_ = s.database.FailMediaSearchChunk(userID, body.DeviceID, body.AssetID, body.ChunkIndex, "embedding_failed")
-					if billingErr := analyzer.BillingError(); billingErr != nil {
-						writeBillingError(w, billingErr)
-						return
-					}
-					writeJSON(w, 502, map[string]any{"code": "embedding_failed", "message": "The agent could not index this transcript."})
-					return
-				}
-			}
-			for i, item := range transcript {
-				segments = append(segments, db.MediaSearchSegment{AssetID: body.AssetID, Kind: "spoken", ChunkIndex: body.ChunkIndex, StartMS: body.StartMS + item.StartMS, EndMS: minInt64(body.EndMS, body.StartMS+item.EndMS), Content: item.Text, Transcript: item.Text, Embedding: vectors[i], EmbeddingModel: configuredEmbeddingModel(r.Context(), analyzer, userID), Metadata: map[string]any{"source": "audio_transcript"}})
-			}
+			segments = append(segments, spoken...)
 		}
 		if len(frames) > 0 {
-			analysis, analyzeErr := analyzer.Analyze(r.Context(), frames)
-			addUsage(&totalUsage, analysis.Usage)
-			if analyzeErr != nil {
-				_ = s.database.FailMediaSearchChunk(userID, body.DeviceID, body.AssetID, body.ChunkIndex, "visual_analysis_failed")
-				if billingErr := analyzer.BillingError(); billingErr != nil {
-					writeBillingError(w, billingErr)
-					return
-				}
-				writeJSON(w, 502, map[string]any{"code": "visual_analysis_failed", "message": "The agent could not analyze the scenes."})
+			visual, visualOK := run.indexVisual(frames, frameTimes)
+			if !visualOK {
 				return
 			}
-			metadata := map[string]serveragent.SmartLibraryMetadata{}
-			for _, item := range analysis.Results {
-				metadata[item.AssetID] = item
-			}
-			// Scene retrieval is text-to-scene search. Embed the normalized scene
-			// documents as one batch after vision analysis instead of uploading each
-			// frame to the embedding endpoint a second time. This is cheaper and also
-			// avoids a partial per-frame embedding failure discarding the whole chunk.
-			visualFrames := make([]serveragent.SmartLibraryAsset, 0, len(frames))
-			visualTexts := make([]string, 0, len(frames))
-			for _, frame := range frames {
-				item, found := metadata[frame.AssetID]
-				content := strings.TrimSpace(item.SearchDocument())
-				if found && content != "" {
-					visualFrames = append(visualFrames, frame)
-					visualTexts = append(visualTexts, content)
-				}
-			}
-			embeddings, usage, embedErr := TestingEmbedMediaTexts(r.Context(), analyzer, visualTexts)
-			addUsage(&totalUsage, usage)
-			if embedErr != nil {
-				_ = s.database.FailMediaSearchChunk(userID, body.DeviceID, body.AssetID, body.ChunkIndex, "visual_embedding_failed")
-				if billingErr := analyzer.BillingError(); billingErr != nil {
-					writeBillingError(w, billingErr)
-					return
-				}
-				writeJSON(w, 502, map[string]any{"code": "visual_embedding_failed", "message": "The agent could not index the scenes."})
-				return
-			}
-			byID := map[string][]float64{}
-			for index, frame := range visualFrames {
-				byID[frame.AssetID] = embeddings[index]
-			}
-			for _, frame := range visualFrames {
-				item, found := metadata[frame.AssetID]
-				if !found {
-					continue
-				}
-				timestamp := frameTimes[frame.AssetID]
-				visualStart, visualEnd := TestingVisualSegmentBounds(timestamp, body.EndMS)
-				content := strings.TrimSpace(item.SearchDocument())
-				if content == "" {
-					continue
-				}
-				segments = append(segments, db.MediaSearchSegment{AssetID: body.AssetID, Kind: "visual", ChunkIndex: body.ChunkIndex, StartMS: visualStart, EndMS: visualEnd, Content: content, VisualDescription: item.Description, VisibleText: item.VisibleText, Embedding: byID[frame.AssetID], EmbeddingModel: configuredEmbeddingModel(r.Context(), analyzer, userID), Metadata: map[string]any{"frameTimestampMs": timestamp, "primarySubject": item.PrimarySubject, "tags": item.Tags, "characters": item.Characters, "applications": item.Applications, "objects": item.Objects, "scenes": item.Scenes}})
-			}
+			segments = append(segments, visual...)
 		}
-		if err = s.database.CompleteMediaSearchChunk(userID, body.DeviceID, body.AssetID, body.ChunkIndex, body.EndMS, segments); err != nil {
+		if err := s.database.CompleteMediaSearchChunk(userID, body.DeviceID, body.AssetID, body.ChunkIndex, body.EndMS, segments); err != nil {
 			_ = s.database.FailMediaSearchChunk(userID, body.DeviceID, body.AssetID, body.ChunkIndex, "persistence_failed")
 			http.Error(w, "internal error", 500)
 			return

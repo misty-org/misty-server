@@ -1,40 +1,10 @@
 package api
 
-import (
-	"context"
-	"slices"
-)
-
-// Agent preferences from Settings › Agents. They belong to the account, so a
-// tool reads them on the server for every run on every device. A missing
-// record or value means the setting's default.
+// What an agent does with web search. These are the same for every account and every
+// device: settings belong to the device and never reach the server, so a tool has no
+// per-account preference to read. Web search is on whenever the model runtime is, runs
+// on the default engine, and paid search apps are offered only when the user names one.
 const (
-	prefWebSearch       = "agents.web_search"
-	prefWebSearchEngine = "agents.web_search_engine"
-	prefOfferSearchApps = "agents.offer_search_apps"
+	webSearchOnByDefault     = true
+	offerSearchAppsByDefault = false
 )
-
-func (s *SpacesService) agentPreferences(ctx context.Context, userID string) map[string]any {
-	if s == nil || s.database == nil || userID == "" {
-		return nil
-	}
-	preferences, err := s.database.AccountPreferences(ctx, userID)
-	if err != nil {
-		return nil
-	}
-	return preferences.Values
-}
-
-func preferenceBool(values map[string]any, id string, fallback bool) bool {
-	if value, ok := values[id].(bool); ok {
-		return value
-	}
-	return fallback
-}
-
-func preferenceChoice(values map[string]any, id, fallback string, choices ...string) string {
-	if value, ok := values[id].(string); ok && slices.Contains(choices, value) {
-		return value
-	}
-	return fallback
-}

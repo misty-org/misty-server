@@ -10,7 +10,7 @@ import (
 
 import ()
 
-func TestFirstOwnedSpaceBecomesTheProtectedDefault(t *testing.T) {
+func TestEveryAccountStartsWithAProtectedPersonalSpace(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
 	owner, err := database.CreateUser("Default owner", "default-owner@example.com", "password123")
@@ -19,14 +19,11 @@ func TestFirstOwnedSpaceBecomesTheProtectedDefault(t *testing.T) {
 	}
 
 	spaces, err := database.ListSpaces(ctx, owner.ID)
-	if err != nil || len(spaces) != 0 {
-		t.Fatalf("new account Spaces = %#v, %v, want none before onboarding", spaces, err)
+	if err != nil || len(spaces) != 1 || !spaces[0].IsDefault || spaces[0].Role != "owner" || spaces[0].Name != "Default's Space" {
+		t.Fatalf("new account Spaces = %#v, %v, want one personal Space named after them", spaces, err)
 	}
 
-	first := createTestSpace(t, database, ctx, owner.ID, "Home")
-	if !first.IsDefault || first.Role != "owner" {
-		t.Fatalf("first Space = %#v, want owned default", first)
-	}
+	first := &spaces[0]
 	first, err = database.SpaceByID(ctx, owner.ID, first.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +69,7 @@ func TestDefaultSpaceCannotBeTransferred(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	space := createTestSpace(t, database, ctx, owner.ID, "Home")
+	space := personalSpace(t, database, ctx, owner.ID)
 	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
 	if err != nil {
 		t.Fatal(err)

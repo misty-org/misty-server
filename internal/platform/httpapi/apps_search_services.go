@@ -9,7 +9,7 @@ import (
 
 // Search apps are paid web search services the user would have to sign up
 // for. Misty has its own web search, so an agent asks to connect one only when
-// the user names it, or when Settings › Agents allows offering them.
+// the user names it.
 var appsSearchServices = map[string]*regexp.Regexp{
 	"exa":          regexp.MustCompile(`(?i)\bexa\b`),
 	"tavily":       regexp.MustCompile(`(?i)\btavily\b`),
@@ -20,7 +20,7 @@ var appsSearchServices = map[string]*regexp.Regexp{
 }
 
 type searchAppPolicy struct {
-	// offer is the user's Offer search apps setting.
+	// offer says whether Misty may offer them unprompted (it does not).
 	offer bool
 	// webSearch reports whether this run has Misty's web search.
 	webSearch bool
@@ -28,11 +28,10 @@ type searchAppPolicy struct {
 	request string
 }
 
-func (s *SpacesService) searchAppPolicy(ctx context.Context, invocation agenttools.Invocation) searchAppPolicy {
-	values := s.agentPreferences(ctx, invocation.UserID)
+func (s *SpacesService) searchAppPolicy(_ context.Context, invocation agenttools.Invocation) searchAppPolicy {
 	return searchAppPolicy{
-		offer:     preferenceBool(values, prefOfferSearchApps, false),
-		webSearch: s.models.Enabled() && preferenceBool(values, prefWebSearch, true),
+		offer:     offerSearchAppsByDefault,
+		webSearch: s.models.Enabled() && webSearchOnByDefault,
 		request:   invocation.OriginalInput,
 	}
 }

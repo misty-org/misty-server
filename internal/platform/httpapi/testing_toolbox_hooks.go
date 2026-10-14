@@ -41,16 +41,6 @@ func TestingResolveAIInvocationSpaceToolNames(ctx context.Context, database *db.
 	return manifestToolNames(manifest), err
 }
 
-func TestingResolveAIInvocationSpaceToolNamesWithConversation(ctx context.Context, database *db.Database, userID, spaceID, conversationID, invocationID, prompt string) ([]string, error) {
-	if err := TestingAdmitToolInvocation(ctx, database, userID, spaceID, invocationID, prompt); err != nil {
-		return nil, err
-	}
-	_, _, manifest, err := resolveAIInvocationSpaceToolbox(ctx, database, spaceConversationToolActor{
-		userID: userID, spaceID: spaceID, runID: invocationID, sessionID: conversationID,
-	}, prompt)
-	return manifestToolNames(manifest), err
-}
-
 func TestingExecuteAIInvocationSpaceTool(ctx context.Context, database *db.Database, userID, spaceID, invocationID, prompt, name string, arguments json.RawMessage) (json.RawMessage, error) {
 	return TestingExecuteAIInvocationSpaceToolWithConversation(ctx, database, userID, spaceID, "", invocationID, prompt, name, arguments)
 }

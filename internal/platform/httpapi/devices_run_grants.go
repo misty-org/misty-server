@@ -22,12 +22,14 @@ func deviceContextSurface(kind string) string {
 	switch kind {
 	case "local_folder":
 		return "folders"
+	case "project_folder":
+		// No device policy offers this surface, so a project is reachable
+		// only from the computer it is on.
+		return "code"
 	case "workspace", "browser_tab":
 		return "browser"
 	case "terminal":
 		return "terminal"
-	case "inbox":
-		return "inbox"
 	}
 	return ""
 }
@@ -79,10 +81,6 @@ func verifyDeviceContextGrants(ctx context.Context, database *db.Database, userI
 		}
 		// Reaching another device needs this one added.
 		if requesterState != "admitted" {
-			return errDeviceGrantRequired
-		}
-		if deviceContext.Kind == "inbox" {
-			// Only a device can let files arrive in its own inbox.
 			return errDeviceGrantRequired
 		}
 		// Work on another device: it must be added too, and its own signed

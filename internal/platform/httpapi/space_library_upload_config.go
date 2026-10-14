@@ -43,7 +43,6 @@ type SpaceLibraryService struct {
 	duplicatesEnabled           bool
 	importsEnabled              bool
 	exportsEnabled              bool
-	malwareScanner              LibraryMalwareScanner
 	TestingUploadLimits         UploadLimits
 	TestingNoteAssetsEnabled    bool
 	TestingDrawingAssetsEnabled bool

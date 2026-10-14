@@ -9,13 +9,6 @@ import (
 	agent "github.com/kannachi323/misty/server/internal/agents"
 )
 
-type voiceClientEvent struct {
-	Type         string `json:"type"`
-	Audio        string `json:"audio,omitempty"`
-	Sequence     int    `json:"sequence,omitempty"`
-	InvocationID string `json:"invocation_id,omitempty"`
-	AudioBytes   int    `json:"audio_bytes,omitempty"`
-}
 type voiceProvider interface {
 	Read() (agent.VoiceRealtimeEvent, error)
 	Send(any) error
@@ -23,7 +16,6 @@ type voiceProvider interface {
 	SetOutputLimit(int) error
 	Close()
 }
-
 
 func (s *AgentsService) ownedVoiceReply(ctx context.Context, user, id string) (string, error) {
 	if id == "" || len(id) > 160 {

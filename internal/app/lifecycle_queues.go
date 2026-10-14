@@ -24,6 +24,11 @@ func runLifecycleQueues(ctx context.Context, server *Server) {
 			return recaps + workflows, err
 		}
 	}
+	if server.AI != nil {
+		queues["inbound-tasks"] = func(ctx context.Context) (int, error) {
+			return server.AI.ProcessInboundTasks(ctx, time.Now().UTC(), 25)
+		}
+	}
 	if server.Spaces != nil {
 		queues["account-deletion"] = func(ctx context.Context) (int, error) {
 			processed, err := server.Spaces.ProcessAccountDeletions(ctx, 10)

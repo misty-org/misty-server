@@ -157,7 +157,7 @@ func (s *Service) completeWithProviderContext(ctx context.Context, userID, space
 	}
 	response, err := nextProvider(ctx, selectedProvider, request)
 	if err != nil {
-		if reservation != nil {
+		if reservation != nil && releasableProviderFailure(err) {
 			_ = s.meter.Release(reservation)
 		}
 		if !errors.Is(err, context.Canceled) {
@@ -169,7 +169,7 @@ func (s *Service) completeWithProviderContext(ctx context.Context, userID, space
 	if reservation != nil {
 		settlement, err = s.meter.Settle(reservation, idempotencyKey+":settle", meterName, provider, model, response.Usage)
 		if err != nil {
-			_ = s.meter.Release(reservation)
+			// The settlement is durable in the outbox; never release used work.
 			return "", UsageSettlement{}, err
 		}
 	}

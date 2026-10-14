@@ -1,13 +1,6 @@
 package agent
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-)
-
-
-import (
 	"strings"
 	"testing"
 
@@ -32,30 +25,4 @@ func TestRequestSizeBytesCountsPromptAndSpaceContext(t *testing.T) {
 			t.Fatalf("requestSizeBytes() ignored the %s: got %d, want %d", name, got, base+100)
 		}
 	}
-}
-
-type loopingToolProvider struct{ calls int }
-
-func (provider *loopingToolProvider) Next(ModelRequest) (ModelResponse, error) {
-	provider.calls++
-	return ModelResponse{ToolRequests: []ToolRequest{{
-		ID: fmt.Sprintf("tool-%d", provider.calls), Name: ToolListDirectory, Risk: RiskRead,
-	}}}, nil
-}
-
-type serverToolProvider struct {
-	calls         int
-	systemPrompts []string
-}
-
-func (provider *serverToolProvider) Next(request ModelRequest) (ModelResponse, error) {
-	provider.calls++
-	provider.systemPrompts = append(provider.systemPrompts, request.SystemPrompt)
-	if provider.calls == 1 {
-		return ModelResponse{ToolRequests: []ToolRequest{{ID: "read-1", Name: "workflow.read_content", Risk: RiskRead, Arguments: json.RawMessage(`{"resourceId":"doc-1"}`)}}}, nil
-	}
-	if len(request.ToolResults) != 1 || !request.ToolResults[0].OK {
-		return ModelResponse{}, errors.New("missing tool result")
-	}
-	return ModelResponse{Text: "Grounded answer"}, nil
 }

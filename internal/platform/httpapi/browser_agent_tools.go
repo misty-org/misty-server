@@ -27,183 +27,43 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 	invocation agenttools.Invocation,
 	tool serveragent.ToolRequest,
 ) (json.RawMessage, error) {
-	var input struct {
-		ScopeID string `json:"scopeId"`
-	}
-	if json.Unmarshal(tool.Arguments, &input) != nil || len(input.ScopeID) < 8 {
-		return nil, db.ErrSpaceInvalid
-	}
-	if err := authorizeNativeAgentBrowserScope(ctx, s.database, invocation, input.ScopeID); err != nil {
+	scopeID, err := browserToolScopeID(tool.Arguments)
+	if err != nil {
 		return nil, err
 	}
-	var schema json.RawMessage
-	for _, descriptor := range browserToolDescriptors() {
-		if descriptor.Name == tool.Name {
-			schema = descriptor.InputSchema
-			break
-		}
+	if err := authorizeNativeAgentBrowserScope(ctx, s.database, invocation, scopeID); err != nil {
+		return nil, err
 	}
-	if len(schema) == 0 {
-		return nil, workflowv2.ErrCapabilityDenied
+	schema, err := browserToolSchema(tool.Name)
+	if err != nil {
+		return nil, err
 	}
-	agentID := invocation.AgentID
-	if agentID == "" {
-		agentID = "misty-unified"
-	}
-	configData := map[string]any{"agentId": agentID}
-	// The device refuses to act on these sites before any input is sent.
-	if settings, _, err := s.database.AISettings(ctx, invocation.UserID); err == nil {
-		configData["siteBlocks"] = map[string]any{"sensitive": settings.AgentBlockSensitive, "sites": settings.AgentBlockedSites}
-	}
+	configData := s.browserToolConfig(ctx, invocation)
 	if isAIInvocationRuntimeID(invocation.RunID) {
-		record, lookupErr := s.database.AIInvocationByID(ctx, invocation.UserID, invocation.RunID)
-		if lookupErr != nil {
-			return nil, lookupErr
-		}
-		var body aiInvocationInput
-		_ = json.Unmarshal(record.RequestPayload, &body)
-		// A goal on a workspace scope runs on the Misty window, or on the desktop
-		// with Misty's own cursor; either needs the same foreground task.
-		surface := "browser"
-		for _, target := range body.DeviceContexts {
-			var metadata map[string]any
-			_ = json.Unmarshal(target.Metadata, &metadata)
-			if target.OpaqueRef == input.ScopeID && metadata["workspace_control"] == true {
-				surface = "workspace"
-				if metadata["desktop_control"] == true {
-					surface = "desktop"
-				}
-			}
-		}
-		if strings.HasPrefix(tool.Name, "browser.workspace.") || (tool.Name == screenActTool && surface != "browser") {
-			if body.ExecutionMode != "agent" || body.WindowLabel != "main" || body.TaskID == "" || surface == "browser" {
-				return nil, db.ErrSpaceForbidden
-			}
-		}
-		if tool.Name == screenActTool {
-			configData["surface"] = surface
-		}
-		configData["taskId"] = scopeTaskID(body, input.ScopeID)
-		if body.AgentID != "" {
-			configData["agentId"] = body.AgentID
-		}
-		if tool.Name == "browser.upload" {
-			upload, err := parseBrowserUploadSource(tool.Arguments)
-			if err != nil {
-				return nil, err
-			}
-			if upload.DownloadID != "" {
-				// Download reuse is restricted to a live personal-agent task. The
-				// native boundary also verifies task ownership and pinned bytes.
-				if body.AgentID == "" || body.TaskID == "" {
-					return nil, db.ErrSpaceForbidden
-				}
-				if err := authorizeNativeAgentBrowserScope(ctx, s.database, invocation, upload.SourceScopeID); err != nil {
-					return nil, err
-				}
-				configData["downloadUpload"] = upload
-			} else {
-				file, lookupErr := s.database.AIConversationAttachment(ctx, invocation.UserID, upload.AttachmentID)
-				if lookupErr != nil || file.LifecycleState != "ready" || file.ConversationID != record.ConversationID || file.InvocationID == "" {
-					return nil, db.ErrSpaceForbidden
-				}
-				configData["upload"] = map[string]any{"id": file.ID, "name": file.DisplayName, "mimeType": file.MIMEType, "byteSize": file.ByteSize, "sha256": file.SHA256}
-			}
+		if err := s.applyAIInvocationBrowserConfig(ctx, invocation, tool, scopeID, configData); err != nil {
+			return nil, err
 		}
 	} else if tool.Name == "browser.upload" {
 		return nil, db.ErrSpaceForbidden
 	}
-	if tool.Name == "browser.extract" {
-		// Reject a bad instruction or schema before the device reads the page.
-		if _, _, err := validBrowserExtractRequest(tool.Arguments); err != nil {
-			return nil, err
-		}
-	}
-	if tool.Name == "browser.upload" && !validBrowserUploadTarget(tool.Arguments) {
-		return nil, db.ErrSpaceInvalid
+	if err := validateBrowserToolArguments(tool); err != nil {
+		return nil, err
 	}
 	if browserPageActTools[tool.Name] {
-		approval, waiting, err := s.browserPageStepsApproval(ctx, invocation, tool, input.ScopeID)
-		if err != nil {
-			return nil, err
-		}
-		if waiting != nil {
-			return waiting, nil
-		}
-		if err := s.useAgentActionApproval(ctx, invocation.UserID, approval); err != nil {
-			return nil, err
+		if waiting, err := s.approveBrowserPageSteps(ctx, invocation, tool, scopeID); err != nil || waiting != nil {
+			return waiting, err
 		}
 	}
 	if tool.Name == screenActTool {
-		var act struct {
-			Goal               string `json:"goal"`
-			AllowConsequential bool   `json:"allowConsequential"`
-		}
-		_ = json.Unmarshal(tool.Arguments, &act)
-		if act.AllowConsequential {
-			// Sending, buying, deleting or changing access on screen follows the
-			// same "Ask before acting" approval card as app actions.
-			approval, waiting, err := s.confirmAgentAction(ctx, invocation, "screen.act:"+input.ScopeID, act.Goal,
-				"On screen: "+truncateAgentRuntimeText(act.Goal, 180), act.Goal)
-			if err != nil {
-				return nil, err
-			}
-			if waiting != nil {
-				return waiting, nil
-			}
-			if err := s.useAgentActionApproval(ctx, invocation.UserID, approval); err != nil {
-				return nil, err
-			}
+		if waiting, err := s.approveScreenAct(ctx, invocation, tool, scopeID); err != nil || waiting != nil {
+			return waiting, err
 		}
 	}
-	config := TestingMustAPIRawJSON(configData)
-	var job *db.WorkflowDeviceNodeJob
-	var err error
-	if isAIInvocationRuntimeID(invocation.RunID) {
-		job, err = s.database.QueueAIInvocationDeviceNodeJob(
-			ctx, invocation.UserID, invocation.RunID, "browser_tool_"+tool.ID, 1,
-			input.ScopeID, tool.Name, tool.Name, tool.Arguments, config,
-			schema, agentToolObjectOutputSchema(),
-		)
-	} else {
-		job, err = s.database.QueueWorkflowDeviceNodeJob(
-			ctx, invocation.UserID, invocation.RunID, "browser_tool_"+tool.ID, 1,
-			input.ScopeID, tool.Name, tool.Name, tool.Arguments, config,
-			schema, agentToolObjectOutputSchema(),
-		)
-	}
-	if errors.Is(err, db.ErrDeviceNotFound) {
-		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
-	}
+	job, err := s.queueBrowserDeviceJob(ctx, invocation, tool, scopeID, schema, configData)
 	if err != nil {
 		return nil, err
 	}
-	if job.State == "canceled" && job.ControlVersion == 2 && job.ExecutionStartedAt == nil {
-		job, err = s.database.RearmUnstartedBrowserJob(ctx, invocation.UserID, job)
-		if err != nil {
-			return nil, errors.Join(db.ErrAgentToolboxNotAttempted, err)
-		}
-	}
-	current, err := waitForDeviceJob(ctx, s.database, invocation.UserID, job.ID, job.DeadlineAt)
-	if err != nil {
-		return s.stopBrowserDeviceTool(invocation.UserID, job.ID, tool.Name)
-	}
-	switch current.State {
-	case "completed":
-		if tool.Name == "browser.extract" {
-			return s.browserExtract(ctx, invocation, current.ID, tool.Arguments, current.Output)
-		}
-		return current.Output, nil
-	case "uncertain":
-		if browserObservation(tool.Name) {
-			return nil, browserObservationFailure(current.ErrorCode)
-		}
-		return nil, db.ErrAgentToolboxActionUnknown
-	case "canceled":
-		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
-	default:
-		return nil, browserDeviceFailureForOperation(current.ErrorCode, current.Operation)
-	}
+	return s.awaitBrowserDeviceJob(ctx, invocation, tool, job)
 }
 
 var errBrowserWebviewUnavailable = errors.New("browser_webview_unavailable")
@@ -316,4 +176,17 @@ func (s *SpacesService) stopBrowserDeviceTool(userID, jobID, operation string) (
 		}
 		return nil, db.ErrAgentToolboxActionUnknown
 	}
+}
+
+// browserConfirmKinds are the page actions the device pauses on until the
+// person allows them in the island. Agents act on their own unless the account
+// asks first; paying has its own switch.
+func browserConfirmKinds(settings db.AIUserSettings) []string {
+	if settings.AppActionsAsk {
+		return []string{"payment", "send", "delete", "publish"}
+	}
+	if settings.PaymentsAsk {
+		return []string{"payment"}
+	}
+	return []string{}
 }

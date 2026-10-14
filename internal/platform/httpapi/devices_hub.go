@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"log"
 	"sort"
@@ -11,54 +10,46 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// The device hub keeps presence and LAN address candidates in memory only:
-// the current entry per device, never a history, dropped when its socket
-// closes. It routes small control messages between an account's devices and
-// never carries file contents (docs/design/devices/BRIEF.md).
+// The device hub keeps presence in memory only: whether each of an account's
+// devices is online right now, never a history, dropped when its socket
+// closes. Devices never connect to each other; everything between them goes
+// through the server, and this channel carries only presence and hints
+// (docs/design/devices/BRIEF.md).
 
 const (
 	deviceLivenessInterval  = 45 * time.Second
 	deviceRemotePresenceTTL = 2 * time.Minute
-	maxDeviceCandidates     = 8
 	maxDeviceSocketsAccount = 30
 	deviceNotifyChannel     = "misty_device_channel"
 )
 
 type devicePresence struct {
-	DeviceID   string   `json:"deviceId"`
-	EndpointID string   `json:"endpointId,omitempty"`
-	Online     bool     `json:"online"`
-	NetworkKey string   `json:"networkKey,omitempty"`
-	Overlay    bool     `json:"overlay,omitempty"`
-	Candidates []string `json:"-"`
+	DeviceID string `json:"deviceId"`
+	Online   bool   `json:"online"`
 }
 
 type deviceConnection struct {
-	id         string
-	userID     string
-	deviceID   string
-	admitted   bool
-	send       func(any) bool
-	close      func()
-	revoke     func()
-	presence   devicePresence
-	connectLog map[string][]time.Time
+	id       string
+	userID   string
+	deviceID string
+	admitted bool
+	send     func(any) bool
+	close    func()
+	revoke   func()
+	presence devicePresence
 }
 
 // deviceHubEvent crosses processes through Postgres NOTIFY. Payloads stay well
-// under its 8000-byte limit: at most eight candidate addresses.
+// under its 8000-byte limit.
 type deviceHubEvent struct {
-	Instance   string          `json:"instance"`
-	Kind       string          `json:"kind"`
-	UserID     string          `json:"userId"`
-	DeviceID   string          `json:"deviceId"`
-	Target     string          `json:"target,omitempty"`
-	Presence   *devicePresence `json:"presence,omitempty"`
-	Candidates []string        `json:"candidates,omitempty"`
+	Instance string          `json:"instance"`
+	Kind     string          `json:"kind"`
+	UserID   string          `json:"userId"`
+	DeviceID string          `json:"deviceId"`
+	Presence *devicePresence `json:"presence,omitempty"`
 	// Entries carries a batch of presences ("presence-batch").
 	Entries []hubPresenceEntry `json:"entries,omitempty"`
 }
@@ -79,7 +70,6 @@ type remotePresence struct {
 type deviceHub struct {
 	database *db.Database
 	instance string
-	secret   []byte
 	mu       sync.Mutex
 	accounts map[string]map[string]*deviceConnection
 	remote   map[string]map[string]remotePresence
@@ -90,12 +80,7 @@ type deviceHub struct {
 }
 
 func newDeviceHub(database *db.Database) *deviceHub {
-	secret := []byte(envconfig.Getenv("MISTY_DEVICE_PAIRING_PEPPER"))
-	if len(secret) < 32 {
-		secret = make([]byte, 32)
-		_, _ = rand.Read(secret)
-	}
-	return &deviceHub{database: database, instance: uuid.NewString(), secret: secret,
+	return &deviceHub{database: database, instance: uuid.NewString(),
 		accounts: map[string]map[string]*deviceConnection{}, remote: map[string]map[string]remotePresence{}}
 }
 
@@ -141,23 +126,12 @@ func (h *deviceHub) unregister(connection *deviceConnection) {
 			delete(h.accounts, connection.userID)
 		}
 		connection.presence.Online = false
-		connection.presence.Candidates = nil
 	}
 	presence, admitted := connection.presence, connection.admitted
 	h.mu.Unlock()
 	if current {
 		h.publishPresence(connection.userID, presence, admitted)
 	}
-}
-
-// setCandidates replaces a device's current LAN candidates.
-func (h *deviceHub) setCandidates(connection *deviceConnection, candidates []string, overlay bool) {
-	h.mu.Lock()
-	connection.presence.Candidates = candidates
-	connection.presence.Overlay = overlay
-	presence, admitted := connection.presence, connection.admitted
-	h.mu.Unlock()
-	h.publishPresence(connection.userID, presence, admitted)
 }
 
 // admit marks a pending device's socket as added once its admission lands.
@@ -220,19 +194,7 @@ func (h *deviceHub) local(userID, deviceID string) *deviceConnection {
 	return h.accounts[userID][deviceID]
 }
 
-// localAdmitted returns an admitted local device and a copy of its presence.
-func (h *deviceHub) localAdmitted(userID, deviceID string) (*deviceConnection, devicePresence, bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	connection := h.accounts[userID][deviceID]
-	if connection == nil || !connection.admitted {
-		return nil, devicePresence{}, false
-	}
-	return connection, connection.presence, true
-}
-
 // publishPresence tells the account's other devices, here and elsewhere.
-// Candidates never travel with presence; they go only with a connect intent.
 func (h *deviceHub) publishPresence(userID string, presence devicePresence, admitted bool) {
 	if !admitted {
 		return
@@ -249,41 +211,6 @@ func (h *deviceHub) publishPresence(userID string, presence devicePresence, admi
 	if remote {
 		h.notify(deviceHubEvent{Kind: "presence", UserID: userID, DeviceID: presence.DeviceID, Presence: &presence})
 	}
-}
-
-// routeCandidates sends a device the other's LAN candidates. Both devices of a
-// connect intent receive them at the same moment and dial each other.
-func (h *deviceHub) routeCandidates(userID, toDevice, fromDevice, endpointID string, candidates []string) {
-	message := map[string]any{"type": "candidates", "deviceId": fromDevice, "endpointId": endpointID, "addresses": candidates}
-	if connection := h.local(userID, toDevice); connection != nil {
-		connection.send(message)
-		return
-	}
-	h.notify(deviceHubEvent{Kind: "candidates", UserID: userID, DeviceID: fromDevice, Target: toDevice, Candidates: candidates,
-		Presence: &devicePresence{DeviceID: fromDevice, EndpointID: endpointID}})
-}
-
-// connectIntent answers "A wants B": B must be admitted and online. Returns false
-// when B is offline everywhere.
-func (h *deviceHub) connectIntent(from *deviceConnection, target string) bool {
-	h.mu.Lock()
-	own := from.presence
-	h.mu.Unlock()
-	if _, peer, ok := h.localAdmitted(from.userID, target); ok {
-		h.routeCandidates(from.userID, from.deviceID, target, peer.EndpointID, peer.Candidates)
-		h.routeCandidates(from.userID, target, from.deviceID, own.EndpointID, own.Candidates)
-		return true
-	}
-	h.mu.Lock()
-	remote, ok := h.remote[from.userID][target]
-	h.mu.Unlock()
-	if !ok || !remote.presence.Online || remote.expires.Before(time.Now()) {
-		return false
-	}
-	// The other process answers with B's candidates and forwards A's to B.
-	h.notify(deviceHubEvent{Kind: "connect", UserID: from.userID, DeviceID: from.deviceID, Target: target, Candidates: own.Candidates,
-		Presence: &devicePresence{DeviceID: from.deviceID, EndpointID: own.EndpointID}})
-	return true
 }
 
 // kick closes a removed device's socket wherever it is.
@@ -340,18 +267,6 @@ func (h *deviceHub) receive(event deviceHubEvent) {
 		for _, peer := range h.localPeers(event.UserID, event.DeviceID) {
 			peer.send(map[string]any{"type": "presence.delta", "device": event.Presence})
 		}
-	case "candidates":
-		if connection := h.local(event.UserID, event.Target); connection != nil && event.Presence != nil {
-			connection.send(map[string]any{"type": "candidates", "deviceId": event.DeviceID, "endpointId": event.Presence.EndpointID, "addresses": event.Candidates})
-		}
-	case "connect":
-		peer, presence, ok := h.localAdmitted(event.UserID, event.Target)
-		if !ok || event.Presence == nil {
-			return
-		}
-		peer.send(map[string]any{"type": "candidates", "deviceId": event.DeviceID, "endpointId": event.Presence.EndpointID, "addresses": event.Candidates})
-		h.notify(deviceHubEvent{Kind: "candidates", UserID: event.UserID, DeviceID: peer.deviceID, Target: event.DeviceID, Candidates: presence.Candidates,
-			Presence: &devicePresence{DeviceID: peer.deviceID, EndpointID: presence.EndpointID}})
 	case "kick":
 		if connection := h.local(event.UserID, event.DeviceID); connection != nil {
 			connection.revoke()

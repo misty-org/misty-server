@@ -37,7 +37,7 @@ func (m BillingMeter) reserveNative(userID, key, provider, model string, units m
 	if err != nil {
 		return nil, err
 	}
-	return &UsageReservation{ID: r.ID, Billing: r}, nil
+	return &UsageReservation{ID: r.ID, Billing: r, OverLimit: r.OverLimit}, nil
 }
 
 func (m BillingMeter) Settle(r *UsageReservation, key, meter, provider, model string, u ModelUsage) (UsageSettlement, error) {

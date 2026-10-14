@@ -1,15 +1,17 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// AgentListings lists the agents members published to a Space.
+// AgentListings lists a Space's agent members.
 func (s *SpacesService) AgentListings() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -108,6 +110,12 @@ func (s *SpacesService) DecideAgentMemberRequest(approve bool) http.HandlerFunc 
 		if err != nil {
 			writeSpaceError(w, err)
 			return
+		}
+		if !approve && request.SourceMessageID != "" {
+			owner := firstName(request.TargetOwnerName, "My owner")
+			if _, err := s.database.CreateAgentMemberRequestMessage(context.WithoutCancel(r.Context()), request, "agent_member_request_declined", owner+" didn't approve this request."); err != nil {
+				log.Printf("agent request %s: declined note failed: %v", request.ID, err)
+			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"request": request, "state": memberRequestState(request)})
 	}

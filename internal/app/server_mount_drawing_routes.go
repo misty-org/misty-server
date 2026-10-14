@@ -302,6 +302,11 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Post(prefix+"/agent-methods/instantiate", aiService.InstantiateAgentMethod())
 	s.Router.Post(prefix+"/agent-methods/run", aiService.RunAgentMethod())
 	s.Router.Get(prefix+"/workflow-schedules", aiService.UpcomingWorkflowRuns())
+	s.Router.Get(prefix+"/workflow-schedules/device-runs", aiService.DeviceScheduledRuns())
+	s.Router.Get(prefix+"/inbound-channels", aiService.InboundChannels())
+	s.Router.Put(prefix+"/inbound-channels/{channel}", aiService.InboundChannel())
+	s.Router.Delete(prefix+"/inbound-channels/{channel}", aiService.InboundChannel())
+	s.Router.Post(prefix+"/workflow-schedules/{scheduleID}/device-claim", aiService.ClaimDeviceScheduledRun())
 	s.Router.Put(prefix+"/agent-methods/{methodID}/schedule", aiService.WorkflowSchedule())
 	s.Router.Delete(prefix+"/agent-methods/{methodID}/schedule", aiService.WorkflowSchedule())
 	s.Router.Get(prefix+"/activity", aiService.MistyActivity())
@@ -319,9 +324,6 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 }
 
 func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {
-	s.Router.Get(prefix+"/settings/preferences", aiService.AccountPreferences())
-	s.Router.Post(prefix+"/settings/preferences", aiService.AccountPreferences())
-	s.Router.Patch(prefix+"/settings/preferences", aiService.AccountPreferences())
 	s.Router.Get(prefix+"/misty/events", aiService.AccountEvents())
 	s.Router.Post(prefix+"/misty/agent-followup", aiService.AgentFollowup())
 	s.Router.Post(prefix+"/misty/agent-execution", aiService.AgentExecutionLease())

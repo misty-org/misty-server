@@ -19,10 +19,41 @@ const (
 	syncRecordTombstoneDays = 30
 )
 
+// The shared clipboard (docs/design/clipboard/BRIEF.md) is a small ring of
+// sealed clips in its own collection: a few larger records that expire after
+// a day. Only devices whose signed policy turns the clipboard on reach it.
+const (
+	syncClipboardCollection = "clipboard"
+	syncClipboardMaxBytes   = 256 << 10
+	syncClipboardMaxPage    = 8
+	syncClipboardLifetime   = "24 hours"
+)
+
 var (
-	syncRecordCollections = map[string]bool{"bookmarks": true, "tab_groups": true, "history": true, "extension_sync": true, "passwords": true}
+	syncRecordCollections = map[string]bool{"bookmarks": true, "tab_groups": true, "history": true, "extension_sync": true, "passwords": true, syncClipboardCollection: true}
 	syncRecordKeyPattern  = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
+
+func recordMaxBytes(collection string) int {
+	if collection == syncClipboardCollection {
+		return syncClipboardMaxBytes
+	}
+	return syncRecordMaxBytes
+}
+
+// clipboardAllowed reports whether this sync device belongs to an admitted
+// device whose latest signed policy turns the shared clipboard on.
+func clipboardAllowed(ctx context.Context, tx *sql.Tx, userID, device string) (bool, error) {
+	// Device tables enforce row-level security per user; scope this
+	// transaction to the device's own account.
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_user_id',$1,true)`, userID); err != nil {
+		return false, err
+	}
+	var allowed bool
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices t JOIN device_policies p ON p.device_id=t.id AND p.user_id=t.user_id
+		WHERE t.user_id=$1 AND t.sync_device_id::text=$2 AND t.admission_state='admitted' AND p.clipboard)`, userID, device).Scan(&allowed)
+	return allowed, err
+}
 
 type SyncRecord struct {
 	Key     string `json:"key"`
@@ -56,8 +87,8 @@ type SyncRecordListing struct {
 	Reset bool `json:"reset"`
 }
 
-func validRecordWrite(w SyncRecordWrite) bool {
-	return syncRecordKeyPattern.MatchString(w.Key) && w.BaseVersion >= 0 && w.BaseVersion < SyncMaxCounter && len(w.Ciphertext) <= syncRecordMaxBytes
+func validRecordWrite(collection string, w SyncRecordWrite) bool {
+	return syncRecordKeyPattern.MatchString(w.Key) && w.BaseVersion >= 0 && w.BaseVersion < SyncMaxCounter && len(w.Ciphertext) <= recordMaxBytes(collection)
 }
 
 // PullBrowserSyncRecords returns a collection's records changed after `since`,
@@ -69,11 +100,25 @@ func (db *Store) PullBrowserSyncRecords(ctx context.Context, userID, vault, devi
 	if limit <= 0 || limit > syncRecordMaxPage {
 		limit = syncRecordMaxPage
 	}
+	// Large clips arrive a few at a time so each frame stays small.
+	clipboard := collection == syncClipboardCollection
+	if clipboard && limit > syncClipboardMaxPage {
+		limit = syncClipboardMaxPage
+	}
 	tx, err := db.readTx(ctx, userID, vault, device)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+	if clipboard {
+		allowed, err := clipboardAllowed(ctx, tx, userID, device)
+		if err != nil {
+			return nil, err
+		}
+		if !allowed {
+			return nil, ErrSyncForbidden
+		}
+	}
 	out := &SyncRecordListing{Collection: collection, Records: []SyncRecord{}}
 	var head, floor int64
 	err = tx.QueryRowContext(ctx, `SELECT sequence,compacted_through FROM browser_sync_record_cursors WHERE vault_id=$1 AND collection=$2`, vault, collection).Scan(&head, &floor)
@@ -86,7 +131,9 @@ func (db *Store) PullBrowserSyncRecords(ctx context.Context, userID, vault, devi
 	if since > 0 && since < floor {
 		out.Reset, since = true, 0
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT record_key,version,ciphertext,sequence FROM browser_sync_records WHERE vault_id=$1 AND collection=$2 AND sequence>$3 ORDER BY sequence LIMIT $4`, vault, collection, since, limit+1)
+	// Expired clips are never served, even before a write tombstones them.
+	rows, err := tx.QueryContext(ctx, `SELECT record_key,version,ciphertext,sequence FROM browser_sync_records WHERE vault_id=$1 AND collection=$2 AND sequence>$3
+		AND ($5=false OR ciphertext IS NULL OR updated_at > now() - $6::interval) ORDER BY sequence LIMIT $4`, vault, collection, since, limit+1, clipboard, syncClipboardLifetime)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +167,7 @@ func (db *Store) PushBrowserSyncRecords(ctx context.Context, userID, vault, devi
 		return nil, 0, ErrSyncInvalid
 	}
 	for _, w := range writes {
-		if !validRecordWrite(w) {
+		if !validRecordWrite(collection, w) {
 			return nil, 0, ErrSyncInvalid
 		}
 	}
@@ -140,6 +187,16 @@ func (db *Store) PushBrowserSyncRecords(ctx context.Context, userID, vault, devi
 	if !fullSync {
 		return nil, 0, ErrSyncForbidden
 	}
+	clipboard := collection == syncClipboardCollection
+	if clipboard {
+		allowed, err := clipboardAllowed(ctx, tx, userID, device)
+		if err != nil {
+			return nil, 0, err
+		}
+		if !allowed {
+			return nil, 0, ErrSyncForbidden
+		}
+	}
 	// The cursor row serializes writers of one collection.
 	var head int64
 	err = tx.QueryRowContext(ctx, `INSERT INTO browser_sync_record_cursors(vault_id,collection) VALUES($1,$2)
@@ -147,6 +204,11 @@ func (db *Store) PushBrowserSyncRecords(ctx context.Context, userID, vault, devi
 		RETURNING sequence`, vault, collection).Scan(&head)
 	if err != nil {
 		return nil, 0, err
+	}
+	if clipboard {
+		if head, err = expireClips(ctx, tx, vault, head); err != nil {
+			return nil, 0, err
+		}
 	}
 	var live int64
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM browser_sync_records WHERE vault_id=$1 AND collection=$2 AND ciphertext IS NOT NULL`, vault, collection).Scan(&live); err != nil {
@@ -235,4 +297,35 @@ func sharedWorkspaceRetired(ctx context.Context, tx *sql.Tx, vault string) (bool
 // notifyRecords sends a content-free hint that a collection's cursor moved.
 func notifyRecords(ctx context.Context, tx *sql.Tx, userID, collection string) error {
 	return notifySync(ctx, tx, userID, collection, "browser-records")
+}
+
+// expireClips tombstones clips older than a day, each at a new sequence so
+// every device's next pull drops it. It returns the collection's new head.
+func expireClips(ctx context.Context, tx *sql.Tx, vault string, head int64) (int64, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT record_key FROM browser_sync_records WHERE vault_id=$1 AND collection=$2 AND ciphertext IS NOT NULL
+		AND updated_at <= now() - $3::interval ORDER BY sequence FOR UPDATE`, vault, syncClipboardCollection, syncClipboardLifetime)
+	if err != nil {
+		return head, err
+	}
+	var keys []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			rows.Close()
+			return head, err
+		}
+		keys = append(keys, key)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return head, err
+	}
+	for _, key := range keys {
+		head++
+		if _, err := tx.ExecContext(ctx, `UPDATE browser_sync_records SET ciphertext=NULL,version=version+1,sequence=$4,updated_at=now()
+			WHERE vault_id=$1 AND collection=$2 AND record_key=$3`, vault, syncClipboardCollection, key, head); err != nil {
+			return head, err
+		}
+	}
+	return head, nil
 }

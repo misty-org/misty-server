@@ -11,10 +11,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// Bounds for work one member's agent asks of another member's agent. The
-// target owner pays for that work, so a request gets fewer model turns and
-// less time than a run the owner starts themselves, and an unapproved request
-// expires.
+// Bounds for work a member asks of another member's agent. The work uses the
+// owner's agent on someone else's behalf, so a request gets fewer model turns
+// and less time than a run the owner starts themselves, and an unapproved
+// request expires.
 const (
 	memberRequestModelTurns    = 12
 	memberRequestExecutionMS   = 10 * 60 * 1000
@@ -34,6 +34,12 @@ func ExternalAgentRequester(userID, agentID string) string {
 	return ExternalAgentRequesterPrefix + userID + ":" + agentID
 }
 
+// MentionRequesterPrefix marks requests a person made by @mentioning an agent
+// in Space chat. The message stands in for the requesting run.
+const MentionRequesterPrefix = "message:"
+
+func MentionRequester(messageID string) string { return MentionRequesterPrefix + messageID }
+
 type AgentMemberRequestInput struct {
 	SpaceID          string
 	RequesterUserID  string
@@ -43,6 +49,9 @@ type AgentMemberRequestInput struct {
 	Message          string
 	IdempotencyKey   string
 	Timezone         string
+	// SourceConversationID is the chat the mentioning message was sent in;
+	// empty means the Space's main chat.
+	SourceConversationID string
 }
 
 // AgentMemberRequest joins the request to the current state of its run.
@@ -65,12 +74,16 @@ type AgentMemberRequest struct {
 	RunState          string          `json:"run_state"`
 	RunResult         json.RawMessage `json:"run_result"`
 	RunErrorMessage   string          `json:"run_error_message"`
-	Replay            bool            `json:"-"`
+	// SourceMessageID is set when a person @mentioned the agent in Space chat;
+	// the reply posts under that message.
+	SourceMessageID      string `json:"source_message_id,omitempty"`
+	SourceConversationID string `json:"source_conversation_id,omitempty"`
+	Replay               bool   `json:"-"`
 }
 
 const agentMemberRequestSelect = `SELECT q.id,q.space_id,s.name,q.requester_user_id,COALESCE(ru.name,''),q.requester_agent_id,q.requester_run_id,
 	q.target_agent_id,COALESCE(a.name,''),q.target_owner_user_id,COALESCE(ou.name,''),q.child_run_id,q.approval,q.message,q.created_at,
-	r.state,r.result,COALESCE(r.error_message,'')
+	r.state,r.result,COALESCE(r.error_message,''),COALESCE(q.source_message_id,''),COALESCE(q.source_conversation_id,'')
 	FROM agent_member_requests q JOIN spaces s ON s.id=q.space_id JOIN space_runs r ON r.id=q.child_run_id
 	LEFT JOIN misty_ask_identities a ON a.id=q.target_agent_id
 	LEFT JOIN users ru ON ru.id=q.requester_user_id LEFT JOIN users ou ON ou.id=q.target_owner_user_id `
@@ -78,15 +91,16 @@ const agentMemberRequestSelect = `SELECT q.id,q.space_id,s.name,q.requester_user
 func scanAgentMemberRequest(row interface{ Scan(...any) error }, out *AgentMemberRequest) error {
 	return row.Scan(&out.ID, &out.SpaceID, &out.SpaceName, &out.RequesterUserID, &out.RequesterName, &out.RequesterAgentID, &out.RequesterRunID,
 		&out.TargetAgentID, &out.TargetAgentName, &out.TargetOwnerUserID, &out.TargetOwnerName, &out.ChildRunID, &out.Approval, &out.Message, &out.CreatedAt,
-		&out.RunState, &out.RunResult, &out.RunErrorMessage)
+		&out.RunState, &out.RunResult, &out.RunErrorMessage, &out.SourceMessageID, &out.SourceConversationID)
 }
 
-// CreateAgentMemberRequest sends work from the caller's agent run to an agent
-// another member published to a shared Space. The requester's own run pays
-// for asking; the delegated run is owned and paid for by the target agent's
-// owner and acts only in that Space. A listing that asks first waits for its
-// owner to approve before anything runs or is charged; otherwise it starts.
-// A repeated idempotency key from the same run returns the original request.
+// CreateAgentMemberRequest sends work to an agent that lives in a Space, from
+// another agent's run or from a person @mentioning it in Space chat. The
+// delegated run acts as the target agent with its owner's permissions, only
+// in that Space, and is billed to the person who asked. A listing that asks
+// first waits for its owner to approve before anything runs or is charged;
+// otherwise it starts. A repeated idempotency key from the same run (or
+// message) returns the original request.
 func (db *Database) CreateAgentMemberRequest(ctx context.Context, input AgentMemberRequestInput) (*AgentMemberRequest, error) {
 	input.Message = strings.TrimSpace(input.Message)
 	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
@@ -125,6 +139,13 @@ func (db *Database) CreateAgentMemberRequest(ctx context.Context, input AgentMem
 		if err != nil {
 			return err
 		}
+		sourceMessageID := ""
+		if strings.HasPrefix(input.RequesterRunID, MentionRequesterPrefix) {
+			sourceMessageID = strings.TrimPrefix(input.RequesterRunID, MentionRequesterPrefix)
+			if err := requireMentionMessageTx(ctx, tx, input, sourceMessageID); err != nil {
+				return err
+			}
+		}
 		target, err := memberRequestTargetTx(ctx, tx, input)
 		if err != nil {
 			return err
@@ -136,8 +157,9 @@ func (db *Database) CreateAgentMemberRequest(ctx context.Context, input AgentMem
 		if runModeRank(mode) > runModeRank("auto") {
 			mode = "auto"
 		}
+		// Owners never wait on themselves.
 		approval := "not_needed"
-		if target.policy == "ask" {
+		if target.policy == "ask" && target.ownerUserID != input.RequesterUserID {
 			approval = "pending"
 		}
 		snapshot := mustJSON(map[string]any{"id": input.TargetAgentID, "version": target.version, "version_id": target.versionID, "name": target.name,
@@ -153,16 +175,17 @@ func (db *Database) CreateAgentMemberRequest(ctx context.Context, input AgentMem
 			requesting_member_id,source_type,agent_id,outputs,artifacts,attempt,conversation_scope_kind,owner_user_id,
 			initial_run_mode,effective_run_mode,agent_version_snapshot,parent_run_id,delegation_depth,context_bindings,
 			model_turn_limit,execution_limit_ms)
-			VALUES($1,$2,'agent',$3,$4,$6,'delegated','queued',$5,'{}'::jsonb,$6,'direct',$3,'{}'::jsonb,'[]'::jsonb,1,'everyone',$6,
+			VALUES($1,$2,'agent',$3,$4,$4,'delegated','queued',$5,'{}'::jsonb,$6,'direct',$3,'{}'::jsonb,'[]'::jsonb,1,'everyone',$6,
 			$7,$7,$8,NULLIF($9,''),$10,'[]'::jsonb,$11,$12)`,
 			runID, input.SpaceID, input.TargetAgentID, input.RequesterUserID, runInput, target.ownerUserID,
 			mode, snapshot, parentRunID, depth, memberRequestModelTurns, memberRequestExecutionMS); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO agent_member_requests(id,space_id,requester_user_id,requester_agent_id,requester_run_id,
-			target_agent_id,target_owner_user_id,child_run_id,message,idempotency_key,approval) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			target_agent_id,target_owner_user_id,child_run_id,message,idempotency_key,approval,source_message_id,source_conversation_id)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NULLIF($12,''),NULLIF($13,''))`,
 			requestID, input.SpaceID, input.RequesterUserID, input.RequesterAgentID, input.RequesterRunID, input.TargetAgentID,
-			target.ownerUserID, runID, input.Message, input.IdempotencyKey, approval); err != nil {
+			target.ownerUserID, runID, input.Message, input.IdempotencyKey, approval, sourceMessageID, input.SourceConversationID); err != nil {
 			return err
 		}
 		if approval == "not_needed" {
@@ -184,6 +207,13 @@ func (db *Database) CreateAgentMemberRequest(ctx context.Context, input AgentMem
 // memberRequestParentTx proves the requester owns the live run asking for
 // help and bounds how deep delegated work can go.
 func memberRequestParentTx(ctx context.Context, tx *sql.Tx, userID, agentID, runID string) (parentRunID, parentInvocationID string, depth int, err error) {
+	if strings.HasPrefix(runID, MentionRequesterPrefix) {
+		// A person asked in Space chat; requireMentionMessageTx checks the message.
+		if agentID != "" {
+			return "", "", 0, ErrSpaceForbidden
+		}
+		return "", "", 1, nil
+	}
 	if strings.HasPrefix(runID, ExternalAgentRequesterPrefix) {
 		// An A2A caller is one of the signed-in member's own agents, outside
 		// any Misty run. The endpoint verified its agent token; this re-checks
@@ -237,7 +267,7 @@ func memberRequestTargetTx(ctx context.Context, tx *sql.Tx, input AgentMemberReq
 	var target memberRequestTarget
 	err := tx.QueryRowContext(ctx, `SELECT l.owner_user_id,l.accept_policy,l.max_open_requests,a.name,a.instructions,a.model_id,a.reasoning_effort,a.default_run_mode,a.version,v.id`+
 		spaceAgentListingJoins+` JOIN misty_ask_identity_versions v ON v.agent_id=a.id AND v.version=a.version
-		WHERE l.space_id=$1 AND l.agent_id=$2 AND NOT a.system_managed FOR SHARE OF l`, input.SpaceID, input.TargetAgentID).
+		WHERE l.space_id=$1 AND l.agent_id=$2 FOR SHARE OF l`, input.SpaceID, input.TargetAgentID).
 		Scan(&target.ownerUserID, &target.policy, &target.maxOpen, &target.name, &target.instructions, &target.modelID, &target.effort, &target.defaultMode, &target.version, &target.versionID)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && target.policy == "off" {
 		return target, ErrAgentListingUnavailable
@@ -277,7 +307,7 @@ func memberRequestLimitsTx(ctx context.Context, tx *sql.Tx, input AgentMemberReq
 	if open >= maxOpen {
 		return ErrAgentRequestBusy
 	}
-	external := strings.HasPrefix(input.RequesterRunID, ExternalAgentRequesterPrefix)
+	external := strings.HasPrefix(input.RequesterRunID, ExternalAgentRequesterPrefix) || strings.HasPrefix(input.RequesterRunID, MentionRequesterPrefix)
 	if (!external && perRun >= memberRequestsPerRun) || lastHour >= memberRequestsPerUserHour {
 		return ErrAgentRequestLimit
 	}
@@ -307,4 +337,33 @@ func (db *Database) AgentMemberRequestForRun(ctx context.Context, runID string) 
 		return nil, ErrSpaceNotFound
 	}
 	return out, err
+}
+
+// requireMentionMessageTx proves the requester sent the chat message that
+// @mentions the agent, in the Space and chat the request names. The owner must
+// be able to post the reply there.
+func requireMentionMessageTx(ctx context.Context, tx *sql.Tx, input AgentMemberRequestInput, messageID string) error {
+	var mentioned bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_messages m
+		WHERE m.id=$1 AND m.space_id=$2 AND m.sender_user_id=$3 AND m.sender_kind='person' AND COALESCE(m.conversation_id,'')=$4
+		  AND m.content @> jsonb_build_array(jsonb_build_object('type','mention','agent_id',$5::text)))`,
+		messageID, input.SpaceID, input.RequesterUserID, input.SourceConversationID, input.TargetAgentID).Scan(&mentioned); err != nil {
+		return err
+	}
+	if !mentioned {
+		return ErrSpaceForbidden
+	}
+	if input.SourceConversationID == "" {
+		return nil
+	}
+	var ownerInChat bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_conversation_members cm
+		JOIN misty_ask_identities a ON a.owner_user_id=cm.user_id
+		WHERE cm.conversation_id=$1 AND a.id=$2)`, input.SourceConversationID, input.TargetAgentID).Scan(&ownerInChat); err != nil {
+		return err
+	}
+	if !ownerInChat {
+		return ErrAgentListingUnavailable
+	}
+	return nil
 }

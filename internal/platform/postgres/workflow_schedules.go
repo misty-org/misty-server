@@ -20,28 +20,37 @@ type WorkflowSchedule struct {
 	MethodID       string `json:"method_id"`
 	ConversationID string `json:"conversation_id,omitempty"`
 	ScheduleTiming
-	Inputs           map[string]any `json:"inputs"`
-	Enabled          bool           `json:"enabled"`
-	State            string         `json:"state"`
-	NextRunAt        *time.Time     `json:"next_run_at,omitempty"`
-	LastInvocationID string         `json:"last_invocation_id,omitempty"`
-	LastRunAt        *time.Time     `json:"last_run_at,omitempty"`
-	LastError        string         `json:"last_error,omitempty"`
-	RunCount         int            `json:"run_count"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
+	Inputs  map[string]any `json:"inputs"`
+	Enabled bool           `json:"enabled"`
+	// DeviceID names the computer whose Misty browser the run uses. Empty runs
+	// on the server with no browser.
+	DeviceID string `json:"device_id,omitempty"`
+	// DueAt is the occurrence waiting for that computer, and MissedCount the
+	// later ones that passed while it waited.
+	DueAt            *time.Time `json:"due_at,omitempty"`
+	MissedCount      int        `json:"missed_count,omitempty"`
+	State            string     `json:"state"`
+	NextRunAt        *time.Time `json:"next_run_at,omitempty"`
+	LastInvocationID string     `json:"last_invocation_id,omitempty"`
+	LastRunAt        *time.Time `json:"last_run_at,omitempty"`
+	LastError        string     `json:"last_error,omitempty"`
+	RunCount         int        `json:"run_count"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 const MaxWorkflowSchedulesPerUser = 50
 
 const workflowScheduleColumns = `id,user_id,method_id,COALESCE(conversation_id,''),timezone,rules,skip_dates,inputs,
-	enabled,state,next_run_at,COALESCE(last_invocation_id,''),last_run_at,last_error,run_count,created_at,updated_at`
+	enabled,state,next_run_at,COALESCE(last_invocation_id,''),last_run_at,last_error,run_count,created_at,updated_at,
+	COALESCE(device_id,''),due_at,missed_count`
 
 func scanWorkflowSchedule(scanner interface{ Scan(...any) error }, item *WorkflowSchedule) error {
 	var rules, skip, inputs []byte
 	err := scanner.Scan(&item.ID, &item.UserID, &item.MethodID, &item.ConversationID, &item.Timezone,
 		&rules, &skip, &inputs, &item.Enabled, &item.State, &item.NextRunAt, &item.LastInvocationID,
-		&item.LastRunAt, &item.LastError, &item.RunCount, &item.CreatedAt, &item.UpdatedAt)
+		&item.LastRunAt, &item.LastError, &item.RunCount, &item.CreatedAt, &item.UpdatedAt,
+		&item.DeviceID, &item.DueAt, &item.MissedCount)
 	if err != nil {
 		return err
 	}
@@ -129,18 +138,34 @@ func (db *Database) SaveWorkflowSchedule(ctx context.Context, userID, conversati
 		if count >= MaxWorkflowSchedulesPerUser {
 			return ErrSpaceConflict
 		}
+		if item.DeviceID != "" {
+			var usable bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL)`, item.DeviceID, userID).Scan(&usable); err != nil {
+				return err
+			}
+			if !usable {
+				return ErrSpaceInvalid
+			}
+		}
+		// A run already waiting for a computer keeps waiting, for the newly
+		// chosen one; with no computer chosen it is dropped.
 		return scanWorkflowSchedule(tx.QueryRowContext(ctx, `
-			INSERT INTO workflow_schedules(id,user_id,method_id,conversation_id,timezone,rules,skip_dates,inputs,enabled,next_run_at)
-			VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10)
+			INSERT INTO workflow_schedules(id,user_id,method_id,conversation_id,timezone,rules,skip_dates,inputs,enabled,next_run_at,device_id)
+			VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10,NULLIF($11,''))
 			ON CONFLICT(method_id) DO UPDATE SET timezone=EXCLUDED.timezone,rules=EXCLUDED.rules,
 				skip_dates=EXCLUDED.skip_dates,inputs=EXCLUDED.inputs,enabled=EXCLUDED.enabled,
-				next_run_at=EXCLUDED.next_run_at,
-				state=CASE WHEN workflow_schedules.state='running' THEN 'running' ELSE 'idle' END,updated_at=NOW()
+				next_run_at=EXCLUDED.next_run_at,device_id=EXCLUDED.device_id,
+				state=CASE WHEN workflow_schedules.state IN ('running','device_claimed') THEN workflow_schedules.state
+					WHEN workflow_schedules.state='awaiting_device' AND EXCLUDED.device_id IS NOT NULL AND EXCLUDED.enabled THEN 'awaiting_device'
+					ELSE 'idle' END,
+				due_at=CASE WHEN workflow_schedules.state='awaiting_device' AND (EXCLUDED.device_id IS NULL OR NOT EXCLUDED.enabled) THEN NULL ELSE workflow_schedules.due_at END,
+				missed_count=CASE WHEN workflow_schedules.state='awaiting_device' AND (EXCLUDED.device_id IS NULL OR NOT EXCLUDED.enabled) THEN 0 ELSE workflow_schedules.missed_count END,
+				updated_at=NOW()
 			WHERE workflow_schedules.user_id=EXCLUDED.user_id
 			RETURNING `+workflowScheduleColumns,
 			"workflow_schedule_"+uuid.NewString(), userID, item.MethodID, conversationID, item.Timezone,
 			jsonOrEmpty(item.Rules, `[]`), jsonOrEmpty(item.SkipDates, `[]`), jsonOrEmpty(item.Inputs, `{}`),
-			item.Enabled, next), out)
+			item.Enabled, next, item.DeviceID), out)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound
@@ -178,6 +203,7 @@ func (db *Database) ClaimDueWorkflowSchedules(ctx context.Context, now time.Time
 				WHERE t2.enabled AND m.enabled AND t2.next_run_at<=$1
 				  AND COALESCE((SELECT s.enabled FROM ai_user_settings s WHERE s.user_id=t2.user_id),TRUE)
 				  AND (t2.state<>'running' OR t2.lease_until<=$1)
+				  AND t2.state<>'device_claimed'
 				ORDER BY t2.next_run_at FOR UPDATE OF t2 SKIP LOCKED LIMIT $2
 			) RETURNING `+workflowScheduleColumns, now, limit)
 		return err
@@ -218,7 +244,7 @@ func (db *Database) CompleteWorkflowScheduleRun(ctx context.Context, item Workfl
 	return db.TestingWithRLSContext(ctx, TestingServiceRLSSettings(), func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `
 			UPDATE workflow_schedules SET state=$2,next_run_at=$3,lease_until=NULL,last_error=$4,last_run_at=$5,
-				run_count=run_count+1,updated_at=NOW()
+				run_count=run_count+1,due_at=NULL,missed_count=0,device_claim_hash=NULL,device_claim_until=NULL,updated_at=NOW()
 			WHERE id=$1 AND state='running'`, item.ID, state, next, message, now)
 		if err != nil {
 			return err

@@ -20,6 +20,7 @@ var (
 type AskIdentity struct {
 	ID              string          `json:"id"`
 	OwnerUserID     string          `json:"owner_user_id"`
+	SpaceID         string          `json:"space_id"`
 	Name            string          `json:"name"`
 	Role            string          `json:"role"`
 	Description     string          `json:"description"`
@@ -39,10 +40,10 @@ type AskIdentity struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
-const personalAgentColumns = `id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,enabled,system_managed,version,created_at,updated_at`
+const personalAgentColumns = `id,owner_user_id,COALESCE(space_id,''),name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,enabled,system_managed,version,created_at,updated_at`
 
 func scanPersonalAgent(row scanner, out *AskIdentity) error {
-	err := row.Scan(&out.ID, &out.OwnerUserID, &out.Name, &out.Role, &out.Description, &out.Icon, &out.Avatar, &out.Instructions,
+	err := row.Scan(&out.ID, &out.OwnerUserID, &out.SpaceID, &out.Name, &out.Role, &out.Description, &out.Icon, &out.Avatar, &out.Instructions,
 		&out.ModelMode, &out.ModelID, &out.ReasoningEffort, &out.DefaultRunMode, &out.VoiceID, &out.Enabled,
 		&out.SystemManaged, &out.Version, &out.CreatedAt, &out.UpdatedAt)
 	if err == nil {

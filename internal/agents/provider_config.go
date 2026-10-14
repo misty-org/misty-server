@@ -36,6 +36,11 @@ func NewAgentProvider(models *modelruntime.Client) ModelProvider {
 	)
 }
 
+// WebSearchModel only issues the Gateway search call, so the low tier is enough.
+func WebSearchModel() string {
+	return envOrDefault("MISTY_AI_LOW_MODEL", TestingDefaultAgentLowGatewayModel)
+}
+
 func defaultHTTPClient() *http.Client {
 	return noRedirectHTTPClient(&http.Client{Timeout: 45 * time.Second})
 }

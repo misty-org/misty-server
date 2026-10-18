@@ -14,7 +14,7 @@ var ErrProviderConflict = errors.New("this email belongs to an existing account;
 
 // GoogleUser accepts only a server-verified Google identity. Never link an
 // existing account by email: Google's stable subject owns the identity.
-func (db Store) GoogleUser(name, email, subject string) (*User, error) {
+func (db Store) GoogleUser(email, subject string) (*User, error) {
 	email = NormalizeEmail(email)
 	if email == "" || subject == "" {
 		return nil, errors.New("Google identity is incomplete")
@@ -52,7 +52,7 @@ func (db Store) GoogleUser(name, email, subject string) (*User, error) {
 	}
 	username := DefaultUsernameForEmail(email)
 	for attempt := 0; attempt < 3; attempt++ {
-		user, err := db.createIdentity(name, username, email, "", "google", subject)
+		user, err := db.createIdentity(username, email, "", "google", subject)
 		if err == nil {
 			return user, nil
 		}

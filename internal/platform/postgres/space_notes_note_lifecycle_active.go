@@ -58,10 +58,10 @@ func noteAccessForTx(ctx context.Context, tx *sql.Tx, userID, noteID string) (No
 	if userID == "" || noteID == "" {
 		return noteAccessDenied, nil
 	}
-	var creatorUserID, spaceID, lifecycle, audienceKind, audienceConversationID string
+	var creatorUserID, spaceID, lifecycle, audienceKind, audienceConversationID, visibility string
 	err := tx.QueryRowContext(ctx,
-		`SELECT creator_user_id,space_id,lifecycle_state,audience_kind,COALESCE(audience_conversation_id,'') FROM space_notes WHERE id=$1`,
-		noteID).Scan(&creatorUserID, &spaceID, &lifecycle, &audienceKind, &audienceConversationID)
+		`SELECT creator_user_id,space_id,lifecycle_state,audience_kind,COALESCE(audience_conversation_id,''),visibility FROM space_notes WHERE id=$1`,
+		noteID).Scan(&creatorUserID, &spaceID, &lifecycle, &audienceKind, &audienceConversationID, &visibility)
 	if errors.Is(err, sql.ErrNoRows) {
 		return noteAccessDenied, nil
 	}
@@ -77,6 +77,10 @@ func noteAccessForTx(ctx context.Context, tx *sql.Tx, userID, noteID string) (No
 	}
 	isCreator := userID == creatorUserID
 	isOwner := role == "owner"
+	// A private note opens only for its creator, and not on public-only work.
+	if visibility == VisibilityPrivate && itemViewer(ctx, userID) != creatorUserID {
+		return noteAccessDenied, nil
+	}
 	if audienceKind == SpaceAudienceConversation {
 		var participant bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_conversation_members WHERE conversation_id=$1 AND actor_kind='person' AND user_id=$2)`, audienceConversationID, userID).Scan(&participant); err != nil {
@@ -117,10 +121,10 @@ func noteEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, ev
 	if event.EntityID == "" {
 		return false, nil
 	}
-	var creatorUserID, spaceID string
+	var creatorUserID, spaceID, visibility string
 	err := tx.QueryRowContext(ctx,
-		`SELECT creator_user_id,space_id FROM space_notes WHERE id=$1`,
-		event.EntityID).Scan(&creatorUserID, &spaceID)
+		`SELECT creator_user_id,space_id,visibility FROM space_notes WHERE id=$1`,
+		event.EntityID).Scan(&creatorUserID, &spaceID, &visibility)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -130,6 +134,11 @@ func noteEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, ev
 	// The event's own Space must match the note's, so a stale or forged
 	// entity ID cannot pull a note's events into another Space's stream.
 	if spaceID != event.SpaceID {
+		return false, nil
+	}
+	// A private note's events reach only its creator. (The item.visibility_changed
+	// event that turned it private reaches every member, so they drop it.)
+	if visibility == VisibilityPrivate && userID != creatorUserID {
 		return false, nil
 	}
 	// A former member loses visibility even while a stale grant row survives.
@@ -160,19 +169,21 @@ func recordNoteEventTx(ctx context.Context, tx *sql.Tx, spaceID, actorUserID, ev
 // document body lives only in the collaboration service; the projections here
 // exist for listing and search.
 type SpaceNote struct {
-	ID                     string    `json:"id"`
-	SpaceID                string    `json:"space_id"`
-	CreatorUserID          string    `json:"creator_user_id"`
-	TitleProjection        string    `json:"title"`
-	MarkdownProjection     string    `json:"markdown,omitempty"`
-	PlainTextProjection    string    `json:"plain_text,omitempty"`
-	LifecycleState         string    `json:"lifecycle_state"`
-	CollaborationRevision  int64     `json:"collaboration_revision"`
-	ACLVersion             int64     `json:"acl_version"`
-	AudienceKind           string    `json:"audience_kind"`
-	AudienceConversationID string    `json:"audience_conversation_id,omitempty"`
-	CreatedAt              time.Time `json:"created_at"`
-	UpdatedAt              time.Time `json:"updated_at"`
+	ID                     string `json:"id"`
+	SpaceID                string `json:"space_id"`
+	CreatorUserID          string `json:"creator_user_id"`
+	TitleProjection        string `json:"title"`
+	MarkdownProjection     string `json:"markdown,omitempty"`
+	PlainTextProjection    string `json:"plain_text,omitempty"`
+	LifecycleState         string `json:"lifecycle_state"`
+	CollaborationRevision  int64  `json:"collaboration_revision"`
+	ACLVersion             int64  `json:"acl_version"`
+	AudienceKind           string `json:"audience_kind"`
+	AudienceConversationID string `json:"audience_conversation_id,omitempty"`
+	// Visibility is "public" or "private": a private note opens only for its creator.
+	Visibility string    `json:"visibility"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 	// Role is the caller's own effective role. A non-creator never receives the
 	// full grant set, only this.
 	Role          string `json:"role"`
@@ -208,8 +219,8 @@ func (db *Database) CreateSpaceNoteWithAudience(ctx context.Context, creatorUser
 		note.AudienceKind, note.AudienceConversationID = normalized.Kind, normalized.ConversationID
 		if err := tx.QueryRowContext(ctx,
 			`INSERT INTO space_notes(id,space_id,creator_user_id,title_projection,audience_kind,audience_conversation_id) VALUES($1,$2,$3,$4,$5,NULLIF($6,''))
-			 RETURNING created_at,updated_at`,
-			note.ID, spaceID, creatorUserID, title, normalized.Kind, normalized.ConversationID).Scan(&note.CreatedAt, &note.UpdatedAt); err != nil {
+			 RETURNING created_at,updated_at,visibility`,
+			note.ID, spaceID, creatorUserID, title, normalized.Kind, normalized.ConversationID).Scan(&note.CreatedAt, &note.UpdatedAt, &note.Visibility); err != nil {
 			return err
 		}
 		if strings.TrimSpace(markdown) != "" {
@@ -234,20 +245,22 @@ func (db *Database) AccessibleSpaceNotes(ctx context.Context, userID, spaceID st
 		}
 		rows, err := tx.QueryContext(ctx,
 			`SELECT n.id,n.space_id,n.creator_user_id,n.title_projection,n.markdown_projection,n.plain_text_projection,n.lifecycle_state,
-			        n.collaboration_revision,n.acl_version,n.audience_kind,COALESCE(n.audience_conversation_id,''),n.created_at,n.updated_at,
+			        n.collaboration_revision,n.acl_version,n.audience_kind,COALESCE(n.audience_conversation_id,''),n.visibility,n.created_at,n.updated_at,
 			        CASE WHEN n.creator_user_id=$1 THEN 'creator' ELSE 'editor' END AS effective_role,
 			        (n.creator_user_id=$1 OR EXISTS(SELECT 1 FROM spaces s WHERE s.id=n.space_id AND s.owner_user_id=$1)) AS can_delete,
 			        (SELECT COUNT(*) FROM space_note_links links
 			         JOIN space_notes source ON source.id=links.source_note_id
 			         WHERE links.target_note_id=n.id AND source.lifecycle_state='active'
+			           AND (source.visibility='public' OR source.creator_user_id=$3)
 			           AND (source.audience_kind='space' OR EXISTS(
 			               SELECT 1 FROM space_conversation_members cm
 			               WHERE cm.conversation_id=source.audience_conversation_id
 			                 AND cm.actor_kind='person' AND cm.user_id=$1))) AS backlink_count
 			 FROM space_notes n
 			 WHERE n.space_id=$2 AND n.lifecycle_state='active'
+			   AND (n.visibility='public' OR n.creator_user_id=$3)
 			   AND (n.audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=n.audience_conversation_id AND cm.actor_kind='person' AND cm.user_id=$1))
-			 ORDER BY n.updated_at DESC`, userID, spaceID)
+			 ORDER BY n.updated_at DESC`, userID, spaceID, itemViewer(ctx, userID))
 		if err != nil {
 			return err
 		}
@@ -256,7 +269,7 @@ func (db *Database) AccessibleSpaceNotes(ctx context.Context, userID, spaceID st
 			var note SpaceNote
 			if err := rows.Scan(&note.ID, &note.SpaceID, &note.CreatorUserID, &note.TitleProjection,
 				&note.MarkdownProjection, &note.PlainTextProjection, &note.LifecycleState, &note.CollaborationRevision, &note.ACLVersion, &note.AudienceKind, &note.AudienceConversationID,
-				&note.CreatedAt, &note.UpdatedAt, &note.Role, &note.CanDelete, &note.BacklinkCount); err != nil {
+				&note.Visibility, &note.CreatedAt, &note.UpdatedAt, &note.Role, &note.CanDelete, &note.BacklinkCount); err != nil {
 				return err
 			}
 			notes = append(notes, note)

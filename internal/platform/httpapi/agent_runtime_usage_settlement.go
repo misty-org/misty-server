@@ -171,10 +171,18 @@ func completeRuntimeModelTurn(ctx context.Context, meter serveragent.UsageMeter,
 func runtimeAdmissionUnits(raw json.RawMessage) map[string]int64 {
 	units := map[string]int64{"output_tokens": serveragent.MaxAgentTurnOutputTokens}
 	var input struct {
-		Bytes *int64 `json:"input_bytes"`
+		Bytes  *int64 `json:"input_bytes"`
+		Images *int64 `json:"input_images"`
 	}
 	if json.Unmarshal(raw, &input) == nil && input.Bytes != nil && *input.Bytes >= 0 {
 		units["input_bytes"] = *input.Bytes
+	}
+	// Screenshots and other images are priced by count, never by their encoded size.
+	if input.Images != nil && *input.Images > 0 {
+		units["input_images"] = *input.Images
+		if units["input_images"] > 64 {
+			units["input_images"] = 64
+		}
 	}
 	return units
 }

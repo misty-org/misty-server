@@ -197,7 +197,7 @@ func (db *Database) SpaceNodes(ctx context.Context, userID, spaceID string) ([]S
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT id,space_id,COALESCE(parent_id,''),kind,display_name,uploader_user_id,mime_type,size_bytes,stale,metadata,created_at,updated_at
-			FROM space_nodes WHERE space_id=$1 ORDER BY parent_id NULLS FIRST,kind,display_name`, spaceID)
+			FROM space_nodes WHERE space_id=$1 AND (visibility='public' OR uploader_user_id=$2) ORDER BY parent_id NULLS FIRST,kind,display_name`, spaceID, itemViewer(ctx, userID))
 		if err != nil {
 			return err
 		}
@@ -221,7 +221,7 @@ func (db *Database) SpaceNodeSecret(ctx context.Context, userID, spaceID, nodeID
 			return err
 		}
 		return tx.QueryRowContext(ctx, `SELECT id,space_id,COALESCE(parent_id,''),kind,display_name,uploader_user_id,mime_type,size_bytes,stale,metadata,created_at,updated_at,target_ciphertext,target_nonce,COALESCE(target_key_version,0)
-			FROM space_nodes WHERE id=$1 AND space_id=$2`, nodeID, spaceID).Scan(&out.ID, &out.SpaceID, &out.ParentID, &out.Kind, &out.DisplayName, &out.UploaderUserID, &out.MIMEType, &out.SizeBytes, &out.Stale, &out.Metadata, &out.CreatedAt, &out.UpdatedAt, &out.TargetCipher, &out.TargetNonce, &out.KeyVersion)
+			FROM space_nodes WHERE id=$1 AND space_id=$2 AND (visibility='public' OR uploader_user_id=$3)`, nodeID, spaceID, itemViewer(ctx, userID)).Scan(&out.ID, &out.SpaceID, &out.ParentID, &out.Kind, &out.DisplayName, &out.UploaderUserID, &out.MIMEType, &out.SizeBytes, &out.Stale, &out.Metadata, &out.CreatedAt, &out.UpdatedAt, &out.TargetCipher, &out.TargetNonce, &out.KeyVersion)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound

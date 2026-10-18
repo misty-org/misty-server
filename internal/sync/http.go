@@ -133,11 +133,50 @@ func (s *BrowserSyncService) Vault() http.HandlerFunc {
 			writeSyncError(w, err)
 			return
 		}
-		if err := s.store.CreateBrowserSyncVault(r.Context(), user, body.RootPublicKey, body.KeyEnvelope, body.Device); err != nil {
+		if err := s.store.CreateBrowserSyncVault(r.Context(), user, "", body.RootPublicKey, PasswordVaultKeys(body.KeyEnvelope), body.Device); err != nil {
 			writeSyncError(w, err)
 			return
 		}
 		transport.WriteJSON(w, 201, map[string]string{"vault_id": body.Device.VaultID})
+	}
+}
+
+// Vaults lists the account's vaults, one per Space, and creates one for a
+// Space the caller belongs to.
+func (s *BrowserSyncService) Vaults() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, ok := s.user(w, r)
+		if !ok {
+			return
+		}
+		if r.Method == http.MethodGet {
+			vaults, err := s.store.BrowserSyncVaults(r.Context(), user)
+			if err != nil {
+				writeSyncError(w, err)
+				return
+			}
+			transport.WriteJSON(w, 200, map[string]any{"vaults": vaults})
+			return
+		}
+		var body struct {
+			SpaceID       string          `json:"space_id"`
+			RootPublicKey []byte          `json:"root_public_key"`
+			Device        SyncDeviceGrant `json:"device"`
+			SyncVaultKeys
+		}
+		if err := decodeSync(http.MaxBytesReader(w, r.Body, 16384), &body); err != nil {
+			writeSyncError(w, err)
+			return
+		}
+		if body.SpaceID == "" || len(body.SpaceID) > 128 {
+			writeSyncError(w, ErrSyncInvalid)
+			return
+		}
+		if err := s.store.CreateBrowserSyncVault(r.Context(), user, body.SpaceID, body.RootPublicKey, body.SyncVaultKeys, body.Device); err != nil {
+			writeSyncError(w, err)
+			return
+		}
+		transport.WriteJSON(w, 201, map[string]string{"vault_id": body.Device.VaultID, "space_id": body.SpaceID})
 	}
 }
 func (s *BrowserSyncService) Devices() http.HandlerFunc {
@@ -147,7 +186,14 @@ func (s *BrowserSyncService) Devices() http.HandlerFunc {
 			return
 		}
 		if r.Method == http.MethodGet {
-			vault, err := s.store.BrowserSyncVault(r.Context(), user)
+			// Without a vault_id this lists the personal vault's devices.
+			var vault *SyncVault
+			var err error
+			if id := r.URL.Query().Get("vault_id"); id != "" {
+				vault, err = s.store.BrowserSyncVaultByID(r.Context(), user, id)
+			} else {
+				vault, err = s.store.BrowserSyncVault(r.Context(), user)
+			}
 			if err != nil {
 				writeSyncError(w, err)
 				return

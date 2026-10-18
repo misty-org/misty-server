@@ -14,7 +14,7 @@ import (
 func TestInvocationAdmissionAndDeliveryAreAtomic(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	user, err := database.CreateUser("Delivery", "delivery@example.com", "password123")
+	user, err := database.CreateUser("delivery@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestInvocationAdmissionAndDeliveryAreAtomic(t *testing.T) {
 func TestInvocationEventsHaveDurableOrderAndReceipts(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	user, err := database.CreateUser("Events", "ordered-events@example.com", "password123")
+	user, err := database.CreateUser("ordered-events@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

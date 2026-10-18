@@ -28,7 +28,7 @@ type SyncDeviceControl struct {
 	WorkspaceID *string `json:"workspace_id,omitempty"`
 }
 
-// Device controls are account-owned. Activation is a short-lived request to
+// Device controls are account-owned and act on the personal vault's device. Activation is a short-lived request to
 // the target; only its signed native mutation can actually take over.
 func (db *Store) ControlBrowserSyncDevice(ctx context.Context, user string, c SyncDeviceControl) (string, error) {
 	if !validSyncID(c.DeviceID) || (c.DisplayName != nil && (!utf8.ValidString(*c.DisplayName) || len(*c.DisplayName) > 160 || strings.TrimSpace(*c.DisplayName) == "")) || (c.Platform != nil && len(*c.Platform) > 32) || (c.ControlVersion != nil && (*c.ControlVersion < 1 || *c.ControlVersion > maxSyncControlVersion)) || (c.OSVersion != nil && (!utf8.ValidString(*c.OSVersion) || len(*c.OSVersion) > 64)) || (c.WorkspaceID != nil && (!validSyncID(*c.WorkspaceID) || !c.Activate)) {
@@ -42,7 +42,7 @@ func (db *Store) ControlBrowserSyncDevice(ctx context.Context, user string, c Sy
 	var vault string
 	var version int
 	var full, workspaceMode bool
-	err = tx.QueryRowContext(ctx, `SELECT d.vault_id,d.control_version,d.full_sync,w.workspace_mode FROM browser_sync_devices d JOIN browser_sync_vaults w USING(vault_id) WHERE w.user_id=$1 AND d.device_id=$2 AND d.revoked_at IS NULL FOR UPDATE OF d`, user, c.DeviceID).Scan(&vault, &version, &full, &workspaceMode)
+	err = tx.QueryRowContext(ctx, `SELECT d.vault_id,d.control_version,d.full_sync,w.workspace_mode FROM browser_sync_devices d JOIN browser_sync_vaults w USING(vault_id) WHERE w.user_id=$1 AND w.key_envelope IS NOT NULL AND d.device_id=$2 AND d.revoked_at IS NULL FOR UPDATE OF d`, user, c.DeviceID).Scan(&vault, &version, &full, &workspaceMode)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrSyncForbidden
 	}

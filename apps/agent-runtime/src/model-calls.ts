@@ -117,7 +117,7 @@ export class RoutedModel implements LanguageModelV4 {
   }
 }
 
-function usageOf(usage: {
+export function usageOf(usage: {
   inputTokens?: number;
   outputTokens?: number;
   inputTokenDetails?: { cacheReadTokens?: number };

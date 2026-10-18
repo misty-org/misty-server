@@ -17,7 +17,7 @@ import (
 func TestSessionCRUDAndExpiry(t *testing.T) {
 	database := openTestDatabase(t)
 
-	user, err := database.CreateUser("Session User", "session@example.com", "password123")
+	user, err := database.CreateUser("session@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
@@ -57,7 +57,7 @@ func TestSessionCacheHitsAndEviction(t *testing.T) {
 	database := openTestDatabase(t)
 	TestingClearSessionCache()
 
-	user, err := database.CreateUser("Cache User", "cache@example.com", "password123")
+	user, err := database.CreateUser("cache@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
@@ -90,7 +90,7 @@ func TestSessionCacheHitsAndEviction(t *testing.T) {
 func TestSessionLookupWorksWithRuntimeRLSRole(t *testing.T) {
 	database := openTestDatabase(t)
 
-	user, err := database.CreateUser("Runtime Session User", "runtime-session@example.com", "password123")
+	user, err := database.CreateUser("runtime-session@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}

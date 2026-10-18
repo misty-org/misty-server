@@ -16,7 +16,7 @@ import ()
 func TestSpaceAgentPersistsFinishedFiveParagraphJournalEssay(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Essay Note Owner", "essay-note-owner@example.com", "password123")
+	owner, err := database.CreateUser("essay-note-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestSpaceAgentPersistsFinishedFiveParagraphJournalEssay(t *testing.T) {
 	}
 	markdown := strings.Join(paragraphs, "\n\n")
 	createdRaw, err := api.TestingExecuteSpaceConversationTool(
-		ctx, database, owner.ID, space.ID, "", prompt, "notes.create",
+		ctx, database, owner.ID, space.ID, "", prompt, "note.create",
 		json.RawMessage(`{"title":"The First Operating System","markdown":`+strconv.Quote(markdown)+`}`),
 	)
 	if err != nil {

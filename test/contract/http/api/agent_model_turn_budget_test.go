@@ -20,7 +20,7 @@ import (
 
 func TestAgentModelTurnBudgetRuntimeEndpoint(t *testing.T) {
 	database := openPresenceTestDatabase(t)
-	user, err := database.CreateUser("Model budget", uniqueTestEmail("model-budget"), "password123")
+	user, err := database.CreateUser(uniqueTestEmail("model-budget"), "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,11 +12,11 @@ import ()
 func TestAccountRunSurvivesSpaceRemovalWithoutRetainingSpaceAccess(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Space Owner", "revoke-run-owner@example.com", "password123")
+	owner, err := database.CreateUser("revoke-run-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	creator, err := database.CreateUser("Agent Creator", "revoke-run-creator@example.com", "password123")
+	creator, err := database.CreateUser("revoke-run-creator@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

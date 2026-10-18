@@ -12,11 +12,11 @@ import (
 
 // Composio's guidance names its own meta tools; the model knows Misty's.
 var appsGuidanceNames = strings.NewReplacer(
-	"COMPOSIO_MULTI_EXECUTE_TOOL", "apps_execute",
-	"COMPOSIO_GET_TOOL_SCHEMAS", "apps_schemas",
-	"COMPOSIO_MANAGE_CONNECTIONS", "apps_connect",
-	"COMPOSIO_WAIT_FOR_CONNECTIONS", "apps_connect",
-	"COMPOSIO_SEARCH_TOOLS", "apps_search",
+	"COMPOSIO_MULTI_EXECUTE_TOOL", "integration_execute",
+	"COMPOSIO_GET_TOOL_SCHEMAS", "integration_schemas",
+	"COMPOSIO_MANAGE_CONNECTIONS", "integration_connect",
+	"COMPOSIO_WAIT_FOR_CONNECTIONS", "integration_connect",
+	"COMPOSIO_SEARCH_TOOLS", "integration_search",
 	"COMPOSIO_REMOTE_WORKBENCH", "the code sandbox (unavailable in Misty)",
 	"COMPOSIO_REMOTE_BASH_TOOL", "the code sandbox (unavailable in Misty)",
 )
@@ -43,19 +43,24 @@ func (s *SpacesService) appsSearch(ctx context.Context, invocation agenttools.In
 		return nil, agenttools.ErrArgumentsInvalid
 	}
 	var result composio.SearchResult
+	var apps runApps
 	err := s.withAppsSession(ctx, invocation.UserID, func(client *composio.Client, session string) error {
 		var err error
-		result, err = client.Search(ctx, session, input.Queries)
+		if result, err = client.Search(ctx, session, input.Queries); err != nil {
+			return err
+		}
+		apps, err = s.loadRunApps(ctx, client, invocation)
 		return err
 	})
 	if err != nil {
 		return nil, appsError(err)
 	}
-	return json.Marshal(appsSearchView(result, s.searchAppPolicy(ctx, invocation)))
+	return json.Marshal(appsSearchView(result, s.searchAppPolicy(ctx, invocation), apps))
 }
 
-// appsSearchView keeps what the model needs to plan and call tools.
-func appsSearchView(result composio.SearchResult, searchApps searchAppPolicy) map[string]any {
+// appsSearchView keeps what the model needs to plan and call tools. Apps
+// show the person's own accounts.
+func appsSearchView(result composio.SearchResult, searchApps searchAppPolicy, mine runApps) map[string]any {
 	tasks := []map[string]any{}
 	for _, item := range result.Results {
 		task := map[string]any{"task": item.UseCase, "tools": item.PrimaryToolSlugs, "apps": item.Toolkits}
@@ -84,21 +89,22 @@ func appsSearchView(result composio.SearchResult, searchApps searchAppPolicy) ma
 			tool["input_schema"] = schema.InputSchema
 			budget -= len(schema.InputSchema)
 		} else {
-			tool["input_schema"] = "Call apps_schemas for this tool's input schema."
+			tool["input_schema"] = "Call integration_schemas for this tool's input schema."
 		}
 		tools[slug] = tool
 	}
 	apps := []map[string]any{}
 	for _, status := range result.Connections {
-		app := map[string]any{"app": status.Toolkit, "connected": status.HasActiveConnection}
+		own := mine.active[status.Toolkit]
+		app := map[string]any{"app": status.Toolkit, "connected": len(own) > 0}
 		accounts := []map[string]any{}
-		for _, account := range status.Accounts {
-			accounts = append(accounts, map[string]any{"account": account.ID, "alias": account.Alias, "status": strings.ToLower(account.Status), "default": account.IsDefault})
+		for _, account := range own {
+			accounts = append(accounts, map[string]any{"account": account.ID, "alias": account.Alias, "status": strings.ToLower(account.Status), "default": len(own) == 1})
 		}
 		if len(accounts) > 0 {
 			app["accounts"] = accounts
 		}
-		if !status.HasActiveConnection {
+		if len(own) == 0 {
 			app["next"] = searchApps.next(status.Toolkit)
 		}
 		apps = append(apps, app)
@@ -130,13 +136,15 @@ func (s *SpacesService) appsConnected(ctx context.Context, invocation agenttools
 	if err != nil {
 		return nil, appsError(err)
 	}
-	accounts, err := client.Accounts(ctx, composio.UserID(invocation.UserID), "")
+	apps, err := s.loadRunApps(ctx, client, invocation)
 	if err != nil {
 		return nil, appsError(err)
 	}
 	items := []map[string]any{}
-	for _, account := range accounts {
-		items = append(items, map[string]any{"app": account.Toolkit.Slug, "account": account.ID, "alias": account.Alias, "status": strings.ToLower(account.Status)})
+	for toolkit, accounts := range apps.active {
+		for _, account := range accounts {
+			items = append(items, map[string]any{"app": toolkit, "account": account.ID, "alias": account.Alias, "status": strings.ToLower(account.Status)})
+		}
 	}
 	return json.Marshal(map[string]any{"connected": items})
 }

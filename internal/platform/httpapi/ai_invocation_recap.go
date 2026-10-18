@@ -43,7 +43,11 @@ func (s *SpacesService) completeAIInvocationRecap(ctx context.Context, record *d
 	if body.Trigger != "schedule" {
 		return nil
 	}
-	items, err := s.database.AIRecaps(ctx, record.UserID)
+	space, err := s.database.MemorySpace(ctx, record.UserID, body.SpaceID)
+	if err != nil {
+		return err
+	}
+	items, err := s.database.AIRecaps(ctx, record.UserID, space)
 	if err != nil {
 		return err
 	}

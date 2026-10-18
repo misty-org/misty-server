@@ -12,7 +12,7 @@ import (
 func TestAIConversationTurnsExposeOriginalPromptAndDurableOutcome(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Companion history owner", "companion-history-owner@example.com", "password123")
+	owner, err := database.CreateUser("companion-history-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestAIConversationTurnsExposeOriginalPromptAndDurableOutcome(t *testing.T) 
 	if len(turns) != 1 || turns[0].Prompt != "hello" || turns[0].Status != "Checking your Space…" || turns[0].Failure != "Weekly AI pool reached." || turns[0].State != "failed" {
 		t.Fatalf("unexpected companion turns: %#v", turns)
 	}
-	other, err := database.CreateUser("Other history owner", "companion-history-other@example.com", "password123")
+	other, err := database.CreateUser("companion-history-other@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

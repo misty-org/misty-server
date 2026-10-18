@@ -16,7 +16,7 @@ import (
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
-func (s *SpaceLibraryService) copyLibraryItem(ctx context.Context, userID, sourceSpaceID, destinationSpaceID string, source db.LibraryTransferItem, recordImport bool) (*db.SpaceLibraryItem, error) {
+func (s *SpaceLibraryService) copyLibraryItem(ctx context.Context, userID, sourceSpaceID, destinationSpaceID string, source db.LibraryTransferItem) (*db.SpaceLibraryItem, error) {
 	token, err := security.GenerateSecureToken()
 	if err != nil {
 		return nil, err
@@ -64,11 +64,7 @@ func (s *SpaceLibraryService) copyLibraryItem(ctx context.Context, userID, sourc
 	if completed.Item == nil {
 		return nil, db.ErrLibraryConflict
 	}
-	if recordImport {
-		if _, err := s.database.RecordLibraryImport(ctx, userID, sourceSpaceID, source.ItemID, destinationSpaceID, completed.Item.ID, upload.ID, source.ByteSize); err != nil {
-			return nil, err
-		}
-	} else if err := s.database.RecordLibraryDuplicate(ctx, userID, destinationSpaceID, source.ItemID, completed.Item.ID, source.ByteSize); err != nil {
+	if err := s.database.RecordLibraryDuplicate(ctx, userID, destinationSpaceID, source.ItemID, completed.Item.ID, source.ByteSize); err != nil {
 		return nil, err
 	}
 	return completed.Item, nil
@@ -81,10 +77,6 @@ func (s *SpaceLibraryService) Item() http.HandlerFunc {
 			return
 		}
 		spaceID, itemID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "itemID")
-		if err := s.validateSensitiveLibraryItem(r, userID, spaceID, itemID); err != nil {
-			writeLibraryError(w, err)
-			return
-		}
 		switch r.Method {
 		case http.MethodGet:
 			item, err := s.database.LibraryItem(r.Context(), userID, spaceID, itemID)
@@ -139,18 +131,6 @@ func (s *SpaceLibraryService) BulkItems() http.HandlerFunc {
 			return
 		}
 		spaceID := chi.URLParam(r, "spaceID")
-		for _, item := range body.Items {
-			if err := s.validateSensitiveLibraryItem(r, userID, spaceID, item.ID); err != nil {
-				writeLibraryError(w, err)
-				return
-			}
-		}
-		if body.Action == "restore" {
-			if err := s.validateLibraryReauthentication(r, userID, spaceID, "recently_deleted"); err != nil {
-				writeLibraryError(w, err)
-				return
-			}
-		}
 		operation := db.BulkLibraryItemOperation{Action: body.Action, Items: body.Items, AlbumID: body.AlbumID, Tags: body.Tags, LocationOverride: body.LocationOverride}
 		if body.DateOverride != "" {
 			parsed, err := time.Parse(time.RFC3339, body.DateOverride)
@@ -176,10 +156,6 @@ func (s *SpaceLibraryService) TrashItem() http.HandlerFunc {
 			return
 		}
 		spaceID, itemID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "itemID")
-		if err := s.validateSensitiveLibraryItem(r, userID, spaceID, itemID); err != nil {
-			writeLibraryError(w, err)
-			return
-		}
 		item, err := s.database.TrashLibraryItem(r.Context(), userID, spaceID, itemID)
 		if err != nil {
 			writeLibraryError(w, err)
@@ -196,10 +172,6 @@ func (s *SpaceLibraryService) RestoreItem() http.HandlerFunc {
 			return
 		}
 		spaceID, itemID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "itemID")
-		if err := s.validateLibraryReauthentication(r, userID, spaceID, "recently_deleted"); err != nil {
-			writeLibraryError(w, err)
-			return
-		}
 		item, err := s.database.RestoreLibraryItem(r.Context(), userID, spaceID, itemID)
 		if err != nil {
 			writeLibraryError(w, err)

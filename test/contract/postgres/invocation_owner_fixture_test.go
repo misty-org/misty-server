@@ -12,7 +12,7 @@ import (
 func invocationOwnerFixture(t *testing.T) (*Database, string) {
 	t.Helper()
 	database := openTestDatabase(t)
-	user, err := database.CreateUser("Invocation owner", "invocation-owner-"+uuid.NewString()+"@example.com", "password123")
+	user, err := database.CreateUser("invocation-owner-"+uuid.NewString()+"@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

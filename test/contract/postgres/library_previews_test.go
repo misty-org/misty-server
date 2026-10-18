@@ -15,8 +15,8 @@ func TestLibraryPreviewDerivativeAuthorizationAndReuse(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	owner, _ := database.CreateUser("Preview Owner", "preview-owner@example.com", "password123")
-	outsider, _ := database.CreateUser("Preview Outsider", "preview-outsider@example.com", "password123")
+	owner, _ := database.CreateUser("preview-owner@example.com", "password123")
+	outsider, _ := database.CreateUser("preview-outsider@example.com", "password123")
 	spaceID := createTestSpace(t, database, ctx, owner.ID, "Previews").ID
 	item := createPeopleTestImage(t, database, owner.ID, spaceID, "preview.jpg", "1")
 	baseline, err := database.OwnerStorageUsage(ctx, owner.ID)

@@ -12,7 +12,7 @@ vi.mock("workflow", () => ({
 }));
 vi.mock("../src/control-plane.js", () => ({
   controlPlaneRequest: async (_identity: unknown, operation: string, body: Record<string, unknown>) => {
-    if (operation === "context") return { model_id: "fixture/model", system: "", prompt: "Message then record it", allowed_tools: ["social.send_message", "notes.create"] };
+    if (operation === "context") return { model_id: "fixture/model", system: "", prompt: "Message then record it", allowed_tools: ["social.send_message", "note.create"] };
     if (operation === "complete") fixture.completions.push(body);
     if (operation === "steering") return { messages: [], closed: true };
     if (operation === "budget") return { version: 1, remaining_ms: 1800000, active: true, deadline: new Date(Date.now()+1800000).toISOString() };
@@ -21,7 +21,7 @@ vi.mock("../src/control-plane.js", () => ({
   },
 }));
 vi.mock("../src/mcp-runtime.js", () => ({
-  discoverRemoteMCPTools: async () => ({ supported: true, tools: ["social.send_message", "notes.create"].map(name => ({ name, description: name, inputSchema: { type: "object", properties: {} } })) }),
+  discoverRemoteMCPTools: async () => ({ supported: true, tools: ["social.send_message", "note.create"].map(name => ({ name, description: name, inputSchema: { type: "object", properties: {} } })) }),
   requestMCPToolExecution: async (_context: unknown, _access: unknown, _id: string, name: string) => {
     fixture.executed.push(name);
     return { result: fixture.result };

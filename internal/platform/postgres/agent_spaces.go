@@ -4,30 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 )
 
-// Agents live in exactly one Space. These helpers cover moving there, replying
-// in its chat and saving what the agent makes into it.
-
-func requireAgentSpaceMembershipTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) error {
-	_, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
-	return err
-}
-
-// AgentSpaceID returns the Space the caller's agent lives in.
-func (db *Database) AgentSpaceID(ctx context.Context, userID, agentID string) (string, error) {
-	var spaceID string
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT COALESCE(space_id,'') FROM misty_ask_identities WHERE id=$1 AND owner_user_id=$2 AND deleted_at IS NULL`, agentID, userID).Scan(&spaceID)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrPersonalAgentNotFound
-	}
-	return spaceID, err
-}
+// Agents are members of Spaces. These helpers cover replying in a Space's
+// chat and saving what an agent makes into a Space it is in.
 
 // CreateAgentMemberRequestMessage posts the target agent's words about a
 // request that a person made by @mentioning it, under the mentioning message.
@@ -41,7 +23,7 @@ func (db *Database) CreateAgentMemberRequestMessage(ctx context.Context, request
 		[]MessageSpan{{Type: "text", Text: text}}, true, request.SourceMessageID, origin)
 }
 
-// AgentArtifactKinds are what an agent can save to its Space.
+// AgentArtifactKinds are what an agent can save to a Space.
 var AgentArtifactKinds = map[string]bool{"download": true, "file": true, "image": true, "code": true, "document": true}
 
 // AgentArtifactProvenance says which agent made an upload, in which of its
@@ -66,7 +48,7 @@ func (p *AgentArtifactProvenance) normalize() error {
 }
 
 // requireAgentArtifactUploadTx checks that the uploader owns the agent and
-// that the upload goes to the Space the agent lives in.
+// that the upload goes to a Space the agent is in.
 func requireAgentArtifactUploadTx(ctx context.Context, tx *sql.Tx, userID, spaceID, purpose string, provenance *AgentArtifactProvenance) error {
 	if err := provenance.normalize(); err != nil {
 		return err
@@ -74,15 +56,11 @@ func requireAgentArtifactUploadTx(ctx context.Context, tx *sql.Tx, userID, space
 	if purpose != "library" {
 		return ErrLibraryInvalid
 	}
-	var agentSpaceID string
-	err := tx.QueryRowContext(ctx, `SELECT COALESCE(space_id,'') FROM misty_ask_identities WHERE id=$1 AND owner_user_id=$2 AND deleted_at IS NULL`, provenance.AgentID, userID).Scan(&agentSpaceID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrLibraryForbidden
-	}
+	in, err := agentInSpaceTx(ctx, tx, userID, spaceID, provenance.AgentID)
 	if err != nil {
 		return err
 	}
-	if agentSpaceID != spaceID {
+	if !in {
 		return ErrLibraryForbidden
 	}
 	return nil
@@ -99,7 +77,7 @@ func recordAgentArtifactTx(ctx context.Context, tx *sql.Tx, uploadID, itemID, sp
 	return err
 }
 
-// SpaceAgentArtifact is a Library item an agent saved to its Space.
+// SpaceAgentArtifact is a Library item an agent saved to a Space.
 type SpaceAgentArtifact struct {
 	ItemID      string    `json:"item_id"`
 	SpaceID     string    `json:"space_id"`
@@ -130,7 +108,7 @@ func (db *Database) SpaceAgentArtifacts(ctx context.Context, userID, spaceID, ag
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT x.item_id,x.space_id,i.display_name,COALESCE(b.server_detected_mime_type,''),COALESCE(b.byte_size,0),
-			COALESCE(x.agent_id,''),COALESCE(a.name,x.agent_name),x.owner_user_id,COALESCE(u.name,''),x.kind,x.created_at,
+			COALESCE(x.agent_id,''),COALESCE(a.name,x.agent_name),x.owner_user_id,COALESCE(u.username,''),x.kind,x.created_at,
 			CASE WHEN x.owner_user_id=$1 THEN x.conversation_id ELSE '' END,CASE WHEN x.owner_user_id=$1 THEN x.run_id ELSE '' END
 			FROM space_agent_artifacts x
 			JOIN space_library_items i ON i.id=x.item_id AND i.lifecycle_state='ready' AND i.hidden=FALSE AND i.audience_kind='space'

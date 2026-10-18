@@ -19,7 +19,7 @@ func TestAccountEventsRevalidateSessionWithoutReconnecting(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	restore := TestingSetAccountEventSessionCheck(100 * time.Millisecond)
 	defer restore()
-	user, err := database.CreateUser("Stream", "account-stream-session@example.invalid", "password123")
+	user, err := database.CreateUser("account-stream-session@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,7 +23,7 @@ func TestPasswordResetEndToEnd(t *testing.T) {
 		t.Fatalf("NewPasswordResetService() error = %v", err)
 	}
 
-	user, err := database.CreateUser("Reset User", "reset@example.com", "old-password")
+	user, err := database.CreateUser("reset@example.com", "old-password")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}

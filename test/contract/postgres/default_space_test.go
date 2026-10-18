@@ -3,42 +3,29 @@ package db
 import (
 	"context"
 	"errors"
-	"testing"
 	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"testing"
 )
-
 
 import ()
 
 func TestEveryAccountStartsWithAProtectedPersonalSpace(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Default owner", "default-owner@example.com", "password123")
+	owner, err := database.CreateUser("default-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	spaces, err := database.ListSpaces(ctx, owner.ID)
-	if err != nil || len(spaces) != 1 || !spaces[0].IsDefault || spaces[0].Role != "owner" || spaces[0].Name != "Default's Space" {
+	if err != nil || len(spaces) != 1 || !spaces[0].IsDefault || spaces[0].Role != "owner" || spaces[0].Name != owner.Username+"'s Space" {
 		t.Fatalf("new account Spaces = %#v, %v, want one personal Space named after them", spaces, err)
 	}
 
 	first := &spaces[0]
 	first, err = database.SpaceByID(ctx, owner.ID, first.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, permission := range []string{
-		PermissionSpaceInvite, PermissionSpaceRename, PermissionStorageViewOwn,
-	} {
-		if !first.Permissions[permission] {
-			t.Fatalf("default Space lacks %s: %#v", permission, first.Permissions)
-		}
-	}
-	for _, permission := range []string{PermissionSpaceTransfer, PermissionSpaceDelete} {
-		if first.Permissions[permission] {
-			t.Fatalf("default Space unexpectedly grants %s: %#v", permission, first.Permissions)
-		}
+	if err != nil || first.Role != "owner" || !first.IsDefault {
+		t.Fatalf("SpaceByID(default) = %#v, %v", first, err)
 	}
 
 	renamed, err := database.RenameSpace(ctx, owner.ID, first.ID, "Personal")
@@ -61,11 +48,11 @@ func TestEveryAccountStartsWithAProtectedPersonalSpace(t *testing.T) {
 func TestDefaultSpaceCannotBeTransferred(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Transfer owner", "default-transfer-owner@example.com", "password123")
+	owner, err := database.CreateUser("default-transfer-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := database.CreateUser("Transfer member", "default-transfer-member@example.com", "password123")
+	member, err := database.CreateUser("default-transfer-member@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

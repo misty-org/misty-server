@@ -12,11 +12,11 @@ import (
 func TestAgentAppRequestsAreOwnedSingleUseAndRemembered(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Apps owner", "apps-"+uuid.NewString()+"@example.test", "password123")
+	owner, err := database.CreateUser("apps-"+uuid.NewString()+"@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Other", "apps-"+uuid.NewString()+"@example.test", "password123")
+	other, err := database.CreateUser("apps-"+uuid.NewString()+"@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

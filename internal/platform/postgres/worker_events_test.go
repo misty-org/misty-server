@@ -89,52 +89,38 @@ func TestWorkerNotificationsCommitRollbackIsolationAndReconnect(t *testing.T) {
 func TestWorkerDeadlinesAndClaimEligibility(t *testing.T) {
 	database := workerTestDatabase(t)
 	ctx := context.Background()
-	for _, queue := range []string{"library-ai", "library-edit", "library-faces", "note-control", "drawing-control", "drawing-purge", "embedding"} {
+	for _, queue := range []string{"library-edit", "note-control", "drawing-control", "drawing-purge", "embedding"} {
 		if _, pending, err := database.NextWorkerDelay(ctx, queue); err != nil || pending {
 			t.Fatal("empty queue", queue, pending, err)
 		}
 	}
 	_, err := database.Conn.Exec(`INSERT INTO library_processing_jobs(id,job_kind,target_id,available_at) VALUES
- ('ai','ai','item',now()+interval '1 hour'),('faces','faces','item',now()+interval '1 hour'),('edit','edit','edit',now()+interval '1 hour')`)
+ ('edit','edit','edit',now()+interval '1 hour')`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, kind := range []string{"ai", "edit", "faces"} {
-		delay, pending, err := database.NextWorkerDelay(ctx, "library-"+kind)
-		if err != nil || !pending || delay < 59*time.Minute || delay > time.Hour {
-			t.Fatal(kind, delay, pending, err)
-		}
+	delay, pending, err := database.NextWorkerDelay(ctx, "library-edit")
+	if err != nil || !pending || delay < 59*time.Minute || delay > time.Hour {
+		t.Fatal("edit", delay, pending, err)
 	}
 	if _, err = database.Conn.Exec(`UPDATE library_blobs SET lifecycle_state='missing'; UPDATE library_processing_jobs SET available_at=now()`); err != nil {
 		t.Fatal(err)
 	}
-	if _, pending, err := database.NextWorkerDelay(ctx, "library-ai"); err != nil || pending {
+	if _, pending, err := database.NextWorkerDelay(ctx, "library-edit"); err != nil || pending {
 		t.Fatal("unavailable source must sleep", pending, err)
 	}
-	if job, err := database.ClaimLibraryIntelligenceJob(ctx, "worker", time.Minute); err != nil || job != nil {
+	if job, err := database.ClaimLibraryRenditionJob(ctx, "worker", time.Minute); err != nil || job != nil {
 		t.Fatal("claim and plan disagree", job, err)
 	}
 	if _, err = database.Conn.Exec(`UPDATE library_blobs SET lifecycle_state='ready'`); err != nil {
 		t.Fatal(err)
 	}
-	if job, err := database.ClaimLibraryIntelligenceJob(ctx, "worker", time.Minute); err != nil || job == nil {
-		t.Fatal("AI claim", job, err)
-	}
 	if job, err := database.ClaimLibraryRenditionJob(ctx, "worker", time.Minute); err != nil || job == nil {
 		t.Fatal("edit claim", job, err)
 	}
-	if job, err := database.ClaimLibraryPeopleJob(ctx, "worker", time.Minute); err != nil || job == nil {
-		t.Fatal("faces claim", job, err)
-	}
-	delay, pending, err := database.NextWorkerDelay(ctx, "library-faces")
+	delay, pending, err = database.NextWorkerDelay(ctx, "library-edit")
 	if err != nil || !pending || delay < 50*time.Second {
 		t.Fatal("lease deadline", delay, pending, err)
-	}
-	if _, err = database.Conn.Exec(`UPDATE library_processing_jobs SET lease_expires_at=now()-interval '1 second' WHERE id='faces'`); err != nil {
-		t.Fatal(err)
-	}
-	if job, err := database.ClaimLibraryPeopleJob(ctx, "replacement", time.Minute); err != nil || job == nil || job.AttemptCount != 2 {
-		t.Fatal("expired People lease not recovered", job, err)
 	}
 }
 

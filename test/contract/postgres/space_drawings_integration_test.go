@@ -85,9 +85,7 @@ func TestSpaceDrawingAccessAndLifecycle(t *testing.T) {
 		t.Fatalf("owner list = %#v", listed)
 	}
 
-	outsider, err := fixture.database.CreateUser(
-		"Drawing Outsider",
-		"drawing-lifecycle-outsider@example.com",
+	outsider, err := fixture.database.CreateUser("drawing-lifecycle-outsider@example.com",
 		"password123",
 	)
 	if err != nil {

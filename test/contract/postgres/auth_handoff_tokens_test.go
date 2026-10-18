@@ -12,7 +12,7 @@ import (
 func TestAuthHandoffTokenIsConsumedOnFirstRead(t *testing.T) {
 	database := openTestDatabase(t)
 
-	user, err := database.CreateUser("Handoff User", "handoff-consume@example.com", "password")
+	user, err := database.CreateUser("handoff-consume@example.com", "password")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
@@ -43,7 +43,7 @@ func TestAuthHandoffTokenIsConsumedOnFirstRead(t *testing.T) {
 func TestAuthHandoffTokenRejectsExpiredAndDeletesIt(t *testing.T) {
 	database := openTestDatabase(t)
 
-	user, err := database.CreateUser("Expired Handoff", "handoff-expired@example.com", "password")
+	user, err := database.CreateUser("handoff-expired@example.com", "password")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}

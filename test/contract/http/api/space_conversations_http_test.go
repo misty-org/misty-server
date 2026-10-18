@@ -92,19 +92,19 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 	}
 	router := newConversationTestRouter(t, spaces)
 
-	owner, err := database.CreateUser("Convo Owner", uniqueTestEmail("owner"), "password123")
+	owner, err := database.CreateUser(uniqueTestEmail("owner"), "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(owner) error = %v", err)
 	}
-	member, err := database.CreateUser("Convo Member", uniqueTestEmail("member"), "password123")
+	member, err := database.CreateUser(uniqueTestEmail("member"), "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(member) error = %v", err)
 	}
-	spacemate, err := database.CreateUser("Convo Spacemate", uniqueTestEmail("spacemate"), "password123")
+	spacemate, err := database.CreateUser(uniqueTestEmail("spacemate"), "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(spacemate) error = %v", err)
 	}
-	outsider, err := database.CreateUser("Convo Outsider", uniqueTestEmail("outsider"), "password123")
+	outsider, err := database.CreateUser(uniqueTestEmail("outsider"), "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(outsider) error = %v", err)
 	}

@@ -29,7 +29,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 		t.Setenv("DB_"+name, os.Getenv("TEST_DB_"+name))
 	}
 	ctx := t.Context()
-	owner, _ := database.CreateUser("Owner", "device-tools-owner@example.test", "password123")
+	owner, _ := database.CreateUser("device-tools-owner@example.test", "password123")
 	publicKey, _, _ := ed25519.GenerateKey(rand.Reader)
 	device, err := database.RegisterTrustedDevice(owner.ID, "Studio Mac", base64.RawURLEncoding.EncodeToString(publicKey), "macos", "", json.RawMessage(`[]`), json.RawMessage(`{}`))
 	if err != nil {
@@ -46,16 +46,16 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 		_, err := database.AttachAIInvocationContext(ctx, owner.ID, record.ID, "", device.ID, kind, ref, name, json.RawMessage(capabilities), nil)
 		return err
 	}
-	if err := attach("local_folder", "scope_reports", "Reports", `["files.list","files.read","files.send"]`); err != nil {
+	if err := attach("local_folder", "scope_reports", "Reports", `["folder.list","folder.read","folder.send"]`); err != nil {
 		t.Fatal(err)
 	}
-	if err := attach("workspace", "workspace:misty-browser", "Misty browser", `["tabs.list","tabs.open","bookmarks.list","bookmarks.add"]`); err != nil {
+	if err := attach("workspace", "workspace:misty-browser", "Misty browser", `["browser.tab.list","browser.tab.open","bookmark.list","bookmark.add"]`); err != nil {
 		t.Fatal(err)
 	}
 	if err := attach("local_folder", "scope_bad", "Bad", `["browser.navigate"]`); !errors.Is(err, db.ErrSpaceInvalid) {
 		t.Fatalf("a folder grant asked for browser control: %v", err)
 	}
-	if err := attach("workspace", "workspace:bad", "Bad", `["files.read"]`); !errors.Is(err, db.ErrSpaceInvalid) {
+	if err := attach("workspace", "workspace:bad", "Bad", `["folder.read"]`); !errors.Is(err, db.ErrSpaceInvalid) {
 		t.Fatalf("a workspace grant asked for files: %v", err)
 	}
 	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
@@ -113,10 +113,10 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	select {
 	case raw := <-done:
 		if !strings.Contains(string(raw), "Revenue grew") {
-			t.Fatalf("files.read = %s", raw)
+			t.Fatalf("folder.read = %s", raw)
 		}
 	case <-time.After(20 * time.Second):
-		t.Fatal("files.read did not return after the device finished")
+		t.Fatal("folder.read did not return after the device finished")
 	}
 
 	// Sending a file asks the computer to save it to the Space Library: the job
@@ -136,7 +136,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	}
 	var sendArguments map[string]any
 	if json.Unmarshal([]byte(sendInput), &sendArguments) != nil || len(sendArguments) != 2 || sendArguments["scopeId"] != "scope_reports" || sendArguments["relativePath"] != "q3.txt" {
-		t.Fatalf("files.send job input = %q", sendInput)
+		t.Fatalf("folder.send job input = %q", sendInput)
 	}
 	cancelSend()
 	<-sent
@@ -149,10 +149,10 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	if registrations := service.deviceToolRegistrations(ctx, &plain); len(registrations) != 0 {
 		t.Fatalf("chat without grants got %d device tools", len(registrations))
 	}
-	if err := TestingValidateAIInvocationDeviceContexts([]byte(`[]`), []byte(`[{"device_id":"d","kind":"local_folder","opaque_ref":"s","capabilities":["files.read"]}]`), ""); err != nil {
+	if err := TestingValidateAIInvocationDeviceContexts([]byte(`[]`), []byte(`[{"device_id":"d","kind":"local_folder","opaque_ref":"s","capabilities":["folder.read"]}]`), ""); err != nil {
 		t.Fatalf("folder grant without a page reference = %v", err)
 	}
-	if err := TestingValidateAIInvocationDeviceContexts([]byte(`[]`), []byte(`[{"device_id":"d","kind":"local_folder","opaque_ref":"s","capabilities":["files.delete"]}]`), ""); err == nil {
+	if err := TestingValidateAIInvocationDeviceContexts([]byte(`[]`), []byte(`[{"device_id":"d","kind":"local_folder","opaque_ref":"s","capabilities":["folder.delete"]}]`), ""); err == nil {
 		t.Fatal("a folder grant asked to delete files")
 	}
 }

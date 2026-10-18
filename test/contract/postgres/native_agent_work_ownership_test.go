@@ -12,7 +12,7 @@ import ()
 func TestGoAgentSchedulerLeavesNativeOwnedJobsUntouched(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Ownership", "native-work-owner@example.invalid", "password123")
+	owner, err := database.CreateUser("native-work-owner@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

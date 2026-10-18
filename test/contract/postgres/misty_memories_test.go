@@ -13,11 +13,11 @@ import ()
 func TestMistyMemoryIsExplicitPrivateScopedAndControllable(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Memory Owner", "memory-owner@example.com", "password123")
+	owner, err := database.CreateUser("memory-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Memory Other", "memory-other@example.com", "password123")
+	other, err := database.CreateUser("memory-other@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,13 +48,18 @@ func TestMistyMemoryIsExplicitPrivateScopedAndControllable(t *testing.T) {
 		t.Fatalf("duplicate memory = %#v, %v", duplicate, err)
 	}
 
+	// Each Space has its own memory tree; the personal Space is one of them.
 	familyContext, err := database.MistyMemoryContext(ctx, owner.ID, family.ID, 20)
-	if err != nil || !hasMistyMemory(familyContext, personal.ID) || !hasMistyMemory(familyContext, spaceMemory.ID) {
+	if err != nil || hasMistyMemory(familyContext, personal.ID) || !hasMistyMemory(familyContext, spaceMemory.ID) {
 		t.Fatalf("family context = %#v, %v", familyContext, err)
 	}
 	workContext, err := database.MistyMemoryContext(ctx, owner.ID, work.ID, 20)
-	if err != nil || !hasMistyMemory(workContext, personal.ID) || !hasMistyMemory(workContext, spaceMemory.ID) {
-		t.Fatalf("account memory was incorrectly restricted to a Space = %#v, %v", workContext, err)
+	if err != nil || len(workContext) != 0 {
+		t.Fatalf("memory crossed into another Space = %#v, %v", workContext, err)
+	}
+	personalContext, err := database.MistyMemoryContext(ctx, owner.ID, "", 20)
+	if err != nil || !hasMistyMemory(personalContext, personal.ID) || hasMistyMemory(personalContext, spaceMemory.ID) {
+		t.Fatalf("personal context = %#v, %v", personalContext, err)
 	}
 	otherContext, err := database.MistyMemoryContext(ctx, other.ID, "", 20)
 	if err != nil || len(otherContext) != 0 {
@@ -75,12 +80,15 @@ func TestMistyMemoryIsExplicitPrivateScopedAndControllable(t *testing.T) {
 	if _, err := database.UpdateAISettings(ctx, owner.ID, true, 30, true, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.ForgetMistyMemory(ctx, owner.ID, personal.ID); err != nil {
+	if err := database.ForgetMistyMemory(ctx, owner.ID, "", personal.ID); err != nil {
 		t.Fatal(err)
 	}
 	remaining, err := database.MistyMemories(ctx, owner.ID, "", 100)
-	if err != nil || hasMistyMemory(remaining, personal.ID) || !hasMistyMemory(remaining, spaceMemory.ID) {
+	if err != nil || len(remaining) != 0 {
 		t.Fatalf("forget/list result = %#v, %v", remaining, err)
+	}
+	if kept, err := database.MistyMemories(ctx, owner.ID, family.ID, 100); err != nil || !hasMistyMemory(kept, spaceMemory.ID) {
+		t.Fatalf("forgetting in Personal touched the family Space = %#v, %v", kept, err)
 	}
 }
 

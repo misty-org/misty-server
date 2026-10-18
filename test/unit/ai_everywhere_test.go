@@ -207,10 +207,6 @@ func TestMistyCitationsOnlyIncludeReferencedSources(t *testing.T) {
 }
 
 func TestStructuredArtifactContracts(t *testing.T) {
-	tasks, err := api.TestingParseAITaskDraftSummaries(`{"tasks":[{"title":" Ship launch ","priority":"HIGH"},{"title":"ship launch","priority":"low"},{"title":"Review metrics","priority":"unexpected"}]}`)
-	if err != nil || len(tasks) != 2 || !strings.HasSuffix(tasks[0], ":high") || !strings.HasSuffix(tasks[1], ":medium") || !strings.HasPrefix(tasks[0], "task_") {
-		t.Fatalf("unexpected task drafts: %#v %v", tasks, err)
-	}
 	for _, kind := range []string{"file_plan", "terminal_command", "browser_action", "extension_action"} {
 		risk, policy := api.TestingAIArtifactPolicy(kind)
 		if risk != "dangerous" || policy != "always_confirm" {

@@ -3,7 +3,9 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"github.com/kannachi323/misty/server/internal/platform/security"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func (db *Database) CreateGoogleReauthenticationToken(ctx context.Context, userID, hash string) error {
@@ -40,4 +42,21 @@ func (db *Database) VerifyAccountReauthentication(ctx context.Context, userID, p
 		return err
 	})
 	return valid, err
+}
+
+func (db *Database) VerifyUserPassword(ctx context.Context, userID, password string) (bool, error) {
+	if userID == "" || password == "" || len(password) > 1024 {
+		return false, nil
+	}
+	var hash string
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id=$1 AND provider='misty' AND lifecycle_state='active'`, userID).Scan(&hash)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil, nil
 }

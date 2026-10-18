@@ -20,7 +20,7 @@ import ()
 func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	user, err := database.CreateUser("Browser Context Owner", "browser-context-owner@example.com", "password123")
+	user, err := database.CreateUser("browser-context-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := database.CreateUser("Family Member", "browser-context-member@example.com", "password123")
+	member, err := database.CreateUser("browser-context-member@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := database.AttachAIInvocationContext(
-		ctx, user.ID, invocation.ID, space.ID, device.ID, "browser_tab", "scope-files", "Bad", json.RawMessage(`["files.read"]`), nil,
+		ctx, user.ID, invocation.ID, space.ID, device.ID, "browser_tab", "scope-files", "Bad", json.RawMessage(`["folder.read"]`), nil,
 	); !errors.Is(err, ErrSpaceInvalid) {
 		t.Fatalf("non-browser capability error = %v", err)
 	}
@@ -88,7 +88,7 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"members.list", "tasks.query", "tasks.create", "browser.inspect", "browser.navigate", "notes.create", "messages.send"} {
+	for _, expected := range []string{"space.member.list", "browser.inspect", "browser.navigate", "note.create", "message.send"} {
 		found := false
 		for _, name := range toolNames {
 			found = found || name == expected
@@ -97,17 +97,9 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 			t.Fatalf("unified research tools = %v, missing %s", toolNames, expected)
 		}
 	}
-	membersRaw, err := api.TestingExecuteAIInvocationSpaceTool(ctx, database, user.ID, space.ID, invocation.ID, prompt, "members.list", json.RawMessage(`{}`))
+	membersRaw, err := api.TestingExecuteAIInvocationSpaceTool(ctx, database, user.ID, space.ID, invocation.ID, prompt, "space.member.list", json.RawMessage(`{}`))
 	if err != nil || !strings.Contains(string(membersRaw), `"count":2`) {
 		t.Fatalf("unified member inspection = %s, %v", membersRaw, err)
-	}
-	createdTask, err := api.TestingExecuteAIInvocationSpaceTool(ctx, database, user.ID, space.ID, invocation.ID, prompt, "tasks.create", json.RawMessage(`{"title":"Compare summer camps","status":"todo","priority":"medium"}`))
-	if err != nil || !strings.Contains(string(createdTask), "Compare summer camps") {
-		t.Fatalf("unified task creation = %s, %v", createdTask, err)
-	}
-	queriedTasks, err := api.TestingExecuteAIInvocationSpaceTool(ctx, database, user.ID, space.ID, invocation.ID, prompt, "tasks.query", json.RawMessage(`{"query":"summer camps"}`))
-	if err != nil || !strings.Contains(string(queriedTasks), "Compare summer camps") {
-		t.Fatalf("unified task query = %s, %v", queriedTasks, err)
 	}
 	type browserOutcome struct {
 		result json.RawMessage
@@ -156,7 +148,7 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 		t.Fatal("unified browser tool did not return its device result")
 	}
 	createdNote, err := api.TestingExecuteAIInvocationSpaceTool(
-		ctx, database, user.ID, space.ID, invocation.ID, prompt, "notes.create",
+		ctx, database, user.ID, space.ID, invocation.ID, prompt, "note.create",
 		json.RawMessage(`{"title":"Family summer camp research","markdown":"# Summer camps\n\nArt and science programs are available.\n\nSource: `+sourceURL+`"}`),
 	)
 	if err != nil || !strings.Contains(string(createdNote), "Family summer camp research") {
@@ -164,7 +156,7 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 	}
 	summary := "Family summer camp research found art and science programs. Source: " + sourceURL
 	if _, err := api.TestingExecuteAIInvocationSpaceTool(
-		ctx, database, user.ID, space.ID, invocation.ID, prompt, "messages.send",
+		ctx, database, user.ID, space.ID, invocation.ID, prompt, "message.send",
 		json.RawMessage(`{"message":"`+summary+`","audience":"space"}`),
 	); err != nil {
 		t.Fatalf("unified cited summary: %v", err)

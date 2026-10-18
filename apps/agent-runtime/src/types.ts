@@ -14,7 +14,7 @@ export interface SpaceTaskContext {
   model_id: string;
   vision_model_id?: string;
   reasoning_effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max" | "";
-  run_mode: "ask" | "auto" | "full";
+  run_mode: "ask" | "auto";
   system: string;
   prompt: string;
   task?: {
@@ -26,7 +26,6 @@ export interface SpaceTaskContext {
   };
   attached_sources: unknown[];
   companion_mode?: "team" | "auto";
-  companion_explanation?: boolean;
   display_captures?: Array<NonNullable<SpaceTaskContext["capture"]> & { screen: string; primary: boolean; captured_at?: number; display_id?: number; source?: string; controls?: ScreenControl[] }>;
   capture?: {
     id: string;

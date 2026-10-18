@@ -15,11 +15,11 @@ func TestAgentToolboxRejectsDuplicateNamesAndAliases(t *testing.T) {
 	handler := func(context.Context, agenttools.Invocation, serveragent.ToolRequest) (json.RawMessage, error) {
 		return json.RawMessage(`{}`), nil
 	}
-	base := agenttools.Registration{Descriptor: agenttools.Descriptor{Name: "tasks.query", Description: "Query Tasks", Risk: serveragent.RiskRead, Aliases: []string{"tasks.list"}}, Handler: handler}
+	base := agenttools.Registration{Descriptor: agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: "task.query", Description: "Query Tasks", Risk: serveragent.RiskRead, Aliases: []string{"tasks.list"}}, Handler: handler}
 	if _, err := agenttools.New(base, base); !errors.Is(err, agenttools.ErrInvalidRegistration) {
 		t.Fatalf("duplicate tool error = %v", err)
 	}
-	conflict := agenttools.Registration{Descriptor: agenttools.Descriptor{Name: "tasks.list", Description: "List Tasks", Risk: serveragent.RiskRead}, Handler: handler}
+	conflict := agenttools.Registration{Descriptor: agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: "tasks.list", Description: "List Tasks", Risk: serveragent.RiskRead}, Handler: handler}
 	if _, err := agenttools.New(base, conflict); !errors.Is(err, agenttools.ErrInvalidRegistration) {
 		t.Fatalf("alias conflict error = %v", err)
 	}
@@ -28,7 +28,7 @@ func TestAgentToolboxRejectsDuplicateNamesAndAliases(t *testing.T) {
 func TestAgentToolboxExposesOwnedToolsAndReauthorizesExecution(t *testing.T) {
 	executions := 0
 	registry := agenttools.MustNew(agenttools.Registration{
-		Descriptor: agenttools.Descriptor{
+		Descriptor: agenttools.Descriptor{Layer: agenttools.LayerPublic,
 			Name: "spaces.rename", Description: "Rename the current Space", Risk: serveragent.RiskWrite,
 			Approval: agenttools.ApprovalExplicitIntent, RequiredPermission: "spaces.owner", AuditEvent: "space.updated",
 		},
@@ -62,14 +62,14 @@ func TestAgentToolboxExposesOwnedToolsAndReauthorizesExecution(t *testing.T) {
 func TestAgentToolboxAliasesExecuteCanonicalHandler(t *testing.T) {
 	var executedName string
 	registry := agenttools.MustNew(agenttools.Registration{
-		Descriptor: agenttools.Descriptor{Name: "messages.search", Description: "Search messages", Risk: serveragent.RiskRead, Aliases: []string{"space.search_messages"}},
+		Descriptor: agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: "message.search", Description: "Search messages", Risk: serveragent.RiskRead, Aliases: []string{"space.search_messages"}},
 		Handler: func(_ context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
 			executedName = request.Name
 			return json.RawMessage(`{"count":0}`), nil
 		},
 	})
 	result, err := registry.Execute(context.Background(), agenttools.Invocation{}, serveragent.ToolRequest{Name: "space.search_messages", Arguments: json.RawMessage(`{}`)}, nil)
-	if err != nil || executedName != "messages.search" || string(result) != `{"count":0}` {
+	if err != nil || executedName != "message.search" || string(result) != `{"count":0}` {
 		t.Fatalf("alias result = %s, name = %q, error = %v", result, executedName, err)
 	}
 }
@@ -77,8 +77,8 @@ func TestAgentToolboxAliasesExecuteCanonicalHandler(t *testing.T) {
 func TestAgentToolboxIgnoresLegacyApprovalModes(t *testing.T) {
 	executions := 0
 	registry := agenttools.MustNew(agenttools.Registration{
-		Descriptor: agenttools.Descriptor{
-			Name: "tasks.update", Description: "Update a Task", Risk: serveragent.RiskWrite,
+		Descriptor: agenttools.Descriptor{Layer: agenttools.LayerPublic,
+			Name: "task.update", Description: "Update a Task", Risk: serveragent.RiskWrite,
 			Approval:         agenttools.ApprovalExplicitIntent,
 			ApprovalBySource: map[string]agenttools.ApprovalPolicy{"canonical_run": agenttools.ApprovalInteractive},
 			AuditEvent:       "task.updated",
@@ -90,21 +90,21 @@ func TestAgentToolboxIgnoresLegacyApprovalModes(t *testing.T) {
 	})
 
 	conversation := agenttools.Invocation{Source: "space_conversation"}
-	manifest, err := registry.Resolve(context.Background(), conversation, []string{"tasks.update"}, nil)
+	manifest, err := registry.Resolve(context.Background(), conversation, []string{"task.update"}, nil)
 	if err != nil || len(manifest.Tools) != 1 {
 		t.Fatalf("implicit conversation manifest = %#v, %v", manifest, err)
 	}
 	canonical := agenttools.Invocation{Source: "canonical_run"}
-	manifest, err = registry.Resolve(context.Background(), canonical, []string{"tasks.update"}, nil)
+	manifest, err = registry.Resolve(context.Background(), canonical, []string{"task.update"}, nil)
 	if err != nil || len(manifest.Tools) != 1 {
 		t.Fatalf("canonical manifest = %#v, %v", manifest, err)
 	}
-	_, err = registry.Execute(context.Background(), canonical, serveragent.ToolRequest{Name: "tasks.update", Arguments: json.RawMessage(`{}`)}, nil)
+	_, err = registry.Execute(context.Background(), canonical, serveragent.ToolRequest{Name: "task.update", Arguments: json.RawMessage(`{}`)}, nil)
 	if err != nil || executions != 1 {
 		t.Fatalf("autonomous execution error = %v, executions = %d", err, executions)
 	}
 	canonical.DelegatedApproval = true
-	_, err = registry.Execute(context.Background(), canonical, serveragent.ToolRequest{Name: "tasks.update", Arguments: json.RawMessage(`{}`)}, nil)
+	_, err = registry.Execute(context.Background(), canonical, serveragent.ToolRequest{Name: "task.update", Arguments: json.RawMessage(`{}`)}, nil)
 	if err != nil || executions != 2 {
 		t.Fatalf("delegated execution error = %v, executions = %d", err, executions)
 	}
@@ -112,7 +112,7 @@ func TestAgentToolboxIgnoresLegacyApprovalModes(t *testing.T) {
 
 func TestAgentToolboxEnforcesDeclaredInputAndOutputSchemas(t *testing.T) {
 	registry := agenttools.MustNew(agenttools.Registration{
-		Descriptor: agenttools.Descriptor{
+		Descriptor: agenttools.Descriptor{Layer: agenttools.LayerPublic,
 			Name: "tasks.lookup", Description: "Look up a Task", Risk: serveragent.RiskRead,
 			InputSchema:  json.RawMessage(`{"type":"object","required":["id"],"properties":{"id":{"type":"string","minLength":1}},"additionalProperties":false}`),
 			OutputSchema: json.RawMessage(`{"type":"object","required":["found"],"properties":{"found":{"type":"boolean"}},"additionalProperties":false}`),
@@ -145,13 +145,13 @@ func TestAgentToolboxEnforcesDeclaredInputAndOutputSchemas(t *testing.T) {
 
 func TestAgentToolboxExecutionMiddlewareWrapsCanonicalValidatedAction(t *testing.T) {
 	registry := agenttools.MustNew(agenttools.Registration{
-		Descriptor: agenttools.Descriptor{
-			Name: "tasks.update", Description: "Update a Task", Risk: serveragent.RiskWrite,
+		Descriptor: agenttools.Descriptor{Layer: agenttools.LayerPublic,
+			Name: "task.update", Description: "Update a Task", Risk: serveragent.RiskWrite,
 			Aliases: []string{"task.edit"}, AuditEvent: "task.updated",
 			InputSchema: json.RawMessage(`{"type":"object","required":["id"]}`), OutputSchema: json.RawMessage(`{"type":"object","required":["ok"],"properties":{"ok":{"type":"boolean"}}}`),
 		},
 		Handler: func(_ context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
-			if request.Name != "tasks.update" {
+			if request.Name != "task.update" {
 				t.Fatalf("handler request name = %q", request.Name)
 			}
 			return json.RawMessage(`{"ok":true}`), nil
@@ -160,7 +160,7 @@ func TestAgentToolboxExecutionMiddlewareWrapsCanonicalValidatedAction(t *testing
 	middlewareCalls := 0
 	middleware := func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor, request serveragent.ToolRequest, next agenttools.Handler) (json.RawMessage, error) {
 		middlewareCalls++
-		if descriptor.Name != "tasks.update" || descriptor.AuditEvent != "task.updated" || request.Name != "tasks.update" {
+		if descriptor.Name != "task.update" || descriptor.AuditEvent != "task.updated" || request.Name != "task.update" {
 			t.Fatalf("middleware descriptor=%#v request=%#v", descriptor, request)
 		}
 		return next(ctx, invocation, request)
@@ -172,7 +172,7 @@ func TestAgentToolboxExecutionMiddlewareWrapsCanonicalValidatedAction(t *testing
 	invalidReplay := func(context.Context, agenttools.Invocation, agenttools.Descriptor, serveragent.ToolRequest, agenttools.Handler) (json.RawMessage, error) {
 		return json.RawMessage(`{"ok":"not-a-boolean"}`), nil
 	}
-	_, err = registry.ExecuteWithMiddleware(context.Background(), agenttools.Invocation{}, serveragent.ToolRequest{Name: "tasks.update", Arguments: json.RawMessage(`{"id":"task-1"}`)}, nil, invalidReplay)
+	_, err = registry.ExecuteWithMiddleware(context.Background(), agenttools.Invocation{}, serveragent.ToolRequest{Name: "task.update", Arguments: json.RawMessage(`{"id":"task-1"}`)}, nil, invalidReplay)
 	if !errors.Is(err, agenttools.ErrResultInvalid) {
 		t.Fatalf("invalid replay error=%v", err)
 	}

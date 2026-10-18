@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	toolboxLibraryRead              = "library.read"
-	toolboxLibraryUpdate            = "library.update"
-	toolboxLibraryPromoteAttachment = "library.promote_attachment"
+	toolboxLibraryRead              = "file.read"
+	toolboxLibraryUpdate            = "file.update"
+	toolboxLibraryPromoteAttachment = "file.promote_attachment"
 )
 
 func libraryMutationToolDescriptors() []agenttools.Descriptor {
@@ -23,9 +23,9 @@ func libraryMutationToolDescriptors() []agenttools.Descriptor {
 	}, "required": []string{"id"}, "additionalProperties": false})
 	promoteSchema := TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{"attachmentId": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"attachmentId"}, "additionalProperties": false})
 	return []agenttools.Descriptor{
-		{Name: toolboxLibraryRead, Version: 1, Description: "Read metadata, caption, tags, and file facts for one visible Library item in the current Space.", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionLibraryView, AgentPermission: db.PermissionLibraryView, AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
-		{Name: toolboxLibraryUpdate, Version: 1, Description: "Update the name, caption, tags, favorite, or hidden state of an identified Library item.", Risk: serveragent.RiskWrite, InputSchema: updateSchema, OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionLibraryEdit, AgentPermission: db.PermissionLibraryEdit, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "library.item.updated", Sources: agentToolboxSpaceSources},
-		{Name: toolboxLibraryPromoteAttachment, Version: 1, Description: "Save an identified Space message attachment into the current Space Library.", Risk: serveragent.RiskWrite, InputSchema: promoteSchema, OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionLibraryAdd, AgentPermission: db.PermissionLibraryAdd, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "library.item.promoted", Sources: agentToolboxSpaceSources},
+		{Name: toolboxLibraryRead, Version: 1, Description: "Read metadata, caption, tags, and file facts for one visible Library item in the current Space.", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionLibraryView, AgentPermission: db.PermissionLibraryView, AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
+		{Name: toolboxLibraryUpdate, Version: 1, Description: "Update the name, caption, tags, favorite, or hidden state of an identified Library item.", Risk: serveragent.RiskWrite, InputSchema: updateSchema, OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionLibraryEdit, AgentPermission: db.PermissionLibraryEdit, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "library.item.updated", Sources: agentToolboxSpaceSources},
+		{Name: toolboxLibraryPromoteAttachment, Version: 1, Description: "Save an identified Space message attachment into the current Space Library.", Risk: serveragent.RiskWrite, InputSchema: promoteSchema, OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionLibraryAdd, AgentPermission: db.PermissionLibraryAdd, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "library.item.promoted", Sources: agentToolboxSpaceSources},
 	}
 }
 

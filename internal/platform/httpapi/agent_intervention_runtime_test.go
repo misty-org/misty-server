@@ -40,8 +40,8 @@ func TestInterventionRuntimeRequiresNegotiationAndAttachedReadGrant(t *testing.T
 }
 func TestPendingSpaceInterventionCannotExecuteAnotherTool(t *testing.T) {
 	service := &SpacesService{}
-	for _, name := range []string{"browser.inspect", "messages.send", "sdk.example"} {
-		result, err := service.callPersonalAgentMCPTool(t.Context(), &mcpRuntimeAccess{run: &db.SpaceRun{State: "awaiting_intervention"}}, agenttools.Descriptor{Name: name}, nil)
+	for _, name := range []string{"browser.inspect", "message.send", "sdk.example"} {
+		result, err := service.callPersonalAgentMCPTool(t.Context(), &mcpRuntimeAccess{run: &db.SpaceRun{State: "awaiting_intervention"}}, agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: name}, nil)
 		if err != nil || result == nil || !result.IsError {
 			t.Fatalf("pending run admitted %s: %#v %v", name, result, err)
 		}

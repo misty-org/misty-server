@@ -57,19 +57,3 @@ func askExecutionContextTx(ctx context.Context, tx *sql.Tx, userID, spaceID, ide
 		ApprovedVersion: identity.Version, Permissions: json.RawMessage(`{}`), CanControl: true,
 	}, nil
 }
-
-func (db *Database) EffectiveAgentSpacePermission(ctx context.Context, userID, spaceID, agentID, permission string) (bool, error) {
-	allowed := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		memberAllowed, err := hasSpacePermissionTx(ctx, tx, userID, spaceID, permission)
-		if err != nil || !memberAllowed {
-			return err
-		}
-		if _, err := askExecutionContextTx(ctx, tx, userID, spaceID, agentID); err != nil {
-			return err
-		}
-		allowed = memberAllowed
-		return nil
-	})
-	return allowed, err
-}

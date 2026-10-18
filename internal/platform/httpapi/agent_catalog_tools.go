@@ -15,7 +15,7 @@ import (
 // every kind of item, and the account's devices.
 const (
 	searchAllTool   = "search.all"
-	devicesListTool = "devices.list"
+	devicesListTool = "device.list"
 )
 
 func agentToolSchema(properties map[string]any, required []string) json.RawMessage {
@@ -29,14 +29,14 @@ func searchAllToolRegistration(database *db.Database) agenttools.Registration {
 	return agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
 			Name: searchAllTool, Version: 1, Risk: serveragent.RiskRead, Approval: agenttools.ApprovalNone,
-			Description: "Search notes, tasks, roadmaps, calendar events and messages at once, ranked by relevance. Use it when you do not know where something is; then read the item with its own tool.",
+			Description: "Search notes and messages at once, ranked by relevance. Use it when you do not know where something is; then read the item with its own tool.",
 			InputSchema: agentToolSchema(map[string]any{
 				"query": map[string]any{"type": "string", "minLength": 1, "maxLength": 500},
 				"space": map[string]any{"type": "string", "minLength": 1, "maxLength": 200, "description": "Space name or id. Omit to search every Space you can access."},
-				"kinds": map[string]any{"type": "array", "maxItems": 5, "items": map[string]any{"type": "string", "enum": []string{"note", "task", "roadmap", "calendar", "message"}}},
+				"kinds": map[string]any{"type": "array", "maxItems": 5, "items": map[string]any{"type": "string", "enum": []string{"note", "message"}}},
 				"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
 			}, []string{"query"}),
-			OutputSchema: agentToolObjectOutputSchema(), Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
+			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
 		},
 		Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
 			return executeSearchAll(ctx, database, invocation, request)
@@ -110,7 +110,7 @@ func devicesListToolRegistration(database *db.Database) agenttools.Registration 
 			Name: devicesListTool, Version: 1, Risk: serveragent.RiskRead, Approval: agenttools.ApprovalNone,
 			Description: "List this account's signed-in devices with their platform and when each was last online.",
 			InputSchema: agentToolSchema(map[string]any{}, nil), OutputSchema: agentToolObjectOutputSchema(),
-			Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
+			Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
 		},
 		Handler: func(ctx context.Context, invocation agenttools.Invocation, _ serveragent.ToolRequest) (json.RawMessage, error) {
 			devices, err := database.TrustedDevices(invocation.UserID)

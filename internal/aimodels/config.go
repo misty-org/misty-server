@@ -34,6 +34,16 @@ var Roles = []Role{
 	{"media-transcription", false},
 	{"media-transcription-fallback", false},
 	{"speech", false},
+	// Live transcription through the runtime's Soniox relay, and the diarized
+	// pass over files and finished captures. Not user-facing: no Gateway
+	// catalog model fits them, so they keep Misty's defaults.
+	{"live-transcription", false},
+	{"diarized-transcription", false},
+	// Tidying dictation before it is typed: the fast model.
+	{"dictation-cleanup", false},
+	// Notes, summaries, action items and chapters from a transcript.
+	{"voice-notes", false},
+	{"day-summary", false},
 }
 
 // Sense is a user-facing model choice. Kind says which Gateway models fit it.

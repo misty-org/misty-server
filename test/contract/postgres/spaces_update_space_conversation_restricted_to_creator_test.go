@@ -13,15 +13,15 @@ import ()
 func TestUpdateSpaceConversationRestrictedToCreator(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Update Owner", "update-owner@example.com", "password123")
+	owner, err := database.CreateUser("update-owner@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(owner) error = %v", err)
 	}
-	member, err := database.CreateUser("Update Member", "update-member@example.com", "password123")
+	member, err := database.CreateUser("update-member@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(member) error = %v", err)
 	}
-	outsider, err := database.CreateUser("Update Outsider", "update-outsider@example.com", "password123")
+	outsider, err := database.CreateUser("update-outsider@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(outsider) error = %v", err)
 	}

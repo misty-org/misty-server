@@ -22,7 +22,7 @@ func (s *SpacesService) executeAIInvocationMCPTool(ctx context.Context, access *
 	if access.prepared.collaboration.planning() && (access.prepared.toolbox == nil || len(planModeTools(access.prepared.toolbox, []string{call.Name})) != 1) {
 		return nil, serveragent.ErrInvalidRequest("Plan mode is read-only. Put this action in the plan as a step instead.")
 	}
-	ctx = withAgentExecutionRuntime(ctx, call.RuntimeRunID)
+	ctx = withPermissionGate(withAgentExecutionRuntime(ctx, call.RuntimeRunID), s.askGate)
 	if call.Name == "browser.request_user_action" {
 		if !access.claims.InterventionWaits {
 			return nil, db.ErrSpaceForbidden

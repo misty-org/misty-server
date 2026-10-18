@@ -4,10 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
@@ -90,75 +88,4 @@ func (db *Database) LibraryTransferItems(ctx context.Context, userID, spaceID st
 		return insertLibraryAuditTx(ctx, tx, spaceID, "", userID, "library.transfer.authorized", "library_items", "", "success", map[string]any{"count": len(items)})
 	})
 	return items, err
-}
-
-func (db *Database) RecordLibraryImport(ctx context.Context, userID, sourceSpaceID, sourceItemID, destinationSpaceID, destinationItemID, uploadID string, logicalBytes int64) (*LibraryImportRecord, error) {
-	if sourceSpaceID == destinationSpaceID || sourceItemID == "" || destinationItemID == "" || uploadID == "" || logicalBytes < 1 {
-		return nil, ErrLibraryInvalid
-	}
-	out := &LibraryImportRecord{ID: "import_" + uuid.NewString(), SourceSpaceID: sourceSpaceID, SourceItemID: sourceItemID, DestinationSpaceID: destinationSpaceID, DestinationItemID: destinationItemID, LogicalBytes: logicalBytes, State: "ready"}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, sourceSpaceID, PermissionLibraryDownload); err != nil {
-			return err
-		}
-		if err := requireSpacePermissionTx(ctx, tx, userID, destinationSpaceID, PermissionLibraryImport); err != nil {
-			return err
-		}
-		if err := requireLibraryItemAudienceTx(ctx, tx, userID, sourceSpaceID, sourceItemID); err != nil {
-			return err
-		}
-		var sourceDomainID, destinationDomainID string
-		if err := tx.QueryRowContext(ctx, `SELECT f.security_domain_id FROM space_library_items i JOIN library_files f ON f.id=i.file_id WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready' AND i.audience_kind='space'`, sourceItemID, sourceSpaceID).Scan(&sourceDomainID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrLibraryNotFound
-			}
-			return err
-		}
-		if err := tx.QueryRowContext(ctx, `SELECT f.security_domain_id FROM space_library_items i JOIN library_files f ON f.id=i.file_id WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready'`, destinationItemID, destinationSpaceID).Scan(&destinationDomainID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrLibraryNotFound
-			}
-			return err
-		}
-		if err := tx.QueryRowContext(ctx, `INSERT INTO space_library_imports(id,source_space_id,source_item_id,source_security_domain_id,destination_space_id,destination_item_id,destination_security_domain_id,importer_user_id,quota_reservation_upload_id,logical_bytes,state,completed_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ready',NOW()) RETURNING created_at`, out.ID, sourceSpaceID, sourceItemID, sourceDomainID, destinationSpaceID, destinationItemID, destinationDomainID, userID, uploadID, logicalBytes).Scan(&out.CreatedAt); err != nil {
-			return err
-		}
-		return insertLibraryAuditTx(ctx, tx, destinationSpaceID, destinationDomainID, userID, "library.import.completed", "import", out.ID, "success", map[string]any{"logical_bytes": logicalBytes, "source_space_id": sourceSpaceID})
-	})
-	return out, err
-}
-
-func (db *Database) LibraryImportHistory(ctx context.Context, userID, spaceID string, limit int) ([]LibraryImportHistoryItem, error) {
-	if limit < 1 || limit > 200 {
-		limit = 100
-	}
-	out := []LibraryImportHistoryItem{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryView); err != nil {
-			return err
-		}
-		rows, err := tx.QueryContext(ctx, `SELECT h.id,CASE WHEN h.destination_space_id=$1 THEN 'incoming' ELSE 'outgoing' END,h.source_space_id,h.destination_space_id,
-			CASE WHEN EXISTS(SELECT 1 FROM space_members member WHERE member.space_id=CASE WHEN h.destination_space_id=$1 THEN h.source_space_id ELSE h.destination_space_id END AND member.user_id=$2)
-				THEN CASE WHEN h.destination_space_id=$1 THEN source_space.name ELSE destination_space.name END ELSE 'Unavailable space' END,
-			CASE WHEN h.destination_space_id=$1 THEN CASE WHEN destination_item.lifecycle_state='ready' AND destination_item.hidden=FALSE THEN COALESCE(h.destination_item_id,'') ELSE '' END ELSE CASE WHEN source_item.lifecycle_state='ready' AND source_item.hidden=FALSE THEN h.source_item_id ELSE '' END END,
-			CASE WHEN h.destination_space_id=$1 THEN CASE WHEN destination_item.lifecycle_state='ready' AND destination_item.hidden=FALSE THEN COALESCE(destination_item.display_name,'Imported item') ELSE 'Protected item' END ELSE CASE WHEN source_item.lifecycle_state='ready' AND source_item.hidden=FALSE THEN COALESCE(source_item.display_name,'Imported item') ELSE 'Protected item' END END,
-			h.logical_bytes,h.state,h.created_at,h.completed_at
-			FROM space_library_imports h JOIN spaces source_space ON source_space.id=h.source_space_id JOIN spaces destination_space ON destination_space.id=h.destination_space_id
-			LEFT JOIN space_library_items source_item ON source_item.id=h.source_item_id LEFT JOIN space_library_items destination_item ON destination_item.id=h.destination_item_id
-			WHERE h.source_space_id=$1 OR h.destination_space_id=$1 ORDER BY h.created_at DESC LIMIT $3`, spaceID, userID, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item LibraryImportHistoryItem
-			if err := rows.Scan(&item.ID, &item.Direction, &item.SourceSpaceID, &item.DestinationSpaceID, &item.CounterpartSpaceName, &item.ItemID, &item.DisplayName, &item.LogicalBytes, &item.State, &item.CreatedAt, &item.CompletedAt); err != nil {
-				return err
-			}
-			out = append(out, item)
-		}
-		return rows.Err()
-	})
-	return out, err
 }

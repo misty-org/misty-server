@@ -1,6 +1,6 @@
 # Pointing eval
 
-Measures how precisely a model points at a control on a screenshot. Each turn uses the same teaching prompt (`server/internal/platform/httpapi/companion_teach_prompt.txt` and `companion_teach_turn.txt`), the same screenshot labels (`src/companion-images.ts`) and the same model route (`generateTextCall`) that the companion uses. A point counts as a hit when it lands inside the target control's box. Ledger item L7 in `docs/plans/companion-teaching-ledger.md`.
+Measures how precisely a model points at a control on a screenshot. Each turn uses the same pointing rules (`server/internal/platform/httpapi/companion_teach_prompt.txt`), the same screenshot labels (`src/companion-images.ts`) and the same model route (`generateTextCall`) that the companion uses. A point counts as a hit when it lands inside the target control's box. Ledger item L7 in `docs/plans/companion-teaching-ledger.md`.
 
 ## Make fixtures
 

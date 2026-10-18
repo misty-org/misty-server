@@ -59,7 +59,7 @@ func (s *SpacesService) AgentRuntimeMCPAccess() http.HandlerFunc {
 			}
 			subject = record.UserID
 		} else {
-			run, _, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), runID, body.RuntimeRunID, true)
+			run, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), runID, body.RuntimeRunID, true)
 			if err != nil {
 				writeAgentError(w, err)
 				return

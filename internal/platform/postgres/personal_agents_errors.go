@@ -20,7 +20,6 @@ var (
 type AskIdentity struct {
 	ID              string          `json:"id"`
 	OwnerUserID     string          `json:"owner_user_id"`
-	SpaceID         string          `json:"space_id"`
 	Name            string          `json:"name"`
 	Role            string          `json:"role"`
 	Description     string          `json:"description"`
@@ -31,21 +30,26 @@ type AskIdentity struct {
 	ModelID         string          `json:"model_id,omitempty"`
 	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
 	DefaultRunMode  string          `json:"default_run_mode"`
-	VoiceID         string          `json:"voice_id"`
-	Enabled         bool            `json:"enabled"`
-	SystemManaged   bool            `json:"system_managed"`
-	Version         int64           `json:"version"`
-	LatestVersionID string          `json:"latest_version_id,omitempty"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	// Runner is who does the work: Misty's cloud loop, or a coding CLI on the person's device.
+	Runner          string `json:"runner"`
+	VoiceID         string `json:"voice_id"`
+	Enabled         bool   `json:"enabled"`
+	SystemManaged   bool   `json:"system_managed"`
+	Version         int64  `json:"version"`
+	LatestVersionID string `json:"latest_version_id,omitempty"`
+	// SpaceID is the agent's home Space. It can also be in other Spaces
+	// (space_agents); the Agents page groups agents by home.
+	SpaceID   string    `json:"space_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-const personalAgentColumns = `id,owner_user_id,COALESCE(space_id,''),name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,enabled,system_managed,version,created_at,updated_at`
+const personalAgentColumns = `id,owner_user_id,name,role,description,icon,avatar,instructions,model_mode,model_id,reasoning_effort,default_run_mode,voice_id,enabled,system_managed,version,created_at,updated_at,runner,space_id`
 
 func scanPersonalAgent(row scanner, out *AskIdentity) error {
-	err := row.Scan(&out.ID, &out.OwnerUserID, &out.SpaceID, &out.Name, &out.Role, &out.Description, &out.Icon, &out.Avatar, &out.Instructions,
+	err := row.Scan(&out.ID, &out.OwnerUserID, &out.Name, &out.Role, &out.Description, &out.Icon, &out.Avatar, &out.Instructions,
 		&out.ModelMode, &out.ModelID, &out.ReasoningEffort, &out.DefaultRunMode, &out.VoiceID, &out.Enabled,
-		&out.SystemManaged, &out.Version, &out.CreatedAt, &out.UpdatedAt)
+		&out.SystemManaged, &out.Version, &out.CreatedAt, &out.UpdatedAt, &out.Runner, &out.SpaceID)
 	if err == nil {
 		out.LatestVersionID = personalAgentVersionID(out.ID, out.Version)
 	}

@@ -27,7 +27,7 @@ func (a *customerAdapter) Do(_ context.Context, action string, r billingadapter.
 }
 func TestBillingAdapterCustomerIdentityAndOutage(t *testing.T) {
 	database := openPresenceTestDatabase(t)
-	user, err := database.CreateUser("Adapter Customer", uniqueTestEmail("billing-adapter"), "password123")
+	user, err := database.CreateUser(uniqueTestEmail("billing-adapter"), "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestBillingAdapterCustomerIdentityAndOutage(t *testing.T) {
 
 func TestCommandEstimateUsesAuthenticatedAccountAndNativeBytes(t *testing.T) {
 	database := openPresenceTestDatabase(t)
-	user, err := database.CreateUser("Estimate", uniqueTestEmail("estimate"), "password123")
+	user, err := database.CreateUser(uniqueTestEmail("estimate"), "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

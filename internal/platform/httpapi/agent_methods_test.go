@@ -15,7 +15,7 @@ func TestAgentMethodRuntimePinsAndTargetBoundaries(t *testing.T) {
 	}
 	database := testkit.OpenDatabase(t)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Methods", "methods@example.test", "password123")
+	owner, err := database.CreateUser("methods@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

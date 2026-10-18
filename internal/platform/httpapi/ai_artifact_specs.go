@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -21,16 +20,6 @@ type aiArtifactSpec struct {
 }
 
 var aiArtifactSpecs = map[string]aiArtifactSpec{
-	"calendar_event": {
-		Title: "Review calendar event", Risk: "consequential", ApprovalPolicy: "confirm",
-		Prompt: "Propose one calendar event using explicit dates, timezone, title, description, and location. Never infer invitees.",
-		Shape:  `{"title":"...","description":"...","starts_at":"RFC3339","ends_at":"RFC3339","timezone":"IANA timezone","all_day":false,"location":"...","invitees":[]}`,
-	},
-	"roadmap_patch": {
-		Title: "Review roadmap changes", Risk: "draft", ApprovalPolicy: "visible_apply",
-		Prompt: "Propose a revision-anchored roadmap graph patch using only add, update, or connect operations and exact visible node identifiers.",
-		Shape:  `{"base_revision":"...","changes":[{"op":"add|update|connect","kind":"milestone|goal|node|edge","id":"opaque id when updating","fields":{}}]}`,
-	},
 	"drawing_patch": {
 		Title: "Review drawing changes", Risk: "draft", ApprovalPolicy: "visible_apply",
 		Prompt: "Propose constrained scene operations for the current drawing selection. Preserve unrelated elements. For layout updates, copy the exact selection content hash into base_hash and change only x/y positions of selected elements.",
@@ -138,99 +127,6 @@ func (hub *aiInvocationHub) addStructuredArtifact(userID, invocationID, kind, su
 		ID: "artifact_" + uuid.NewString(), SchemaVersion: 1, Kind: kind, Title: spec.Title, Summary: summary,
 		Sources: sources, Target: target, BaseRevision: baseRevision, Operations: operations,
 		Risk: spec.Risk, ApprovalPolicy: spec.ApprovalPolicy, IdempotencyKey: "artifact:" + invocationID + ":" + kind,
-		ExpiresAt: time.Now().UTC().Add(aiInvocationTTL).Format(time.RFC3339Nano), State: "proposed", InvocationID: invocationID, OwnerUserID: userID,
-	}
-	hub.mu.Lock()
-	hub.artifacts[artifact.ID] = artifact
-	database := hub.database
-	hub.mu.Unlock()
-	if database != nil {
-		payload, err := json.Marshal(artifact)
-		if err == nil {
-			err = database.UpsertAIArtifact(context.Background(), userID, invocationID, payload)
-		}
-		if err != nil {
-			log.Printf("persist AI artifact %s: %v", artifact.ID, err)
-		}
-	}
-	copy := *artifact
-	return &copy
-}
-
-type aiTaskDraft struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Notes    string `json:"notes"`
-	Priority string `json:"priority"`
-}
-
-func parseAITaskDrafts(value string) ([]aiTaskDraft, error) {
-	value = strings.TrimSpace(value)
-	value = strings.TrimPrefix(value, "```json")
-	value = strings.TrimPrefix(value, "```")
-	value = strings.TrimSuffix(value, "```")
-	var envelope struct {
-		Tasks []aiTaskDraft `json:"tasks"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(value)), &envelope); err != nil {
-		return nil, err
-	}
-	if len(envelope.Tasks) > 20 {
-		return nil, errors.New("too many task drafts")
-	}
-	result := make([]aiTaskDraft, 0, len(envelope.Tasks))
-	seen := map[string]bool{}
-	for _, task := range envelope.Tasks {
-		task.Title = strings.Join(strings.Fields(task.Title), " ")
-		task.Notes = strings.TrimSpace(task.Notes)
-		task.Priority = strings.ToLower(strings.TrimSpace(task.Priority))
-		if task.Priority == "" {
-			task.Priority = "medium"
-		}
-		key := strings.ToLower(task.Title)
-		if task.Title == "" || len([]rune(task.Title)) > 240 || len([]rune(task.Notes)) > 20_000 || seen[key] {
-			continue
-		}
-		if task.Priority != "high" && task.Priority != "medium" && task.Priority != "low" {
-			task.Priority = "medium"
-		}
-		seen[key] = true
-		task.ID = "task_" + uuid.NewString()
-		result = append(result, task)
-	}
-	return result, nil
-}
-
-func (hub *aiInvocationHub) addTaskSetArtifact(userID, invocationID string, tasks []aiTaskDraft, resolved []aiResolvedContext, body aiInvocationInput) *aiArtifact {
-	spaceID := ""
-	if body.Selection != nil {
-		spaceID, _ = body.Selection.Object["spaceId"].(string)
-	}
-	if spaceID == "" {
-		for _, reference := range body.Context {
-			if reference.SpaceID != "" {
-				spaceID = reference.SpaceID
-				break
-			}
-		}
-	}
-	if spaceID == "" {
-		return nil
-	}
-	sources := make([]aiCitation, 0, len(resolved))
-	for _, item := range resolved {
-		sources = append(sources, item.Citation)
-	}
-	suffix := "s"
-	if len(tasks) == 1 {
-		suffix = ""
-	}
-	artifact := &aiArtifact{
-		ID: "artifact_" + uuid.NewString(), SchemaVersion: 1, Kind: "task_set",
-		Title:   fmt.Sprintf("Create %d task%s", len(tasks), suffix),
-		Summary: "Create these reviewed tasks in the current Space. No assignees or due dates will be inferred.", Sources: sources,
-		Target: map[string]any{"kind": "space", "id": spaceID, "spaceId": spaceID}, Operations: map[string]any{"tasks": tasks},
-		Risk: "consequential", ApprovalPolicy: "confirm", IdempotencyKey: "artifact:" + invocationID,
 		ExpiresAt: time.Now().UTC().Add(aiInvocationTTL).Format(time.RFC3339Nano), State: "proposed", InvocationID: invocationID, OwnerUserID: userID,
 	}
 	hub.mu.Lock()

@@ -70,13 +70,7 @@ func (s *SpacesService) ProcessPersonalAgentTasks(ctx context.Context, workerID 
 			continue
 		}
 		if requeued {
-			if job.HasTask {
-				_, _ = s.database.AddSpaceTaskAgentActivity(ctx, job.Task.ID, job.Run.AgentID, job.Run.ID, "status", "Agent runtime was unavailable and will retry", TestingMustAPIRawJSON(map[string]any{"attempt": job.Attempt}))
-			}
 			continue
-		}
-		if job.HasTask {
-			s.finishPersonalAgentTaskRun(ctx, &job.Run, &job.Task, "", dispatchErr)
 		}
 		processed++
 	}

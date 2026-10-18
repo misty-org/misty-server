@@ -100,7 +100,7 @@ func (s *BrowserSyncService) writeConnection(ctx context.Context, conn *websocke
 // start sends the welcome frame, the batching policy and the first replay.
 // It returns false when the connection should end before it is serving.
 func (w *connectionWriter) start() bool {
-	vault, err := w.service.store.BrowserSyncVault(w.ctx, w.identity.UserID)
+	vault, err := w.service.store.BrowserSyncVaultByID(w.ctx, w.identity.UserID, w.identity.VaultID)
 	if err != nil || vault == nil {
 		return false
 	}

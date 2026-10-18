@@ -22,7 +22,12 @@ func (s *AIService) Recaps() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		items, err := s.database.AIRecaps(r.Context(), userID)
+		space, err := requestMemorySpace(r.Context(), s.database, userID, memorySpaceParam(r))
+		if err != nil {
+			writeMemorySpaceError(w, err)
+			return
+		}
+		items, err := s.database.AIRecaps(r.Context(), userID, space)
 		if err != nil {
 			TestingWriteAIError(w, err)
 			return
@@ -53,8 +58,14 @@ func (s *AIService) Recap() http.HandlerFunc {
 		if decodeAIJSON(w, r, &body) != nil {
 			return
 		}
+		// Each Space has its own recaps, built from that Space's moments.
+		space, err := requestMemorySpace(r.Context(), s.database, userID, memorySpaceParam(r))
+		if err != nil {
+			writeMemorySpaceError(w, err)
+			return
+		}
 		item, err := s.database.UpsertAIRecap(r.Context(), userID, db.AIRecap{
-			SurfaceID: surfaceID, Enabled: body.Enabled, Cadence: strings.TrimSpace(body.Cadence),
+			SpaceID: space, SurfaceID: surfaceID, Enabled: body.Enabled, Cadence: strings.TrimSpace(body.Cadence),
 			LocalTime: strings.TrimSpace(body.LocalTime), Weekday: body.Weekday,
 			Timezone: strings.TrimSpace(body.Timezone), Prompt: strings.TrimSpace(body.Prompt),
 		}, time.Now().UTC())
@@ -99,7 +110,7 @@ func (s *AIService) processAIRecap(ctx context.Context, item db.AIRecap, now tim
 		return err
 	}
 	prompt := firstAIText(item.Prompt, "Summarize recent progress, upcoming commitments, decisions, risks, and blockers. Be concise and omit sections with no grounded evidence.")
-	body := aiInvocationInput{Mode: "drawer", SurfaceID: item.SurfaceID, Trigger: "schedule", Prompt: prompt, Timezone: item.Timezone}
+	body := aiInvocationInput{Mode: "drawer", SurfaceID: item.SurfaceID, SpaceID: item.SpaceID, Trigger: "schedule", Prompt: prompt, Timezone: item.Timezone}
 	payload, _ := json.Marshal(body)
 	scheduledAt := now
 	if item.NextRunAt != nil {
@@ -108,7 +119,7 @@ func (s *AIService) processAIRecap(ctx context.Context, item db.AIRecap, now tim
 	invocation, created, err := s.database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{
 		ID: "invocation_" + uuid.NewString(), UserID: item.UserID, SurfaceID: item.SurfaceID,
 		Mode: "drawer", Trigger: "schedule", State: "queued",
-		IdempotencyKey: "recap:" + item.SurfaceID + ":" + scheduledAt.UTC().Format(time.RFC3339),
+		IdempotencyKey: "recap:" + item.SpaceID + ":" + item.SurfaceID + ":" + scheduledAt.UTC().Format(time.RFC3339),
 		RequestPayload: payload, ExpiresAt: now.Add(aiInvocationTTL),
 	})
 	if err != nil {

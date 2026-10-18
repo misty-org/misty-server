@@ -29,9 +29,7 @@ func (transport bearerRoundTripper) RoundTrip(request *http.Request) (*http.Resp
 
 func TestAIInvocationMCPAdvertisesWeatherThroughOfficialGoSDK(t *testing.T) {
 	database := openPresenceTestDatabase(t)
-	owner, err := database.CreateUserWithUsername(
-		"AI MCP",
-		"aimcp_"+strings.ReplaceAll(uuid.NewString()[:12], "-", ""),
+	owner, err := database.CreateUserWithUsername("aimcp_"+strings.ReplaceAll(uuid.NewString()[:12], "-", ""),
 		uniqueTestEmail("ai-mcp-e2e"),
 		"password123",
 	)

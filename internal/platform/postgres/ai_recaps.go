@@ -12,6 +12,8 @@ import (
 
 type AIRecap struct {
 	UserID           string          `json:"-"`
+	// SpaceID is the Space whose moments the recap summarizes.
+	SpaceID          string          `json:"space_id"`
 	SurfaceID        string          `json:"surface_id"`
 	Enabled          bool            `json:"enabled"`
 	Cadence          string          `json:"cadence"`
@@ -30,22 +32,27 @@ type AIRecap struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 }
 
-const aiRecapColumns = `user_id,surface_id,enabled,cadence,local_time,weekday,timezone,prompt,state,next_run_at,
+const aiRecapColumns = `user_id,space_id,surface_id,enabled,cadence,local_time,weekday,timezone,prompt,state,next_run_at,
 	COALESCE(last_invocation_id,''),last_result,last_citations,last_error,last_run_at,last_seen_at,updated_at`
 
 func scanAIRecap(scanner interface{ Scan(...any) error }, item *AIRecap) error {
 	return scanner.Scan(
-		&item.UserID, &item.SurfaceID, &item.Enabled, &item.Cadence, &item.LocalTime,
+		&item.UserID, &item.SpaceID, &item.SurfaceID, &item.Enabled, &item.Cadence, &item.LocalTime,
 		&item.Weekday, &item.Timezone, &item.Prompt, &item.State, &item.NextRunAt,
 		&item.LastInvocationID, &item.LastResult, &item.LastCitations, &item.LastError,
 		&item.LastRunAt, &item.LastSeenAt, &item.UpdatedAt,
 	)
 }
 
-func (db *Database) AIRecaps(ctx context.Context, userID string) ([]AIRecap, error) {
+// AIRecaps lists the person's recaps in one Space (empty: the personal Space).
+func (db *Database) AIRecaps(ctx context.Context, userID, spaceID string) ([]AIRecap, error) {
 	items := []AIRecap{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT `+aiRecapColumns+` FROM ai_recaps WHERE user_id=$1 ORDER BY surface_id`, userID)
+		spaceID, err := memorySpaceTx(ctx, tx, userID, spaceID)
+		if err != nil {
+			return err
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT `+aiRecapColumns+` FROM ai_recaps WHERE user_id=$1 AND space_id=$2 ORDER BY surface_id`, userID, spaceID)
 		if err != nil {
 			return err
 		}
@@ -79,15 +86,19 @@ func (db *Database) UpsertAIRecap(ctx context.Context, userID string, item AIRec
 	}
 	out := &AIRecap{}
 	err = db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		var err error
+		if item.SpaceID, err = memorySpaceTx(ctx, tx, userID, item.SpaceID); err != nil {
+			return err
+		}
 		return scanAIRecap(tx.QueryRowContext(ctx, `
-			INSERT INTO ai_recaps(user_id,surface_id,enabled,cadence,local_time,weekday,timezone,prompt,next_run_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
-			ON CONFLICT(user_id,surface_id) DO UPDATE SET enabled=EXCLUDED.enabled,cadence=EXCLUDED.cadence,
+			INSERT INTO ai_recaps(user_id,space_id,surface_id,enabled,cadence,local_time,weekday,timezone,prompt,next_run_at)
+			VALUES($1,$10,$2,$3,$4,$5,$6,$7,$8,$9)
+			ON CONFLICT(user_id,space_id,surface_id) DO UPDATE SET enabled=EXCLUDED.enabled,cadence=EXCLUDED.cadence,
 				local_time=EXCLUDED.local_time,weekday=EXCLUDED.weekday,timezone=EXCLUDED.timezone,
 				prompt=EXCLUDED.prompt,next_run_at=EXCLUDED.next_run_at,state='idle',lease_until=NULL,updated_at=NOW()
 			RETURNING `+aiRecapColumns,
 			userID, item.SurfaceID, item.Enabled, item.Cadence, item.LocalTime, item.Weekday,
-			item.Timezone, strings.TrimSpace(item.Prompt), nextValue), out)
+			item.Timezone, strings.TrimSpace(item.Prompt), nextValue, item.SpaceID), out)
 	})
 	return out, err
 }
@@ -143,8 +154,8 @@ func (db *Database) ClaimDueAIRecaps(ctx context.Context, now time.Time, limit i
 	err := db.TestingWithRLSContext(ctx, TestingServiceRLSSettings(), func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
 			UPDATE ai_recaps r SET state='running',lease_until=$1+INTERVAL '10 minutes',updated_at=NOW()
-			WHERE (r.user_id,r.surface_id) IN (
-				SELECT r2.user_id,r2.surface_id FROM ai_recaps r2
+			WHERE (r.user_id,r.space_id,r.surface_id) IN (
+				SELECT r2.user_id,r2.space_id,r2.surface_id FROM ai_recaps r2
 				WHERE r2.enabled
 				  AND COALESCE((SELECT s.enabled FROM ai_user_settings s WHERE s.user_id=r2.user_id),TRUE)
 				  AND r2.next_run_at<=$1
@@ -188,8 +199,8 @@ func (db *Database) CompleteAIRecap(ctx context.Context, item AIRecap, invocatio
 				last_result=CASE WHEN $1='idle' THEN $4 ELSE last_result END,
 				last_citations=CASE WHEN $1='idle' THEN $5 ELSE last_citations END,last_error=$6,
 				last_run_at=$7,updated_at=NOW()
-			WHERE user_id=$8 AND surface_id=$9 AND state='running'
-		`, state, next, invocationID, result, jsonOr(citations, `[]`), message, now, item.UserID, item.SurfaceID)
+			WHERE user_id=$8 AND surface_id=$9 AND space_id=$10 AND state='running'
+		`, state, next, invocationID, result, jsonOr(citations, `[]`), message, now, item.UserID, item.SurfaceID, item.SpaceID)
 		if err != nil {
 			return err
 		}

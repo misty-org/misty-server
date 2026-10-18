@@ -2,73 +2,36 @@ package api
 
 import (
 	"context"
-	"encoding/json"
-	"net/url"
 	"strings"
 	"unicode/utf8"
 
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-func personalAgentRuntimeCompletionOutcome(status string, taskDone, taskRun bool, errorCode string) (state, code, activityKind string, valid bool) {
+func personalAgentRuntimeCompletionOutcome(status, errorCode string) (state, code string, valid bool) {
 	switch status {
 	case "success":
-		if taskDone {
-			return "completed", "", "result", true
-		}
-		return "completed_with_errors", "task_not_completed", "failure", true
+		return "completed", "", true
 	case "incomplete":
-		if taskRun {
-			return "completed_with_errors", "task_not_completed", "failure", true
-		}
 		code = strings.TrimSpace(errorCode)
 		if code == "" {
 			code = "run_incomplete"
 		}
-		return "completed_with_errors", code, "failure", true
+		return "completed_with_errors", code, true
 	case "failed":
 		code = strings.TrimSpace(errorCode)
 		if code == "" {
 			code = "agent_runtime_failed"
 		}
-		return "failed", code, "failure", true
+		return "failed", code, true
 	default:
-		return "", "", "", false
+		return "", "", false
 	}
 }
 
-func (s *SpacesService) publishPersonalAgentTaskCompletion(ctx context.Context, run *db.SpaceRun, task *db.SpaceTask, text string) error {
-	actionID, claimed, err := s.database.ClaimRunResponsePublication(ctx, run.ID)
-	if err != nil || !claimed {
-		return err
-	}
-	summary := truncateAgentRuntimeText(strings.TrimSpace(text), 600)
-	if summary == "" {
-		summary = "Finished the assigned work."
-	}
-	taskLink := "/spaces/" + url.PathEscape(run.SpaceID) + "/planner/tasks/board?task=" + url.QueryEscape(task.ID)
-	message, publishErr := s.database.CreatePersonalAgentSpaceMessage(ctx, run.RequestingMemberID, run.SpaceID, run.AgentID, "Completed ["+task.TaskKey+"]("+taskLink+"): "+summary)
-	details := TestingMustAPIRawJSON(map[string]any{"task_id": task.ID, "task_key": task.TaskKey})
-	state := "failed"
-	if publishErr == nil {
-		state = "completed"
-		var values map[string]any
-		_ = json.Unmarshal(details, &values)
-		values["message_id"] = message.ID
-		details = TestingMustAPIRawJSON(values)
-	}
-	if finishErr := s.database.FinishRunResponsePublication(ctx, actionID, state, details); finishErr != nil {
-		return finishErr
-	}
-	return publishErr
-}
-
-func (s *SpacesService) publishPersonalAgentCompletion(ctx context.Context, run *db.SpaceRun, task *db.SpaceTask, text string) error {
+func (s *SpacesService) publishPersonalAgentCompletion(ctx context.Context, run *db.SpaceRun, text string) error {
 	if request := s.mentionRequestForRun(ctx, run); request != nil {
 		return s.publishMentionReply(ctx, run, request, text)
-	}
-	if run.SourceTaskID != "" {
-		return s.publishPersonalAgentTaskCompletion(ctx, run, task, text)
 	}
 	actionID, claimed, err := s.database.ClaimRunResponsePublication(ctx, run.ID)
 	if err != nil || !claimed {
@@ -109,6 +72,6 @@ func truncateAgentRuntimeText(value string, limit int) string {
 	return strings.TrimSpace(string(runes[:limit-1])) + "…"
 }
 
-func TestingPersonalAgentRuntimeCompletionOutcome(status string, taskDone, taskRun bool, errorCode string) (string, string, string, bool) {
-	return personalAgentRuntimeCompletionOutcome(status, taskDone, taskRun, errorCode)
+func TestingPersonalAgentRuntimeCompletionOutcome(status, errorCode string) (string, string, bool) {
+	return personalAgentRuntimeCompletionOutcome(status, errorCode)
 }

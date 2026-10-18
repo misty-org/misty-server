@@ -15,8 +15,7 @@ func TestSpacesToolsRemainMountedAndAuthenticated(t *testing.T) {
 			{"GET", "/spaces/example"}, {"GET", "/spaces/example/members"},
 			{"GET", "/spaces/example/messages"}, {"POST", "/spaces/example/messages"},
 			{"GET", "/spaces/example/conversations"},
-			{"GET", "/spaces/example/tasks"}, {"POST", "/spaces/example/tasks"},
-			{"GET", "/spaces/example/agenda"}, {"GET", "/spaces/example/notes"},
+			{"GET", "/spaces/example/notes"},
 			{"GET", "/spaces/example/drawings"}, {"GET", "/spaces/example/library"},
 		} {
 			t.Run(endpoint.method+prefix+endpoint.path, func(t *testing.T) {

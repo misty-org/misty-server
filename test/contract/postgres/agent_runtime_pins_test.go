@@ -12,7 +12,7 @@ import (
 
 func TestAgentRuntimeDeploymentPinSurvivesConfigurationChanges(t *testing.T) {
 	database := openTestDatabase(t)
-	user, err := database.CreateUser("Pinned runtime", uuid.NewString()+"@example.com", "password123")
+	user, err := database.CreateUser(uuid.NewString()+"@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

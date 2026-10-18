@@ -16,10 +16,10 @@ func TestNativeAgentToolSchemasRequiredIsArray(t *testing.T) {
 			if !ok {
 				t.Fatalf("required must be an array, got %s", descriptor.InputSchema)
 			}
-			if descriptor.Name == "agents.list" && len(required) != 0 {
+			if descriptor.Name == "agent.list" && len(required) != 0 {
 				t.Fatal("listing agents must accept an empty object")
 			}
-			if descriptor.Name == "agents.configure" && (len(required) != 1 || required[0] != "operation") {
+			if descriptor.Name == "agent.configure" && (len(required) != 1 || required[0] != "operation") {
 				t.Fatal("configuration must still require operation")
 			}
 		})

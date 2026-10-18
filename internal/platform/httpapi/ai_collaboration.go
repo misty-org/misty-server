@@ -92,7 +92,8 @@ func planModeTools(toolbox *agenttools.Registry, names []string) []string {
 	}
 	allowed := make([]string, 0, len(names))
 	for _, name := range names {
-		if risk[name] == serveragent.RiskRead && planModeToolPermitted(name) {
+		// Delegated coding inherits Plan: the tool gets a read-only launch.
+		if (risk[name] == serveragent.RiskRead || name == codeDelegateTool) && planModeToolPermitted(name) {
 			allowed = append(allowed, name)
 		}
 	}
@@ -103,7 +104,7 @@ func planModeTools(toolbox *agenttools.Registry, names []string) []string {
 // action requests in the browser, and progress or goal reports.
 func planModeToolPermitted(name string) bool {
 	switch name {
-	case "browser.request_user_action", collaborationUpdatePlan, collaborationUpdateGoal:
+	case "browser.request_user_action", collaborationUpdatePlan, collaborationUpdateGoal, collaborationChecklist:
 		return false
 	}
 	return true
@@ -132,8 +133,9 @@ func collaborationInstructions(state collaborationState) string {
 	if state.canAsk {
 		out.WriteString("\n\nWhen a missing decision would materially change the result, ask with conversation_ask_user instead of guessing; explore with read tools first and never ask whether to proceed.")
 	}
+	out.WriteString("\n\nBefore multi-step work, publish a live checklist with log_work_checklist: 3-8 concrete steps the user can follow. Keep exactly one step in_progress, mark each done as you finish it, and mark steps you hand to another agent or a coding tool as delegated. Each turn publishes its own checklist; skip it for a single quick answer.")
 	if plan := state.approvedPlan(); plan != nil {
-		out.WriteString("\n\nThe user approved this plan: \"" + plan.Payload.Title + "\" (version " + fmt.Sprint(plan.Version) + "). Follow it and report each step with plan_update: in_progress before you start it, done after it, skipped or blocked with a note. " +
+		out.WriteString("\n\nThe user approved this plan: \"" + plan.Payload.Title + "\" (version " + fmt.Sprint(plan.Version) + "). Follow it and report each step with log_work_checklist using the plan's step ids (it starts as the plan's steps): in_progress before you start it, done after it, skipped or blocked with a note. " +
 			"If a step proves wrong or the work needs steps that are not in the plan, do not widen it silently: ask, or finish explaining the change.\nSteps:")
 		for _, step := range plan.Payload.Steps {
 			status := plan.Progress[step.ID].Status
@@ -162,8 +164,9 @@ func collaborationInstructions(state collaborationState) string {
 	return out.String()
 }
 
-// admitCollaboration settles a new turn's mode at admission: the conversation's
-// saved mode unless the turn chose one, which is then saved. A typed message
+// admitCollaboration settles a new turn's modes at admission: Plan or Act, and
+// Ask or Auto. Each is the conversation's saved mode unless the turn chose one,
+// which is then saved. A typed message
 // also answers the conversation's open questions by superseding them.
 func admitCollaboration(ctx context.Context, database *db.Database, user string, body *aiInvocationInput) error {
 	if body.ConversationID != "" {
@@ -183,7 +186,7 @@ func admitCollaboration(ctx context.Context, database *db.Database, user string,
 	if body.CollaborationMode == "" {
 		body.CollaborationMode = db.ConversationModeAct
 	}
-	return nil
+	return admitPermissionMode(ctx, database, user, body)
 }
 
 // aiCollaborationEventFields are an invocation event's collaboration updates:
@@ -192,4 +195,5 @@ type aiCollaborationEventFields struct {
 	QuestionSet *db.AgentQuestionSet `json:"questionSet,omitempty"`
 	Plan        *db.AgentPlan        `json:"plan,omitempty"`
 	Goal        *db.AgentGoal        `json:"goal,omitempty"`
+	Checklist   *db.AgentChecklist   `json:"checklist,omitempty"`
 }

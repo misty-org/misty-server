@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
 	"github.com/kannachi323/misty/server/internal/aimodels"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
@@ -14,9 +13,6 @@ import (
 // the fast model, so the free plan stretches far; paid plans default to the mid
 // model and may pick any priced model, flagship included.
 func fastModel() string { return envOr("MISTY_AI_FAST_MODEL", "openai/gpt-6-luna") }
-func paidDefaultModel() string {
-	return envOr("MISTY_AI_PAID_DEFAULT_MODEL", "openai/gpt-6.1-sol")
-}
 
 var planTiers = struct {
 	sync.Mutex
@@ -55,23 +51,11 @@ func accountPlan(ctx context.Context, database *db.Database, user string) string
 	return tier
 }
 
-// planRoutes applies the plan to a run's default routes and returns the models
-// the plan forces regardless of the account's or conversation's choice.
+// planRoutes returns a run's default routes unchanged. Every plan runs the same house
+// model (agent.HouseModel); plans differ in usage limits, never in how smart the agent is.
+// The second result, the models a plan forces, is always empty.
 func planRoutes(ctx context.Context, database *db.Database, user string, defaults []aimodels.Route) ([]aimodels.Route, map[string]string) {
-	plan := accountPlan(ctx, database, user)
-	if plan == "" {
-		return defaults, nil
-	}
-	if plan == "basic" {
-		return defaults, map[string]string{"agent": fastModel(), "vision": fastModel()}
-	}
-	out := append([]aimodels.Route(nil), defaults...)
-	for i, r := range out {
-		if (r.Role == "agent" || r.Role == "vision") && r.Model == agent.FrontierDefaultModelID() {
-			out[i].Model = paidDefaultModel()
-		}
-	}
-	return out, nil
+	return defaults, nil
 }
 
 // planAllowsModel reports whether the account's plan may pick a model.

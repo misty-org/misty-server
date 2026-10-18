@@ -54,8 +54,8 @@ describe("context compaction", () => {
     const messages: ModelMessage[] = [
       task,
       ...step(1),
-      { role: "assistant", content: [{ type: "tool-call", toolCallId: "e", toolName: "notes_update", input: {} }] },
-      { role: "tool", content: [{ type: "tool-result", toolCallId: "e", toolName: "notes_update", output: { type: "error-text", value: "x".repeat(5_000) } }] },
+      { role: "assistant", content: [{ type: "tool-call", toolCallId: "e", toolName: "note_update", input: {} }] },
+      { role: "tool", content: [{ type: "tool-result", toolCallId: "e", toolName: "note_update", output: { type: "error-text", value: "x".repeat(5_000) } }] },
       ...step(2),
     ];
     const { messages: cleared } = clearOldToolResults(messages, 1);

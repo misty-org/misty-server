@@ -14,7 +14,7 @@ func shouldRetrieveAccountContext(prompt string) bool {
 	markers := []string{
 		" my ", " our ", " we ", " misty ", " workspace ", " account ", " space ",
 		" task ", " tasks ", " todo ", " note ", " notes ", " file ", " files ",
-		" project ", " projects ", " roadmap ", " message ", " messages ", " drawing ",
+		" project ", " projects ", " message ", " messages ", " drawing ",
 		" document ", " documents ", " launch plan ", " what did ", " where did ", " find ",
 		" due ", " overdue ", " deadline ", " calendar ", " meeting ", " reminder ",
 	}

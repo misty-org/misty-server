@@ -49,6 +49,12 @@ export function classifyRuntimeError(error: unknown): { code: string; message: s
   if (normalized.includes("timeout") || normalized.includes("timed out") || normalized.includes("aborted")) {
     return { code: "agent_runtime_timeout", message: "Misty timed out before completing this request." };
   }
+  if (normalized.includes("usage_limit_reached") && normalized.includes("too many agent tasks")) {
+    return { code: "usage_limit_reached", message: "Too many agent tasks are running at once. Wait for one to finish, then try again." };
+  }
+  if (normalized.includes("usage_limit_reached") && normalized.includes("starting agent tasks faster")) {
+    return { code: "usage_limit_reached", message: "You're starting agent tasks faster than they can run. Wait a minute, then try again." };
+  }
   if (normalized.includes("usage_limit_reached")) {
     return { code: "usage_limit_reached", message: "Misty paused here because an AI usage limit was reached. It can pick up from this point once your limit refills." };
   }

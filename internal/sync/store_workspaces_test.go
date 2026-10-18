@@ -70,7 +70,7 @@ func setupWorkspaceVault(t *testing.T) (*Store, string, []*workspaceTestDevice) 
 	for i := 0; i < 3; i++ {
 		g, key := syncTestGrant(vault, rootKey)
 		if i == 0 {
-			if err := store.CreateBrowserSyncVault(ctx, "owner", root, syncTestKeyEnvelope(), g); err != nil {
+			if err := store.CreateBrowserSyncVault(ctx, "owner", "", root, PasswordVaultKeys(syncTestKeyEnvelope()), g); err != nil {
 				t.Fatal(err)
 			}
 		} else if err := store.EnrollBrowserSyncDevice(ctx, "owner", g); err != nil {

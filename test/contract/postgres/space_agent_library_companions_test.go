@@ -16,7 +16,7 @@ import ()
 func TestSpaceAgentReadsUpdatesAndPromotesLibraryItems(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Library Tool Owner", "library-tool-owner@example.com", "password123")
+	owner, err := database.CreateUser("library-tool-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,11 +36,11 @@ func TestSpaceAgentReadsUpdatesAndPromotesLibraryItems(t *testing.T) {
 	if err != nil || completed.Item == nil {
 		t.Fatalf("completed Library upload = %#v, %v", completed, err)
 	}
-	readRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Read the library item", "library.read", json.RawMessage(`{"id":"`+completed.Item.ID+`"}`))
+	readRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Read the library item", "file.read", json.RawMessage(`{"id":"`+completed.Item.ID+`"}`))
 	if err != nil || !strings.Contains(string(readRaw), "brief.txt") {
 		t.Fatalf("read Library item = %s, %v", readRaw, err)
 	}
-	updatedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Tag the file in the library", "library.update", json.RawMessage(`{"id":"`+completed.Item.ID+`","displayName":"Investor brief","tags":["demo","investor"],"favorite":true}`))
+	updatedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Tag the file in the library", "file.update", json.RawMessage(`{"id":"`+completed.Item.ID+`","displayName":"Investor brief","tags":["demo","investor"],"favorite":true}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestSpaceAgentReadsUpdatesAndPromotesLibraryItems(t *testing.T) {
 	if err != nil || attachmentResult.Attachment == nil {
 		t.Fatalf("completed attachment upload = %#v, %v", attachmentResult, err)
 	}
-	promotedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Save the attachment to the library", "library.promote_attachment", json.RawMessage(`{"attachmentId":"`+attachmentResult.Attachment.ID+`"}`))
+	promotedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Save the attachment to the library", "file.promote_attachment", json.RawMessage(`{"attachmentId":"`+attachmentResult.Attachment.ID+`"}`))
 	if err != nil || !strings.Contains(string(promotedRaw), attachmentResult.Attachment.DisplayName) {
 		t.Fatalf("promoted attachment = %s, %v", promotedRaw, err)
 	}

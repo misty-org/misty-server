@@ -35,7 +35,7 @@ func TestRuntimeCompletionLimitTerminatesInvocation(t *testing.T) {
 	for _, scenario := range []string{"success", "incomplete", "transient", "blocked", "terminal_transient", "canceled_quota"} {
 		t.Run(scenario, func(t *testing.T) {
 			database := openPresenceTestDatabase(t)
-			owner, err := database.CreateUserWithUsername("Completion test", "limit"+strings.ReplaceAll(uuid.NewString(), "-", "")[:12], uniqueTestEmail("completion-limit"), "password123")
+			owner, err := database.CreateUserWithUsername("limit"+strings.ReplaceAll(uuid.NewString(), "-", "")[:12], uniqueTestEmail("completion-limit"), "password123")
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -10,10 +10,22 @@ import (
 type Tier string
 
 const (
-	TierBasic Tier = "basic"
-	TierPro   Tier = "pro"
-	TierMax   Tier = "max"
+	TierBasic     Tier = "basic"
+	TierPro       Tier = "pro"
+	TierMax       Tier = "max"
+	TierUltra     Tier = "ultra"
+	TierUltraPlus Tier = "ultra_plus"
 )
+
+// IncludesCoding reports whether a plan includes coding: Pro and above.
+// Unknown plans do not.
+func (tier Tier) IncludesCoding() bool {
+	switch tier {
+	case TierPro, TierMax, TierUltra, TierUltraPlus:
+		return true
+	}
+	return false
+}
 
 const (
 	LicenseStatusActive   = "active"

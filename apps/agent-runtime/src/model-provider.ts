@@ -1,3 +1,4 @@
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type {
   EmbeddingModelV4,
@@ -12,8 +13,8 @@ import type { RuntimeIdentity } from "./control-plane.js";
 type Environment = Record<string, string | undefined>;
 
 /**
- * Every model runs on Misty's own keys. OpenAI models go straight to OpenAI when
- * the instance has an OpenAI key; everything else goes through the AI Gateway.
+ * Every model runs on Misty's own keys. OpenAI and Anthropic models go straight to
+ * their maker when the instance has that key; everything else goes through the AI Gateway.
  */
 export function instanceModelConfig(env: Environment = process.env) {
   const model = env.MISTY_AGENT_MODEL?.trim() || "";
@@ -38,6 +39,20 @@ function directOpenAI(modelId: string, env: Environment) {
   return modelId.startsWith("openai/") && openAIKey(env) !== "";
 }
 
+function anthropicKey(env: Environment) {
+  return env.ANTHROPIC_API_KEY?.trim() || env.CLAUDE_API_KEY?.trim() || "";
+}
+
+/** An `anthropic/…` model with an instance Anthropic key skips the Gateway. */
+function directAnthropic(modelId: string, env: Environment) {
+  return modelId.startsWith("anthropic/") && anthropicKey(env) !== "";
+}
+
+/** The Gateway names `claude-haiku-5.5`; Anthropic's own API names `claude-haiku-5-5`. */
+export function anthropicModelName(modelId: string): string {
+  return modelId.slice("anthropic/".length).replaceAll(".", "-");
+}
+
 function openAI(env: Environment) {
   return createOpenAI({ apiKey: openAIKey(env) });
 }
@@ -54,6 +69,14 @@ export function resolveInstanceModel(
   options: LanguageModelV4CallOptions,
   env: Environment = process.env,
 ): { model: LanguageModelV4; options: LanguageModelV4CallOptions } {
+  if (directAnthropic(modelId, env)) {
+    // Gateway routing options mean nothing to Anthropic itself.
+    const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};
+    return {
+      model: createAnthropic({ apiKey: anthropicKey(env) })(anthropicModelName(modelId)),
+      options: { ...options, providerOptions },
+    };
+  }
   if (!directOpenAI(modelId, env)) return { model: instanceGateway(env)(modelId), options };
   // Gateway routing options mean nothing to OpenAI itself.
   const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};

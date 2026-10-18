@@ -25,7 +25,7 @@ func TestDeviceOpenedTabsMustBeTheDevicesOwnBrowserTabs(t *testing.T) {
 		"another device":      func(tab *aiInvocationDeviceContext) { tab.DeviceID = "device-c" },
 		"not a browser tab":   func(tab *aiInvocationDeviceContext) { tab.Kind = "local_folder" },
 		"no grant":            func(tab *aiInvocationDeviceContext) { tab.RunGrant = nil },
-		"a folder capability": func(tab *aiInvocationDeviceContext) { tab.Capabilities = json.RawMessage(`["files.read"]`) },
+		"a folder capability": func(tab *aiInvocationDeviceContext) { tab.Capabilities = json.RawMessage(`["folder.read"]`) },
 		"no browser app":      func(tab *aiInvocationDeviceContext) { tab.Metadata = json.RawMessage(`{}`) },
 		"an empty scope":      func(tab *aiInvocationDeviceContext) { tab.OpaqueRef = " " },
 		"a terminal ability":  func(tab *aiInvocationDeviceContext) { tab.Capabilities = json.RawMessage(`["terminal.execute"]`) },
@@ -57,15 +57,29 @@ func TestAnotherDevicesSessionRunsUnderItsOwnTask(t *testing.T) {
 
 func TestOnlyAPickedDevicesBrowserGrantOpensASession(t *testing.T) {
 	contexts := []db.AIInvocationContext{
-		{Kind: "workspace", State: "attached", DeviceID: "laptop", Capabilities: json.RawMessage(`["tabs.list"]`)},
+		{Kind: "workspace", State: "attached", DeviceID: "laptop", Capabilities: json.RawMessage(`["browser.tab.list"]`)},
 		{Kind: "workspace", State: "detached", DeviceID: "old", Capabilities: json.RawMessage(`["browser.session"]`)},
-		{Kind: "workspace", State: "attached", DeviceID: "mac-mini", Capabilities: json.RawMessage(`["tabs.list","browser.session"]`)},
+		{Kind: "workspace", State: "attached", DeviceID: "mac-mini", Capabilities: json.RawMessage(`["browser.tab.list","browser.session"]`)},
 	}
-	if target := remoteSessionTarget(contexts); target == nil || target.DeviceID != "mac-mini" {
+	if target := sessionTarget(contexts, false); target == nil || target.DeviceID != "mac-mini" {
 		t.Fatalf("target = %#v", target)
 	}
-	if remoteSessionTarget(contexts[:2]) != nil {
+	if sessionTarget(contexts[:2], false) != nil {
 		t.Fatal("a request without a picked device opened a session")
+	}
+}
+
+func TestTheAgentsOwnTabOpensOnThisComputerOnlyWhenNoPlaceWasNamed(t *testing.T) {
+	own := db.AIInvocationContext{Kind: "workspace", State: "attached", DeviceID: "laptop", Capabilities: json.RawMessage(`["browser.session"]`), Metadata: json.RawMessage(`{"source":"desktop"}`)}
+	picked := db.AIInvocationContext{Kind: "workspace", State: "attached", DeviceID: "mac-mini", Capabilities: json.RawMessage(`["browser.session"]`), Metadata: json.RawMessage(`{"source":"device"}`)}
+	if target := sessionTarget([]db.AIInvocationContext{own}, true); target == nil || target.DeviceID != "laptop" {
+		t.Fatalf("own tab target = %#v", target)
+	}
+	if sessionTarget([]db.AIInvocationContext{own}, false) != nil {
+		t.Fatal("a named place still opened the agent's own tab")
+	}
+	if target := sessionTarget([]db.AIInvocationContext{own, picked}, true); target == nil || target.DeviceID != "mac-mini" {
+		t.Fatalf("a picked device lost to this computer: %#v", target)
 	}
 }
 
@@ -81,12 +95,12 @@ func TestAnOfflineDeviceEndsTheRunWithWordsThePersonCanActOn(t *testing.T) {
 
 func TestTheAgentIsToldWhichDeviceThePersonPicked(t *testing.T) {
 	picked := aiInvocationInput{DeviceContexts: []aiInvocationDeviceContext{{
-		Kind: "workspace", DisplayName: "Misty browser on Mac mini", Capabilities: json.RawMessage(`["tabs.list","browser.session"]`),
+		Kind: "workspace", DisplayName: "Misty browser on Mac mini", Capabilities: json.RawMessage(`["browser.tab.list","browser.session"]`),
 	}}}
 	if guidance := pickedDeviceGuidance(picked); !strings.Contains(guidance, "the person picked Mac mini") || !strings.Contains(guidance, "screen_open opens a browser there") {
 		t.Fatalf("guidance = %q", guidance)
 	}
-	own := aiInvocationInput{DeviceContexts: []aiInvocationDeviceContext{{Kind: "workspace", Capabilities: json.RawMessage(`["tabs.list"]`)}}}
+	own := aiInvocationInput{DeviceContexts: []aiInvocationDeviceContext{{Kind: "workspace", Capabilities: json.RawMessage(`["browser.tab.list"]`)}}}
 	if guidance := pickedDeviceGuidance(own); guidance != "" {
 		t.Fatalf("a request on this computer was told to work elsewhere: %q", guidance)
 	}

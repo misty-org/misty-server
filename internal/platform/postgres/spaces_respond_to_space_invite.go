@@ -58,7 +58,7 @@ func (db *Database) SpaceInvitationPreview(
 ) (*SpaceInvitationPreview, error) {
 	out := &SpaceInvitationPreview{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT s.name,u.name,i.invited_email,i.expires_at
+		return tx.QueryRowContext(ctx, `SELECT s.name,u.username,i.invited_email,i.expires_at
 			FROM space_invitations i
 			JOIN spaces s ON s.id=i.space_id
 			JOIN users u ON u.id=i.invited_by_user_id
@@ -117,12 +117,19 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_conversation_members cm USING space_conversations c WHERE cm.conversation_id=c.id AND c.space_id=$1 AND cm.user_id=$2`, spaceID, memberID); err != nil {
 			return err
 		}
+		// Everything of theirs in the Space goes in the same transaction.
+		if err := purgeSpaceMemberTx(ctx, tx, spaceID, memberID); err != nil {
+			return err
+		}
 		result, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2 AND role='member'`, spaceID, memberID)
 		if err != nil {
 			return err
 		}
 		if n, _ := result.RowsAffected(); n == 0 {
 			return ErrSpaceNotFound
+		}
+		if err := deleteSpaceVaultsTx(ctx, tx, spaceID, memberID); err != nil {
+			return err
 		}
 		// Agents continue account-wide; destination tools recheck content access.
 
@@ -153,7 +160,15 @@ func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) erro
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_conversation_members cm USING space_conversations c WHERE cm.conversation_id=c.id AND c.space_id=$1 AND cm.user_id=$2`, spaceID, userID); err != nil {
 			return err
 		}
+		// Everything of theirs in the Space goes in the same transaction:
+		// memory, private items, integration picks.
+		if err := purgeSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`, spaceID, userID); err != nil {
+			return err
+		}
+		if err := deleteSpaceVaultsTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
 		// Agents continue account-wide; destination tools recheck content access.

@@ -12,7 +12,7 @@ import (
 func collaborationFixture(t *testing.T) (*db.Database, string, string) {
 	t.Helper()
 	database := openIntegrationDatabase(t)
-	user, err := database.CreateUser("Planner", "collaboration@example.com", "password123")
+	user, err := database.CreateUser("collaboration@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestAgentQuestionSetLifecycle(t *testing.T) {
 		t.Fatalf("replay = %+v, %v", again, err)
 	}
 	// Another user cannot see or answer it.
-	stranger, _ := database.CreateUser("Stranger", "collaboration-stranger@example.com", "password123")
+	stranger, _ := database.CreateUser("collaboration-stranger@example.com", "password123")
 	if _, err := database.AgentQuestionSet(ctx, stranger.ID, set.ID); !errors.Is(err, db.ErrSpaceNotFound) {
 		t.Fatalf("stranger read = %v", err)
 	}

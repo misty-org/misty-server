@@ -16,7 +16,6 @@ type AccountExportSpace struct {
 
 type AccountExportProfile struct {
 	ID            string    `json:"id"`
-	Name          string    `json:"name"`
 	Username      string    `json:"username"`
 	Email         string    `json:"email"`
 	AvatarVersion int64     `json:"avatar_version"`

@@ -85,18 +85,17 @@ func TestAgentLifecycleEventsRedactSecretsAndBoundText(t *testing.T) {
 	}
 }
 
-func TestCreatorAgentCompletionRequiresExplicitTaskDone(t *testing.T) {
-	state, code, kind, valid := api.TestingPersonalAgentRuntimeCompletionOutcome("success", false, true, "")
-	if !valid || state != "completed_with_errors" || code != "task_not_completed" || kind != "failure" {
-		t.Fatalf("success without done = %q %q %q %v", state, code, kind, valid)
+func TestAgentRunCompletionOutcomes(t *testing.T) {
+	state, code, valid := api.TestingPersonalAgentRuntimeCompletionOutcome("success", "")
+	if !valid || state != "completed" || code != "" {
+		t.Fatalf("success = %q %q %v", state, code, valid)
 	}
-	state, code, kind, valid = api.TestingPersonalAgentRuntimeCompletionOutcome("success", true, true, "")
-	if !valid || state != "completed" || code != "" || kind != "result" {
-		t.Fatalf("explicit completion = %q %q %q %v", state, code, kind, valid)
+	state, code, valid = api.TestingPersonalAgentRuntimeCompletionOutcome("incomplete", "tool_execution_failed")
+	if !valid || state != "completed_with_errors" || code != "tool_execution_failed" {
+		t.Fatalf("incomplete = %q %q %v", state, code, valid)
 	}
-	state, code, kind, valid = api.TestingPersonalAgentRuntimeCompletionOutcome("incomplete", true, false, "tool_execution_failed")
-	if !valid || state != "completed_with_errors" || code != "tool_execution_failed" || kind != "failure" {
-		t.Fatalf("direct tool failure = %q %q %q %v", state, code, kind, valid)
+	if _, _, valid = api.TestingPersonalAgentRuntimeCompletionOutcome("unknown", ""); valid {
+		t.Fatal("unknown status accepted")
 	}
 }
 

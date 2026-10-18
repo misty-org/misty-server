@@ -185,31 +185,6 @@ func firstConfigured(names ...string) string {
 	return ""
 }
 
-func (s *Server) mountMediaSearchRoutes(prefix string, service *api.MediaSearchService) {
-	s.Router.Post(prefix+"/chunks", service.IndexChunk())
-	s.Router.Post(prefix+"/search", service.Search())
-	s.Router.Get(prefix+"/status", service.Status())
-	s.Router.Delete(prefix+"/assets/{assetID}", service.DeleteAsset())
-	s.Router.Delete(prefix+"/devices/{deviceID}", service.DeleteDevice())
-	s.Router.Post(prefix+"/devices/{deviceID}/adopt-legacy", service.AdoptLegacyDevice())
-}
-
-func (s *Server) mountSmartLibraryRoutes(prefix string, service *api.SmartLibraryService) {
-	s.Router.Post(prefix+"/search", service.GlobalSearch())
-	s.Router.Post(prefix+"/reindex", service.PlanReindex())
-	s.Router.Post(prefix+"/reindex/{jobID}/complete", service.CompleteReindex())
-	s.Router.Post(prefix+"/folders", service.RegisterFolder())
-	s.Router.Post(prefix+"/folders/{folderID}/preflight", service.Preflight())
-	s.Router.Post(prefix+"/folders/{folderID}/sample", service.CreateSample())
-	s.Router.Post(prefix+"/folders/{folderID}/sample/approve", service.Approve("sample"))
-	s.Router.Post(prefix+"/folders/{folderID}/approve", service.Approve("full"))
-	s.Router.Get(prefix+"/folders/{folderID}/progress", service.Progress())
-	s.Router.Get(prefix+"/folders/{folderID}/results", service.Results())
-	s.Router.Put(prefix+"/folders/{folderID}/assets/{assetID}/tags", service.SetAssetTags())
-	s.Router.Post(prefix+"/folders/{folderID}/rescan", service.Rescan())
-	s.Router.Delete(prefix+"/folders/{folderID}", service.Delete())
-}
-
 func TestingAllowedCORSOrigins() []string {
 	origins := []string{
 		"tauri://localhost",
@@ -235,9 +210,7 @@ func TestingAllowedCORSOrigins() []string {
 //
 // A header missing here fails at the preflight with a 200 that carries no
 // Access-Control-Allow-Origin, which surfaces in the browser as an opaque
-// "load failed" rather than anything pointing at CORS. Omitting
-// X-Misty-Library-Reauthentication is exactly how Recently Deleted and Hidden
-// became unreachable: only those collections send it.
+// "load failed" rather than anything pointing at CORS.
 var allowedCORSRequestHeaders = []string{
 	"Accept",
 	"Authorization",
@@ -254,7 +227,6 @@ var allowedCORSRequestHeaders = []string{
 	"X-Misty-Device-Signature",
 	"X-Misty-Attachment-Upload-Token",
 	"X-Misty-Library-Upload-Token",
-	"X-Misty-Library-Reauthentication",
 }
 
 func productionEnvironment() bool {
@@ -291,6 +263,7 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Put(prefix+"/settings/keep-awake", aiService.KeepAwakeSetting())
 	s.Router.Put(prefix+"/settings/screen-location", aiService.ScreenLocationSetting())
 	s.Router.Get(prefix+"/memories", aiService.Memories())
+	s.Router.Post(prefix+"/me/voice/cleanup", aiService.VoiceCleanup())
 	s.Router.Delete(prefix+"/memories/{memoryID}", aiService.Memory())
 	s.Router.Put(prefix+"/memories/{memoryID}", aiService.Memory())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/preferences/{surfaceID}", aiService.SurfacePreference())

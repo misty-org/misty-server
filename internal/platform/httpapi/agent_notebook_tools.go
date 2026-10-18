@@ -18,8 +18,8 @@ import (
 // shows in the conversation and is mirrored to a note in the personal Space.
 
 const (
-	toolboxNotebookRead  = "notebook.read"
-	toolboxNotebookWrite = "notebook.write"
+	toolboxNotebookRead  = "log.work.read"
+	toolboxNotebookWrite = "log.work.write"
 )
 
 type aiNotebookEvent struct {
@@ -30,10 +30,10 @@ type aiNotebookEvent struct {
 
 func notebookToolDescriptors() []agenttools.Descriptor {
 	return []agenttools.Descriptor{
-		{Name: toolboxNotebookRead, Version: 1, Risk: serveragent.RiskRead, Idempotent: true, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone,
+		{Name: toolboxNotebookRead, Version: 1, Risk: serveragent.RiskRead, Idempotent: true, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone,
 			Description: "Read this task's notebook: its plan and its findings so far, including what sub-agents reported. Read it before continuing a long task, after earlier steps were summarized, and before writing the final answer.",
 			InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema()},
-		{Name: toolboxNotebookWrite, Version: 1, Risk: serveragent.RiskWrite, Idempotent: true, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone, AuditEvent: "agent.notebook.written",
+		{Name: toolboxNotebookWrite, Version: 1, Risk: serveragent.RiskWrite, Idempotent: true, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone, AuditEvent: "agent.notebook.written",
 			Description: "Write to this task's notebook, which the person sees in the conversation. section plan holds the steps and their status as a short Markdown checklist; findings holds facts as you learn them, each with its source URL. mode replace rewrites the section; append adds to the end. Keep the plan current on multi-step tasks and add findings as you go, so nothing is lost if earlier steps are summarized.",
 			InputSchema: TestingMustAPIRawJSON(map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"section", "content"},

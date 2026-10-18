@@ -23,6 +23,7 @@ func RegisterWithTelemetry(database *db.Database, analytics telemetry.Client) ht
 func RegisterWithVerification(database *db.Database, analytics telemetry.Client, verification *AccountVerification) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
+			// Older apps still send a display name; people are known by username alone.
 			Name     string `json:"name"`
 			Username string `json:"username"`
 			Email    string `json:"email"`
@@ -55,7 +56,7 @@ func RegisterWithVerification(database *db.Database, analytics telemetry.Client,
 			return
 		}
 
-		user, err := database.CreateUserWithUsername(body.Name, body.Username, body.Email, body.Password)
+		user, err := database.CreateUserWithUsername(body.Username, body.Email, body.Password)
 		if err != nil {
 			if errors.Is(err, db.ErrEmailTaken) {
 				http.Error(w, "email already registered", http.StatusConflict)
@@ -152,7 +153,6 @@ func writeAuthSession(
 
 	writeJSON(w, status, map[string]string{
 		"user_id":  user.ID,
-		"name":     user.Name,
 		"username": user.Username,
 		"email":    user.Email,
 		"provider": user.Provider,

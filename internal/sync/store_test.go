@@ -167,6 +167,28 @@ func applyLaterMigrations(t *testing.T, conn *sql.DB, dir string) {
 	if _, err = conn.Exec(strings.Split(string(raw), "-- +goose Down")[0]); err != nil {
 		t.Fatal(err)
 	}
+	// Minimal Spaces give every person a personal Space before vaults move to
+	// one per person per Space.
+	if _, err = conn.Exec(`
+    CREATE TABLE spaces(id text PRIMARY KEY,owner_user_id text NOT NULL,is_default boolean NOT NULL DEFAULT false,lifecycle_state text NOT NULL DEFAULT 'active');
+    CREATE TABLE space_members(space_id text REFERENCES spaces(id) ON DELETE CASCADE,user_id text,role text NOT NULL DEFAULT 'member',PRIMARY KEY(space_id,user_id));
+    CREATE FUNCTION misty_ensure_personal_space(target text) RETURNS text LANGUAGE plpgsql AS $f$
+    BEGIN
+      INSERT INTO spaces(id,owner_user_id,is_default) VALUES('personal_'||target,target,true) ON CONFLICT DO NOTHING;
+      INSERT INTO space_members(space_id,user_id,role) VALUES('personal_'||target,target,'owner') ON CONFLICT DO NOTHING;
+      RETURN 'personal_'||target;
+    END $f$;
+    `); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = os.ReadFile(dir + "/20271028100000_sync_vault_per_space.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := strings.NewReplacer("public.", "", "-- +goose StatementBegin", "", "-- +goose StatementEnd", "").Replace(strings.Split(string(raw), "-- +goose Down")[0])
+	if _, err = conn.Exec(up); err != nil {
+		t.Fatalf("sync vault per space: %v", err)
+	}
 }
 
 func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
@@ -174,10 +196,10 @@ func TestBrowserSyncPostgresMultiwriterRecovery(t *testing.T) {
 	ctx := context.Background()
 	root, rootKey, _ := ed25519.GenerateKey(rand.Reader)
 	a, keyA := syncTestGrant(uuid.NewString(), rootKey)
-	if err := database.CreateBrowserSyncVault(ctx, "owner", root, syncTestKeyEnvelope(), a); err != nil {
+	if err := database.CreateBrowserSyncVault(ctx, "owner", "", root, PasswordVaultKeys(syncTestKeyEnvelope()), a); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.CreateBrowserSyncVault(ctx, "owner", root, syncTestKeyEnvelope(), a); !errors.Is(err, ErrSyncExists) {
+	if err := database.CreateBrowserSyncVault(ctx, "owner", "", root, PasswordVaultKeys(syncTestKeyEnvelope()), a); !errors.Is(err, ErrSyncExists) {
 		t.Fatalf("bootstrap overwrite: %v", err)
 	}
 	b, keyB := syncTestGrant(a.VaultID, rootKey)

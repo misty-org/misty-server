@@ -55,7 +55,7 @@ func (s *Service) SummarizeConversation(ctx context.Context, userID, previous, t
 	if previous = strings.TrimSpace(previous); previous != "" {
 		prompt = "Existing notes:\n" + previous + "\n\n" + prompt
 	}
-	key := "conversation-summary:" + uuid.NewString()
+	key := conversationSummaryKeyPrefix + uuid.NewString()
 	var reservation *UsageReservation
 	if s.meter != nil {
 		var err error

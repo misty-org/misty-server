@@ -28,7 +28,10 @@ type AgentMethodDefinition struct {
 	RequiredTools []string           `json:"required_tools"`
 }
 type AgentMethod struct {
-	ID                 string                `json:"id"`
+	ID string `json:"id"`
+	// SpaceID is the Space whose memory tree holds the workflow; its schedule
+	// runs there too.
+	SpaceID            string                `json:"space_id"`
 	AgentID            string                `json:"agent_id"`
 	Kind               string                `json:"kind"`
 	Enabled            bool                  `json:"enabled"`
@@ -133,12 +136,12 @@ func RenderAgentMethod(d AgentMethodDefinition, inputs map[string]any) (string, 
 	return text, nil
 }
 
-const methodColumns = `m.id,m.agent_id,m.kind,m.enabled,v.id,v.version,v.definition,COALESCE(v.source_invocation_id,''),m.updated_at`
+const methodColumns = `m.id,m.space_id,m.agent_id,m.kind,m.enabled,v.id,v.version,v.definition,COALESCE(v.source_invocation_id,''),m.updated_at`
 
 func scanAgentMethod(row interface{ Scan(...any) error }) (AgentMethod, error) {
 	var m AgentMethod
 	var raw []byte
-	err := row.Scan(&m.ID, &m.AgentID, &m.Kind, &m.Enabled, &m.VersionID, &m.Version, &raw, &m.SourceInvocationID, &m.UpdatedAt)
+	err := row.Scan(&m.ID, &m.SpaceID, &m.AgentID, &m.Kind, &m.Enabled, &m.VersionID, &m.Version, &raw, &m.SourceInvocationID, &m.UpdatedAt)
 	if err == nil {
 		err = json.Unmarshal(raw, &m.Definition)
 	}
@@ -147,10 +150,16 @@ func scanAgentMethod(row interface{ Scan(...any) error }) (AgentMethod, error) {
 	}
 	return m, err
 }
-func (db *Database) AgentMethods(ctx context.Context, user, agent string) ([]AgentMethod, error) {
+// AgentMethods lists an agent's workflows, templates and skills in one Space
+// (empty: the personal Space).
+func (db *Database) AgentMethods(ctx context.Context, user, space, agent string) ([]AgentMethod, error) {
 	items := []AgentMethod{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(user), func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT `+methodColumns+` FROM agent_methods m JOIN agent_method_versions v ON v.method_id=m.id AND v.version=m.current_version WHERE m.user_id=$1 AND m.agent_id=$2 ORDER BY m.updated_at DESC LIMIT 200`, user, agent)
+		space, err := memorySpaceTx(ctx, tx, user, space)
+		if err != nil {
+			return err
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT `+methodColumns+` FROM agent_methods m JOIN agent_method_versions v ON v.method_id=m.id AND v.version=m.current_version WHERE m.user_id=$1 AND m.space_id=$3 AND m.agent_id=$2 ORDER BY m.updated_at DESC LIMIT 200`, user, agent, space)
 		if err != nil {
 			return err
 		}
@@ -166,7 +175,7 @@ func (db *Database) AgentMethods(ctx context.Context, user, agent string) ([]Age
 			return err
 		}
 		schedules, err := queryWorkflowSchedules(ctx, tx, `SELECT `+workflowScheduleColumns+` FROM workflow_schedules s
-			WHERE s.user_id=$1 AND s.method_id IN (SELECT id FROM agent_methods WHERE user_id=$1 AND agent_id=$2)`, user, agent)
+			WHERE s.user_id=$1 AND s.method_id IN (SELECT id FROM agent_methods WHERE user_id=$1 AND space_id=$3 AND agent_id=$2)`, user, agent, space)
 		if err != nil {
 			return err
 		}
@@ -219,9 +228,22 @@ func (db *Database) SaveAgentMethod(ctx context.Context, user string, m AgentMet
 		if _, err := tx.ExecContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, user); err != nil {
 			return err
 		}
+		// A workflow stays in the Space it was saved in; an edit that names no
+		// Space keeps it there, and a new one without a Space is personal.
+		requested := m.SpaceID
+		if m.ID != "" {
+			if err := tx.QueryRowContext(ctx, `SELECT space_id FROM agent_methods WHERE id=$1 AND user_id=$2`, m.ID, user).Scan(&m.SpaceID); err != nil || requested != "" && requested != m.SpaceID {
+				return ErrSpaceNotFound
+			}
+		} else {
+			var err error
+			if m.SpaceID, err = memorySpaceTx(ctx, tx, user, m.SpaceID); err != nil {
+				return err
+			}
+		}
 		if m.Kind == "skill" && m.Enabled {
 			var count int
-			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM agent_methods WHERE user_id=$1 AND agent_id=$2 AND kind='skill' AND enabled AND id<>$3`, user, m.AgentID, m.ID).Scan(&count); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM agent_methods WHERE user_id=$1 AND space_id=$4 AND agent_id=$2 AND kind='skill' AND enabled AND id<>$3`, user, m.AgentID, m.ID, m.SpaceID).Scan(&count); err != nil {
 				return err
 			}
 			if count >= 8 {
@@ -247,13 +269,16 @@ func (db *Database) SaveAgentMethod(ctx context.Context, user string, m AgentMet
 			}
 			m.ID = "method_" + uuid.NewString()
 			m.Version = 1
-			if _, err := tx.ExecContext(ctx, `INSERT INTO agent_methods(id,user_id,agent_id,kind,enabled) VALUES($1,$2,$3,$4,$5)`, m.ID, user, m.AgentID, m.Kind, m.Enabled); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO agent_methods(id,user_id,space_id,agent_id,kind,enabled) VALUES($1,$2,$6,$3,$4,$5)`, m.ID, user, m.AgentID, m.Kind, m.Enabled, m.SpaceID); err != nil {
 				return err
 			}
 		} else {
 			var version int
-			var agent, kind string
-			if err := tx.QueryRowContext(ctx, `SELECT current_version,agent_id,kind FROM agent_methods WHERE id=$1 AND user_id=$2 FOR UPDATE`, m.ID, user).Scan(&version, &agent, &kind); err != nil {
+			var agent, kind, space string
+			if err := tx.QueryRowContext(ctx, `SELECT current_version,agent_id,kind,space_id FROM agent_methods WHERE id=$1 AND user_id=$2 FOR UPDATE`, m.ID, user).Scan(&version, &agent, &kind, &space); err != nil {
+				return ErrSpaceNotFound
+			}
+			if space != m.SpaceID {
 				return ErrSpaceNotFound
 			}
 			if version != expected || agent != m.AgentID || kind != m.Kind {

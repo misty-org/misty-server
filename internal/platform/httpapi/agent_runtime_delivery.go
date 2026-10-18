@@ -157,7 +157,7 @@ func (s *SpacesService) deliverAgentContinuation(ctx context.Context, delivery d
 			return err
 		}
 		if allowed && !isAIInvocationRuntimeID(delivery.RunID) {
-			run, _, validateErr := s.database.ValidatePersonalAgentTaskRuntime(ctx, delivery.RunID, payload.RuntimeID)
+			run, validateErr := s.database.ValidatePersonalAgentTaskRuntime(ctx, delivery.RunID, payload.RuntimeID)
 			if validateErr != nil {
 				return validateErr
 			}

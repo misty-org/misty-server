@@ -70,12 +70,12 @@ func (f *googleFlowStub) ConsumeGoogleSignInFlow(_ context.Context, poll, comple
 	f.phase = "consumed"
 	return &f.flow, nil
 }
-func (f *googleFlowStub) GoogleUser(name, email, subject string) (*db.User, error) {
+func (f *googleFlowStub) GoogleUser(email, subject string) (*db.User, error) {
 	f.creations++
 	if f.accountErr != nil {
 		return nil, f.accountErr
 	}
-	f.user = &db.User{ID: "google-user", Name: name, Email: email, Provider: "google", ProviderSubject: subject}
+	f.user = &db.User{ID: "google-user", Email: email, Provider: "google", ProviderSubject: subject}
 	return f.user, nil
 }
 func (f *googleFlowStub) GetUserByID(id string) (*db.User, error) { return f.user, nil }
@@ -328,11 +328,11 @@ func TestGoogleReauthenticationRequiresSameIdentity(t *testing.T) {
 	service := &GoogleSignInService{store: store}
 	flow := db.GoogleSignInFlow{ReauthenticateUserID: "existing", ExpiresAt: time.Now().Add(googleSignInTTL)}
 	payload := googlePayload("nonce")
-	if user, err := service.googleAccount(flow, payload, "Google", "user@example.com"); err != nil || user.ID != "existing" {
+	if user, err := service.googleAccount(flow, payload, "user@example.com"); err != nil || user.ID != "existing" {
 		t.Fatal("fresh reauthentication rejected")
 	}
 	payload.Subject = "another-subject"
-	if _, err := service.googleAccount(flow, payload, "Other", "other@example.com"); !errors.Is(err, db.ErrProviderConflict) {
+	if _, err := service.googleAccount(flow, payload, "other@example.com"); !errors.Is(err, db.ErrProviderConflict) {
 		t.Fatal("different identity accepted")
 	}
 	if store.creations != 0 {

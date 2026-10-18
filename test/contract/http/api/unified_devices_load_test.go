@@ -36,7 +36,7 @@ func TestDeviceChannelIdleSocketsCostNoDatabaseWork(t *testing.T) {
 	// Each account allows 30 sockets; spread devices 25 to an account.
 	users := make([]string, (count+24)/25)
 	for index := range users {
-		user, err := f.database.CreateUserWithUsername("Load", "load"+strings.ReplaceAll(uuidString()[:13], "-", ""), uniqueTestEmail("load"+strconv.Itoa(index)), "password123")
+		user, err := f.database.CreateUserWithUsername("load"+strings.ReplaceAll(uuidString()[:13], "-", ""), uniqueTestEmail("load"+strconv.Itoa(index)), "password123")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -40,17 +40,34 @@ type remoteScreen struct {
 	Contexts   []aiInvocationDeviceContext `json:"contexts"`
 }
 
-// remoteSessionTarget is the picked device's browser grant that may open a
-// session, if the request named another device.
-func remoteSessionTarget(contexts []db.AIInvocationContext) *db.AIInvocationContext {
+// sessionTarget is the workspace grant a browser session opens under: a device
+// the person picked for this request first, otherwise this computer's own when
+// local is true (the agent's own hidden tab, docs/plans/odysseys-campaign.md).
+func sessionTarget(contexts []db.AIInvocationContext, local bool) *db.AIInvocationContext {
+	var own *db.AIInvocationContext
 	for index := range contexts {
 		item := &contexts[index]
 		var capabilities []string
-		if item.Kind == "workspace" && item.State == "attached" && json.Unmarshal(item.Capabilities, &capabilities) == nil && containsString(capabilities, remoteSessionOp) {
+		if item.Kind != "workspace" || item.State != "attached" || json.Unmarshal(item.Capabilities, &capabilities) != nil || !containsString(capabilities, remoteSessionOp) {
+			continue
+		}
+		if !fromThisComputer(item.Metadata) {
 			return item
 		}
+		if own == nil {
+			own = item
+		}
+	}
+	if local {
+		return own
 	}
 	return nil
+}
+
+// fromThisComputer reports a context the asking desktop sent for itself.
+func fromThisComputer(metadata json.RawMessage) bool {
+	var fields map[string]any
+	return json.Unmarshal(metadata, &fields) == nil && fields["source"] == "desktop"
 }
 
 func (s *SpacesService) deviceDisplayName(ctx context.Context, userID, deviceID string) (string, bool) {
@@ -184,43 +201,72 @@ func (s *SpacesService) remoteScopeDevice(ctx context.Context, userID string, bo
 	return "", false
 }
 
-// remoteScreenOpen handles screen_open for a request that picked another
-// device: it opens a browser session there, or reports why it can't. It
-// returns nil, nil when the request works on the asking device.
-func (s *SpacesService) remoteScreenOpen(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput, callID, url, reason string, desktop bool) (json.RawMessage, error) {
+// remoteScreenOpen handles screen_open with a browser session: on a device the
+// person picked, or on this computer when the agent did not name a place. The
+// device opens the agent's own tab, and the tab joins this run, so the agent
+// keeps working in the same run with browser tools from its next step instead
+// of handing off to a new run. It returns nil, nil when no session applies.
+func (s *SpacesService) remoteScreenOpen(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput, callID, url, reason string, desktop bool, place string) (json.RawMessage, error) {
 	contexts, err := s.database.AIInvocationContexts(ctx, record.UserID, record.ID)
 	if err != nil {
 		return nil, err
 	}
-	target := remoteSessionTarget(contexts)
+	target := sessionTarget(contexts, place == "" && !desktop)
 	if target == nil {
 		return nil, nil
 	}
 	name, _ := s.deviceDisplayName(ctx, record.UserID, target.DeviceID)
+	if fromThisComputer(target.Metadata) {
+		name = "this computer"
+	}
 	if desktop {
 		return nil, serveragent.ErrInvalidRequest("Other apps can be used only on the device the person is asking from. Use a browser on " + name + " (omit target), or tell them to pick this device.")
 	}
 	for _, item := range contexts {
 		var metadata map[string]any
 		if item.Kind == "browser_tab" && item.State == "attached" && item.DeviceID == target.DeviceID && json.Unmarshal(item.Metadata, &metadata) == nil && metadata["remote_session"] == true {
-			return json.Marshal(map[string]any{"status": "open", "message": "A browser on " + name + " is already attached. Use browser_snapshot with its scopeId " + item.OpaqueRef + "."})
+			return sessionOpened(item.OpaqueRef, name, url, true)
 		}
 	}
 	remote, err := s.openRemoteSession(ctx, record, body, target, callID, url, strings.TrimSpace(reason))
 	if err != nil {
 		return nil, err
 	}
-	screen := &screenRequest{Kind: "open", URL: url, Reason: strings.TrimSpace(reason), Location: "remote", Chosen: true, Remote: remote}
-	if s.aiInvocations != nil {
-		if _, err := s.aiInvocations.restoreDurable(ctx, *record); err != nil {
-			return nil, err
-		}
-		if err := s.aiInvocations.append(record.ID, aiInvocationEvent{Type: "screen.request", ScreenRequest: screen}); err != nil {
-			return nil, err
-		}
+	tab := remote.Contexts[0]
+	// The tab works for the window that asked, as a screen the person attached would.
+	var metadata map[string]any
+	if json.Unmarshal(tab.Metadata, &metadata) != nil {
+		return nil, deviceOfflineError{name: name, reason: "returned an invalid browser session."}
 	}
-	return json.Marshal(map[string]any{"status": "screen_requested", "kind": "open",
-		"message": "Misty opened a browser on " + name + " and will continue this conversation there."})
+	metadata["window_label"] = body.WindowLabel
+	tab.Metadata, _ = json.Marshal(metadata)
+	if _, err := s.database.AttachRunningAIInvocationContext(ctx, record.UserID, record.ID, tab.DeviceID, tab.Kind, tab.OpaqueRef, tab.DisplayName, tab.Capabilities, tab.Metadata, runGrantRecord(tab.RunGrant)); err != nil {
+		// Calls made together (one per site) share the device's one session tab: the
+		// first attaches it and the others find it attached.
+		if attached, readErr := s.database.AIInvocationContexts(ctx, record.UserID, record.ID); readErr == nil {
+			for _, item := range attached {
+				if item.OpaqueRef == tab.OpaqueRef {
+					return sessionOpened(tab.OpaqueRef, name, url, true)
+				}
+			}
+		}
+		return nil, err
+	}
+	return sessionOpened(tab.OpaqueRef, name, url, false)
+}
+
+// sessionOpened tells the agent where its own tab is and that browser tools now act on it.
+func sessionOpened(scopeID, name, url string, reused bool) (json.RawMessage, error) {
+	opened := "Your own browser tab is open on " + name
+	if reused {
+		opened = "Your own browser tab on " + name + " is already open"
+	}
+	next := "Read it with browser_snapshot"
+	if url == "" || reused {
+		next = "It is one tab: visit pages one after another with browser_navigate, which returns each page's snapshot"
+	}
+	return json.Marshal(map[string]any{"status": "open", "scopeId": scopeID, "catalog_changed": true,
+		"message": opened + " (scopeId " + scopeID + "). Browser tools act on it from your next step. " + next + ", and keep working in this run."})
 }
 
 // TestingOpenRemoteSession runs screen_open for a stored request.
@@ -233,7 +279,7 @@ func (s *SpacesService) TestingOpenRemoteSession(ctx context.Context, userID, in
 	if json.Unmarshal(record.RequestPayload, &body) != nil {
 		return nil, db.ErrSpaceInvalid
 	}
-	return s.remoteScreenOpen(ctx, record, body, callID, url, "Fill in the form", false)
+	return s.remoteScreenOpen(ctx, record, body, callID, url, "Fill in the form", false, "")
 }
 
 // TestingSetRemoteSessionWait shortens how long a device has to answer.

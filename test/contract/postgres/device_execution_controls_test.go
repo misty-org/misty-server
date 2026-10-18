@@ -17,7 +17,7 @@ import ()
 func TestDeviceExecutionControls(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Device owner", "device-owner@example.com", "password123")
+	owner, err := database.CreateUser("device-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

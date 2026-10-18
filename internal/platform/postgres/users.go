@@ -21,27 +21,24 @@ var ErrUsernameTaken = accounts.ErrUsernameTaken
 var ErrEmailTaken = accounts.ErrEmailTaken
 var ErrProviderConflict = accounts.ErrProviderConflict
 
-func (db *Database) GoogleUser(name, email, subject string) (*User, error) {
-	return db.accountStore().GoogleUser(name, email, subject)
+func (db *Database) GoogleUser(email, subject string) (*User, error) {
+	return db.accountStore().GoogleUser(email, subject)
 }
 
 type User = accounts.User
 type UserSettings = accounts.UserSettings
 type UserAvatarReference = accounts.UserAvatarReference
 
-func (db *Database) CreateUser(name, email, password string) (*User, error) {
-	return db.accountStore().CreateUser(name, email, password)
+func (db *Database) CreateUser(email, password string) (*User, error) {
+	return db.accountStore().CreateUser(email, password)
 }
-func (db *Database) CreateUserWithUsername(name, username, email, password string) (*User, error) {
-	return db.accountStore().CreateUserWithUsername(name, username, email, password)
+func (db *Database) CreateUserWithUsername(username, email, password string) (*User, error) {
+	return db.accountStore().CreateUserWithUsername(username, email, password)
 }
 func (db *Database) GetUserByEmail(email string) (*User, string, error) {
 	return db.accountStore().GetUserByEmail(email)
 }
 func (db *Database) GetUserByID(id string) (*User, error) { return db.accountStore().GetUserByID(id) }
-func (db *Database) UpdateUserName(id, name string) error {
-	return db.accountStore().UpdateUserName(id, name)
-}
 func (db *Database) BumpUserAvatarVersion(id string) (int64, error) {
 	return db.accountStore().BumpUserAvatarVersion(id)
 }

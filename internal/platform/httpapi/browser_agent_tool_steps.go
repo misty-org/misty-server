@@ -48,7 +48,8 @@ func (s *SpacesService) browserToolConfig(ctx context.Context, invocation agentt
 	// The device refuses to act on these sites before any input is sent.
 	if settings, _, err := s.database.AISettings(ctx, invocation.UserID); err == nil {
 		configData["siteBlocks"] = map[string]any{"sensitive": settings.AgentBlockSensitive, "sites": settings.AgentBlockedSites}
-		configData["confirmKinds"] = browserConfirmKinds(settings)
+		configData["confirmKinds"] = browserConfirmKinds()
+		configData["grantSet"] = s.browserGrantSet(ctx, invocation)
 	}
 	return configData
 }
@@ -86,6 +87,10 @@ func (s *SpacesService) applyAIInvocationBrowserConfig(
 	}
 	var body aiInvocationInput
 	_ = json.Unmarshal(record.RequestPayload, &body)
+	// A tab that joined the run mid-run (screen_open) is only in the run's stored contexts.
+	if err := s.withJoinedContexts(ctx, record, &body); err != nil {
+		return err
+	}
 	surface := browserToolSurface(body, scopeID)
 	if strings.HasPrefix(tool.Name, "browser.workspace.") || (tool.Name == screenActTool && surface != "browser") {
 		if body.ExecutionMode != "agent" || body.WindowLabel != "main" || body.TaskID == "" || surface == "browser" {
@@ -169,8 +174,9 @@ func (s *SpacesService) approveBrowserPageSteps(
 	return nil, s.useAgentActionApproval(ctx, invocation.UserID, approval)
 }
 
-// approveScreenAct asks before a consequential on-screen action. It returns the
-// waiting result while the approval is pending.
+// approveScreenAct pauses on-screen actions: every one in Ask, and in both
+// modes the consequential ones, which act on the whole screen and can never be
+// remembered. It returns the waiting result while the approval is pending.
 func (s *SpacesService) approveScreenAct(
 	ctx context.Context,
 	invocation agenttools.Invocation,
@@ -182,12 +188,11 @@ func (s *SpacesService) approveScreenAct(
 		AllowConsequential bool   `json:"allowConsequential"`
 	}
 	_ = json.Unmarshal(tool.Arguments, &act)
-	if !act.AllowConsequential {
-		return nil, nil
+	need := grantNeed{action: serveragent.ActionToolWrite}
+	if act.AllowConsequential {
+		need.action = serveragent.ActionScreenControl
 	}
-	// Sending, buying, deleting or changing access on screen follows the
-	// same "Ask before acting" approval card as app actions.
-	approval, waiting, err := s.confirmAgentAction(ctx, invocation, "screen.act:"+scopeID, act.Goal,
+	approval, waiting, err := s.confirmAgentAction(ctx, invocation, need, "screen.act:"+scopeID, act.Goal,
 		"On screen: "+truncateAgentRuntimeText(act.Goal, 180), act.Goal)
 	if err != nil {
 		return nil, err
@@ -266,4 +271,32 @@ func (s *SpacesService) awaitBrowserDeviceJob(
 	default:
 		return nil, browserDeviceFailureForOperation(current.ErrorCode, current.Operation)
 	}
+}
+
+// withJoinedContexts adds the run's stored browser tabs that its request did not
+// carry, such as the agent's own tab opened mid-run, so their task and surface resolve.
+func (s *SpacesService) withJoinedContexts(ctx context.Context, record *db.AIInvocationRecord, body *aiInvocationInput) error {
+	stored, err := s.database.AIInvocationContexts(ctx, record.UserID, record.ID)
+	if err != nil {
+		return err
+	}
+	for _, item := range stored {
+		if item.Kind != "browser_tab" {
+			continue
+		}
+		known := false
+		for _, carried := range body.DeviceContexts {
+			if carried.OpaqueRef == item.OpaqueRef && carried.DeviceID == item.DeviceID {
+				known = true
+				break
+			}
+		}
+		if !known {
+			body.DeviceContexts = append(body.DeviceContexts, aiInvocationDeviceContext{
+				DeviceID: item.DeviceID, Kind: item.Kind, OpaqueRef: item.OpaqueRef, DisplayName: item.DisplayName,
+				Capabilities: item.Capabilities, Metadata: item.Metadata,
+			})
+		}
+	}
+	return nil
 }

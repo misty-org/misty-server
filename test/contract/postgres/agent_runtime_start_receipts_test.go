@@ -14,7 +14,7 @@ import (
 
 func TestAgentRuntimeStartReceiptsRecoverWithoutResubmission(t *testing.T) {
 	database := openTestDatabase(t)
-	user, err := database.CreateUser("Start receipts", uuid.NewString()+"@example.com", "password123")
+	user, err := database.CreateUser(uuid.NewString()+"@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

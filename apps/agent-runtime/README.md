@@ -14,10 +14,10 @@ Tokens cannot be reused for another Misty run or Vercel Workflow run. During a r
 
 ## Tool calls
 
-- The model sees every tool in the run's catalog under its Misty name, with dots as underscores (`notes.search` is `notes_search`). There is no discovery tool or working set; Go decides what the catalog contains.
+- The model sees every tool in the run's catalog under its Misty name, with dots as underscores (`note.search` is `note_search`). There is no discovery tool or working set; Go decides what the catalog contains.
 - A call Misty rejected without effect, and any failed read, returns its error to the model, which corrects the call or picks another tool. Later calls from the same model response are reported as not attempted.
 - A write whose outcome is unknown, a declined app confirmation, an unavailable device, a required sign-in, or a write repeated after the same rejection stops the run.
-- The model reports the outcome with `misty_finish_task`. `misty_browser_act` runs Midscene against the assigned browser when the native adapter is available.
+- The model reports the outcome with `agent_finish`. `misty_browser_act` runs Midscene against the assigned browser when the native adapter is available.
 - `workflows/space-task-agent.ts` only orchestrates the run. Tool naming lives in `src/model-tools.ts`, call outcomes in `src/tool-outcomes.ts` and `src/tool-monitor.ts`, transport in `src/tool-calls.ts`, and lifecycle steps in `src/control-plane-steps.ts`.
 
 ## Context management

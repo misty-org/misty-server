@@ -30,10 +30,6 @@ func (s *SpaceLibraryService) RenderEditVersion() http.HandlerFunc {
 			return
 		}
 		spaceID, itemID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "itemID")
-		if err := s.validateSensitiveLibraryItem(r, userID, spaceID, itemID); err != nil {
-			writeLibraryError(w, err)
-			return
-		}
 		var body struct {
 			MaximumOutputBytes int64 `json:"maximum_output_bytes"`
 		}

@@ -54,29 +54,35 @@ func TestAccountAgentMigrationPreservesHistory(t *testing.T) {
 	}
 }
 
-func TestAccountAgentMemoryIgnoresLegacyDestination(t *testing.T) {
+// Memory belongs to one person in one Space (docs/plans/spaces-as-profiles.md, phase 7).
+func TestAccountAgentMemoryStaysInItsSpace(t *testing.T) {
 	database, _ := syncTestDatabase(t)
-	_, err := database.Conn.Exec(`CREATE TABLE misty_memories(id text,user_id text,space_id text,agent_id text,kind text,content text,reason text,source_conversation_id text,source_invocation_id text,last_used_at timestamptz,created_at timestamptz,updated_at timestamptz,forgotten_at timestamptz);
+	_, err := database.Conn.Exec(`CREATE TABLE spaces(id text PRIMARY KEY,lifecycle_state text NOT NULL DEFAULT 'active');
+ CREATE TABLE space_members(space_id text,user_id text,role text);
+ INSERT INTO spaces(id) VALUES('home'),('work'),('unrelated');
+ INSERT INTO space_members VALUES('home','owner','owner'),('work','owner','owner'),('work','other','member'),('unrelated','owner','owner'),('unrelated','other','owner');
+ CREATE TABLE misty_memories(id text,user_id text,space_id text NOT NULL,agent_id text,kind text,content text,reason text,source_conversation_id text,source_invocation_id text,last_used_at timestamptz,created_at timestamptz,updated_at timestamptz,forgotten_at timestamptz,memory_key text);
  INSERT INTO misty_memories VALUES
- ('personal','owner',NULL,'one','fact','personal','',NULL,NULL,NULL,NOW(),NOW(),NULL),
- ('historical','owner','former','one','fact','history','',NULL,NULL,NULL,NOW(),NOW(),NULL),
- ('other-agent','owner',NULL,'two','fact','other agent','',NULL,NULL,NULL,NOW(),NOW(),NULL),
- ('other-user','other',NULL,'one','fact','other user','',NULL,NULL,NULL,NOW(),NOW(),NULL);`)
+ ('home','owner','home','one','fact','personal','',NULL,NULL,NULL,NOW(),NOW(),NULL,''),
+ ('work','owner','work','one','fact','work','',NULL,NULL,NULL,NOW(),NOW(),NULL,''),
+ ('other-agent','owner','work','two','fact','other agent','',NULL,NULL,NULL,NOW(),NOW(),NULL,''),
+ ('other-user','other','work','one','fact','other user','',NULL,NULL,NULL,NOW(),NOW(),NULL,'');`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, destination := range []string{"", "former", "unrelated"} {
-		memories, err := database.MistyMemories(context.Background(), "owner", destination, 100, "one")
-		if err != nil || len(memories) != 2 {
-			t.Fatalf("destination %q: %v %v", destination, memories, err)
-		}
-		for _, memory := range memories {
-			if memory.SpaceID != "" || (memory.ID != "personal" && memory.ID != "historical") {
-				t.Fatalf("invalid memory: %+v", memory)
-			}
+	for space, want := range map[string]string{"home": "home", "work": "work"} {
+		memories, err := database.MistyMemories(context.Background(), "owner", space, 100, "one")
+		if err != nil || len(memories) != 1 || memories[0].ID != want || memories[0].SpaceID != space {
+			t.Fatalf("Space %q: %v %v", space, memories, err)
 		}
 	}
-	if err := database.UpdateAgentMemory(context.Background(), "other", "one", "", "personal", "overwrite"); err == nil {
+	if memories, err := database.MistyMemories(context.Background(), "owner", "unrelated", 100, "one"); err != nil || len(memories) != 0 {
+		t.Fatalf("another Space: %v %v", memories, err)
+	}
+	if err := database.UpdateAgentMemory(context.Background(), "owner", "one", "home", "work", "overwrite"); err == nil {
+		t.Fatal("memory changed from another Space")
+	}
+	if err := database.UpdateAgentMemory(context.Background(), "other", "one", "work", "work", "overwrite"); err == nil {
 		t.Fatal("another account changed memory")
 	}
 }

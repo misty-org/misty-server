@@ -79,18 +79,18 @@ func requireSpaceConversationMemberTx(ctx context.Context, tx *sql.Tx, userID, s
 func loadSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, conversation *SpaceConversation) error {
 	conversation.Participants = []SpaceConversationParticipant{}
 	query := `SELECT cm.actor_kind,COALESCE(cm.user_id,''),COALESCE(cm.agent_id,''),
-		CASE WHEN cm.actor_kind='person' THEN u.name ELSE COALESCE(v.name,'Former agent') END,
+		CASE WHEN cm.actor_kind='person' THEN u.username ELSE COALESCE(v.name,'Former agent') END,
 		CASE WHEN cm.actor_kind='person' THEN u.email ELSE '' END,
 		CASE WHEN cm.actor_kind='agent' THEN v.avatar ELSE NULL END,cm.joined_at
 		FROM space_conversation_members cm
 		LEFT JOIN users u ON u.id=cm.user_id
 		LEFT JOIN misty_ask_identities pa ON pa.id=cm.agent_id
 		LEFT JOIN misty_ask_identity_versions v ON v.agent_id=pa.id AND v.version=pa.version
-		WHERE cm.conversation_id=$1 ORDER BY cm.actor_kind,u.name,v.name`
+		WHERE cm.conversation_id=$1 ORDER BY cm.actor_kind,u.username,v.name`
 	if conversation.VisibleToSpace {
-		query = `SELECT 'person',sm.user_id,'',u.name,u.email,NULL,sm.joined_at
+		query = `SELECT 'person',sm.user_id,'',u.username,u.email,NULL,sm.joined_at
 			FROM space_members sm JOIN users u ON u.id=sm.user_id
-			WHERE sm.space_id=$1 ORDER BY u.name,u.email`
+			WHERE sm.space_id=$1 ORDER BY u.username,u.email`
 	}
 	argument := conversation.ID
 	arguments := []any{argument}
@@ -216,8 +216,8 @@ func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceI
 		}
 		var leftName, rightName string
 		if err := tx.QueryRowContext(ctx, `SELECT
-			COALESCE((SELECT u.name FROM space_members sm JOIN users u ON u.id=sm.user_id WHERE sm.space_id=$1 AND sm.user_id=$2),''),
-			COALESCE((SELECT u.name FROM space_members sm JOIN users u ON u.id=sm.user_id WHERE sm.space_id=$1 AND sm.user_id=$3),'')`, spaceID, ids[0], ids[1]).Scan(&leftName, &rightName); err != nil {
+			COALESCE((SELECT u.username FROM space_members sm JOIN users u ON u.id=sm.user_id WHERE sm.space_id=$1 AND sm.user_id=$2),''),
+			COALESCE((SELECT u.username FROM space_members sm JOIN users u ON u.id=sm.user_id WHERE sm.space_id=$1 AND sm.user_id=$3),'')`, spaceID, ids[0], ids[1]).Scan(&leftName, &rightName); err != nil {
 			return err
 		}
 		if leftName == "" || rightName == "" {

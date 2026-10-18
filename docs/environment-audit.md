@@ -248,23 +248,30 @@ variables and deliberate compatibility aliases are called out separately below.
 | `MISTY_SERVER_VERSION` | `observability.env` | `server/internal/app/health.go` · `server/internal/platform/telemetry/client.go` |
 | `AI_GATEWAY_API_KEY` | `integrations/ai.env` | `server/internal/app/health.go` · `server/internal/app/server_core.go` |
 | `AI_GATEWAY_BASE_URL` | `integrations/ai.env` | `server/internal/app/server_core.go` · `server/internal/agents/model_catalog_version.go` |
+| `MISTY_SERPER_API_KEY` | `integrations/ai.env` | `server/internal/platform/httpapi/web_search.go` |
 | `AGENT_TRANSCRIPTION_MODEL` | `integrations/ai.env` | `server/internal/agents/media_search.go` |
-| `MEDIA_SEARCH_EMERGENCY_DISABLE` | `integrations/ai.env` | `server/internal/platform/httpapi/media_search_index_chunk.go` |
 | `MEDIA_SEARCH_TRANSCRIPTION_MODEL` | `integrations/ai.env` | `server/internal/agents/media_search.go` |
 | `MEDIA_SEARCH_TRANSCRIPTION_FALLBACK_MODEL` | `integrations/ai.env` | `server/internal/agents/media_search.go` |
 | `SMART_LIBRARY_EMBEDDING_MODEL` | `integrations/ai.env` | `server/internal/agents/smart_library_analyzer_request_at.go` · `server/internal/platform/httpapi/smart_library_hosted_ai_weekly_ratio.go` |
 | `SMART_LIBRARY_PRIMARY_MODEL` | `integrations/ai.env` | `server/internal/agents/smart_library_analyzer_request_at.go` |
 | `SMART_LIBRARY_FALLBACK_MODEL` | `integrations/ai.env` | `server/internal/agents/smart_library_analyzer_request_at.go` |
-| `SMART_LIBRARY_EMERGENCY_DISABLE` | `integrations/ai.env` | `server/internal/platform/httpapi/smart_library_approve.go` · `server/internal/platform/httpapi/smart_library_complete_reindex.go` |
-| `SMART_LIBRARY_SEARCH_EMERGENCY_DISABLE` | `integrations/ai.env` | `server/internal/platform/httpapi/smart_library_set_asset_tags.go` |
 | `SMART_LIBRARY_SEARCH_DAILY_LIMIT` | `integrations/ai.env` | `server/internal/platform/httpapi/smart_library_hosted_ai_weekly_ratio.go` |
 | `MISTY_AI_LOW_MODEL` | `integrations/ai.env` | `server/internal/agents/provider_config.go` · `server/internal/agents/model_catalog_version.go` |
 | `MISTY_AI_MED_MODEL` | `integrations/ai.env` | `server/internal/agents/provider_config.go` · `server/internal/agents/model_catalog_version.go` |
 | `MISTY_AI_HIGH_MODEL` | `integrations/ai.env` | `server/internal/agents/provider_config.go` · `server/internal/agents/model_catalog_version.go` |
 | `MISTY_AI_MODEL_CATALOG_JSON` | `integrations/ai.env` | `server/internal/agents/model_catalog_version.go` |
-| `VISION_PROCESSOR_URL` | `integrations/ai.env` | `server/internal/app/server_core.go` |
-| `VISION_PROCESSOR_TOKEN` | `integrations/ai.env` | `server/internal/app/server_core.go` |
 | `MISTY_COMPANION_TEACH_REASONING` | `integrations/ai.env` | `server/internal/platform/httpapi/ai_cursor_companion.go` |
+| `MISTY_RECALL` | `integrations/ai.env` | `server/internal/platform/httpapi/memory_api.go` |
+| `MISTY_RECALL_BACKLOG_CAP` | `integrations/ai.env` | `server/internal/platform/httpapi/memory_api.go` |
+| `MISTY_VOICE_LIVE` | `integrations/ai.env` | `server/internal/platform/httpapi/voice_live_ticket.go` |
+| `MISTY_VOICE_LIVE_URL` | `integrations/ai.env` | `server/internal/platform/httpapi/voice_live_ticket.go` |
+| `MISTY_VOICE_LIVE_TICKET_MINUTES` | `integrations/ai.env` | `server/internal/platform/httpapi/voice_live_ticket.go` |
+| `MISTY_VOICE_WEEKLY_MINUTES` | `integrations/ai.env` | `server/internal/platform/httpapi/voice_live_tokens.go` |
+| `MISTY_LIVE_TRANSCRIPTION_MODEL` | `integrations/ai.env` | `server/internal/platform/httpapi/ai_model_senses.go` |
+| `MISTY_DIARIZED_TRANSCRIPTION_MODEL` | `integrations/ai.env` | `server/internal/platform/httpapi/ai_model_senses.go` |
+| `MISTY_VOICE_NOTES_MODEL` | `integrations/ai.env` | `server/internal/platform/httpapi/ai_model_senses.go` |
+| `MISTY_RUNTIME_LIVE_TRANSCRIBE` | `integrations/ai.env` | `server/apps/agent-runtime/src/live/route.ts` |
+| `SONIOX_API_KEY` | `integrations/ai.env` | `server/apps/agent-runtime/src/live/route.ts · server/apps/agent-runtime/src/transcribe-diarized.ts` |
 | `MISTY_AGENT_MODEL` | `integrations/ai.env` | `server/internal/platform/config/agent_model.go` · `server/apps/agent-runtime/src/model-provider.ts` |
 | `MISTY_AI_MAX_TOKENS_PER_DAY` | `integrations/ai.env` | `server/internal/agents/provider_budget_limits.go` |
 | `MISTY_AI_MAX_TOKENS_PER_HOUR` | `integrations/ai.env` | `server/internal/agents/provider_budget_limits.go` |
@@ -284,6 +291,7 @@ variables and deliberate compatibility aliases are called out separately below.
 | `MISTY_BILLING_ADAPTER` | `integrations/billing.env` | `server/internal/app/health.go` · `server/internal/platform/config/billing.go` |
 | `MISTY_BILLING_URL` | `integrations/billing.env` | `server/internal/app/health.go` · `server/internal/platform/config/billing.go` |
 | `MISTY_BILLING_SECRET` | `integrations/billing.env` | `server/internal/app/health.go` · `server/internal/platform/config/billing.go` |
+| `MISTY_CODING_EXTERNAL_FACTOR` | `integrations/billing.env` | `server/internal/platform/httpapi/coding_pricing.go` |
 | `MISTY_DROPBOX_CLIENT_ID` | `integrations/dropbox.env` | `server/internal/platform/httpapi/connected_accounts_oauth.go` · `server/internal/platform/httpapi/cloud_connections_cloud_o_auth_definition.go` |
 | `MISTY_DROPBOX_CLIENT_SECRET` | `integrations/dropbox.env` | `server/internal/platform/httpapi/connected_accounts_oauth.go` · `server/internal/platform/httpapi/cloud_connections_cloud_o_auth_definition.go` |
 | `MAILJET_API_KEY` | `integrations/email.env` | `server/internal/app/health.go` · `server/internal/platform/email/sender_config.go` |

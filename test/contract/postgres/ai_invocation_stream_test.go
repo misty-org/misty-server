@@ -16,11 +16,11 @@ import (
 func TestInvocationStreamPagesHintsIsolationAndRecovery(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	user, err := database.CreateUser("Stream", "stream-pages@example.invalid", "password123")
+	user, err := database.CreateUser("stream-pages@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Other", "stream-other@example.invalid", "password123")
+	other, err := database.CreateUser("stream-other@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

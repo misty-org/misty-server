@@ -30,7 +30,12 @@ func (s *AIService) AgentMethods() http.HandlerFunc {
 				writePersonalAgentError(w, err)
 				return
 			}
-			items, err := s.database.AgentMethods(r.Context(), user, agent)
+			space, err := requestMemorySpace(r.Context(), s.database, user, memorySpaceParam(r))
+			if err != nil {
+				writeMemorySpaceError(w, err)
+				return
+			}
+			items, err := s.database.AgentMethods(r.Context(), user, space, agent)
 			if err != nil {
 				writeAgentMethodError(w, err)
 				return
@@ -48,6 +53,13 @@ func (s *AIService) AgentMethods() http.HandlerFunc {
 			body.ID = ""
 			body.ExpectedVersion = 0
 		}
+		// Workflows are saved in the window's Space and stay there.
+		space, err := requestMemorySpace(r.Context(), s.database, user, body.SpaceID)
+		if err != nil {
+			writeMemorySpaceError(w, err)
+			return
+		}
+		body.SpaceID = space
 		item, err := s.database.SaveAgentMethod(r.Context(), user, body.AgentMethod, body.ExpectedVersion)
 		if err != nil {
 			writeAgentMethodError(w, err)
@@ -133,6 +145,9 @@ func resolveInvocationMethod(ctx context.Context, database *db.Database, user st
 		return nil, db.ErrSpaceForbidden
 	}
 	body.AgentID = m.AgentID
+	// A workflow runs in its own Space, wherever it was started from; so does
+	// its schedule.
+	body.SpaceID = m.SpaceID
 	prompt, err := db.RenderAgentMethod(m.Definition, body.MethodInputs)
 	if err != nil {
 		return nil, err
@@ -155,7 +170,11 @@ func resolveInvocationMethod(ctx context.Context, database *db.Database, user st
 	return &m, nil
 }
 func pinInvocationSkills(ctx context.Context, database *db.Database, user string, body *aiInvocationInput) error {
-	items, err := database.AgentMethods(ctx, user, body.AgentID)
+	space, err := database.MemorySpace(ctx, user, body.SpaceID)
+	if err != nil {
+		return err
+	}
+	items, err := database.AgentMethods(ctx, user, space, body.AgentID)
 	if err != nil {
 		return err
 	}

@@ -45,7 +45,7 @@ func TestMissingDeduplicationObjectCanBeReplacedByNewUpload(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Library Repair Owner", "library-repair-owner@example.com", "password123")
+	owner, err := database.CreateUser("library-repair-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,52 +122,12 @@ func containsString(values []string, expected string) bool {
 	return false
 }
 
-func TestMergeLibraryDuplicatesPreservesMetadataAndTrashesRedundantItems(t *testing.T) {
-	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
-	ctx := context.Background()
-	owner, _ := database.CreateUser("Duplicate Owner", "duplicate-owner@example.com", "password123")
-	spaceID := createTestSpace(t, database, ctx, owner.ID, "Duplicates").ID
-	digest := strings.Repeat("d", 64)
-	items := make([]*SpaceLibraryItem, 0, 2)
-	for index, token := range []string{"duplicate-token-1", "duplicate-token-2"} {
-		upload, err := database.CreateLibraryUpload(ctx, owner.ID, spaceID, "library", "duplicate.txt", "text/plain", 20, digest, "library/duplicateobject"+string(rune('a'+index)), token, time.Now().Add(time.Hour))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := database.SetLibraryUploadState(ctx, owner.ID, spaceID, upload.ID, token, "initiated", "uploaded_unverified"); err != nil {
-			t.Fatal(err)
-		}
-		completed, err := database.CompleteLibraryUpload(ctx, owner.ID, spaceID, upload.ID, token, 20, digest, "text/plain", nil)
-		if err != nil || completed.Item == nil {
-			t.Fatalf("complete duplicate %d = %#v, %v", index, completed, err)
-		}
-		items = append(items, completed.Item)
-	}
-	second, err := database.UpdateLibraryItem(ctx, owner.ID, spaceID, items[1].ID, items[1].Version, items[1].DisplayName, "Useful caption", []string{"keep-me"}, true, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	merged, err := database.MergeLibraryDuplicates(ctx, owner.ID, spaceID, LibraryItemVersion{ID: items[0].ID, Version: items[0].Version}, []LibraryItemVersion{{ID: second.ID, Version: second.Version}})
-	if err != nil || !merged.Favorite || merged.Caption != "Useful caption" || !containsString(merged.Tags, "keep-me") {
-		t.Fatalf("MergeLibraryDuplicates() = %#v, %v", merged, err)
-	}
-	discovery, err := database.LibraryDiscovery(ctx, owner.ID, spaceID)
-	if err != nil || len(discovery.Duplicates) != 0 {
-		t.Fatalf("duplicates after merge = %#v, %v", discovery, err)
-	}
-	deleted, err := database.LibraryItems(ctx, owner.ID, spaceID, LibraryItemQuery{Collection: "recently-deleted", Visibility: "all"})
-	if err != nil || len(deleted) != 1 || deleted[0].ID != second.ID {
-		t.Fatalf("deleted duplicates = %#v, %v", deleted, err)
-	}
-}
-
 func TestLibraryQuotaReservationsDrawOnEachAccountsAllowance(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	owner, _ := database.CreateUser("Quota Owner", "quota-owner@example.com", "password123")
-	member, _ := database.CreateUser("Quota Member", "quota-member@example.com", "password123")
+	owner, _ := database.CreateUser("quota-owner@example.com", "password123")
+	member, _ := database.CreateUser("quota-member@example.com", "password123")
 	spaceID := createTestSpace(t, database, ctx, owner.ID, "Quota").ID
 	invite, err := database.TestingInviteToSpace(ctx, owner.ID, spaceID, member.Email)
 	if err != nil {

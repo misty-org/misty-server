@@ -268,7 +268,7 @@ func (db *Database) AIConversationTurns(ctx context.Context, userID, conversatio
 			LEFT JOIN LATERAL (
 				SELECT action.result
 				FROM agent_toolbox_action_journal AS action
-				WHERE action.run_id=run.id AND action.tool_name='drawings.create' AND action.state='completed'
+				WHERE action.run_id=run.id AND action.tool_name='drawing.create' AND action.state='completed'
 				ORDER BY action.created_at DESC LIMIT 1
 			) AS drawing ON TRUE
 			LEFT JOIN LATERAL (

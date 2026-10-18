@@ -23,7 +23,7 @@ func TestAgentDispatchDeadlinesOnFullSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stop()
-	user, err := database.CreateUser("Dispatch", "dispatch-deadlines@example.invalid", "password123")
+	user, err := database.CreateUser("dispatch-deadlines@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

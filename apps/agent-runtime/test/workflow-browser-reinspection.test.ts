@@ -21,7 +21,7 @@ vi.mock("@ai-sdk/workflow", () => ({ WorkflowAgent: class {
     const turn = fixture.turn++;
     const entries = Object.entries(this.options.tools) as Array<[string, any]>;
     fixture.active.push(this.options.prepareStep().activeTools);
-    if (turn === 3) return { steps: [{ text: "Done", content: [{type:"tool-call",toolName:"misty_finish_task"},{type:"tool-result",toolName:"misty_finish_task",output:{outcome:"completed",summary:"Task verified",remaining:[]}}] }], messages: [], finishReason: "stop", totalUsage: {} };
+    if (turn === 3) return { steps: [{ text: "Done", content: [{type:"tool-call",toolName:"agent_finish"},{type:"tool-result",toolName:"agent_finish",output:{outcome:"completed",summary:"Task verified",remaining:[]}}] }], messages: [], finishReason: "stop", totalUsage: {} };
     const [name, tool] = entries[turn === 1 ? 1 : 0]!;
     const call = { toolCallId: `call-${turn}`, toolName: name, input: { elementRef: `ref-${turn}` } };
     await this.options.onToolExecutionStart({ toolCall: call });

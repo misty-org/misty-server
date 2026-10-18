@@ -14,11 +14,11 @@ import (
 func TestAgentEffectClaimIsExclusiveAcrossWorkers(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := t.Context()
-	user, err := database.CreateUser("Concurrent", "concurrent-effects@example.invalid", "password123")
+	user, err := database.CreateUser("concurrent-effects@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	action := AgentToolboxAction{IdempotencyKey: "same-logical-send", UserID: user.ID, ToolName: "messages.send", Risk: "write", AuditEvent: "message.sent", Source: "test", Request: json.RawMessage(`{"text":"hello"}`)}
+	action := AgentToolboxAction{IdempotencyKey: "same-logical-send", UserID: user.ID, ToolName: "message.send", Risk: "write", AuditEvent: "message.sent", Source: "test", Request: json.RawMessage(`{"text":"hello"}`)}
 	entered, release, finished := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
 		_, err := database.JournalAgentToolboxAction(ctx, action, func() (json.RawMessage, error) {
@@ -54,14 +54,14 @@ func TestAgentEffectClaimIsExclusiveAcrossWorkers(t *testing.T) {
 func TestAgentToolboxActionJournalReplaysSuccessAndRetriesOnlyReads(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	user, err := database.CreateUser("Toolbox Journal", "toolbox-journal@example.com", "correct horse battery staple")
+	user, err := database.CreateUser("toolbox-journal@example.com", "correct horse battery staple")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	action := AgentToolboxAction{
 		IdempotencyKey: "contract-toolbox-success", UserID: user.ID, SessionID: "session-1",
-		ToolName: "tasks.update", AuditEvent: "task.updated", Risk: "write", Source: "contract",
+		ToolName: "task.update", AuditEvent: "task.updated", Risk: "write", Source: "contract",
 		Request: json.RawMessage(`{"task_id":"task-1"}`),
 	}
 	executions := 0
@@ -107,11 +107,11 @@ func TestAgentToolboxActionJournalReplaysSuccessAndRetriesOnlyReads(t *testing.T
 func TestAgentToolboxActionJournalNeverRetriesUncertainWrite(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	user, err := database.CreateUser("Uncertain", "uncertain@example.com", "correct horse battery staple")
+	user, err := database.CreateUser("uncertain@example.com", "correct horse battery staple")
 	if err != nil {
 		t.Fatal(err)
 	}
-	action := AgentToolboxAction{IdempotencyKey: "uncertain-send", UserID: user.ID, ToolName: "messages.send", AuditEvent: "message.sent", Risk: "write", Source: "contract", Request: json.RawMessage(`{"body":"hello"}`)}
+	action := AgentToolboxAction{IdempotencyKey: "uncertain-send", UserID: user.ID, ToolName: "message.send", AuditEvent: "message.sent", Risk: "write", Source: "contract", Request: json.RawMessage(`{"body":"hello"}`)}
 	calls := 0
 	execute := func() (json.RawMessage, error) { calls++; return nil, errors.New("response lost after send") }
 	for range 2 {
@@ -131,7 +131,7 @@ func TestAgentToolboxActionJournalNeverRetriesUncertainWrite(t *testing.T) {
 func TestAgentToolboxActionJournalResumesUndispatchedDeviceAction(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	user, err := database.CreateUser("Device", "device-journal@example.com", "correct horse battery staple")
+	user, err := database.CreateUser("device-journal@example.com", "correct horse battery staple")
 	if err != nil {
 		t.Fatal(err)
 	}

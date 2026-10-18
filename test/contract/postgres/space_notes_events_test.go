@@ -45,7 +45,7 @@ func TestNoteEventsReachEverySpaceMember(t *testing.T) {
 // apply the same rule, or one path would leak what the other hides.
 func TestNoteEventVisibilityMatchesOnLiveDeliveryAndReplay(t *testing.T) {
 	fixture := newNoteFixture(t, "note-event-paths")
-	outsider, err := fixture.database.CreateUser("Event Outsider", "note-event-outsider@example.com", "password123")
+	outsider, err := fixture.database.CreateUser("note-event-outsider@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

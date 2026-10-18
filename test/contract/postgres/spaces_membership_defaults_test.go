@@ -16,11 +16,11 @@ func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testi
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 
-	owner, err := database.CreateUser("Owner", "space-owner@example.com", "password123")
+	owner, err := database.CreateUser("space-owner@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(owner) error = %v", err)
 	}
-	member, err := database.CreateUser("Member", "space-member@example.com", "password123")
+	member, err := database.CreateUser("space-member@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(member) error = %v", err)
 	}
@@ -29,7 +29,7 @@ func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testi
 	if err != nil {
 		t.Fatalf("ListSpaces(owner) error = %v", err)
 	}
-	if len(ownerSpaces) != 1 || !ownerSpaces[0].IsDefault || ownerSpaces[0].Name != "Owner's Space" {
+	if len(ownerSpaces) != 1 || !ownerSpaces[0].IsDefault || ownerSpaces[0].Name != owner.Username+"'s Space" {
 		t.Fatalf("initial owner Spaces = %#v, want the personal Space from sign-up", ownerSpaces)
 	}
 	project, err := database.TestingCreateSpace(ctx, owner.ID, "Project")
@@ -145,11 +145,11 @@ func TestOwnershipTransferDoesNotTransferContributorUsage(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Transfer Owner", "transfer-owner@example.com", "password123")
+	owner, err := database.CreateUser("transfer-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	recipient, err := database.CreateUser("Transfer Recipient", "transfer-recipient@example.com", "password123")
+	recipient, err := database.CreateUser("transfer-recipient@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

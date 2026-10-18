@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 )
@@ -23,35 +22,6 @@ func (hub *aiInvocationHub) artifactForUser(userID, id string) *aiArtifact {
 	}
 	copy := *artifact
 	return &copy
-}
-
-func (hub *aiInvocationHub) reviseTaskSetArtifact(userID, id string, operations json.RawMessage) error {
-	var value struct {
-		Tasks []aiTaskDraft `json:"tasks"`
-	}
-	if json.Unmarshal(operations, &value) != nil || len(value.Tasks) < 1 || len(value.Tasks) > 20 {
-		return errors.New("invalid task set")
-	}
-	seen := map[string]bool{}
-	for index := range value.Tasks {
-		value.Tasks[index].Title = strings.Join(strings.Fields(value.Tasks[index].Title), " ")
-		value.Tasks[index].Notes = strings.TrimSpace(value.Tasks[index].Notes)
-		if !strings.HasPrefix(value.Tasks[index].ID, "task_") || value.Tasks[index].Title == "" || len([]rune(value.Tasks[index].Title)) > 240 || len([]rune(value.Tasks[index].Notes)) > 20_000 || seen[value.Tasks[index].ID] {
-			return errors.New("invalid task draft")
-		}
-		if value.Tasks[index].Priority != "high" && value.Tasks[index].Priority != "medium" && value.Tasks[index].Priority != "low" {
-			return errors.New("invalid task priority")
-		}
-		seen[value.Tasks[index].ID] = true
-	}
-	hub.mu.Lock()
-	defer hub.mu.Unlock()
-	artifact := hub.artifacts[strings.TrimSpace(id)]
-	if artifact == nil || artifact.OwnerUserID != userID || artifact.Kind != "task_set" || artifact.State != "proposed" {
-		return errors.New("artifact is not editable")
-	}
-	artifact.Operations = map[string]any{"tasks": value.Tasks}
-	return nil
 }
 
 func (hub *aiInvocationHub) restoreArtifact(userID string, payload json.RawMessage) *aiArtifact {

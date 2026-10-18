@@ -91,26 +91,17 @@ func TestCursorCompanionHasOneNaturalPolicy(t *testing.T) {
 	}
 }
 
-func TestCompanionTeachingTurnShowsWithoutTools(t *testing.T) {
+func TestCursorAnswersFromTheScreenAndLooksUpWhatItDoesNotShow(t *testing.T) {
 	capture := companionTestCapture(t)
-	body := aiInvocationInput{Mode: "companion", CompanionIntent: "teach", Timezone: "UTC", SurfaceID: "global", DisplayCaptures: []aiDisplayCapture{{aiCaptureAttachment: capture, Screen: "screen1", Primary: true}}}
+	body := aiInvocationInput{Mode: "companion", Timezone: "UTC", SurfaceID: "global", DisplayCaptures: []aiDisplayCapture{{aiCaptureAttachment: capture, Screen: "screen1", Primary: true}}}
 	if err := validateCompanionInput(&body); err != nil {
 		t.Fatal(err)
 	}
-	system := aiInvocationSystem(aiSystemPromptInput{body: body, agent: &db.AskIdentity{Name: "Misty"}, now: time.Unix(0, 0).UTC(), tools: []string{"browser.workspace.visual", "apps.search"}})
-	for _, text := range []string{"teach instead of doing it", "This turn has no tools", "[POINT:x,y:label:screenN]", "Personal agent: Misty"} {
+	system := aiInvocationSystem(aiSystemPromptInput{body: body, agent: &db.AskIdentity{Name: "Misty"}, now: time.Unix(0, 0).UTC(), tools: []string{"web.search", "web.fetch"}})
+	for _, text := range []string{"teach instead of doing it", "[POINT:x,y:label:screenN]", "use web_search and web_fetch", "never open a browser or take the screen just to look something up", agentExecutionGuidance} {
 		if !strings.Contains(system, text) {
-			t.Fatalf("teaching prompt lacks %q", text)
+			t.Fatalf("cursor prompt lacks %q", text)
 		}
-	}
-	for _, text := range []string{agentExecutionGuidance, "Do the requested work with your tools", "browser_act", "apps_search", "you do not need per-action approval"} {
-		if strings.Contains(system, text) {
-			t.Fatalf("teaching prompt must not carry %q", text)
-		}
-	}
-	general := aiInvocationSystem(aiSystemPromptInput{body: aiInvocationInput{Mode: "companion", Timezone: "UTC", SurfaceID: "global"}, now: time.Unix(0, 0).UTC()})
-	if !strings.Contains(general, "teach instead of doing it") || !strings.Contains(general, agentExecutionGuidance) {
-		t.Fatal("general companion turns keep tools guidance and also teach")
 	}
 }
 
@@ -127,48 +118,6 @@ func TestCompanionLooksBeforeAnsweringAScreenQuestion(t *testing.T) {
 	attached := companionSystemPrompt(aiInvocationInput{Mode: "companion", DisplayCaptures: []aiDisplayCapture{{aiCaptureAttachment: capture, Screen: "screen1", Primary: true}}}, []string{screenLookTool})
 	if strings.Contains(attached, "call screen_look first") || strings.Contains(attached, "desktop context is unavailable") {
 		t.Fatal("attached screens need neither")
-	}
-}
-
-func TestCompanionTeachingIntentValidation(t *testing.T) {
-	capture := companionTestCapture(t)
-	screens := []aiDisplayCapture{{aiCaptureAttachment: capture, Screen: "screen1", Primary: true}}
-	for _, body := range []aiInvocationInput{
-		{Mode: "companion", CompanionIntent: "teach"},
-		{Mode: "companion", CompanionIntent: "do", DisplayCaptures: screens},
-		{Mode: "drawer", CompanionIntent: "teach"},
-	} {
-		if validateCompanionInput(&body) == nil {
-			t.Fatalf("accepted %q intent in %s mode with %d screens", body.CompanionIntent, body.Mode, len(body.DisplayCaptures))
-		}
-	}
-	if companionTeaches(aiInvocationInput{Mode: "drawer", CompanionIntent: "teach"}) || !companionTeaches(aiInvocationInput{Mode: "companion", CompanionIntent: "teach"}) {
-		t.Fatal("only companion turns teach")
-	}
-}
-
-func TestCompanionTeachingTurnsUseTheTeachingEffort(t *testing.T) {
-	t.Setenv("MISTY_COMPANION_TEACH_REASONING", "")
-	if companionAdmissionReasoning(aiInvocationInput{Mode: "companion", CompanionIntent: "teach"}, "high") != "low" {
-		t.Fatal("a teaching turn must not inherit the conversation's Thinking effort")
-	}
-	if companionAdmissionReasoning(aiInvocationInput{Mode: "companion"}, "xhigh") != "xhigh" {
-		t.Fatal("other turns keep the account's Thinking effort")
-	}
-}
-
-func TestCompanionTeachReasoningDefaultsLow(t *testing.T) {
-	t.Setenv("MISTY_COMPANION_TEACH_REASONING", "")
-	if companionTeachReasoning() != "low" {
-		t.Fatal("default teaching effort must be low")
-	}
-	t.Setenv("MISTY_COMPANION_TEACH_REASONING", "Medium")
-	if companionTeachReasoning() != "medium" {
-		t.Fatal("the eval's effort must be configurable")
-	}
-	t.Setenv("MISTY_COMPANION_TEACH_REASONING", "turbo")
-	if companionTeachReasoning() != "low" {
-		t.Fatal("invalid effort must fall back")
 	}
 }
 
@@ -234,17 +183,17 @@ func TestCursorCompanionKeepsOnlyPlausibleMistyControls(t *testing.T) {
 }
 
 func TestCursorCompanionAddsMistyGuideOnlyForMisty(t *testing.T) {
-	other := aiInvocationInput{Mode: "companion", CompanionIntent: "teach", Prompt: "how do I commit in xcode?", DisplayCaptures: []aiDisplayCapture{{Screen: "screen1", Primary: true}}}
-	if strings.Contains(companionSystemPrompt(other, nil), "Manage virtual windows") {
+	other := aiInvocationInput{Mode: "companion", Prompt: "how do I commit in xcode?", DisplayCaptures: []aiDisplayCapture{{Screen: "screen1", Primary: true}}}
+	if strings.Contains(companionSystemPrompt(other, nil), "New incognito window") {
 		t.Fatal("another app's question received the Misty guide")
 	}
 	shown := other
 	shown.DisplayCaptures = []aiDisplayCapture{{Screen: "screen1", Primary: true, Controls: []aiScreenControl{{Label: "New tab", Role: "button", X: 1, Y: 1, Width: 1, Height: 1}}}}
-	if !strings.Contains(companionSystemPrompt(shown, nil), "Manage virtual windows") {
+	if !strings.Contains(companionSystemPrompt(shown, nil), "New incognito window") {
 		t.Fatal("a turn showing Misty's controls lacks the guide")
 	}
-	named := aiInvocationInput{Mode: "drawer", Prompt: "How do I create a virtual window in Misty?"}
-	if !strings.Contains(aiInvocationSystem(aiSystemPromptInput{body: named, now: time.Now()}), "Manage virtual windows") {
+	named := aiInvocationInput{Mode: "drawer", Prompt: "How do I open an incognito window in Misty?"}
+	if !strings.Contains(aiInvocationSystem(aiSystemPromptInput{body: named, now: time.Now()}), "New incognito window") {
 		t.Fatal("a question naming Misty lacks the guide")
 	}
 }

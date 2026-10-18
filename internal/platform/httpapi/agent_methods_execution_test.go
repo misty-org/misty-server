@@ -32,11 +32,11 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 	t.Setenv("AI_GATEWAY_API_KEY", "fixture-not-a-real-key")
 	t.Setenv("AI_GATEWAY_BASE_URL", "http://127.0.0.1:1")
 	t.Setenv("MISTY_AI_MODEL_CATALOG_JSON", `[{"id":"openai/gpt-6-astra","name":"GPT-6 Astra","capabilities":["chat","tools","vision","reasoning"]}]`)
-	owner, err := database.CreateUser("Workflow execution", "workflow-execution@example.test", "password123")
+	owner, err := database.CreateUser("workflow-execution@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Foreign owner", "workflow-foreign@example.test", "password123")
+	other, err := database.CreateUser("workflow-foreign@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

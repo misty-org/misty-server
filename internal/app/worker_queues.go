@@ -49,24 +49,10 @@ func runNoteControlProcessing(ctx context.Context, server *Server) {
 	workers.Wait()
 }
 
-func runLibraryIntelligenceProcessing(ctx context.Context, server *Server) {
-	if server.Library == nil || !server.Library.WorkerEnabled("ai") {
-		return
-	}
-	worker := "intelligence-worker-" + uuid.NewString()
-	runDatabaseQueue(ctx, server, "library-ai", func(ctx context.Context) (int, error) { return server.Library.ProcessIntelligenceJobs(ctx, worker, 2) })
-}
 func runLibraryRenditionProcessing(ctx context.Context, server *Server) {
 	if server.Library == nil || !server.Library.WorkerEnabled("edit") {
 		return
 	}
 	worker := "rendition-worker-" + uuid.NewString()
 	runDatabaseQueue(ctx, server, "library-edit", func(ctx context.Context) (int, error) { return server.Library.ProcessRenditionJobs(ctx, worker, 2) })
-}
-func runLibraryPeopleProcessing(ctx context.Context, server *Server) {
-	if server.Library == nil || !server.Library.WorkerEnabled("faces") {
-		return
-	}
-	worker := "people-worker-" + uuid.NewString()
-	runDatabaseQueue(ctx, server, "library-faces", func(ctx context.Context) (int, error) { return server.Library.ProcessPeopleJobs(ctx, worker, 4) })
 }

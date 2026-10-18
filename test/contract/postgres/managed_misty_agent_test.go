@@ -13,7 +13,7 @@ import ()
 func TestManagedMistyIsSingleFixedAndSupportsBoundedHiddenWorkers(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Managed Misty Owner", "managed-misty-owner@example.com", "password123")
+	owner, err := database.CreateUser("managed-misty-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

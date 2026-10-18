@@ -73,33 +73,35 @@ func TestLiveBillingContract(t *testing.T) {
 
 // testLiveLimitsContract checks what pricing v2 added: refusals that name their
 // limit, the grace for a running command, web search, unpriced models and
-// referrals. Basic has a 450k weekly limit, a 135k 5-hour window (27k grace)
-// and a 112.5k per-command cap; built-in prices charge gpt-5.6-luna $1/M input.
+// referrals. The limits account is on Pro (the harness seeds it): a 1.6M weekly
+// limit, a 480k 5-hour window (96k grace) and a 400k per-command cap; built-in
+// prices charge gpt-5.6-luna $1/M input. Basic has no recurring AI, only a
+// one-time taste from a pool that the harness's one paying subscription funds.
 func testLiveLimitsContract(t *testing.T, ctx context.Context, adapter Adapter) {
 	t.Helper()
 	reserve := func(command, key string, units int64) (Decision, error) {
 		return adapter.Do(ctx, "reserve", Request{Version: 1, AccountID: "limits-account", Operation: "agent.model", OperationID: command + ":" + key, Key: command + ":" + key, CommandID: command,
 			Usage: Usage{Model: "gpt-5.6-luna", Units: map[string]int64{"input_tokens": units}, Estimated: true}})
 	}
-	if _, err := reserve("a", "1", 100_000); err != nil {
+	if _, err := reserve("a", "1", 300_000); err != nil {
 		t.Fatalf("first command refused: %v", err)
 	}
-	if _, err := reserve("d", "1", 30_000); err != nil {
+	if _, err := reserve("d", "1", 170_000); err != nil {
 		t.Fatalf("second command inside the window refused: %v", err)
 	}
-	_, err := reserve("b", "1", 10_000)
+	_, err := reserve("b", "1", 20_000)
 	var denial *Denial
 	if !errors.As(err, &denial) || denial.Limit != "window" || denial.ResetsAt == nil {
 		t.Fatalf("a new command past the 5-hour window: %v %+v", err, denial)
 	}
-	over, err := reserve("a", "2", 10_000)
+	over, err := reserve("a", "2", 20_000)
 	var admitted struct {
 		OverLimit bool `json:"over_limit"`
 	}
 	if err != nil || json.Unmarshal(over.Summary, &admitted) != nil || !admitted.OverLimit {
 		t.Fatalf("a running command could not finish on its grace: %v %s", err, over.Summary)
 	}
-	if _, err = reserve("d", "2", 30_000); !errors.As(err, &denial) || denial.Limit != "window" {
+	if _, err = reserve("d", "2", 100_000); !errors.As(err, &denial) || denial.Limit != "window" {
 		t.Fatalf("a command went past its grace: %v", err)
 	}
 	if _, err = adapter.Do(ctx, "reserve", Request{Version: 1, AccountID: "model-account", Operation: "agent.model", OperationID: "m", Key: "m",
@@ -107,13 +109,13 @@ func testLiveLimitsContract(t *testing.T, ctx context.Context, adapter Adapter) 
 		t.Fatalf("an unpriced model was admitted: %v", err)
 	}
 	search := Request{Version: 1, AccountID: "search-account", Operation: "web.search", OperationID: "s", Key: "s", CommandID: "s",
-		Usage: Usage{Provider: "parallel", Model: "google/gemini-2.5-flash-lite", Units: map[string]int64{"requests": 1, "input_bytes": 600, "output_tokens": 400}, Estimated: true}}
+		Usage: Usage{Provider: "serper", Units: map[string]int64{"requests": 1}}}
 	held, err := adapter.Do(ctx, "reserve", search)
 	if err != nil || held.ReservationID == "" {
 		t.Fatalf("web search reservation: %v", err)
 	}
 	search.ReservationID, search.Key = held.ReservationID, "s:settle"
-	search.Usage = Usage{Provider: "parallel", Model: "google/gemini-2.5-flash-lite", Units: map[string]int64{"requests": 1}}
+	search.Usage = Usage{Provider: "serper", Units: map[string]int64{"requests": 1}}
 	if _, err = adapter.Do(ctx, "settle", search); err != nil {
 		t.Fatalf("web search settlement: %v", err)
 	}
@@ -163,7 +165,39 @@ func testLiveLimitsContract(t *testing.T, ctx context.Context, adapter Adapter) 
 		} `json:"referrals"`
 		TrialEligible bool `json:"trial_eligible"`
 	}
-	if err != nil || json.Unmarshal(summary.Summary, &view) != nil || view.AI.Limits["window"].Limit != 135_000 || view.AI.Limits["monthly"].Limit != 2_000_000 || view.Referrals.Pending != 1 || view.TrialEligible {
+	if err != nil || json.Unmarshal(summary.Summary, &view) != nil || view.AI.Limits["window"].Limit != 480_000 || view.AI.Limits["monthly"].Limit != 7_000_000 || view.Referrals.Pending != 1 || view.TrialEligible {
 		t.Fatalf("summary limits and referrals: %v %s", err, summary.Summary)
+	}
+	testLiveFreeContract(t, ctx, adapter)
+}
+
+// testLiveFreeContract checks Basic's one-time taste: a free account's first try
+// is admitted from the pool, background work never spends it, and the summary
+// shows what's left.
+func testLiveFreeContract(t *testing.T, ctx context.Context, adapter Adapter) {
+	t.Helper()
+	try := func(key string, background bool) (Decision, error) {
+		return adapter.Do(ctx, "reserve", Request{Version: 1, AccountID: "free-account", Operation: "agent.model", OperationID: key, Key: key, CommandID: key, Background: background,
+			Usage: Usage{Model: "gpt-5.6-luna", Units: map[string]int64{"input_tokens": 5_000}, Estimated: true}})
+	}
+	if d, err := try("free-1", false); err != nil || d.ReservationID == "" {
+		t.Fatalf("a free account's first try: %+v %v", d, err)
+	}
+	var denial *Denial
+	if _, err := try("free-title", true); !errors.As(err, &denial) || denial.Limit != "free_background" {
+		t.Fatalf("background work spent a free try: %v", err)
+	}
+	summary, err := adapter.Do(ctx, "summary", Request{Version: 1, AccountID: "free-account", Operation: "customer.summary", OperationID: "summary", Key: "free-summary"})
+	var view struct {
+		AI struct {
+			Free struct {
+				Taste     int64 `json:"taste_units"`
+				Remaining int64 `json:"remaining"`
+				PoolOpen  bool  `json:"pool_open"`
+			} `json:"free"`
+		} `json:"ai"`
+	}
+	if err != nil || json.Unmarshal(summary.Summary, &view) != nil || view.AI.Free.Taste != 200_000 || view.AI.Free.Remaining >= 200_000 || !view.AI.Free.PoolOpen {
+		t.Fatalf("free summary: %v %s", err, summary.Summary)
 	}
 }

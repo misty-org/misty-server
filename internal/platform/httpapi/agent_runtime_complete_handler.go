@@ -26,12 +26,12 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 			return
 		}
 		runID := chi.URLParam(r, "runID")
-		run, task, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), runID, body.RuntimeRunID)
+		run, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), runID, body.RuntimeRunID)
 		if err != nil {
-			existingRun, existingTask, lookupErr := s.database.PersonalAgentTaskRuntimeRecord(r.Context(), runID, body.RuntimeRunID)
+			existingRun, lookupErr := s.database.PersonalAgentRuntimeRecord(r.Context(), runID, body.RuntimeRunID)
 			if lookupErr == nil && (existingRun.State == "completed" || existingRun.State == "completed_with_errors" || existingRun.State == "failed" || existingRun.State == "canceled") {
 				if existingRun.State == "completed" || existingRun.SourceConversationID != "" || s.mentionRequestForRun(r.Context(), existingRun) != nil {
-					if publishErr := s.publishPersonalAgentCompletion(r.Context(), existingRun, existingTask, body.Text); publishErr != nil {
+					if publishErr := s.publishPersonalAgentCompletion(r.Context(), existingRun, body.Text); publishErr != nil {
 						writeAgentError(w, publishErr)
 						return
 					}
@@ -63,22 +63,10 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 		if len(body.Usage) == 0 || !validJSONObject(body.Usage) {
 			body.Usage = json.RawMessage(`{}`)
 		}
-		done := run.SourceTaskID == ""
-		if body.Status == "success" && run.SourceTaskID != "" {
-			var doneErr error
-			done, doneErr = s.database.PersonalAgentTaskDone(r.Context(), run.ID, body.RuntimeRunID)
-			if doneErr != nil {
-				writeAgentError(w, doneErr)
-				return
-			}
-		}
-		state, code, activityKind, valid := personalAgentRuntimeCompletionOutcome(body.Status, done, run.SourceTaskID != "", body.ErrorCode)
+		state, code, valid := personalAgentRuntimeCompletionOutcome(body.Status, body.ErrorCode)
 		if !valid {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_completion_status"})
 			return
-		}
-		if body.Status == "success" && !done && body.Text == "" {
-			body.Text = "The Agent stopped without marking the task done."
 		}
 		if err := s.settlePersonalAgentRuntimeUsage(r.Context(), run, body.Status, body.Usage); err != nil {
 			writeAgentError(w, err)
@@ -92,12 +80,6 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 			message = "Agent run failed"
 		}
 		result := TestingMustAPIRawJSON(map[string]any{"text": body.Text, "usage": json.RawMessage(body.Usage), "runtime_status": body.Status, "message": message})
-		if run.SourceTaskID != "" {
-			if err := s.database.AddPersonalAgentRuntimeFinalActivity(r.Context(), run, task, activityKind, message, result); err != nil {
-				writeAgentError(w, err)
-				return
-			}
-		}
 		finished, err := s.database.FinishSpaceRun(r.Context(), run.ID, state, result, code)
 		if err != nil {
 			writeAgentError(w, err)
@@ -116,7 +98,7 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 			return
 		}
 		if state == "completed" || finished.SourceConversationID != "" || s.mentionRequestForRun(r.Context(), finished) != nil {
-			if err := s.publishPersonalAgentCompletion(r.Context(), finished, task, body.Text); err != nil {
+			if err := s.publishPersonalAgentCompletion(r.Context(), finished, body.Text); err != nil {
 				writeAgentError(w, err)
 				return
 			}

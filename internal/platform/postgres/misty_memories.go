@@ -40,7 +40,9 @@ type RememberMistyMemoryInput struct {
 const maxMistyMemoryList = 100
 
 func (db *Database) RememberMistyMemory(ctx context.Context, userID string, input RememberMistyMemoryInput) (MistyMemory, error) {
-	input.SpaceID = "" // Memories belong to the account and agent, never a Space.
+	// Each memory belongs to one person in one Space: the run's, or the
+	// personal Space when none is named.
+	input.SpaceID = strings.TrimSpace(input.SpaceID)
 	input.Kind = strings.ToLower(strings.TrimSpace(input.Kind))
 	input.Content = strings.TrimSpace(input.Content)
 	input.Reason = strings.TrimSpace(input.Reason)
@@ -55,10 +57,8 @@ func (db *Database) RememberMistyMemory(ctx context.Context, userID string, inpu
 	normalized := strings.ToLower(strings.Join(strings.Fields(input.Content), " "))
 	digest := sha256.Sum256([]byte(normalized))
 	memoryKey := hex.EncodeToString(digest[:])
+	// The Space is its own column of the unique key; the scope key names the agent.
 	scopeKey := "personal"
-	if input.SpaceID != "" {
-		scopeKey = "space:" + input.SpaceID
-	}
 	if input.AgentID != "" {
 		scopeKey = "agent:" + input.AgentID + ":" + scopeKey
 	}
@@ -80,10 +80,11 @@ func (db *Database) RememberMistyMemory(ctx context.Context, userID string, inpu
 			}
 			return ErrSpaceConflict
 		}
-		if input.SpaceID != "" {
-			if _, err := requireSpaceMemberTx(ctx, tx, input.SpaceID, userID); err != nil {
-				return err
-			}
+		if input.SpaceID, err = memorySpaceTx(ctx, tx, userID, input.SpaceID); err != nil {
+			return err
+		}
+		if _, err := requireSpaceMemberTx(ctx, tx, input.SpaceID, userID); err != nil {
+			return err
 		}
 		conversationID, err := ownedMistyMemoryConversationTx(ctx, tx, userID, input.SourceConversationID)
 		if err != nil {
@@ -97,13 +98,13 @@ func (db *Database) RememberMistyMemory(ctx context.Context, userID string, inpu
 			INSERT INTO misty_memories(
 				id,user_id,space_id,scope_key,memory_key,kind,content,reason,
 				source_conversation_id,source_invocation_id,agent_id
-			) VALUES($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8,NULLIF($9,''),NULLIF($10,''),NULLIF($11,''))
-			ON CONFLICT(user_id,scope_key,memory_key) DO UPDATE SET
+			) VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),NULLIF($10,''),NULLIF($11,''))
+			ON CONFLICT(user_id,space_id,scope_key,memory_key) DO UPDATE SET
 				kind=EXCLUDED.kind,content=EXCLUDED.content,reason=EXCLUDED.reason,
 				source_conversation_id=COALESCE(EXCLUDED.source_conversation_id,misty_memories.source_conversation_id),
 				source_invocation_id=COALESCE(EXCLUDED.source_invocation_id,misty_memories.source_invocation_id),
 				forgotten_at=NULL,updated_at=NOW()
-			RETURNING id,COALESCE(space_id,''),kind,content,reason,
+			RETURNING id,space_id,kind,content,reason,
 				COALESCE(source_conversation_id,''),COALESCE(source_invocation_id,''),
 				last_used_at,created_at,updated_at
 		`, "memory_"+uuid.NewString(), userID, input.SpaceID, scopeKey, memoryKey,
@@ -119,20 +120,23 @@ func (db *Database) MistyMemories(ctx context.Context, userID, spaceID string, l
 	if len(agentIDs) > 0 {
 		agentID = agentIDs[0]
 	}
-	spaceID = ""
 	if limit < 1 || limit > maxMistyMemoryList {
 		limit = maxMistyMemoryList
 	}
 	items := []MistyMemory{}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		spaceID, err := memorySpaceTx(ctx, tx, userID, spaceID)
+		if err != nil {
+			return err
+		}
 		rows, err := tx.QueryContext(ctx, `
-			SELECT id,'' AS legacy_space,kind,content,reason,
+			SELECT id,space_id,kind,content,reason,
 				COALESCE(source_conversation_id,''),COALESCE(source_invocation_id,''),
 				last_used_at,created_at,updated_at
 			FROM misty_memories
-			WHERE user_id=$1 AND forgotten_at IS NULL AND COALESCE(agent_id,'')=$3
+			WHERE user_id=$1 AND space_id=$4 AND forgotten_at IS NULL AND COALESCE(agent_id,'')=$3
 			ORDER BY updated_at DESC LIMIT $2
-		`, userID, limit, agentID)
+		`, userID, limit, agentID, spaceID)
 		if err != nil {
 			return err
 		}
@@ -161,17 +165,21 @@ func (db *Database) MistyMemoryContext(ctx context.Context, userID, spaceID stri
 		if err != nil || !enabled {
 			return err
 		}
+		spaceID, err := memorySpaceTx(ctx, tx, userID, spaceID)
+		if err != nil {
+			return err
+		}
 		if limit < 1 || limit > 30 {
 			limit = 20
 		}
 		rows, err := tx.QueryContext(ctx, `
-			SELECT id,'' AS legacy_space,kind,content,reason,
+			SELECT id,space_id,kind,content,reason,
 				COALESCE(source_conversation_id,''),COALESCE(source_invocation_id,''),
 				last_used_at,created_at,updated_at
 			FROM misty_memories
-			WHERE user_id=$1 AND forgotten_at IS NULL AND COALESCE(agent_id,'')=$3
+			WHERE user_id=$1 AND space_id=$4 AND forgotten_at IS NULL AND COALESCE(agent_id,'')=$3
 			ORDER BY updated_at DESC LIMIT $2
-		`, userID, limit, agentID)
+		`, userID, limit, agentID, spaceID)
 		if err != nil {
 			return err
 		}
@@ -199,7 +207,8 @@ func (db *Database) MistyMemoryContext(ctx context.Context, userID, spaceID stri
 	return items, err
 }
 
-func (db *Database) ForgetMistyMemory(ctx context.Context, userID, memoryID string, agentIDs ...string) error {
+// ForgetMistyMemory forgets one memory in one Space.
+func (db *Database) ForgetMistyMemory(ctx context.Context, userID, spaceID, memoryID string, agentIDs ...string) error {
 	agentID := ""
 	if len(agentIDs) > 0 {
 		agentID = agentIDs[0]
@@ -209,7 +218,11 @@ func (db *Database) ForgetMistyMemory(ctx context.Context, userID, memoryID stri
 		return ErrSpaceInvalid
 	}
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE misty_memories SET forgotten_at=NOW(),updated_at=NOW() WHERE id=$1 AND user_id=$2 AND forgotten_at IS NULL AND COALESCE(agent_id,'')=$3`, memoryID, userID, agentID)
+		spaceID, err := memorySpaceTx(ctx, tx, userID, spaceID)
+		if err != nil {
+			return err
+		}
+		result, err := tx.ExecContext(ctx, `UPDATE misty_memories SET forgotten_at=NOW(),updated_at=NOW() WHERE id=$1 AND user_id=$2 AND space_id=$4 AND forgotten_at IS NULL AND COALESCE(agent_id,'')=$3`, memoryID, userID, agentID, spaceID)
 		if err != nil {
 			return err
 		}
@@ -267,7 +280,11 @@ func (db *Database) UpdateAgentMemory(ctx context.Context, userID, agentID, spac
 	normalized := strings.ToLower(strings.Join(strings.Fields(content), " "))
 	digest := sha256.Sum256([]byte(normalized))
 	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE misty_memories SET content=$4,memory_key=$5,updated_at=NOW() WHERE id=$1 AND user_id=$2 AND agent_id=$3 AND forgotten_at IS NULL`, memoryID, userID, agentID, content, hex.EncodeToString(digest[:]))
+		spaceID, err := memorySpaceTx(ctx, tx, userID, spaceID)
+		if err != nil {
+			return err
+		}
+		result, err := tx.ExecContext(ctx, `UPDATE misty_memories SET content=$4,memory_key=$5,updated_at=NOW() WHERE id=$1 AND user_id=$2 AND agent_id=$3 AND space_id=$6 AND forgotten_at IS NULL`, memoryID, userID, agentID, content, hex.EncodeToString(digest[:]), spaceID)
 		if err != nil {
 			return err
 		}

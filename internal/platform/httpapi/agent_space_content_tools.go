@@ -30,10 +30,10 @@ func agentNoteWriteResult(note *db.SpaceNote, title, markdown, operation string)
 }
 
 const (
-	toolboxNotesSearch = "notes.search"
-	toolboxNotesRead   = "notes.read"
-	toolboxNotesCreate = "notes.create"
-	toolboxNotesUpdate = "notes.update"
+	toolboxNotesSearch = "note.search"
+	toolboxNotesRead   = "note.read"
+	toolboxNotesCreate = "note.create"
+	toolboxNotesUpdate = "note.update"
 )
 
 func noteAgentToolDescriptors() []agenttools.Descriptor {
@@ -48,10 +48,10 @@ func noteAgentToolDescriptors() []agenttools.Descriptor {
 		"append": map[string]any{"type": "string", "maxLength": 100000, "description": "Markdown added after the current body, for adding a line or section without rewriting it."},
 	}})
 	return []agenttools.Descriptor{
-		{Name: toolboxNotesSearch, Version: 1, Description: "Search Notes visible in the current Space.", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
-		{Name: toolboxNotesRead, Version: 1, Description: "Read one Note visible in the current Space, including its Markdown body (empty means the Note has no text yet).", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
-		{Name: toolboxNotesCreate, Version: 1, Description: "Create a native Note in the current Space from a title and Markdown body.", Risk: serveragent.RiskWrite, InputSchema: writeSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Locality: agenttools.LocalityServer, AuditEvent: "note.created", Sources: agentToolboxSpaceSources},
-		{Name: toolboxNotesUpdate, Version: 1, Description: "Change an explicitly identified Note: a new title, a replacement Markdown body, or Markdown appended to the end of the body.", Risk: serveragent.RiskWrite, InputSchema: updateSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "note.updated", Sources: agentToolboxSpaceSources},
+		{Name: toolboxNotesSearch, Version: 1, Description: "Search Notes visible in the current Space.", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
+		{Name: toolboxNotesRead, Version: 1, Description: "Read one Note visible in the current Space, including its Markdown body (empty means the Note has no text yet).", Risk: serveragent.RiskRead, InputSchema: readSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
+		{Name: toolboxNotesCreate, Version: 1, Description: "Create a native Note in the current Space from a title and Markdown body.", Risk: serveragent.RiskWrite, InputSchema: writeSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AuditEvent: "note.created", Sources: agentToolboxSpaceSources},
+		{Name: toolboxNotesUpdate, Version: 1, Description: "Change an explicitly identified Note: a new title, a replacement Markdown body, or Markdown appended to the end of the body.", Risk: serveragent.RiskWrite, InputSchema: updateSchema, OutputSchema: agentToolObjectOutputSchema(), AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "note.updated", Sources: agentToolboxSpaceSources},
 	}
 }
 

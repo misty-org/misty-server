@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kannachi323/misty/server/internal/integrations/composio"
+	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 // appsUser authenticates the account owner. Extension and app authority can
@@ -187,6 +188,8 @@ func (s *SpacesService) DisconnectApp() http.HandlerFunc {
 			writeAppsError(w, err)
 			return
 		}
+		// The account is gone from Composio, so a failure here only leaves picks
+		// that runs already ignore.
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -216,12 +219,20 @@ func (s *SpacesService) AppRequestControl() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		state := map[string]string{"approve": "approved", "decline": "declined"}[body.Decision]
-		if state == "" {
+		// continue approves this one action; remember also stores the grant the
+		// card named; deny declines. approve and decline are older names.
+		decision := map[string]string{"continue": "approved", "approve": "approved", "remember": "remember", "deny": "declined", "decline": "declined"}[body.Decision]
+		if decision == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_decision"})
 			return
 		}
-		request, err := s.database.DecideAgentAppRequest(r.Context(), user, id, state)
+		var request *db.AgentAppRequest
+		var err error
+		if decision == "remember" {
+			request, err = s.rememberAppRequest(r.Context(), user, id)
+		} else {
+			request, err = s.database.DecideAgentAppRequest(r.Context(), user, id, decision)
+		}
 		if err != nil {
 			writeSpaceError(w, err)
 			return

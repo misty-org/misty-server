@@ -17,6 +17,6 @@ describe("visual tool output", () => {
   });
 
   it("keeps other tools as text", () => {
-    expect(visualToolOutput("notes.search", { image: { dataUrl: "data:image/png;base64,AAAA" } }).type).toBe("text");
+    expect(visualToolOutput("note.search", { image: { dataUrl: "data:image/png;base64,AAAA" } }).type).toBe("text");
   });
 });

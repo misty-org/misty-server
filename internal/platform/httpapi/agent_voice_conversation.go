@@ -140,5 +140,5 @@ func (s *AgentsService) runVoiceConversation(ctx context.Context, client *websoc
 // voiceToolAdmits reports a voice tool whose client admits a new invocation
 // under the call's idempotency key, rather than acting on the bound task.
 func voiceToolAdmits(name string) bool {
-	return name == "start_task" || name == "show_on_screen"
+	return name == "start_task"
 }

@@ -65,17 +65,6 @@ func (s *AIService) DecideArtifact() http.HandlerFunc {
 				}
 			}
 		}
-		if body.Decision == "accept" && len(body.Operations) > 0 {
-			artifact := s.invocations.artifactForUser(userID, artifactID)
-			if artifact == nil || artifact.Kind != "task_set" || s.invocations.reviseTaskSetArtifact(userID, artifactID, body.Operations) != nil {
-				http.Error(w, "invalid artifact operations", http.StatusBadRequest)
-				return
-			}
-			if err := s.database.UpdateAIArtifactOperations(r.Context(), userID, artifactID, body.Operations); err != nil {
-				TestingWriteAIError(w, err)
-				return
-			}
-		}
 		if _, err := s.database.DecideAIArtifact(r.Context(), userID, artifactID, body.Decision); err != nil {
 			if errors.Is(err, db.ErrSpaceConflict) {
 				writeJSON(w, http.StatusConflict, map[string]any{"code": "artifact_already_decided", "message": "This draft has already been decided."})
@@ -102,35 +91,6 @@ func (s *AIService) DecideArtifact() http.HandlerFunc {
 			})
 			return
 		}
-		if body.Decision == "accept" && artifact.Kind == "task_set" {
-			created, err := s.applyTaskSetArtifact(r.Context(), userID, artifact)
-			if err != nil {
-				_ = s.database.CompleteAIArtifact(r.Context(), userID, artifact.ID, "failed", "Task creation failed after permissions were rechecked.")
-				s.invocations.completeArtifact(userID, artifact.ID, "failed", "Task creation failed after permissions were rechecked.")
-				TestingWriteAIError(w, err)
-				return
-			}
-			if err := s.database.CompleteAIArtifact(r.Context(), userID, artifact.ID, "applied", ""); err != nil {
-				TestingWriteAIError(w, err)
-				return
-			}
-			artifact, _ = s.invocations.completeArtifact(userID, artifact.ID, "applied", "")
-			applyMode, result = "server", map[string]any{"tasks": created}
-		} else if body.Decision == "accept" && artifact.Kind == "calendar_event" {
-			created, err := s.applyCalendarEventArtifact(r.Context(), userID, artifact)
-			if err != nil {
-				_ = s.database.CompleteAIArtifact(r.Context(), userID, artifact.ID, "failed", "Calendar event creation failed after permissions were rechecked.")
-				s.invocations.completeArtifact(userID, artifact.ID, "failed", "Calendar event creation failed after permissions were rechecked.")
-				TestingWriteAIError(w, err)
-				return
-			}
-			if err := s.database.CompleteAIArtifact(r.Context(), userID, artifact.ID, "applied", ""); err != nil {
-				TestingWriteAIError(w, err)
-				return
-			}
-			artifact, _ = s.invocations.completeArtifact(userID, artifact.ID, "applied", "")
-			applyMode, result = "server", map[string]any{"event": created}
-		}
 		if artifact.State == "applied" && artifact.InvocationID != "" {
 			s.invocations.append(artifact.InvocationID, aiInvocationEvent{
 				Type: "effect.applied", ArtifactID: artifact.ID, Text: artifact.Summary,
@@ -138,66 +98,6 @@ func (s *AIService) DecideArtifact() http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"artifact": artifact, "applyMode": applyMode, "result": result})
 	}
-}
-
-func (s *AIService) applyCalendarEventArtifact(ctx context.Context, userID string, artifact *aiArtifact) (*db.SpaceCalendarEvent, error) {
-	spaceID, _ := artifact.Target["spaceId"].(string)
-	if strings.TrimSpace(spaceID) == "" || artifact.Risk != "consequential" || artifact.ApprovalPolicy != "confirm" {
-		return nil, db.ErrSpaceInvalid
-	}
-	raw, err := json.Marshal(artifact.Operations)
-	if err != nil {
-		return nil, db.ErrSpaceInvalid
-	}
-	var input struct {
-		Title       string   `json:"title"`
-		Description string   `json:"description"`
-		StartsAt    string   `json:"starts_at"`
-		EndsAt      string   `json:"ends_at"`
-		Timezone    string   `json:"timezone"`
-		AllDay      bool     `json:"all_day"`
-		Location    string   `json:"location"`
-		Invitees    []string `json:"invitees"`
-	}
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&input) != nil || len(input.Invitees) != 0 {
-		return nil, db.ErrSpaceInvalid
-	}
-	startsAt, startErr := time.Parse(time.RFC3339, input.StartsAt)
-	endsAt, endErr := time.Parse(time.RFC3339, input.EndsAt)
-	if startErr != nil || endErr != nil || !endsAt.After(startsAt) {
-		return nil, db.ErrSpaceInvalid
-	}
-	return s.database.CreateNativeCalendarEvent(ctx, userID, db.SpaceCalendarEvent{
-		ID: "native_event_" + artifact.ID, SpaceID: spaceID,
-		Title: input.Title, Description: input.Description, Location: input.Location,
-		StartsAt: startsAt, EndsAt: endsAt, AllDay: input.AllDay, Timezone: input.Timezone,
-		Status: "confirmed", AudienceKind: db.SpaceAudienceSpace, CreatedByUserID: userID,
-	})
-}
-
-func (s *AIService) applyTaskSetArtifact(ctx context.Context, userID string, artifact *aiArtifact) ([]db.SpaceTask, error) {
-	spaceID, _ := artifact.Target["spaceId"].(string)
-	if strings.TrimSpace(spaceID) == "" || artifact.Risk != "consequential" || artifact.ApprovalPolicy != "confirm" {
-		return nil, db.ErrSpaceInvalid
-	}
-	raw, err := json.Marshal(artifact.Operations["tasks"])
-	if err != nil {
-		return nil, db.ErrSpaceInvalid
-	}
-	var drafts []aiTaskDraft
-	if json.Unmarshal(raw, &drafts) != nil || len(drafts) < 1 || len(drafts) > 20 {
-		return nil, db.ErrSpaceInvalid
-	}
-	items := make([]db.SpaceTask, 0, len(drafts))
-	for _, draft := range drafts {
-		items = append(items, db.SpaceTask{
-			ID: draft.ID, SpaceID: spaceID, Title: draft.Title, Notes: draft.Notes,
-			Status: "todo", Priority: draft.Priority, DueTimezone: "UTC", SourceRefs: json.RawMessage(`[]`),
-		})
-	}
-	return s.database.CreateSpaceTaskBatch(ctx, userID, spaceID, items)
 }
 
 func (s *AIService) CompleteArtifact() http.HandlerFunc {
@@ -262,6 +162,10 @@ func validateAIInvocationInput(body *aiInvocationInput) error {
 	if body.CollaborationMode != "" && body.CollaborationMode != "act" && body.CollaborationMode != "plan" {
 		return errors.New("collaboration mode must be act or plan")
 	}
+	body.PermissionMode = strings.TrimSpace(body.PermissionMode)
+	if body.PermissionMode != "" && body.PermissionMode != "ask" && body.PermissionMode != "auto" {
+		return errors.New("permission mode must be ask or auto")
+	}
 	if body.Timezone == "" {
 		body.Timezone = "UTC"
 	}
@@ -309,7 +213,7 @@ func validateAIInvocationInput(body *aiInvocationInput) error {
 	if err := validateAICapture(body.Capture); err != nil {
 		return err
 	}
-	if body.RequestedArtifactKind != "" && body.RequestedArtifactKind != "text_patch" && body.RequestedArtifactKind != "task_set" {
+	if body.RequestedArtifactKind != "" && body.RequestedArtifactKind != "text_patch" {
 		if _, ok := aiArtifactSpecs[body.RequestedArtifactKind]; !ok {
 			return errors.New("unsupported artifact kind")
 		}
@@ -326,7 +230,6 @@ func TestingValidateAIInvocationAttachmentShape(prompt string, attachmentIDs []s
 
 var aiSurfaceIDs = map[string]bool{
 	"global": true, "activity": true, "space.chat": true,
-	"planner.tasks": true, "planner.agenda": true, "planner.roadmap": true,
 	"notes": true, "drawings": true, "library": true,
 	"browser": true, "files": true, "code": true, "terminal": true,
 	"transfers": true, "extensions": true, "photo-editor": true,

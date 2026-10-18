@@ -44,7 +44,7 @@ it("drops all but the newest two snapshots in one batch", () => {
 
 it("leaves other tools' results alone", () => {
   const messages: ModelMessage[] = [{ role: "user", content: "Go" }];
-  for (let index = 0; index < 8; index++) messages.push(call(`n${index}`, "notes_search"), result(`n${index}`, "notes_search", { tree: tree(index) }));
+  for (let index = 0; index < 8; index++) messages.push(call(`n${index}`, "note_search"), result(`n${index}`, "note_search", { tree: tree(index) }));
   expect(pruneStalePageSnapshots(messages).dropped).toBe(0);
 });
 

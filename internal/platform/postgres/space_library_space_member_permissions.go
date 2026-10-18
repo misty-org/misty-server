@@ -6,149 +6,18 @@ import (
 	"errors"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/spaces"
-
 	"github.com/google/uuid"
 )
-
-func (db *Database) SpaceMemberPermissions(ctx context.Context, actorUserID, spaceID, memberUserID string) (map[string]bool, error) {
-	out := map[string]bool{}
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, actorUserID); err != nil {
-			return err
-		}
-		if actorUserID != memberUserID {
-			if err := requireSpaceOwnerTx(ctx, tx, spaceID, actorUserID); err != nil {
-				return ErrLibraryForbidden
-			}
-		}
-		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, memberUserID); err != nil {
-			return ErrLibraryNotFound
-		}
-		for _, permission := range configurableSpacePermissions {
-			allowed, err := hasSpacePermissionTx(ctx, tx, memberUserID, spaceID, permission)
-			if err != nil {
-				return err
-			}
-			out[permission] = allowed
-		}
-		applySpacePermissionDependencies(out)
-		return nil
-	})
-	return out, err
-}
-
-func applySpacePermissionDependencies(permissions map[string]bool) {
-	spaces.ApplyPermissionDependencies(permissions)
-}
-
-func (db *Database) SetSpaceMemberPermission(
-	ctx context.Context,
-	ownerUserID,
-	spaceID,
-	memberUserID,
-	permission,
-	effect string,
-) error {
-	validPermission := false
-	for _, candidate := range configurableSpacePermissions {
-		if permission == candidate {
-			validPermission = true
-			break
-		}
-	}
-	if !validPermission || effect != "allow" && effect != "deny" && effect != "inherit" {
-		return ErrLibraryInvalid
-	}
-
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerUserID); err != nil {
-			return ErrLibraryForbidden
-		}
-		role, err := requireSpaceMemberTx(ctx, tx, spaceID, memberUserID)
-		if err != nil {
-			return ErrLibraryNotFound
-		}
-		if role == "owner" {
-			return ErrLibraryInvalid
-		}
-
-		if effect == "inherit" {
-			_, err = tx.ExecContext(
-				ctx,
-				`DELETE FROM space_member_permission_overrides
-				 WHERE space_id=$1 AND user_id=$2 AND permission=$3`,
-				spaceID,
-				memberUserID,
-				permission,
-			)
-		} else {
-			_, err = tx.ExecContext(
-				ctx,
-				`INSERT INTO space_member_permission_overrides(
-					space_id,user_id,permission,effect,updated_by_user_id
-				) VALUES($1,$2,$3,$4,$5)
-				ON CONFLICT(space_id,user_id,permission) DO UPDATE
-				SET effect=excluded.effect,
-					updated_by_user_id=excluded.updated_by_user_id,
-					version=space_member_permission_overrides.version+1,
-					updated_at=NOW()`,
-				spaceID,
-				memberUserID,
-				permission,
-				effect,
-				ownerUserID,
-			)
-		}
-		if err != nil {
-			return err
-		}
-
-		var securityDomainID string
-		if err := tx.QueryRowContext(
-			ctx,
-			`SELECT security_domain_id FROM spaces WHERE id=$1`,
-			spaceID,
-		).Scan(&securityDomainID); err != nil {
-			return err
-		}
-		return insertLibraryAuditTx(
-			ctx,
-			tx,
-			spaceID,
-			securityDomainID,
-			ownerUserID,
-			"space.permission.updated",
-			"member",
-			memberUserID,
-			"success",
-			map[string]any{"permission": permission, "effect": effect},
-		)
-	})
-}
 
 func hasSpacePermissionTx(ctx context.Context, tx *sql.Tx, userID, spaceID, permission string) (bool, error) {
 	role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
 	if err != nil {
 		return false, err
 	}
+	// Owners can do everything; every other member can do everything except
+	// manage the Space itself. There are no roles or per-member overrides.
 	if role == "owner" {
 		return true, nil
-	}
-	var effect string
-	err = tx.QueryRowContext(
-		ctx,
-		`SELECT effect FROM space_member_permission_overrides
-		 WHERE space_id=$1 AND user_id=$2 AND permission=$3`,
-		spaceID,
-		userID,
-		permission,
-	).Scan(&effect)
-	if err == nil {
-		return effect == "allow", nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return false, err
 	}
 	return fixedMemberPermission(permission), nil
 }
@@ -158,8 +27,7 @@ func fixedMemberPermission(permission string) bool {
 	case PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload,
 		PermissionLibraryView, PermissionLibraryUpload, PermissionLibraryAdd,
 		PermissionLibraryEdit, PermissionLibraryDownload, PermissionLibraryImport,
-		PermissionStorageViewOwn, PermissionStudioView, PermissionAskRun,
-		PermissionTasksView, PermissionTasksManage:
+		PermissionStorageViewOwn, PermissionStudioView, PermissionAskRun:
 		return true
 	default:
 		return false

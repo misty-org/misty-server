@@ -24,4 +24,11 @@ describe("legacy Go tool catalog compatibility", () => {
     const input = { type: "object", required: "operation" };
     expect(() => ajv.compile(normalizeToolInputSchema(input))).toThrow();
   });
+  it("drops top-level combinators providers refuse, keeping the properties", () => {
+    const input = { type: "object", properties: { attachmentId: { type: "string" }, downloadId: { type: "string" } }, required: ["documentId"],
+      oneOf: [{ required: ["attachmentId"] }, { required: ["downloadId"] }], additionalProperties: false };
+    const normalized = normalizeToolInputSchema(input);
+    expect(normalized).not.toHaveProperty("oneOf");
+    expect(normalized).toEqual({ type: "object", properties: input.properties, required: ["documentId"], additionalProperties: false });
+  });
 });

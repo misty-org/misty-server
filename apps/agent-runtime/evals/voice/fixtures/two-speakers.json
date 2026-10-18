@@ -1,0 +1,9 @@
+{
+  "audio": "two-speakers.wav",
+  "note": "A recorded two-person exchange (record it once; WAV, 16 kHz mono). Speaker A opens, B answers, A closes.",
+  "turns": [
+    { "speaker": "A", "text": "Can we ship the dictation pill on Thursday?" },
+    { "speaker": "B", "text": "Yes, after the design review." },
+    { "speaker": "A", "text": "Great, I'll book the room." }
+  ]
+}

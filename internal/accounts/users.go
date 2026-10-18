@@ -15,7 +15,6 @@ import (
 type User struct {
 	ID                  string
 	LicenseID           string
-	Name                string
 	Username            string
 	Email               string
 	Provider            string
@@ -31,27 +30,27 @@ type UserSettings struct {
 	ErrorReportingEnabled bool `json:"error_reporting_enabled"`
 }
 
-func (db Store) CreateUser(name, email, password string) (*User, error) {
-	return db.createUser(name, DefaultUsernameForEmail(email), email, password)
+func (db Store) CreateUser(email, password string) (*User, error) {
+	return db.createUser(DefaultUsernameForEmail(email), email, password)
 }
 
-func (db Store) CreateUserWithUsername(name, username, email, password string) (*User, error) {
+func (db Store) CreateUserWithUsername(username, email, password string) (*User, error) {
 	normalizedUsername, err := NormalizeUsername(username)
 	if err != nil {
 		return nil, err
 	}
-	return db.createUser(name, normalizedUsername, email, password)
+	return db.createUser(normalizedUsername, email, password)
 }
 
-func (db Store) createUser(name, username, email, password string) (*User, error) {
+func (db Store) createUser(username, email, password string) (*User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
-	return db.createIdentity(name, username, email, string(hash), "misty", "")
+	return db.createIdentity(username, email, string(hash), "misty", "")
 }
 
-func (db Store) createIdentity(name, username, email, hash, provider, subject string) (*User, error) {
+func (db Store) createIdentity(username, email, hash, provider, subject string) (*User, error) {
 	normalizedEmail := NormalizeEmail(email)
 
 	id := uuid.New().String()
@@ -61,8 +60,8 @@ func (db Store) createIdentity(name, username, email, hash, provider, subject st
 	err := db.Transaction(context.Background(), RegistrationScope(id, licenseID, normalizedEmail), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(
 			context.Background(),
-			`INSERT INTO users (id, license_id, name, username, email, password_hash, provider, provider_subject) VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8,''))`,
-			id, licenseID, name, username, normalizedEmail, hash, provider, subject,
+			`INSERT INTO users (id, license_id, username, email, password_hash, provider, provider_subject) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7,''))`,
+			id, licenseID, username, normalizedEmail, hash, provider, subject,
 		)
 		if err != nil {
 			return err
@@ -83,7 +82,7 @@ func (db Store) createIdentity(name, username, email, hash, provider, subject st
 		return nil, err
 	}
 
-	return &User{ID: id, LicenseID: licenseID, Name: name, Username: username, Email: normalizedEmail, Provider: provider, ProviderSubject: subject, CreatedAt: now}, nil
+	return &User{ID: id, LicenseID: licenseID, Username: username, Email: normalizedEmail, Provider: provider, ProviderSubject: subject, CreatedAt: now}, nil
 }
 
 func (db Store) GetUserByEmail(email string) (*User, string, error) {
@@ -94,10 +93,10 @@ func (db Store) GetUserByEmail(email string) (*User, string, error) {
 	err := db.Transaction(context.Background(), AnonymousScope(normalizedEmail), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(
 			context.Background(),
-			`SELECT id, license_id, name, username, email, password_hash, created_at, provider, COALESCE(provider_subject,'')
+			`SELECT id, license_id, username, email, password_hash, created_at, provider, COALESCE(provider_subject,'')
 			 FROM users WHERE LOWER(email)=$1 AND lifecycle_state='active'`,
 			normalizedEmail,
-		).Scan(&u.ID, &u.LicenseID, &u.Name, &u.Username, &u.Email, &hash, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
+		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &hash, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -108,17 +107,6 @@ func (db Store) GetUserByEmail(email string) (*User, string, error) {
 	}
 
 	return &u, hash, nil
-}
-
-func (db Store) UpdateUserName(id, name string) error {
-	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(context.Background(), `UPDATE users SET name = $1 WHERE id = $2`, name, id)
-		return err
-	})
-	if err != nil {
-		log.Println("Failed to update user name:", err)
-	}
-	return err
 }
 
 // BumpUserAvatarVersion advances the avatar version without storing bytes in
@@ -168,11 +156,11 @@ func (db Store) GetUserByID(id string) (*User, error) {
 	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(
 			context.Background(),
-			`SELECT id, license_id, name, username, email, avatar_version,
+			`SELECT id, license_id, username, email, avatar_version,
 			        email_updates_enabled, created_at, provider, COALESCE(provider_subject,'')
 			 FROM users WHERE id=$1 AND lifecycle_state='active'`,
 			id,
-		).Scan(&u.ID, &u.LicenseID, &u.Name, &u.Username, &u.Email, &u.AvatarVersion, &u.EmailUpdatesEnabled, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
+		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &u.AvatarVersion, &u.EmailUpdatesEnabled, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

@@ -25,7 +25,7 @@ func (db *Database) SpaceContextRevision(ctx context.Context, userID, spaceID st
 		spaceUpdatedAt   time.Time
 		messageSeq       sql.NullInt64
 		messageEditedAt  sql.NullTime
-		taskUpdatedAt    sql.NullTime
+		noteUpdatedAt    sql.NullTime
 		libraryUpdatedAt sql.NullTime
 		memberCount      int64
 		memberJoinedAt   sql.NullTime
@@ -39,7 +39,7 @@ func (db *Database) SpaceContextRevision(ctx context.Context, userID, spaceID st
 				(SELECT updated_at FROM spaces WHERE id=$1),
 				(SELECT MAX(seq) FROM space_messages WHERE space_id=$1),
 				(SELECT MAX(edited_at) FROM space_messages WHERE space_id=$1),
-				(SELECT MAX(updated_at) FROM space_tasks WHERE space_id=$1),
+				(SELECT MAX(updated_at) FROM space_notes WHERE space_id=$1),
 				(SELECT MAX(updated_at) FROM space_library_items WHERE space_id=$1),
 				(SELECT COUNT(*) FROM space_members WHERE space_id=$1),
 				(SELECT MAX(joined_at) FROM space_members WHERE space_id=$1)
@@ -47,7 +47,7 @@ func (db *Database) SpaceContextRevision(ctx context.Context, userID, spaceID st
 			&spaceUpdatedAt,
 			&messageSeq,
 			&messageEditedAt,
-			&taskUpdatedAt,
+			&noteUpdatedAt,
 			&libraryUpdatedAt,
 			&memberCount,
 			&memberJoinedAt,
@@ -65,13 +65,13 @@ func (db *Database) SpaceContextRevision(ctx context.Context, userID, spaceID st
 	// is a stale name rather than a permission leak, since every section still
 	// re-checks its own permission when it is rebuilt.
 	digest := sha256.Sum256([]byte(fmt.Sprintf(
-		"space=%s|user=%s|space_at=%d|msg_seq=%d|msg_edit=%d|task_at=%d|lib_at=%d|members=%d|joined=%d",
+		"space=%s|user=%s|space_at=%d|msg_seq=%d|msg_edit=%d|note_at=%d|lib_at=%d|members=%d|joined=%d",
 		spaceID,
 		userID,
 		spaceUpdatedAt.UnixNano(),
 		messageSeq.Int64,
 		nullTimeNanos(messageEditedAt),
-		nullTimeNanos(taskUpdatedAt),
+		nullTimeNanos(noteUpdatedAt),
 		nullTimeNanos(libraryUpdatedAt),
 		memberCount,
 		nullTimeNanos(memberJoinedAt),

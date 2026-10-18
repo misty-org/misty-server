@@ -10,11 +10,11 @@ import (
 )
 
 func TestOnlyReadsAreAnnouncedOnArrival(t *testing.T) {
-	if !announcesToolStart(agenttools.Descriptor{Name: "web.search", Risk: serveragent.RiskRead}) {
+	if !announcesToolStart(agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: "web.search", Risk: serveragent.RiskRead}) {
 		t.Fatal("a read must be announced when it arrives")
 	}
 	for _, risk := range []string{serveragent.RiskWrite, serveragent.RiskDangerous} {
-		if announcesToolStart(agenttools.Descriptor{Name: "notes.update", Risk: risk}) {
+		if announcesToolStart(agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: "note.update", Risk: risk}) {
 			t.Fatalf("a %s tool keeps its runtime start checkpoint", risk)
 		}
 	}

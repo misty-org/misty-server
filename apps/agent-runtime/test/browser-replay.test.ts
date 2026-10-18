@@ -64,7 +64,7 @@ it("stops the run when an action's outcome is unknown, and hands off for approva
 it("accepts only well-formed replays of browser actions", () => {
   expect(validReplay(replay)).toBe(true);
   expect(validReplay({ ...replay, calls: [] })).toBe(false);
-  expect(validReplay({ ...replay, calls: [{ tool: "notes.create", args: {} }] })).toBe(false);
+  expect(validReplay({ ...replay, calls: [{ tool: "note.create", args: {} }] })).toBe(false);
   expect(validReplay({ ...replay, scope_id: "x" })).toBe(false);
   expect(validReplay(null)).toBe(false);
 });

@@ -16,11 +16,8 @@ import { scoreReply, summarize, validateFixture, type PointingResult } from "./s
 
 const here = resolve(import.meta.dirname);
 const prompts = resolve(here, "../../../../internal/platform/httpapi");
-/** Exactly what a teaching turn's system prompt carries about the companion. */
-const system = [
-  readFileSync(join(prompts, "companion_teach_prompt.txt"), "utf8"),
-  readFileSync(join(prompts, "companion_teach_turn.txt"), "utf8"),
-].join("");
+/** The cursor's pointing rules, exactly as an agent.entry.cursor run carries them. */
+const system = readFileSync(join(prompts, "companion_teach_prompt.txt"), "utf8");
 const fixturesDir = resolve(process.env.MISTY_POINTING_EVAL_FIXTURES || join(here, "fixtures"));
 const models = (process.env.MISTY_POINTING_EVAL_MODELS || "")
   .split(",")

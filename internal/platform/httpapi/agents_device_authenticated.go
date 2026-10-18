@@ -245,8 +245,6 @@ func writeAgentError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "reason": "personal_storage_limit_reached", "message": "Your account has reached its cloud storage limit."})
 	case errors.Is(err, db.ErrLibraryQuota):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "message": "Storage quota has been reached."})
-	case errors.Is(err, db.ErrLibraryReauthentication):
-		writeJSON(w, http.StatusForbidden, map[string]string{"code": "reauthentication_required", "message": "This Library item requires you to confirm access first."})
 	case errors.Is(err, db.ErrPersonalAgentModel):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_unavailable"})
 	case isHostedAILimitReached(err):

@@ -8,15 +8,15 @@ describe("structured task outcome", () => {
     const call = {type: "tool-call", toolName: taskCompletionTool, toolCallId: "finish", input: report("completed")};
     const receipt = {type: "tool-result", toolName: taskCompletionTool, toolCallId: "finish", output: report("completed")};
     expect(finalTaskCompletion([{content:[call]}], [receipt])?.outcome).toBe("completed");
-    for (const receipts of [[], [{...receipt,toolCallId:"earlier"}], [{...receipt,toolName:"notes.read"}], [{...receipt,type:"tool-error"}], [receipt,receipt], [{...receipt,output:{outcome:"completed"}}]])
+    for (const receipts of [[], [{...receipt,toolCallId:"earlier"}], [{...receipt,toolName:"note.read"}], [{...receipt,type:"tool-error"}], [receipt,receipt], [{...receipt,output:{outcome:"completed"}}]])
       expect(finalTaskCompletion([{content:[call]}], receipts)).toBeUndefined();
-    expect(finalTaskCompletion([{content:[call,{type:"tool-call",toolName:"notes.create",toolCallId:"write"}]}], [receipt])).toBeUndefined();
+    expect(finalTaskCompletion([{content:[call,{type:"tool-call",toolName:"note.create",toolCallId:"write"}]}], [receipt])).toBeUndefined();
     expect(finalTaskCompletion([{content:[call]},{content:[{type:"text"}]}], [receipt])).toBeUndefined();
   });
   it("keeps earlier reads without a deliverable blocked", () => {
     const value = report("blocked", [{ requirement: "Verified GothamChess weekly playlist manifest", reason: "No authorized browser or YouTube reader is available." }]);
     const completed = finalTaskCompletion([
-      { content: [{ type: "tool-result", toolName: "notes_search", output: { results: [] } }] },
+      { content: [{ type: "tool-result", toolName: "note_search", output: { results: [] } }] },
       finishStep(value),
     ]);
     expect(taskCompletionOutcome(completed)).toMatchObject({ status: "incomplete", error_code: "task_blocked" });
@@ -33,7 +33,7 @@ describe("structured task outcome", () => {
   });
   it("requires the final standalone report after any further work or steering", () => {
     const earlier = finishStep(report("completed"));
-    const later = {content:[{type:"tool-result",toolName:"notes.create",output:{id:"note"}}]};
+    const later = {content:[{type:"tool-result",toolName:"note.create",output:{id:"note"}}]};
     expect(finalTaskCompletion([earlier,later])).toBeUndefined();
     expect(finalTaskCompletion([{content:[...earlier.content,...later.content]}])).toBeUndefined();
     expect(finalTaskCompletion([earlier,later,finishStep(report("partial"))])?.outcome).toBe("partial");

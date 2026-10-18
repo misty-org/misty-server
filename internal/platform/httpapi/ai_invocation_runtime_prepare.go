@@ -7,7 +7,6 @@ import (
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/aimodels"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
@@ -78,11 +77,6 @@ func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *
 		// Plan mode is read-only: write tools are neither listed nor executable.
 		allowedTools = planModeTools(toolbox, allowedTools)
 	}
-	if companionTeaches(body) {
-		// Teaching explains and points at the attached screens; with no tools
-		// listed, none can execute either.
-		allowedTools = []string{}
-	}
 	methodGuidance, err := invocationMethodGuidance(ctx, s.database, record.UserID, &body, allowedTools)
 	if err != nil {
 		return nil, err
@@ -116,7 +110,7 @@ func (s *SpacesService) aiInvocationContext(ctx context.Context, record *db.AIIn
 	if body.AgentID != "" || (body.SurfaceID != "activity" && body.SurfaceID != "global") || !shouldRetrieveAccountContext(body.Prompt) {
 		return resolved, nil
 	}
-	embedding, _ := s.globalSearchQueryEmbedding(ctx, record.UserID, body.Prompt)
+	embedding, _ := s.agentQueryEmbedding(ctx, record.UserID, body.Prompt)
 	retrieved, err := broker.retrieveAccount(ctx, record.UserID, body.Prompt, embedding, 4, "", configuredEmbeddingModel(ctx, s.searchAnalyzer, record.UserID))
 	if err != nil {
 		return nil, err
@@ -128,7 +122,7 @@ func (s *SpacesService) aiInvocationContext(ctx context.Context, record *db.AIIn
 // conversation, prior write receipts and the request with its context.
 func (s *SpacesService) aiInvocationPrompt(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput, resolved []aiResolvedContext) (string, error) {
 	prompt := compileAIInvocationPrompt(body, resolved)
-	memory, err := loadAgentMemoryContext(ctx, s.database, record.UserID, "", body.AgentID)
+	memory, err := loadAgentMemoryContext(ctx, s.database, record.UserID, body.SpaceID, body.AgentID)
 	if err != nil {
 		return "", err
 	}
@@ -167,18 +161,11 @@ func (s *SpacesService) aiInvocationPrompt(ctx context.Context, record *db.AIInv
 // aiInvocationModel freezes the run's model at admission; changing a
 // conversation must not change an in-flight turn.
 func aiInvocationModel(body aiInvocationInput) (string, string) {
-	modelID := serveragent.FrontierDefaultModelID()
-	if body.ModelID != "" {
-		modelID = body.ModelID
+	modelID := serveragent.HouseModel(body.ModelID)
+	if body.Mode == "companion" {
+		modelID = serveragent.HouseModel(body.CompanionModel)
 	}
-	if body.Mode == "companion" && body.CompanionModel != "" {
-		modelID = body.CompanionModel
-	}
-	reasoning := serveragent.ManagedReasoning(body.ThinkingMode, body.ReasoningEffort)
-	if body.ModelID != "" && aimodels.ValidReasoning(body.ReasoningEffort) {
-		reasoning = body.ReasoningEffort
-	}
-	return modelID, reasoning
+	return modelID, serveragent.HouseEffort(body.ReasoningEffort)
 }
 
 func aiInvocationModelID(body aiInvocationInput) string {

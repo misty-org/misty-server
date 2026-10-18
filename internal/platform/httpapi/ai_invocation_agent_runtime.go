@@ -88,14 +88,13 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 		"space_name": prepared.spaceName, "space_kind": prepared.spaceKind,
 		"timezone": prepared.timezone, "current_time": prepared.currentTime.Format(time.RFC3339),
 		"members": prepared.members, "model_id": agentRoute.Model, "reasoning_effort": agentRoute.Reasoning, "vision_model_id": visionRoute.Model,
-		"run_mode": "full", "system": prepared.system, "prompt": prepared.prompt,
+		"run_mode": prepared.body.PermissionMode, "system": prepared.system, "prompt": prepared.prompt,
 		"attached_sources": []any{}, "file_warnings": "", "allowed_tools": prepared.allowedTools,
 		"model_turn_limit":      record.ModelTurnLimit,
 		"context_window_tokens": serveragent.ModelContextWindow(r.Context(), agentRoute.Model),
 		"capture":               prepared.body.Capture,
 		"display_captures":      prepared.body.DisplayCaptures,
 		"companion_mode":        prepared.body.CompanionMode,
-		"companion_explanation": companionTeaches(prepared.body),
 		"attachments":           attachments,
 		"browser_replay":        s.browserWorkflowReplayContext(r.Context(), record, prepared.body),
 	})
@@ -145,7 +144,7 @@ func (s *SpacesService) agentRuntimeToolAIInvocation(w http.ResponseWriter, r *h
 }
 
 func runtimeToolStatus(name string) string {
-	if name == "misty_finish_task" || name == "misty.finish.task" {
+	if name == "agent_finish" || name == "agent.finish" {
 		return "Finishing task…"
 	}
 	label := strings.ReplaceAll(strings.TrimSpace(name), "_", " ")

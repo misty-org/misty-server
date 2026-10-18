@@ -29,9 +29,9 @@ func TestA2AEndpointPostgres(t *testing.T) {
 	t.Cleanup(func() { a2aStreamPoll = restorePoll })
 	database := testkit.OpenDatabase(t)
 	ctx := t.Context()
-	alice, _ := database.CreateUser("Alice", "a2a-alice@example.test", "password123")
-	bob, _ := database.CreateUser("Bob", "a2a-bob@example.test", "password123")
-	outsider, _ := database.CreateUser("Outsider", "a2a-outsider@example.test", "password123")
+	alice, _ := database.CreateUser("a2a-alice@example.test", "password123")
+	bob, _ := database.CreateUser("a2a-bob@example.test", "password123")
+	outsider, _ := database.CreateUser("a2a-outsider@example.test", "password123")
 	space, err := database.TestingCreateSpace(ctx, alice.ID, "Launch team")
 	if err != nil {
 		t.Fatal(err)
@@ -42,11 +42,11 @@ func TestA2AEndpointPostgres(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	researcher, _ := database.SavePersonalAgent(ctx, bob.ID, "", db.AgentProfileInput{Name: "Researcher", Enabled: true, SpaceID: space.ID})
+	researcher, _ := database.SavePersonalAgent(ctx, bob.ID, "", db.AgentProfileInput{Name: "Researcher", Enabled: true})
 	assistant, _ := database.SavePersonalAgent(ctx, alice.ID, "", db.AgentProfileInput{Name: "Assistant", Enabled: true})
 	planner, _ := database.SavePersonalAgent(ctx, alice.ID, "", db.AgentProfileInput{Name: "Planner", Enabled: true})
 	outsiderAgent, _ := database.SavePersonalAgent(ctx, outsider.ID, "", db.AgentProfileInput{Name: "Stranger", Enabled: true})
-	if _, err := database.SaveSpaceAgentListing(ctx, bob.ID, space.ID, researcher.ID, db.SpaceAgentListingInput{Description: "Answers research questions"}); err != nil {
+	if _, err := database.AddSpaceAgent(ctx, bob.ID, space.ID, researcher.ID); err != nil {
 		t.Fatal(err)
 	}
 	service := &SpacesService{database: database}
@@ -143,11 +143,11 @@ func TestA2AEndpointPostgres(t *testing.T) {
 		t.Fatalf("agent token from another session = %d", stolen.StatusCode)
 	}
 
-	// Send, replay, approve, and the task is scoped to the agent that sent it.
+	// Send and replay; the task is scoped to the agent that sent it.
 	first, _ := send(alice.ID, aliceToken, "message/send", message("m-1", "What is the launch date?"))
 	id, state := taskState(first)
-	if state != "auth-required" {
-		t.Fatalf("new request state = %s, want auth-required while Bob decides", state)
+	if state != "submitted" {
+		t.Fatalf("new request state = %s, want submitted at once", state)
 	}
 	if replay, _ := send(alice.ID, aliceToken, "message/send", message("m-1", "What is the launch date?")); replay["result"].(map[string]any)["id"] != id {
 		t.Fatalf("repeated messageId created a second task: %v", replay)
@@ -213,15 +213,11 @@ func TestA2AEndpointPostgres(t *testing.T) {
 			t.Fatalf("no push for %s", want)
 		}
 	}
-	readPush("auth-required")
-	if _, err := database.DecideAgentMemberRequest(ctx, bob.ID, id, true); err != nil {
-		t.Fatal(err)
-	}
 	readPush("submitted")
 	closeInbox()
 	inbox.Body.Close()
 
-	// A stream follows a new task through approval to its reply.
+	// A stream follows a new task to its reply.
 	streamContext, closeStream := context.WithTimeout(ctx, 20*time.Second)
 	defer closeStream()
 	stream, err := http.DefaultClient.Do(request(alice.ID, "a2a-session-"+alice.ID, aliceToken, http.MethodPost, path,
@@ -246,14 +242,8 @@ func TestA2AEndpointPostgres(t *testing.T) {
 	}
 	opened := nextUpdate()
 	streamed := opened["id"].(string)
-	if opened["kind"] != "task" || opened["status"].(map[string]any)["state"] != "auth-required" {
+	if opened["kind"] != "task" || opened["status"].(map[string]any)["state"] != "submitted" {
 		t.Fatalf("stream opened with %v", opened)
-	}
-	if _, err := database.DecideAgentMemberRequest(ctx, bob.ID, streamed, true); err != nil {
-		t.Fatal(err)
-	}
-	if update := nextUpdate(); update["kind"] != "status-update" || update["final"] != false || update["status"].(map[string]any)["state"] != "submitted" {
-		t.Fatalf("approval update = %v", update)
 	}
 	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `UPDATE space_runs SET state='completed',result='{"text":"Launch is Friday."}'::jsonb,completed_at=NOW()

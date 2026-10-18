@@ -23,16 +23,23 @@ type aiInvocationInput struct {
 	SkillVersionIDs []string       `json:"skill_version_ids,omitempty"`
 	CompanionMode   string         `json:"companion_mode,omitempty"`
 	CompanionModel  string         `json:"companion_model,omitempty"`
-	CompanionIntent string         `json:"companion_intent,omitempty"` // "teach": explain and point at the screens, no tools
 	// ModelOverride pins a new conversation's Thinking model with its first
 	// message; an existing conversation sets it with PATCH instead.
-	ModelOverride         string                      `json:"model_override,omitempty"`
-	DisplayCaptures       []aiDisplayCapture          `json:"display_captures,omitempty"`
-	ThinkingMode          string                      `json:"thinking_mode,omitempty"`
-	TaskID                string                      `json:"task_id,omitempty"`
-	AgentID               string                      `json:"agent_id,omitempty"`
-	ExecutionMode         string                      `json:"execution_mode,omitempty"`
-	CollaborationMode     string                      `json:"collaboration_mode,omitempty"` // "plan" or "act"; frozen at admission
+	ModelOverride     string             `json:"model_override,omitempty"`
+	DisplayCaptures   []aiDisplayCapture `json:"display_captures,omitempty"`
+	ThinkingMode      string             `json:"thinking_mode,omitempty"`
+	TaskID            string             `json:"task_id,omitempty"`
+	AgentID           string             `json:"agent_id,omitempty"`
+	// SpaceID is the Space of the window the request came from. Memory tools
+	// read and write that Space's tree; empty is the asker's personal Space.
+	SpaceID string `json:"space_id,omitempty"`
+	ExecutionMode     string             `json:"execution_mode,omitempty"`
+	CollaborationMode string             `json:"collaboration_mode,omitempty"` // "plan" or "act"; frozen at admission
+	PermissionMode    string             `json:"permission_mode,omitempty"`    // "ask" or "auto"; frozen at admission
+	// CodingProject is the attached project a delegated coding run works in.
+	CodingProject string `json:"coding_project,omitempty"`
+	// CodingTool is the coding tool the person picked for this chat; empty uses the Settings default.
+	CodingTool            string                      `json:"coding_tool,omitempty"`
 	WindowLabel           string                      `json:"window_label,omitempty"`
 	Mode                  string                      `json:"mode"`
 	SurfaceID             string                      `json:"surface_id"`
@@ -50,7 +57,7 @@ type aiInvocationInput struct {
 	IdempotencyKey        string                      `json:"idempotency_key"`
 	Timezone              string                      `json:"timezone,omitempty"`
 	// NotebookKey and DelegatedFrom are set by the server for sub-agents
-	// (agents_delegate); requests from clients never carry them.
+	// (agent_delegate); requests from clients never carry them.
 	NotebookKey   string `json:"notebook_key,omitempty"`
 	DelegatedFrom string `json:"delegated_from,omitempty"`
 	// CurrentTab is the Misty browser tab in front of the user when they wrote,
@@ -82,9 +89,11 @@ type aiInvocationEvent struct {
 	// Activity and DurationMS describe a tool call for the reply's timeline.
 	Activity   *aiToolActivity `json:"activity,omitempty"`
 	DurationMS int64           `json:"durationMs,omitempty"`
-	Citation   *aiCitation     `json:"citation,omitempty"`
-	Artifact   *aiArtifact     `json:"artifact,omitempty"`
-	AppRequest *appRequest     `json:"appRequest,omitempty"`
+	// Result is the raw tool result, sent only to local workflow evals.
+	Result     string      `json:"result,omitempty"`
+	Citation   *aiCitation `json:"citation,omitempty"`
+	Artifact   *aiArtifact `json:"artifact,omitempty"`
+	AppRequest *appRequest `json:"appRequest,omitempty"`
 	// ScreenRequest asks the desktop to open a screen and continue the task.
 	ScreenRequest *screenRequest `json:"screenRequest,omitempty"`
 	// Notebook is the run's plan and findings after a notebook write.
@@ -154,7 +163,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			return
 		}
 		// Only the server links a run to a parent's notebook or delegation.
-		body.NotebookKey, body.DelegatedFrom = "", ""
+		body.NotebookKey, body.DelegatedFrom, body.CodingProject = "", "", ""
 		scheduled, ok := s.admitScheduledInvocation(w, r, userID, &body)
 		if !ok {
 			return

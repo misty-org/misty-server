@@ -27,7 +27,7 @@ import (
 func TestScreenModelPassThroughForALiveActJob(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := t.Context()
-	user, err := database.CreateUser("Screen model", uniqueTestEmail("screen-model"), "password123")
+	user, err := database.CreateUser(uniqueTestEmail("screen-model"), "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -108,7 +108,7 @@ func TestCompletedBrowserJobsAndToolNamesComeBackInOrder(t *testing.T) {
   ('j1','owner','inv','browser.snapshot','completed','{}','{"url":"https://x"}'),
   ('j2','owner','inv','browser.steps','completed','{"steps":[]}','{"completed":0}'),
   ('j3','owner','inv','browser.steps','failed','{}',NULL),
-  ('j4','owner','inv','files.read','completed','{}','{}'),
+  ('j4','owner','inv','folder.read','completed','{}','{}'),
   ('j5','other','inv','browser.navigate','completed','{}','{}');
  INSERT INTO ai_invocation_events VALUES('inv',1,'tool.started','{"toolName":"browser.snapshot"}'),('inv',2,'tool.completed','{"toolName":"browser.snapshot"}'),('inv',3,'tool.started','{"toolName":"browser.steps"}');`); err != nil {
 		t.Fatal(err)

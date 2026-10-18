@@ -9,6 +9,7 @@ import (
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	"github.com/kannachi323/misty/server/internal/agenttools"
+	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
@@ -73,6 +74,16 @@ func (s *SpacesService) announcePersonalAgentToolStart(ctx context.Context, run 
 	s.projectLinkedAIInvocationEvent(ctx, run, nodeID, string(workflowv2.StepRunning), phase, nil)
 }
 
+// toolResultForEvals is the call's raw result, clipped, for the workflow eval
+// (server/apps/agent-runtime/evals/workflows) so its judge can see what the agent
+// read. Only a non-production server with MISTY_AI_TOOL_RESULT_EVENTS=1 sends it.
+func toolResultForEvals(result json.RawMessage) string {
+	if strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production") || strings.TrimSpace(envconfig.Getenv("MISTY_AI_TOOL_RESULT_EVENTS")) != "1" || len(result) == 0 {
+		return ""
+	}
+	return truncateAgentRuntimeText(string(result), 64_000)
+}
+
 // recordAIInvocationToolActivity adds what a finished call targeted and got
 // back to the reply's timeline. It is best effort, like announcing the start.
 func (s *SpacesService) recordAIInvocationToolActivity(record *db.AIInvocationRecord, call agentRuntimeToolCall, result json.RawMessage) {
@@ -80,9 +91,10 @@ func (s *SpacesService) recordAIInvocationToolActivity(record *db.AIInvocationRe
 		return
 	}
 	activity := toolActivity(call.Arguments, result)
-	if activity == nil {
+	raw := toolResultForEvals(result)
+	if activity == nil && raw == "" {
 		return
 	}
-	event := aiInvocationEvent{Type: "tool.detail", ToolCallID: call.CallID, ToolName: call.Name, Activity: activity}
+	event := aiInvocationEvent{Type: "tool.detail", ToolCallID: call.CallID, ToolName: call.Name, Activity: activity, Result: raw}
 	_ = s.aiInvocations.appendReceipt(record.ID, event, call.RuntimeRunID+":tool:"+call.CallID+":detail")
 }

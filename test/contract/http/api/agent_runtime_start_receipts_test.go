@@ -19,7 +19,7 @@ import (
 
 func TestAgentRuntimeStartReceiptRequiresSignedPinnedAdmission(t *testing.T) {
 	database := openPresenceTestDatabase(t)
-	owner, err := database.CreateUser("Start receipt", uniqueTestEmail("start-receipt"), "password123")
+	owner, err := database.CreateUser(uniqueTestEmail("start-receipt"), "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

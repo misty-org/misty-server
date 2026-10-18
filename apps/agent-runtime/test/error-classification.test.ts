@@ -202,10 +202,10 @@ describe("runtime error classification", () => {
 describe("tool failure reporting", () => {
   it("names the failed action without claiming success", () => {
     const visible = incompleteToolResultText([
-      { toolName: "tasks_create", error: "assignee could not be resolved" },
+      { toolName: "task_create", error: "assignee could not be resolved" },
     ]);
     expect(visible).toContain("couldn't fully complete");
-    expect(visible).toContain("tasks create");
+    expect(visible).toContain("task create");
     expect(visible).not.toContain("success");
   });
 

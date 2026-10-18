@@ -13,11 +13,11 @@ import (
 
 func TestAccountFolderProposalRestoresAndRequiresOwner(t *testing.T) {
 	database := openPresenceTestDatabase(t)
-	owner, err := database.CreateUser("Folder owner", uniqueTestEmail("folder-owner"), "password123")
+	owner, err := database.CreateUser(uniqueTestEmail("folder-owner"), "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Other owner", uniqueTestEmail("folder-other"), "password123")
+	other, err := database.CreateUser(uniqueTestEmail("folder-other"), "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

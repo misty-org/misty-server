@@ -14,17 +14,17 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// Sub-agents (docs/plans/agentic-browser.md, Phase 4). agents_delegate starts
+// Sub-agents (docs/plans/agentic-browser.md, Phase 4). agent_delegate starts
 // up to four child runs. Each is an ordinary invocation that runs under the
 // parent's lease, agent and approval setting, never more; with a browser, the
 // parent's device opens a tab per child and signs that child's grant itself.
 // Children report into the parent's notebook and return their answers here.
 
 const (
-	toolboxAgentsDelegateTasks = "agents.delegate"
-	toolboxAgentsWait          = "agents.wait"
+	toolboxAgentsDelegateTasks = "agent.delegate"
+	toolboxAgentsWait          = "agent.wait"
 	maxDelegatedTasks          = 4
-	// A tool call holds this long at most, like a device job; agents_wait
+	// A tool call holds this long at most, like a device job; agent_wait
 	// picks up children that run longer.
 	delegationHold = 270 * time.Second
 	spawnTabsOp    = "browser.spawn_tabs"
@@ -57,8 +57,8 @@ func delegationToolDescriptors() []agenttools.Descriptor {
 		},
 	}
 	return []agenttools.Descriptor{
-		{Name: toolboxAgentsDelegateTasks, Version: 1, Risk: serveragent.RiskWrite, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone, AuditEvent: "agent.delegated",
-			Description: "Split independent parts of a large task across up to four sub-agents that work at the same time, each in its own browser tab when this run has a browser. Use it for breadth: researching several companies, products or sources, or filling several separate forms. Each task must stand alone. Sub-agents act with your permissions, write their findings to this task's notebook and return their answers; this call waits for them for up to about four minutes, then returns whatever is still running so you can call agents_wait.",
+		{Name: toolboxAgentsDelegateTasks, Version: 1, Risk: serveragent.RiskWrite, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone, AuditEvent: "agent.delegated",
+			Description: "Split independent parts of a large task across up to four sub-agents that work at the same time, each in its own browser tab when this run has a browser. Use it for breadth: researching several companies, products or sources, or filling several separate forms. Each task must stand alone. Sub-agents act with your permissions, write their findings to this task's notebook and return their answers; this call waits for them for up to about four minutes, then returns whatever is still running so you can call agent_wait.",
 			InputSchema: TestingMustAPIRawJSON(map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"tasks"},
 				"properties": map[string]any{
@@ -66,7 +66,7 @@ func delegationToolDescriptors() []agenttools.Descriptor {
 					"browser": map[string]any{"type": "boolean", "description": "Give each sub-agent its own browser tab. Default true when this run has a browser."},
 				},
 			}), OutputSchema: agentToolObjectOutputSchema()},
-		{Name: toolboxAgentsWait, Version: 1, Risk: serveragent.RiskRead, Idempotent: true, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone,
+		{Name: toolboxAgentsWait, Version: 1, Risk: serveragent.RiskRead, Idempotent: true, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone,
 			Description: "Wait up to about four minutes for this task's sub-agents to finish, and return each one's state and answer.",
 			InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema()},
 	}
@@ -106,19 +106,19 @@ func delegatedPrompt(task delegatedTask) string {
 		prompt.WriteString("\n\nContext:\n")
 		prompt.WriteString(context)
 	}
-	prompt.WriteString("\n\nAppend what you find, with source URLs, to the task notebook's findings with notebook_write as you go. Do not rewrite its plan.")
+	prompt.WriteString("\n\nAppend what you find, with source URLs, to the task notebook's findings with log_work_write as you go. Do not rewrite its plan.")
 	if len(task.OutputSchema) > 0 {
-		prompt.WriteString("\n\nEnd with misty_finish_task whose summary is only a JSON object matching this schema:\n")
+		prompt.WriteString("\n\nEnd with agent_finish whose summary is only a JSON object matching this schema:\n")
 		prompt.Write(task.OutputSchema)
 	} else {
-		prompt.WriteString("\n\nEnd with misty_finish_task: a concise answer with the facts and their sources.")
+		prompt.WriteString("\n\nEnd with agent_finish: a concise answer with the facts and their sources.")
 	}
 	return prompt.String()
 }
 
 func (s *SpacesService) delegationToolRegistrations(record *db.AIInvocationRecord, body aiInvocationInput) []agenttools.Registration {
 	// Sub-agents never start sub-agents of their own.
-	if record == nil || body.DelegatedFrom != "" || companionTeaches(body) {
+	if record == nil || body.DelegatedFrom != "" {
 		return nil
 	}
 	descriptors := delegationToolDescriptors()
@@ -132,7 +132,7 @@ func (s *SpacesService) delegationToolRegistrations(record *db.AIInvocationRecor
 				return nil, err
 			}
 			if len(children) == 0 {
-				return nil, serveragent.ErrInvalidRequest("this task has no sub-agents; start them with agents_delegate")
+				return nil, serveragent.ErrInvalidRequest("this task has no sub-agents; start them with agent_delegate")
 			}
 			return s.awaitChildren(ctx, record, "")
 		}},
@@ -212,7 +212,7 @@ func (s *SpacesService) spawnChildTabs(ctx context.Context, record *db.AIInvocat
 	}
 	current, err := waitForDeviceJob(ctx, s.database, record.UserID, job.ID, job.DeadlineAt)
 	if err != nil || current.State != "completed" {
-		return nil, serveragent.ErrInvalidRequest("Misty could not open browser tabs for the sub-agents. Call agents_delegate with browser false to run them without one.")
+		return nil, serveragent.ErrInvalidRequest("Misty could not open browser tabs for the sub-agents. Call agent_delegate with browser false to run them without one.")
 	}
 	var output struct {
 		Tabs []aiInvocationDeviceContext `json:"tabs"`
@@ -221,7 +221,7 @@ func (s *SpacesService) spawnChildTabs(ctx context.Context, record *db.AIInvocat
 		return nil, serveragent.ErrInvalidRequest("the device opened the wrong number of tabs for the sub-agents")
 	}
 	if err := validateDeviceOpenedTabs(output.Tabs, device, count); err != nil {
-		return nil, serveragent.ErrInvalidRequest("Misty could not open browser tabs for the sub-agents. Call agents_delegate with browser false to run them without one.")
+		return nil, serveragent.ErrInvalidRequest("Misty could not open browser tabs for the sub-agents. Call agent_delegate with browser false to run them without one.")
 	}
 	if err := verifyDeviceContextGrants(ctx, s.database, record.UserID, body.AgentID, output.Tabs); err != nil {
 		return nil, err
@@ -231,14 +231,14 @@ func (s *SpacesService) spawnChildTabs(ctx context.Context, record *db.AIInvocat
 
 func (s *SpacesService) startDelegatedInvocation(ctx context.Context, parent *db.AIInvocationRecord, body aiInvocationInput, callID string, index int, task delegatedTask, tab *aiInvocationDeviceContext) (string, error) {
 	model := strings.TrimSpace(body.ModelID)
-	if route, err := s.database.AIModelBrowsingRoute(ctx, parent.UserID, parent.ID); err == nil && route.Model != "" {
+	if route, err := s.database.AIModelBrowsingRoute(ctx, parent.UserID, parent.ID); err == nil && route.Model != "" && serveragent.ClientModelChoice() {
 		// Children navigate on the account's Browsing model.
 		model = route.Model
 	}
 	child := aiInvocationInput{
 		Mode: "drawer", SurfaceID: "global", Trigger: "delegated", Prompt: delegatedPrompt(task), Timezone: body.Timezone,
-		AgentID: body.AgentID, ExecutionMode: body.ExecutionMode, TaskID: body.TaskID, WindowLabel: body.WindowLabel,
-		CollaborationMode: body.CollaborationMode, ModelID: model, ReasoningEffort: body.ReasoningEffort,
+		AgentID: body.AgentID, SpaceID: body.SpaceID, ExecutionMode: body.ExecutionMode, TaskID: body.TaskID, WindowLabel: body.WindowLabel,
+		CollaborationMode: body.CollaborationMode, PermissionMode: body.PermissionMode, ModelID: model, ReasoningEffort: body.ReasoningEffort,
 		IdempotencyKey: "delegate:" + parent.ID + ":" + callID + ":" + strconv.Itoa(index),
 		NotebookKey:    notebookKey(parent, body), DelegatedFrom: parent.ID,
 	}

@@ -239,8 +239,10 @@ func (db *Database) RemoveDevice(ctx context.Context, userID, targetID string, c
 		if _, err := tx.ExecContext(ctx, `UPDATE trusted_devices SET admission_state='revoked',revoked_at=COALESCE(revoked_at,NOW()),updated_at=NOW() WHERE id=$1 AND user_id=$2`, targetID, userID); err != nil {
 			return err
 		}
+		// The device holds the same sync identity in every Space's vault.
 		if syncDevice.Valid && vault.Valid {
-			if _, err := tx.ExecContext(ctx, `UPDATE browser_sync_devices SET revoked_at=COALESCE(revoked_at,NOW()) WHERE vault_id::text=$1 AND device_id::text=$2`, vault.String, syncDevice.String); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE browser_sync_devices d SET revoked_at=COALESCE(d.revoked_at,NOW()) FROM browser_sync_vaults v
+				WHERE v.vault_id=d.vault_id AND v.user_id=$1 AND d.device_id::text=$2`, userID, syncDevice.String); err != nil {
 				return err
 			}
 		}
@@ -277,7 +279,8 @@ func (db *Database) RenameDevice(ctx context.Context, userID, targetID, name str
 			return err
 		}
 		if syncDevice.Valid && vault.Valid {
-			_, err = tx.ExecContext(ctx, `UPDATE browser_sync_devices SET display_name=$3 WHERE vault_id::text=$1 AND device_id::text=$2 AND revoked_at IS NULL`, vault.String, syncDevice.String, name)
+			_, err = tx.ExecContext(ctx, `UPDATE browser_sync_devices d SET display_name=$3 FROM browser_sync_vaults v
+				WHERE v.vault_id=d.vault_id AND v.user_id=$1 AND d.device_id::text=$2 AND d.revoked_at IS NULL`, userID, syncDevice.String, name)
 		}
 		return err
 	})

@@ -12,7 +12,7 @@ import (
 func TestSessionCRUDAndExpiry(t *testing.T) {
 	database := openIntegrationDatabase(t)
 
-	user, err := database.CreateUser("Session User", "session@example.com", "password123")
+	user, err := database.CreateUser("session@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSessionCRUDAndExpiry(t *testing.T) {
 func TestPasswordResetTokenPersistenceAndReset(t *testing.T) {
 	database := openIntegrationDatabase(t)
 
-	user, err := database.CreateUser("Reset Repo User", "reset-repo@example.com", "old-password")
+	user, err := database.CreateUser("reset-repo@example.com", "old-password")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}

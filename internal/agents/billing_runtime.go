@@ -114,7 +114,16 @@ func (m BillingMeter) CompleteRuntime(ctx context.Context, account, run string, 
 		}
 		request.Usage.Units = units
 		request.Usage.Estimated = u.Estimated
-		return (billingadapter.Reliable{Adapter: m.Service.Adapter, Store: m.Service.Store}).Submit(ctx, "settle_group", request)
+		action := "settle_group"
+		if u.Estimated {
+			// A run that ended without reporting what it used (canceled mid-turn, or
+			// crashed) has nothing to charge, and billing refuses to settle an estimate.
+			// Release the holds, or they would sit against the person's window until the
+			// stale-hold sweep.
+			action = "release_group"
+			request.Key = group + ":release"
+		}
+		return (billingadapter.Reliable{Adapter: m.Service.Adapter, Store: m.Service.Store}).Submit(ctx, action, request)
 	})
 }
 

@@ -8,23 +8,21 @@ import (
 )
 
 type AccountExportAgent struct {
-	ID              string                         `json:"id"`
-	Name            string                         `json:"name"`
-	Role            string                         `json:"role"`
-	Description     string                         `json:"description"`
-	Icon            string                         `json:"icon"`
-	Avatar          json.RawMessage                `json:"avatar"`
-	Instructions    string                         `json:"instructions"`
-	ModelMode       string                         `json:"model_mode"`
-	ModelID         string                         `json:"model_id,omitempty"`
-	ReasoningEffort string                         `json:"reasoning_effort,omitempty"`
-	DefaultRunMode  string                         `json:"default_run_mode"`
-	Enabled         bool                           `json:"enabled"`
-	Version         int64                          `json:"version"`
-	Versions        []AccountExportAgentVersion    `json:"versions"`
-	// SpaceID is the one Space the agent lives in; Memberships holds its
-	// membership there.
-	SpaceID     string                         `json:"space_id,omitempty"`
+	ID              string                      `json:"id"`
+	Name            string                      `json:"name"`
+	Role            string                      `json:"role"`
+	Description     string                      `json:"description"`
+	Icon            string                      `json:"icon"`
+	Avatar          json.RawMessage             `json:"avatar"`
+	Instructions    string                      `json:"instructions"`
+	ModelMode       string                      `json:"model_mode"`
+	ModelID         string                      `json:"model_id,omitempty"`
+	ReasoningEffort string                      `json:"reasoning_effort,omitempty"`
+	DefaultRunMode  string                      `json:"default_run_mode"`
+	Enabled         bool                        `json:"enabled"`
+	Version         int64                       `json:"version"`
+	Versions        []AccountExportAgentVersion `json:"versions"`
+	// Memberships are the Spaces the agent is in.
 	Memberships []AccountExportAgentMembership `json:"space_memberships"`
 	CreatedAt   time.Time                      `json:"created_at"`
 	UpdatedAt   time.Time                      `json:"updated_at"`
@@ -59,10 +57,6 @@ type AccountExportAgentMembership struct {
 	UpdatedAt         time.Time  `json:"updated_at"`
 	RemovedAt         *time.Time `json:"removed_at,omitempty"`
 	SpaceName         string     `json:"space_name,omitempty"`
-	// AcceptPolicy is how the agent takes requests from the Space: ask, auto or off.
-	AcceptPolicy    string `json:"accept_policy,omitempty"`
-	MaxOpenRequests int    `json:"max_open_requests,omitempty"`
-	Description     string `json:"description,omitempty"`
 }
 
 func appendAccountAgentExport(ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport) error {
@@ -71,7 +65,7 @@ func appendAccountAgentExport(ctx context.Context, tx *sql.Tx, userID string, ou
 
 func exportOwnedAgents(ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport) error {
 	rows, err := tx.QueryContext(ctx, `SELECT id,name,role,description,icon,avatar,instructions,model_mode,model_id,
-		reasoning_effort,default_run_mode,enabled,version,created_at,updated_at,deleted_at,COALESCE(space_id,'')
+		reasoning_effort,default_run_mode,enabled,version,created_at,updated_at,deleted_at
 		FROM misty_ask_identities WHERE owner_user_id=$1 ORDER BY created_at`, userID)
 	if err != nil {
 		return err
@@ -81,7 +75,7 @@ func exportOwnedAgents(ctx context.Context, tx *sql.Tx, userID string, out *Acco
 		var item AccountExportAgent
 		if err := rows.Scan(&item.ID, &item.Name, &item.Role, &item.Description, &item.Icon, &item.Avatar, &item.Instructions, &item.ModelMode,
 			&item.ModelID, &item.ReasoningEffort, &item.DefaultRunMode, &item.Enabled,
-			&item.Version, &item.CreatedAt, &item.UpdatedAt, &item.DeletedAt, &item.SpaceID); err != nil {
+			&item.Version, &item.CreatedAt, &item.UpdatedAt, &item.DeletedAt); err != nil {
 			return err
 		}
 		items = append(items, item)
@@ -118,20 +112,19 @@ func exportAgentVersionsAndMemberships(ctx context.Context, tx *sql.Tx, agent *A
 	if err := versions.Close(); err != nil {
 		return err
 	}
-	// An agent's listing in its Space is its membership there.
-	memberships, err := tx.QueryContext(ctx, `SELECT l.space_id,s.name,l.accept_policy,l.max_open_requests,l.description,l.created_at,l.updated_at
-		FROM space_agent_listings l JOIN spaces s ON s.id=l.space_id WHERE l.agent_id=$1 ORDER BY l.created_at`, agent.ID)
+	memberships, err := tx.QueryContext(ctx, `SELECT m.space_id,s.name,m.added_at,m.added_at
+		FROM space_agents m JOIN spaces s ON s.id=m.space_id WHERE m.agent_id=$1 ORDER BY m.added_at`, agent.ID)
 	if err != nil {
 		return err
 	}
 	defer memberships.Close()
 	for memberships.Next() {
 		item := AccountExportAgentMembership{SpaceRole: "agent", Version: agent.Version, ApprovedVersionID: personalAgentVersionID(agent.ID, agent.Version)}
-		if err := memberships.Scan(&item.SpaceID, &item.SpaceName, &item.AcceptPolicy, &item.MaxOpenRequests, &item.Description, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := memberships.Scan(&item.SpaceID, &item.SpaceName, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return err
 		}
 		item.ID = "agentmember:" + item.SpaceID + ":" + agent.ID
-		item.Enabled = item.AcceptPolicy != "off"
+		item.Enabled = true
 		agent.Memberships = append(agent.Memberships, item)
 	}
 	return memberships.Err()

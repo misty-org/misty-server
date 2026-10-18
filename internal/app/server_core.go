@@ -129,16 +129,7 @@ func CreateServer() (*Server, error) {
 		s.Library.SetMetadataExtractor(extractor)
 		mediaProcessingEnabled = true
 	}
-	peopleProcessingEnabled := false
-	if endpoint := strings.TrimSpace(envconfig.Getenv("VISION_PROCESSOR_URL")); endpoint != "" {
-		processor, processorErr := api.NewHTTPLibraryPeopleProcessor(endpoint, envconfig.Getenv("VISION_PROCESSOR_TOKEN"))
-		if processorErr != nil {
-			return nil, fmt.Errorf("configure Library People processor: %w", processorErr)
-		}
-		s.Library.SetPeopleProcessor(processor)
-		peopleProcessingEnabled = true
-	}
-	s.Library.SetSubsystems(true, true, mediaProcessingEnabled, peopleProcessingEnabled, mediaProcessingEnabled, true, true, true, true)
+	s.Library.SetSubsystems(true, mediaProcessingEnabled, mediaProcessingEnabled, true)
 	s.Library.SetNoteAssetsEnabled(true)
 	s.Library.SetDrawingAssetsEnabled(true)
 	spaceKey, err := spaceLinkEncryptionKeyFromEnv()

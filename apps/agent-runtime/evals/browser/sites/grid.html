@@ -5,6 +5,8 @@
 <button id="save">Save</button> <span id="status" role="status"></span>
 <script>
 const COLS=['A','B','C','D'],ROWS=12;const cells={};let sel='A1';window.__evalState={cells,saved:null};
+// ?preset=prospects: a list of companies for the workflow eval's prospect research.
+if(new URLSearchParams(location.search).get('preset')==='prospects'){Object.assign(cells,{A1:'Company',B1:'Industry',C1:'Employee range',D1:'HQ city',A2:'Ramp',A3:'Linear',A4:'Pigment',A5:'Airtable'})}
 const grid=document.getElementById('grid');
 function key(c,r){return c+r}
 function render(){let h='<div class="c h"></div>'+COLS.map(c=>'<div class="c h" role="columnheader">'+c+'</div>').join('');

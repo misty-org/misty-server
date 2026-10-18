@@ -39,11 +39,6 @@ func managedMistyRun(run *db.SpaceRun) bool {
 }
 
 func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, run *db.SpaceRun) (*agenttools.Registry, agenttools.Invocation, agenttools.Authorizer, error) {
-	if run.SourceTaskID != "" {
-		toolbox, invocation, _, err := s.resolveAssignedTaskToolbox(ctx, run)
-		return toolbox, invocation, authorizePersonalAgentTaskTool(s.database), err
-	}
-
 	if _, err := s.database.AskIdentityByID(ctx, run.OwnerUserID, run.AgentID); err != nil {
 		return nil, agenttools.Invocation{}, nil, err
 	}
@@ -79,12 +74,13 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 			browserCapabilities[descriptor.Name] = activeBrowserRuntimeCapability(contexts, descriptor.Name)
 		}
 	}
-	connected := append(s.webSearchToolRegistrations(ctx, run.OwnerUserID), s.appsToolRegistrations()...)
+	connected := withWebFetch(append(s.webSearchToolRegistrations(ctx, run.OwnerUserID), s.appsToolRegistrations()...))
 	connected = append(connected, agentMemberToolRegistrations(s.database)...)
 	connected = append(connected, s.accountAdminToolRegistrations()...)
 	toolbox := buildAgentToolbox(s.database, agentToolboxOptions{
-		accountLevel: run.SpaceID == "", browserTabs: browserTabs, browserCapabilities: browserCapabilities,
-		delegation: delegationHandler, extra: connected,
+		accountLevel: run.SpaceID == "", browserTabs: browserTabs, browserCapabilities: browserCapabilities, browser: s,
+		delegation: delegationHandler, extra: connected, memorySearch: s.searchMemory,
+		run: ownRun(run.OwnerUserID),
 	})
 	names := make([]string, 0, len(toolbox.Descriptors()))
 	for _, descriptor := range toolbox.Descriptors() {
@@ -100,6 +96,7 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 		OriginalInput:         string(run.Input),
 		DelegatedApproval:     true,
 		ConversationScopeKind: db.ConversationScopeEveryone,
+		PermissionMode:        serveragent.NormalizePermissionMode(run.EffectiveRunMode),
 	}
 	authorize := authorizeSpaceAgentTool(s.database)
 	if _, err := toolbox.Resolve(ctx, invocation, names, authorize); err != nil {
@@ -115,7 +112,7 @@ func (s *SpacesService) executePersonalAgentRuntimeTool(ctx context.Context, run
 	if call.Name == "browser.request_user_action" && !call.SupportsIntervention {
 		return agentRuntimeToolOutcome{}, db.ErrSpaceForbidden
 	}
-	ctx = withAgentExecutionRuntime(ctx, call.RuntimeRunID)
+	ctx = withPermissionGate(withAgentExecutionRuntime(ctx, call.RuntimeRunID), s.askGate)
 	toolbox, invocation, authorize, err := s.resolvePersonalAgentRuntimeToolbox(ctx, run)
 	if err != nil {
 		return agentRuntimeToolOutcome{}, err
@@ -130,6 +127,10 @@ func (s *SpacesService) executePersonalAgentRuntimeTool(ctx context.Context, run
 		}
 		result, err := s.requestAIUserAction(ctx, run.OwnerUserID, run.ID, call)
 		return agentRuntimeToolOutcome{Result: result}, err
+	}
+	if invocation.PublicLayerOnly {
+		// Someone else's ask: no private item of the owner's opens on any read.
+		ctx = db.WithPublicLayerOnly(ctx)
 	}
 	result, err := toolbox.ExecuteWithMiddleware(ctx, invocation, serveragent.ToolRequest{
 		ID: call.CallID, Name: call.Name, Arguments: call.Arguments,

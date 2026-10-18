@@ -27,7 +27,7 @@ func TestDelegatedTasksAreBoundedAndSelfContained(t *testing.T) {
 		}
 	}
 	prompt := delegatedPrompt(tasks[0])
-	for _, want := range []string{"Find Acme's pricing", "Use acme.com", "notebook_write", `"price"`, "misty_finish_task"} {
+	for _, want := range []string{"Find Acme's pricing", "Use acme.com", "log_work_write", `"price"`, "agent_finish"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt lacks %q:\n%s", want, prompt)
 		}
@@ -49,7 +49,7 @@ func TestDelegationResultParsesStructuredAnswersAndCountsRunningChildren(t *test
 	if err := json.Unmarshal(raw, &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.StillRunning != 1 || !strings.Contains(result.Next, "agents_wait") || result.ContentTrust != "untrusted-subagent-output" {
+	if result.StillRunning != 1 || !strings.Contains(result.Next, "agent_wait") || result.ContentTrust != "untrusted-subagent-output" {
 		t.Fatal(string(raw))
 	}
 	if output, _ := result.Subagents[0]["output"].(map[string]any); output["price"] != float64(12) {
@@ -81,13 +81,13 @@ func TestSubagentsCannotDelegateAndGuidanceMentionsNotebook(t *testing.T) {
 	s := &SpacesService{}
 	record := &db.AIInvocationRecord{ID: "invocation_1"}
 	if got := s.delegationToolRegistrations(record, aiInvocationInput{DelegatedFrom: "invocation_0"}); len(got) != 0 {
-		t.Fatal("a sub-agent was offered agents_delegate")
+		t.Fatal("a sub-agent was offered agent_delegate")
 	}
 	if got := s.delegationToolRegistrations(record, aiInvocationInput{}); len(got) != 2 {
-		t.Fatal("a top-level run should get agents_delegate and agents_wait")
+		t.Fatal("a top-level run should get agent_delegate and agent_wait")
 	}
-	guidance := agentCapabilityGuidance([]string{"notebook.write", "notebook.read", "agents.delegate"}, false)
-	if !strings.Contains(guidance, "notebook_write") || !strings.Contains(guidance, "agents_delegate") {
+	guidance := agentCapabilityGuidance([]string{"log.work.write", "log.work.read", "agent.delegate"}, false)
+	if !strings.Contains(guidance, "log_work_write") || !strings.Contains(guidance, "agent_delegate") {
 		t.Fatal(guidance)
 	}
 }

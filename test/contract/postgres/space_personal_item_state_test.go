@@ -9,11 +9,11 @@ import (
 func TestSpacePersonalItemsKeepFavoritesIndependentFromVisits(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Personal state owner", "personal-items-owner@example.invalid", "password123")
+	owner, err := database.CreateUser("personal-items-owner@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Other", "personal-items-other@example.invalid", "password123")
+	other, err := database.CreateUser("personal-items-other@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

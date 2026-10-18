@@ -54,9 +54,7 @@ func corsTestServer(t *testing.T) *Server {
 //
 // A missing entry fails in a uniquely unhelpful way: the preflight returns 200
 // with no Access-Control-Allow-Origin, so the browser reports an opaque "load
-// failed" that points at the origin rather than the header. Omitting
-// X-Misty-Library-Reauthentication made Recently Deleted and Hidden completely
-// unreachable, because only those collections send it.
+// failed" that points at the origin rather than the header.
 func TestPreflightAllowsEveryClientHeader(t *testing.T) {
 	server := corsTestServer(t)
 
@@ -73,7 +71,6 @@ func TestPreflightAllowsEveryClientHeader(t *testing.T) {
 		"X-Misty-Device-Signature",
 		"X-Misty-Attachment-Upload-Token",
 		"X-Misty-Library-Upload-Token",
-		"X-Misty-Library-Reauthentication",
 	}
 
 	for _, header := range clientHeaders {
@@ -88,29 +85,5 @@ func TestPreflightAllowsEveryClientHeader(t *testing.T) {
 			t.Fatalf("preflight carrying %s returned no Access-Control-Allow-Origin; "+
 				"the browser reports this as an opaque load failure", header)
 		}
-	}
-}
-
-// The sensitive-collection request is the one that actually broke, so it gets
-// its own case with the exact header combination the client sends.
-func TestPreflightAllowsSensitiveCollectionRequest(t *testing.T) {
-	server := corsTestServer(t)
-
-	request := httptest.NewRequest(http.MethodOptions,
-		"/api/spaces/space_1/library?collection=recently-deleted", nil)
-	request.Header.Set("Origin", "http://127.0.0.1:5174")
-	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
-	request.Header.Set("Access-Control-Request-Headers",
-		"authorization,x-misty-library-reauthentication")
-	recorder := httptest.NewRecorder()
-	server.Router.ServeHTTP(recorder, request)
-
-	if recorder.Header().Get("Access-Control-Allow-Origin") != "http://127.0.0.1:5174" {
-		t.Fatalf("Recently Deleted preflight = %q, want the origin echoed back",
-			recorder.Header().Get("Access-Control-Allow-Origin"))
-	}
-	allowed := strings.ToLower(recorder.Header().Get("Access-Control-Allow-Headers"))
-	if !strings.Contains(allowed, "x-misty-library-reauthentication") {
-		t.Fatalf("Access-Control-Allow-Headers = %q, missing the reauthentication header", allowed)
 	}
 }

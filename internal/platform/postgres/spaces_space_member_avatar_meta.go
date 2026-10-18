@@ -56,7 +56,7 @@ func (db *Database) InviteToSpaceWithToken(
 			WHERE expires_at<=NOW() AND consumed_at IS NULL`); err != nil {
 			return err
 		}
-		err := tx.QueryRowContext(ctx, `SELECT id,name,email FROM users WHERE lower(email)=$1`, email).
+		err := tx.QueryRowContext(ctx, `SELECT id,username,email FROM users WHERE lower(email)=$1`, email).
 			Scan(&out.InvitedUserID, &out.InvitedUserName, &out.InvitedEmail)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
@@ -71,7 +71,7 @@ func (db *Database) InviteToSpaceWithToken(
 		if already {
 			return ErrSpaceConflict
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT name FROM users WHERE id=$1`, ownerID).Scan(&out.InviterName); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT username FROM users WHERE id=$1`, ownerID).Scan(&out.InviterName); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `SELECT name FROM spaces WHERE id=$1`, spaceID).Scan(&out.SpaceName); err != nil {
@@ -107,7 +107,7 @@ func (db *Database) IncomingSpaceInvites(ctx context.Context, userID string) ([]
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.space_id,s.name,i.invited_user_id,
-			invited.name,i.invited_email,i.invited_by_user_id,inviter.name,
+			invited.username,i.invited_email,i.invited_by_user_id,inviter.username,
 			i.delivery_status,i.expires_at,i.created_at
 			FROM space_invitations i
 			JOIN spaces s ON s.id=i.space_id
@@ -145,8 +145,8 @@ func (db *Database) PendingSpaceInvitations(
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.space_id,s.name,
-			i.invited_user_id,invited.name,i.invited_email,
-			i.invited_by_user_id,inviter.name,i.delivery_status,i.expires_at,i.created_at
+			i.invited_user_id,invited.username,i.invited_email,
+			i.invited_by_user_id,inviter.username,i.delivery_status,i.expires_at,i.created_at
 			FROM space_invitations i
 			JOIN spaces s ON s.id=i.space_id
 			JOIN users inviter ON inviter.id=i.invited_by_user_id
@@ -189,7 +189,7 @@ func (db *Database) RefreshSpaceInvitation(
 			  AND inviter.id=i.invited_by_user_id
 			  AND i.revoked_at IS NULL AND i.consumed_at IS NULL
 			RETURNING i.id,i.space_id,s.name,i.invited_user_id,
-			  i.invited_email,i.invited_by_user_id,inviter.name,i.delivery_status,
+			  i.invited_email,i.invited_by_user_id,inviter.username,i.delivery_status,
 			  i.expires_at,i.created_at`, tokenHash, expiresAt, inviteID, spaceID).
 			Scan(&out.ID, &out.SpaceID, &out.SpaceName, &out.InvitedUserID, &out.InvitedEmail,
 				&out.InvitedByUserID, &out.InviterName, &out.DeliveryStatus, &out.ExpiresAt,

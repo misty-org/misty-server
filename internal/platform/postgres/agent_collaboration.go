@@ -65,6 +65,40 @@ func (db *Database) SetConversationMode(ctx context.Context, user, conversation,
 	})
 }
 
+// ConversationPermissionMode is the chat's own Ask or Auto, or "" when it follows the agent.
+func (db *Database) ConversationPermissionMode(ctx context.Context, user, conversation string) (string, error) {
+	mode := ""
+	if strings.TrimSpace(conversation) == "" {
+		return mode, nil
+	}
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(user), func(tx *sql.Tx) error {
+		var stored sql.NullString
+		err := tx.QueryRowContext(ctx, `SELECT permission_mode FROM ai_conversation_modes WHERE conversation_id=$1 AND owner_user_id=$2`, conversation, user).Scan(&stored)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		mode = stored.String
+		return err
+	})
+	return mode, err
+}
+
+// SetConversationPermissionMode saves the chat's Ask or Auto; "" follows the agent again.
+func (db *Database) SetConversationPermissionMode(ctx context.Context, user, conversation, mode string) error {
+	if mode != "" && mode != "ask" && mode != "auto" {
+		return ErrSpaceInvalid
+	}
+	return db.TestingWithRLSContext(ctx, userRLSSettings(user), func(tx *sql.Tx) error {
+		if err := conversationOwnedTx(ctx, tx, user, conversation); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `INSERT INTO ai_conversation_modes(conversation_id,owner_user_id,permission_mode) VALUES($1,$2,NULLIF($3,''))
+			ON CONFLICT (conversation_id) DO UPDATE SET permission_mode=EXCLUDED.permission_mode, updated_at=now() WHERE ai_conversation_modes.owner_user_id=EXCLUDED.owner_user_id`,
+			conversation, user, mode)
+		return err
+	})
+}
+
 func trimmedList(values []string, maxItems, maxRunes int) ([]string, error) {
 	if len(values) > maxItems {
 		return nil, ErrSpaceInvalid

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const taskCompletionTool = "misty_finish_task";
+export const taskCompletionTool = "agent_finish";
 export const taskCompletionSchema = z.object({
   outcome: z.enum(["completed", "partial", "blocked"]),
   summary: z.string().trim().min(1).max(12000),
@@ -57,4 +57,4 @@ export function taskCompletionText(report: TaskCompletion): string {
     : "");
 }
 
-export const taskCompletionInstructions = `A reply that needs no action, such as a greeting or a question you can answer from what you already know, ends with your plain text answer and no tool calls. Finish every task with one standalone misty_finish_task call, with no other tool calls in that response. Its summary is your final answer to the user. Choose completed only when every requested deliverable is actually complete and verified; set remaining to an empty list. Choose blocked when required access, information, permission, or capability is missing; choose partial when only part of the requested work was achieved. For blocked or partial outcomes, list each unfinished requirement and its reason. Explaining why you cannot do the work does not complete the user's requested deliverable. Do not issue a completed report just because the model response is ending. This report cannot replace tool receipts.`;
+export const taskCompletionInstructions = `A reply that needs no action, such as a greeting or a question you can answer from what you already know, ends with your plain text answer and no tool calls. Finish every task with one standalone agent_finish call, with no other tool calls in that response. Its summary is your final answer to the user. Choose completed only when every requested deliverable is actually complete and verified; set remaining to an empty list. Choose blocked when required access, information, permission, or capability is missing; choose partial when only part of the requested work was achieved. For blocked or partial outcomes, list each unfinished requirement and its reason. Explaining why you cannot do the work does not complete the user's requested deliverable. Do not issue a completed report just because the model response is ending. This report cannot replace tool receipts.`;

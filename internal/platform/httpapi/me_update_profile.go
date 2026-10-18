@@ -2,43 +2,9 @@ package api
 
 import (
 	"net/http"
-	"strings"
 
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-func UpdateProfile(database *db.Database) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, err := sessionUserID(r, database)
-		if err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		if userID == "" {
-			http.Error(w, "not authenticated", http.StatusUnauthorized)
-			return
-		}
-
-		var body struct {
-			Name string `json:"name"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		body.Name = strings.TrimSpace(body.Name)
-		if body.Name == "" {
-			http.Error(w, "name is required", http.StatusBadRequest)
-			return
-		}
-
-		if err := database.UpdateUserName(userID, body.Name); err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	}
-}
 
 func UpdateDevice(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

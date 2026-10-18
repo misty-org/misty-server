@@ -79,7 +79,7 @@ func delegationResult(children []db.DelegationChild, running int) json.RawMessag
 	}
 	out := map[string]any{"subagents": results, "still_running": running, "contentTrust": "untrusted-subagent-output"}
 	if running > 0 {
-		out["next"] = "Some sub-agents are still working. Do other work or call agents_wait."
+		out["next"] = "Some sub-agents are still working. Do other work or call agent_wait."
 	}
 	return TestingMustAPIRawJSON(out)
 }

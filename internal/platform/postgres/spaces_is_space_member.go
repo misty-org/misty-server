@@ -73,11 +73,6 @@ func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, err
 		if err := rows.Close(); err != nil {
 			return err
 		}
-		for index := range spaces {
-			if err := populateSpacePermissionsTx(ctx, tx, userID, &spaces[index]); err != nil {
-				return err
-			}
-		}
 		return nil
 	})
 	return spaces, err
@@ -97,7 +92,7 @@ func (db *Database) SpaceByID(ctx context.Context, userID, spaceID string) (*Spa
 			WHERE s.id=$1 AND m.user_id=$2 AND s.lifecycle_state='active'`, spaceID, userID).Scan(&out.ID, &out.SecurityDomainID, &out.OwnerUserID, &out.Name, &out.IsDefault, &out.Role, &out.MemberCount, &out.PendingCount, &out.IsShared, &out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err
 		}
-		return populateSpacePermissionsTx(ctx, tx, userID, out)
+		return nil
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound
@@ -106,25 +101,6 @@ func (db *Database) SpaceByID(ctx context.Context, userID, spaceID string) (*Spa
 		return nil, err
 	}
 	return out, err
-}
-
-func populateSpacePermissionsTx(ctx context.Context, tx *sql.Tx, userID string, space *Space) error {
-	space.Permissions = make(map[string]bool, len(configurableSpacePermissions)+5)
-	for _, permission := range configurableSpacePermissions {
-		allowed, err := hasSpacePermissionTx(ctx, tx, userID, space.ID, permission)
-		if err != nil {
-			return err
-		}
-		space.Permissions[permission] = allowed
-	}
-	applySpacePermissionDependencies(space.Permissions)
-	canManage := space.Role == "owner"
-	space.Permissions[PermissionSpaceInvite] = canManage
-	space.Permissions[PermissionSpaceRename] = canManage
-	space.Permissions[PermissionSpaceTransfer] = canManage && !space.IsDefault
-	space.Permissions[PermissionSpaceDelete] = canManage && !space.IsDefault
-	space.Permissions[PermissionSpaceLeave] = space.Role != "owner"
-	return nil
 }
 
 func (db *Database) RenameSpace(ctx context.Context, userID, spaceID, name string) (*Space, error) {
@@ -179,10 +155,18 @@ func (db *Database) DeleteSpace(ctx context.Context, userID, spaceID, confirmati
 			memberIDs = append(memberIDs, memberID)
 		}
 		rows.Close()
+		// Every member's private layer goes now; the public layer waits out
+		// the recovery window with the Space.
+		if err := purgeSpaceMembersTx(ctx, tx, spaceID, memberIDs); err != nil {
+			return err
+		}
 		if err := notifySpaceControlTx(ctx, tx, map[string]any{"type": "space.deleted", "space_id": spaceID, "user_ids": memberIDs}); err != nil {
 			return err
 		}
 		if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
+		if err := deleteSpaceVaultsTx(ctx, tx, spaceID, ""); err != nil {
 			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "space.deletion_requested", spaceID, map[string]any{"recover_days": 30}); err != nil {
@@ -199,11 +183,11 @@ func (db *Database) SpaceMembers(ctx context.Context, userID, spaceID string) ([
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT m.space_id,m.user_id,u.name,u.email,m.role,m.joined_at,m.read_message_seq
+		rows, err := tx.QueryContext(ctx, `SELECT m.space_id,m.user_id,u.username,u.email,m.role,m.joined_at,m.read_message_seq
 			FROM space_members m
 			JOIN users u ON u.id=m.user_id
 			WHERE m.space_id=$1
-			ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END,u.name`, spaceID)
+			ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END,u.username`, spaceID)
 		if err != nil {
 			return err
 		}

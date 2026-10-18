@@ -22,11 +22,11 @@ func TestRoutedSpaceToolsPostgres(t *testing.T) {
 	}
 	database := testkit.OpenDatabase(t)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Global owner", "global-owner@example.test", "password123")
+	owner, err := database.CreateUser("global-owner@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Other owner", "global-other@example.test", "password123")
+	other, err := database.CreateUser("global-other@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,35 +61,35 @@ func TestRoutedSpaceToolsPostgres(t *testing.T) {
 	run := func(id, name string, arguments any) (json.RawMessage, error) {
 		return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, agent.ToolRequest{ID: id, Name: name, Arguments: TestingMustAPIRawJSON(arguments)})
 	}
-	list, err := run("list", "spaces.list", map[string]any{})
+	list, err := run("list", "space.list", map[string]any{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(list), destination.ID) || strings.Contains(string(list), foreign.ID) {
 		t.Fatalf("space discovery: %s", list)
 	}
-	result, err := run("create-one", "tasks.create", map[string]any{"space": "family", "title": "Book dinner"})
+	result, err := run("create-one", "task.create", map[string]any{"space": "family", "title": "Book dinner"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	replay, err := run("create-one", "tasks.create", map[string]any{"space": "family", "title": "Book dinner"})
+	replay, err := run("create-one", "task.create", map[string]any{"space": "family", "title": "Book dinner"})
 	var originalValue, replayValue any
 	_ = json.Unmarshal(result, &originalValue)
 	_ = json.Unmarshal(replay, &replayValue)
 	if err != nil || !reflect.DeepEqual(originalValue, replayValue) {
 		t.Fatalf("replay: %s %v", replay, err)
 	}
-	if _, err = run("create-one", "tasks.create", map[string]any{"space": origin.ID, "title": "Book dinner"}); err == nil {
+	if _, err = run("create-one", "task.create", map[string]any{"space": origin.ID, "title": "Book dinner"}); err == nil {
 		t.Fatal("same call ID silently changed destination")
 	}
-	if _, err = run("query-foreign", "tasks.query", map[string]any{"space": foreign.ID}); err == nil {
+	if _, err = run("query-foreign", "task.query", map[string]any{"space": foreign.ID}); err == nil {
 		t.Fatal("foreign space accessible")
 	}
-	everywhere, err := run("query-all", "tasks.query", map[string]any{})
+	everywhere, err := run("query-all", "task.query", map[string]any{})
 	if err != nil || !strings.Contains(string(everywhere), "Book dinner") || strings.Contains(string(everywhere), foreign.ID) {
 		t.Fatalf("reads without a space cover every accessible Space: %s %v", everywhere, err)
 	}
-	if _, err = run("update-unrouted", "tasks.update", map[string]any{"id": "missing", "title": "Renamed"}); err == nil {
+	if _, err = run("update-unrouted", "task.update", map[string]any{"id": "missing", "title": "Renamed"}); err == nil {
 		t.Fatal("a change to an existing item must name its Space")
 	}
 }

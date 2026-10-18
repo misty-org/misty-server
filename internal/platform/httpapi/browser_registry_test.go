@@ -9,6 +9,8 @@ func TestRunCatalogRetainsGrantedBrowserTools(t *testing.T) {
 	toolbox := buildAgentToolbox(nil, agentToolboxOptions{
 		accountLevel: true, browserTabs: []string{"Browser (scopeId scope-browser)"},
 		browserCapabilities: map[string]bool{"browser.inspect": true, "browser.navigate": true, "browser.act": true},
+		// Browser tools are private: the owner's own run keeps them.
+		run: ownRun("owner"),
 	})
 	granted := 0
 	for _, descriptor := range toolbox.Descriptors() {

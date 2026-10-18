@@ -16,9 +16,7 @@ func TestConcurrentLibraryFinalizationIsIdempotent(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	owner, err := database.CreateUser(
-		"Concurrent Finalize Owner",
-		"concurrent-finalize@example.com",
+	owner, err := database.CreateUser("concurrent-finalize@example.com",
 		"password123",
 	)
 	if err != nil {

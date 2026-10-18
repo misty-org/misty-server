@@ -59,10 +59,10 @@ vi.mock("@ai-sdk/workflow", () => ({
       return {
         steps: Array.from({ length: fixture.steps }, () => ({
           text: "Earlier model text that must not prove completion.",
-          content: fixture.separateToolResults ? [{type:"tool-call",toolName:"misty_finish_task",toolCallId:"finish"}] : finishReason === "stop" ? [{type:"tool-call",toolName:"misty_finish_task"},{type:"tool-result",toolName:"misty_finish_task",output:{outcome:"completed",summary:"Task verified",remaining:[]}}] : [{ type: "text", text: "Earlier model text that must not prove completion." }],
+          content: fixture.separateToolResults ? [{type:"tool-call",toolName:"agent_finish",toolCallId:"finish"}] : finishReason === "stop" ? [{type:"tool-call",toolName:"agent_finish"},{type:"tool-result",toolName:"agent_finish",output:{outcome:"completed",summary:"Task verified",remaining:[]}}] : [{ type: "text", text: "Earlier model text that must not prove completion." }],
         })),
-        toolResults: fixture.separateToolResults ? [{type:"tool-result",toolName:"misty_finish_task",toolCallId:"finish",output:{outcome:"completed",summary:"Task verified",remaining:[]}}] : [],
-        messages: [{ role: "system", content: "adapter instructions" }, ...options.messages, { role: "assistant", content: "Prior model turn" }, { role: "tool", content: [{ type: "tool-result", toolCallId: "prior-call", toolName: "notes.read", output: { type: "text", value: "Observed note" } }] }],
+        toolResults: fixture.separateToolResults ? [{type:"tool-result",toolName:"agent_finish",toolCallId:"finish",output:{outcome:"completed",summary:"Task verified",remaining:[]}}] : [],
+        messages: [{ role: "system", content: "adapter instructions" }, ...options.messages, { role: "assistant", content: "Prior model turn" }, { role: "tool", content: [{ type: "tool-result", toolCallId: "prior-call", toolName: "note.read", output: { type: "text", value: "Observed note" } }] }],
         finishReason,
         totalUsage: { inputTokens: 100, outputTokens: 12 },
       };

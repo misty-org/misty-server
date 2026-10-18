@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // web.fetch when none of the person's devices is online
+  // (docs/plans/agent-harness.md, phase 1). Isolated from the VPS: it reads
+  // public pages only and keeps nothing.
+  "name": "misty-web-fetch",
+  "main": "src/index.ts",
+  "workers_dev": true,
+  "compatibility_date": "2026-06-25",
+  "observability": { "enabled": true },
+  // MISTY_WEB_FETCH_SECRET is set with `wrangler secret put` and never appears here.
+}

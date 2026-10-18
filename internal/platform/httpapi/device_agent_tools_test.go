@@ -22,10 +22,10 @@ func TestFilesSendSavesToTheSpaceLibrary(t *testing.T) {
 		}
 	}
 	if send == nil {
-		t.Fatal("a shared folder did not offer files.send")
+		t.Fatal("a shared folder did not offer folder.send")
 	}
 	if !strings.Contains(send.Descriptor.Description, "Space Library") || strings.Contains(strings.ToLower(send.Descriptor.Description), "local network") {
-		t.Fatalf("files.send description = %q", send.Descriptor.Description)
+		t.Fatalf("folder.send description = %q", send.Descriptor.Description)
 	}
 	var schema struct {
 		Properties map[string]any `json:"properties"`
@@ -35,7 +35,7 @@ func TestFilesSendSavesToTheSpaceLibrary(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(schema.Properties) != 2 || schema.Properties["folder"] == nil || schema.Properties["path"] == nil || strings.Join(schema.Required, ",") != "folder,path" {
-		t.Fatalf("files.send schema = %s", send.Descriptor.InputSchema)
+		t.Fatalf("folder.send schema = %s", send.Descriptor.InputSchema)
 	}
 	invocation := agenttools.Invocation{UserID: "user-1", RunID: "invocation_1"}
 	var invalid agent.ErrInvalidRequest

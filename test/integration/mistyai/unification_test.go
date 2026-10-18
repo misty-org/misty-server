@@ -16,11 +16,11 @@ import ()
 func TestPrivateActivityDelegationAndRevocation(t *testing.T) {
 	database := testkit.OpenDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Misty owner", "misty-owner@example.test", "password123")
+	owner, err := database.CreateUser("misty-owner@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Other", "misty-other@example.test", "password123")
+	other, err := database.CreateUser("misty-other@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

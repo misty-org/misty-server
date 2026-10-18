@@ -6,39 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
-
-func TestHTTPLibraryPeopleProcessorUsesPrivateBoundedContract(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer processor-token" || r.Header.Get("X-Misty-Detect-People") != "true" || r.Header.Get("X-Misty-Detect-Pets") != "false" || r.Header.Get("Content-Type") != "image/jpeg" {
-			t.Fatalf("processor headers = %#v", r.Header)
-		}
-		body, _ := io.ReadAll(r.Body)
-		if string(body) != "private-image" {
-			t.Fatalf("processor body = %q", body)
-		}
-		_, _ = io.WriteString(w, `{"detections":[{"kind":"person","confidence":0.98,"bounds":{"x":0.1},"embedding":[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]}`)
-	}))
-	defer server.Close()
-	processor, err := NewHTTPLibraryPeopleProcessor(server.URL, "processor-token")
-	if err != nil {
-		t.Fatal(err)
-	}
-	detections, err := processor.Analyze(context.Background(), strings.NewReader("private-image"), "image/jpeg", int64(len("private-image")), true, false)
-	if err != nil || len(detections) != 1 || detections[0].Kind != "person" || len(detections[0].Embedding) != 16 {
-		t.Fatalf("Analyze() = %#v, %v", detections, err)
-	}
-	if _, err := NewHTTPLibraryPeopleProcessor("http://example.com/processor", ""); err == nil {
-		t.Fatal("processor accepted non-loopback plain HTTP")
-	}
-}
 
 
 func TestMemoryLibraryObjectStoreEnforcesExactObject(t *testing.T) {

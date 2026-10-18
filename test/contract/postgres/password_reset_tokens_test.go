@@ -14,7 +14,7 @@ import (
 func TestPasswordResetTokenLifecycle(t *testing.T) {
 	database := openTestDatabase(t)
 
-	user, err := database.CreateUser("Reset Repo User", "reset-repo@example.com", "old-password")
+	user, err := database.CreateUser("reset-repo@example.com", "old-password")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
@@ -51,7 +51,7 @@ func TestPasswordResetTokenLifecycle(t *testing.T) {
 func TestValidatePasswordResetTokenDeletesExpiredToken(t *testing.T) {
 	database := openTestDatabase(t)
 
-	user, err := database.CreateUser("Expired Reset", "expired-reset@example.com", "old-password")
+	user, err := database.CreateUser("expired-reset@example.com", "old-password")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}

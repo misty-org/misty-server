@@ -38,7 +38,12 @@ func (db *Database) UpdateSpaceConversation(ctx context.Context, userID, spaceID
 			}
 			return err
 		}
-		if createdByUserID != userID {
+		// Only the Space's owner renames or re-seats a conversation.
+		role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
+		if err != nil {
+			return err
+		}
+		if role != "owner" {
 			return ErrSpaceForbidden
 		}
 		if conversationKind != "standard" {

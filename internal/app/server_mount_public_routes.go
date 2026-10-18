@@ -47,14 +47,14 @@ func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 	s.Router.Post(prefix+"/me/email/verify", deps.verification.Resend())
 	s.Router.Get(prefix+"/me/referral", deps.verification.Referral())
 	s.Router.Post(prefix+"/me/referral/claim", deps.verification.ClaimReferral())
-	s.Router.Get(prefix+"/me/library-lock", api.LibraryLockPassword(s.Database))
-	s.Router.Post(prefix+"/me/library-lock", api.LibraryLockPassword(s.Database))
 }
 
 // mountPublicSyncRoutes registers the browser sync vault, device, and restore routes.
 func (s *Server) mountPublicSyncRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/sync/vault", deps.browserSync.Vault())
 	s.Router.Post(prefix+"/sync/vault", deps.browserSync.Vault())
+	s.Router.Get(prefix+"/sync/vaults", deps.browserSync.Vaults())
+	s.Router.Post(prefix+"/sync/vaults", deps.browserSync.Vaults())
 	s.Router.Get(prefix+"/sync/devices", deps.browserSync.Devices())
 	s.Router.Post(prefix+"/sync/devices", deps.browserSync.Devices())
 	s.Router.Post(prefix+"/sync/control", deps.browserSync.ControlDevice())
@@ -66,7 +66,6 @@ func (s *Server) mountPublicSyncRoutes(prefix string, deps *mountDeps) {
 // mountPublicProfileRoutes registers profile, avatar, device, settings, space,
 // agent intervention, and telemetry preference routes.
 func (s *Server) mountPublicProfileRoutes(prefix string, deps *mountDeps) {
-	s.Router.Put(prefix+"/me/profile", api.UpdateProfile(s.Database))
 	s.Router.Post(prefix+"/me/export", s.Spaces.AccountExportManifest())
 	s.Router.Post(prefix+"/me/deletion", s.Spaces.BeginAccountDeletion())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
@@ -74,10 +73,6 @@ func (s *Server) mountPublicProfileRoutes(prefix string, deps *mountDeps) {
 	s.Router.Put(prefix+"/me/device", api.UpdateDevice(s.Database))
 	s.Router.Get(prefix+"/me/settings", api.GetSettings(s.Database))
 	s.Router.Put(prefix+"/me/settings", api.UpdateSettings(s.Database))
-	s.Router.Get(prefix+"/me/space-templates", api.PersonalSpaceTemplates(s.Database))
-	s.Router.Post(prefix+"/me/space-templates", api.PersonalSpaceTemplates(s.Database))
-	s.Router.Put(prefix+"/me/space-templates/{templateID}", api.PersonalSpaceTemplates(s.Database))
-	s.Router.Delete(prefix+"/me/space-templates/{templateID}", api.PersonalSpaceTemplates(s.Database))
 	s.Router.Get(prefix+"/me/space-people", api.SpacePeople(s.Database))
 	s.Router.Get(prefix+"/me/agent-interventions", s.Spaces.AIUserInterventionControl())
 	s.Router.Post(prefix+"/me/agent-interventions/{waitID}", s.Spaces.AIUserInterventionControl())
@@ -97,8 +92,6 @@ func (s *Server) mountPublicBillingRoutes(prefix string, deps *mountDeps) {
 func (s *Server) mountPublicFeatureRoutes(prefix string, deps *mountDeps) {
 	s.mountAIRoutes(prefix+"/ai", deps.ai)
 	s.mountMistyRoutes(prefix, deps.ai)
-	s.mountSmartLibraryRoutes(prefix+"/ai/smart-library", deps.smartLibrary)
-	s.mountMediaSearchRoutes(prefix+"/ai/media-search", deps.mediaSearch)
 	s.mountAgentsRoutes(prefix, deps.agents)
 	s.mountSpacesRoutes(prefix, s.Spaces, s.Realtime)
 	if s.Library != nil {
@@ -108,13 +101,14 @@ func (s *Server) mountPublicFeatureRoutes(prefix string, deps *mountDeps) {
 
 // mountOperationalRoutes registers the unversioned metrics, agent-runtime
 // callback, and MCP endpoints.
-func (s *Server) mountOperationalRoutes() {
+func (s *Server) mountOperationalRoutes(deps *mountDeps) {
 	// Unmounted entirely when no token is configured: the output names every
 	// route, its traffic volume, and its error rate.
 	if token := metricsToken(); token != "" {
 		s.Router.Get("/metrics", s.Metrics.Handler(token))
 	}
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/activate", s.Spaces.AgentRuntimeActivate())
+	s.Router.Post("/internal/voice/live/settle", deps.agents.VoiceLiveSettle())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/start-receipt", s.Spaces.AgentRuntimeStartReceipt())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/budget", s.Spaces.AgentRuntimeExecutionBudget())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/steering", s.Spaces.AgentRuntimeSteering())

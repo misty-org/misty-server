@@ -57,7 +57,14 @@ def main():
                                              dsn + " user=postgres password=contract-test-password"})
             sql = ("CREATE ROLE misty_billing_runtime LOGIN PASSWORD 'runtime-test-password';\n"
                    + (BILLING / "deploy/runtime-grants.sql").read_text()
-                   + "\nUPDATE billing.usage_writer SET enabled=true;\n")
+                   + "\nUPDATE billing.usage_writer SET enabled=true;\n"
+                   # Basic has no recurring AI: one paying subscription funds the free pool,
+                   # and the limits account is on Pro so its 5-hour window can be exercised.
+                   + "INSERT INTO billing.accounts(user_id,license_id) VALUES ('pool-payer','account:pool-payer'),('limits-account','account:limits-account');\n"
+                   + "INSERT INTO billing.subscriptions(stripe_subscription_id,user_id,stripe_customer_id,stripe_price_id,tier,billing_interval,status,current_period_end)"
+                   + " VALUES ('sub_pool','pool-payer','cus_pool','price_pro','pro','year','active',now()+interval '30 days');\n"
+                   + "INSERT INTO billing.customer_licenses(user_id,license_id,record)"
+                   + " VALUES ('limits-account','account:limits-account','{\"tier\":\"pro\",\"status\":\"active\"}');\n")
             run("docker", "exec", "-i", container, "psql", "-v", "ON_ERROR_STOP=1",
                 "-U", "postgres", "-d", "misty_contract_test", input=sql, stdout=subprocess.DEVNULL)
             with socket.socket() as listener:

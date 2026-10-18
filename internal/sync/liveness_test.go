@@ -55,7 +55,7 @@ func TestBrowserSyncLivenessWritesOnlyTransitions(t *testing.T) {
 	ctx := context.Background()
 	root, rootKey, _ := ed25519.GenerateKey(rand.Reader)
 	a, keyA := syncTestGrant(uuid.NewString(), rootKey)
-	if err := store.CreateBrowserSyncVault(ctx, "owner", root, syncTestKeyEnvelope(), a); err != nil {
+	if err := store.CreateBrowserSyncVault(ctx, "owner", "", root, PasswordVaultKeys(syncTestKeyEnvelope()), a); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.PublishBrowserSync(ctx, "owner", syncTestMutation(a, keyA, 1)); err != nil {

@@ -151,7 +151,7 @@ func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, 
 		if err != nil {
 			return err
 		}
-		if kind != "direct" && (kind != "standard" || (creator != userID && role != "owner")) {
+		if kind != "standard" || role != "owner" {
 			return ErrSpaceForbidden
 		}
 		participantUserIDs, err := humanMemberIDsForConversationTx(ctx, tx, conversationID)

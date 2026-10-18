@@ -12,26 +12,42 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// confirmAgentAction applies the account's "Ask before acting for you" setting
-// to Misty's own consequential actions: invites, member removals, leaving a
-// Space and deletes. It shows the same approval card connected apps use and
-// holds the call while the user decides. It returns the approval to consume
-// before acting, a result telling the model the card is still waiting, or
-// nothing when the account does not ask first.
-func (s *SpacesService) confirmAgentAction(ctx context.Context, invocation agenttools.Invocation, subject string, arguments any, title, summary string) (*db.AgentAppRequest, json.RawMessage, error) {
-	settings, _, err := s.database.AISettings(ctx, invocation.UserID)
+// confirmAgentAction applies the run's Ask or Auto to one of Misty's own
+// consequential actions: invites, member removals, leaving a Space, deletes and
+// on-screen actions. need names the action and the one resource it touches.
+// It returns the approval to consume before acting, a result telling the model
+// the card is still waiting, or nothing when the action may continue.
+func (s *SpacesService) confirmAgentAction(ctx context.Context, invocation agenttools.Invocation, need grantNeed, subject string, arguments any, title, summary string) (*db.AgentAppRequest, json.RawMessage, error) {
+	canonical, _ := json.Marshal([]any{subject, arguments})
+	digest := sha256.Sum256(canonical)
+	return s.gateAction(ctx, invocation, need, subject, hex.EncodeToString(digest[:]), title, summary)
+}
+
+// gateAction decides one action and, when it pauses, shows the approval card
+// and holds the call while the person decides. The card records what
+// remembering it would grant, derived here from the call, never from the answer.
+func (s *SpacesService) gateAction(ctx context.Context, invocation agenttools.Invocation, need grantNeed, subject, argumentsHash, title, summary string) (*db.AgentAppRequest, json.RawMessage, error) {
+	decided, err := s.decideGrant(ctx, invocation, need)
 	if err != nil {
 		return nil, nil, err
 	}
-	if !settings.AppActionsAsk {
+	switch decided.decision {
+	case serveragent.DecisionAllow:
 		return nil, nil, nil
+	case serveragent.DecisionDeny:
+		return nil, nil, serveragent.ErrInvalidRequest("“" + title + "” is not allowed for this agent. Do not retry it; continue without it or ask the user.")
 	}
-	canonical, _ := json.Marshal([]any{subject, arguments})
-	digest := sha256.Sum256(canonical)
-	pending, err := s.database.OpenAgentAppRequest(ctx, db.AgentAppRequest{
+	title, summary = truncateAgentRuntimeText(title, 200), truncateAgentRuntimeText(summary, 3800)
+	request := db.AgentAppRequest{
 		OwnerUserID: invocation.UserID, RunID: invocation.RunID, Kind: "approve", Subject: subject,
-		ArgumentsHash: hex.EncodeToString(digest[:]), Title: truncateAgentRuntimeText(title, 200), Summary: truncateAgentRuntimeText(summary, 3800),
-	}, appsRequestTTL)
+		ArgumentsHash: argumentsHash, Title: title, Summary: summary, PermissionMode: decided.mode,
+	}
+	if decided.agentID != "" && need.rememberable() {
+		request.AgentID, request.Rememberable = decided.agentID, true
+		request.GrantAction, request.GrantScopeKind, request.GrantScopeID = string(need.action), string(need.scopeKind), need.scopeID
+		request.GrantConstraints, request.RememberLabel = need.constraints(), truncateAgentRuntimeText(need.label, 300)
+	}
+	pending, err := s.database.OpenAgentAppRequest(ctx, request, appsRequestTTL)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -59,7 +75,8 @@ func (s *SpacesService) confirmAgentAction(ctx context.Context, invocation agent
 	case "declined":
 		return nil, nil, serveragent.ErrInvalidRequest("The user declined “" + title + "”. Do not retry it; continue without it or ask the user.")
 	}
-	return nil, nil, serveragent.ErrInvalidRequest("The approval request expired. Call the tool again to ask the user again.")
+	// An approval that timed out counts as declined.
+	return nil, nil, serveragent.ErrInvalidRequest("The approval request for “" + title + "” expired without an answer, which counts as declined. Call the tool again to ask the user again.")
 }
 
 // useAgentActionApproval consumes an approval right before the action runs,

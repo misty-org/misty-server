@@ -62,6 +62,8 @@ func (s *SpacesService) AIModelSenses() http.HandlerFunc {
 			if catalogErr != nil {
 				options = []agent.SenseModel{}
 			}
+			// Pickers list a trimmed set; the account's own choice always stays listed.
+			options = agent.PickerModels(sense.Kind, options, modelRoute(routes, primary).Model)
 			if sense.Kind == "thinking" || sense.Kind == "seeing" {
 				for i := range options {
 					options[i].PaidOnly = !planAllowsModel(r.Context(), s.database, user, options[i].ID)
@@ -140,7 +142,7 @@ func defaultAIRoutes(model, reasoning string) []aimodels.Route {
 		reasoning = "low"
 	}
 	// Browsing is empty by default: it follows the run's vision route.
-	defaults := map[string]string{"agent": model, "vision": model, "browsing": "", "routing": envOr("MISTY_AI_LOW_MODEL", agent.TestingDefaultAgentLowGatewayModel), "realtime": agent.AgentRealtimeModel, "library": envOr("SMART_LIBRARY_PRIMARY_MODEL", agent.SmartLibraryPrimaryModel), "library-fallback": envOr("SMART_LIBRARY_FALLBACK_MODEL", agent.SmartLibraryFallbackModel), "embedding": envOr("SMART_LIBRARY_EMBEDDING_MODEL", agent.SmartLibraryEmbeddingModel), "transcription": envOr("AGENT_TRANSCRIPTION_MODEL", "openai/gpt-4o-mini-transcribe"), "transcription-fallback": agent.MediaSearchTranscriptionFallbackModel, "media-transcription": envOr("MEDIA_SEARCH_TRANSCRIPTION_MODEL", agent.MediaSearchTranscriptionModel), "media-transcription-fallback": envOr("MEDIA_SEARCH_TRANSCRIPTION_FALLBACK_MODEL", agent.MediaSearchTranscriptionFallbackModel), "speech": agent.AgentSpeechModel}
+	defaults := map[string]string{"agent": model, "vision": model, "browsing": "", "routing": envOr("MISTY_AI_LOW_MODEL", agent.TestingDefaultAgentLowGatewayModel), "realtime": agent.AgentRealtimeModel, "library": envOr("SMART_LIBRARY_PRIMARY_MODEL", agent.SmartLibraryPrimaryModel), "library-fallback": envOr("SMART_LIBRARY_FALLBACK_MODEL", agent.SmartLibraryFallbackModel), "embedding": envOr("SMART_LIBRARY_EMBEDDING_MODEL", agent.SmartLibraryEmbeddingModel), "transcription": envOr("AGENT_TRANSCRIPTION_MODEL", "openai/gpt-4o-mini-transcribe"), "transcription-fallback": agent.MediaSearchTranscriptionFallbackModel, "media-transcription": envOr("MEDIA_SEARCH_TRANSCRIPTION_MODEL", agent.MediaSearchTranscriptionModel), "media-transcription-fallback": envOr("MEDIA_SEARCH_TRANSCRIPTION_FALLBACK_MODEL", agent.MediaSearchTranscriptionFallbackModel), "speech": agent.AgentSpeechModel, "live-transcription": envOr("MISTY_LIVE_TRANSCRIPTION_MODEL", "soniox/stt-rt-v4"), "diarized-transcription": envOr("MISTY_DIARIZED_TRANSCRIPTION_MODEL", "soniox/stt-async-v4"), "dictation-cleanup": envOr("MISTY_AI_LOW_MODEL", agent.TestingDefaultAgentLowGatewayModel), "voice-notes": envOr("MISTY_VOICE_NOTES_MODEL", agent.FrontierDefaultModelID()), "day-summary": envOr("MISTY_AI_LOW_MODEL", agent.TestingDefaultAgentLowGatewayModel)}
 	result := make([]aimodels.Route, 0, len(aimodels.Roles))
 	for _, role := range aimodels.Roles {
 		effort := ""
@@ -154,6 +156,12 @@ func defaultAIRoutes(model, reasoning string) []aimodels.Route {
 	}
 	return result
 }
+// defaultRoleModel is Misty's model for a role no account chooses, so callers
+// never name a model themselves.
+func defaultRoleModel(role string) string {
+	return modelRoute(defaultAIRoutes("", ""), role).Model
+}
+
 func envOr(key, fallback string) string {
 	if v := strings.TrimSpace(envconfig.Getenv(key)); v != "" {
 		return v
@@ -205,7 +213,7 @@ func (s *SpacesService) AgentRuntimeModelProvider() http.HandlerFunc {
 			user = record.UserID
 			runID = record.ID
 		} else {
-			run, _, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), runID, body.RuntimeRunID)
+			run, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), runID, body.RuntimeRunID)
 			if err != nil {
 				writeAgentError(w, err)
 				return
@@ -237,7 +245,8 @@ func modelRoute(routes []aimodels.Route, role string) aimodels.Route {
 }
 
 func (s *AIService) accountAgentModel(ctx context.Context, user string) (string, string, bool, error) {
-	if s.providerSettings == nil {
+	// An account's own model choice applies only where the instance allows choosing (agent.ClientModelChoice).
+	if s.providerSettings == nil || !agent.ClientModelChoice() {
 		return "", "", false, nil
 	}
 	routes, err := s.database.AIModelRoutes(ctx, user)

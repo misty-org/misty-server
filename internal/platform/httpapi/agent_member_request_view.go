@@ -29,12 +29,8 @@ func agentRequestState(runState string) string {
 	}
 }
 
-// memberRequestState is agentRequestState plus the wait for the target
-// owner's approval, which is A2A's auth-required.
+// memberRequestState is the request's place in A2A's task lifecycle.
 func memberRequestState(request *db.AgentMemberRequest) string {
-	if request.Approval == "pending" && request.RunState == "queued" {
-		return "awaiting_approval"
-	}
 	return agentRequestState(request.RunState)
 }
 
@@ -61,10 +57,8 @@ func agentRequestView(request *db.AgentMemberRequest) json.RawMessage {
 			reason = "The agent stopped without a reply."
 		}
 		view["error"] = truncateAgentRuntimeText(reason, 2_000)
-	case "awaiting_approval":
-		view["note"] = "Waiting for " + request.TargetOwnerName + " to approve. Nothing runs until they do; the request expires after 24 hours. Call agents_request_status later, or carry on without it."
 	default:
-		view["note"] = "Still working. Call agents_request_status with this request_id to keep waiting."
+		view["note"] = "Still working. Call agent_request_status with this request_id to keep waiting."
 	}
 	return TestingMustAPIRawJSON(view)
 }

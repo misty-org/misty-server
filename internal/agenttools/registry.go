@@ -31,6 +31,19 @@ const (
 	LocalityRouted Locality = "routed"
 )
 
+// Layer is the permission layer a tool touches
+// (docs/design/spaces-as-profiles/BRIEF.md#private-and-public). Public tools
+// read and change the Space's shared items, which the database still filters
+// to "public, or owned by the viewer". Private tools reach a person's own
+// trees: memory, devices, connected apps, private chats and agent settings.
+// Every registration declares one; there is no default.
+type Layer string
+
+const (
+	LayerPublic  Layer = "public"
+	LayerPrivate Layer = "private"
+)
+
 var (
 	ErrInvalidRegistration = errors.New("invalid Agent Toolbox registration")
 	ErrToolNotFound        = errors.New("Agent Toolbox tool not found")
@@ -54,6 +67,7 @@ type Descriptor struct {
 	Approval           ApprovalPolicy
 	ApprovalBySource   map[string]ApprovalPolicy
 	Locality           Locality
+	Layer              Layer
 	Idempotent         bool
 	AuditEvent         string
 	Aliases            []string
@@ -62,8 +76,12 @@ type Descriptor struct {
 }
 
 type Invocation struct {
-	UserID                string
-	SpaceID               string
+	UserID  string
+	SpaceID string
+	// MemorySpaceID is the Space whose memory tree the run reads and writes:
+	// the Space of the window the request came from. Empty falls back to
+	// SpaceID, then to the asker's personal Space.
+	MemorySpaceID         string
 	AgentID               string
 	AgentInstanceID       string
 	RunID                 string
@@ -79,6 +97,11 @@ type Invocation struct {
 	// inside the tool handler. The descriptor still advertises the real policy;
 	// the handler remains responsible for enforcing it before any external write.
 	DelegatedApproval bool
+	// PermissionMode is the run's Ask or Auto, frozen when the run was admitted.
+	// Empty follows the agent's default.
+	PermissionMode string // PublicLayerOnly marks a run the private layer doesn't open for, such as a
+	// teammate's ask of someone's agent. Its tools see public items only.
+	PublicLayerOnly bool
 }
 
 type Handler func(context.Context, Invocation, serveragent.ToolRequest) (json.RawMessage, error)
@@ -354,6 +377,9 @@ func validateRegistration(descriptor Descriptor, handler Handler) error {
 	if descriptor.Locality != LocalityServer && descriptor.Locality != LocalityDevice && descriptor.Locality != LocalityProvider && descriptor.Locality != LocalityRouted {
 		return fmt.Errorf("%w: invalid locality for %s", ErrInvalidRegistration, descriptor.Name)
 	}
+	if descriptor.Layer != LayerPublic && descriptor.Layer != LayerPrivate {
+		return fmt.Errorf("%w: tool %s declares no layer", ErrInvalidRegistration, descriptor.Name)
+	}
 	if descriptor.Risk != serveragent.RiskRead && descriptor.AuditEvent == "" {
 		return fmt.Errorf("%w: write tool %s has no audit event", ErrInvalidRegistration, descriptor.Name)
 	}
@@ -380,4 +406,16 @@ func cloneDescriptor(descriptor Descriptor) Descriptor {
 		descriptor.ApprovalBySource = overrides
 	}
 	return descriptor
+}
+
+// PublicOnly drops every private-layer registration, for runs that may not
+// open the private layer. The model never sees what it cannot use.
+func PublicOnly(registrations []Registration) []Registration {
+	kept := make([]Registration, 0, len(registrations))
+	for _, registration := range registrations {
+		if registration.Descriptor.Layer != LayerPrivate {
+			kept = append(kept, registration)
+		}
+	}
+	return kept
 }

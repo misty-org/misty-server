@@ -74,7 +74,7 @@ func googleTestDatabase(t *testing.T) *Database {
 		`CREATE UNIQUE INDEX users_email_normalized_unique_idx ON users(lower(email))`,
 		`CREATE UNIQUE INDEX users_username_unique_idx ON users(username)`,
 		`ALTER TABLE password_reset_tokens ADD PRIMARY KEY(user_id)`,
-		`INSERT INTO users(id,license_id,name,username,email,password_hash) VALUES('legacy','legacy-license','Legacy','legacy','legacy@example.com','legacy-hash')`,
+		`INSERT INTO users(id,license_id,username,email,password_hash) VALUES('legacy','legacy-license','legacy','legacy@example.com','legacy-hash')`,
 		`CREATE OR REPLACE FUNCTION public.misty_rls_is_service() RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT current_setting('app.rls_mode',true)='service' $$`,
 	} {
 		if _, err = scoped.Exec(statement); err != nil {
@@ -101,7 +101,7 @@ func TestGoogleConcurrentProvisioning(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			user, err := db.GoogleUser("Concurrent", "parallel@example.com", "parallel-subject")
+			user, err := db.GoogleUser("parallel@example.com", "parallel-subject")
 			if err != nil {
 				t.Error(err)
 				return
@@ -129,7 +129,7 @@ func TestGoogleConcurrentProvisioning(t *testing.T) {
 func TestGoogleFlowExpiryAndSingleUse(t *testing.T) {
 	db := googleTestDatabase(t)
 	ctx := context.Background()
-	user, err := db.GoogleUser("Google", "flow@example.com", "flow-subject")
+	user, err := db.GoogleUser("flow@example.com", "flow-subject")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,11 +196,11 @@ func TestGoogleFlowExpiryAndSingleUse(t *testing.T) {
 func TestGoogleReauthenticationProofs(t *testing.T) {
 	database := googleTestDatabase(t)
 	ctx := context.Background()
-	user, err := database.GoogleUser("Google", "reauth@example.com", "reauth-subject")
+	user, err := database.GoogleUser("reauth@example.com", "reauth-subject")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.GoogleUser("Other", "other@example.com", "other-subject")
+	other, err := database.GoogleUser("other@example.com", "other-subject")
 	if err != nil {
 		t.Fatal(err)
 	}

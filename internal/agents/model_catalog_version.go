@@ -162,7 +162,9 @@ type gatewayCatalogItem struct {
 	Tags          []string        `json:"tags"`
 	Capabilities  json.RawMessage `json:"capabilities"`
 	ContextWindow int             `json:"context_window"`
-	Pricing       *struct {
+	// Released is when the maker released the model, in Unix seconds; zero when unknown.
+	Released int64 `json:"released"`
+	Pricing  *struct {
 		Input  string `json:"input"`
 		Output string `json:"output"`
 	} `json:"pricing"`

@@ -199,8 +199,8 @@ func TestVoiceConversationLiveRoutesScreenQuestions(t *testing.T) {
 	}
 	routes := map[string]string{} // prompt → tool, and how much it said around the hand-off
 	for _, c := range []struct{ prompt, want string }{
-		{"where's the push button on my screen?", "show_on_screen"},
-		{"walk me through committing my changes in the app I have open", "show_on_screen"},
+		{"where's the push button on my screen?", "start_task"},
+		{"walk me through committing my changes in the app I have open", "start_task"},
 		{"please push my branch to github for me", "start_task"},
 		{"thanks, how's your day going?", ""},
 	} {

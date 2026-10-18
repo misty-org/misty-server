@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -63,83 +62,6 @@ func (s *SpaceLibraryService) Usage() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, usage)
-	}
-}
-
-func (s *SpaceLibraryService) AssetStacks() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID := chi.URLParam(r, "spaceID")
-		if r.Method == http.MethodGet {
-			stacks, err := s.database.LibraryAssetStacks(r.Context(), userID, spaceID)
-			if err != nil {
-				writeLibraryError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"stacks": stacks})
-			return
-		}
-		var input db.CreateLibraryAssetStack
-		if decodeJSON(w, r, &input) != nil {
-			return
-		}
-		for _, member := range input.Members {
-			if err := s.validateSensitiveLibraryItem(r, userID, spaceID, member.ItemID); err != nil {
-				writeLibraryError(w, err)
-				return
-			}
-		}
-		stack, err := s.database.CreateLibraryAssetStack(r.Context(), userID, spaceID, input)
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, stack)
-	}
-}
-
-func (s *SpaceLibraryService) AssetStack() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID, stackID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "stackID")
-		if err := s.validateSensitiveLibraryAssetStack(r, userID, spaceID, stackID); err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		if r.Method == http.MethodPatch {
-			var input struct {
-				Version     int64  `json:"version"`
-				Title       string `json:"title"`
-				CoverItemID string `json:"cover_item_id"`
-				Effect      string `json:"effect"`
-			}
-			if decodeJSON(w, r, &input) != nil {
-				return
-			}
-			stack, err := s.database.UpdateLibraryAssetStack(r.Context(), userID, spaceID, stackID, input.Version, input.Title, input.CoverItemID, input.Effect)
-			if err != nil {
-				writeLibraryError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, stack)
-			return
-		}
-		version, err := strconv.ParseInt(r.URL.Query().Get("version"), 10, 64)
-		if err != nil {
-			writeLibraryError(w, db.ErrLibraryInvalid)
-			return
-		}
-		if err := s.database.DeleteLibraryAssetStack(r.Context(), userID, spaceID, stackID, version); err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

@@ -16,6 +16,9 @@ var usageLimitMessages = map[string]string{
 	"command": "This task is bigger than one task may use. Try splitting it into smaller requests.",
 	"service": "Misty's AI is busy right now. Try again in a little while.",
 	"model":   "That model isn't available. Choose another in Settings.",
+	// Too many new agent tasks at once, not an allowance: it clears as tasks finish.
+	"concurrency": "Too many agent tasks are running at once. Wait for one to finish, then try again.",
+	"rate":        "You're starting agent tasks faster than they can run. Wait a minute, then try again.",
 	"email":   "Confirm your email to start using AI. Check your inbox for the link.",
 }
 

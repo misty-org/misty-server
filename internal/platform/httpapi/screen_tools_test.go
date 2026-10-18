@@ -42,7 +42,7 @@ func TestScreenToolsAreOfferedOnlyToDesktopAgentRuns(t *testing.T) {
 }
 
 func TestScreenGuidanceOffersOnDemandScreensInsteadOfAModeChoice(t *testing.T) {
-	desktop := agentCapabilityGuidance([]string{"spaces.list", "screen.open", "screen.look"}, false)
+	desktop := agentCapabilityGuidance([]string{"space.list", "screen.open", "screen.look"}, false)
 	if !strings.Contains(desktop, "call screen_open") || !strings.Contains(desktop, "call screen_look") {
 		t.Fatal(desktop)
 	}
@@ -50,10 +50,26 @@ func TestScreenGuidanceOffersOnDemandScreensInsteadOfAModeChoice(t *testing.T) {
 	if strings.Contains(attached, "screen_open") || !strings.Contains(attached, "screen_look") {
 		t.Fatal(attached)
 	}
-	for _, guidance := range []string{desktop, attached, agentCapabilityGuidance([]string{"spaces.list"}, false)} {
+	for _, guidance := range []string{desktop, attached, agentCapabilityGuidance([]string{"space.list"}, false)} {
 		if strings.Contains(guidance, "above the composer") || strings.Contains(guidance, "Separate Misty window") {
 			t.Fatal("guidance still asks the user to pick a mode")
 		}
+	}
+}
+
+func TestARunThatCanOpenItsOwnTabLearnsTheBrowserToolsUpFront(t *testing.T) {
+	own := agentCapabilityGuidance([]string{"web.search", "web.fetch", "screen.open", "screen.look"}, false, true)
+	for _, want := range []string{"opens your own browser tab in the background and this run continues", "Act with browser_steps", "Use browser_act only for visual work"} {
+		if !strings.Contains(own, want) {
+			t.Fatalf("guidance lacks %q:\n%s", want, own)
+		}
+	}
+	if strings.Contains(own, "Either call ends this response") {
+		t.Fatal("an own tab is still described as a hand-off")
+	}
+	body := aiInvocationInput{DeviceContexts: []aiInvocationDeviceContext{{Kind: "workspace", Capabilities: json.RawMessage(`["web.fetch","browser.session"]`)}}}
+	if !invocationCanOpenOwnTab(body) || invocationCanOpenOwnTab(aiInvocationInput{}) {
+		t.Fatal("own tab detection is wrong")
 	}
 }
 

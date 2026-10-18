@@ -23,18 +23,21 @@ func newMemberRequestFixture(t *testing.T) memberRequestFixture {
 	t.Helper()
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	alice, err := database.CreateUser("Alice", "alice-member-request@example.com", "password123")
+	alice, err := database.CreateUser("alice-member-request@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	bob, err := database.CreateUser("Bob", "bob-member-request@example.com", "password123")
+	bob, err := database.CreateUser("bob-member-request@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
 	space := createTestSpace(t, database, ctx, alice.ID, "Launch team")
 	addTestSpaceMember(t, database, space.ID, bob.ID)
-	bobAgent, err := database.SavePersonalAgent(ctx, bob.ID, "", AgentProfileInput{Name: "Researcher", Instructions: "Find facts.", Enabled: true, SpaceID: space.ID})
+	bobAgent, err := database.SavePersonalAgent(ctx, bob.ID, "", AgentProfileInput{Name: "Researcher", Instructions: "Find facts.", Enabled: true})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.AddSpaceAgent(ctx, bob.ID, space.ID, bobAgent.ID); err != nil {
 		t.Fatal(err)
 	}
 	aliceAgent, err := database.SavePersonalAgent(ctx, alice.ID, "", AgentProfileInput{Name: "Planner", Enabled: true})
@@ -76,22 +79,15 @@ func (f memberRequestFixture) request(key string) (*AgentMemberRequest, error) {
 	})
 }
 
-func TestAgentMemberRequestRunsAsTargetOwnerAfterApproval(t *testing.T) {
+func TestAgentMemberRequestRunsAsTargetOwnerAtOnce(t *testing.T) {
 	f := newMemberRequestFixture(t)
 	ctx := context.Background()
-	if _, err := f.database.SaveSpaceAgentListing(ctx, f.alice.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{}); !errors.Is(err, ErrPersonalAgentNotFound) {
-		t.Fatalf("changing someone else's agent = %v", err)
+	if _, err := f.database.AddSpaceAgent(ctx, f.alice.ID, f.space.ID, f.bobAgent.ID); !errors.Is(err, ErrPersonalAgentNotFound) {
+		t.Fatalf("bringing someone else's agent = %v", err)
 	}
-	if _, err := f.database.SaveSpaceAgentListing(ctx, f.alice.ID, f.space.ID, f.aliceAgent.ID, SpaceAgentListingInput{}); !errors.Is(err, ErrAgentListingUnavailable) {
-		t.Fatalf("listing an agent in a Space it doesn't live in = %v", err)
-	}
-	// Bob's agent became a member when it moved in, asking first by default.
-	listings, err := f.database.SpaceAgentListings(ctx, f.alice.ID, f.space.ID)
-	if err != nil || len(listings) != 1 || listings[0].AgentID != f.bobAgent.ID || listings[0].OwnerName != "Bob" || listings[0].AcceptPolicy != "ask" {
-		t.Fatalf("listings = %#v, %v", listings, err)
-	}
-	if _, err := f.database.SaveSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{Description: "Answers research questions"}); err != nil {
-		t.Fatal(err)
+	agents, err := f.database.SpaceAgents(ctx, f.alice.ID, f.space.ID)
+	if err != nil || len(agents) != 1 || agents[0].AgentID != f.bobAgent.ID || agents[0].OwnerName != f.bob.Username {
+		t.Fatalf("Space agents = %#v, %v", agents, err)
 	}
 
 	request, err := f.request("call-1")
@@ -109,23 +105,9 @@ func TestAgentMemberRequestRunsAsTargetOwnerAfterApproval(t *testing.T) {
 	if child.SpaceID != f.space.ID || child.TriggerKind != "delegated" || child.ParentRunID != f.aliceRun.ID || child.DelegationDepth != 1 || child.AgentID != f.bobAgent.ID || child.InitialRunMode == "full" {
 		t.Fatalf("child run = %#v", child)
 	}
-	// Bob's listing asks first by default, so nothing runs until Bob approves.
-	if child.State != "queued" || request.Approval != "pending" || testRunJobCount(t, f.database, child.ID) != 0 {
-		t.Fatalf("Ask-mode request started without approval: state %s", child.State)
-	}
-	pending, err := f.database.PendingAgentMemberRequests(ctx, f.bob.ID)
-	if err != nil || len(pending) != 1 || pending[0].ID != request.ID {
-		t.Fatalf("Bob's pending requests = %#v, %v", pending, err)
-	}
-	if _, err := f.database.DecideAgentMemberRequest(ctx, f.alice.ID, request.ID, true); !errors.Is(err, ErrSpaceNotFound) {
-		t.Fatalf("the requester approved their own request: %v", err)
-	}
-	approved, err := f.database.DecideAgentMemberRequest(ctx, f.bob.ID, request.ID, true)
-	if err != nil || approved.RunState != "queued" || testRunJobCount(t, f.database, child.ID) != 1 {
-		t.Fatalf("approved request = %#v, %v", approved, err)
-	}
-	if _, err := f.database.DecideAgentMemberRequest(ctx, f.bob.ID, request.ID, false); !errors.Is(err, ErrSpaceConflict) {
-		t.Fatalf("deciding twice = %v", err)
+	// Nobody approves: the work is queued at once.
+	if child.State != "queued" || testRunJobCount(t, f.database, child.ID) != 1 {
+		t.Fatalf("request did not start at once: state %s", child.State)
 	}
 	replay, err := f.request("call-1")
 	if err != nil || replay.ID != request.ID || !replay.Replay {
@@ -137,7 +119,7 @@ func TestAgentMemberRequestRunsAsTargetOwnerAfterApproval(t *testing.T) {
 		t.Fatalf("delegated work billing command = %q, %v", command, err)
 	}
 	found, err := f.database.AgentMemberRequestForRun(ctx, child.ID)
-	if err != nil || found.ID != request.ID || found.RequesterName != "Alice" {
+	if err != nil || found.ID != request.ID || found.RequesterName != f.alice.Username {
 		t.Fatalf("request for run = %#v, %v", found, err)
 	}
 	if err := f.database.ValidateAgentMemberRequestRun(ctx, child.ID); err != nil {
@@ -148,19 +130,21 @@ func TestAgentMemberRequestRunsAsTargetOwnerAfterApproval(t *testing.T) {
 	}
 }
 
-func TestAgentMemberRequestLimitsAndRevocation(t *testing.T) {
+func TestAgentMemberRequestLimitsAndRemoval(t *testing.T) {
 	f := newMemberRequestFixture(t)
 	ctx := context.Background()
-	if _, err := f.database.SaveSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{MaxOpenRequests: 1}); err != nil {
-		t.Fatal(err)
+	requests := []*AgentMemberRequest{}
+	for _, key := range []string{"call-1", "call-2", "call-3"} {
+		request, err := f.request(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requests = append(requests, request)
 	}
-	request, err := f.request("call-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.request("call-2"); !errors.Is(err, ErrAgentRequestBusy) {
+	if _, err := f.request("call-4"); !errors.Is(err, ErrAgentRequestBusy) {
 		t.Fatalf("request over the open limit = %v", err)
 	}
+	request := requests[0]
 	setTestRunState(t, f.database, request.ChildRunID, "running")
 	if _, err := f.database.CreateAgentMemberRequest(ctx, AgentMemberRequestInput{
 		SpaceID: f.space.ID, RequesterUserID: f.bob.ID, RequesterAgentID: f.bobAgent.ID, RequesterRunID: request.ChildRunID,
@@ -169,19 +153,14 @@ func TestAgentMemberRequestLimitsAndRevocation(t *testing.T) {
 		t.Fatalf("delegated work requesting more work = %v", err)
 	}
 
-	if err := f.database.DeleteSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID); err != nil {
+	// The Space's owner can take any agent out; work stops at its next tool call.
+	if err := f.database.RemoveSpaceAgent(ctx, f.alice.ID, f.space.ID, f.bobAgent.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.database.ValidateAgentMemberRequestRun(ctx, request.ChildRunID); !errors.Is(err, ErrAgentListingUnavailable) {
-		t.Fatalf("agent kept working after its owner turned requests off: %v", err)
+	if err := f.database.ValidateAgentMemberRequestRun(ctx, request.ChildRunID); !errors.Is(err, ErrAgentNotInSpace) {
+		t.Fatalf("agent kept working after it left the Space: %v", err)
 	}
-	if _, err := f.database.SaveSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{AcceptPolicy: "off"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.database.ValidateAgentMemberRequestRun(ctx, request.ChildRunID); !errors.Is(err, ErrAgentListingUnavailable) {
-		t.Fatalf("listing set to off kept working: %v", err)
-	}
-	if _, err := f.database.SaveSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{AcceptPolicy: "auto", MaxOpenRequests: 3}); err != nil {
+	if _, err := f.database.AddSpaceAgent(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.database.ValidateAgentMemberRequestRun(ctx, request.ChildRunID); err != nil {
@@ -193,25 +172,21 @@ func TestAgentMemberRequestLimitsAndRevocation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.database.ValidateAgentMemberRequestRun(ctx, request.ChildRunID); !errors.Is(err, ErrAgentListingUnavailable) {
+	if err := f.database.ValidateAgentMemberRequestRun(ctx, request.ChildRunID); !errors.Is(err, ErrAgentNotInSpace) {
 		t.Fatalf("work continued after its owner left the Space: %v", err)
 	}
-	if listings, err := f.database.SpaceAgentListings(ctx, f.alice.ID, f.space.ID); err != nil || len(listings) != 0 {
-		t.Fatalf("a former member's agent is still listed: %#v, %v", listings, err)
+	if agents, err := f.database.SpaceAgents(ctx, f.alice.ID, f.space.ID); err != nil || len(agents) != 0 {
+		t.Fatalf("a former member's agent is still in the Space: %#v, %v", agents, err)
 	}
-	// The agent went home to Bob's personal Space.
-	moved, err := f.database.AskIdentityByID(ctx, f.bob.ID, f.bobAgent.ID)
-	if err != nil || moved.SpaceID != personalSpace(t, f.database, ctx, f.bob.ID).ID {
-		t.Fatalf("agent after its owner left = %#v, %v", moved, err)
+	// It is still in Bob's personal Space.
+	if ids, err := f.database.AgentSpaceIDs(ctx, f.bob.ID, f.bobAgent.ID); err != nil || len(ids) != 1 || ids[0] != personalSpace(t, f.database, ctx, f.bob.ID).ID {
+		t.Fatalf("agent's Spaces after its owner left = %v, %v", ids, err)
 	}
 }
 
 func TestCancellingRequesterStopsMemberWork(t *testing.T) {
 	f := newMemberRequestFixture(t)
 	ctx := context.Background()
-	if _, err := f.database.SaveSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{}); err != nil {
-		t.Fatal(err)
-	}
 	request, err := f.request("call-1")
 	if err != nil {
 		t.Fatal(err)
@@ -240,45 +215,4 @@ func testRunJobCount(t *testing.T, database *Database, runID string) int {
 		t.Fatal(err)
 	}
 	return count
-}
-
-func TestAgentMemberRequestAutoModeDeclineAndExpiry(t *testing.T) {
-	f := newMemberRequestFixture(t)
-	ctx := context.Background()
-	if _, err := f.database.SaveSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{MaxOpenRequests: 1}); err != nil {
-		t.Fatal(err)
-	}
-	declined, err := f.request("ask-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if declined, err = f.database.DecideAgentMemberRequest(ctx, f.bob.ID, declined.ID, false); err != nil || declined.RunState != "rejected" || declined.RunErrorMessage == "" {
-		t.Fatalf("declined request = %#v, %v", declined, err)
-	}
-	stale, err := f.request("ask-2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.request("ask-3"); !errors.Is(err, ErrAgentRequestBusy) {
-		t.Fatalf("an unanswered request did not hold the open slot: %v", err)
-	}
-	if err := f.database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE agent_member_requests SET created_at=NOW()-INTERVAL '25 hours' WHERE id=$1`, stale.ID)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// A listing that starts at once queues work immediately, and the expired
-	// request frees its slot.
-	if _, err := f.database.SaveSpaceAgentListing(ctx, f.bob.ID, f.space.ID, f.bobAgent.ID, SpaceAgentListingInput{AcceptPolicy: "auto", MaxOpenRequests: 1}); err != nil {
-		t.Fatal(err)
-	}
-	auto, err := f.request("auto-1")
-	if err != nil || auto.RunState != "queued" || testRunJobCount(t, f.database, auto.ChildRunID) != 1 {
-		t.Fatalf("Auto-mode request = %#v, %v", auto, err)
-	}
-	expired, err := f.database.AgentMemberRequestForUser(ctx, f.alice.ID, stale.ID)
-	if err != nil || expired.RunState != "rejected" {
-		t.Fatalf("stale request = %#v, %v", expired, err)
-	}
 }

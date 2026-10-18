@@ -55,21 +55,21 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	alice, _ := database.CreateUser("Alice", "alice-members@example.test", "password123")
-	bob, _ := database.CreateUser("Bob", "bob-members@example.test", "password123")
+	alice, _ := database.CreateUser("alice-members@example.test", "password123")
+	bob, _ := database.CreateUser("bob-members@example.test", "password123")
 	space, err := database.TestingCreateSpace(ctx, alice.ID, "Launch team")
 	if err != nil {
 		t.Fatal(err)
 	}
 	exec(`INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,'member')`, space.ID, bob.ID)
-	bobAgent, _ := database.SavePersonalAgent(ctx, bob.ID, "", db.AgentProfileInput{Name: "Researcher", Enabled: true, SpaceID: space.ID})
+	bobAgent, _ := database.SavePersonalAgent(ctx, bob.ID, "", db.AgentProfileInput{Name: "Researcher", Enabled: true})
 	aliceAgent, _ := database.SavePersonalAgent(ctx, alice.ID, "", db.AgentProfileInput{Name: "Planner", Enabled: true})
 	aliceRun, err := database.CreateCreatorAgentRun(ctx, alice.ID, "", aliceAgent.ID, db.CreatorAgentRunInput{Instruction: "Plan the launch"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	exec(`UPDATE space_runs SET state='running' WHERE id=$1`, aliceRun.ID)
-	if _, err := database.SaveSpaceAgentListing(ctx, bob.ID, space.ID, bobAgent.ID, db.SpaceAgentListingInput{Description: "Research"}); err != nil {
+	if _, err := database.AddSpaceAgent(ctx, bob.ID, space.ID, bobAgent.ID); err != nil {
 		t.Fatal(err)
 	}
 	meter := &memberBillingMeter{}
@@ -94,16 +94,17 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 		RequestID string `json:"request_id"`
 		State     string `json:"state"`
 	}
-	// Bob's listing asks first: the requester is told it waits for Bob.
-	if json.Unmarshal(raw, &sent) != nil || sent.State != "awaiting_approval" || !strings.Contains(string(raw), "Waiting for Bob") {
+	// The work starts at once; nobody approves it.
+	if json.Unmarshal(raw, &sent) != nil || sent.State != "submitted" {
 		t.Fatalf("request = %s", raw)
 	}
-	request, err := database.DecideAgentMemberRequest(ctx, bob.ID, sent.RequestID, true)
+	request, err := database.AgentMemberRequestForUser(ctx, alice.ID, sent.RequestID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// The delegated run gets only Space tools, and Alice pays for the work she asked for.
+	// The delegated run gets Space tools and reads Bob's agent's memory, and
+	// Alice pays for the work she asked for.
 	exec(`UPDATE space_runs SET state='running',runtime_run_id='runtime-1' WHERE id=$1`, request.ChildRunID)
 	child, _ := database.SpaceRun(ctx, bob.ID, request.ChildRunID)
 	// The run context freezes Bob's own model routes when the work starts.
@@ -114,12 +115,12 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{agentsRequestTool, "memory.list", "agents.configure", appsExecuteTool, "spaces.list", toolboxAgentsDelegate} {
+	for _, forbidden := range []string{agentsRequestTool, toolboxMemoryRemember, toolboxMemoryForget, "agent.configure", appsExecuteTool, "space.list", toolboxAgentsDelegate} {
 		if hasToolboxTool(childToolbox, forbidden) {
 			t.Fatalf("delegated run offers %s", forbidden)
 		}
 	}
-	if !hasToolboxTool(childToolbox, "notes.search") || childInvocation.UserID != bob.ID || childInvocation.SpaceID != space.ID || childInvocation.DelegatedApproval {
+	if !hasToolboxTool(childToolbox, "note.search") || !hasToolboxTool(childToolbox, "memory.pref.list") || childInvocation.UserID != bob.ID || childInvocation.SpaceID != space.ID || childInvocation.DelegatedApproval {
 		t.Fatalf("delegated invocation = %#v", childInvocation)
 	}
 	if _, err := service.meterPersonalAgentRuntimeModel(ctx, child, "model:1", workflowv2.StepRunning, json.RawMessage(`{"input_bytes":64}`)); err != nil {
@@ -132,12 +133,12 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 		t.Fatalf("billing reserved=%v completed=%v commands=%v; want the member who asked", meter.reserved, meter.completed, meter.commands)
 	}
 
-	// Turning requests off stops the work at its next tool call.
-	if err := database.DeleteSpaceAgentListing(ctx, bob.ID, space.ID, bobAgent.ID); err != nil {
+	// Taking the agent out of the Space stops the work at its next tool call.
+	if err := database.RemoveSpaceAgent(ctx, bob.ID, space.ID, bobAgent.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := childToolbox.Execute(ctx, childInvocation, agent.ToolRequest{ID: "c1", Name: "notes.search", Arguments: json.RawMessage(`{"query":"launch"}`)}, authorize); err == nil {
-		t.Fatal("agent kept working after requests were turned off")
+	if _, err := childToolbox.Execute(ctx, childInvocation, agent.ToolRequest{ID: "c1", Name: "note.search", Arguments: json.RawMessage(`{"query":"launch"}`)}, authorize); err == nil {
+		t.Fatal("agent kept working after it left the Space")
 	}
 
 	// The requester reads the finished reply.

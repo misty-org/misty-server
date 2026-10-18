@@ -33,12 +33,12 @@ func TestPersonalStorageUsageAggregatesAcrossJoinedSpaces(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	member, err := database.CreateUser("Basic Contributor", "global-storage-member@example.com", "password123")
+	member, err := database.CreateUser("global-storage-member@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstOwner, _ := database.CreateUser("First Max Owner", "global-storage-owner-1@example.com", "password123")
-	secondOwner, _ := database.CreateUser("Second Max Owner", "global-storage-owner-2@example.com", "password123")
+	firstOwner, _ := database.CreateUser("global-storage-owner-1@example.com", "password123")
+	secondOwner, _ := database.CreateUser("global-storage-owner-2@example.com", "password123")
 	for _, owner := range []User{*firstOwner, *secondOwner} {
 		if err := setAdapterFixtureCohort(database, owner.LicenseID, TierMax, LicenseStatusActive, nil); err != nil {
 			t.Fatal(err)
@@ -67,11 +67,11 @@ func TestSpaceOwnerPlanDoesNotLimitContributorStorage(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Basic Space Owner", "space-capacity-owner@example.com", "password123")
+	owner, err := database.CreateUser("space-capacity-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := database.CreateUser("Max Contributor", "space-capacity-member@example.com", "password123")
+	member, err := database.CreateUser("space-capacity-member@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,12 +97,12 @@ func TestConcurrentReservationsAcrossSpacesCannotRacePersonalLimit(t *testing.T)
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	member, err := database.CreateUser("Concurrent Contributor", "concurrent-storage-member@example.com", "password123")
+	member, err := database.CreateUser("concurrent-storage-member@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstOwner, _ := database.CreateUser("Concurrent Owner One", "concurrent-storage-owner-1@example.com", "password123")
-	secondOwner, _ := database.CreateUser("Concurrent Owner Two", "concurrent-storage-owner-2@example.com", "password123")
+	firstOwner, _ := database.CreateUser("concurrent-storage-owner-1@example.com", "password123")
+	secondOwner, _ := database.CreateUser("concurrent-storage-owner-2@example.com", "password123")
 	for _, owner := range []*User{firstOwner, secondOwner} {
 		if err := setAdapterFixtureCohort(database, owner.LicenseID, TierMax, LicenseStatusActive, nil); err != nil {
 			t.Fatal(err)

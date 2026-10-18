@@ -26,12 +26,12 @@ func (db *Database) LibraryItems(ctx context.Context, userID, spaceID string, qu
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryView); err != nil {
 			return err
 		}
-		filter := newLibraryItemFilter(spaceID, state, userID)
+		filter := newLibraryItemFilter(spaceID, state, userID, itemViewer(ctx, userID))
 		filter.applyAttributeFilters(query, structuredSearch)
 		if err := filter.applyMediaFilter(query.MediaType); err != nil {
 			return err
 		}
-		sortExpression, subquerySortExpression, err = filter.applyAlbumAndUtilityFilters(query, structuredSearch.Album, userID, sortExpression, subquerySortExpression)
+		sortExpression, subquerySortExpression, err = filter.applyUtilityFilter(query.Utility, userID, sortExpression, subquerySortExpression)
 		if err != nil {
 			return err
 		}
@@ -129,7 +129,7 @@ func libraryMediaSubtypeCondition(kind string) string {
 	case "selfies":
 		return "b.server_detected_mime_type LIKE 'image/%' AND " + metadata + " ~ '(selfie|front.camera)'"
 	case "live-photos":
-		return "(EXISTS(SELECT 1 FROM space_library_asset_stacks asset_stack WHERE asset_stack.space_id=i.space_id AND asset_stack.cover_item_id=i.id AND asset_stack.kind='live_photo' AND asset_stack.lifecycle_state='ready') OR b.server_detected_mime_type LIKE 'image/%' AND " + metadata + " ~ '(live.photo|motion.photo)')"
+		return "b.server_detected_mime_type LIKE 'image/%' AND " + metadata + " ~ '(live.photo|motion.photo)'"
 	case "portraits":
 		return "b.server_detected_mime_type LIKE 'image/%' AND " + metadata + " ~ '(portrait|depth.effect)'"
 	case "panoramas":
@@ -139,9 +139,9 @@ func libraryMediaSubtypeCondition(kind string) string {
 	case "cinematic":
 		return "b.server_detected_mime_type LIKE 'video/%' AND " + metadata + " ~ '(cinematic|depth.video)'"
 	case "bursts":
-		return "(EXISTS(SELECT 1 FROM space_library_asset_stacks asset_stack WHERE asset_stack.space_id=i.space_id AND asset_stack.cover_item_id=i.id AND asset_stack.kind='burst' AND asset_stack.lifecycle_state='ready') OR b.server_detected_mime_type LIKE 'image/%' AND " + metadata + " ~ '(burst|burst.identifier)')"
+		return "b.server_detected_mime_type LIKE 'image/%' AND " + metadata + " ~ '(burst|burst.identifier)'"
 	case "raw":
-		return "(EXISTS(SELECT 1 FROM space_library_asset_stacks asset_stack WHERE asset_stack.space_id=i.space_id AND asset_stack.cover_item_id=i.id AND asset_stack.kind='raw_pair' AND asset_stack.lifecycle_state='ready') OR lower(f.original_filename) ~ '\\.(dng|cr2|cr3|nef|nrw|arw|srf|sr2|raf|rw2|orf|pef|x3f)$')"
+		return "lower(f.original_filename) ~ '\\.(dng|cr2|cr3|nef|nrw|arw|srf|sr2|raf|rw2|orf|pef|x3f)$'"
 	case "screenshots":
 		return "b.server_detected_mime_type LIKE 'image/%' AND " + metadata + " ~ '(screenshot|screen.shot)'"
 	case "screen-recordings":

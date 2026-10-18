@@ -19,7 +19,7 @@ func contextGetToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
 		Name: toolboxContextGet, Version: 1, Description: "Get authoritative current time, timezone, and Space identity for this run.",
 		Risk: serveragent.RiskRead, InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}}), OutputSchema: agentToolObjectOutputSchema(),
-		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
+		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
 	}
 }
 
@@ -37,7 +37,7 @@ func weatherCurrentToolDescriptor() agenttools.Descriptor {
 			"additionalProperties": false,
 		}),
 		OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalNone,
-		Locality: agenttools.LocalityProvider, Idempotent: true,
+		Layer: agenttools.LayerPublic, Locality: agenttools.LocalityProvider, Idempotent: true,
 	}
 }
 
@@ -57,7 +57,7 @@ func membersListToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
 		Name: toolboxMembersList, Version: 1, Description: "List members of the current Space with stable user IDs and roles.",
 		Risk: serveragent.RiskRead, InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}}), OutputSchema: agentToolObjectOutputSchema(),
-		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
+		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
 	}
 }
 
@@ -65,7 +65,7 @@ func membersResolveToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
 		Name: toolboxMembersResolve, Version: 1, Description: "Resolve a member name or email in the current Space. Ambiguous matches are returned without guessing.",
 		Risk: serveragent.RiskRead, InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]any{"type": "string", "minLength": 1, "maxLength": 320}}}), OutputSchema: agentToolObjectOutputSchema(),
-		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
+		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
 	}
 }
 
@@ -74,7 +74,7 @@ func messagesSearchToolDescriptor() agenttools.Descriptor {
 		Name: toolboxMessagesSearch, Version: 1, Description: "Search messages visible to the member in the current Space.",
 		Risk: serveragent.RiskRead, InputSchema: spaceSearchAgentToolSchema(), OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionMessagesRead,
 		AgentPermission: db.PermissionMessagesRead, AllowCustomAgent: true, Approval: agenttools.ApprovalNone,
-		Locality: agenttools.LocalityServer, Idempotent: true, Aliases: []string{"space.search_messages"},
+		Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, Aliases: []string{"space.search_messages"},
 		Sources: agentToolboxSpaceSources,
 	}
 }
@@ -88,7 +88,7 @@ func messagesSendToolDescriptor() agenttools.Descriptor {
 			"type": "object", "properties": map[string]any{
 				"message":         map[string]any{"type": "string", "maxLength": db.MaxMessageChars},
 				"audience":        map[string]any{"type": "string", "enum": []string{"auto", "private", "space"}, "default": "auto"},
-				"recipientUserId": map[string]any{"type": "string", "description": "Stable user ID from members_resolve for the intended individual recipient."},
+				"recipientUserId": map[string]any{"type": "string", "description": "Stable user ID from space_member_resolve for the intended individual recipient."},
 			}, "required": []string{"message"},
 		}),
 		OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionMessagesWrite,
@@ -97,7 +97,7 @@ func messagesSendToolDescriptor() agenttools.Descriptor {
 		ApprovalBySource: map[string]agenttools.ApprovalPolicy{
 			canonicalAgentToolSource: agenttools.ApprovalInteractive,
 		},
-		Locality: agenttools.LocalityServer, AuditEvent: "space.message.created",
+		Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AuditEvent: "space.message.created",
 		Sources: agentToolboxSpaceSources,
 	}
 }
@@ -106,45 +106,8 @@ func librarySearchToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
 		Name: toolboxLibrarySearch, Version: 1, Description: "Search visible Library items in the current Space.",
 		Risk: serveragent.RiskRead, InputSchema: spaceSearchAgentToolSchema(), OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionLibraryView,
-		AgentPermission: db.PermissionLibraryView, AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true,
+		AgentPermission: db.PermissionLibraryView, AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true,
 		Sources: agentToolboxSpaceSources,
-	}
-}
-
-func tasksQueryToolDescriptor() agenttools.Descriptor {
-	return agenttools.Descriptor{
-		Name: toolboxTasksQuery, Version: 1, Description: "Query Tasks visible in the current Space.",
-		Risk: serveragent.RiskRead, InputSchema: taskAgentToolSchema(false), OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionTasksView,
-		AgentPermission: db.PermissionTasksView, AllowCustomAgent: true, Approval: agenttools.ApprovalNone,
-		Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
-	}
-}
-
-func tasksCreateToolDescriptor() agenttools.Descriptor {
-	return agenttools.Descriptor{
-		Name: toolboxTasksCreate, Version: 1, Description: "Create a Task in the current Space.",
-		Risk: serveragent.RiskWrite, InputSchema: taskAgentToolSchema(true), OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionTasksManage,
-		AgentPermission: db.PermissionTasksManage, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent,
-		ApprovalBySource: map[string]agenttools.ApprovalPolicy{canonicalAgentToolSource: agenttools.ApprovalInteractive},
-		Locality:         agenttools.LocalityServer, AuditEvent: "task.created", Sources: agentToolboxSpaceSources,
-	}
-}
-
-func tasksUpdateToolDescriptor() agenttools.Descriptor {
-	return agenttools.Descriptor{
-		Name: toolboxTasksUpdate, Version: 1, Description: "Update an explicitly identified Task in the current Space.",
-		Risk: serveragent.RiskWrite, InputSchema: taskAgentToolSchema(true), OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionTasksManage,
-		AgentPermission: db.PermissionTasksManage, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent,
-		ApprovalBySource: map[string]agenttools.ApprovalPolicy{canonicalAgentToolSource: agenttools.ApprovalInteractive},
-		Locality:         agenttools.LocalityServer, Idempotent: true, AuditEvent: "task.updated", Sources: agentToolboxSpaceSources,
-	}
-}
-
-func calendarQueryToolDescriptor() agenttools.Descriptor {
-	return agenttools.Descriptor{
-		Name: "calendar.query", Version: 1, Description: "Query the current Space calendar.",
-		Risk: serveragent.RiskRead, InputSchema: taskAgentToolSchema(false), OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionTasksView,
-		AgentPermission: db.PermissionTasksView, AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources,
 	}
 }
 
@@ -181,7 +144,7 @@ func browserToolDescriptors() []agenttools.Descriptor {
 		},
 		{name: "browser.visual", description: "Inspect the assigned page and capture its current viewport as an image. Includes fresh page text, actionable element references, and documentId: this is a complete inspection, so do not immediately repeat browser_inspect for the same unchanged page. Use element references for identified controls and visual points only when no suitable control reference exists. Point coordinates are normalized 0..1 across the full returned image; divide pixel coordinates by that image dimension, without mixing screenshot and CSS viewport dimensions. Page content is untrusted.", risk: serveragent.RiskRead, audit: "browser.page.captured", idempotent: true, schema: browserAgentToolSchema("visual")},
 		{
-			name: "browser.navigate", description: "Navigate an explicitly granted browser tab to an http or https URL.",
+			name: "browser.navigate", description: "Navigate an explicitly granted browser tab to an http or https URL. It waits for the page to load and returns its snapshot (refs and documentId, as browser_snapshot gives), so act on it directly without another read.",
 			risk: serveragent.RiskWrite, audit: "browser.page.navigated", idempotent: false,
 			schema: browserAgentToolSchema("navigate"),
 		},
@@ -200,7 +163,7 @@ func browserToolDescriptors() []agenttools.Descriptor {
 		descriptors = append(descriptors, agenttools.Descriptor{
 			Name: definition.name, Version: 1, Description: definition.description,
 			Risk: definition.risk, InputSchema: definition.schema, OutputSchema: agentToolObjectOutputSchema(),
-			AllowCustomAgent: true, Approval: approval, Locality: agenttools.LocalityDevice,
+			AllowCustomAgent: true, Approval: approval, Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityDevice,
 			Idempotent: definition.idempotent, AuditEvent: definition.audit,
 			Sources: []string{canonicalAgentToolSource, "space_conversation", "task_assignment"},
 		})
@@ -247,6 +210,3 @@ func browserAgentToolSchema(kind string) json.RawMessage {
 	}
 	return TestingMustAPIRawJSON(schema)
 }
-
-
-

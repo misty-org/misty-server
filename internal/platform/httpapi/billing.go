@@ -53,7 +53,7 @@ func customerBillingAction(database *db.Database, action string) http.HandlerFun
 				http.Error(w, "account unavailable", 503)
 				return
 			}
-			request.Customer = &billingadapter.Customer{Email: user.Email, Name: user.Name}
+			request.Customer = &billingadapter.Customer{Email: user.Email, Name: user.Username}
 		}
 		d, err := service.Adapter.Do(r.Context(), action, request)
 		if err != nil {

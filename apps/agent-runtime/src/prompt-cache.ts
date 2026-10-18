@@ -9,7 +9,7 @@ import type { ModelMessage, ToolResultPart } from "ai";
 // batches: each drop rewrites earlier messages and costs one uncached turn.
 
 /** Page tools whose results carry a snapshot tree. */
-const snapshotTools = new Set(["browser_snapshot", "browser_steps", "browser_fill_form"]);
+const snapshotTools = new Set(["browser_snapshot", "browser_steps", "browser_fill_form", "browser_navigate"]);
 /** The newest snapshots stay; the model acts on them. */
 const KEEP_SNAPSHOTS = 2;
 /** Stale snapshot text that triggers one batched drop. */
@@ -98,4 +98,19 @@ export function withCacheBreakpoint(messages: ModelMessage[], modelId: string): 
     const { providerOptions: _old, ...rest } = message;
     return (Object.keys(options).length ? { ...rest, providerOptions: options } : rest) as ModelMessage;
   });
+}
+
+/** Where the server's run-specific part of the system prompt (time, tab, device) begins. */
+const volatileMarkers = ["\n\nAuthoritative run context:", "\n\nCurrent time:"];
+
+/**
+ * Adds the runtime's fixed instructions to the server's system prompt ahead of the part that
+ * changes every run. Providers cache a prompt only up to its first difference, so fixed text
+ * after a timestamp would be re-read at full price by every new run.
+ */
+export function withRuntimeInstructions(system: string, fixed: string[]): string {
+  const marker = volatileMarkers.map((value) => system.indexOf(value)).filter((index) => index >= 0).sort((a, b) => a - b)[0];
+  const added = ["", ...fixed].join("\n");
+  if (marker === undefined) return system + "\n" + added;
+  return system.slice(0, marker) + added + system.slice(marker);
 }

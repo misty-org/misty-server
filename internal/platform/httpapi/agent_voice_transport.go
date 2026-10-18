@@ -7,14 +7,13 @@ import (
 	agent "github.com/kannachi323/misty/server/internal/agents"
 )
 
-// openVoiceTransport opens the account's voice. Basic accounts use the voice
+// openVoiceTransport opens the account's voice. Every plan uses the voice
 // pipeline (ElevenLabs Scribe, the fast model, ElevenLabs Flash), several
-// times cheaper per spoken reply; paid plans keep native Realtime.
+// times cheaper per spoken reply. Without an ElevenLabs key, or with
+// MISTY_VOICE_PIPELINE=realtime, it falls back to native Realtime.
 // MISTY_VOICE_ID picks Misty's ElevenLabs voice.
-// MISTY_VOICE_PIPELINE=all sends every plan through the pipeline.
 func (s *AgentsService) openVoiceTransport(ctx context.Context, account string) (voiceProvider, error) {
-	plan := accountPlan(ctx, s.database, account)
-	if (plan == "basic" || envOr("MISTY_VOICE_PIPELINE", "") == "all") && s.voiceAnalyzer != nil {
+	if envOr("MISTY_VOICE_PIPELINE", "") != "realtime" && s.voiceAnalyzer != nil {
 		pipeline, err := agent.NewVoicePipeline(ctx, s.voiceAnalyzer.Models, fastModel(), envOr("MISTY_VOICE_TTS_MODEL", "elevenlabs/eleven_flash_v2_5"), envOr("MISTY_VOICE_ID", ""))
 		if err == nil {
 			return pipeline, nil

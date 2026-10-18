@@ -11,23 +11,23 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// items.delete is the one delete tool for Misty items. Deleting asks first
+// item.delete is the one delete tool for Misty items. Deleting asks first
 // when the account asks first, and every delete re-checks the item's own
 // permissions in the database.
-const itemsDeleteTool = "items.delete"
+const itemsDeleteTool = "item.delete"
 
 func (s *SpacesService) deleteToolRegistration() agenttools.Registration {
 	return agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
 			Name: itemsDeleteTool, Version: 1, Risk: serveragent.RiskWrite, Approval: agenttools.ApprovalNone,
-			Description: "Delete a note, drawing, calendar event, thread or Library album; move a Library item to the trash; or archive a task or roadmap. " +
+			Description: "Delete a note, drawing or thread, or move a file to the trash. " +
 				"Use only when the user asked to delete that exact item; the user may see an approval card first. Every kind except notes and drawings also needs its Space.",
 			InputSchema: agentToolSchema(map[string]any{
-				"kind":  map[string]any{"type": "string", "enum": []string{"note", "task", "drawing", "calendar_event", "thread", "album", "roadmap", "library_item", "shared_file"}},
+				"kind":  map[string]any{"type": "string", "enum": []string{"note", "drawing", "thread", "library_item", "shared_file"}},
 				"id":    map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 				"space": map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 			}, []string{"kind", "id"}),
-			OutputSchema: agentToolObjectOutputSchema(), Locality: agenttools.LocalityServer, AllowCustomAgent: true, AuditEvent: "item.deleted",
+			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true, AuditEvent: "item.deleted",
 		},
 		Handler: s.executeItemDelete,
 	}
@@ -75,7 +75,8 @@ func (s *SpacesService) executeItemDelete(ctx context.Context, invocation agentt
 	if strings.TrimSpace(title) == "" {
 		title = "Untitled " + input.Kind
 	}
-	approval, waiting, err := s.confirmAgentAction(ctx, invocation, "misty.items.delete", []string{input.Kind, id}, "Delete "+input.Kind+" “"+title+"”", "This cannot be undone from the agent.")
+	need := grantNeed{action: serveragent.GrantItemDelete, scopeKind: serveragent.ScopeSpace, scopeID: spaceID, label: "delete items in " + s.spaceLabel(ctx, invocation.UserID, spaceID)}
+	approval, waiting, err := s.confirmAgentAction(ctx, invocation, need, "misty.items.delete", []string{input.Kind, id}, "Delete "+input.Kind+" “"+title+"”", "This cannot be undone from the agent.")
 	if err != nil || waiting != nil {
 		return waiting, err
 	}

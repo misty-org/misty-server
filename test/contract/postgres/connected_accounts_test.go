@@ -12,7 +12,7 @@ import (
 func TestConnectedAccountOAuthStateIsPrivateAndSingleUse(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Connection Owner", "connection-owner@example.com", "correct horse battery staple")
+	owner, err := database.CreateUser("connection-owner@example.com", "correct horse battery staple")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestConnectedAccountOAuthStateIsPrivateAndSingleUse(t *testing.T) {
 func TestConnectedAccountReconnectAndRevoke(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Mail Owner", "mail-owner@example.com", "correct horse battery staple")
+	owner, err := database.CreateUser("mail-owner@example.com", "correct horse battery staple")
 	if err != nil {
 		t.Fatal(err)
 	}

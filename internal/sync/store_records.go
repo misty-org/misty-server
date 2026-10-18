@@ -30,8 +30,14 @@ const (
 )
 
 var (
-	syncRecordCollections = map[string]bool{"bookmarks": true, "tab_groups": true, "history": true, "extension_sync": true, "passwords": true, syncClipboardCollection: true}
-	syncRecordKeyPattern  = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	// Space data travels in these too: extensions, site permissions, search
+	// engines and bangs, and the downloads list. The server sees only names.
+	syncRecordCollections = map[string]bool{
+		"bookmarks": true, "tab_groups": true, "history": true, "extension_sync": true, "passwords": true, "space_settings": true,
+		"extensions": true, "site_permissions": true, "search": true, "downloads": true,
+		syncClipboardCollection: true,
+	}
+	syncRecordKeyPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
 func recordMaxBytes(collection string) int {

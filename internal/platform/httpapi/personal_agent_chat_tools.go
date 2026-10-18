@@ -11,14 +11,12 @@ import (
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
 
-const toolboxMessagesSend = "messages.send"
+const toolboxMessagesSend = "message.send"
 
-func permittedSpaceConversationRead(ctx context.Context, database *db.Database, userID, spaceID, agentID, permission string) (bool, error) {
-	allowed, err := database.HasSpacePermission(ctx, userID, spaceID, permission)
-	if err != nil || !allowed || agentID == "" {
-		return allowed, err
-	}
-	return database.EffectiveAgentSpacePermission(ctx, userID, spaceID, agentID, permission)
+// permittedSpaceConversationRead reports whether the person may read the
+// Space. Their agents read with the same access.
+func permittedSpaceConversationRead(ctx context.Context, database *db.Database, userID, spaceID, _ string, permission string) (bool, error) {
+	return database.HasSpacePermission(ctx, userID, spaceID, permission)
 }
 
 type spaceConversationToolActor struct {
@@ -28,6 +26,13 @@ type spaceConversationToolActor struct {
 	runID          string
 	sessionID      string
 	conversationID string
+	// memorySpaceID is the Space whose memory tree the run uses (see
+	// agenttools.Invocation.MemorySpaceID).
+	memorySpaceID string
+	// memorySearch ranks memory by meaning; nil lists by recency instead.
+	memorySearch memorySearchFunc
+	// service runs the browser tools with the server's model client (browser.extract).
+	service *SpacesService
 }
 
 func executeSpaceConversationTool(ctx context.Context, database *db.Database, actor spaceConversationToolActor, originalPrompt string, tool serveragent.ToolRequest) (json.RawMessage, error) {
@@ -38,12 +43,6 @@ func executeSpaceConversationTool(ctx context.Context, database *db.Database, ac
 		return result, err
 	}
 	if result, handled, err := executeAgentDrawingTool(ctx, database, actor, tool); handled {
-		return result, err
-	}
-	if result, handled, err := executeAgentCalendarTool(ctx, database, actor, tool); handled {
-		return result, err
-	}
-	if result, handled, err := executeAgentRoadmapTool(ctx, database, actor, tool); handled {
 		return result, err
 	}
 	if result, handled, err := executeAgentLibraryTool(ctx, database, actor, tool); handled {
@@ -58,17 +57,10 @@ func executeSpaceConversationTool(ctx context.Context, database *db.Database, ac
 	if tool.Name == toolboxMessagesSend {
 		return executeAgentMessageSend(ctx, database, actor, originalPrompt, tool)
 	}
-	if tool.Name == "space.search_messages" || tool.Name == "library.search" {
+	if tool.Name == "space.search_messages" || tool.Name == "file.search" {
 		return executeSpaceSearchTool(ctx, database, actor, tool)
 	}
-	return executePermissionedSpaceTool(ctx, database, actor, originalPrompt, tool)
-}
-
-func agentSpaceRunSourceID(runID string) string {
-	if isAIInvocationRuntimeID(runID) {
-		return ""
-	}
-	return runID
+	return nil, workflowv2.ErrCapabilityDenied
 }
 
 func agentToolTimezone(originalInput string) string {
@@ -162,14 +154,12 @@ func resolveAgentMembers(members []db.SpaceMember, query string) []db.SpaceMembe
 }
 
 func (s *SpacesService) explicitMessageFileContext(ctx context.Context, userID string, membership *db.AskExecutionContext, spaceID string, attachmentIDs, libraryItemIDs []string) (string, string, []workflowv2.ContentRef) {
-	refs := make([]explicitTaskSourceRef, 0, len(attachmentIDs)+len(libraryItemIDs))
+	refs := make([]explicitAttachmentRef, 0, len(attachmentIDs)+len(libraryItemIDs))
 	for _, id := range attachmentIDs {
-		refs = append(refs, explicitTaskSourceRef{Kind: "chat_attachment", ResourceID: id})
+		refs = append(refs, explicitAttachmentRef{Kind: "chat_attachment", ResourceID: id})
 	}
 	for _, id := range libraryItemIDs {
-		refs = append(refs, explicitTaskSourceRef{Kind: "library_item", ResourceID: id})
+		refs = append(refs, explicitAttachmentRef{Kind: "library_item", ResourceID: id})
 	}
-	raw, _ := json.Marshal(refs)
-	task := &db.SpaceTask{ID: "message", SpaceID: spaceID, SourceRefs: raw}
-	return s.explicitTaskFileContext(ctx, userID, task)
+	return s.explicitAttachmentContext(ctx, userID, spaceID, refs)
 }

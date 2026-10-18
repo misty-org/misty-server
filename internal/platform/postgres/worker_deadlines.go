@@ -12,14 +12,6 @@ import (
 // The caller aliases library_processing_jobs as j; kind is an internal constant.
 func libraryJobEligibility(kind string) string {
 	switch kind {
-	case "ai":
-		return `EXISTS(SELECT 1 FROM space_library_items i JOIN library_files f ON f.id=i.file_id
-   JOIN library_blobs b ON b.id=f.blob_id WHERE i.id=j.target_id
-   AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready')`
-	case "faces":
-		return `EXISTS(SELECT 1 FROM space_library_items i JOIN library_files f ON f.id=i.file_id
-   JOIN library_blobs b ON b.id=f.blob_id WHERE i.id=j.target_id
-   AND i.lifecycle_state='ready' AND b.lifecycle_state='ready')`
 	case "edit":
 		return `EXISTS(SELECT 1 FROM library_item_versions v JOIN space_library_items i ON i.id=v.space_library_item_id
    JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id
@@ -35,7 +27,7 @@ func libraryJobEligibility(kind string) string {
 func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Duration, bool, error) {
 	var deadline string
 	switch queue {
-	case "library-ai", "library-edit", "library-faces":
+	case "library-edit":
 		kind := queue[len("library-"):]
 		eligible := libraryJobEligibility(kind)
 		deadline = `SELECT min(due) FROM (
@@ -82,6 +74,9 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
    (SELECT c.embedding_lease_until AS due FROM ai_retrieval_chunks c JOIN ai_retrieval_documents d ON d.id=c.document_id
     WHERE d.lifecycle_state='active' AND d.owner_user_id IS NOT NULL AND c.embedding IS NULL
     AND c.embedding_lease_until IS NOT NULL ORDER BY c.embedding_lease_until LIMIT 1)
+   UNION ALL
+   (SELECT GREATEST(due_at, COALESCE(embedding_lease_until, due_at)) AS due FROM memory_chunks
+    WHERE embedding IS NULL ORDER BY due_at LIMIT 1)
    ) pending`
 	default:
 		return 0, false, errors.New("unknown worker queue")

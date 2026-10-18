@@ -287,7 +287,7 @@ func validAISavedActions(raw json.RawMessage) bool {
 			return false
 		}
 		seen[action.ID] = true
-		if action.RequestedArtifactKind != "" && action.RequestedArtifactKind != "text_patch" && action.RequestedArtifactKind != "task_set" {
+		if action.RequestedArtifactKind != "" && action.RequestedArtifactKind != "text_patch" {
 			if _, ok := aiArtifactSpecs[action.RequestedArtifactKind]; !ok {
 				return false
 			}

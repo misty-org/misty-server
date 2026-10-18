@@ -53,10 +53,10 @@ func TestRoutedSpaceDescriptors(t *testing.T) {
 	for _, registration := range routedSpaceRegistrations(nil) {
 		routed[registration.Descriptor.Name] = registration.Descriptor
 	}
-	if _, ok := routed["context.get"]; ok {
-		t.Fatal("context.get is redundant for account runs")
+	if _, ok := routed["agent.context"]; ok {
+		t.Fatal("agent.context is redundant for account runs")
 	}
-	for name, wantRequired := range map[string]bool{"notes.search": false, "notes.create": false, "notes.update": true, "messages.send": true} {
+	for name, wantRequired := range map[string]bool{"note.search": false, "note.create": false, "note.update": true, "message.send": true} {
 		descriptor, ok := routed[name]
 		if !ok {
 			t.Fatalf("%s is not routed", name)

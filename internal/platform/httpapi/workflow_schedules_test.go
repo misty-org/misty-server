@@ -14,11 +14,11 @@ func TestScheduleConversationsBelongToTheWorkflowsAgentPostgres(t *testing.T) {
 	}
 	database := testkit.OpenDatabase(t)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Schedule owner", "scheduled-owner@example.test", "password123")
+	owner, err := database.CreateUser("scheduled-owner@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Other owner", "scheduled-other@example.test", "password123")
+	other, err := database.CreateUser("scheduled-other@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

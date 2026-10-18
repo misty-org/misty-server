@@ -126,3 +126,25 @@ function rejectingFetch() {
       }),
   );
 }
+
+describe("direct Anthropic", () => {
+  const anthropicKey = { AI_GATEWAY_API_KEY: "gateway-fixture", CLAUDE_API_KEY: "anthropic-fixture" };
+
+  it("sends Anthropic models to Anthropic with the instance key, in Anthropic's own naming", async () => {
+    const fetch = rejectingFetch();
+    vi.stubGlobal("fetch", fetch);
+    const resolved = resolveInstanceModel("anthropic/claude-haiku-5.5", options, anthropicKey);
+    expect(resolved.model.provider).not.toBe("gateway");
+    expect(resolved.options.providerOptions).not.toHaveProperty("gateway");
+    await expect(resolved.model.doGenerate(resolved.options)).rejects.toThrow();
+    const [url, request] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.anthropic.com/v1/messages");
+    expect(new Headers(request.headers).get("x-api-key")).toBe("anthropic-fixture");
+    expect(JSON.parse(request.body as string).model).toBe("claude-haiku-5-5");
+  });
+
+  it("keeps Anthropic models on the Gateway without a key, and other models off Anthropic", () => {
+    expect(resolveInstanceModel("anthropic/claude-haiku-5.5", options, { AI_GATEWAY_API_KEY: "x" }).model.provider).toBe("gateway");
+    expect(resolveInstanceModel("google/gemini-3.5-flash-lite", options, anthropicKey).model.provider).toBe("gateway");
+  });
+});

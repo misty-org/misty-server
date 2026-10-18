@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -25,12 +26,27 @@ type AgentAppRequest struct {
 	ExpiresAt     time.Time  `json:"expires_at"`
 	CreatedAt     time.Time  `json:"created_at"`
 	DecidedAt     *time.Time `json:"decided_at,omitempty"`
+	// What remembering this approval would grant, set by the server when it
+	// pauses. Rememberable requests name one concrete scope.
+	AgentID          string          `json:"agent_id,omitempty"`
+	GrantAction      string          `json:"grant_action,omitempty"`
+	GrantScopeKind   string          `json:"grant_scope_kind,omitempty"`
+	GrantScopeID     string          `json:"grant_scope_id,omitempty"`
+	GrantConstraints json.RawMessage `json:"grant_constraints,omitempty"`
+	RememberLabel    string          `json:"remember_label,omitempty"`
+	Rememberable     bool            `json:"rememberable"`
+	// PermissionMode is the run's Ask or Auto when it paused.
+	PermissionMode string `json:"permission_mode,omitempty"`
+	// SpaceID is unused now that accounts aren't chosen per Space; it stays for old rows.
+	SpaceID string `json:"space_id,omitempty"`
 }
 
-const agentAppRequestColumns = `id,owner_user_id,run_id,kind,subject,arguments_hash,title,summary,state,expires_at,created_at,decided_at`
+const agentAppRequestColumns = `id,owner_user_id,run_id,kind,subject,arguments_hash,title,summary,state,expires_at,created_at,decided_at,
+	agent_id,grant_action,grant_scope_kind,grant_scope_id,grant_constraints,remember_label,rememberable,permission_mode,space_id`
 
 func scanAgentAppRequest(row scanner, out *AgentAppRequest) error {
-	return row.Scan(&out.ID, &out.OwnerUserID, &out.RunID, &out.Kind, &out.Subject, &out.ArgumentsHash, &out.Title, &out.Summary, &out.State, &out.ExpiresAt, &out.CreatedAt, &out.DecidedAt)
+	return row.Scan(&out.ID, &out.OwnerUserID, &out.RunID, &out.Kind, &out.Subject, &out.ArgumentsHash, &out.Title, &out.Summary, &out.State, &out.ExpiresAt, &out.CreatedAt, &out.DecidedAt,
+		&out.AgentID, &out.GrantAction, &out.GrantScopeKind, &out.GrantScopeID, &out.GrantConstraints, &out.RememberLabel, &out.Rememberable, &out.PermissionMode, &out.SpaceID)
 }
 
 // OpenAgentAppRequest returns the live request for one exact need, or opens
@@ -39,28 +55,34 @@ func scanAgentAppRequest(row scanner, out *AgentAppRequest) error {
 func (db *Database) OpenAgentAppRequest(ctx context.Context, request AgentAppRequest, ttl time.Duration) (*AgentAppRequest, error) {
 	request.Title, request.Summary = strings.TrimSpace(request.Title), strings.TrimSpace(request.Summary)
 	if request.OwnerUserID == "" || request.RunID == "" || (request.Kind != "connect" && request.Kind != "approve") || len(request.Subject) < 2 || len(request.Subject) > 128 ||
-		request.Title == "" || len(request.Title) > 200 || len(request.Summary) > 4000 || ttl < time.Minute || ttl > time.Hour {
+		request.Title == "" || len(request.Title) > 200 || len(request.Summary) > 4000 || ttl < time.Minute || ttl > time.Hour || len(request.SpaceID) > 200 ||
+		len(request.RememberLabel) > 300 || (request.Rememberable && (request.AgentID == "" || request.GrantAction == "" || request.GrantScopeKind == "" || request.GrantScopeID == "")) {
 		return nil, ErrSpaceInvalid
 	}
+	if len(request.GrantConstraints) == 0 {
+		request.GrantConstraints = json.RawMessage(`{}`)
+	}
 	out := &AgentAppRequest{}
-	key := []any{request.OwnerUserID, request.Kind, request.Subject, request.ArgumentsHash}
+	key := []any{request.OwnerUserID, request.Kind, request.Subject, request.ArgumentsHash, request.SpaceID}
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(request.OwnerUserID), func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `UPDATE agent_app_requests SET state='expired' WHERE owner_user_id=$1 AND kind=$2 AND subject=$3 AND arguments_hash=$4
+		if _, err := tx.ExecContext(ctx, `UPDATE agent_app_requests SET state='expired' WHERE owner_user_id=$1 AND kind=$2 AND subject=$3 AND arguments_hash=$4 AND space_id=$5
 			AND state IN ('pending','approved') AND expires_at<=now()`, key...); err != nil {
 			return err
 		}
 		for attempt := 0; attempt < 2; attempt++ {
 			err := scanAgentAppRequest(tx.QueryRowContext(ctx, `SELECT `+agentAppRequestColumns+` FROM agent_app_requests
-				WHERE owner_user_id=$1 AND kind=$2 AND subject=$3 AND arguments_hash=$4
+				WHERE owner_user_id=$1 AND kind=$2 AND subject=$3 AND arguments_hash=$4 AND space_id=$5
 				AND (state IN ('pending','approved') OR (state='declined' AND decided_at>now()-interval '15 minutes'))
 				ORDER BY created_at DESC LIMIT 1`, key...), out)
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
-			inserted, err := tx.ExecContext(ctx, `INSERT INTO agent_app_requests(id,owner_user_id,run_id,kind,subject,arguments_hash,title,summary,state,expires_at)
-				VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending',now()+$9*interval '1 second') ON CONFLICT DO NOTHING`,
+			inserted, err := tx.ExecContext(ctx, `INSERT INTO agent_app_requests(id,owner_user_id,run_id,kind,subject,arguments_hash,title,summary,state,expires_at,
+				agent_id,grant_action,grant_scope_kind,grant_scope_id,grant_constraints,remember_label,rememberable,permission_mode,space_id)
+				VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending',now()+$9*interval '1 second',$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT DO NOTHING`,
 				"apprq_"+uuid.NewString(), request.OwnerUserID, request.RunID, request.Kind, request.Subject, request.ArgumentsHash,
-				request.Title, request.Summary, int(ttl/time.Second))
+				request.Title, request.Summary, int(ttl/time.Second), request.AgentID, request.GrantAction, request.GrantScopeKind,
+				request.GrantScopeID, request.GrantConstraints, request.RememberLabel, request.Rememberable, request.PermissionMode, request.SpaceID)
 			if err != nil {
 				return err
 			}
@@ -69,7 +91,7 @@ func (db *Database) OpenAgentAppRequest(ctx context.Context, request AgentAppReq
 			}
 		}
 		return scanAgentAppRequest(tx.QueryRowContext(ctx, `SELECT `+agentAppRequestColumns+` FROM agent_app_requests
-			WHERE owner_user_id=$1 AND kind=$2 AND subject=$3 AND arguments_hash=$4 AND state IN ('pending','approved')
+			WHERE owner_user_id=$1 AND kind=$2 AND subject=$3 AND arguments_hash=$4 AND space_id=$5 AND state IN ('pending','approved')
 			ORDER BY created_at DESC LIMIT 1`, key...), out)
 	})
 	return out, err

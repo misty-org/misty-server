@@ -14,11 +14,11 @@ import ()
 func TestAgentMethodVersionsOwnershipAndSchedulePin(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Method owner", "method-"+uuid.NewString()+"@example.test", "password123")
+	owner, err := database.CreateUser("method-"+uuid.NewString()+"@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Other", "method-"+uuid.NewString()+"@example.test", "password123")
+	other, err := database.CreateUser("method-"+uuid.NewString()+"@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestAgentMethodVersionsOwnershipAndSchedulePin(t *testing.T) {
 	if err != nil || paused.ID != schedule.ID || paused.NextRunAt != nil || paused.ConversationID != conversation {
 		t.Fatal("one schedule per workflow, paused without a next run", err)
 	}
-	listed, err := database.AgentMethods(ctx, owner.ID, agent.ID)
+	listed, err := database.AgentMethods(ctx, owner.ID, "", agent.ID)
 	if err != nil || len(listed) != 1 || listed[0].Schedule == nil || listed[0].Schedule.ID != schedule.ID {
 		t.Fatal("workflow list lost its schedule", err)
 	}

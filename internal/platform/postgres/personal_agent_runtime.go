@@ -17,10 +17,6 @@ type PersonalAgentRunSummary struct {
 	AgentID            string          `json:"agent_id"`
 	SpaceID            string          `json:"space_id"`
 	SpaceName          string          `json:"space_name"`
-	TaskID             string          `json:"task_id"`
-	TaskKey            string          `json:"task_key"`
-	TaskTitle          string          `json:"task_title"`
-	TaskStatus         string          `json:"task_status"`
 	TriggerKind        string          `json:"trigger_kind"`
 	SourceType         string          `json:"source_type"`
 	SourceMessageID    string          `json:"source_message_id,omitempty"`
@@ -51,27 +47,26 @@ type PersonalAgentRunDetail struct {
 	Instruction string                  `json:"instruction"`
 	Result      json.RawMessage         `json:"result"`
 	Steps       []WorkflowRunStep       `json:"steps"`
-	Activity    []SpaceTaskActivity     `json:"activity"`
 }
 
-const personalAgentRunSummaryColumns = `r.id,r.agent_id,''::text,''::text,COALESCE(t.id,''),COALESCE(t.task_key,''),COALESCE(t.title,''),COALESCE(t.status,''),
+const personalAgentRunSummaryColumns = `r.id,r.agent_id,''::text,''::text,
 	r.trigger_kind,r.source_type,COALESCE(r.source_message_id,''),COALESCE((SELECT response.id FROM space_messages response WHERE response.origin->>'agent_run_id'=r.id ORDER BY response.created_at DESC LIMIT 1),''),COALESCE(r.input->>'input_modality','text'),r.state,EXISTS(SELECT 1 FROM space_run_steps failed_step WHERE failed_step.run_id=r.id AND failed_step.state='failed'),r.runtime_phase,r.progress,r.attempt,r.runtime_kind,COALESCE(r.error_code,''),COALESCE(r.error_message,''),
 	r.created_at,r.updated_at,r.completed_at,r.runtime_heartbeat_at,
 	r.owner_user_id,r.initial_run_mode,r.effective_run_mode,COALESCE(r.parent_run_id,''),r.delegation_depth,r.context_bindings`
 
 func scanPersonalAgentRunSummary(row scanner, out *PersonalAgentRunSummary) error {
-	return row.Scan(&out.RunID, &out.AgentID, &out.SpaceID, &out.SpaceName, &out.TaskID, &out.TaskKey,
-		&out.TaskTitle, &out.TaskStatus, &out.TriggerKind, &out.SourceType, &out.SourceMessageID, &out.ResponseMessageID, &out.InputModality, &out.State, &out.HasFailedSteps, &out.Phase, &out.Progress, &out.Attempt,
+	return row.Scan(&out.RunID, &out.AgentID, &out.SpaceID, &out.SpaceName,
+		&out.TriggerKind, &out.SourceType, &out.SourceMessageID, &out.ResponseMessageID, &out.InputModality, &out.State, &out.HasFailedSteps, &out.Phase, &out.Progress, &out.Attempt,
 		&out.RuntimeKind, &out.ErrorCode, &out.ErrorMessage, &out.CreatedAt, &out.UpdatedAt,
 		&out.CompletedAt, &out.RuntimeHeartbeatAt, &out.OwnerUserID, &out.InitialRunMode, &out.EffectiveRunMode,
 		&out.ParentRunID, &out.DelegationDepth, &out.ContextBindings)
 }
 
 func (db *Database) PersonalAgentRunDetailForOwner(ctx context.Context, userID, runID string) (*PersonalAgentRunDetail, error) {
-	out := &PersonalAgentRunDetail{Steps: []WorkflowRunStep{}, Activity: []SpaceTaskActivity{}}
+	out := &PersonalAgentRunDetail{Steps: []WorkflowRunStep{}}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := scanPersonalAgentRunSummary(tx.QueryRowContext(ctx, `SELECT `+personalAgentRunSummaryColumns+`
-			FROM space_runs r LEFT JOIN space_tasks t ON t.id=r.source_task_id
+			FROM space_runs r
 			JOIN misty_ask_identities a ON a.id=r.agent_id
 			WHERE r.id=$1 AND a.owner_user_id=$2 AND a.deleted_at IS NULL
 			  AND r.owner_user_id=$2`, runID, userID), &out.Summary); err != nil {
@@ -99,24 +94,7 @@ func (db *Database) PersonalAgentRunDetailForOwner(ctx context.Context, userID, 
 			}
 			out.Steps = append(out.Steps, item)
 		}
-		if err := stepRows.Close(); err != nil {
-			return err
-		}
-		activityRows, err := tx.QueryContext(ctx, `SELECT `+spaceTaskActivityColumns+` FROM space_task_activity WHERE run_id=$1 ORDER BY created_at,id`, runID)
-		if err != nil {
-			return err
-		}
-		for activityRows.Next() {
-			var item SpaceTaskActivity
-			if err := scanSpaceTaskActivity(activityRows, &item); err != nil {
-				return err
-			}
-			out.Activity = append(out.Activity, item)
-		}
-		if err := activityRows.Close(); err != nil {
-			return err
-		}
-		return nil
+		return stepRows.Close()
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrSpaceNotFound
@@ -173,53 +151,16 @@ func (db *Database) FinishDispatchedPersonalAgentTaskRunJob(ctx context.Context,
 	})
 }
 
-func (db *Database) PersonalAgentTaskDone(ctx context.Context, runID, runtimeRunID string) (bool, error) {
-	var done bool
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT t.status='done' FROM space_tasks t JOIN space_runs r ON r.source_task_id=t.id
-			WHERE r.id=$1 AND r.runtime_run_id=$2 AND r.state='running' AND t.assignee_agent_id=r.agent_id AND t.archived_at IS NULL`, runID, runtimeRunID).Scan(&done)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		err = ErrSpaceForbidden
-	}
-	return done, err
-}
-
-func (db *Database) PersonalAgentTaskRuntimeRecord(ctx context.Context, runID, runtimeRunID string) (*SpaceRun, *SpaceTask, error) {
+// PersonalAgentRuntimeRecord is the run a runtime callback names.
+func (db *Database) PersonalAgentRuntimeRecord(ctx context.Context, runID, runtimeRunID string) (*SpaceRun, error) {
 	run := &SpaceRun{}
-	task := &SpaceTask{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs WHERE id=$1 AND runtime_run_id=$2`, runID, runtimeRunID), run); err != nil {
-			return err
-		}
-		if run.SourceTaskID == "" {
-			return nil
-		}
-		return scanSpaceTask(tx.QueryRowContext(ctx, `SELECT `+spaceTaskColumns+` FROM space_tasks WHERE id=$1`, run.SourceTaskID), task)
+		return scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs WHERE id=$1 AND runtime_run_id=$2`, runID, runtimeRunID), run)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrSpaceNotFound
 	}
-	return run, task, err
-}
-
-func (db *Database) AddPersonalAgentRuntimeFinalActivity(ctx context.Context, run *SpaceRun, task *SpaceTask, kind, message string, metadata json.RawMessage) error {
-	if run == nil || task == nil || strings.TrimSpace(message) == "" {
-		return ErrSpaceInvalid
-	}
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var exists bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_task_activity WHERE run_id=$1 AND metadata->>'runtime_final'='true')`, run.ID).Scan(&exists); err != nil || exists {
-			return err
-		}
-		var values map[string]any
-		if json.Unmarshal(metadata, &values) != nil || values == nil {
-			values = map[string]any{}
-		}
-		values["runtime_final"] = true
-		_, err := insertTaskActivityTx(ctx, tx, SpaceTaskActivity{SpaceID: task.SpaceID, TaskID: task.ID, ActorKind: "agent", ActorAgentID: run.AgentID, RunID: run.ID, Kind: kind, Message: message, Metadata: mustJSON(values)})
-		return err
-	})
+	return run, err
 }
 
 func releasePersonalAgentRuntimeReservationsTx(ctx context.Context, tx *sql.Tx, runID string) error {

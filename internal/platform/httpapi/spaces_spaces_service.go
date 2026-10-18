@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
@@ -26,23 +25,20 @@ import (
 )
 
 type SpacesService struct {
-	TestingJournalCollab    JournalCollabConfig
-	database                *db.Database
-	agent                   *serveragent.Service
-	library                 *SpaceLibraryService
-	avatarStore             LibraryObjectStore
-	aead                    cipher.AEAD
-	keyVer                  int16
-	invitationSender        mistyemail.SpaceInvitationSender
-	invitationBaseURL       string
-	agentRuntime            AgentRuntimeConfig
-	aiInvocations           *aiInvocationHub
-	searchAnalyzer          *serveragent.SmartLibraryAnalyzer
-	searchEmbeddingMu       sync.Mutex
-	searchEmbeddings        map[string]globalSearchEmbeddingCacheEntry
-	searchEmbeddingInflight map[string]*globalSearchEmbeddingFlight
-	usageMeter              serveragent.UsageMeter
-	models                  *modelruntime.Client
+	TestingJournalCollab JournalCollabConfig
+	database             *db.Database
+	agent                *serveragent.Service
+	library              *SpaceLibraryService
+	avatarStore          LibraryObjectStore
+	aead                 cipher.AEAD
+	keyVer               int16
+	invitationSender     mistyemail.SpaceInvitationSender
+	invitationBaseURL    string
+	agentRuntime         AgentRuntimeConfig
+	aiInvocations        *aiInvocationHub
+	searchAnalyzer       *serveragent.SmartLibraryAnalyzer
+	usageMeter           serveragent.UsageMeter
+	models               *modelruntime.Client
 }
 
 // SetModels sets where screen-planner model calls go.
@@ -58,15 +54,7 @@ func (s *SpacesService) SetUsageMeter(meter serveragent.UsageMeter) {
 }
 
 func (s *SpacesService) SetSearchAnalyzer(analyzer *serveragent.SmartLibraryAnalyzer) {
-	s.searchEmbeddingMu.Lock()
-	defer s.searchEmbeddingMu.Unlock()
 	s.searchAnalyzer = analyzer
-	if s.searchEmbeddings == nil {
-		s.searchEmbeddings = map[string]globalSearchEmbeddingCacheEntry{}
-	}
-	if s.searchEmbeddingInflight == nil {
-		s.searchEmbeddingInflight = map[string]*globalSearchEmbeddingFlight{}
-	}
 }
 
 func (s *SpacesService) SetInvitationSender(
@@ -78,6 +66,10 @@ func (s *SpacesService) SetInvitationSender(
 }
 
 func NewSpacesService(database *db.Database, agent *serveragent.Service, encryptionKey string) (*SpacesService, error) {
+	// Every agent tool declares its layer; a tool without one stops the server here.
+	if err := validateAgentToolLayers(); err != nil {
+		return nil, err
+	}
 	key, err := parseSpaceEncryptionKey(encryptionKey)
 	if err != nil {
 		return nil, err
@@ -255,19 +247,12 @@ func (s *SpacesService) Spaces() http.HandlerFunc {
 				"owner_storage": storage})
 		case http.MethodPost:
 			var body struct {
-				Name       string `json:"name"`
-				TemplateID string `json:"template_id"`
-				// Copies the structure of a Space the caller belongs to instead.
-				SourceSpaceID        string   `json:"source_space_id"`
-				IntegrationProviders []string `json:"integration_providers"`
+				Name string `json:"name"`
 			}
 			if decodeJSON(w, r, &body) != nil {
 				return
 			}
-			result, err := s.database.CreateSpaceFromSource(
-				r.Context(), userID, body.Name, body.TemplateID, body.SourceSpaceID,
-				body.IntegrationProviders, r.Header.Get("Idempotency-Key"),
-			)
+			result, err := s.database.CreateSpace(r.Context(), userID, body.Name, r.Header.Get("Idempotency-Key"))
 			if err != nil {
 				writeSpaceError(w, err)
 				return

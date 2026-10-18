@@ -7,6 +7,20 @@ import (
 	"time"
 )
 
+// Titles and conversation notes run on their own, not because the person asked,
+// so billing treats them as background work: Basic accounts never spend their
+// free tries on them.
+const (
+	conversationTitleKeyPrefix   = "conversation-title:"
+	conversationSummaryKeyPrefix = "conversation-summary:"
+)
+
+// backgroundUsage reports whether billing should see a reservation as
+// background work: an agent job, a title or conversation notes.
+func backgroundUsage(key, commandID string) bool {
+	return strings.HasPrefix(commandID, "agent-job:") || strings.HasPrefix(key, conversationTitleKeyPrefix) || strings.HasPrefix(key, conversationSummaryKeyPrefix)
+}
+
 // BillingMeter sends authenticated identity and native usage only. Private
 // billing calculates prices; a disabled adapter (development) never calls it.
 type BillingMeter struct{ Service *billingadapter.Service }
@@ -33,7 +47,7 @@ func (m BillingMeter) reserveNative(userID, key, provider, model string, units m
 			commandID = key[:i]
 		}
 	}
-	r, err := m.Service.Reserve(ctx, billingadapter.Request{CommandID: commandID, Background: strings.HasPrefix(commandID, "agent-job:"), Version: 1, AccountID: userID, Operation: "agent.model", OperationID: operationID, Key: key, Usage: billingadapter.Usage{Provider: provider, Model: model, Units: units, Estimated: true}})
+	r, err := m.Service.Reserve(ctx, billingadapter.Request{CommandID: commandID, Background: backgroundUsage(key, commandID), Version: 1, AccountID: userID, Operation: "agent.model", OperationID: operationID, Key: key, Usage: billingadapter.Usage{Provider: provider, Model: model, Units: units, Estimated: true}})
 	if err != nil {
 		return nil, err
 	}

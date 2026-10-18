@@ -41,6 +41,8 @@ type SpaceDrawing struct {
 	CanDelete              bool      `json:"can_delete"`
 	AudienceKind           string    `json:"audience_kind"`
 	AudienceConversationID string    `json:"audience_conversation_id,omitempty"`
+	// Visibility is "public" or "private": a private drawing opens only for its creator.
+	Visibility string `json:"visibility"`
 }
 
 func TestingNormalizeDrawingTitle(title string) (string, error) {
@@ -92,9 +94,9 @@ func (db *Database) CreateSpaceDrawing(
 		}
 		if err := tx.QueryRowContext(ctx,
 			`INSERT INTO space_drawings(id,space_id,creator_user_id,title)
-			 VALUES($1,$2,$3,$4) RETURNING created_at,updated_at`,
+			 VALUES($1,$2,$3,$4) RETURNING created_at,updated_at,visibility`,
 			drawing.ID, spaceID, creatorUserID, title,
-		).Scan(&drawing.CreatedAt, &drawing.UpdatedAt); err != nil {
+		).Scan(&drawing.CreatedAt, &drawing.UpdatedAt, &drawing.Visibility); err != nil {
 			return err
 		}
 		return recordDrawingEventTx(
@@ -127,12 +129,13 @@ func (db *Database) AccessibleSpaceDrawings(
 			        d.collaboration_revision,d.acl_version,d.created_at,d.updated_at,
 			        CASE WHEN d.creator_user_id=$1 THEN 'creator' ELSE 'editor' END,
 			        (d.creator_user_id=$1 OR s.owner_user_id=$1),d.audience_kind,
-			        COALESCE(d.audience_conversation_id,'')
+			        COALESCE(d.audience_conversation_id,''),d.visibility
 			 FROM space_drawings d
 			 JOIN spaces s ON s.id=d.space_id
 			 WHERE d.space_id=$2 AND d.lifecycle_state='active'
+			   AND (d.visibility='public' OR d.creator_user_id=$3)
 			   AND `+resourceAudienceSQL("d", "$1")+`
-			 ORDER BY d.updated_at DESC`, userID, spaceID)
+			 ORDER BY d.updated_at DESC`, userID, spaceID, itemViewer(ctx, userID))
 		if err != nil {
 			return err
 		}
@@ -144,7 +147,7 @@ func (db *Database) AccessibleSpaceDrawings(
 				&drawing.LifecycleState, &drawing.CollaborationRevision,
 				&drawing.ACLVersion, &drawing.CreatedAt, &drawing.UpdatedAt,
 				&drawing.Role, &drawing.CanDelete, &drawing.AudienceKind,
-				&drawing.AudienceConversationID,
+				&drawing.AudienceConversationID, &drawing.Visibility,
 			); err != nil {
 				return err
 			}
@@ -174,18 +177,22 @@ func drawingAccessForTx(
 	tx *sql.Tx,
 	userID, drawingID string,
 ) (DrawingAccess, error) {
-	var creatorID, spaceID, lifecycle, audienceKind, conversationID string
+	var creatorID, spaceID, lifecycle, audienceKind, conversationID, visibility string
 	err := tx.QueryRowContext(ctx,
 		`SELECT creator_user_id,space_id,lifecycle_state,audience_kind,
-		        COALESCE(audience_conversation_id,'')
+		        COALESCE(audience_conversation_id,''),visibility
 		 FROM space_drawings WHERE id=$1`,
 		drawingID,
-	).Scan(&creatorID, &spaceID, &lifecycle, &audienceKind, &conversationID)
+	).Scan(&creatorID, &spaceID, &lifecycle, &audienceKind, &conversationID, &visibility)
 	if errors.Is(err, sql.ErrNoRows) {
 		return DrawingAccess{}, nil
 	}
 	if err != nil {
 		return DrawingAccess{}, err
+	}
+	// A private drawing opens only for its creator, and not on public-only work.
+	if visibility == VisibilityPrivate && itemViewer(ctx, userID) != creatorID {
+		return DrawingAccess{}, nil
 	}
 	if audienceKind == SpaceAudienceConversation {
 		visible, err := humanConversationParticipantTx(ctx, tx, userID, spaceID, conversationID)
@@ -231,13 +238,13 @@ func (db *Database) SpaceDrawingByID(
 		return tx.QueryRowContext(ctx,
 			`SELECT id,space_id,creator_user_id,title,lifecycle_state,
 			        collaboration_revision,acl_version,created_at,updated_at,
-			        audience_kind,COALESCE(audience_conversation_id,'')
+			        audience_kind,COALESCE(audience_conversation_id,''),visibility
 			 FROM space_drawings WHERE id=$1`, drawingID,
 		).Scan(
 			&drawing.ID, &drawing.SpaceID, &drawing.CreatorUserID, &drawing.Title,
 			&drawing.LifecycleState, &drawing.CollaborationRevision,
 			&drawing.ACLVersion, &drawing.CreatedAt, &drawing.UpdatedAt,
-			&drawing.AudienceKind, &drawing.AudienceConversationID,
+			&drawing.AudienceKind, &drawing.AudienceConversationID, &drawing.Visibility,
 		)
 	})
 	if err != nil {

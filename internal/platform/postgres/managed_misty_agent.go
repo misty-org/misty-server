@@ -24,7 +24,7 @@ func (db *Database) EnsureAskIdentity(ctx context.Context, userID, modelID strin
 			return err
 		}
 		err := scanPersonalAgent(tx.QueryRowContext(ctx, `SELECT `+personalAgentColumns+` FROM misty_ask_identities
-			WHERE owner_user_id=$1 AND system_managed AND deleted_at IS NULL`, userID), out)
+			WHERE owner_user_id=$1 AND system_managed AND runner='misty' AND deleted_at IS NULL`, userID), out)
 		if err == nil {
 			return adoptDefaultAgentHistoryTx(ctx, tx, userID, out.ID)
 		}

@@ -37,7 +37,7 @@ func TestScheduledAndCleanupQueuesFollowAccountAISwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stopCleanup()
-	user, err := database.CreateUser("Lifecycle", "lifecycle-queues@example.invalid", "password123")
+	user, err := database.CreateUser("lifecycle-queues@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestScheduledAndCleanupQueuesFollowAccountAISwitch(t *testing.T) {
 func TestBoundedSpaceDataPurgeAndSingleRetentionOwner(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	user, err := database.CreateUser("Tickets", "retention-tickets@example.invalid", "password123")
+	user, err := database.CreateUser("retention-tickets@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

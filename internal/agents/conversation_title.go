@@ -41,7 +41,7 @@ func (s *Service) TitleConversation(ctx context.Context, userID, message, reply 
 	}
 	prompt += "\n\nWrite the title now."
 	model, provider := ConversationTitleModel(), ProviderVercelAI
-	key := "conversation-title:" + uuid.NewString()
+	key := conversationTitleKeyPrefix + uuid.NewString()
 	var reservation *UsageReservation
 	if s.meter != nil {
 		var err error

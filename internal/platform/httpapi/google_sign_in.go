@@ -28,7 +28,7 @@ type googleSignInStore interface {
 	AdvanceGoogleSignInFlow(context.Context, string, string, string) (db.GoogleSignInFlow, error)
 	FinishGoogleSignInFlow(context.Context, string, string, string, string) error
 	ConsumeGoogleSignInFlow(context.Context, string, string) (*db.GoogleSignInFlow, error)
-	GoogleUser(string, string, string) (*db.User, error)
+	GoogleUser(string, string) (*db.User, error)
 	GetUserByID(string) (*db.User, error)
 	CreateGoogleReauthenticationToken(context.Context, string, string) error
 }
@@ -190,8 +190,7 @@ func (s *GoogleSignInService) Callback() http.HandlerFunc {
 				payload, validationErr := s.validate(ctx, raw, s.oauth.ClientID)
 				if validationErr == nil && validGoogleIdentity(payload, flow.Nonce, s.oauth.ClientID) {
 					email, _ := payload.Claims["email"].(string)
-					name, _ := payload.Claims["name"].(string)
-					user, accountErr := s.googleAccount(flow, payload, name, email)
+					user, accountErr := s.googleAccount(flow, payload, email)
 					if accountErr == nil && user != nil {
 						userID = user.ID
 						errorCode = ""
@@ -351,9 +350,9 @@ func (s *GoogleSignInService) Complete() http.HandlerFunc {
 	}
 }
 
-func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *idtoken.Payload, name, email string) (*db.User, error) {
+func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *idtoken.Payload, email string) (*db.User, error) {
 	if flow.ReauthenticateUserID == "" {
-		return s.store.GoogleUser(name, email, payload.Subject)
+		return s.store.GoogleUser(email, payload.Subject)
 	}
 	user, err := s.store.GetUserByID(flow.ReauthenticateUserID)
 	if err != nil {

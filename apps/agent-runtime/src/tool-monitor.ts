@@ -47,6 +47,14 @@ export function toolMonitor({ catalog, order, checkpoint, rejected }: ToolMonito
       order.stop(outcome.reason);
       return;
     }
+    // An ordinary page action whose effect couldn't be confirmed (a toggle, a menu) is
+    // looked at again rather than ending the run. A consequential one still stops:
+    // it may have sent, paid or deleted, and must never be planned a second time.
+    if (outcome.kind === "stop" && uncertainPageAction(name, call.input)) {
+      const look = catalog.modelName("browser.snapshot") ? "browser.snapshot" : "browser.inspect";
+      requireInspection(look);
+      return;
+    }
     if (outcome.kind === "retry") {
       const signature = toolFailureSignature(name, call.input);
       const repeats = catalog.readOnly(call.toolName) ? 0 : (rejectedWrites.get(signature) ?? 0) + 1;
@@ -102,4 +110,13 @@ export function toolMonitor({ catalog, order, checkpoint, rejected }: ToolMonito
       });
     }),
   };
+}
+
+/** A browser page action, not marked consequential, whose outcome was uncertain. */
+function uncertainPageAction(name: string, input: unknown): boolean {
+  if (!name.startsWith("browser.") || name.startsWith("browser.workspace.")) return false;
+  const fields = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  if (fields.allowConsequential === true) return false;
+  const steps = Array.isArray(fields.steps) ? fields.steps : [];
+  return !steps.some((step) => step && typeof step === "object" && (step as Record<string, unknown>).allowConsequential === true);
 }

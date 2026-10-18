@@ -10,14 +10,11 @@ import (
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
 )
 
 const (
 	TestingLibraryUploadTokenHeader    = "X-Misty-Library-Upload-Token"
 	TestingLibrarySignedDownloadHeader = "X-Misty-Signed-Download"
-	libraryReauthenticationHeader      = "X-Misty-Library-Reauthentication"
 	libraryUploadLifetime              = 30 * time.Minute
 )
 
@@ -30,18 +27,10 @@ type SpaceLibraryService struct {
 	egress                      *EgressGuard
 	TestingUploadsEnabled       bool
 	TestingAttachmentsEnabled   bool
-	groupsEnabled               bool
 	previewsEnabled             bool
-	peopleEnabled               bool
-	peopleProcessor             LibraryPeopleProcessor
-	intelligence                *serveragent.SmartLibraryAnalyzer
-	aiEnabled                   bool
 	editingEnabled              bool
 	mediaProcessor              LibraryMediaProcessor
 	metadataExtractor           LibraryMetadataExtractor
-	locationsEnabled            bool
-	duplicatesEnabled           bool
-	importsEnabled              bool
 	exportsEnabled              bool
 	TestingUploadLimits         UploadLimits
 	TestingNoteAssetsEnabled    bool
@@ -188,21 +177,11 @@ func (l UploadLimits) TestingValidate() error {
 	return nil
 }
 
-func (s *SpaceLibraryService) SetSubsystems(attachmentsEnabled, groupsEnabled, previewsEnabled, peopleEnabled, editingEnabled, locationsEnabled, duplicatesEnabled, importsEnabled, exportsEnabled bool) {
+func (s *SpaceLibraryService) SetSubsystems(attachmentsEnabled, previewsEnabled, editingEnabled, exportsEnabled bool) {
 	s.TestingAttachmentsEnabled = attachmentsEnabled
-	s.groupsEnabled = groupsEnabled
 	s.previewsEnabled = previewsEnabled
-	s.peopleEnabled = peopleEnabled
 	s.editingEnabled = editingEnabled
-	s.locationsEnabled = locationsEnabled
-	s.duplicatesEnabled = duplicatesEnabled
-	s.importsEnabled = importsEnabled
 	s.exportsEnabled = exportsEnabled
-}
-
-func (s *SpaceLibraryService) SetIntelligence(analyzer *serveragent.SmartLibraryAnalyzer, aiEnabled bool) {
-	s.intelligence = analyzer
-	s.aiEnabled = aiEnabled
 }
 
 func (s *SpaceLibraryService) SetMetadataExtractor(extractor LibraryMetadataExtractor) {

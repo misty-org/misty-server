@@ -108,18 +108,6 @@ func TestingMistyCitationIDs(answer string, ids []string) []string {
 	return result
 }
 
-func TestingParseAITaskDraftSummaries(value string) ([]string, error) {
-	tasks, err := parseAITaskDrafts(value)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]string, len(tasks))
-	for index, task := range tasks {
-		result[index] = task.ID + ":" + task.Priority
-	}
-	return result, nil
-}
-
 func TestingAIArtifactPolicy(kind string) (string, string) {
 	spec := aiArtifactSpecs[kind]
 	return spec.Risk, spec.ApprovalPolicy

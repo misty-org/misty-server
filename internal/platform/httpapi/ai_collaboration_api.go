@@ -53,12 +53,25 @@ func (s *SpacesService) ConversationCollaboration() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"mode": mode, "plan": plan, "planHistory": history, "goal": goal, "questionSets": questions, "runningInvocationId": running})
+		permission, err := s.database.ConversationPermissionMode(r.Context(), user, conversation)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		checklists, err := s.database.ConversationChecklists(r.Context(), user, conversation)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		identity, _ := s.database.AgentConversationIdentity(r.Context(), user, conversation)
+		writeJSON(w, http.StatusOK, map[string]any{"mode": mode, "permissionMode": permission,
+			"agentPermissionMode": s.agentPermissionMode(r.Context(), user, identity.AgentID), "checklists": checklists, "plan": plan, "planHistory": history, "goal": goal, "questionSets": questions, "runningInvocationId": running})
 	}
 }
 
-// ConversationMode switches a conversation between Plan and Act. The next turn
-// is admitted in the new mode; a running turn keeps the mode it started with.
+// ConversationModeControl switches a conversation between Plan and Act, and
+// between Ask and Auto ("" follows the agent's default again). The next turn is
+// admitted in the new modes; a running turn keeps the modes it started with.
 func (s *SpacesService) ConversationModeControl() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, ok := s.appsUser(w, r)
@@ -66,16 +79,35 @@ func (s *SpacesService) ConversationModeControl() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Mode string `json:"mode"`
+			Mode           *string `json:"mode"`
+			PermissionMode *string `json:"permission_mode"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		if err := s.database.SetConversationMode(r.Context(), user, chi.URLParam(r, "conversationID"), strings.TrimSpace(body.Mode)); err != nil {
-			writeSpaceError(w, err)
+		conversation := chi.URLParam(r, "conversationID")
+		if body.Mode == nil && body.PermissionMode == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_mode"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"mode": strings.TrimSpace(body.Mode)})
+		out := map[string]any{}
+		if body.Mode != nil {
+			mode := strings.TrimSpace(*body.Mode)
+			if err := s.database.SetConversationMode(r.Context(), user, conversation, mode); err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+			out["mode"] = mode
+		}
+		if body.PermissionMode != nil {
+			mode := strings.TrimSpace(*body.PermissionMode)
+			if err := s.database.SetConversationPermissionMode(r.Context(), user, conversation, mode); err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+			out["permissionMode"] = mode
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 

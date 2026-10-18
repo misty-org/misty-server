@@ -236,7 +236,7 @@ func insertCreatorRunContexts(ctx context.Context, tx *sql.Tx, runID, ownerUserI
 
 // insertCreatorAgentRunJob queues the durable work item that executes the run.
 func insertCreatorAgentRunJob(ctx context.Context, tx *sql.Tx, runID, spaceID, agentID, trigger string) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO agent_run_jobs(run_id,space_id,task_id,agent_id,trigger_kind) VALUES($1,NULLIF($2,''),NULL,$3,$4)`, runID, spaceID, agentID, trigger)
+	_, err := tx.ExecContext(ctx, `INSERT INTO agent_run_jobs(run_id,space_id,agent_id,trigger_kind) VALUES($1,NULLIF($2,''),$3,$4)`, runID, spaceID, agentID, trigger)
 	return err
 }
 

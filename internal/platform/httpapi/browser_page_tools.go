@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -131,8 +132,9 @@ func withDescription(schema map[string]any, description string) map[string]any {
 	return copy
 }
 
-// browserPageStepsApproval applies "Ask before acting" to page actions the
-// model marked consequential, before the device job is queued.
+// browserPageStepsApproval pauses page actions in Ask before the device job is
+// queued. In Auto they continue; the device still pauses on sends, deletes,
+// publishes and payments unless a remembered grant for that site covers them.
 func (s *SpacesService) browserPageStepsApproval(ctx context.Context, invocation agenttools.Invocation, tool serveragent.ToolRequest, scopeID string) (*db.AgentAppRequest, json.RawMessage, error) {
 	var input struct {
 		AllowConsequential bool   `json:"allowConsequential"`
@@ -145,7 +147,7 @@ func (s *SpacesService) browserPageStepsApproval(ctx context.Context, invocation
 			Key    string `json:"key"`
 		} `json:"steps"`
 	}
-	if json.Unmarshal(tool.Arguments, &input) != nil || !input.AllowConsequential {
+	if json.Unmarshal(tool.Arguments, &input) != nil {
 		return nil, nil, nil
 	}
 	parts := make([]string, 0, len(input.Steps))
@@ -166,7 +168,7 @@ func (s *SpacesService) browserPageStepsApproval(ctx context.Context, invocation
 	if tool.Name == "browser.skill" {
 		summary = "On this page: " + truncateAgentRuntimeText(input.Skill+"."+input.Action, 80)
 	}
-	return s.confirmAgentAction(ctx, invocation, "browser.steps:"+scopeID, json.RawMessage(tool.Arguments), "Act on a web page", summary)
+	return s.confirmAgentAction(ctx, invocation, grantNeed{action: serveragent.ActionBrowserStep}, "browser.steps:"+scopeID, json.RawMessage(tool.Arguments), "Act on a web page", summary)
 }
 
 func validBrowserExtractRequest(raw json.RawMessage) (string, json.RawMessage, error) {
@@ -208,9 +210,15 @@ func (s *SpacesService) browsingModelRoute(ctx context.Context, user, run, fallb
 
 // browserExtract runs the extraction model over page text the device read.
 // The call is billed on the run's browsing route and spends no agent turn.
-func (s *SpacesService) browserExtract(ctx context.Context, invocation agenttools.Invocation, jobID string, arguments, page json.RawMessage) (json.RawMessage, error) {
-	instruction, schema, err := validBrowserExtractRequest(arguments)
-	if err != nil {
+func (s *SpacesService) browserExtract(ctx context.Context, invocation agenttools.Invocation, jobID string, arguments, page json.RawMessage) (out json.RawMessage, err error) {
+	// The model sees a generic failure; the reason belongs in the server log.
+	defer func() {
+		if err != nil {
+			log.Printf("browser.extract failed for run %s: %v", invocation.RunID, err)
+		}
+	}()
+	instruction, schema, validErr := validBrowserExtractRequest(arguments)
+	if err = validErr; err != nil {
 		return nil, err
 	}
 	var source struct {

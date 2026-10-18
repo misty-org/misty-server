@@ -2,9 +2,16 @@ name: misty-server-production
 
 x-api-image: &api-image
   image: ${MISTY_API_IMAGE:?set immutable MISTY_API_IMAGE}
+  build:
+    context: .
+    dockerfile: Dockerfile
 
 x-agent-runtime-image: &agent-runtime-image
   image: ${MISTY_AGENT_RUNTIME_IMAGE:?set immutable MISTY_AGENT_RUNTIME_IMAGE}
+  build:
+    context: .
+    dockerfile: apps/agent-runtime/Dockerfile
+    target: runtime
 
 x-logging: &logging
   logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
@@ -124,39 +131,39 @@ services:
     <<: [*api-image, *logging]
     restart: unless-stopped
     env_file:
-      - path: .env/prod/runtime.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/runtime.env
         required: false
-      - path: .env/prod/database.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/database.env
         required: false
-      - path: .env/prod/storage.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/storage.env
         required: false
-      - path: .env/prod/observability.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/observability.env
         required: false
-      - path: .env/prod/integrations/ai.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/integrations/ai.env
         required: false
-      - path: .env/prod/composio.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/composio.env
         required: false
-      - path: .env/prod/integrations/composio.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/integrations/composio.env
         required: false
-      - path: .env/prod/integrations/dropbox.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/integrations/dropbox.env
         required: false
-      - path: .env/prod/integrations/email.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/integrations/email.env
         required: false
-      - path: .env/prod/integrations/google.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/integrations/google.env
         required: false
-      - path: .env/prod/integrations/microsoft.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/integrations/microsoft.env
         required: false
-      - path: .env/prod/integrations/billing.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/integrations/billing.env
         required: false
-      - path: .env/prod/crypto/documents.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/crypto/documents.env
         required: false
-      - path: .env/prod/crypto/journal.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/crypto/journal.env
         required: false
-      - path: .env/prod/crypto/devices.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/crypto/devices.env
         required: false
-      - path: .env/prod/crypto/spaces.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/crypto/spaces.env
         required: false
-      - path: .env/prod/crypto/services.env
+      - path: .env/${MISTY_ENV_TARGET:-prod}/crypto/services.env
         required: false
     environment:
       PORT: "8080"
@@ -174,6 +181,8 @@ services:
       MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
     ports:
       - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"
+    volumes:
+      - librarydata:/var/lib/misty/library
     depends_on:
       database-permissions:
         condition: service_completed_successfully
@@ -189,6 +198,7 @@ services:
 
 volumes:
   pgdata:
+  librarydata:
 
 networks:
   edge:

@@ -11,8 +11,8 @@ import (
 )
 
 // startAgentMentionRequests turns @mentions of agent members in a Space chat
-// message into requests to those agents. Each runs under its owner's rules for
-// the Space (off, ask first, or start right away) and is billed to the sender.
+// message into requests to those agents. Each starts at once and is billed to
+// the sender.
 // The agent's reply, or why there is none, posts under the message. A request
 // that can't start never fails the message itself.
 func (s *SpacesService) startAgentMentionRequests(ctx context.Context, userID string, message *db.SpaceMessage, agentIDs []string) {
@@ -27,32 +27,22 @@ func (s *SpacesService) startAgentMentionRequests(ctx context.Context, userID st
 			continue
 		}
 		seen = append(seen, agentID)
-		request, err := s.database.CreateAgentMemberRequest(ctx, db.AgentMemberRequestInput{
+		_, err := s.database.CreateAgentMemberRequest(ctx, db.AgentMemberRequestInput{
 			SpaceID: message.SpaceID, RequesterUserID: userID, RequesterRunID: db.MentionRequester(message.ID),
 			TargetAgentID: agentID, Message: text, IdempotencyKey: agentID, SourceConversationID: message.ConversationID,
 		})
 		if err != nil {
 			s.explainUnstartedMention(ctx, userID, message, agentID, err)
-			continue
-		}
-		if request.Replay || request.Approval != "pending" {
-			continue
-		}
-		owner := firstName(request.TargetOwnerName, "its owner")
-		if _, err := s.database.CreateAgentMemberRequestMessage(ctx, request, "agent_member_request_pending", "Waiting for "+owner+" to approve this request."); err != nil {
-			log.Printf("agent mention: pending note for %s failed: %v", request.ID, err)
 		}
 	}
 }
 
-// explainUnstartedMention says in the chat why a mentioned agent won't answer,
-// when it is a member that turned the request down. Mentions of agents that
-// aren't members of this Space are ordinary text.
+// explainUnstartedMention says in the chat why a mentioned agent won't answer
+// when it is busy or the asker hit a limit. Mentions of agents that aren't in
+// this Space are ordinary text.
 func (s *SpacesService) explainUnstartedMention(ctx context.Context, userID string, message *db.SpaceMessage, agentID string, cause error) {
 	reason := ""
 	switch {
-	case errors.Is(cause, db.ErrAgentListingUnavailable):
-		reason = "I'm not taking requests here right now."
 	case errors.Is(cause, db.ErrAgentRequestBusy):
 		reason = "I have too many requests open. Try again when some finish."
 	case errors.Is(cause, db.ErrAgentRequestLimit):
@@ -61,15 +51,15 @@ func (s *SpacesService) explainUnstartedMention(ctx context.Context, userID stri
 		log.Printf("agent mention: request to %s failed: %v", agentID, cause)
 		return
 	}
-	listings, err := s.database.SpaceAgentListings(ctx, userID, message.SpaceID)
+	agents, err := s.database.SpaceAgents(ctx, userID, message.SpaceID)
 	if err != nil {
 		return
 	}
-	for _, listing := range listings {
-		if listing.AgentID != agentID {
+	for _, agent := range agents {
+		if agent.AgentID != agentID {
 			continue
 		}
-		request := &db.AgentMemberRequest{SpaceID: message.SpaceID, TargetAgentID: agentID, TargetOwnerUserID: listing.OwnerUserID,
+		request := &db.AgentMemberRequest{SpaceID: message.SpaceID, TargetAgentID: agentID, TargetOwnerUserID: agent.OwnerUserID,
 			SourceMessageID: message.ID, SourceConversationID: message.ConversationID}
 		if _, err := s.database.CreateAgentMemberRequestMessage(ctx, request, "agent_member_request_unavailable", reason); err != nil {
 			log.Printf("agent mention: unavailable note for %s failed: %v", agentID, err)
@@ -117,12 +107,33 @@ func (s *SpacesService) publishMentionReply(ctx context.Context, run *db.SpaceRu
 	if finishErr := s.database.FinishRunResponsePublication(ctx, actionID, state, details); finishErr != nil {
 		return finishErr
 	}
+	if publishErr == nil && run.State == "completed" {
+		s.startAgentReplyMentions(ctx, request, message, reply)
+	}
 	return publishErr
 }
 
-func firstName(name, fallback string) string {
-	if fields := strings.Fields(name); len(fields) > 0 {
-		return fields[0]
+// startAgentReplyMentions lets agents talk to each other in the chat: when a
+// reply @mentions another agent in the Space, that agent picks the thread up,
+// visibly and billed to the person who asked first. It goes one hop deep.
+func (s *SpacesService) startAgentReplyMentions(ctx context.Context, request *db.AgentMemberRequest, message *db.SpaceMessage, reply string) {
+	agents, err := s.database.SpaceAgents(ctx, request.RequesterUserID, request.SpaceID)
+	if err != nil {
+		return
 	}
-	return fallback
+	lower := strings.ToLower(reply)
+	started := 0
+	for _, agent := range agents {
+		if started >= 3 || agent.AgentID == request.TargetAgentID || !strings.Contains(lower, "@"+strings.ToLower(agent.AgentName)) {
+			continue
+		}
+		started++
+		if _, err := s.database.CreateAgentMemberRequest(ctx, db.AgentMemberRequestInput{
+			SpaceID: request.SpaceID, RequesterUserID: request.RequesterUserID, RequesterAgentID: request.TargetAgentID,
+			RequesterRunID: db.ReplyRequester(message.ID), TargetAgentID: agent.AgentID, Message: reply,
+			IdempotencyKey: agent.AgentID, SourceConversationID: request.SourceConversationID,
+		}); err != nil && !errors.Is(err, db.ErrAgentRequestLimit) {
+			log.Printf("agent reply mention: request to %s failed: %v", agent.AgentID, err)
+		}
+	}
 }

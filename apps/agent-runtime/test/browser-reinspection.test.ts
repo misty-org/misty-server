@@ -6,7 +6,7 @@ it("only replans for a known browser pre-dispatch stale rejection", () => {
   for (const result of [undefined, { status: "uncertain", reason: "browser_snapshot_stale" }, { denied: true }, { status: "failure", reason: "permission_denied", attempted: false }, { status: "failure", reason: "browser_snapshot_stale" }, { status: "failure", reason: "browser_snapshot_stale", attempted: true }]) {
     expect(requiresBrowserReinspection("browser.click", result)).toBe(false);
   }
-  expect(requiresBrowserReinspection("messages.send", { status: "failure", reason: "browser_snapshot_stale", attempted: false })).toBe(false);
+  expect(requiresBrowserReinspection("message.send", { status: "failure", reason: "browser_snapshot_stale", attempted: false })).toBe(false);
 });
 
 it("recaptures workspace input only when the host confirms no dispatch", () => {

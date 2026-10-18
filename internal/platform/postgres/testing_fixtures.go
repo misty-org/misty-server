@@ -13,7 +13,7 @@ import (
 // contract tests can set up spaces, messages and runs in one call.
 
 func (db *Database) TestingCreateSpace(ctx context.Context, userID, name string) (*Space, error) {
-	result, err := db.TestingCreateSpaceWithTemplate(ctx, userID, name, "blank", nil)
+	result, err := db.CreateSpace(ctx, userID, name, "")
 	if err != nil {
 		return nil, err
 	}
@@ -38,20 +38,12 @@ func (db *Database) TestingCreateSpaceConversationMessageWithReferences(ctx cont
 	return db.CreateSpaceConversationMessageWithReferencesAndClientNonce(ctx, userID, spaceID, conversationID, content, fileNodeIDs, attachmentIDs, libraryItemIDs, replyToMessageID, "")
 }
 
-func (db *Database) TestingCreateSpaceWithTemplate(ctx context.Context, userID, name, templateID string, providers []string) (*CreateSpaceResult, error) {
-	return db.CreateSpaceWithTemplateIdempotent(ctx, userID, name, templateID, providers, "")
-}
-
 func (db *Database) TestingAppendAIInvocationEvent(ctx context.Context, userID, invocationID string, sequence int64, eventType string, payload json.RawMessage, state string) error {
 	if sequence < 1 {
 		return ErrSpaceInvalid
 	}
 	_, err := db.CommitAIInvocationEvent(ctx, userID, invocationID, "compat:"+strconv.FormatInt(sequence, 10), eventType, payload, state)
 	return err
-}
-
-func (db *Database) TestingSearchSmartLibrary(userID, folderID, query string, limit int) ([]SmartLibrarySearchHit, error) {
-	return db.SearchSmartLibraryHybrid(userID, folderID, query, nil, limit)
 }
 
 func (db *Database) TestingAwaitAIUserIntervention(ctx context.Context, user, run, runtime, call, hook, scope, action, reason, digest string) (*AIInterventionWait, error) {

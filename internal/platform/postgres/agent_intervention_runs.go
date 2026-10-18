@@ -51,7 +51,7 @@ func agentInterventionAuthorityTx(ctx context.Context, tx *sql.Tx, user, run, ru
 		return nil
 	}
 	var valid bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_runs r JOIN misty_ask_identities a ON a.id=r.agent_id AND a.owner_user_id=r.owner_user_id JOIN agent_run_jobs j ON j.run_id=r.id AND j.agent_id=r.agent_id LEFT JOIN space_tasks t ON t.id=j.task_id WHERE r.id=$1 AND r.owner_user_id=$2 AND a.enabled AND a.deleted_at IS NULL AND j.state='dispatched' AND (j.task_id IS NULL OR (t.assignee_agent_id=j.agent_id AND t.archived_at IS NULL)))`, run, user).Scan(&valid)
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_runs r JOIN misty_ask_identities a ON a.id=r.agent_id AND a.owner_user_id=r.owner_user_id JOIN agent_run_jobs j ON j.run_id=r.id AND j.agent_id=r.agent_id WHERE r.id=$1 AND r.owner_user_id=$2 AND a.enabled AND a.deleted_at IS NULL AND j.state='dispatched')`, run, user).Scan(&valid)
 	if err != nil {
 		return err
 	}

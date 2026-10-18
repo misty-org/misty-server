@@ -14,7 +14,7 @@ import ()
 func TestPersonalAgentRuntimeIsFIFOAndSingleActivePerAgent(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Runtime Owner", "runtime-owner@example.com", "password123")
+	owner, err := database.CreateUser("runtime-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +22,7 @@ func TestPersonalAgentRuntimeIsFIFOAndSingleActivePerAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Other Ask", "other-scheduler@example.invalid", "password123")
+	other, err := database.CreateUser("other-scheduler@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

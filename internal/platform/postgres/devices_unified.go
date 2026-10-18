@@ -204,7 +204,7 @@ func (db *Database) UnifiedDeviceKey(ctx context.Context, userID, deviceID strin
 func (db *Database) DeviceVaultRoot(ctx context.Context, userID string) (*DeviceVaultRoot, error) {
 	root := &DeviceVaultRoot{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT vault_id::text,root_public_key,key_epoch FROM browser_sync_vaults WHERE user_id=$1`, userID).Scan(&root.VaultID, &root.RootPublicKey, &root.KeyEpoch)
+		return tx.QueryRowContext(ctx, `SELECT vault_id::text,root_public_key,key_epoch FROM browser_sync_vaults WHERE user_id=$1 AND key_envelope IS NOT NULL`, userID).Scan(&root.VaultID, &root.RootPublicKey, &root.KeyEpoch)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrDeviceVaultMissing

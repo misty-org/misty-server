@@ -23,8 +23,6 @@ const (
 	PermissionStorageViewOwn     = spaces.PermissionStorageViewOwn
 	PermissionStudioView         = spaces.PermissionStudioView
 	PermissionAskRun             = spaces.PermissionAskRun
-	PermissionTasksView          = spaces.PermissionTasksView
-	PermissionTasksManage        = spaces.PermissionTasksManage
 	PermissionIntegrationsManage = spaces.PermissionIntegrationsManage
 	PermissionSpaceInvite        = spaces.PermissionSpaceInvite
 	PermissionSpaceRename        = spaces.PermissionSpaceRename
@@ -33,7 +31,6 @@ const (
 	PermissionSpaceLeave         = spaces.PermissionSpaceLeave
 	LibraryRecoveryWindow        = spaces.LibraryRecoveryWindow
 )
-
 
 // Upload purposes decide which Space permission an upload needs and which
 // maximum file size applies. The database enforces the maximum independently of
@@ -62,16 +59,13 @@ func UploadPurposePermission(purpose string) (string, bool) {
 	return spaces.UploadPurposePermission(purpose)
 }
 
-var configurableSpacePermissions = spaces.ConfigurablePermissions()
-
 var (
-	ErrLibraryNotFound         = errors.New("library resource not found")
-	ErrLibraryForbidden        = errors.New("library permission denied")
-	ErrLibraryInvalid          = errors.New("invalid library request")
-	ErrLibraryQuota            = errors.New("account cloud storage quota exceeded")
-	ErrLibraryConflict         = errors.New("library resource version conflict")
-	ErrLibraryReauthentication = errors.New("library reauthentication required")
-	ErrLibraryUploadMismatch   = errors.New("library upload does not match its reservation")
+	ErrLibraryNotFound       = errors.New("library resource not found")
+	ErrLibraryForbidden      = errors.New("library permission denied")
+	ErrLibraryInvalid        = errors.New("invalid library request")
+	ErrLibraryQuota          = errors.New("account cloud storage quota exceeded")
+	ErrLibraryConflict       = errors.New("library resource version conflict")
+	ErrLibraryUploadMismatch = errors.New("library upload does not match its reservation")
 )
 
 type SpaceStorageUsage struct {
@@ -155,7 +149,9 @@ type SpaceLibraryItem struct {
 	RecoverUntil           *time.Time      `json:"recover_until,omitempty"`
 	Version                int64           `json:"version"`
 	UpdatedAt              time.Time       `json:"updated_at"`
-	File                   LibraryFile     `json:"file"`
+	// Visibility is "public" or "private": a private file opens only for whoever added it.
+	Visibility string      `json:"visibility"`
+	File       LibraryFile `json:"file"`
 }
 
 type MessageAttachment struct {

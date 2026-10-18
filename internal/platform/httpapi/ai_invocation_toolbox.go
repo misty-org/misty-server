@@ -14,7 +14,7 @@ import (
 // tools, attached browser tools and the agent's connected tools. The runtime
 // context, the MCP server and every tool call use this same resolution.
 func (s *SpacesService) aiInvocationToolbox(ctx context.Context, record *db.AIInvocationRecord, agentID, prompt string, collaboration collaborationState) (*agenttools.Registry, agenttools.Invocation, serveragent.ToolManifest, error) {
-	actor := spaceConversationToolActor{userID: record.UserID, agentID: agentID, runID: record.ID, sessionID: record.ConversationID}
+	actor := spaceConversationToolActor{userID: record.UserID, agentID: agentID, runID: record.ID, sessionID: record.ConversationID, memorySearch: s.searchMemory, service: s}
 	connected := append(s.aiInvocationConnectedTools(ctx, record), s.deviceToolRegistrations(ctx, record)...)
 	connected = append(connected, s.collaborationToolRegistrations(record, collaboration)...)
 	var body aiInvocationInput
@@ -22,7 +22,13 @@ func (s *SpacesService) aiInvocationToolbox(ctx context.Context, record *db.AIIn
 	// The run notebook, and sub-agents for runs that are not sub-agents themselves.
 	connected = append(connected, s.notebookToolRegistrations(record, body)...)
 	connected = append(connected, s.delegationToolRegistrations(record, body)...)
-	return resolveAIInvocationSpaceToolbox(ctx, s.database, actor, prompt, connected...)
+	connected = append(connected, s.codeDelegationToolRegistrations(ctx, record, body, s.attachedProjects(ctx, record), collaboration)...)
+	// web.fetch from the attached device, or the isolated Worker without one.
+	connected = withWebFetch(connected)
+	toolbox, invocation, manifest, err := resolveAIInvocationSpaceToolbox(ctx, s.database, actor, prompt, connected...)
+	invocation.PermissionMode = body.PermissionMode
+	invocation.MemorySpaceID = body.SpaceID
+	return toolbox, invocation, manifest, err
 }
 
 // aiInvocationConnectedTools are web search, the user's connected apps, the
@@ -37,14 +43,16 @@ func (s *SpacesService) aiInvocationConnectedTools(ctx context.Context, record *
 func resolveAIInvocationSpaceToolbox(ctx context.Context, database *db.Database, actor spaceConversationToolActor, prompt string, connected ...agenttools.Registration) (*agenttools.Registry, agenttools.Invocation, serveragent.ToolManifest, error) {
 	browserTabs, browserCapabilities := aiInvocationBrowserGrants(ctx, database, actor.userID, actor.runID)
 	options := agentToolboxOptions{
-		accountLevel: actor.spaceID == "", browserTabs: browserTabs, browserCapabilities: browserCapabilities,
-		extra: append(connected, agentMemberToolRegistrations(database)...),
+		accountLevel: actor.spaceID == "", browserTabs: browserTabs, browserCapabilities: browserCapabilities, browser: actor.service,
+		extra: append(connected, agentMemberToolRegistrations(database)...), memorySearch: actor.memorySearch,
+		// A chat run is always its asker's own.
+		run: ownRun(actor.userID),
 	}
 	subagents := false
 	for _, registration := range connected {
 		subagents = subagents || registration.Descriptor.Name == toolboxAgentsDelegateTasks
 	}
-	// agents_delegate replaces the older background worker where it is offered.
+	// agent_delegate replaces the older background worker where it is offered.
 	if actor.agentID == "" && !subagents {
 		options.delegation = func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
 			var input struct {
@@ -118,4 +126,3 @@ func agentToolNameAllowed(allowed []string, name string) bool {
 	}
 	return false
 }
-

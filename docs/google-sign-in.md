@@ -50,21 +50,7 @@ the automated tests.
 Account export/deletion may request a new Google flow with
 `{"reauthenticate":true}` while signed in. It must complete with the same Google
 subject and returns a five-minute, single-use `reauthentication_token` instead
-of replacing the session. These account proofs do not unlock the library.
-
-## Independent library password
-
-Hidden and Recently Deleted use a separate account-wide library password for
-both providers. On first unlock, the client checks `GET /v1/me/library-lock`,
-asks for a new password plus confirmation, and submits
-`POST /v1/me/library-lock`. Setup is atomic and cannot overwrite an existing
-password. Only a bcrypt hash is stored in `library_lock_credentials`; it is
-neither an account-login password nor a device vault key.
-
-Subsequent unlocks verify this password and issue the existing short-lived,
-user/space/collection-scoped grant. The migration revokes old grants derived from
-account passwords. Account password resets do not change the library lock.
-There is no library-password recovery or replacement flow in this change.
+of replacing the session.
 
 ## Verification
 
@@ -83,4 +69,4 @@ go test ./internal/platform/httpapi -count=1
 HTTP tests mock Google's token endpoint and exercise PKCE, state cookies, nonce,
 invalid signatures, cancellation, account conflicts, and callback/result replay.
 Client tests cover Google browser launch/cancellation, desktop cookie transport,
-and the first-use/returning library unlock forms.
+and the account reauthentication flow.

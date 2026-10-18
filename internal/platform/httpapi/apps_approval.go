@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	"github.com/kannachi323/misty/server/internal/agenttools"
@@ -14,51 +13,66 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// appsApproval waits for the user's decision on one exact action when the
-// account asks first, or asks before paying and this action pays. It returns
-// the approval to consume, or a result that tells the model the card is still
-// waiting.
-func (s *SpacesService) appsApproval(ctx context.Context, invocation agenttools.Invocation, info composio.ToolInfo, call appsCall) (*db.AgentAppRequest, json.RawMessage, error) {
-	settings, _, err := s.database.AISettings(ctx, invocation.UserID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if !settings.AppActionsAsk && !(settings.PaymentsAsk && appsPaymentAction(info.Slug)) {
-		return nil, nil, nil
-	}
+// appsApproval applies the run's Ask or Auto to one exact app action. Sends,
+// shares, deletes and payments need the person unless, in Auto, they
+// remembered an approval for this connected account (or, for a payment, this
+// merchant up to a cap). Smaller writes pause only in Ask. It returns the
+// approval to consume, or a result that tells the model the card is waiting.
+func (s *SpacesService) appsApproval(ctx context.Context, invocation agenttools.Invocation, info composio.ToolInfo, call appsCall, kind composio.Kind) (*db.AgentAppRequest, json.RawMessage, error) {
 	title, summary := appsActionSummary(info, call)
-	pending, err := s.database.OpenAgentAppRequest(ctx, db.AgentAppRequest{
-		OwnerUserID: invocation.UserID, RunID: invocation.RunID, Kind: "approve", Subject: info.Slug,
-		ArgumentsHash: appsArgumentsHash(call), Title: title, Summary: summary,
-	}, appsRequestTTL)
-	if err != nil {
-		return nil, nil, err
+	return s.gateAction(ctx, invocation, appsGrantNeed(info, call, kind), info.Slug, appsArgumentsHash(call), title, summary)
+}
+
+// appsGrantNeed is what an app action needs: payments name the app as the
+// merchant and carry the amount when the arguments state one; other
+// consequential actions name the one connected account they act through.
+func appsGrantNeed(info composio.ToolInfo, call appsCall, kind composio.Kind) grantNeed {
+	if !kind.NeedsApproval() && !appsPaymentAction(info.Slug) {
+		return grantNeed{action: serveragent.ActionToolWrite}
 	}
-	if pending.State == "pending" {
-		s.showAppRequest(ctx, invocation.UserID, invocation.RunID, pending)
-		if _, err := appsWaitFor(ctx, appsWait, time.Second, func() (bool, error) {
-			current, err := s.database.AgentAppRequest(ctx, invocation.UserID, pending.ID)
-			if err == nil {
-				pending = current
-			}
-			return pending.State != "pending", err
-		}); err != nil {
-			return nil, nil, err
+	app := strings.TrimSpace(info.Toolkit.Name)
+	if app == "" {
+		app = info.Toolkit.Slug
+	}
+	toolkit := strings.ToLower(strings.TrimSpace(info.Toolkit.Slug))
+	if appsPaymentAction(info.Slug) {
+		need := grantNeed{action: serveragent.GrantPayment, scopeKind: serveragent.ScopeMerchant, scopeID: toolkit, amount: appsPaymentAmount(call)}
+		if need.amount != nil {
+			need.label = fmt.Sprintf("pay through %s up to %s", app, formatGrantAmount(*need.amount))
 		}
+		return need
 	}
-	switch pending.State {
-	case "approved":
-		return pending, nil, nil
-	case "pending":
-		return nil, TestingMustAPIRawJSON(map[string]any{
-			"status": "awaiting_approval", "request": pending.ID,
-			"message":      "An approval card for “" + title + "” is showing in the chat. This run ends here and Misty continues after the user decides.",
-			"user_message": "“" + title + "” is waiting for your approval above. Misty continues after you decide.",
-		}), nil
-	case "declined":
-		return nil, nil, serveragent.ErrInvalidRequest("The user declined “" + title + "”. Do not retry it; continue without it or ask the user.")
+	account := strings.TrimSpace(call.Account)
+	label := "act in " + app
+	if account == "" {
+		account = "default"
+	} else {
+		label += " (" + account + ")"
 	}
-	return nil, nil, serveragent.ErrInvalidRequest("The approval request expired. Call apps_execute again to ask the user again.")
+	return grantNeed{action: serveragent.GrantAppAction, scopeKind: serveragent.ScopeConnectedAccount, scopeID: toolkit + ":" + account, label: label}
+}
+
+// appsPaymentAmount reads an amount in minor units and its currency when the
+// action's arguments carry them (Stripe and Square style); otherwise the
+// payment cannot be remembered, since a grant needs a cap.
+func appsPaymentAmount(call appsCall) *grantAmount {
+	var fields struct {
+		Amount   json.Number `json:"amount"`
+		Currency string      `json:"currency"`
+	}
+	if json.Unmarshal(call.Arguments, &fields) != nil {
+		return nil
+	}
+	amount, err := fields.Amount.Int64()
+	currency := strings.ToLower(strings.TrimSpace(fields.Currency))
+	if err != nil || amount <= 0 || len(currency) != 3 {
+		return nil
+	}
+	return &grantAmount{AmountMinor: amount, Currency: currency}
+}
+
+func formatGrantAmount(amount grantAmount) string {
+	return fmt.Sprintf("%d.%02d %s", amount.AmountMinor/100, amount.AmountMinor%100, strings.ToUpper(amount.Currency))
 }
 
 // appsPaymentWords mark an app action that moves money, by the words of its

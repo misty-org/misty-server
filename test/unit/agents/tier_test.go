@@ -43,7 +43,7 @@ func TestSpaceContentCompletionBillsOnlyRequestingAccount(t *testing.T) {
 		manifest ToolManifest
 		execute  ToolExecutor
 	}{
-		{name: "tool session", manifest: ToolManifest{Tools: []ToolDefinition{{Name: "tasks.query", Risk: RiskRead}}}, execute: func(context.Context, ToolRequest) (json.RawMessage, error) { return json.RawMessage(`{}`), nil }},
+		{name: "tool session", manifest: ToolManifest{Tools: []ToolDefinition{{Name: "task.query", Risk: RiskRead}}}, execute: func(context.Context, ToolRequest) (json.RawMessage, error) { return json.RawMessage(`{}`), nil }},
 		{name: "plain fallback"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

@@ -34,6 +34,7 @@ type AgentsService struct {
 	voiceAnalyzer    *serveragent.SmartLibraryAnalyzer
 	voiceLimiter     *SlidingWindowLimiter
 	voiceMetrics     *platformmetrics.Registry
+	voiceLive        VoiceLiveConfig
 	deviceHub        *deviceHub
 	deviceHubOnce    sync.Once
 	claimWaits       deviceClaimWaits

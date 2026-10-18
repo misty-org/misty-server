@@ -18,7 +18,7 @@ func TestBrowserSyncControlRequestReachesSocketAndRequiresTargetSignature(t *tes
 	root, rootKey, _ := ed25519.GenerateKey(rand.Reader)
 	grant, key := socketTestGrant(uuid.NewString(), rootKey)
 	wrapper := SyncKeyEnvelope{Version: 1, KDF: "argon2id-m65536-t3-p1", Salt: base64.StdEncoding.EncodeToString(make([]byte, 16)), Nonce: base64.StdEncoding.EncodeToString(make([]byte, 12)), Ciphertext: base64.StdEncoding.EncodeToString(make([]byte, 32))}
-	if err := NewStore(database.Conn).CreateBrowserSyncVault(ctx, "owner", root, wrapper, grant); err != nil {
+	if err := NewStore(database.Conn).CreateBrowserSyncVault(ctx, "owner", "", root, PasswordVaultKeys(wrapper), grant); err != nil {
 		t.Fatal(err)
 	}
 	version := 1
@@ -93,7 +93,7 @@ func TestBrowserSyncDevicesAdvertiseKnownControlVersionsOnly(t *testing.T) {
 	grant, _ := socketTestGrant(uuid.NewString(), rootKey)
 	wrapper := SyncKeyEnvelope{Version: 1, KDF: "argon2id-m65536-t3-p1", Salt: base64.StdEncoding.EncodeToString(make([]byte, 16)), Nonce: base64.StdEncoding.EncodeToString(make([]byte, 12)), Ciphertext: base64.StdEncoding.EncodeToString(make([]byte, 32))}
 	store := NewStore(database.Conn)
-	if err := store.CreateBrowserSyncVault(ctx, "owner", root, wrapper, grant); err != nil {
+	if err := store.CreateBrowserSyncVault(ctx, "owner", "", root, PasswordVaultKeys(wrapper), grant); err != nil {
 		t.Fatal(err)
 	}
 	// Version 2 also understands nested bookmark folders; 3, pinned tabs.

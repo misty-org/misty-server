@@ -3,101 +3,18 @@ package db
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
-	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
 
 
 import ()
 
-func TestPrivateSpaceConversationCreatesTaskThroughServerOwnedTool(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Space Chat Owner", "space-chat-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.TestingCreateSpace(ctx, owner.ID, "Agentic Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	result, err := api.TestingExecuteSpaceConversationTaskTool(
-		ctx,
-		database,
-		owner.ID,
-		space.ID,
-		"",
-		"Create a task called Review beta readiness",
-		"tasks.create",
-		json.RawMessage(`{"title":"Review beta readiness","priority":"high"}`),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var created SpaceTask
-	if err := json.Unmarshal(result, &created); err != nil {
-		t.Fatal(err)
-	}
-	if created.Title != "Review beta readiness" || created.Priority != "high" || created.CreatedByUserID != owner.ID {
-		t.Fatalf("created Task = %#v", created)
-	}
-	page, err := database.SpaceTaskPage(ctx, owner.ID, space.ID, SpaceTaskQuery{Search: "beta readiness", Limit: 10})
-	if err != nil || len(page.Tasks) != 1 || page.Tasks[0].ID != created.ID {
-		t.Fatalf("persisted Tasks = %#v, %v", page.Tasks, err)
-	}
-}
-
-func TestPrivateSpaceConversationTaskWriteRechecksMemberPermission(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Space Tool Owner", "space-tool-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	member, err := database.CreateUser("Space Tool Viewer", "space-tool-viewer@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.TestingCreateSpace(ctx, owner.ID, "Permission Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.RespondToSpaceInvite(ctx, member.ID, invite.ID, true); err != nil {
-		t.Fatal(err)
-	}
-	if err := database.SetSpaceMemberPermission(ctx, owner.ID, space.ID, member.ID, PermissionTasksManage, "deny"); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = api.TestingExecuteSpaceConversationTaskTool(
-		ctx,
-		database,
-		member.ID,
-		space.ID,
-		"",
-		"Create a task called Forbidden task",
-		"tasks.create",
-		json.RawMessage(`{"title":"Forbidden task"}`),
-	)
-	if !errors.Is(err, workflowv2.ErrCapabilityDenied) {
-		t.Fatalf("task write error = %v, want capability denied", err)
-	}
-}
-
 func TestPrivateSpaceAgentSendsExactMessageThroughServerOwnedToolbox(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Space Message Owner", "space-message-owner@example.com", "password123")
+	owner, err := database.CreateUser("space-message-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +28,7 @@ func TestPrivateSpaceAgentSendsExactMessageThroughServerOwnedToolbox(t *testing.
 	}
 	result, err := api.TestingExecuteSpaceConversationTool(
 		ctx, database, owner.ID, space.ID, personal.ID,
-		"Tell everyone Stone is off for today", "messages.send",
+		"Tell everyone Stone is off for today", "message.send",
 		json.RawMessage(`{"message":"Stone is off for today","audience":"space"}`),
 	)
 	if err != nil {
@@ -137,11 +54,11 @@ func TestPrivateSpaceAgentSendsExactMessageThroughServerOwnedToolbox(t *testing.
 func TestMistyRoutesOnePersonPrivatelyAndPreservesStructuredMention(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Matthew Chen", "private-message-owner@example.com", "password123")
+	owner, err := database.CreateUser("private-message-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := database.CreateUser("Melissa Chen", "private-message-member@example.com", "password123")
+	member, err := database.CreateUser("private-message-member@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,8 +76,8 @@ func TestMistyRoutesOnePersonPrivatelyAndPreservesStructuredMention(t *testing.T
 
 	result, err := api.TestingExecuteSpaceConversationTool(
 		ctx, database, owner.ID, space.ID, "",
-		"Tell Melissa Chen to please finish the laundry by tonight", "messages.send",
-		json.RawMessage(`{"message":"@Melissa Chen, please finish the laundry by tonight.","audience":"auto","recipientUserId":"`+member.ID+`"}`),
+		"Tell Melissa Chen to please finish the laundry by tonight", "message.send",
+		json.RawMessage(`{"message":"@`+member.Username+`, please finish the laundry by tonight.","audience":"auto","recipientUserId":"`+member.ID+`"}`),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -187,14 +104,14 @@ func TestMistyRoutesOnePersonPrivatelyAndPreservesStructuredMention(t *testing.T
 	if json.Unmarshal(messages[0].Origin, &origin) != nil || messages[0].SenderKind != "system" || origin.Kind != "misty_assistant" {
 		t.Fatalf("Misty identity provenance = %#v", messages[0])
 	}
-	if len(messages[0].Content) < 2 || messages[0].Content[0].Type != "mention" || messages[0].Content[0].UserID != member.ID || messages[0].Content[0].Label != member.Name {
+	if len(messages[0].Content) < 2 || messages[0].Content[0].Type != "mention" || messages[0].Content[0].UserID != member.ID || messages[0].Content[0].Label != member.Username {
 		t.Fatalf("structured mention content = %#v", messages[0].Content)
 	}
 
 	groupResult, err := api.TestingExecuteSpaceConversationTool(
 		ctx, database, owner.ID, space.ID, "",
-		"Post in the group chat that Melissa Chen will finish the laundry tonight", "messages.send",
-		json.RawMessage(`{"message":"@Melissa Chen will finish the laundry tonight.","audience":"space","recipientUserId":"`+member.ID+`"}`),
+		"Post in the group chat that Melissa Chen will finish the laundry tonight", "message.send",
+		json.RawMessage(`{"message":"@`+member.Username+` will finish the laundry tonight.","audience":"space","recipientUserId":"`+member.ID+`"}`),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -212,7 +129,7 @@ func TestMistyRoutesOnePersonPrivatelyAndPreservesStructuredMention(t *testing.T
 
 	_, err = api.TestingExecuteSpaceConversationTool(
 		ctx, database, owner.ID, space.ID, "",
-		"Send the laundry update", "messages.send",
+		"Send the laundry update", "message.send",
 		json.RawMessage(`{"message":"Laundry update","audience":"auto"}`),
 	)
 	if err == nil || !strings.Contains(err.Error(), "choose audience") {
@@ -224,85 +141,10 @@ func TestMistyRoutesOnePersonPrivatelyAndPreservesStructuredMention(t *testing.T
 	}
 }
 
-func TestSpaceAgentResolvesMemberAndCreatesAssignedTask(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Assignment Owner", "assignment-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	member, err := database.CreateUser("Melissa Chen", "melissa-assignment@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.TestingCreateSpace(ctx, owner.ID, "Family")
-	if err != nil {
-		t.Fatal(err)
-	}
-	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.RespondToSpaceInvite(ctx, member.ID, invite.ID, true); err != nil {
-		t.Fatal(err)
-	}
-
-	resolved, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Assign Melissa a chore", "members.resolve", json.RawMessage(`{"query":"Melissa"}`))
-	if err != nil || !strings.Contains(string(resolved), member.ID) || !strings.Contains(string(resolved), `"resolved":true`) {
-		t.Fatalf("resolved member = %s, %v", resolved, err)
-	}
-	createdRaw, err := api.TestingExecuteSpaceConversationTaskTool(ctx, database, owner.ID, space.ID, "", "Add a chore to the planner", "tasks.create", json.RawMessage(`{"title":"Wash the dishes","assigneeUserId":"`+member.ID+`","dueAt":"2026-08-19T19:00:00-07:00","dueTimezone":"America/Los_Angeles"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var created SpaceTask
-	if err := json.Unmarshal(createdRaw, &created); err != nil {
-		t.Fatal(err)
-	}
-	if created.AssigneeUserID != member.ID || created.DueAt == nil || created.DueTimezone != "America/Los_Angeles" {
-		t.Fatalf("assigned task = %#v", created)
-	}
-}
-
-func TestSpaceAgentInterpretsTaskTimestampInTheSuppliedTimezone(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Date Owner", "date-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.TestingCreateSpace(ctx, owner.ID, "Date Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-	createdRaw, err := api.TestingExecuteSpaceConversationTaskTool(ctx, database, owner.ID, space.ID, "", "Add a task", "tasks.create", json.RawMessage(`{"title":"Local date","dueAt":"2024-11-21T19:00:00","dueTimezone":"America/Los_Angeles"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var created SpaceTask
-	if json.Unmarshal(createdRaw, &created) != nil || created.DueAt == nil || created.DueAt.Format(time.RFC3339) != "2024-11-22T03:00:00Z" {
-		t.Fatalf("local task timestamp = %s", createdRaw)
-	}
-
-	defaultedRaw, err := api.TestingExecuteSpaceConversationTaskTool(
-		ctx, database, owner.ID, space.ID, "",
-		`{"instruction":"Add an evening task","timezone":"America/Los_Angeles"}`,
-		"tasks.create",
-		json.RawMessage(`{"title":"Evening task","dueAt":"2024-11-21T19:00:00-08:00"}`),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var defaulted SpaceTask
-	if json.Unmarshal(defaultedRaw, &defaulted) != nil || defaulted.DueTimezone != "America/Los_Angeles" || defaulted.DueAt == nil || defaulted.DueAt.Format(time.RFC3339) != "2024-11-22T03:00:00Z" {
-		t.Fatalf("defaulted task timezone = %s", defaultedRaw)
-	}
-}
-
 func TestFamilySpaceResearchCanBeSavedAndPostedWithCitations(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Family Research Owner", "family-research-owner@example.com", "password123")
+	owner, err := database.CreateUser("family-research-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +155,7 @@ func TestFamilySpaceResearchCanBeSavedAndPostedWithCitations(t *testing.T) {
 	prompt := "Research summer camps in Pasadena, save the research, and post a cited summary to Family Space"
 	sourceURL := "https://example.org/pasadena-camps"
 	createdRaw, err := api.TestingExecuteSpaceConversationTool(
-		ctx, database, owner.ID, space.ID, "", prompt, "notes.create",
+		ctx, database, owner.ID, space.ID, "", prompt, "note.create",
 		json.RawMessage(`{"title":"Pasadena summer camp research","markdown":"# Summer camps\n\nArt and science programs are available.\n\nSource: `+sourceURL+`"}`),
 	)
 	if err != nil || !strings.Contains(string(createdRaw), "Pasadena summer camp research") {
@@ -321,7 +163,7 @@ func TestFamilySpaceResearchCanBeSavedAndPostedWithCitations(t *testing.T) {
 	}
 	summary := "Pasadena summer camps include art and science programs. Source: " + sourceURL
 	if _, err := api.TestingExecuteSpaceConversationTool(
-		ctx, database, owner.ID, space.ID, "", prompt, "messages.send",
+		ctx, database, owner.ID, space.ID, "", prompt, "message.send",
 		json.RawMessage(`{"message":"`+summary+`","audience":"space"}`),
 	); err != nil {
 		t.Fatalf("post cited summary: %v", err)
@@ -329,98 +171,5 @@ func TestFamilySpaceResearchCanBeSavedAndPostedWithCitations(t *testing.T) {
 	messages, err := database.SpaceMessages(ctx, owner.ID, space.ID, 0, 20)
 	if err != nil || len(messages) != 1 || !strings.Contains(api.TestingSpansToPlainText(messages[0].Content), sourceURL) {
 		t.Fatalf("Family Space cited summary = %#v, %v", messages, err)
-	}
-}
-
-func TestSpaceAgentCreatesQueriesAndUpdatesNativeCalendarEvent(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Calendar Tool Owner", "calendar-tool-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.TestingCreateSpace(ctx, owner.ID, "Calendar Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-	createdRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Schedule a calendar event", "calendar.create", json.RawMessage(`{"title":"Investor demo","startsAt":"2026-08-20T10:00:00-07:00","endsAt":"2026-08-20T10:30:00-07:00","timezone":"America/Los_Angeles"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var created SpaceCalendarEvent
-	if json.Unmarshal(createdRaw, &created) != nil || created.ID == "" || created.Timezone != "America/Los_Angeles" {
-		t.Fatalf("created calendar event = %s", createdRaw)
-	}
-	from := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
-	to := from.Add(48 * time.Hour)
-	events, err := database.SpaceCalendarEvents(ctx, owner.ID, space.ID, from, to)
-	if err != nil || len(events) != 1 || events[0].ID != created.ID {
-		t.Fatalf("queried calendar events = %#v, %v", events, err)
-	}
-	updatedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Reschedule the meeting", "calendar.update", json.RawMessage(`{"id":"`+created.ID+`","startsAt":"2026-08-20T11:00:00-07:00","endsAt":"2026-08-20T11:30:00-07:00"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var updated SpaceCalendarEvent
-	if json.Unmarshal(updatedRaw, &updated) != nil || updated.Version != created.Version+1 || updated.StartsAt.Equal(created.StartsAt) {
-		t.Fatalf("updated calendar event = %s", updatedRaw)
-	}
-}
-
-func TestSpaceAgentInterpretsCalendarTimestampInTheSuppliedTimezone(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Calendar Date Owner", "calendar-date-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.TestingCreateSpace(ctx, owner.ID, "Calendar Date Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-	createdRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Schedule a calendar event", "calendar.create", json.RawMessage(`{"title":"Local date","startsAt":"2026-08-20T10:00:00","endsAt":"2026-08-20T10:30:00","timezone":"America/Los_Angeles"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var created SpaceCalendarEvent
-	if json.Unmarshal(createdRaw, &created) != nil || created.StartsAt.Format(time.RFC3339) != "2026-08-20T17:00:00Z" {
-		t.Fatalf("local calendar timestamp = %s", createdRaw)
-	}
-}
-
-func TestSpaceAgentCreatesReadsAndUpdatesRoadmap(t *testing.T) {
-	database := openTestDatabase(t)
-	ctx := context.Background()
-	owner, err := database.CreateUser("Roadmap Tool Owner", "roadmap-tool-owner@example.com", "password123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := database.TestingCreateSpace(ctx, owner.ID, "Roadmap Space")
-	if err != nil {
-		t.Fatal(err)
-	}
-	createdRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Create a product roadmap", "roadmaps.create", json.RawMessage(`{"name":"Beta launch","description":"Prepare the public beta"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var created SpaceRoadmapSnapshot
-	if json.Unmarshal(createdRaw, &created) != nil || created.Roadmap.ID == "" || len(created.Milestones) != 1 {
-		t.Fatalf("created roadmap = %s", createdRaw)
-	}
-	queryRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Find the beta roadmap", "roadmaps.query", json.RawMessage(`{"query":"Beta"}`))
-	if err != nil || !strings.Contains(string(queryRaw), created.Roadmap.ID) {
-		t.Fatalf("queried roadmaps = %s, %v", queryRaw, err)
-	}
-	updatedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Rename the roadmap", "roadmaps.update", json.RawMessage(`{"id":"`+created.Roadmap.ID+`","name":"Public beta launch"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var updated SpaceRoadmap
-	if json.Unmarshal(updatedRaw, &updated) != nil || updated.Name != "Public beta launch" || updated.GraphVersion <= created.Roadmap.GraphVersion {
-		t.Fatalf("updated roadmap = %s", updatedRaw)
-	}
-	readRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Read the roadmap", "roadmaps.read", json.RawMessage(`{"id":"`+created.Roadmap.ID+`"}`))
-	if err != nil || !strings.Contains(string(readRaw), "Public beta launch") {
-		t.Fatalf("read roadmap = %s, %v", readRaw, err)
 	}
 }

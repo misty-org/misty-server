@@ -29,20 +29,15 @@ func TestVoiceConversationStartTaskTakesOnlyTheRequest(t *testing.T) {
 	}
 }
 
-func TestVoiceConversationRoutesScreenQuestionsToShowOnScreen(t *testing.T) {
+func TestVoiceConversationSendsScreenQuestionsWithTheScreens(t *testing.T) {
 	config := VoiceConversationConfig("[]")["config"].(map[string]any)
-	found := false
 	for _, tool := range config["tools"].([]map[string]any) {
-		if tool["name"] != "show_on_screen" {
-			continue
-		}
-		found = true
-		parameters := tool["parameters"].(map[string]any)
-		if _, ok := parameters["properties"].(map[string]any)["instruction"]; !ok || parameters["additionalProperties"] != false {
-			t.Fatal("show_on_screen takes only the closed question")
+		if tool["name"] == "show_on_screen" {
+			t.Fatal("screen questions go through start_task, which always carries the screens")
 		}
 	}
-	if !found || !strings.Contains(config["instructions"].(string), "call show_on_screen") || !strings.Contains(config["instructions"].(string), "warm, patient teacher") {
-		t.Fatal("screen questions must route to show_on_screen")
+	instructions := config["instructions"].(string)
+	if !strings.Contains(instructions, "every request you send with start_task carries the user's screens") || !strings.Contains(instructions, "warm, patient teacher") {
+		t.Fatal(instructions)
 	}
 }

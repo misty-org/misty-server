@@ -31,7 +31,7 @@ type searchAppPolicy struct {
 func (s *SpacesService) searchAppPolicy(_ context.Context, invocation agenttools.Invocation) searchAppPolicy {
 	return searchAppPolicy{
 		offer:     offerSearchAppsByDefault,
-		webSearch: s.models.Enabled() && webSearchOnByDefault,
+		webSearch: webSearchKey() != "" && webSearchOnByDefault,
 		request:   invocation.OriginalInput,
 	}
 }
@@ -48,9 +48,9 @@ func (p searchAppPolicy) mayConnect(app string) bool {
 	return !search || p.offer || p.named(app)
 }
 
-// next is what apps_search tells the model about an unconnected app.
+// next is what integration_search tells the model about an unconnected app.
 func (p searchAppPolicy) next(app string) string {
-	connect := "Call apps_connect with app " + app + " before running its tools."
+	connect := "Call integration_connect with app " + app + " before running its tools."
 	if _, search := appsSearchServices[app]; !search || p.named(app) {
 		return connect
 	}

@@ -15,33 +15,12 @@ import (
 // the item's current version in the database.
 func (s *SpacesService) spaceDeleteTarget(ctx context.Context, userID, spaceID, kind, id string) (string, func() error, error) {
 	switch kind {
-	case "calendar_event":
-		event, err := s.database.NativeCalendarEvent(ctx, userID, spaceID, id)
-		if err != nil {
-			return "", nil, err
-		}
-		return event.Title, func() error { return s.database.ArchiveNativeCalendarEvent(ctx, userID, spaceID, id, event.Version) }, nil
 	case "thread":
 		thread, err := spaceThread(ctx, s.database, userID, spaceID, id)
 		if err != nil {
 			return "", nil, err
 		}
 		return thread.Title, func() error { return s.database.DeleteOrClearSpaceConversation(ctx, userID, spaceID, id) }, nil
-	case "album":
-		album, err := s.database.LibraryAlbum(ctx, userID, spaceID, id)
-		if err != nil {
-			return "", nil, err
-		}
-		return album.Name, func() error { return s.database.DeleteLibraryAlbum(ctx, userID, spaceID, id, album.Version) }, nil
-	case "roadmap":
-		roadmap, err := s.database.SpaceRoadmap(ctx, userID, spaceID, id)
-		if err != nil {
-			return "", nil, err
-		}
-		return roadmap.Roadmap.Name, func() error {
-			_, err := s.database.ArchiveSpaceRoadmap(ctx, userID, spaceID, id, roadmap.Roadmap.GraphVersion)
-			return err
-		}, nil
 	case "shared_file":
 		nodes, err := s.database.SpaceNodes(ctx, userID, spaceID)
 		if err != nil {
@@ -63,14 +42,7 @@ func (s *SpacesService) spaceDeleteTarget(ctx context.Context, userID, spaceID, 
 			return err
 		}, nil
 	}
-	task, err := s.database.SpaceTaskForMember(ctx, userID, spaceID, id)
-	if err != nil {
-		return "", nil, err
-	}
-	return task.Title, func() error {
-		_, err := s.database.ArchiveSpaceTask(ctx, userID, spaceID, id, task.Version)
-		return err
-	}, nil
+	return "", nil, db.ErrSpaceInvalid
 }
 
 func spaceThread(ctx context.Context, database *db.Database, userID, spaceID, id string) (*db.SpaceConversation, error) {
@@ -86,20 +58,20 @@ func spaceThread(ctx context.Context, database *db.Database, userID, spaceID, id
 	return nil, db.ErrSpaceNotFound
 }
 
-// items.rename renames a drawing or a thread; other kinds rename through
+// item.rename renames a drawing or a thread; other kinds rename through
 // their own update tools.
 func (s *SpacesService) renameToolRegistration() agenttools.Registration {
 	return agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
-			Name: "items.rename", Version: 1, Risk: serveragent.RiskWrite, Approval: agenttools.ApprovalNone,
-			Description: "Rename a drawing or a thread. Threads also need their Space. Notes, tasks, roadmaps and albums rename through their own update tools.",
+			Name: "item.rename", Version: 1, Risk: serveragent.RiskWrite, Approval: agenttools.ApprovalNone,
+			Description: "Rename a drawing or a thread. Threads also need their Space. Notes rename through their own update tool.",
 			InputSchema: agentToolSchema(map[string]any{
 				"kind":  map[string]any{"type": "string", "enum": []string{"drawing", "thread"}},
 				"id":    map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 				"name":  map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 				"space": map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 			}, []string{"kind", "id", "name"}),
-			OutputSchema: agentToolObjectOutputSchema(), Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true, AuditEvent: "item.renamed",
+			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true, AuditEvent: "item.renamed",
 		},
 		Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
 			var input struct{ Kind, ID, Name, Space string }

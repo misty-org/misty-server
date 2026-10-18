@@ -108,11 +108,11 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := context.Background()
 
-	owner, err := database.CreateUser("Presence Owner", uniqueTestEmail("owner"), "password123")
+	owner, err := database.CreateUser(uniqueTestEmail("owner"), "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(owner) error = %v", err)
 	}
-	outsider, err := database.CreateUser("Presence Outsider", uniqueTestEmail("outsider"), "password123")
+	outsider, err := database.CreateUser(uniqueTestEmail("outsider"), "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(outsider) error = %v", err)
 	}
@@ -146,7 +146,7 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 	}
 
 	// A real invited member joining is broadcast correctly to the owner.
-	member, err := database.CreateUser("Presence Member", uniqueTestEmail("member"), "password123")
+	member, err := database.CreateUser(uniqueTestEmail("member"), "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(member) error = %v", err)
 	}

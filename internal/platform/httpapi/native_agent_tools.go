@@ -19,16 +19,16 @@ func nativeAgentToolDescriptors() []agenttools.Descriptor {
 		return TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
 	}
 	text := map[string]any{"type": "string", "maxLength": 16000}
-	base := agenttools.Descriptor{Version: 1, OutputSchema: agentToolObjectOutputSchema(), Locality: agenttools.LocalityServer, Sources: agentToolboxSpaceSources, Triggers: []string{"message"}, AllowCustomAgent: true, Idempotent: true}
+	base := agenttools.Descriptor{Version: 1, OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Sources: agentToolboxSpaceSources, Triggers: []string{"message"}, AllowCustomAgent: true, Idempotent: true}
 	list := base
-	list.Name = "agents.list"
+	list.Name = "agent.list"
 	list.Description = "List this user's personal agents in the browser workspace."
 	list.Risk = serveragent.RiskRead
 	list.InputSchema = schema(map[string]any{}, nil)
 	list.Approval = agenttools.ApprovalNone
 	manage := base
-	manage.Name = "agents.configure"
-	manage.Description = "Create, update, or delete a personal agent when the user requests agent configuration. Every agent lives in one Space: `space` (name or id from spaces_list) picks it; omit it to create in the personal Space or keep an agent where it is. For update, provide the current version from agents_list. Browser workspace tools and model policy are automatic. Never delete or move the default Misty agent. Deletion requires an explicit request to delete the named agent, not just stop its task."
+	manage.Name = "agent.configure"
+	manage.Description = "Create, update, or delete a personal agent when the user requests agent configuration. A new agent starts in the personal Space; `space` (name or id from space_list) also brings it into that Space, where everyone there can ask it for work. For update, provide the current version from agent_list. Browser workspace tools and model policy are automatic. Never delete the default Misty agent. Deletion requires an explicit request to delete the named agent, not just stop its task."
 	manage.Risk = serveragent.RiskWrite
 	manage.Approval = agenttools.ApprovalExplicitIntent
 	manage.AuditEvent = "agents.configured"
@@ -41,7 +41,7 @@ func executeNativeAgentTool(ctx context.Context, database *db.Database, i agentt
 	if err != nil {
 		return nil, err
 	}
-	if r.Name == "agents.list" {
+	if r.Name == "agent.list" {
 		return json.Marshal(map[string]any{"agents": agents})
 	}
 	var input struct {
@@ -74,7 +74,7 @@ func executeNativeAgentTool(ctx context.Context, database *db.Database, i agentt
 		if err != nil {
 			return nil, err
 		}
-		profile = db.AgentProfileInput{SpaceID: a.SpaceID, Name: a.Name, Role: a.Role, Description: a.Description, Instructions: a.Instructions, Icon: a.Icon, Avatar: a.Avatar, ModelMode: a.ModelMode, ModelID: a.ModelID, ReasoningEffort: a.ReasoningEffort, Enabled: a.Enabled, Version: input.Version}
+		profile = db.AgentProfileInput{Name: a.Name, Role: a.Role, Description: a.Description, Instructions: a.Instructions, Icon: a.Icon, Avatar: a.Avatar, ModelMode: a.ModelMode, ModelID: a.ModelID, ReasoningEffort: a.ReasoningEffort, Enabled: a.Enabled, Version: input.Version}
 	} else {
 		input.AgentID = ""
 	}
@@ -105,6 +105,15 @@ func executeNativeAgentTool(ctx context.Context, database *db.Database, i agentt
 	if input.ReasoningEffort != nil {
 		profile.ReasoningEffort = *input.ReasoningEffort
 	}
+	if profile.ModelMode == "automatic" {
+		profile.ModelID = ""
+		profile.ReasoningEffort = ""
+	}
+
+	saved, err := database.SavePersonalAgent(ctx, i.UserID, input.AgentID, profile)
+	if err != nil {
+		return nil, err
+	}
 	if reference := strings.TrimSpace(input.Space); reference != "" {
 		spaces, err := database.ListSpaces(ctx, i.UserID)
 		if err != nil {
@@ -114,16 +123,9 @@ func executeNativeAgentTool(ctx context.Context, database *db.Database, i agentt
 		if err != nil {
 			return nil, err
 		}
-		profile.SpaceID = targets[0].ID
-	}
-	if profile.ModelMode == "automatic" {
-		profile.ModelID = ""
-		profile.ReasoningEffort = ""
-	}
-
-	saved, err := database.SavePersonalAgent(ctx, i.UserID, input.AgentID, profile)
-	if err != nil {
-		return nil, err
+		if _, err := database.AddSpaceAgent(ctx, i.UserID, targets[0].ID, saved.ID); err != nil {
+			return nil, err
+		}
 	}
 	return json.Marshal(map[string]any{"agent": saved})
 }

@@ -50,8 +50,10 @@ func (s *SpacesService) screenToolRegistrations(record *db.AIInvocationRecord) [
 				"for other apps on their Mac or the whole screen, such as Numbers, Finder or Mail, where Misty works with its own cursor "+
 				"after they allow it. Omit target when they did not say, or when they mean a site they already have open (\"my Gmail tab\"), "+
 				"and pass that site's url: Misty reuses an open tab that matches, otherwise opens one where they prefer. "+
-				"If such a screen is already attached, use browser_act with its scopeId instead. Otherwise this ends the current "+
-				"response; Misty opens the screen and continues this conversation with it attached. Do not ask the user where to work.",
+				"If such a screen is already attached, use browser_act with its scopeId instead. With no target, and a url when you know "+
+				"the page, this opens your own browser tab in the background and keeps this run going: browser tools act on it from "+
+				"your next step. A named target ends the current response; Misty opens that screen and continues this conversation "+
+				"with it attached. Do not ask the user where to work.",
 			map[string]any{"reason": reason,
 				"target": map[string]any{"type": "string", "enum": []string{"current_tab", "new_tab", "window", "desktop"}, "description": "Where to work. Omit for the user's preferred place for new screens."},
 				"url":    map[string]any{"type": "string", "maxLength": 2048, "description": "Optional https page to open first (new_tab or window)"}}, "reason"),
@@ -68,7 +70,7 @@ func screenDescriptor(name, description string, properties map[string]any, requi
 	return agenttools.Descriptor{
 		Name: name, Version: 1, Description: description, Risk: serveragent.RiskRead,
 		InputSchema:  TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}),
-		OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer,
+		OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer,
 		Idempotent: true, AllowCustomAgent: true, AuditEvent: name,
 	}
 }
@@ -114,7 +116,7 @@ func (s *SpacesService) screenRequestHandler(tool string) agenttools.Handler {
 			default:
 				return nil, serveragent.ErrInvalidRequest("target must be current_tab, new_tab, window or desktop.")
 			}
-			if remote, err := s.remoteScreenOpen(ctx, record, body, request.ID, input.URL, input.Reason, desktop); remote != nil || err != nil {
+			if remote, err := s.remoteScreenOpen(ctx, record, body, request.ID, input.URL, input.Reason, desktop, input.Target); remote != nil || err != nil {
 				return remote, err
 			}
 			if invocationHasDesktopControl(body) == desktop {

@@ -16,7 +16,7 @@ import (
 // The A2A endpoint lets a member's own agent talk to another member's agent
 // in a Space they share. Callers authenticate as one of their agents
 // (see a2a_auth.go). It speaks A2A's JSON-RPC methods and sends every message
-// through the same request service as agents_request, so consent, approval,
+// through the same request service as agent_request, so consent, approval,
 // billing and limits are identical.
 const a2aProtocolVersion = "0.3.0"
 
@@ -84,9 +84,9 @@ func (s *SpacesService) A2AAgentCard() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		description := listing.Description
-		if description == "" {
-			description = listing.OwnerName + "’s agent in " + listing.SpaceName
+		description := listing.OwnerName + "’s agent in " + listing.SpaceName
+		if listing.AgentRole != "" {
+			description = listing.AgentRole + ", " + description
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -177,8 +177,8 @@ func (s *SpacesService) A2AAgent() http.HandlerFunc {
 	}
 }
 
-func (s *SpacesService) a2aListing(r *http.Request, userID string) (*db.SpaceAgentListing, error) {
-	listings, err := s.database.SpaceAgentListings(r.Context(), userID, chi.URLParam(r, "spaceID"))
+func (s *SpacesService) a2aListing(r *http.Request, userID string) (*db.SpaceAgent, error) {
+	listings, err := s.database.SpaceAgents(r.Context(), userID, chi.URLParam(r, "spaceID"))
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (s *SpacesService) a2aListing(r *http.Request, userID string) (*db.SpaceAge
 	return nil, db.ErrSpaceNotFound
 }
 
-func (s *SpacesService) a2aSend(r *http.Request, caller a2aCaller, listing *db.SpaceAgentListing, raw json.RawMessage) (*db.AgentMemberRequest, error) {
+func (s *SpacesService) a2aSend(r *http.Request, caller a2aCaller, listing *db.SpaceAgent, raw json.RawMessage) (*db.AgentMemberRequest, error) {
 	var params a2aSendParams
 	if json.Unmarshal(raw, &params) != nil || strings.TrimSpace(params.Message.MessageID) == "" {
 		return nil, db.ErrSpaceInvalid
@@ -231,7 +231,7 @@ func (s *SpacesService) a2aSend(r *http.Request, caller a2aCaller, listing *db.S
 }
 
 // a2aTaskCall loads (or cancels) a task this agent sent to this listing.
-func (s *SpacesService) a2aTaskCall(r *http.Request, caller a2aCaller, listing *db.SpaceAgentListing, method string, raw json.RawMessage) (*db.AgentMemberRequest, error) {
+func (s *SpacesService) a2aTaskCall(r *http.Request, caller a2aCaller, listing *db.SpaceAgent, method string, raw json.RawMessage) (*db.AgentMemberRequest, error) {
 	var params struct {
 		ID string `json:"id"`
 	}
@@ -245,7 +245,7 @@ func (s *SpacesService) a2aTaskCall(r *http.Request, caller a2aCaller, listing *
 	return s.database.CancelAgentMemberRequest(r.Context(), caller.UserID, request.ID)
 }
 
-func (s *SpacesService) a2aOwnTask(r *http.Request, caller a2aCaller, listing *db.SpaceAgentListing, taskID string) (*db.AgentMemberRequest, error) {
+func (s *SpacesService) a2aOwnTask(r *http.Request, caller a2aCaller, listing *db.SpaceAgent, taskID string) (*db.AgentMemberRequest, error) {
 	request, err := s.database.A2AAgentRequest(r.Context(), caller.UserID, caller.AgentID, strings.TrimSpace(taskID))
 	if err != nil {
 		return nil, err
@@ -259,13 +259,8 @@ func (s *SpacesService) a2aOwnTask(r *http.Request, caller a2aCaller, listing *d
 // a2aTaskStatus maps a request onto an A2A task state, status and reply.
 func a2aTaskStatus(request *db.AgentMemberRequest) (state string, status map[string]any, reply string) {
 	state = memberRequestState(request)
-	switch state {
-	case "awaiting_approval":
-		state = "auth-required"
-	case "failed":
-		if request.RunState == "rejected" {
-			state = "rejected"
-		}
+	if state == "failed" && request.RunState == "rejected" {
+		state = "rejected"
 	}
 	var view struct {
 		Reply string `json:"reply"`

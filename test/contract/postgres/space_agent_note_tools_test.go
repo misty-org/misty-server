@@ -15,7 +15,7 @@ import ()
 func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Note Tool Owner", "note-tool-owner@example.com", "password123")
+	owner, err := database.CreateUser("note-tool-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	createdRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Create a launch note", "notes.create", json.RawMessage(`{"title":"Launch plan","markdown":"# Launch\nInitial checklist"}`))
+	createdRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Create a launch note", "note.create", json.RawMessage(`{"title":"Launch plan","markdown":"# Launch\nInitial checklist"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 	if err := json.Unmarshal(createdRaw, &created); err != nil || created.ID == "" {
 		t.Fatalf("created note = %s, %v", createdRaw, err)
 	}
-	updatedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Update the launch note", "notes.update", json.RawMessage(`{"id":"`+created.ID+`","title":"Launch plan","markdown":"# Launch\nReady for beta"}`))
+	updatedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Update the launch note", "note.update", json.RawMessage(`{"id":"`+created.ID+`","title":"Launch plan","markdown":"# Launch\nReady for beta"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,12 +59,12 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 	if err != nil || !applied {
 		t.Fatalf("room projection was not applied: applied=%v err=%v", applied, err)
 	}
-	searchRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Find launch notes", "notes.search", json.RawMessage(`{"query":"Ready for beta"}`))
+	searchRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Find launch notes", "note.search", json.RawMessage(`{"query":"Ready for beta"}`))
 	if err != nil || !strings.Contains(string(searchRaw), created.ID) {
 		t.Fatalf("searched notes = %s, %v", searchRaw, err)
 	}
 
-	readRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Read the launch note", "notes.read", json.RawMessage(`{"id":"`+created.ID+`"}`))
+	readRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Read the launch note", "note.read", json.RawMessage(`{"id":"`+created.ID+`"}`))
 	var read struct {
 		Markdown *string `json:"markdown"`
 		Empty    bool    `json:"empty"`
@@ -73,7 +73,7 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 		t.Fatalf("read note = %s, %v", readRaw, err)
 	}
 	// Adding a line keeps the body instead of asking the model to rewrite it.
-	if _, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Add a line to the launch note", "notes.update", json.RawMessage(`{"id":"`+created.ID+`","append":"Book the venue."}`)); err != nil {
+	if _, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Add a line to the launch note", "note.update", json.RawMessage(`{"id":"`+created.ID+`","append":"Book the venue."}`)); err != nil {
 		t.Fatal(err)
 	}
 	commands, err = database.PendingNoteControlCommands(ctx, 10)
@@ -87,7 +87,7 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 	if !appended {
 		t.Fatalf("append did not keep the body: %#v", commands)
 	}
-	if _, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Update the launch note", "notes.update", json.RawMessage(`{"id":"`+created.ID+`","markdown":"x","append":"y"}`)); err == nil {
+	if _, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Update the launch note", "note.update", json.RawMessage(`{"id":"`+created.ID+`","markdown":"x","append":"y"}`)); err == nil {
 		t.Fatal("accepted both a replacement body and an append")
 	}
 }
@@ -95,7 +95,7 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 func TestSpaceAgentReadsAnEmptyNoteAsEmpty(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Empty Note Owner", "empty-note-owner@example.com", "password123")
+	owner, err := database.CreateUser("empty-note-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestSpaceAgentReadsAnEmptyNoteAsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Read the checklist", "notes.read", json.RawMessage(`{"id":"`+note.ID+`"}`))
+	raw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Read the checklist", "note.read", json.RawMessage(`{"id":"`+note.ID+`"}`))
 	if err != nil || !strings.Contains(string(raw), `"markdown":""`) || !strings.Contains(string(raw), `"empty":true`) {
 		t.Fatalf("empty note read = %s, %v", raw, err)
 	}

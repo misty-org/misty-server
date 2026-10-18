@@ -16,7 +16,7 @@ func TestOwnedSpacesShareOneStoragePool(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Pooled Owner", "pooled-owner@example.com", "password123")
+	owner, err := database.CreateUser("pooled-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

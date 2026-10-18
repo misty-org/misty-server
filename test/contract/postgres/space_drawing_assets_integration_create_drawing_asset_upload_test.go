@@ -68,9 +68,7 @@ func TestDrawingAssetUploadAuthorizationAndBinding(t *testing.T) {
 		)
 	}
 
-	outsider, err := fixture.database.CreateUser(
-		"Drawing Asset Outsider",
-		"drawing-assets-outsider@example.com",
+	outsider, err := fixture.database.CreateUser("drawing-assets-outsider@example.com",
 		"password123",
 	)
 	if err != nil {

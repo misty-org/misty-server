@@ -31,9 +31,6 @@ const consoleJobStateCounts = `
 	UNION ALL
 	SELECT 'Agent runs (24h)', state, count(*) FROM agent_run_jobs
 		WHERE updated_at > now() - interval '1 day' GROUP BY state
-	UNION ALL
-	SELECT 'Library reindex', status, count(*) FROM smart_library_reindex_jobs
-		WHERE status IN ('pending','processing') OR updated_at > now() - interval '1 day' GROUP BY status
 	ORDER BY 1, 2`
 
 const consoleJobAttention = `
@@ -56,13 +53,6 @@ const consoleJobAttention = `
 	 FROM agent_run_jobs j
 	 WHERE j.state IN ('queued','leased','dispatched')
 	    OR (j.state = 'failed' AND j.updated_at > now() - interval '1 day'))
-	UNION ALL
-	(SELECT 'Library reindex', r.embedding_model, COALESCE(u.email, r.user_id), r.status,
-	        r.completed_assets || '/' || r.requested_assets || ' assets, ' || r.failed_assets || ' failed',
-	        r.updated_at
-	 FROM smart_library_reindex_jobs r LEFT JOIN users u ON u.id = r.user_id
-	 WHERE r.status IN ('pending','processing')
-	    OR (r.status IN ('failed','partially_failed') AND r.updated_at > now() - interval '1 day'))
 	ORDER BY 6 DESC LIMIT $1`
 
 func (db *Database) ConsoleJobs(ctx context.Context, limit int) ([]ConsoleStateCount, []ConsoleJob, error) {

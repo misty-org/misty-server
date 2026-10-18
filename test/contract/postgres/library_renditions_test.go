@@ -15,7 +15,7 @@ func TestLibraryEditRenditionReservationCompletionAndDownload(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	owner, _ := database.CreateUser("Rendition Owner", "rendition-owner@example.com", "password123")
+	owner, _ := database.CreateUser("rendition-owner@example.com", "password123")
 	spaceID := createTestSpace(t, database, ctx, owner.ID, "Renditions").ID
 	item := createPeopleTestImage(t, database, owner.ID, spaceID, "source.jpg", "7")
 
@@ -94,7 +94,7 @@ func TestLibraryEditRenditionReservationCompletionAndDownload(t *testing.T) {
 func TestExpiredLibraryRenditionReservationReleasesQuota(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, _ := database.CreateUser("Expired Rendition Owner", "expired-rendition@example.com", "password123")
+	owner, _ := database.CreateUser("expired-rendition@example.com", "password123")
 	spaceID := createTestSpace(t, database, ctx, owner.ID, "Expired renditions").ID
 	item := createPeopleTestImage(t, database, owner.ID, spaceID, "source.jpg", "9")
 	created, err := database.CreateLibraryEditVersion(ctx, owner.ID, spaceID, item.ID, item.Version, TestingDefaultLibraryEditDefinition())

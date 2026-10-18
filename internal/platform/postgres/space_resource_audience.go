@@ -56,19 +56,20 @@ func validateResourceAudienceTx(ctx context.Context, tx *sql.Tx, userID, spaceID
 
 // requireLibraryItemAudienceTx closes the gap created by service-role database
 // connections: permission to use Library does not imply access to an item that
-// belongs to a private conversation.
+// belongs to a private conversation, or to someone else's private item.
 func requireLibraryItemAudienceTx(ctx context.Context, tx *sql.Tx, userID, spaceID, itemID string) error {
 	var allowed bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(
 		SELECT 1 FROM space_library_items item
-		WHERE item.id=$1 AND item.space_id=$2 AND (
+		WHERE item.id=$1 AND item.space_id=$2
+		  AND (item.visibility='public' OR item.added_by_user_id=$4) AND (
 			item.audience_kind='space' OR EXISTS(
 				SELECT 1 FROM space_conversation_members member
 				WHERE member.conversation_id=item.audience_conversation_id
 				  AND member.actor_kind='person' AND member.user_id=$3
 			)
 		)
-	)`, itemID, spaceID, userID).Scan(&allowed)
+	)`, itemID, spaceID, userID, itemViewer(ctx, userID)).Scan(&allowed)
 	if err != nil {
 		return err
 	}

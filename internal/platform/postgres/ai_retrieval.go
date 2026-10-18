@@ -77,6 +77,20 @@ func (db *Database) CompleteAIEmbeddingChunk(ctx context.Context, chunk AIEmbedd
 	})
 }
 
+// retrievalItemVisible keeps someone else's private notes, drawings and
+// Library files out of search: an indexed item must be public, or the
+// viewer's own. The checks read the item rows under the viewer's RLS.
+func retrievalItemVisible(viewer string) string {
+	return `(d.source_kind NOT IN ('note','drawing','library_item') OR EXISTS(
+		SELECT 1 FROM space_notes item WHERE d.source_kind='note' AND item.id=d.source_id AND (item.visibility='public' OR item.creator_user_id=` + viewer + `)
+		UNION ALL SELECT 1 FROM space_drawings item WHERE d.source_kind='drawing' AND item.id=d.source_id AND (item.visibility='public' OR item.creator_user_id=` + viewer + `)
+		UNION ALL SELECT 1 FROM space_library_items item WHERE d.source_kind='library_item' AND item.id=d.source_id AND (item.visibility='public' OR item.added_by_user_id=` + viewer + `)))`
+}
+
+// Memory lives in memory_chunks (memory_space.go), never in this index; the
+// filter keeps any stray memory document out of Space search.
+const retrievalWithoutMemory = `AND d.source_kind NOT LIKE 'memory\_%'`
+
 func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string, embedding []float64, limit int, spaceIDs ...string) ([]AIRetrievalHit, error) {
 	spaceID := ""
 	if len(spaceIDs) > 0 {
@@ -86,6 +100,10 @@ func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string,
 	if len(spaceIDs) > 1 {
 		embeddingModel = spaceIDs[1]
 	}
+	return db.searchAIRetrieval(ctx, userID, query, embedding, limit, spaceID, embeddingModel, retrievalWithoutMemory)
+}
+
+func (db *Database) searchAIRetrieval(ctx context.Context, userID, query string, embedding []float64, limit int, spaceID, embeddingModel, kinds string) ([]AIRetrievalHit, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return []AIRetrievalHit{}, nil
@@ -105,38 +123,34 @@ func (db *Database) SearchAIRetrieval(ctx context.Context, userID, query string,
 					ts_rank_cd(c.lexical,q.value) lexical_score,
 					CASE WHEN c.embedding IS NULL OR c.embedding_model<>$6 THEN 0 ELSE (1-(c.embedding <=> $2::vector)) END semantic_score
 				FROM ai_retrieval_documents d JOIN ai_retrieval_chunks c ON c.document_id=d.id CROSS JOIN lexical_query q
-				WHERE d.lifecycle_state='active' AND ($5='' OR d.space_id=$5)
+				WHERE d.lifecycle_state='active' `+kinds+` AND ($5='' OR d.space_id=$5)
 				  AND (
 				    (d.privacy_class='private' AND d.owner_user_id=$4) OR
 				    (d.privacy_class IN ('shared','provider')
 				      AND misty_can_access_space_audience(d.space_id,d.audience_kind,d.audience_conversation_id)
-				      AND (d.privacy_class='shared' OR
-				        (d.source_kind='calendar' AND EXISTS(
-				          SELECT 1 FROM space_calendar_events e JOIN space_calendar_sources s ON s.id=e.source_id
-				          WHERE e.id=d.source_id AND e.removed_at IS NULL AND s.status='active'))))
+				      AND d.privacy_class='shared')
 				  )
+				  AND `+retrievalItemVisible("$4")+`
 				  AND (c.lexical @@ q.value OR (c.embedding IS NOT NULL AND c.embedding_model=$6))
 				ORDER BY score DESC,d.updated_at DESC,d.id,c.ordinal LIMIT $3
-			`, query, aiVectorLiteral(embedding), limit, userID, spaceID, embeddingModel)
+			`, query, aiVectorLiteral(embedding), limit, itemViewer(ctx, userID), spaceID, embeddingModel)
 		} else {
 			rows, err = tx.QueryContext(ctx, `
 				WITH lexical_query AS (SELECT plainto_tsquery('simple',$1) value)
 				SELECT d.id,d.source_kind,d.source_id,COALESCE(d.space_id,''),d.source_revision,d.title,d.href,c.content,
 					ts_rank_cd(c.lexical,q.value) score,ts_rank_cd(c.lexical,q.value) lexical_score,0::float8 semantic_score
 				FROM ai_retrieval_documents d JOIN ai_retrieval_chunks c ON c.document_id=d.id CROSS JOIN lexical_query q
-				WHERE d.lifecycle_state='active' AND ($4='' OR d.space_id=$4)
+				WHERE d.lifecycle_state='active' `+kinds+` AND ($4='' OR d.space_id=$4)
 				  AND (
 				    (d.privacy_class='private' AND d.owner_user_id=$3) OR
 				    (d.privacy_class IN ('shared','provider')
 				      AND misty_can_access_space_audience(d.space_id,d.audience_kind,d.audience_conversation_id)
-				      AND (d.privacy_class='shared' OR
-				        (d.source_kind='calendar' AND EXISTS(
-				          SELECT 1 FROM space_calendar_events e JOIN space_calendar_sources s ON s.id=e.source_id
-				          WHERE e.id=d.source_id AND e.removed_at IS NULL AND s.status='active'))))
+				      AND d.privacy_class='shared')
 				  )
+				  AND `+retrievalItemVisible("$3")+`
 				  AND c.lexical @@ q.value
 				ORDER BY score DESC,d.updated_at DESC,d.id,c.ordinal LIMIT $2
-			`, query, limit, userID, spaceID)
+			`, query, limit, itemViewer(ctx, userID), spaceID)
 		}
 		if err != nil {
 			return err

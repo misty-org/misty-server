@@ -60,18 +60,19 @@ func (db *Database) SpaceNoteByID(ctx context.Context, userID, noteID string) (*
 		note.CanDelete = access.CanDelete
 		return tx.QueryRowContext(ctx,
 			`SELECT id,space_id,creator_user_id,title_projection,markdown_projection,plain_text_projection,
-			        lifecycle_state,collaboration_revision,acl_version,audience_kind,COALESCE(audience_conversation_id,''),created_at,updated_at,
+			        lifecycle_state,collaboration_revision,acl_version,audience_kind,COALESCE(audience_conversation_id,''),visibility,created_at,updated_at,
 			        (SELECT COUNT(*) FROM space_note_links links
 			         JOIN space_notes source ON source.id=links.source_note_id
 			         WHERE links.target_note_id=space_notes.id AND source.lifecycle_state='active'
+			           AND (source.visibility='public' OR source.creator_user_id=$3)
 			           AND (source.audience_kind='space' OR EXISTS(
 			               SELECT 1 FROM space_conversation_members cm
 			               WHERE cm.conversation_id=source.audience_conversation_id
 			                 AND cm.actor_kind='person' AND cm.user_id=$2)))
-			 FROM space_notes WHERE id=$1`, noteID, userID).Scan(
+			 FROM space_notes WHERE id=$1`, noteID, userID, itemViewer(ctx, userID)).Scan(
 			&note.ID, &note.SpaceID, &note.CreatorUserID, &note.TitleProjection,
 			&note.MarkdownProjection, &note.PlainTextProjection, &note.LifecycleState, &note.CollaborationRevision,
-			&note.ACLVersion, &note.AudienceKind, &note.AudienceConversationID, &note.CreatedAt, &note.UpdatedAt, &note.BacklinkCount)
+			&note.ACLVersion, &note.AudienceKind, &note.AudienceConversationID, &note.Visibility, &note.CreatedAt, &note.UpdatedAt, &note.BacklinkCount)
 	})
 	if err != nil {
 		return nil, err

@@ -31,7 +31,7 @@ func TestNoteAssetUploadRequiresNoteEditAccess(t *testing.T) {
 		}
 	}
 
-	outsider, err := fixture.database.CreateUser("Asset Outsider", "note-asset-outsider@example.com", "password123")
+	outsider, err := fixture.database.CreateUser("note-asset-outsider@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestNoteAssetVisibilityFollowsTheParentNote(t *testing.T) {
 		}
 	}
 
-	outsider, err := fixture.database.CreateUser("Visibility Outsider", "note-asset-vis-outsider@example.com", "password123")
+	outsider, err := fixture.database.CreateUser("note-asset-vis-outsider@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestNoteAssetVisibilityFollowsTheParentNote(t *testing.T) {
 func TestDeleteNoteAssetIsIdempotentAndRequiresEditAccess(t *testing.T) {
 	fixture := newNoteFixture(t, "note-asset-delete")
 
-	outsider, err := fixture.database.CreateUser("Delete Outsider", "note-asset-del-outsider@example.com", "password123")
+	outsider, err := fixture.database.CreateUser("note-asset-del-outsider@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/url"
 	"strings"
-	"time"
 
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
@@ -68,7 +67,7 @@ func collectIndexedHits(c *globalSearchCollector, indexed []db.AIRetrievalHit, s
 		if kind == "provider" {
 			kind = "message"
 		}
-		if kind != "note" && kind != "task" && kind != "roadmap" && kind != "calendar" && kind != "message" {
+		if kind != "note" && kind != "message" {
 			continue
 		}
 		href := item.Href
@@ -81,27 +80,6 @@ func collectIndexedHits(c *globalSearchCollector, indexed []db.AIRetrievalHit, s
 			SpaceID: item.SpaceID, SpaceName: spaceNames[item.SpaceID], Source: "server",
 			CanonicalID: item.SourceKind + ":" + item.SourceID, Revision: item.SourceRevision,
 			Score: normalizedSearchScore(item.Score), LexicalScore: normalizedSearchScore(item.LexicalScore), SemanticScore: normalizedSearchScore(item.SemanticScore),
-		}) {
-			break
-		}
-	}
-}
-
-// collectSpaceTasks adds task matches for one Space. The caller checks the
-// tasks-view permission first.
-func (s *SpacesService) collectSpaceTasks(ctx context.Context, c *globalSearchCollector, space db.Space, query string) {
-	tasks, taskErr := s.database.SpaceTasks(ctx, c.userID, space.ID, db.SpaceTaskQuery{
-		Search: query, Sort: "updated", Limit: min(8, c.limit-len(c.hits)),
-	})
-	if taskErr != nil {
-		return
-	}
-	for _, task := range tasks {
-		if !c.add(globalSearchHit{
-			ID: "task:" + task.ID, Kind: "task", Title: task.Title, Body: task.Notes,
-			Keywords: []string{"task", task.TaskKey, task.Status, task.Priority, space.Name},
-			Href:     "/spaces/" + url.PathEscape(space.ID) + "/planner/tasks/board?task=" + url.QueryEscape(task.ID),
-			SpaceID:  space.ID, SpaceName: space.Name, UpdatedAt: searchTime(task.UpdatedAt),
 		}) {
 			break
 		}
@@ -143,51 +121,6 @@ func (s *SpacesService) collectSpaceDrawings(ctx context.Context, c *globalSearc
 			Body: "Drawing in " + space.Name, Keywords: []string{"drawing", space.Name},
 			Href:    "/spaces/" + url.PathEscape(space.ID) + "/drawings/" + url.PathEscape(drawing.ID),
 			SpaceID: space.ID, SpaceName: space.Name, UpdatedAt: searchTime(drawing.UpdatedAt),
-		}) {
-			break
-		}
-	}
-}
-
-// collectSpaceRoadmaps adds roadmaps in one Space whose name or description
-// matches the query.
-func (s *SpacesService) collectSpaceRoadmaps(ctx context.Context, c *globalSearchCollector, space db.Space, lowerQuery string) {
-	roadmaps, roadmapErr := s.database.SpaceRoadmaps(ctx, c.userID, space.ID)
-	if roadmapErr != nil {
-		return
-	}
-	for _, roadmap := range roadmaps {
-		if !strings.Contains(strings.ToLower(roadmap.Name+" "+roadmap.Description), lowerQuery) {
-			continue
-		}
-		if !c.add(globalSearchHit{
-			ID: "roadmap:" + roadmap.ID, Kind: "roadmap", Title: roadmap.Name, Body: roadmap.Description,
-			Keywords: []string{"roadmap", space.Name},
-			Href:     "/spaces/" + url.PathEscape(space.ID) + "/planner/roadmaps/" + url.PathEscape(roadmap.ID),
-			SpaceID:  space.ID, SpaceName: space.Name, UpdatedAt: searchTime(roadmap.UpdatedAt),
-		}) {
-			break
-		}
-	}
-}
-
-// collectSpaceCalendarEvents adds events in the year around now whose title,
-// description or location matches the query.
-func (s *SpacesService) collectSpaceCalendarEvents(ctx context.Context, c *globalSearchCollector, space db.Space, lowerQuery string) {
-	now := time.Now().UTC()
-	events, calendarErr := s.database.SpaceCalendarEvents(ctx, c.userID, space.ID, now.AddDate(-1, 0, 0), now.AddDate(1, 0, 0))
-	if calendarErr != nil {
-		return
-	}
-	for _, event := range events {
-		if !strings.Contains(strings.ToLower(event.Title+" "+event.Description+" "+event.Location), lowerQuery) {
-			continue
-		}
-		if !c.add(globalSearchHit{
-			ID: "calendar:" + event.ID, Kind: "calendar", Title: event.Title, Body: event.Description,
-			Keywords: []string{"calendar", "event", event.Location, space.Name},
-			Href:     "/spaces/" + url.PathEscape(space.ID) + "/planner/agenda/day?date=" + url.QueryEscape(event.StartsAt.Format("2006-01-02")),
-			SpaceID:  space.ID, SpaceName: space.Name, UpdatedAt: searchTime(event.UpdatedAt),
 		}) {
 			break
 		}

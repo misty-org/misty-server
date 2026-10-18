@@ -58,7 +58,7 @@ func newRemoteSessionFixture(t *testing.T) *remoteSessionFixture {
 	run := f.request(t, agent.ID)
 	// Attached at dispatch, as for any request. The laptop picked the Mac mini: its browser grant may open a session.
 	if _, err := f.database.AttachAIInvocationContext(t.Context(), f.userID, run.ID, "", picked.id, "workspace", "workspace:"+picked.id, "Misty browser on Mac mini",
-		json.RawMessage(`["tabs.list","tabs.open","browser.session"]`), json.RawMessage(`{"source":"device"}`)); err != nil {
+		json.RawMessage(`["browser.tab.list","browser.tab.open","browser.session"]`), json.RawMessage(`{"source":"device"}`)); err != nil {
 		t.Fatal(err)
 	}
 	activate(t, f.database, run.ID)
@@ -193,11 +193,11 @@ func TestSharedFoldersWorkFromAnAgentChat(t *testing.T) {
 	// Folders carry no window: a chat from the main window may still read one.
 	next := f.request(t, f.agentID)
 	if _, err := f.database.AttachAIInvocationContext(t.Context(), f.userID, next.ID, "", f.picked.id, "local_folder", "scope-1", "Reports",
-		json.RawMessage(`["files.list","files.read"]`), json.RawMessage(`{"source":"device"}`)); err != nil {
+		json.RawMessage(`["folder.list","folder.read"]`), json.RawMessage(`{"source":"device"}`)); err != nil {
 		t.Fatal(err)
 	}
 	activate(t, f.database, next.ID)
-	if !f.claimable(t, next.ID, "scope-1", "files.read") {
+	if !f.claimable(t, next.ID, "scope-1", "folder.read") {
 		t.Fatal("a shared folder could not be read from a user-mode agent chat")
 	}
 }

@@ -13,11 +13,11 @@ import (
 
 func TestDeviceRegistrationIdentityConflictWithRuntimeRole(t *testing.T) {
 	admin := openTestDatabase(t)
-	owner, err := admin.CreateUser("Device owner", "device-owner@example.invalid", "password123")
+	owner, err := admin.CreateUser("device-owner@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := admin.CreateUser("Other owner", "device-other@example.invalid", "password123")
+	other, err := admin.CreateUser("device-other@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,7 @@ func TestLibraryQuotaUploadDedupAndAttachmentPromotion(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Library Owner", "library-owner@example.com", "password123")
+	owner, err := database.CreateUser("library-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,65 +164,13 @@ func TestLibraryQuotaUploadDedupAndAttachmentPromotion(t *testing.T) {
 		t.Fatalf("bulk clear location = %#v, %v", bulkItems, err)
 	}
 	updated, promoted = libraryItemsByID(t, bulkItems, updated.ID, promoted.ID)
-	album, err := database.CreateLibraryAlbum(ctx, owner.ID, spaceID, "Road trip", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bulkItems, err = database.BulkUpdateLibraryItems(ctx, owner.ID, spaceID, BulkLibraryItemOperation{Action: "add_to_album", AlbumID: album.ID, Items: []LibraryItemVersion{{ID: updated.ID, Version: updated.Version}, {ID: promoted.ID, Version: promoted.Version}}})
-	if err != nil || len(bulkItems) != 2 {
-		t.Fatalf("bulk add to album = %#v, %v", bulkItems, err)
-	}
-	albumItems, err := database.LibraryAlbumItems(ctx, owner.ID, spaceID, album.ID, 10)
-	if err != nil || len(albumItems) != 2 {
-		t.Fatalf("album items = %#v, %v", albumItems, err)
-	}
-	album, err = database.LibraryAlbum(ctx, owner.ID, spaceID, album.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	album, err = database.ReorderLibraryAlbumItems(ctx, owner.ID, spaceID, album.ID, album.Version, []string{promoted.ID, updated.ID})
-	if err != nil {
-		t.Fatalf("ReorderLibraryAlbumItems() error = %v", err)
-	}
-	albumItems, err = database.LibraryAlbumItems(ctx, owner.ID, spaceID, album.ID, 10)
-	if err != nil || len(albumItems) != 2 || albumItems[0].ID != promoted.ID || albumItems[1].ID != updated.ID {
-		t.Fatalf("reordered album items = %#v, %v", albumItems, err)
-	}
-	album, err = database.UpdateLibraryAlbum(ctx, owner.ID, spaceID, album.ID, album.Version, "Coastal road trip", "Summer favorites", promoted.ID)
-	if err != nil || album.Name != "Coastal road trip" || album.CoverItemID != promoted.ID {
-		t.Fatalf("UpdateLibraryAlbum() = %#v, %v", album, err)
-	}
-	structured, err := database.LibraryItems(ctx, owner.ID, spaceID, LibraryItemQuery{Search: `tag:travel type:document album:"Coastal road trip" favorite:true after:2020-01-01`})
+	structured, err := database.LibraryItems(ctx, owner.ID, spaceID, LibraryItemQuery{Search: `tag:travel type:document favorite:true after:2020-01-01`})
 	if err != nil || len(structured) != 1 || structured[0].ID != updated.ID {
 		t.Fatalf("structured search = %#v, %v", structured, err)
 	}
 	facets, err := database.LibraryFacets(ctx, owner.ID, spaceID, "")
-	if err != nil || facets.Total != 2 || facets.Favorites != 1 || facets.Hidden != 0 || facets.RecentlyDeleted != 0 || len(facets.Tags) != 2 || len(facets.MediaTypes) != 1 || facets.MediaTypes[0].Value != "document" || len(facets.Albums) != 1 || facets.Albums[0].Count != 2 {
+	if err != nil || facets.Total != 2 || facets.Favorites != 1 || facets.Hidden != 0 || facets.RecentlyDeleted != 0 || len(facets.Tags) != 2 || len(facets.MediaTypes) != 1 || facets.MediaTypes[0].Value != "document" {
 		t.Fatalf("LibraryFacets() = %#v, %v", facets, err)
-	}
-	albumFacets, err := database.LibraryFacets(ctx, owner.ID, spaceID, "coastal")
-	if err != nil || len(albumFacets.Albums) != 1 || albumFacets.Albums[0].Value != album.ID {
-		t.Fatalf("filtered LibraryFacets() = %#v, %v", albumFacets, err)
-	}
-	bulkItems, err = database.BulkUpdateLibraryItems(ctx, owner.ID, spaceID, BulkLibraryItemOperation{Action: "set_date", Items: []LibraryItemVersion{{ID: updated.ID, Version: updated.Version}, {ID: promoted.ID, Version: promoted.Version}}, DateOverride: &capturedAt})
-	if err != nil {
-		t.Fatalf("prepare discovery dates: %v", err)
-	}
-	updated, promoted = libraryItemsByID(t, bulkItems, updated.ID, promoted.ID)
-	bulkItems, err = database.BulkUpdateLibraryItems(ctx, owner.ID, spaceID, BulkLibraryItemOperation{Action: "set_location", Items: []LibraryItemVersion{{ID: updated.ID, Version: updated.Version}, {ID: promoted.ID, Version: promoted.Version}}, LocationOverride: location})
-	if err != nil {
-		t.Fatalf("prepare discovery locations: %v", err)
-	}
-	updated, promoted = libraryItemsByID(t, bulkItems, updated.ID, promoted.ID)
-	discovery, err := database.LibraryDiscovery(ctx, owner.ID, spaceID)
-	if err != nil || len(discovery.RecentDays) != 1 || discovery.RecentDays[0].ItemCount != 2 || len(discovery.Months) != 1 || discovery.Months[0].ID != "2026-07" || len(discovery.Years) != 1 || discovery.Years[0].ID != "2026" || len(discovery.Memories) != 1 || discovery.Memories[0].ItemCount != 2 || len(discovery.Trips) != 1 || discovery.Trips[0].Title != "Big Sur" || len(discovery.Duplicates) != 1 || discovery.Duplicates[0].ItemCount != 2 {
-		t.Fatalf("LibraryDiscovery() = %#v, %v", discovery, err)
-	}
-	for _, target := range []struct{ kind, id string }{{"day", discovery.RecentDays[0].ID}, {"month", discovery.Months[0].ID}, {"year", discovery.Years[0].ID}, {"memory", discovery.Memories[0].ID}, {"trip", discovery.Trips[0].ID}, {"duplicate", discovery.Duplicates[0].ID}} {
-		discoveryItems, itemErr := database.LibraryDiscoveryItems(ctx, owner.ID, spaceID, target.kind, target.id)
-		if itemErr != nil || len(discoveryItems) != 2 {
-			t.Fatalf("LibraryDiscoveryItems(%s) = %#v, %v", target.kind, discoveryItems, itemErr)
-		}
 	}
 	transferItems, err := database.LibraryTransferItems(ctx, owner.ID, spaceID, []string{updated.ID, promoted.ID})
 	if err != nil || len(transferItems) != 2 || transferItems[0].SHA256 != digest {
@@ -239,8 +187,5 @@ func TestLibraryQuotaUploadDedupAndAttachmentPromotion(t *testing.T) {
 	if err != nil || libraryFacetCount(facets.Utilities, "recently-viewed") != 1 || libraryFacetCount(facets.Utilities, "documents") != 2 {
 		t.Fatalf("utility facets = %#v, %v", facets.Utilities, err)
 	}
-	testLibrarySharingAndLifecycle(
-		t, database, ctx, owner.ID, space, digest, updated, promoted, album,
-		discovery.Memories[0].ID, discovery.Trips[0].ID,
-	)
+	testLibraryLifecycle(t, database, ctx, owner.ID, space, updated, promoted)
 }

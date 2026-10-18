@@ -23,9 +23,10 @@ see **Verify** below.
    not enable connected apps.
 3. Recreate the API. Composio-managed auth covers most toolkits without any
    auth config; a toolkit without a managed scheme needs an auth config in the
-   Composio dashboard before users can connect it. Custom OAuth apps (for
-   Misty's own branding on Google's consent screen) are a launch-checklist
-   item, not a prerequisite.
+   Composio dashboard before users can connect it. Every app uses
+   Composio-managed auth; Misty runs no OAuth apps of its own for them
+   (decided October 16, 2026, after a custom Calendar config limited
+   connections to read-only).
 
 The CLI ignores the retired `MISTY_COMPOSIO_URL` and
 `MISTY_COMPOSIO_CALENDAR_*` settings in older files.
@@ -39,14 +40,14 @@ The CLI ignores the retired `MISTY_COMPOSIO_URL` and
   workbench and bash tools disabled, and Composio's in-chat connection prompts
   disabled. The session ID is stored in `composio_sessions` and recreated if
   Composio no longer has it.
-- **Agent tools.** Every chat, agent and task run gets `apps.search`,
-  `apps.schemas`, `apps.connected`, `apps.connect` and `apps.execute`
-  (the model sees `apps_search` and so on). Agents inherit the account's
+- **Agent tools.** Every chat, agent and task run gets `integration.search`,
+  `integration.schemas`, `integration.connected`, `integration.connect` and `integration.execute`
+  (the model sees `integration_search` and so on). Agents inherit the account's
   connected apps; there are no per-agent bindings.
-- **Connect card.** `apps.connect` shows a **Connect** card in the chat and
+- **Connect card.** `integration.connect` shows a **Connect** card in the chat and
   waits up to 40 seconds while the user signs in; the model calls it again to
   keep waiting. Sign-in links must be HTTPS links on `composio.dev`.
-- **Approvals.** `apps.execute` classifies each tool with Composio's behavior
+- **Approvals.** `integration.execute` classifies each tool with Composio's behavior
   tags and the action it names. Sends, posts, shares, invites, payments,
   access changes and deletes wait for an **Approve** card while the account
   setting *Ask before acting for you* (Settings → Agents → Connections) is on,
@@ -66,7 +67,7 @@ The CLI ignores the retired `MISTY_COMPOSIO_URL` and
 A key, a session, a search or a Connect Link alone does not prove the
 integration. In a chat:
 
-1. Ask "list my five latest emails". Expect an `apps_search`, a Connect card for
+1. Ask "list my five latest emails". Expect an `integration_search`, a Connect card for
    Gmail, sign-in, then a result from a read tool with a Composio `log_id`.
 2. Ask to create a Google Drive folder. Expect no approval card (a create).
 3. Ask to send a test email to yourself. Expect an Approve card that shows the

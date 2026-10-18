@@ -61,12 +61,6 @@ func (s *SpaceLibraryService) rejectAndDelete(ctx context.Context, upload *db.Li
 	_ = s.TestingStore.Delete(ctx, upload.ObjectKey)
 }
 
-
-
-
-
-
-
 func sanitizeLibraryFilename(value string) string {
 	value = strings.TrimSpace(filepath.Base(strings.ReplaceAll(value, "\\", "/")))
 	value = strings.Map(func(r rune) rune {
@@ -87,8 +81,6 @@ func writeLibraryError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
 	case errors.Is(err, db.ErrLibraryForbidden):
 		writeJSON(w, http.StatusForbidden, map[string]string{"code": "forbidden"})
-	case errors.Is(err, db.ErrLibraryReauthentication):
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "library_reauthentication_required"})
 	case errors.Is(err, db.ErrLibraryInvalid):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_request"})
 	case errors.Is(err, db.ErrPersonalStorageQuota):

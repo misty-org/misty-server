@@ -89,7 +89,6 @@ func NewAPIRateLimiter() *APIRateLimiter {
 			"GET /auth/google/start":                                 {Limit: 20, Window: time.Minute},
 			"GET /auth/google/callback":                              {Limit: 20, Window: time.Minute},
 			"POST /auth/google/complete":                             {Limit: 60, Window: time.Minute},
-			"POST /me/library-lock":                                  {Limit: 5, Window: time.Minute},
 			"POST /auth/forgot":                                      {Limit: 8, Window: time.Minute},
 			"GET /auth/reset/start":                                  {Limit: 20, Window: time.Minute},
 			"GET /auth/reset/validate":                               {Limit: 20, Window: time.Minute},

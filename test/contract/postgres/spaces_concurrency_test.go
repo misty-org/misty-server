@@ -17,11 +17,11 @@ func TestConcurrentListSpacesNeverCrossesAccounts(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
 
-	userA, err := database.CreateUser("Account A", "concurrency-a@example.com", "password123")
+	userA, err := database.CreateUser("concurrency-a@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(A) error = %v", err)
 	}
-	userB, err := database.CreateUser("Account B", "concurrency-b@example.com", "password123")
+	userB, err := database.CreateUser("concurrency-b@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(B) error = %v", err)
 	}

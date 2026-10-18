@@ -93,6 +93,7 @@ services:
       MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-${CLAUDE_API_KEY:-}}
       VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
       AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
       MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
@@ -132,6 +133,8 @@ services:
         required: false
       - path: .env/dev/integrations/composio.env
         required: false
+      - path: .env/dev/integrations/web-fetch.env
+        required: false
       - path: .env/dev/integrations/dropbox.env
         required: false
       - path: .env/dev/integrations/email.env
@@ -160,6 +163,8 @@ services:
       VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
       AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
       MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
+      # Evals only: lets a request pick its model and effort (production never does).
+      MISTY_ALLOW_MODEL_OVERRIDE: ${MISTY_ALLOW_MODEL_OVERRIDE:-}
       # The API stays publicly reachable for callbacks, while the development
       # website runs only on localhost through Vite.
       MISTY_PUBLIC_API_URL: "${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}/v1"

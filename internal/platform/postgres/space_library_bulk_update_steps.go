@@ -36,11 +36,11 @@ func validateBulkLibraryItemRefs(refs []LibraryItemVersion) (map[string]int64, [
 func validateBulkLibraryOperation(operation *BulkLibraryItemOperation) error {
 	allowedAction := map[string]bool{
 		"favorite": true, "unfavorite": true, "hide": true, "unhide": true,
-		"trash": true, "restore": true, "add_to_album": true, "remove_from_album": true,
+		"trash": true, "restore": true,
 		"add_tags": true, "remove_tags": true, "set_date": true, "clear_date": true,
 		"set_location": true, "clear_location": true,
 	}
-	if !allowedAction[operation.Action] || (operation.Action == "add_to_album" || operation.Action == "remove_from_album") && operation.AlbumID == "" {
+	if !allowedAction[operation.Action] {
 		return ErrLibraryInvalid
 	}
 	if operation.Action == "add_tags" || operation.Action == "remove_tags" {
@@ -136,8 +136,6 @@ func applyBulkLibraryItemMutationTx(ctx context.Context, tx *sql.Tx, userID, spa
 		return trashBulkLibraryItemsTx(ctx, tx, spaceID, ids)
 	case "restore":
 		return restoreBulkLibraryItemsTx(ctx, tx, spaceID, ids)
-	case "add_to_album", "remove_from_album":
-		return applyBulkAlbumMembershipTx(ctx, tx, userID, spaceID, operation, ids)
 	case "add_tags":
 		raw, _ := json.Marshal(operation.Tags)
 		_, err := tx.ExecContext(ctx, `UPDATE space_library_items i SET tags=(SELECT COALESCE(jsonb_agg(value ORDER BY lower(value)),'[]'::jsonb) FROM (SELECT DISTINCT value FROM jsonb_array_elements_text(i.tags||$1::jsonb) value) tags),version=version+1,updated_at=NOW() WHERE i.space_id=$2 AND i.id=ANY($3)`, raw, spaceID, pq.Array(ids))
@@ -182,25 +180,6 @@ func restoreBulkLibraryItemsTx(ctx context.Context, tx *sql.Tx, spaceID string, 
 		return ErrLibraryNotFound
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE space_storage_contributions SET state='active',updated_at=NOW() WHERE space_id=$1 AND source_kind='library_item' AND source_id=ANY($2) AND state='recovery'`, spaceID, pq.Array(ids))
-	return err
-}
-
-// applyBulkAlbumMembershipTx adds the items to, or removes them from, the
-// requested album and bumps the album version.
-func applyBulkAlbumMembershipTx(ctx context.Context, tx *sql.Tx, userID, spaceID string, operation BulkLibraryItemOperation, ids []string) error {
-	var albumExists bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_albums WHERE id=$1 AND space_id=$2)`, operation.AlbumID, spaceID).Scan(&albumExists); err != nil || !albumExists {
-		return ErrLibraryNotFound
-	}
-	var err error
-	if operation.Action == "add_to_album" {
-		_, err = tx.ExecContext(ctx, `INSERT INTO space_album_items(album_id,space_library_item_id,added_by_user_id) SELECT $1,unnest($2::text[]),$3 ON CONFLICT DO NOTHING`, operation.AlbumID, pq.Array(ids), userID)
-	} else {
-		_, err = tx.ExecContext(ctx, `DELETE FROM space_album_items WHERE album_id=$1 AND space_library_item_id=ANY($2)`, operation.AlbumID, pq.Array(ids))
-	}
-	if err == nil {
-		_, err = tx.ExecContext(ctx, `UPDATE space_albums SET version=version+1,updated_at=NOW() WHERE id=$1`, operation.AlbumID)
-	}
 	return err
 }
 

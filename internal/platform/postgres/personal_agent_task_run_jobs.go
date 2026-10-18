@@ -11,32 +11,9 @@ import (
 
 type PersonalAgentTaskRunJob struct {
 	Run          SpaceRun
-	Task         SpaceTask
-	HasTask      bool
 	Attempt      int
 	LeaseOwner   string
 	LeaseExpires time.Time
-}
-
-func (db *Database) ValidatePersonalAgentTaskRun(ctx context.Context, userID, runID, taskID, agentID string) error {
-	return db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		var spaceID string
-		var active bool
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(r.space_id,''),EXISTS(
-			SELECT 1 FROM agent_run_jobs j JOIN space_tasks t ON t.id=j.task_id
-			WHERE j.run_id=r.id AND j.state IN ('leased','dispatched') AND t.id=$2 AND t.assignee_agent_id=$3 AND t.archived_at IS NULL
-		) FROM space_runs r WHERE r.id=$1 AND r.state='running' AND r.requesting_member_id=$4`, runID, taskID, agentID, userID).Scan(&spaceID, &active); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrSpaceForbidden
-			}
-			return err
-		}
-		if !active {
-			return ErrSpaceForbidden
-		}
-		_, err := askExecutionContextTx(ctx, tx, userID, spaceID, agentID)
-		return err
-	})
 }
 
 func (db *Database) ClaimPersonalAgentTaskRunJobs(ctx context.Context, workerID string, limit int, lease time.Duration) ([]PersonalAgentTaskRunJob, error) {
@@ -60,9 +37,9 @@ func (db *Database) ClaimPersonalAgentTaskRunJobs(ctx context.Context, workerID 
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT j.run_id,j.agent_id FROM agent_run_jobs j
-			JOIN space_runs r ON r.id=j.run_id LEFT JOIN space_tasks t ON t.id=j.task_id
+			JOIN space_runs r ON r.id=j.run_id
 			WHERE ((j.state='queued' AND j.available_at<=NOW()) OR (j.state='leased' AND j.lease_expires_at<=NOW()))
-			  AND r.execution_owner='go' AND r.state IN ('queued','running') AND (j.task_id IS NULL OR (t.assignee_agent_id=j.agent_id AND t.archived_at IS NULL))
+			  AND r.execution_owner='go' AND r.state IN ('queued','running')
 			  AND NOT EXISTS(SELECT 1 FROM agent_run_jobs active
 			    WHERE active.agent_id=j.agent_id AND active.run_id<>j.run_id AND active.state='dispatched')
 			ORDER BY j.available_at,j.created_at FOR UPDATE OF j SKIP LOCKED LIMIT $1`, limit*5)
@@ -114,17 +91,6 @@ func (db *Database) ClaimPersonalAgentTaskRunJobs(ctx context.Context, workerID 
 				next_retry_at=NULL,updated_at=NOW() WHERE id=$2 AND state IN ('queued','running') RETURNING `+spaceRunColumns,
 				job.Attempt, runID), &job.Run); err != nil {
 				return err
-			}
-			if job.Run.SourceTaskID != "" {
-				if err := scanSpaceTask(tx.QueryRowContext(ctx, `SELECT `+spaceTaskColumns+` FROM space_tasks WHERE id=$1`, job.Run.SourceTaskID), &job.Task); err != nil {
-					return err
-				}
-				job.HasTask = true
-				if _, err := insertTaskActivityTx(ctx, tx, SpaceTaskActivity{SpaceID: job.Task.SpaceID, TaskID: job.Task.ID,
-					ActorKind: "agent", ActorAgentID: job.Run.AgentID, RunID: job.Run.ID, Kind: "progress",
-					Message: "Started working on this task", Metadata: mustJSON(map[string]any{"attempt": job.Attempt})}); err != nil {
-					return err
-				}
 			}
 			jobs = append(jobs, job)
 			seenAgents[candidate.agentID] = true
@@ -193,22 +159,15 @@ func (db *Database) MarkPersonalAgentTaskRunDispatched(ctx context.Context, runI
 	return out, err
 }
 
-func (db *Database) ValidatePersonalAgentTaskRuntime(ctx context.Context, runID, runtimeRunID string, allowIntervention ...bool) (*SpaceRun, *SpaceTask, error) {
+func (db *Database) ValidatePersonalAgentTaskRuntime(ctx context.Context, runID, runtimeRunID string, allowIntervention ...bool) (*SpaceRun, error) {
 	run := &SpaceRun{}
-	task := &SpaceTask{}
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs r WHERE r.id=$1 AND r.runtime_run_id=$2 AND (r.state='running' OR ($3 AND r.state='awaiting_intervention'))`, runID, runtimeRunID, len(allowIntervention) > 0 && allowIntervention[0]), run); err != nil {
 			return err
 		}
-		if run.SourceTaskID != "" {
-			if err := scanSpaceTask(tx.QueryRowContext(ctx, `SELECT `+spaceTaskColumns+` FROM space_tasks t JOIN agent_run_jobs j ON j.task_id=t.id WHERE j.run_id=$1 AND j.state='dispatched' AND t.assignee_agent_id=j.agent_id AND t.archived_at IS NULL`, runID), task); err != nil {
-				return err
-			}
-		} else {
-			var active bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_run_jobs WHERE run_id=$1 AND state='dispatched' AND task_id IS NULL)`, runID).Scan(&active); err != nil || !active {
-				return ErrSpaceForbidden
-			}
+		var active bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_run_jobs WHERE run_id=$1 AND state='dispatched')`, runID).Scan(&active); err != nil || !active {
+			return ErrSpaceForbidden
 		}
 		_, err := askExecutionContextTx(ctx, tx, run.OwnerUserID, run.SpaceID, run.AgentID)
 		return err
@@ -216,7 +175,7 @@ func (db *Database) ValidatePersonalAgentTaskRuntime(ctx context.Context, runID,
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrSpaceForbidden
 	}
-	return run, task, err
+	return run, err
 }
 
 func (db *Database) FailPersonalAgentTaskRunJob(ctx context.Context, runID, workerID, code, message string, retry bool) (bool, error) {

@@ -56,31 +56,6 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 			return false, err
 		}
 		permission = PermissionLibraryView
-	case strings.HasPrefix(event.EventType, "task."):
-		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, event.SpaceID, "space_tasks", event.EntityID)
-		if err != nil || !visible {
-			return false, err
-		}
-		permission = PermissionTasksView
-	case strings.HasPrefix(event.EventType, "roadmap."):
-		roadmapID := event.EntityID
-		var payload struct {
-			RoadmapID string `json:"roadmap_id"`
-		}
-		if json.Unmarshal(event.Payload, &payload) == nil && payload.RoadmapID != "" {
-			roadmapID = payload.RoadmapID
-		}
-		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, event.SpaceID, "space_roadmaps", roadmapID)
-		if err != nil || !visible {
-			return false, err
-		}
-		permission = PermissionTasksView
-	case strings.HasPrefix(event.EventType, "calendar."):
-		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, event.SpaceID, "space_native_calendar_events", event.EntityID)
-		if err != nil || !visible {
-			return false, err
-		}
-		permission = PermissionTasksView
 	case strings.HasPrefix(event.EventType, "drawing."):
 		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, event.SpaceID, "space_drawings", event.EntityID)
 		if err != nil || !visible {
@@ -143,12 +118,17 @@ func humanConversationParticipantTx(ctx context.Context, tx *sql.Tx, userID, spa
 func resourceEntityAudienceVisibleTx(ctx context.Context, tx *sql.Tx, userID, spaceID, table, entityID string) (bool, error) {
 	// Table names are an internal closed set; values never come from requests.
 	switch table {
-	case "space_tasks", "space_roadmaps", "space_native_calendar_events", "space_library_items", "space_drawings":
+	case "space_library_items", "space_drawings":
 	default:
 		return false, ErrSpaceInvalid
 	}
+	owner := "creator_user_id"
+	if table == "space_library_items" {
+		owner = "added_by_user_id"
+	}
 	var audienceKind, conversationID string
-	err := tx.QueryRowContext(ctx, `SELECT audience_kind,COALESCE(audience_conversation_id,'') FROM `+table+` WHERE id=$1 AND space_id=$2`, entityID, spaceID).Scan(&audienceKind, &conversationID)
+	var private bool
+	err := tx.QueryRowContext(ctx, `SELECT audience_kind,COALESCE(audience_conversation_id,''),visibility='private' AND `+owner+`<>$3 FROM `+table+` WHERE id=$1 AND space_id=$2`, entityID, spaceID, userID).Scan(&audienceKind, &conversationID, &private)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Some event families use upload/source IDs, and connected-calendar rows
 		// do not live in the native table. They are Space-wide by definition.
@@ -156,6 +136,10 @@ func resourceEntityAudienceVisibleTx(ctx context.Context, tx *sql.Tx, userID, sp
 	}
 	if err != nil {
 		return false, err
+	}
+	// Someone else's private item: its events reach only its owner.
+	if private {
+		return false, nil
 	}
 	if audienceKind == SpaceAudienceSpace {
 		return true, nil

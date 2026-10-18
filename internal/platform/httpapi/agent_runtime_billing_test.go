@@ -46,7 +46,7 @@ func TestRuntimeCanceledCompletionSettlesOriginalHolds(t *testing.T) {
 	// remaining connection, including its durable journal and delivery receipt.
 	database.Conn.SetMaxOpenConns(2)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Billing validation", "runtime-billing@example.test", "password123")
+	owner, err := database.CreateUser("runtime-billing@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

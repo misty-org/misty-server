@@ -13,7 +13,7 @@ import ()
 func TestRecoveryPreservesRuntimeAndExactDeviceWait(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Recovery", "recovery@example.invalid", "password123")
+	owner, err := database.CreateUser("recovery@example.invalid", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

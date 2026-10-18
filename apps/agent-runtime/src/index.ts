@@ -2,7 +2,9 @@ import express, { type Request } from "express";
 import { rateLimit } from "express-rate-limit";
 import { instanceModelConfig } from "./model-provider.js";
 import { embedCall, generateTextCall, modelCallFailure, speechCall, transcribeCall } from "./model-calls.js";
-import { webSearchCall } from "./web-search.js";
+import { transcribeDiarizedCall } from "./transcribe-diarized.js";
+import { voiceNotesCall } from "./voice-notes.js";
+import { daySummaryCall } from "./day-summary.js";
 import { vercelHarness as harness } from "./vercel-harness.js";
 import { MISTY_HARNESS_VERSION } from "./harness.js";
 import { controlPlaneURL } from "./control-plane.js";
@@ -82,8 +84,10 @@ for (const [path, call] of [
   ["/v1/models/text", generateTextCall],
   ["/v1/models/embed", embedCall],
   ["/v1/models/transcribe", transcribeCall],
+  ["/v1/models/transcribe-diarized", transcribeDiarizedCall],
+  ["/v1/models/voice-notes", voiceNotesCall],
+  ["/v1/models/day-summary", daySummaryCall],
   ["/v1/models/speech", speechCall],
-  ["/v1/models/search", webSearchCall],
 ] as const) {
   app.post(path, async (request: RawRequest, response) => {
     if (!authorized(request))

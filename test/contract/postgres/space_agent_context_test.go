@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"testing"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 
@@ -16,11 +15,11 @@ import ()
 func TestSpaceContextRevisionTracksVisibleChanges(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Revision Owner", "revision-owner@example.com", "password123")
+	owner, err := database.CreateUser("revision-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := database.CreateUser("Revision Member", "revision-member@example.com", "password123")
+	member, err := database.CreateUser("revision-member@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,17 +43,15 @@ func TestSpaceContextRevisionTracksVisibleChanges(t *testing.T) {
 		t.Fatal("revision changed with no Space activity; context would be rebuilt every turn")
 	}
 
-	if _, err := database.CreateSpaceTask(ctx, owner.ID, SpaceTask{
-		SpaceID: space.ID, Title: "Added after the first turn", Status: "todo",
-	}); err != nil {
+	if _, err := database.CreateSpaceNote(ctx, owner.ID, space.ID, "Added after the first turn"); err != nil {
 		t.Fatal(err)
 	}
-	afterTask, err := database.SpaceContextRevision(ctx, owner.ID, space.ID)
+	afterNote, err := database.SpaceContextRevision(ctx, owner.ID, space.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if afterTask == first {
-		t.Fatal("revision did not move after a task was added; the agent would answer from stale context")
+	if afterNote == first {
+		t.Fatal("revision did not move after a note was added; the agent would answer from stale context")
 	}
 
 	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
@@ -68,7 +65,7 @@ func TestSpaceContextRevisionTracksVisibleChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if afterMember == afterTask {
+	if afterMember == afterNote {
 		t.Fatal("revision did not move after a member joined")
 	}
 

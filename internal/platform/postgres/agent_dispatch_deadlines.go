@@ -31,7 +31,6 @@ const personalRunDeviceReady = `EXISTS(SELECT 1 FROM agent_run_contexts c JOIN t
  AND d.revoked_at IS NULL AND d.last_seen_at>NOW()-INTERVAL '90 seconds')`
 
 const personalAgentTaskJobClaimable = `r.execution_owner='go' AND r.state IN ('queued','running')
- AND (j.task_id IS NULL OR (t.assignee_agent_id=j.agent_id AND t.archived_at IS NULL))
  AND NOT EXISTS(SELECT 1 FROM agent_run_jobs active WHERE active.agent_id=j.agent_id AND active.run_id<>j.run_id AND active.state='dispatched')`
 
 const agentTaskWorkerDeadline = `SELECT min(due) FROM (
@@ -47,6 +46,6 @@ const agentTaskWorkerDeadline = `SELECT min(due) FROM (
   AND r.state IN ('completed','completed_with_errors','failed','canceled','rejected') LIMIT 1)
  UNION ALL
  (SELECT CASE WHEN j.state='queued' THEN j.available_at ELSE j.lease_expires_at END AS due
-  FROM agent_run_jobs j JOIN space_runs r ON r.id=j.run_id LEFT JOIN space_tasks t ON t.id=j.task_id
+  FROM agent_run_jobs j JOIN space_runs r ON r.id=j.run_id
   WHERE j.state IN ('queued','leased') AND ` + personalAgentTaskJobClaimable + ` ORDER BY 1 LIMIT 1)
  ) pending`

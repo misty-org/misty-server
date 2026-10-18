@@ -18,7 +18,7 @@ import (
 
 func TestQuickAIRuntimeRecoveryUsesPinnedWorkerAndCommittedState(t *testing.T) {
 	database := openPresenceTestDatabase(t)
-	owner, err := database.CreateUser("Runtime recovery", uniqueTestEmail("runtime-recovery"), "password123")
+	owner, err := database.CreateUser(uniqueTestEmail("runtime-recovery"), "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,7 +26,7 @@ func TestNormalizeUsername(t *testing.T) {
 func TestUserSettingsDefaultAndUpdate(t *testing.T) {
 	database := openTestDatabase(t)
 
-	user, err := database.CreateUser("Ada", "ada@example.com", "password123")
+	user, err := database.CreateUser("ada@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
@@ -60,7 +60,7 @@ func TestUserSettingsDefaultAndUpdate(t *testing.T) {
 
 func TestUserAvatarVersionBumps(t *testing.T) {
 	database := openTestDatabase(t)
-	user, err := database.CreateUser("Avatar User", "avatar@example.com", "password123")
+	user, err := database.CreateUser("avatar@example.com", "password123")
 	if err != nil {
 		t.Fatalf("CreateUser() error = %v", err)
 	}

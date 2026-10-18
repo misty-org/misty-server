@@ -36,6 +36,16 @@ type DeviceRunGrantRecord struct {
 }
 
 func (db *Database) AttachAIInvocationContext(ctx context.Context, userID, invocationID, spaceID, deviceID, kind, opaqueRef, displayName string, capabilities, metadata json.RawMessage, grants ...*DeviceRunGrantRecord) (*AIInvocationContext, error) {
+	return db.attachAIInvocationContext(ctx, false, userID, invocationID, spaceID, deviceID, kind, opaqueRef, displayName, capabilities, metadata, grants...)
+}
+
+// AttachRunningAIInvocationContext attaches a context to a run that has already
+// started, such as the agent's own browser tab a device opened for it mid-run.
+func (db *Database) AttachRunningAIInvocationContext(ctx context.Context, userID, invocationID, deviceID, kind, opaqueRef, displayName string, capabilities, metadata json.RawMessage, grant *DeviceRunGrantRecord) (*AIInvocationContext, error) {
+	return db.attachAIInvocationContext(ctx, true, userID, invocationID, "", deviceID, kind, opaqueRef, displayName, capabilities, metadata, grant)
+}
+
+func (db *Database) attachAIInvocationContext(ctx context.Context, running bool, userID, invocationID, spaceID, deviceID, kind, opaqueRef, displayName string, capabilities, metadata json.RawMessage, grants ...*DeviceRunGrantRecord) (*AIInvocationContext, error) {
 	var grant *DeviceRunGrantRecord
 	if len(grants) > 0 {
 		grant = grants[0]
@@ -65,7 +75,7 @@ func (db *Database) AttachAIInvocationContext(ctx context.Context, userID, invoc
 	}
 	err = db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
 		var valid bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ai_invocations WHERE id=$1 AND user_id=$2 AND state='queued')`, invocationID, userID).Scan(&valid); err != nil || !valid {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ai_invocations WHERE id=$1 AND user_id=$2 AND (state='queued' OR ($3 AND state='running')))`, invocationID, userID, running).Scan(&valid); err != nil || !valid {
 			if err != nil {
 				return err
 			}

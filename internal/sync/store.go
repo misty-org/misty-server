@@ -62,11 +62,14 @@ func (e SyncKeyEnvelope) Valid() bool {
 }
 
 type SyncVault struct {
-	VaultID       string          `json:"vault_id"`
-	KeyEpoch      int64           `json:"key_epoch"`
-	HeadSequence  int64           `json:"head_sequence"`
-	RootPublicKey []byte          `json:"root_public_key"`
-	KeyEnvelope   json.RawMessage `json:"key_envelope"`
+	VaultID       string `json:"vault_id"`
+	KeyEpoch      int64  `json:"key_epoch"`
+	HeadSequence  int64  `json:"head_sequence"`
+	RootPublicKey []byte `json:"root_public_key"`
+	// Exactly one is set: the personal vault's password wrapper, or another
+	// Space vault's root sealed to the personal root.
+	KeyEnvelope      json.RawMessage `json:"key_envelope,omitempty"`
+	SpaceKeyEnvelope json.RawMessage `json:"space_key_envelope,omitempty"`
 }
 
 type SyncDeviceGrant struct {
@@ -124,47 +127,6 @@ type SyncReplay struct {
 	CheckpointRequired bool        `json:"checkpoint_required"`
 }
 
-func (db *Store) BrowserSyncVault(ctx context.Context, userID string) (*SyncVault, error) {
-	var w SyncVault
-	err := db.Conn.QueryRowContext(ctx, `SELECT vault_id,key_epoch,head_sequence,root_public_key,key_envelope FROM browser_sync_vaults WHERE user_id=$1`, userID).Scan(&w.VaultID, &w.KeyEpoch, &w.HeadSequence, &w.RootPublicKey, &w.KeyEnvelope)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return &w, err
-}
-
-// Bootstrap and enrollment require a vault-root signature. Account access alone
-// cannot add a device that clients would trust to write encrypted state.
-func (db *Store) CreateBrowserSyncVault(ctx context.Context, userID string, root []byte, keyEnvelope SyncKeyEnvelope, grant SyncDeviceGrant) error {
-	if grant.KeyEpoch != 1 || !grant.valid(root) || !keyEnvelope.Valid() {
-		return ErrSyncInvalid
-	}
-	tx, err := db.Conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	wrapped, _ := json.Marshal(keyEnvelope)
-	result, err := tx.ExecContext(ctx, `INSERT INTO browser_sync_vaults(user_id,vault_id,root_public_key,key_envelope) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`, userID, grant.VaultID, root, string(wrapped))
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n != 1 {
-		return ErrSyncExists
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO browser_sync_devices(vault_id,device_id,public_key,grant_epoch,grant_signature) VALUES($1,$2,$3,$4,$5)`, grant.VaultID, grant.DeviceID, grant.PublicKey, grant.KeyEpoch, grant.Signature)
-	if err != nil {
-		return err
-	}
-	if err = ensureBrowserSyncWorkspaces(ctx, tx, grant.VaultID, grant.DeviceID); err != nil {
-		return err
-	}
-	return cloudusage.Commit(ctx, tx)
-}
 func (db *Store) EnrollBrowserSyncDevice(ctx context.Context, userID string, g SyncDeviceGrant) error {
 	if !validSyncID(g.VaultID) || !validSyncID(g.DeviceID) {
 		return ErrSyncInvalid

@@ -97,7 +97,7 @@ func (s *SpacesService) setA2APushConfig(r *http.Request, caller a2aCaller, task
 }
 
 // a2aPushConfigCall handles tasks/pushNotificationConfig/{set,get,list,delete}.
-func (s *SpacesService) a2aPushConfigCall(r *http.Request, caller a2aCaller, listing *db.SpaceAgentListing, method string, raw json.RawMessage) (any, error) {
+func (s *SpacesService) a2aPushConfigCall(r *http.Request, caller a2aCaller, listing *db.SpaceAgent, method string, raw json.RawMessage) (any, error) {
 	var params struct {
 		TaskID                   string              `json:"taskId"`
 		ID                       string              `json:"id"`

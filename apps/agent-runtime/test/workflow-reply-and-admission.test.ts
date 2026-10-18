@@ -77,7 +77,7 @@ it("treats a reply that took no actions as a finished answer, not an unconfirmed
 });
 
 it("still requires a confirmed outcome once the run used a tool", async () => {
-  fixture.content = [{ type: "tool-call", toolName: "notes.read", toolCallId: "read" }, { type: "text", text: fixture.text }];
+  fixture.content = [{ type: "tool-call", toolName: "note.read", toolCallId: "read" }, { type: "text", text: fixture.text }];
   await run();
   expect(fixture.completions).toEqual([expect.objectContaining({ status: "incomplete", error_code: "task_outcome_unreported" })]);
 });

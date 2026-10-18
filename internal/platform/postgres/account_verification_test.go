@@ -34,11 +34,11 @@ func TestEmailVerificationAndReferralClaims(t *testing.T) {
 	database := accountVerificationDB(t)
 	ctx := context.Background()
 	suffix := time.Now().Format("150405.000000")
-	referrer, err := database.CreateUser("Referrer", "referrer-"+suffix+"@example.test", "password123")
+	referrer, err := database.CreateUser("referrer-"+suffix+"@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	friend, err := database.CreateUser("Friend", "friend-"+suffix+"@example.test", "password123")
+	friend, err := database.CreateUser("friend-"+suffix+"@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -66,7 +66,7 @@ func TestingVerifyDeviceRecordFixture(fixture DeviceRecordFixture) error {
 		return fmt.Errorf("policy: %v", err)
 	}
 	run, err := parseDeviceRunGrant(fixture.RunGrant, device)
-	if err != nil || run.TargetDeviceID != fixture.TargetDeviceID || !run.allows("scope-1", []string{"files.read"}) {
+	if err != nil || run.TargetDeviceID != fixture.TargetDeviceID || !run.allows("scope-1", []string{"folder.read"}) {
 		return fmt.Errorf("run grant: %v", err)
 	}
 	if requester := unverifiedRunGrantRequester(fixture.RunGrant); requester != fixture.DeviceID {

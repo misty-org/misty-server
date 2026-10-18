@@ -44,34 +44,29 @@ func NeverReachedProvider(err error) bool {
 	return false
 }
 
-// ReserveWebSearch holds a web search: the engine's per-request fee plus the
-// small model that issues the search call.
-func (m BillingMeter) ReserveWebSearch(userID, key, engine, model string, queryBytes int64, outputTokens int64) (*UsageReservation, error) {
+// ReserveWebSearch holds one web search: the engine's requests (Serper credits) at its per-request fee.
+func (m BillingMeter) ReserveWebSearch(userID, key, engine string, requests int64) (*UsageReservation, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	r, err := m.Service.Reserve(ctx, billingadapter.Request{CommandID: key, Version: 1, AccountID: userID, Operation: "web.search", OperationID: key, Key: key,
-		Usage: billingadapter.Usage{Provider: engine, Model: model, Units: map[string]int64{"requests": 1, "input_bytes": queryBytes, "output_tokens": outputTokens}, Estimated: true}})
+		Usage: billingadapter.Usage{Provider: engine, Units: map[string]int64{"requests": max(requests, 1)}}})
 	if err != nil {
 		return nil, err
 	}
 	return &UsageReservation{ID: r.ID, Billing: r, OverLimit: r.OverLimit}, nil
 }
 
-// SettleWebSearch charges a search. Without measured model usage (a timeout
-// after the engine ran) it charges the engine's request fee alone.
-func (m BillingMeter) SettleWebSearch(r *UsageReservation, key string, usage modelruntime.Usage, callErr error) error {
+// SettleWebSearch charges a search that returned results and releases one
+// that failed; the engine bills only answered requests.
+func (m BillingMeter) SettleWebSearch(r *UsageReservation, key string, requests int64, callErr error) error {
 	if r == nil || r.Billing == nil {
 		return billingadapter.ErrInvalid
 	}
-	if callErr != nil && NeverReachedProvider(callErr) {
+	if callErr != nil {
 		return m.Release(r)
 	}
-	units := map[string]int64{"requests": 1}
-	if usage.InputTokens > 0 || usage.OutputTokens > 0 {
-		units["input_tokens"], units["cached_input_tokens"], units["output_tokens"], units["reasoning_tokens"] = usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, usage.ReasoningTokens
-	}
 	a := r.Billing.Admission
-	return m.Service.Complete(context.Background(), "settle", r.Billing, key, billingadapter.Usage{Provider: a.Usage.Provider, Model: a.Usage.Model, Units: units}, "")
+	return m.Service.Complete(context.Background(), "settle", r.Billing, key, billingadapter.Usage{Provider: a.Usage.Provider, Units: map[string]int64{"requests": min(max(requests, 1), 100)}}, "")
 }
 
 // releasableProviderFailure is a failure before any provider work: the

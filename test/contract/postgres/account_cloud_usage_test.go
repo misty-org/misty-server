@@ -21,7 +21,7 @@ func TestAccountCloudGrowthRollsBackAndShrinkSurvivesOutage(t *testing.T) {
 	database := openTestDatabase(t)
 	t.Setenv("MISTY_BILLING_ADAPTER", "none")
 	ctx := context.Background()
-	user, e := database.CreateUser("Cloud native facts", "cloud-facts@example.com", "password123")
+	user, e := database.CreateUser("cloud-facts@example.com", "password123")
 	if e != nil {
 		t.Fatal(e)
 	}

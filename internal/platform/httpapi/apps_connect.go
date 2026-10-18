@@ -12,9 +12,10 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// appsConnect shows a Connect card and waits briefly for the user to sign in.
-// If the user has not connected by then, the run hands off: the card stays in
-// the chat and Misty continues the conversation once the app is connected.
+// appsConnect makes sure the person has an account for an app. With none it
+// shows a Connect card and waits briefly for the person; if they haven't
+// answered by then, the run hands off: the card stays in the chat and Misty
+// continues the conversation once the app is connected.
 func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		App string `json:"app"`
@@ -24,34 +25,36 @@ func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.I
 	}
 	app := strings.ToLower(strings.TrimSpace(input.App))
 	if !composio.ValidToolkit(app) {
-		return nil, serveragent.ErrInvalidRequest("app must be an app slug from apps_search, such as googledrive")
+		return nil, serveragent.ErrInvalidRequest("app must be an app slug from integration_search, such as googledrive")
 	}
 	client, err := composioClient()
 	if err != nil {
 		return nil, appsError(err)
 	}
-	connected := func() (bool, error) { return appsAccountActive(ctx, client, invocation.UserID, app) }
-	if ok, err := connected(); err != nil || ok {
-		return appsConnectResult(app, ok, err)
+	apps, err := s.loadRunApps(ctx, client, invocation)
+	if err != nil || len(apps.active[app]) > 0 {
+		return appsConnectResult(app, err == nil, err)
 	}
 	name := s.appsName(ctx, invocation.UserID, app)
 	if policy := s.searchAppPolicy(ctx, invocation); !policy.mayConnect(app) {
 		return nil, serveragent.ErrInvalidRequest(policy.refusal(name))
 	}
-	pending, err := s.database.OpenAgentAppRequest(ctx, db.AgentAppRequest{
+	card := db.AgentAppRequest{
 		OwnerUserID: invocation.UserID, RunID: invocation.RunID, Kind: "connect", Subject: app,
 		Title: "Connect " + name, Summary: "Sign in to " + name + " so Misty can continue.",
-	}, appsRequestTTL)
+	}
+	pending, err := s.database.OpenAgentAppRequest(ctx, card, appsRequestTTL)
 	if err != nil {
 		return nil, err
 	}
+	declined := serveragent.ErrInvalidRequest("The user dismissed using " + name + " here. Continue without it, or ask what they would prefer.")
 	if pending.State == "declined" {
-		return nil, serveragent.ErrInvalidRequest("The user dismissed connecting " + name + ". Continue without it, or ask what they would prefer.")
+		return nil, declined
 	}
 	s.showAppRequest(ctx, invocation.UserID, invocation.RunID, pending)
 	ready := false
 	_, err = appsWaitFor(ctx, appsWait, 2*time.Second, func() (bool, error) {
-		if ok, err := connected(); err != nil || ok {
+		if ok, err := appsAccountActive(ctx, client, invocation.UserID, app); err != nil || ok {
 			ready = ok
 			return ok, err
 		}
@@ -72,12 +75,12 @@ func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.I
 		return appsConnectResult(app, true, nil)
 	}
 	if pending.State == "declined" {
-		return nil, serveragent.ErrInvalidRequest("The user dismissed connecting " + name + ". Continue without it, or ask what they would prefer.")
+		return nil, declined
 	}
 	return TestingMustAPIRawJSON(map[string]any{
 		"app": app, "status": "waiting_for_user",
-		"message":      "A Connect " + name + " card is showing in the chat. This run ends here and Misty continues once the user connects " + name + ".",
-		"user_message": "Connect " + name + " with the card above. Misty continues once it's connected.",
+		"message":      "A " + card.Title + " card is showing in the chat. This run ends here and Misty continues once the user connects " + name + ".",
+		"user_message": card.Summary + " Use the card above; Misty continues once it's done.",
 	}), nil
 }
 
@@ -91,8 +94,8 @@ func appsAccountActive(ctx context.Context, client *composio.Client, userID, app
 	return false, err
 }
 
-// refreshConnectRequest marks a pending Connect card connected once the app
-// is, so a card left after the run ended can continue the conversation.
+// refreshConnectRequest marks a pending Connect card done once the person has
+// the app, so a card left after the run ended can continue the conversation.
 func (s *SpacesService) refreshConnectRequest(ctx context.Context, user string, request *db.AgentAppRequest) *db.AgentAppRequest {
 	if request.Kind != "connect" || request.State != "pending" || !time.Now().Before(request.ExpiresAt) {
 		return request

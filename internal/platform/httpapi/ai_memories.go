@@ -30,7 +30,12 @@ func (s *AIService) Memories() http.HandlerFunc {
 			}
 			agentID = identity.ID
 		}
-		items, err := s.database.MistyMemories(r.Context(), userID, "", 100, agentID)
+		space, err := requestMemorySpace(r.Context(), s.database, userID, memorySpaceParam(r))
+		if err != nil {
+			writeMemorySpaceError(w, err)
+			return
+		}
+		items, err := s.database.MistyMemories(r.Context(), userID, space, 100, agentID)
 		if err != nil {
 			TestingWriteAIError(w, err)
 			return
@@ -58,19 +63,23 @@ func (s *AIService) Memory() http.HandlerFunc {
 			}
 			agentID = identity.ID
 		}
-		var err error
+		// The memory's Space is the window's (?space_id); a memory never moves.
+		space, err := requestMemorySpace(r.Context(), s.database, userID, memorySpaceParam(r))
+		if err != nil {
+			writeMemorySpaceError(w, err)
+			return
+		}
 		if r.Method == http.MethodPut {
 			var input struct {
 				Content string `json:"content"`
-				SpaceID string `json:"space_id"`
 			}
 			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&input) != nil {
 				http.Error(w, "Invalid preference", http.StatusBadRequest)
 				return
 			}
-			err = s.database.UpdateAgentMemory(r.Context(), userID, agentID, "", chi.URLParam(r, "memoryID"), input.Content)
+			err = s.database.UpdateAgentMemory(r.Context(), userID, agentID, space, chi.URLParam(r, "memoryID"), input.Content)
 		} else {
-			err = s.database.ForgetMistyMemory(r.Context(), userID, chi.URLParam(r, "memoryID"), agentID)
+			err = s.database.ForgetMistyMemory(r.Context(), userID, space, chi.URLParam(r, "memoryID"), agentID)
 		}
 		if errors.Is(err, db.ErrSpaceNotFound) {
 			http.Error(w, "memory not found", http.StatusNotFound)

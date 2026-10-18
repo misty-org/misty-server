@@ -79,11 +79,34 @@ func TestBrowserSyncRecordsRejectInvalidInput(t *testing.T) {
 	if _, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, a, "unknown", []SyncRecordWrite{{Key: recordKey("d"), Ciphertext: []byte("x")}}); !errors.Is(err, ErrSyncInvalid) {
 		t.Fatalf("unknown collection accepted: %v", err)
 	}
+	for _, collection := range []string{"Extensions", "site-permissions", "search_engines", "download"} {
+		if _, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, a, collection, []SyncRecordWrite{{Key: recordKey("d"), Ciphertext: []byte("x")}}); !errors.Is(err, ErrSyncInvalid) {
+			t.Fatalf("%s accepted: %v", collection, err)
+		}
+	}
 	if _, err := store.PullBrowserSyncRecords(ctx, "owner", vault, a, "bookmarks", 5, 0); !errors.Is(err, ErrSyncCursor) {
 		t.Fatalf("future cursor: %v", err)
 	}
 	if _, _, err := store.PushBrowserSyncRecords(ctx, "someone-else", vault, a, "bookmarks", []SyncRecordWrite{{Key: recordKey("e"), Ciphertext: []byte("x")}}); !errors.Is(err, ErrSyncForbidden) {
 		t.Fatalf("another account wrote: %v", err)
+	}
+}
+
+// A Space's extensions, site permissions, search settings and downloads list
+// each travel in their own sealed collection.
+func TestBrowserSyncRecordsAcceptSpaceCollections(t *testing.T) {
+	store, vault, d := setupWorkspaceVault(t)
+	ctx := context.Background()
+	a, b := d[0].grant.DeviceID, d[1].grant.DeviceID
+	for _, collection := range []string{"extensions", "site_permissions", "search", "downloads"} {
+		results, _, err := store.PushBrowserSyncRecords(ctx, "owner", vault, a, collection, []SyncRecordWrite{{Key: recordKey("f"), Ciphertext: []byte(collection)}})
+		if err != nil || !results[0].Applied || results[0].Version != 1 {
+			t.Fatalf("%s push: %+v %v", collection, results, err)
+		}
+		page, err := store.PullBrowserSyncRecords(ctx, "owner", vault, b, collection, 0, 10)
+		if err != nil || len(page.Records) != 1 || !bytes.Equal(page.Records[0].Ciphertext, []byte(collection)) {
+			t.Fatalf("%s pull: %+v %v", collection, page, err)
+		}
 	}
 }
 

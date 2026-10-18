@@ -25,7 +25,9 @@ func TestingAgentCatalogToolNames() []string {
 		}
 	}
 	extra := append(agentMemberToolRegistrations(nil), service.accountAdminToolRegistrations()...)
-	add(buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, delegation: noop, extra: extra}).Descriptors())
+	// Memory tools are offered only while Memory is on.
+	extra = append(extra, recallToolRegistrationsFor(service)...)
+	add(buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, delegation: noop, extra: extra, allLayers: true}).Descriptors())
 	add(spaceAgentToolbox(nil).Descriptors())
 	add(browserToolDescriptors())
 	for _, name := range []string{webSearchTool, appsSearchTool, appsSchemasTool, appsConnectedTool, appsConnectTool, appsExecuteTool, screenOpenTool, screenLookTool} {

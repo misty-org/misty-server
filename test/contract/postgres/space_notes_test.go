@@ -30,15 +30,15 @@ func newNoteFixture(t *testing.T, prefix string) noteFixture {
 	t.Helper()
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Note Owner", prefix+"-owner@example.com", "password123")
+	owner, err := database.CreateUser(prefix+"-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	creator, err := database.CreateUser("Note Creator", prefix+"-creator@example.com", "password123")
+	creator, err := database.CreateUser(prefix+"-creator@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := database.CreateUser("Note Member", prefix+"-member@example.com", "password123")
+	member, err := database.CreateUser(prefix+"-member@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestOnlyCreatorAndOwnerCanDelete(t *testing.T) {
 // Membership is the whole gate, so someone outside the Space gets nothing.
 func TestNonMemberHasNoNoteAccess(t *testing.T) {
 	fixture := newNoteFixture(t, "note-outsider")
-	outsider, err := fixture.database.CreateUser("Outsider", "note-outsider-stranger@example.com", "password123")
+	outsider, err := fixture.database.CreateUser("note-outsider-stranger@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestArchivedNoteIsInaccessibleToEveryone(t *testing.T) {
 // exist, so a non-member cannot probe for note ids.
 func TestUnauthorizedNoteLooksExactlyLikeAMissingNote(t *testing.T) {
 	fixture := newNoteFixture(t, "note-indistinct")
-	outsider, err := fixture.database.CreateUser("Prober", "note-indistinct-prober@example.com", "password123")
+	outsider, err := fixture.database.CreateUser("note-indistinct-prober@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestAccessibleNotesListsEverySpaceNote(t *testing.T) {
 	}
 
 	// A non-member sees nothing at all.
-	outsider, err := fixture.database.CreateUser("Listing Outsider", "note-list-outsider@example.com", "password123")
+	outsider, err := fixture.database.CreateUser("note-list-outsider@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

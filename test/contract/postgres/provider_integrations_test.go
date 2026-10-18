@@ -12,7 +12,7 @@ import ()
 func TestProviderCredentialOAuthSaveAndReconnect(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
-	owner, err := database.CreateUser("Provider Owner", "provider-owner@example.com", "correct horse battery staple")
+	owner, err := database.CreateUser("provider-owner@example.com", "correct horse battery staple")
 	if err != nil {
 		t.Fatal(err)
 	}

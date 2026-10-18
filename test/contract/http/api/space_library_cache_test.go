@@ -39,7 +39,7 @@ func TestLibraryPreviewCacheHeaders(t *testing.T) {
 				t.Fatalf("ETag = %q", got)
 			}
 			vary := strings.Join(response.Header().Values("Vary"), ", ")
-			if !strings.Contains(vary, "Origin") || !strings.Contains(vary, "Authorization") || !strings.Contains(vary, "X-Misty-Library-Reauthentication") {
+			if !strings.Contains(vary, "Origin") || !strings.Contains(vary, "Authorization") {
 				t.Fatalf("Vary = %q", vary)
 			}
 			if test.notModified && response.Code != http.StatusNotModified {

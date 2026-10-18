@@ -15,7 +15,7 @@ import (
 func newRefreshSession(t *testing.T, username string) (*Database, string, string) {
 	t.Helper()
 	database := testkit.OpenDatabase(t)
-	user, err := database.CreateUserWithUsername("Ada", username, username+"@example.com", "password-long-enough")
+	user, err := database.CreateUserWithUsername(username, username+"@example.com", "password-long-enough")
 	if err != nil {
 		t.Fatal(err)
 	}

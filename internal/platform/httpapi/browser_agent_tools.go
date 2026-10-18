@@ -5,22 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
-
-func (s *SpacesService) executeBrowserAgentTool(
-	ctx context.Context,
-	run *db.SpaceRun,
-	tool serveragent.ToolRequest,
-) (json.RawMessage, error) {
-	return s.executeBrowserAgentToolInvocation(ctx, agenttools.Invocation{
-		UserID: run.RequestingMemberID, SpaceID: run.SpaceID, AgentID: run.AgentID, RunID: run.ID,
-	}, tool)
-}
 
 func (s *SpacesService) executeBrowserAgentToolInvocation(
 	ctx context.Context,
@@ -179,14 +170,34 @@ func (s *SpacesService) stopBrowserDeviceTool(userID, jobID, operation string) (
 }
 
 // browserConfirmKinds are the page actions the device pauses on until the
-// person allows them in the island. Agents act on their own unless the account
-// asks first; paying has its own switch.
-func browserConfirmKinds(settings db.AIUserSettings) []string {
-	if settings.AppActionsAsk {
-		return []string{"payment", "send", "delete", "publish"}
+// person allows them in the island. Sends, deletes, publishes and payments
+// always pause on the device; in Auto, browserGrantSet lets it continue on a
+// site the person remembered (payments still pause, the device cannot check a cap).
+func browserConfirmKinds() []string {
+	return []string{"payment", "send", "delete", "publish"}
+}
+
+// browserGrantSet is the run's mode and the person's remembered page grants
+// for this agent. Grants apply only in Auto; the device re-fetches the set
+// before deciding when its version is stale.
+func (s *SpacesService) browserGrantSet(ctx context.Context, invocation agenttools.Invocation) map[string]any {
+	mode := s.invocationPermissionMode(ctx, invocation)
+	set := map[string]any{"mode": mode, "grants": []map[string]string{}, "version": time.Now().UTC().UnixMilli()}
+	agentID := s.grantAgentID(ctx, invocation)
+	if mode != serveragent.PermissionAuto || agentID == "" {
+		return set
 	}
-	if settings.PaymentsAsk {
-		return []string{"payment"}
+	grants, err := s.database.AgentGrants(ctx, invocation.UserID, agentID)
+	if err != nil {
+		return set
 	}
-	return []string{}
+	kinds := map[string]string{string(serveragent.GrantBrowserSend): "send", string(serveragent.GrantBrowserDelete): "delete", string(serveragent.GrantBrowserPublish): "publish"}
+	out := []map[string]string{}
+	for _, grant := range grants {
+		if kind := kinds[grant.Action]; kind != "" && grant.ScopeKind == string(serveragent.ScopeOrigin) {
+			out = append(out, map[string]string{"kind": kind, "origin": grant.ScopeID})
+		}
+	}
+	set["grants"] = out
+	return set
 }

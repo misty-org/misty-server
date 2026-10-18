@@ -40,7 +40,7 @@ func TestBrowserReplayRefusesRunsItCannotReproduce(t *testing.T) {
 		names []string
 		jobs  []db.BrowserJobRecord
 	}{
-		"another tool's effect": {[]string{"browser.steps", "notes.create"}, []db.BrowserJobRecord{steps}},
+		"another tool's effect": {[]string{"browser.steps", "note.create"}, []db.BrowserJobRecord{steps}},
 		"extracted data":        {[]string{"browser.extract", "browser.steps"}, []db.BrowserJobRecord{steps}},
 		"screen agent":          {[]string{"browser.act"}, []db.BrowserJobRecord{job("browser.act", `{"goal":"x"}`, `{}`)}},
 		"no locator":            {[]string{"browser.steps"}, []db.BrowserJobRecord{job("browser.steps", `{"steps":[{"action":"click","ref":"e1"}]}`, `{"steps":[{"index":1,"action":"click","ok":true}]}`)}},

@@ -13,15 +13,12 @@ import (
 )
 
 const (
-	toolboxMessagesSearch = "messages.search"
-	toolboxLibrarySearch  = "library.search"
-	toolboxContextGet     = "context.get"
-	toolboxMembersList    = "members.list"
-	toolboxMembersResolve = "members.resolve"
-	toolboxTasksQuery     = "tasks.query"
-	toolboxTasksCreate    = "tasks.create"
-	toolboxTasksUpdate    = "tasks.update"
-	toolboxAgentsDelegate = "ask.delegate"
+	toolboxMessagesSearch = "message.search"
+	toolboxLibrarySearch  = "file.search"
+	toolboxContextGet     = "agent.context"
+	toolboxMembersList    = "space.member.list"
+	toolboxMembersResolve = "space.member.resolve"
+	toolboxAgentsDelegate = "agent.background"
 )
 
 // agentToolboxOptions describes one run's toolbox. Account-level toolboxes
@@ -31,16 +28,29 @@ type agentToolboxOptions struct {
 	accountLevel        bool
 	browserTabs         []string
 	browserCapabilities map[string]bool
-	// delegation registers ask.delegate for runs that may start a worker.
+	// browser runs browser tools; it carries the model client browser.extract needs.
+	// Without it the tools still run, but extraction reports no model.
+	browser *SpacesService
+	// delegation registers agent.background for runs that may start a worker.
 	delegation agenttools.Handler
-	// memberRequest builds the toolbox for work another member's agent asked
-	// for: Space data only, without the owner's memory or agent settings.
+	// memberRequest builds the toolbox for work someone else asked of an agent:
+	// Space data and the agent's own memory to read, without agent settings.
 	memberRequest bool
-	extra         []agenttools.Registration
+	// memorySearch ranks the run's memory by meaning (memory.pref.list with a
+	// query, memory.workflow.find); without it they fall back to recency and
+	// shared words.
+	memorySearch memorySearchFunc
+	extra        []agenttools.Registration
+	// run is who the run works for; its private tools register only when
+	// privateLayerAllowed opens the private layer for it.
+	run layerRun
+	// allLayers keeps every tool, for catalogs and for executing routed tools
+	// whose outer toolbox already applied the check.
+	allLayers bool
 }
 
 func spaceAgentToolbox(database *db.Database) *agenttools.Registry {
-	return buildAgentToolbox(database, agentToolboxOptions{})
+	return buildAgentToolbox(database, agentToolboxOptions{allLayers: true})
 }
 
 func buildAgentToolbox(database *db.Database, options agentToolboxOptions) *agenttools.Registry {
@@ -51,7 +61,8 @@ func buildAgentToolbox(database *db.Database, options agentToolboxOptions) *agen
 		}
 		return executeSpaceConversationTool(ctx, database, spaceConversationToolActor{
 			userID: invocation.UserID, spaceID: invocation.SpaceID, agentID: invocation.AgentID, runID: invocation.RunID,
-			sessionID: invocation.SessionID, conversationID: invocation.ConversationID,
+			sessionID: invocation.SessionID, conversationID: invocation.ConversationID, memorySpaceID: invocation.MemorySpaceID,
+			memorySearch: options.memorySearch,
 		}, invocation.OriginalInput, request)
 	}
 	registrations := []agenttools.Registration{}
@@ -71,10 +82,17 @@ func buildAgentToolbox(database *db.Database, options agentToolboxOptions) *agen
 	}
 	registrations = append(registrations, searchAllToolRegistration(database))
 	if options.memberRequest {
-		return agenttools.MustNew(registrations...)
+		// Work asked in a Space chat never changes the agent's memory. Reading
+		// it is private: only the owner's own ask keeps it.
+		for _, descriptor := range memoryAgentToolDescriptors() {
+			if descriptor.Risk == serveragent.RiskRead {
+				registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
+			}
+		}
+		return agenttools.MustNew(options.layered(registrations)...)
 	}
 	registrations = append(registrations, devicesListToolRegistration(database))
-	registrations = append(registrations, methodToolRegistrations(database)...)
+	registrations = append(registrations, methodToolRegistrations(database, options.memorySearch)...)
 	for _, descriptor := range memoryAgentToolDescriptors() {
 		registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
 	}
@@ -87,8 +105,11 @@ func buildAgentToolbox(database *db.Database, options agentToolboxOptions) *agen
 		registrations = append(registrations, agenttools.Registration{Descriptor: agentDelegationToolDescriptor(), Handler: options.delegation})
 	}
 	if len(options.browserTabs) > 0 {
+		service := options.browser
+		if service == nil {
+			service = &SpacesService{database: database}
+		}
 		browserHandler := func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
-			service := &SpacesService{database: database}
 			return service.executeBrowserAgentToolInvocation(ctx, invocation, request)
 		}
 		for _, descriptor := range browserToolDescriptors() {
@@ -99,7 +120,15 @@ func buildAgentToolbox(database *db.Database, options agentToolboxOptions) *agen
 			registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: browserHandler})
 		}
 	}
-	return agenttools.MustNew(append(registrations, options.extra...)...)
+	return agenttools.MustNew(options.layered(append(registrations, options.extra...))...)
+}
+
+// layered applies the private-layer check to a toolbox's registrations.
+func (options agentToolboxOptions) layered(registrations []agenttools.Registration) []agenttools.Registration {
+	if options.allLayers {
+		return registrations
+	}
+	return layeredRegistrations(options.run, registrations)
 }
 
 func agentDelegationToolDescriptor() agenttools.Descriptor {
@@ -115,7 +144,7 @@ func agentDelegationToolDescriptor() agenttools.Descriptor {
 		}),
 		OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionAskRun,
 		AgentPermission: db.PermissionAskRun, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent,
-		Locality: agenttools.LocalityServer, Idempotent: false, AuditEvent: "agent.run.started",
+		Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: false, AuditEvent: "agent.run.started",
 		Sources: []string{"space_conversation"}, Triggers: []string{"message"},
 	}
 }
@@ -193,5 +222,5 @@ func TestingSpaceAgentToolboxDescriptors() []agenttools.Descriptor {
 }
 
 func TestingAccountAgentToolboxDescriptors() []agenttools.Descriptor {
-	return buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true}).Descriptors()
+	return buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, allLayers: true}).Descriptors()
 }

@@ -23,21 +23,6 @@ func inferredAIArtifactKind(body aiInvocationInput) string {
 		if body.Selection != nil && has("rewrite", "improve", "shorten", "expand", "fix", "change") {
 			return "text_patch"
 		}
-		if has("extract task", "turn into task", "make task") {
-			return "task_set"
-		}
-	case "planner.tasks":
-		if has("create", "add", "break down", "plan", "extract") {
-			return "task_set"
-		}
-	case "planner.agenda":
-		if has("schedule", "create event", "add event", "calendar") {
-			return "calendar_event"
-		}
-	case "planner.roadmap":
-		if has("add", "change", "connect", "update", "create") {
-			return "roadmap_patch"
-		}
 	case "drawings":
 		if has("add", "draw", "arrange", "cluster", "move", "diagram") {
 			return "drawing_patch"

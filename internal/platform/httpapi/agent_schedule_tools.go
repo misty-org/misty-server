@@ -11,11 +11,11 @@ import (
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// A schedule belongs to a workflow, like the Workflows page. methods.list shows
+// A schedule belongs to a workflow, like the Workflows page. memory.workflow.list shows
 // each workflow's schedule; to schedule a plain request, save it as a workflow
-// with methods.save first. Removing a schedule asks first when the account asks first.
+// with memory.workflow.save first. Removing a schedule asks first when the account asks first.
 func (s *SpacesService) scheduleToolRegistrations() []agenttools.Registration {
-	base := agenttools.Descriptor{Version: 1, OutputSchema: agentToolObjectOutputSchema(), Locality: agenttools.LocalityServer, AllowCustomAgent: true, Approval: agenttools.ApprovalNone}
+	base := agenttools.Descriptor{Version: 1, OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Approval: agenttools.ApprovalNone}
 	ints := func(low, high int, description string) map[string]any {
 		return map[string]any{"type": "array", "maxItems": 35, "description": description, "items": map[string]any{"type": "integer", "minimum": low, "maximum": high}}
 	}
@@ -42,9 +42,9 @@ func (s *SpacesService) scheduleToolRegistrations() []agenttools.Registration {
 			"end_date":   date,
 		},
 	}
-	workflowID := map[string]any{"type": "string", "minLength": 1, "maxLength": 200, "description": "The workflow's id from methods_list."}
+	workflowID := map[string]any{"type": "string", "minLength": 1, "maxLength": 200, "description": "The workflow's id from memory_workflow_list."}
 	set, remove := base, base
-	set.Name, set.Risk, set.AuditEvent, set.Idempotent = "workflows.schedule", serveragent.RiskWrite, "workflow.schedule.saved", true
+	set.Name, set.Risk, set.AuditEvent, set.Idempotent = "memory.workflow.schedule", serveragent.RiskWrite, "workflow.schedule.saved", true
 	set.Description = "Set when a workflow runs on its own, replacing any schedule it had. A schedule is one or more rules in one timezone; a run happens at every moment any rule produces. Each run uses the workflow's latest version. Pause with enabled false."
 	set.InputSchema = agentToolSchema(map[string]any{
 		"workflow_id": workflowID,
@@ -54,8 +54,8 @@ func (s *SpacesService) scheduleToolRegistrations() []agenttools.Registration {
 		"inputs":      map[string]any{"type": "object", "description": "Values for the workflow's inputs on every scheduled run."},
 		"enabled":     map[string]any{"type": "boolean"},
 	}, []string{"workflow_id", "timezone", "rules"})
-	remove.Name, remove.Risk, remove.AuditEvent = "workflows.unschedule", serveragent.RiskWrite, "workflow.schedule.deleted"
-	remove.Description = "Remove a workflow's schedule so it runs only when started. Use only when the user asked; to stop it for now, set enabled false with workflows_schedule instead."
+	remove.Name, remove.Risk, remove.AuditEvent = workflowUnscheduleTool, serveragent.RiskWrite, "workflow.schedule.deleted"
+	remove.Description = "Remove a workflow's schedule so it runs only when started. Use only when the user asked; to stop it for now, set enabled false with memory_workflow_schedule instead."
 	remove.InputSchema = agentToolSchema(map[string]any{"workflow_id": workflowID}, []string{"workflow_id"})
 	return []agenttools.Registration{
 		{Descriptor: set, Handler: s.executeWorkflowSchedule},
@@ -63,7 +63,10 @@ func (s *SpacesService) scheduleToolRegistrations() []agenttools.Registration {
 	}
 }
 
-const invalidScheduleMessage = "give a workflow_id from methods_list, an IANA timezone and rules: times as HH:MM for every frequency except hourly, dates for once, weekdays for weekly, month_days or nth_weekdays for monthly and yearly, months for yearly; and a value for every required workflow input"
+// workflowUnscheduleTool removes a schedule; it pauses unless remembered in Auto.
+const workflowUnscheduleTool = "memory.workflow.unschedule"
+
+const invalidScheduleMessage = "give a workflow_id from memory_workflow_list, an IANA timezone and rules: times as HH:MM for every frequency except hourly, dates for once, weekdays for weekly, month_days or nth_weekdays for monthly and yearly, months for yearly; and a value for every required workflow input"
 
 func (s *SpacesService) executeWorkflowSchedule(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
@@ -95,12 +98,14 @@ func (s *SpacesService) executeWorkflowUnschedule(ctx context.Context, invocatio
 	id := strings.TrimSpace(input.WorkflowID)
 	method, err := s.database.AgentMethodByID(ctx, invocation.UserID, id)
 	if err != nil {
-		return nil, serveragent.ErrInvalidRequest("no workflow " + id + "; call methods_list for ids")
+		return nil, serveragent.ErrInvalidRequest("no workflow " + id + "; call memory_workflow_list for ids")
 	}
 	if _, err := s.database.WorkflowScheduleByMethod(ctx, invocation.UserID, id); err != nil {
 		return nil, serveragent.ErrInvalidRequest("workflow " + id + " has no schedule")
 	}
-	approval, waiting, err := s.confirmAgentAction(ctx, invocation, "misty.workflows.unschedule", id, "Remove the schedule for “"+method.Definition.Title+"”", "It will run only when started.")
+	need := grantNeed{action: serveragent.GrantScheduleRemove, scopeKind: serveragent.ScopeSchedule, scopeID: id,
+		label: "remove the schedule for “" + method.Definition.Title + "”"}
+	approval, waiting, err := s.confirmAgentAction(ctx, invocation, need, "misty.workflows.unschedule", id, "Remove the schedule for “"+method.Definition.Title+"”", "It will run only when started.")
 	if err != nil || waiting != nil {
 		return waiting, err
 	}

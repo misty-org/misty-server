@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#d9d9de;font:13px Menlo,monospace}
+.win{position:absolute;left:120px;top:90px;width:1040px;height:600px;background:#1e1e1e;border-radius:10px;box-shadow:0 20px 50px #0005;overflow:hidden}
+.tb{height:28px;background:#2d2d2d;color:#bbb;display:flex;align-items:center;justify-content:center;font:12px system-ui;position:relative}
+.dots{position:absolute;left:12px;top:9px}.dots i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;background:#ff5f57}.dots i+i{background:#febc2e}.dots i+i+i{background:#28c840}
+pre{color:#ddd;margin:0;padding:14px;line-height:1.5}.r{color:#ff6b6b}.g{color:#7ee787}.y{color:#e3b341}
+</style></head><body><div class="win"><div class="tb"><span class="dots"><i></i><i></i><i></i></span>~/projects/shop-api — zsh</div><pre>
+<span class="g">~/projects/shop-api</span> $ npm run dev
+
+&gt; shop-api@1.4.0 dev
+&gt; node src/server.js
+
+node:internal/modules/cjs/loader:1228
+  throw err;
+  ^
+
+<span class="r">Error: Cannot find module 'express'</span>
+Require stack:
+- /Users/sam/projects/shop-api/src/server.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Module._load (node:internal/modules/cjs/loader:1051:27)
+    at Module.require (node:internal/modules/cjs/loader:1311:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.&lt;anonymous&gt; (/Users/sam/projects/shop-api/src/server.js:1:17) {
+  code: <span class="y">'MODULE_NOT_FOUND'</span>,
+  requireStack: [ '/Users/sam/projects/shop-api/src/server.js' ]
+}
+
+Node.js v22.11.0
+<span class="g">~/projects/shop-api</span> $ ▌
+</pre></div></body></html>

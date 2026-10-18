@@ -34,12 +34,10 @@ func FrontierDefaultModelID() string {
 
 func configuredFrontierModelIDs() []string { return []string{FrontierDefaultModelID()} }
 
-// ManagedReasoning migrates legacy settings to the two supported presets.
+// ManagedReasoning is the run's effort. Thinking modes and stored efforts are ignored:
+// everyone gets HouseReasoning (see house_route.go).
 func ManagedReasoning(mode, legacyEffort string) string {
-	if mode == "deep" || (mode == "" && strings.TrimSpace(legacyEffort) == "xhigh") {
-		return "xhigh"
-	}
-	return "high"
+	return HouseEffort(legacyEffort)
 }
 
 func FrontierGatewayModels(ctx context.Context) ([]FrontierGatewayModel, error) {

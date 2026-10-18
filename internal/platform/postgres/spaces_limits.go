@@ -33,18 +33,17 @@ var (
 )
 
 type Space struct {
-	ID               string          `json:"id"`
-	SecurityDomainID string          `json:"security_domain_id"`
-	OwnerUserID      string          `json:"owner_user_id"`
-	Name             string          `json:"name"`
-	IsDefault        bool            `json:"is_default"`
-	Role             string          `json:"role"`
-	MemberCount      int             `json:"member_count"`
-	PendingCount     int             `json:"pending_count"`
-	IsShared         bool            `json:"is_shared"`
-	Permissions      map[string]bool `json:"permissions"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	ID               string    `json:"id"`
+	SecurityDomainID string    `json:"security_domain_id"`
+	OwnerUserID      string    `json:"owner_user_id"`
+	Name             string    `json:"name"`
+	IsDefault        bool      `json:"is_default"`
+	Role             string    `json:"role"`
+	MemberCount      int       `json:"member_count"`
+	PendingCount     int       `json:"pending_count"`
+	IsShared         bool      `json:"is_shared"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type SpaceMember struct {
@@ -186,7 +185,6 @@ type SpaceRun struct {
 	AgentVersionID        string          `json:"agent_version_id,omitempty"`
 	Attempt               int             `json:"attempt"`
 	NextRetryAt           *time.Time      `json:"next_retry_at,omitempty"`
-	SourceTaskID          string          `json:"source_task_id,omitempty"`
 	RuntimeKind           string          `json:"runtime_kind,omitempty"`
 	RuntimeRunID          string          `json:"runtime_run_id,omitempty"`
 	RuntimePhase          string          `json:"runtime_phase,omitempty"`

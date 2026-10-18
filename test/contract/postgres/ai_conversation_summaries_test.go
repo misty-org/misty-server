@@ -12,11 +12,11 @@ import (
 func TestConversationNotesOnlyMoveForwardAndStayWithTheirOwner(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := t.Context()
-	owner, err := database.CreateUser("Notes Owner", "conversation-notes-owner@example.com", "password123")
+	owner, err := database.CreateUser("conversation-notes-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := database.CreateUser("Notes Other", "conversation-notes-other@example.com", "password123")
+	other, err := database.CreateUser("conversation-notes-other@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

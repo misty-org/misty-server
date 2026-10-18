@@ -14,8 +14,8 @@ func TestAIInvocationProgressInterleavesNotesAndTools(t *testing.T) {
 	}
 	items := aiInvocationProgress([]db.AIInvocationEventRecord{
 		event("response.delta", map[string]string{"delta": "Let me check your tabs."}),
-		event("tool.started", map[string]string{"toolCallId": "a", "toolName": "tabs.list"}),
-		event("tool.completed", map[string]string{"toolCallId": "a", "toolName": "tabs.list"}),
+		event("tool.started", map[string]string{"toolCallId": "a", "toolName": "browser.tab.list"}),
+		event("tool.completed", map[string]string{"toolCallId": "a", "toolName": "browser.tab.list"}),
 		event("tool.started", map[string]string{"toolCallId": "b", "toolName": "browser.read"}),
 		event("tool.failed", map[string]string{"toolCallId": "b", "toolName": "browser.read"}),
 		event("response.delta", map[string]string{"delta": "You have three tabs open."}),
@@ -23,7 +23,7 @@ func TestAIInvocationProgressInterleavesNotesAndTools(t *testing.T) {
 	})
 	want := []aiProgressItem{
 		{Type: "note", Text: "Let me check your tabs."},
-		{Type: "tool", ID: "a", Name: "tabs.list", State: "completed"},
+		{Type: "tool", ID: "a", Name: "browser.tab.list", State: "completed"},
 		{Type: "tool", ID: "b", Name: "browser.read", State: "failed"},
 	}
 	if len(items) != len(want) {

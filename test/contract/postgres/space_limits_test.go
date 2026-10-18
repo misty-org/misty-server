@@ -16,7 +16,7 @@ func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	member, err := database.CreateUser("Basic Member", "basic-space-limit@example.com", "password123")
+	member, err := database.CreateUser("basic-space-limit@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 		t.Fatalf("create above owned limit error = %v, want ErrSpaceOwnershipLimit", err)
 	}
 
-	owner, err := database.CreateUser("Max Owner", "max-owner@example.com", "password123")
+	owner, err := database.CreateUser("max-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestOwnedSpacesHaveNoPlanCountCap(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	user, err := database.CreateUser("Max Owner", "max-owned-limit@example.com", "password123")
+	user, err := database.CreateUser("max-owned-limit@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestOwnershipTransferHasNoPlanCountCap(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	recipient, err := database.CreateUser("Full Recipient", "full-transfer-recipient@example.com", "password123")
+	recipient, err := database.CreateUser("full-transfer-recipient@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestOwnershipTransferHasNoPlanCountCap(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	owner, err := database.CreateUser("Transfer Owner", "limit-transfer-owner@example.com", "password123")
+	owner, err := database.CreateUser("limit-transfer-owner@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestOwnershipDowngradeDoesNotRestrictSpaces(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	user, err := database.CreateUser("Downgrade Owner", "space-downgrade@example.com", "password123")
+	user, err := database.CreateUser("space-downgrade@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestConcurrentOwnedSpaceCreationHasNoCommercialCap(t *testing.T) {
 	database := openTestDatabase(t)
 	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
-	user, err := database.CreateUser("Concurrent Owner", "space-concurrent@example.com", "password123")
+	user, err := database.CreateUser("space-concurrent@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}

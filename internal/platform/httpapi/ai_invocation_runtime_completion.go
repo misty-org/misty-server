@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -292,30 +291,6 @@ func (s *SpacesService) finishAIInvocationRuntimeAnswer(userID, invocationID str
 		}
 		if err := s.aiInvocations.append(invocationID, aiInvocationEvent{Type: "approval.required", Artifact: artifact}); err != nil {
 			return err
-		}
-	} else if artifactKind == "task_set" {
-		tasks, parseErr := parseAITaskDrafts(answer)
-		if parseErr != nil || len(tasks) == 0 {
-			if err := s.aiInvocations.append(invocationID, aiInvocationEvent{Type: "assistant.message", Text: "I did not find concrete tasks that were safe to propose.", Summary: "No tasks proposed."}); err != nil {
-				return err
-			}
-		} else if artifact := s.aiInvocations.addTaskSetArtifact(userID, invocationID, tasks, resolved, body); artifact != nil {
-			suffix := "s"
-			if len(tasks) == 1 {
-				suffix = ""
-			}
-			message := fmt.Sprintf("I prepared %d task%s for review.", len(tasks), suffix)
-			if err := s.aiInvocations.append(invocationID, aiInvocationEvent{Type: "assistant.message", Text: message, Summary: message}); err != nil {
-				return err
-			}
-			if err := s.aiInvocations.append(invocationID, aiInvocationEvent{Type: "artifact.proposed", Artifact: artifact}); err != nil {
-				return err
-			}
-			if err := s.aiInvocations.append(invocationID, aiInvocationEvent{Type: "approval.required", Artifact: artifact}); err != nil {
-				return err
-			}
-		} else {
-			return errors.New("no authorized Space could receive the proposed tasks")
 		}
 	} else if spec, ok := aiArtifactSpecs[artifactKind]; ok {
 		summary, operations, parseErr := parseAIStructuredArtifact(answer)

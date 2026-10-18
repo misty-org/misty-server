@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -15,11 +16,11 @@ import (
 // reach every toolkit. Misty decides when an action needs the user, shows the
 // card in chat, and journals every write.
 const (
-	appsSearchTool    = "apps.search"
-	appsSchemasTool   = "apps.schemas"
-	appsConnectedTool = "apps.connected"
-	appsConnectTool   = "apps.connect"
-	appsExecuteTool   = "apps.execute"
+	appsSearchTool    = "integration.search"
+	appsSchemasTool   = "integration.schemas"
+	appsConnectedTool = "integration.connected"
+	appsConnectTool   = "integration.connect"
+	appsExecuteTool   = "integration.execute"
 	// One call waits this long for the user; the runtime's MCP request limit is 60s.
 	appsWait       = 40 * time.Second
 	appsRequestTTL = 15 * time.Minute
@@ -36,10 +37,21 @@ type appRequest struct {
 	Summary   string    `json:"summary"`
 	State     string    `json:"state"`
 	ExpiresAt time.Time `json:"expiresAt"`
+	// Rememberable cards offer "Accept and remember"; the label names the exact
+	// scope, written by the server. PermissionMode is the run's Ask or Auto.
+	Rememberable   bool         `json:"rememberable"`
+	RememberLabel  string       `json:"rememberLabel,omitempty"`
+	PermissionMode string       `json:"permissionMode,omitempty"`
+	PaymentCap     *grantAmount `json:"paymentCap,omitempty"`
 }
 
 func appRequestView(request *db.AgentAppRequest) *appRequest {
-	return &appRequest{ID: request.ID, Kind: request.Kind, Subject: request.Subject, Title: request.Title, Summary: request.Summary, State: request.State, ExpiresAt: request.ExpiresAt}
+	view := &appRequest{ID: request.ID, Kind: request.Kind, Subject: request.Subject, Title: request.Title, Summary: request.Summary, State: request.State, ExpiresAt: request.ExpiresAt,
+		Rememberable: request.Rememberable, RememberLabel: request.RememberLabel, PermissionMode: request.PermissionMode}
+	if request.GrantAction == string(serveragent.GrantPayment) {
+		view.PaymentCap = grantAmountFrom(request.GrantConstraints)
+	}
+	return view
 }
 
 func appsAvailable() bool { return composio.ConfigFromEnv().Validate() == nil }
@@ -120,26 +132,42 @@ func appsWaitFor(ctx context.Context, wait, every time.Duration, check func() (b
 // showAppRequest puts a request's card in the run's chat, when it has one.
 func (s *SpacesService) showAppRequest(ctx context.Context, user, runID string, request *db.AgentAppRequest) {
 	if s.aiInvocations == nil || request == nil {
+		log.Printf("app request %s not shown: invocation hub unavailable", requestID(request))
 		return
 	}
 	invocationID := ""
 	if isAIInvocationRuntimeID(runID) {
 		record, err := s.database.AIInvocationByID(ctx, user, runID)
 		if err != nil {
+			log.Printf("app request %s not shown: invocation %s not found: %v", request.ID, runID, err)
 			return
 		}
 		if _, err := s.aiInvocations.restoreDurable(ctx, *record); err != nil {
+			log.Printf("app request %s not shown: invocation %s could not be restored: %v", request.ID, runID, err)
 			return
 		}
 		invocationID = record.ID
 	} else if strings.HasPrefix(runID, "run_") {
 		run, err := s.database.SpaceRun(ctx, user, runID)
 		if err != nil {
+			log.Printf("app request %s not shown: run %s not found: %v", request.ID, runID, err)
 			return
 		}
 		_, invocationID = s.restoreLinkedAIInvocation(ctx, run)
 	}
-	if invocationID != "" {
-		_ = s.aiInvocations.append(invocationID, aiInvocationEvent{Type: "app.request", AppRequest: appRequestView(request)})
+	if invocationID == "" {
+		log.Printf("app request %s not shown: run %q has no conversation to show it in", request.ID, runID)
+		return
 	}
+	// The card is how the person learns the run is waiting, so a failure to show it is logged.
+	if err := s.aiInvocations.append(invocationID, aiInvocationEvent{Type: "app.request", AppRequest: appRequestView(request)}); err != nil {
+		log.Printf("app request %s not shown: %v", request.ID, err)
+	}
+}
+
+func requestID(request *db.AgentAppRequest) string {
+	if request == nil {
+		return ""
+	}
+	return request.ID
 }

@@ -69,22 +69,26 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 			}
 			modelID := agent.FrontierDefaultModelID()
 			reasoning := agent.ManagedReasoning("", body.ReasoningEffort)
-			requestedModel := strings.TrimSpace(body.ModelID)
-			if identity.ModelMode == "pinned" && !identity.SystemManaged {
-				requestedModel = identity.ModelID
-				reasoning = agent.ManagedReasoning("", identity.ReasoningEffort)
-			}
-			if requestedModel != "" {
-				if !agent.FrontierModelAvailable(r.Context(), requestedModel) {
-					writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_model", "message": "Choose an available default model in Settings."})
-					return
+			// Everyone runs on the house model and effort; only a development stack with
+			// MISTY_ALLOW_MODEL_OVERRIDE lets a request or an agent pick (evals).
+			if agent.ClientModelChoice() {
+				requestedModel := strings.TrimSpace(body.ModelID)
+				if identity.ModelMode == "pinned" && !identity.SystemManaged {
+					requestedModel = identity.ModelID
+					reasoning = agent.ManagedReasoning("", identity.ReasoningEffort)
 				}
-				modelID = requestedModel
-			} else if routes, err := s.database.AIModelRoutes(r.Context(), userID); err == nil {
-				// No explicit pick: new chats follow the account's Thinking sense.
-				for _, route := range routes {
-					if route.Role == "agent" && route.Enabled && route.Model != "" && agent.FrontierModelAvailable(r.Context(), route.Model) {
-						modelID = route.Model
+				if requestedModel != "" {
+					if !agent.FrontierModelAvailable(r.Context(), requestedModel) {
+						writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_model", "message": "Choose an available default model in Settings."})
+						return
+					}
+					modelID = requestedModel
+				} else if routes, err := s.database.AIModelRoutes(r.Context(), userID); err == nil {
+					// No explicit pick: new chats follow the account's Thinking sense.
+					for _, route := range routes {
+						if route.Role == "agent" && route.Enabled && route.Model != "" && agent.FrontierModelAvailable(r.Context(), route.Model) {
+							modelID = route.Model
+						}
 					}
 				}
 			}
@@ -246,7 +250,7 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 				}
 				response["title"] = title
 			}
-			if body.ModelID != nil {
+			if body.ModelID != nil && agent.ClientModelChoice() {
 				// A conversation's own model; empty returns it to the account's choice.
 				model := strings.TrimSpace(*body.ModelID)
 				if model != "" && !agent.SenseModelAvailable(r.Context(), "thinking", model) {
@@ -389,7 +393,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 			markCompactedAfter(messages, notes.ThroughInvocationID)
 		}
 		modelID := agent.FrontierDefaultModelID()
-		if summary.ModelOverride != "" {
+		if summary.ModelOverride != "" && agent.ClientModelChoice() {
 			modelID = summary.ModelOverride
 		}
 		return mistyConversation{
@@ -423,7 +427,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 		})
 	}
 	modelID := agent.FrontierDefaultModelID()
-	if summary.ModelOverride != "" {
+	if summary.ModelOverride != "" && agent.ClientModelChoice() {
 		modelID = summary.ModelOverride
 	}
 	return mistyConversation{

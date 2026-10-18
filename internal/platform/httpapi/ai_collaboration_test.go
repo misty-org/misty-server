@@ -38,25 +38,25 @@ func TestPlanModeToolsAllowOnlyReads(t *testing.T) {
 		return json.RawMessage(`{}`), nil
 	}
 	tool := func(name, risk string) agenttools.Registration {
-		descriptor := agenttools.Descriptor{Name: name, Version: 1, Description: name, Risk: risk, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, InputSchema: agentToolSchema(map[string]any{}, nil)}
+		descriptor := agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: name, Version: 1, Description: name, Risk: risk, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, InputSchema: agentToolSchema(map[string]any{}, nil)}
 		if risk != serveragent.RiskRead {
 			descriptor.AuditEvent = "test.write"
 		}
 		return agenttools.Registration{Descriptor: descriptor, Handler: handler}
 	}
 	toolbox := agenttools.MustNew(
-		tool("notes.read", serveragent.RiskRead), tool("notes.create", serveragent.RiskWrite),
+		tool("note.read", serveragent.RiskRead), tool("note.create", serveragent.RiskWrite),
 		tool("browser.inspect", serveragent.RiskRead), tool("browser.act", serveragent.RiskWrite),
-		tool("browser.request_user_action", serveragent.RiskRead), tool("ask.delegate", serveragent.RiskWrite),
+		tool("browser.request_user_action", serveragent.RiskRead), tool("agent.background", serveragent.RiskWrite),
 		tool(collaborationAskUser, serveragent.RiskRead), tool(collaborationProposePlan, serveragent.RiskRead),
-		tool(collaborationUpdatePlan, serveragent.RiskRead), tool("files.delete", serveragent.RiskDangerous),
+		tool(collaborationUpdatePlan, serveragent.RiskRead), tool("folder.delete", serveragent.RiskDangerous),
 	)
 	names := []string{}
 	for _, descriptor := range toolbox.Descriptors() {
 		names = append(names, descriptor.Name)
 	}
 	got := strings.Join(planModeTools(toolbox, names), ",")
-	want := "notes.read,browser.inspect," + collaborationAskUser + "," + collaborationProposePlan
+	want := "note.read,browser.inspect," + collaborationAskUser + "," + collaborationProposePlan
 	if got != want {
 		t.Fatalf("plan tools = %s, want %s", got, want)
 	}
@@ -77,7 +77,7 @@ func TestCollaborationInstructions(t *testing.T) {
 	}
 	approved := &db.AgentPlan{Version: 2, State: "approved", Payload: db.AgentPlanPayload{Title: "Review", Steps: []db.AgentPlanStep{{ID: "s1", Title: "Read", Risk: "read"}}}, Progress: map[string]db.AgentPlanStepProgress{"s1": {Status: "done"}}}
 	acting := collaborationInstructions(collaborationState{mode: db.ConversationModeAct, plan: approved})
-	if !strings.Contains(acting, "plan_update") || !strings.Contains(acting, "[s1] Read (read, done)") {
+	if !strings.Contains(acting, "log_work_checklist") || !strings.Contains(acting, "[s1] Read (read, done)") {
 		t.Errorf("act instructions = %s", acting)
 	}
 	goal := &db.AgentGoal{Status: "pursuing", Objective: "Inbox zero", BudgetTokens: 100, UsedTokens: 85, MaxContinuations: 20, SuccessCriteria: []string{"Inbox is empty"}}

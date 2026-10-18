@@ -8,11 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
 func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
@@ -26,10 +23,6 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 			return
 		}
 		spaceID, itemID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "itemID")
-		if err := s.validateSensitiveLibraryItem(r, userID, spaceID, itemID); err != nil {
-			writeLibraryError(w, err)
-			return
-		}
 		original := r.URL.Query().Get("version") == "original"
 		source, err := s.database.LibraryItemPreviewSource(r.Context(), userID, spaceID, itemID, original)
 		if err != nil {
@@ -185,7 +178,7 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 func TestingWriteLibraryPreviewCacheHeaders(w http.ResponseWriter, r *http.Request, sha string) bool {
 	etag := `"` + sha + `"`
 	w.Header().Set("ETag", etag)
-	w.Header().Add("Vary", "Authorization, X-Misty-Library-Reauthentication")
+	w.Header().Add("Vary", "Authorization")
 	if strings.TrimSpace(r.URL.Query().Get("cache_version")) != "" {
 		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	} else {
@@ -199,30 +192,6 @@ func TestingWriteLibraryPreviewCacheHeaders(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	return false
-}
-
-func (s *SpaceLibraryService) validateLibraryReauthentication(r *http.Request, userID, spaceID, scope string) error {
-	token := strings.TrimSpace(r.Header.Get(libraryReauthenticationHeader))
-	if token == "" {
-		return db.ErrLibraryReauthentication
-	}
-	return s.database.ValidateLibraryReauthenticationGrant(r.Context(), userID, spaceID, scope, security.HashToken(token))
-}
-
-func (s *SpaceLibraryService) validateSensitiveLibraryItem(r *http.Request, userID, spaceID, itemID string) error {
-	scope, err := s.database.SensitiveLibraryItemScope(r.Context(), userID, spaceID, itemID)
-	if err != nil || scope == "" {
-		return err
-	}
-	return s.validateLibraryReauthentication(r, userID, spaceID, scope)
-}
-
-func (s *SpaceLibraryService) validateSensitiveLibraryAssetStack(r *http.Request, userID, spaceID, stackID string) error {
-	scope, err := s.database.SensitiveLibraryAssetStackScope(r.Context(), userID, spaceID, stackID)
-	if err != nil || scope == "" {
-		return err
-	}
-	return s.validateLibraryReauthentication(r, userID, spaceID, scope)
 }
 
 func (s *SpaceLibraryService) DownloadAttachment() http.HandlerFunc {

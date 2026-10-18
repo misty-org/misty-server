@@ -20,7 +20,7 @@ func TestNativeDownloadUploadAuthority(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			database := openTestDatabase(t)
 			ctx := t.Context()
-			owner, err := database.CreateUser("Catalog test", "catalog-test@example.com", "password123")
+			owner, err := database.CreateUser("catalog-test@example.com", "password123")
 			if err != nil {
 				t.Fatal(err)
 			}

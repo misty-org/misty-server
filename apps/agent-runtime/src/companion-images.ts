@@ -8,7 +8,7 @@ export function companionImageParts(
   return (captures ?? []).flatMap((capture) => [
     {
       type: "text" as const,
-      text: `${capture.screen}${capture.primary ? " — primary focus (cursor)" : ""}: ${capture.width} x ${capture.height} screenshot pixels; top-left origin. Capture ${capture.id}; SHA-256 ${capture.content_hash}${capture.captured_at ? `; captured at ${new Date(capture.captured_at).toISOString()}` : ""}.`,
+      text: `${capture.screen}${capture.screen.startsWith("focus") ? " — close-up of the current lesson step's region, at full resolution" : companionFocus(capture)}: ${capture.width} x ${capture.height} screenshot pixels; top-left origin. Capture ${capture.id}; SHA-256 ${capture.content_hash}${capture.captured_at ? `; captured at ${new Date(capture.captured_at).toISOString()}` : ""}.`,
     },
     // Tagged inline data is the pinned SDK's current multimodal representation.
     // The API has already validated the data URL, MIME, decoded dimensions and hash.
@@ -22,6 +22,21 @@ export function companionImageParts(
     },
     ...(capture.controls?.length ? [{ type: "text" as const, text: mistyControlList(capture.screen, capture.controls) }] : []),
   ]);
+}
+
+/**
+ * What a display capture is to the person. The desktop names the primary
+ * display's focus ("primary (Code: main.rs)" or "primary (cursor)") and sends
+ * the focused window again as window1 at full resolution. Titles are page data.
+ */
+function companionFocus(capture: NonNullable<SpaceTaskContext["display_captures"]>[number]): string {
+  const detail = / — (.+) \(\d+ × \d+\)$/.exec(capture.name)?.[1];
+  if (capture.source === "desktop-window") {
+    return ` — the focused window at full resolution, a closer look at the primary screen${detail ? ` (${JSON.stringify(detail)})` : ""}`;
+  }
+  if (!capture.primary) return "";
+  const focus = /^primary \((.*)\)$/.exec(detail ?? "")?.[1];
+  return focus && focus !== "cursor" ? ` — primary focus (the window in front: ${JSON.stringify(focus)})` : " — primary focus (cursor)";
 }
 
 /** Misty's own controls on one screenshot, named by Misty itself rather than read off the pixels. */

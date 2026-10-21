@@ -96,6 +96,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-${CLAUDE_API_KEY:-}}
       VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
       AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
+      # NVIDIA's free hosted models (nim/...), for evals without paid credit.
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-}
       MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
       # Speaks the voice pipeline (ElevenLabs Flash).
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}

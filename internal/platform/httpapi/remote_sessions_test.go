@@ -55,31 +55,19 @@ func TestAnotherDevicesSessionRunsUnderItsOwnTask(t *testing.T) {
 	}
 }
 
-func TestOnlyAPickedDevicesBrowserGrantOpensASession(t *testing.T) {
-	contexts := []db.AIInvocationContext{
-		{Kind: "workspace", State: "attached", DeviceID: "laptop", Capabilities: json.RawMessage(`["browser.tab.list"]`)},
-		{Kind: "workspace", State: "detached", DeviceID: "old", Capabilities: json.RawMessage(`["browser.session"]`)},
-		{Kind: "workspace", State: "attached", DeviceID: "mac-mini", Capabilities: json.RawMessage(`["browser.tab.list","browser.session"]`)},
-	}
-	if target := sessionTarget(contexts, false); target == nil || target.DeviceID != "mac-mini" {
+func TestOnlyTheSendingComputersBrowserGrantOpensASession(t *testing.T) {
+	own := db.AIInvocationContext{Kind: "workspace", State: "attached", DeviceID: "laptop", Capabilities: json.RawMessage(`["browser.session"]`), Metadata: json.RawMessage(`{"source":"desktop"}`)}
+	other := db.AIInvocationContext{Kind: "workspace", State: "attached", DeviceID: "mac-mini", Capabilities: json.RawMessage(`["browser.session"]`), Metadata: json.RawMessage(`{"source":"device"}`)}
+	detached := own
+	detached.State = "detached"
+	if target := sessionTarget([]db.AIInvocationContext{other, own}); target == nil || target.DeviceID != "laptop" {
 		t.Fatalf("target = %#v", target)
 	}
-	if sessionTarget(contexts[:2], false) != nil {
-		t.Fatal("a request without a picked device opened a session")
+	if sessionTarget([]db.AIInvocationContext{other}) != nil {
+		t.Fatal("another device's grant opened a session")
 	}
-}
-
-func TestTheAgentsOwnTabOpensOnThisComputerOnlyWhenNoPlaceWasNamed(t *testing.T) {
-	own := db.AIInvocationContext{Kind: "workspace", State: "attached", DeviceID: "laptop", Capabilities: json.RawMessage(`["browser.session"]`), Metadata: json.RawMessage(`{"source":"desktop"}`)}
-	picked := db.AIInvocationContext{Kind: "workspace", State: "attached", DeviceID: "mac-mini", Capabilities: json.RawMessage(`["browser.session"]`), Metadata: json.RawMessage(`{"source":"device"}`)}
-	if target := sessionTarget([]db.AIInvocationContext{own}, true); target == nil || target.DeviceID != "laptop" {
-		t.Fatalf("own tab target = %#v", target)
-	}
-	if sessionTarget([]db.AIInvocationContext{own}, false) != nil {
-		t.Fatal("a named place still opened the agent's own tab")
-	}
-	if target := sessionTarget([]db.AIInvocationContext{own, picked}, true); target == nil || target.DeviceID != "mac-mini" {
-		t.Fatalf("a picked device lost to this computer: %#v", target)
+	if sessionTarget([]db.AIInvocationContext{detached}) != nil {
+		t.Fatal("a detached grant opened a session")
 	}
 }
 
@@ -88,20 +76,7 @@ func TestAnOfflineDeviceEndsTheRunWithWordsThePersonCanActOn(t *testing.T) {
 	result := mcpToolError(err)
 	text := result.Content[0].(interface{ MarshalJSON() ([]byte, error) })
 	raw, _ := text.MarshalJSON()
-	if !result.IsError || !strings.Contains(string(raw), "device_offline: Mac mini went offline. Pick another device and ask again.") {
+	if !result.IsError || !strings.Contains(string(raw), "device_offline: Mac mini went offline. Ask again once Misty is open there.") {
 		t.Fatalf("tool error = %s", raw)
-	}
-}
-
-func TestTheAgentIsToldWhichDeviceThePersonPicked(t *testing.T) {
-	picked := aiInvocationInput{DeviceContexts: []aiInvocationDeviceContext{{
-		Kind: "workspace", DisplayName: "Misty browser on Mac mini", Capabilities: json.RawMessage(`["browser.tab.list","browser.session"]`),
-	}}}
-	if guidance := pickedDeviceGuidance(picked); !strings.Contains(guidance, "the person picked Mac mini") || !strings.Contains(guidance, "screen_open opens a browser there") {
-		t.Fatalf("guidance = %q", guidance)
-	}
-	own := aiInvocationInput{DeviceContexts: []aiInvocationDeviceContext{{Kind: "workspace", Capabilities: json.RawMessage(`["browser.tab.list"]`)}}}
-	if guidance := pickedDeviceGuidance(own); guidance != "" {
-		t.Fatalf("a request on this computer was told to work elsewhere: %q", guidance)
 	}
 }

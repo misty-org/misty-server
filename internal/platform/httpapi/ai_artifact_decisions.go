@@ -151,6 +151,15 @@ func validateAIInvocationInput(body *aiInvocationInput) error {
 	body.SurfaceID = strings.TrimSpace(body.SurfaceID)
 	body.Trigger = strings.TrimSpace(body.Trigger)
 	body.Prompt = strings.TrimSpace(body.Prompt)
+	if len(body.HistoryTurns) > maxHistoryTurns {
+		body.HistoryTurns = body.HistoryTurns[len(body.HistoryTurns)-maxHistoryTurns:]
+	}
+	for index := range body.HistoryTurns {
+		turn := &body.HistoryTurns[index]
+		turn.InvocationID = truncateAgentRuntimeText(strings.TrimSpace(turn.InvocationID), 120)
+		turn.Prompt = truncateAgentRuntimeText(strings.TrimSpace(turn.Prompt), historyTurnPromptRunes)
+		turn.Reply = truncateAgentRuntimeText(strings.TrimSpace(turn.Reply), historyTurnReplyRunes)
+	}
 	body.Timezone = strings.TrimSpace(body.Timezone)
 	body.ModelID = strings.TrimSpace(body.ModelID)
 	body.ReasoningEffort = strings.ToLower(strings.TrimSpace(body.ReasoningEffort))
@@ -159,8 +168,14 @@ func validateAIInvocationInput(body *aiInvocationInput) error {
 		return errors.New("thinking mode must be normal or deep")
 	}
 	body.CollaborationMode = strings.TrimSpace(body.CollaborationMode)
-	if body.CollaborationMode != "" && body.CollaborationMode != "act" && body.CollaborationMode != "plan" {
-		return errors.New("collaboration mode must be act or plan")
+	if body.CollaborationMode != "" && body.CollaborationMode != "act" && body.CollaborationMode != "plan" && body.CollaborationMode != "teach" {
+		return errors.New("collaboration mode must be act, plan or teach")
+	}
+	if err := validateTeachInput(body); err != nil {
+		return err
+	}
+	if err := validateMediaContext(body); err != nil {
+		return err
 	}
 	body.PermissionMode = strings.TrimSpace(body.PermissionMode)
 	if body.PermissionMode != "" && body.PermissionMode != "ask" && body.PermissionMode != "auto" {

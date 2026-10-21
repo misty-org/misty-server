@@ -11,6 +11,11 @@ import (
 
 // Only a v2 lease that never received a start acknowledgement can be delivered
 // again. A potentially executed operation keeps its token and uncertain evidence.
+//
+// A job a device claimed but did not begin within eight seconds goes back to the queue: begin
+// follows a claim within milliseconds, so the claim's answer was lost on the way (a dropped
+// connection, a worker that stopped). Waiting for the 60-second lease cost a run's 30-second
+// screen_open its whole deadline. A late begin with the old token is refused, so nothing runs twice.
 func (db *Database) ReapWorkflowDeviceJobs(userID string) error {
 	return db.agentTx(userID, func(tx *sql.Tx) error {
 		_, err := tx.Exec(`UPDATE workflow_device_node_jobs SET
@@ -21,7 +26,8 @@ func (db *Database) ReapWorkflowDeviceJobs(userID string) error {
    error_code=CASE WHEN state='executing' OR state='leased' AND control_version=1 THEN 'device_execution_uncertain' ELSE 'device_execution_stopped' END,
    completed_at=CASE WHEN state='leased' AND control_version=2 AND execution_started_at IS NULL AND cancel_requested_at IS NULL AND deadline_at>NOW() AND delivery_attempts<3 THEN NULL ELSE NOW() END
    WHERE user_id=$1 AND state IN ('queued','leased','executing') AND
-    (deadline_at<=NOW() OR state IN ('leased','executing') AND lease_expires_at<=NOW() OR cancel_requested_at IS NOT NULL AND (state='queued' OR state='leased' AND control_version=2 AND execution_started_at IS NULL))`, userID)
+    (deadline_at<=NOW() OR state IN ('leased','executing') AND lease_expires_at<=NOW() OR
+     state='leased' AND control_version=2 AND execution_started_at IS NULL AND last_heartbeat_at<=NOW()-INTERVAL '8 seconds' OR cancel_requested_at IS NOT NULL AND (state='queued' OR state='leased' AND control_version=2 AND execution_started_at IS NULL))`, userID)
 		return err
 	})
 }

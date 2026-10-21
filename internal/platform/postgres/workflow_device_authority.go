@@ -102,7 +102,8 @@ func validateDeviceJobTargetTx(ctx context.Context, tx *sql.Tx, job *WorkflowDev
 			}
 			// Acting in a page needs a live agent task. Folders, tabs and
 			// bookmarks follow their grants instead.
-			if input.Mode == "user" && strings.HasPrefix(job.RequiredCapability, "browser.") && job.RequiredCapability != "browser.session" && !userModeBrowserCapability[job.RequiredCapability] && !remote {
+			// browser.run acts only in the agent's own session tabs, which the device enforces.
+			if input.Mode == "user" && strings.HasPrefix(job.RequiredCapability, "browser.") && job.RequiredCapability != "browser.session" && job.RequiredCapability != "browser.run" && !userModeBrowserCapability[job.RequiredCapability] && !remote {
 				return ErrSpaceForbidden
 			}
 			// A browser tab belongs to the window that started the request.
@@ -141,8 +142,8 @@ func validateDeviceJobTargetTx(ctx context.Context, tx *sql.Tx, job *WorkflowDev
 	return nil
 }
 
-// remoteSessionScopeTx reports whether a scope is a tab this device opened for
-// another device's request (docs/design/agents-on-devices/BRIEF.md): returned
+// remoteSessionScopeTx reports whether a scope is a tab of the agent's own that
+// this device opened for a run (docs/plans/odysseys-campaign.md): returned
 // by a completed browser.session job on this device, or by a sub-agent's
 // browser.spawn_tabs job whose parent was such a tab. The proof is the job's
 // stored output, never anything the request says about the tab.

@@ -17,6 +17,9 @@ import (
 // held claim ends empty or drops, the device falls back to notifications.
 const maxDeviceClaimWait = 25 * time.Second
 
+// deviceClaimRecheck is how often a held claim looks for a job requeued without a notification.
+var deviceClaimRecheck = 5 * time.Second
+
 type deviceClaimStore interface {
 	SubscribeAccountEvents(context.Context, string) (<-chan db.AccountEvent, func(), error)
 	ClaimWorkflowDeviceNodeJob(userID, deviceID string, lease time.Duration, protocol ...int) (*db.WorkflowDeviceNodeJob, string, error)
@@ -69,6 +72,10 @@ func claimDeviceJobWithin(ctx context.Context, store deviceClaimStore, userID, d
 	}
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
+	// A job whose earlier claim was lost goes back to the queue without a notification
+	// (ReapWorkflowDeviceJobs), so a held claim also looks again every few seconds.
+	recheck := time.NewTicker(deviceClaimRecheck)
+	defer recheck.Stop()
 	for {
 		// A device that hung up must not be handed a job it will never run.
 		if err := ctx.Err(); err != nil {
@@ -85,6 +92,8 @@ func claimDeviceJobWithin(ctx context.Context, store deviceClaimStore, userID, d
 				return nil, "", ctx.Err()
 			case <-timer.C:
 				return nil, "", db.ErrAgentJobNotFound
+			case <-recheck.C:
+				break wait
 			case event, open := <-events:
 				if !open {
 					return nil, "", db.ErrAgentJobNotFound

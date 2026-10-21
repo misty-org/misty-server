@@ -40,6 +40,9 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 	if err := validateBrowserToolArguments(tool); err != nil {
 		return nil, err
 	}
+	if err := navigationAddressWithoutHost(ctx, tool); err != nil {
+		return nil, err
+	}
 	if browserPageActTools[tool.Name] {
 		if waiting, err := s.approveBrowserPageSteps(ctx, invocation, tool, scopeID); err != nil || waiting != nil {
 			return waiting, err

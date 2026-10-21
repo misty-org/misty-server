@@ -289,6 +289,8 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Get(prefix+"/invocations/{invocationID}/state", aiService.InvocationState())
 	s.Router.Post(prefix+"/invocations/{invocationID}/cancel", aiService.CancelInvocation())
 	s.Router.Post(prefix+"/invocations/{invocationID}/steering", aiService.SteerInvocation())
+	s.Router.Post(prefix+"/invocations/{invocationID}/pause", aiService.PauseInvocation())
+	s.Router.Post(prefix+"/invocations/{invocationID}/resume", aiService.ResumeInvocation())
 	s.Router.Post(prefix+"/invocations/{invocationID}/feedback", aiService.InvocationFeedback())
 	s.Router.Post(prefix+"/artifacts/{artifactID}/decision", aiService.DecideArtifact())
 	s.Router.Post(prefix+"/artifacts/{artifactID}/completion", aiService.CompleteArtifact())

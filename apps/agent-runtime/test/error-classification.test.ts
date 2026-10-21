@@ -6,7 +6,7 @@ import {
 } from "@modelcontextprotocol/client";
 import { ControlPlaneError } from "../src/control-plane-error.js";
 import { classifyMCPTransportError } from "../src/mcp-errors.js";
-import { classifyRuntimeError, recoverableToolError, visibleErrorMessage } from "../src/runtime-errors.js";
+import { classifyRuntimeError, providerOutage, recoverableToolError, visibleErrorMessage } from "../src/runtime-errors.js";
 import { classifyToolOutcome, incompleteToolResultText, stoppedAtModelTurnLimit, toolFailureSignature } from "../src/tool-outcomes.js";
 
 describe("runtime error classification", () => {
@@ -119,6 +119,13 @@ describe("runtime error classification", () => {
       code: "model_provider_key_invalid",
       message: "Misty's AI provider rejected its API key. The server administrator needs to replace the key.",
     });
+  });
+
+  it("tells a provider outage, which a run waits out, from other failures", () => {
+    expect(providerOutage({ name: "AI_APICallError", message: "Internal Server Error" })).toBe(true);
+    expect(providerOutage(new Error('Step "doStreamStep" failed after 3 retries: Too Many Requests'))).toBe(true);
+    expect(providerOutage({ name: "AI_APICallError", message: "invalid api key" })).toBe(false);
+    expect(providerOutage(new Error("agent_model_turn_limit"))).toBe(false);
   });
 
   it("recognizes serialized gateway outages without returning private provider data", () => {

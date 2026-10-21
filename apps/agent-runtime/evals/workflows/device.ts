@@ -5,7 +5,7 @@
 
 export const deviceId = process.env.MISTY_WORKFLOW_EVAL_DEVICE?.trim() || "";
 export const device = /^device_[0-9a-f-]{36}$/.test(deviceId);
-const workspaceCapabilities = ["bookmark.add", "bookmark.list", "browser.session", "browser.tab.list", "browser.tab.open", "web.fetch"];
+const workspaceCapabilities = ["bookmark.add", "bookmark.list", "browser.run", "browser.session", "browser.tab.list", "browser.tab.open", "web.fetch"];
 
 /** The workspace context for one run, with a fresh grant the desktop signs. */
 export async function deviceContexts(userId: string, agentId: string): Promise<unknown[]> {

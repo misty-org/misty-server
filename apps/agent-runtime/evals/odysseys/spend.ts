@@ -15,6 +15,8 @@ const prices: Record<string, { input: number; cached: number; output: number }> 
 const searchUsd = 0.001;
 
 export function tokenUsd(model: string, input: number, cached: number, output: number): number {
+  // NVIDIA's hosted models are free with rate limits (docs/plans/free-model-evals.md).
+  if (model.startsWith("nim/")) return 0;
   const price = prices[model] ?? prices["anthropic/claude-sonnet-5.5"]!;
   return ((input - cached) * price.input + cached * price.cached + output * price.output) / 1_000_000;
 }

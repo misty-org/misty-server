@@ -57,7 +57,18 @@ func nativeAgentInvocationPolicy(ctx context.Context, database *db.Database, inv
 	if strings.HasPrefix(descriptor.Name, "browser.workspace.") && (body.ExecutionMode != "agent" || body.WindowLabel != "main" || body.TaskID == "") {
 		return true, false, nil
 	}
-	if strings.HasPrefix(descriptor.Name, "browser.") {
+	// browser.run opens and works the agent's own tabs, so it needs the computer the run was sent
+	// from, not a tab already attached: offered from the first turn, the model starts with it
+	// instead of reaching for the step tools (docs/plans/agent-harness-v3.md, change 2).
+	if descriptor.Name == browserRunTool {
+		contexts, err := database.AIInvocationContexts(ctx, record.UserID, record.ID)
+		if err != nil {
+			return true, false, err
+		}
+		if target := sessionTarget(contexts); target == nil || !contextAllows(target, browserRunTool) {
+			return true, false, nil
+		}
+	} else if strings.HasPrefix(descriptor.Name, "browser.") {
 		attached, err := invocationHasBrowserContext(ctx, database, record)
 		if err != nil || !attached {
 			return true, false, err

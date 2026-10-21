@@ -35,8 +35,10 @@ var deviceAgentCapabilities = map[string]bool{
 	"browser.tab.list": true, "browser.tab.open": true, "bookmark.list": true, "bookmark.add": true,
 	// Reads one public page without cookies (docs/plans/agent-harness.md, phase 1).
 	"web.fetch": true,
-	// Opens an agent session in another device's browser (docs/design/agents-on-devices/BRIEF.md).
+	// Opens the agent's own browser session on the sending computer (docs/plans/odysseys-campaign.md).
 	"browser.session": true,
+	// Runs the agent's program against its own tabs there (docs/plans/agent-harness-v3.md).
+	"browser.run": true,
 	// Coding in a project on the chat's own computer, through the person's own
 	// coding tool (docs/plans/coding-runner-capabilities.md).
 	"code.delegate": true,
@@ -45,7 +47,7 @@ var deviceAgentCapabilities = map[string]bool{
 // deviceContextCapabilities are what each kind of desktop grant may allow.
 var deviceContextCapabilities = map[string]map[string]bool{
 	"local_folder": {"folder.list": true, "folder.read": true, "folder.send": true},
-	"workspace":    {"browser.tab.list": true, "browser.tab.open": true, "bookmark.list": true, "bookmark.add": true, "browser.session": true, "web.fetch": true},
+	"workspace":    {"browser.tab.list": true, "browser.tab.open": true, "bookmark.list": true, "bookmark.add": true, "browser.session": true, "browser.run": true, "web.fetch": true},
 	// A project: delegated coding, plus reading documents and saving files to
 	// the Space Library the way read-only folders do.
 	"project_folder": {"folder.list": true, "folder.read": true, "folder.send": true, "code.delegate": true},

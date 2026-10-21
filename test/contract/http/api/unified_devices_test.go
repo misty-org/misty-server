@@ -261,16 +261,13 @@ func TestRunGrantsLimitWhatAgentsMayDoOnADevice(t *testing.T) {
 	if err := check([]map[string]any{folder(second, runGrant(second.key, f.userID, first.id, second.id, []string{"folder.list", "folder.read"}, []string{"scope-1"}))}); err == nil {
 		t.Fatal("a grant with a forged requester was accepted")
 	}
-	// Another device only with its own policy allowing it.
+	// Never another device, even one whose own policy lets agents in.
 	cross := folder(second, runGrant(first.key, f.userID, first.id, second.id, []string{"folder.list", "folder.read"}, []string{"scope-1"}))
-	if err := check([]map[string]any{cross}); err == nil {
-		t.Fatal("cross-device work without the target's policy was accepted")
-	}
 	if response := f.signed(second, http.MethodPut, "/devices/"+second.id+"/policy", map[string]any{"policy": policyRecord(second.key, f.userID, second.id, 1, "view")}); response.Code != http.StatusOK {
 		t.Fatalf("policy: %d", response.Code)
 	}
-	if err := check([]map[string]any{cross}); err != nil {
-		t.Fatalf("cross-device work the target allows: %v", err)
+	if err := check([]map[string]any{cross}); err == nil {
+		t.Fatal("cross-device work was accepted")
 	}
 	// A device not added yet may let agents work on itself, and nowhere else.
 	third := f.register("Third")

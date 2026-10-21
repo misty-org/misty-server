@@ -32,11 +32,16 @@ func TestScreenToolsAreOfferedOnlyToDesktopAgentRuns(t *testing.T) {
 	names := []string{}
 	for _, registration := range got {
 		names = append(names, registration.Descriptor.Name)
-		if registration.Descriptor.Risk != "read" || registration.Handler == nil {
-			t.Fatalf("%s must be a read with a handler", registration.Descriptor.Name)
+		// browser.run acts in the agent's own tabs, so it is a write; the screen tools only read.
+		want := "read"
+		if registration.Descriptor.Name == browserRunTool {
+			want = "write"
+		}
+		if registration.Descriptor.Risk != want || registration.Handler == nil {
+			t.Fatalf("%s must be a %s with a handler", registration.Descriptor.Name, want)
 		}
 	}
-	if strings.Join(names, ",") != "screen.open,screen.look" {
+	if strings.Join(names, ",") != "screen.open,screen.look,screen.close,browser.run" {
 		t.Fatalf("screen tools = %v", names)
 	}
 }
@@ -59,7 +64,7 @@ func TestScreenGuidanceOffersOnDemandScreensInsteadOfAModeChoice(t *testing.T) {
 
 func TestARunThatCanOpenItsOwnTabLearnsTheBrowserToolsUpFront(t *testing.T) {
 	own := agentCapabilityGuidance([]string{"web.search", "web.fetch", "screen.open", "screen.look"}, false, true)
-	for _, want := range []string{"opens your own browser tab in the background and this run continues", "Act with browser_steps", "Use browser_act only for visual work"} {
+	for _, want := range []string{"opens your own browser tab, which the person can watch, and this run continues", "Work the pages your answer relies on in your own browser tab", "Act with browser_steps", "Use browser_act only for visual work"} {
 		if !strings.Contains(own, want) {
 			t.Fatalf("guidance lacks %q:\n%s", want, own)
 		}

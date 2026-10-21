@@ -16,6 +16,7 @@
     "eval:code": "vitest run --config evals/code/vitest.config.ts",
     "eval:workflows": "vitest run --config evals/workflows/vitest.config.ts",
     "eval:odysseys": "vitest run --config evals/odysseys/vitest.config.ts",
+    "eval:free-model": "vitest run --config evals/free-model/vitest.config.ts",
     "trace": "node evals/browser/trace.ts",
     "eval:voice": "vitest run --config evals/voice/vitest.config.ts"
   },
@@ -23,6 +24,7 @@
     "@ai-sdk/anthropic": "4.0.40",
     "@ai-sdk/elevenlabs": "3.0.30",
     "@ai-sdk/openai": "4.0.46",
+    "@ai-sdk/openai-compatible": "3.0.36",
     "@ai-sdk/provider": "4.0.7",
     "@ai-sdk/workflow": "1.0.67",
     "@misty/mcp-client-runtime": "file:./vendor/mcp-client-runtime",

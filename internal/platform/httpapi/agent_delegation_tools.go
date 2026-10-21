@@ -15,7 +15,7 @@ import (
 )
 
 // Sub-agents (docs/plans/agentic-browser.md, Phase 4). agent_delegate starts
-// up to four child runs. Each is an ordinary invocation that runs under the
+// up to three child runs (with the parent, four views of its chat, docs/design/agent-browser/BRIEF.md). Each is an ordinary invocation that runs under the
 // parent's lease, agent and approval setting, never more; with a browser, the
 // parent's device opens a tab per child and signs that child's grant itself.
 // Children report into the parent's notebook and return their answers here.
@@ -23,7 +23,7 @@ import (
 const (
 	toolboxAgentsDelegateTasks = "agent.delegate"
 	toolboxAgentsWait          = "agent.wait"
-	maxDelegatedTasks          = 4
+	maxDelegatedTasks          = 3
 	// A tool call holds this long at most, like a device job; agent_wait
 	// picks up children that run longer.
 	delegationHold = 270 * time.Second
@@ -58,7 +58,7 @@ func delegationToolDescriptors() []agenttools.Descriptor {
 	}
 	return []agenttools.Descriptor{
 		{Name: toolboxAgentsDelegateTasks, Version: 1, Risk: serveragent.RiskWrite, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone, AuditEvent: "agent.delegated",
-			Description: "Split independent parts of a large task across up to four sub-agents that work at the same time, each in its own browser tab when this run has a browser. Use it for breadth: researching several companies, products or sources, or filling several separate forms. Each task must stand alone. Sub-agents act with your permissions, write their findings to this task's notebook and return their answers; this call waits for them for up to about four minutes, then returns whatever is still running so you can call agent_wait.",
+			Description: "Split independent parts of a large task across up to three sub-agents that work at the same time, each in its own browser view when this run has a browser. Give them out like a queue: when one finishes and more parts remain, call it again. Use it for breadth: researching several companies, products or sources, or filling several separate forms. Each task must stand alone. Sub-agents act with your permissions, write their findings to this task's notebook and return their answers; this call waits for them for up to about four minutes, then returns whatever is still running so you can call agent_wait.",
 			InputSchema: TestingMustAPIRawJSON(map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"tasks"},
 				"properties": map[string]any{
@@ -156,7 +156,11 @@ func (s *SpacesService) delegate(ctx context.Context, record *db.AIInvocationRec
 	if len(existing) == 0 {
 		var tabs []aiInvocationDeviceContext
 		if wantBrowser {
-			if tabs, err = s.spawnChildTabs(ctx, record, body, callID, len(tasks)); err != nil {
+			labels := make([]string, len(tasks))
+			for index, task := range tasks {
+				labels[index] = viewLabel(task.Goal)
+			}
+			if tabs, err = s.spawnChildTabs(ctx, record, body, callID, labels); err != nil {
 				return nil, err
 			}
 		}
@@ -182,7 +186,21 @@ func (s *SpacesService) delegate(ctx context.Context, record *db.AIInvocationRec
 // spawnChildTabs asks the parent's device to open one tab per child in the
 // parent's browser workspace and to sign each child's grant. Without a browser
 // that can do this, children work without one.
-func (s *SpacesService) spawnChildTabs(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput, callID string, count int) ([]aiInvocationDeviceContext, error) {
+// viewLabel names a sub-agent's view after its goal's first few words.
+func viewLabel(goal string) string {
+	words := strings.Fields(goal)
+	if len(words) > 4 {
+		words = words[:4]
+	}
+	label := strings.Join(words, " ")
+	if runes := []rune(label); len(runes) > 32 {
+		label = string(runes[:32])
+	}
+	return label
+}
+
+func (s *SpacesService) spawnChildTabs(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput, callID string, labels []string) ([]aiInvocationDeviceContext, error) {
+	count := len(labels)
 	contexts, err := s.database.AIInvocationContexts(ctx, record.UserID, record.ID)
 	if err != nil {
 		return nil, err
@@ -202,7 +220,8 @@ func (s *SpacesService) spawnChildTabs(ctx context.Context, record *db.AIInvocat
 	if agentID == "" {
 		agentID = "misty-unified"
 	}
-	input := TestingMustAPIRawJSON(map[string]any{"scopeId": scope, "count": count})
+	// The conversation finds the parent's own agent window, where the children's tabs open beside its own.
+	input := TestingMustAPIRawJSON(map[string]any{"scopeId": scope, "count": count, "labels": labels, "conversationId": record.ConversationID})
 	// On another device's session, its own task holds the lease.
 	config := TestingMustAPIRawJSON(map[string]any{"agentId": agentID, "taskId": scopeTaskID(body, scope)})
 	job, err := s.database.QueueAIInvocationDeviceNodeJob(ctx, record.UserID, record.ID, "delegate_tabs_"+callID, 1, scope, spawnTabsOp, spawnTabsOp, input, config,

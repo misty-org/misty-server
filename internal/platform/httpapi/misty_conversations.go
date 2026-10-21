@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,9 +29,14 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 				return
 			}
 			query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+			scope := strings.TrimSpace(r.URL.Query().Get("scope"))
+			deviceID := strings.TrimSpace(r.URL.Query().Get("device_id"))
 			items := make([]mistyConversation, 0, len(summaries))
 			for _, summary := range summaries {
 				if id := r.URL.Query().Get("agent_id"); id != "" && summary.AgentID != id {
+					continue
+				}
+				if !conversationInScope(summary, scope, deviceID) {
 					continue
 				}
 				if query != "" && !strings.Contains(strings.ToLower(summary.Title), query) {
@@ -50,12 +56,19 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 				ReasoningEffort string `json:"reasoning_effort,omitempty"`
 				Title           string `json:"title"`
 				SpaceID         string `json:"space_id,omitempty"`
+				// The device that starts the chat keeps it (docs/design/agent-chats-local/BRIEF.md).
+				DeviceID string `json:"device_id,omitempty"`
 			}
 			if err := decodeAIJSON(w, r, &body); err != nil {
 				http.Error(w, "invalid request", http.StatusBadRequest)
 				return
 			}
 			body.SpaceID = "" // Compatibility input; personal conversations are account-owned.
+			body.DeviceID = strings.TrimSpace(body.DeviceID)
+			if body.DeviceID != "" && !deviceIDPattern.MatchString(body.DeviceID) {
+				http.Error(w, "invalid request", http.StatusBadRequest)
+				return
+			}
 			var identity *db.AskIdentity
 			var identityErr error
 			if body.AgentID == "" {
@@ -109,10 +122,16 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 				TestingWriteAIError(w, err)
 				return
 			}
+			if body.DeviceID != "" {
+				if err := s.database.KeepConversationOnDevice(r.Context(), userID, conversationID, body.DeviceID); err != nil {
+					TestingWriteAIError(w, err)
+					return
+				}
+			}
 			writeJSON(w, http.StatusCreated, mistyConversation{
 				ID: conversationID, AgentID: identity.ID, Title: title, CreatedAt: now, UpdatedAt: now,
 				SpaceID: body.SpaceID, Kind: "misty", ModelID: modelID, Reasoning: reasoning,
-				Messages: []mistyConversationMessage{}, Remote: true,
+				Messages: []mistyConversationMessage{}, Remote: true, KeptOnDeviceID: body.DeviceID,
 			})
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -213,12 +232,31 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 				FolderID *string `json:"folder_id"`
 				// True records that the user has now seen the conversation.
 				Read *bool `json:"read"`
+				// The device that keeps the chat from now on: one that took it from the
+				// inbox, or continued a chat from before chats moved to devices.
+				KeepOnDevice *string `json:"keep_on_device"`
 			}
 			if err := decodeAIJSON(w, r, &body); err != nil {
 				http.Error(w, "invalid request", http.StatusBadRequest)
 				return
 			}
 			response := map[string]any{"id": conversationID}
+			if body.KeepOnDevice != nil {
+				deviceID := strings.TrimSpace(*body.KeepOnDevice)
+				if !deviceIDPattern.MatchString(deviceID) {
+					http.Error(w, "invalid request", http.StatusBadRequest)
+					return
+				}
+				if err := s.database.KeepConversationOnDevice(r.Context(), userID, conversationID, deviceID); err != nil {
+					if errors.Is(err, db.ErrConversationKeptElsewhere) {
+						writeJSON(w, http.StatusConflict, map[string]string{"code": "kept_elsewhere", "message": "Another of your devices has this conversation."})
+						return
+					}
+					TestingWriteAIError(w, err)
+					return
+				}
+				response["keptOnDeviceId"] = deviceID
+			}
 			if body.SpaceID != nil {
 				if err := s.database.BindMistyConversationSpace(r.Context(), userID, conversationID, ""); err != nil {
 					TestingWriteAIError(w, err)
@@ -294,6 +332,26 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
+	}
+}
+
+// conversationInScope filters the listing for local-first chats
+// (docs/design/agent-chats-local/BRIEF.md). "legacy" is the one-time copy of chats
+// from before chats moved to devices that no device has taken yet. "device" is what
+// one device needs: the chats it keeps that ran in the last two days (whose runs the
+// server still holds), and the inbox of chats no device keeps yet. No scope lists
+// everything, for older apps.
+func conversationInScope(summary db.AgentSessionSummary, scope, deviceID string) bool {
+	switch scope {
+	case "legacy":
+		return summary.Legacy && summary.KeptOnDeviceID == ""
+	case "device":
+		if summary.KeptOnDeviceID == "" {
+			return !summary.Legacy
+		}
+		return deviceID != "" && summary.KeptOnDeviceID == deviceID && summary.RecentRun
+	default:
+		return true
 	}
 }
 
@@ -401,7 +459,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 			SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
 			OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, ModelOverride: summary.ModelOverride, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
 			CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),
-			UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true,
+			UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true, KeptOnDeviceID: summary.KeptOnDeviceID,
 		}, nil
 	}
 	transcript, err := s.runtime.Transcript(r.Context(), summary.ID, userID)
@@ -435,7 +493,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 		SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
 		OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, ModelOverride: summary.ModelOverride, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
 		CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),
-		UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true,
+		UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true, KeptOnDeviceID: summary.KeptOnDeviceID,
 	}, nil
 }
 

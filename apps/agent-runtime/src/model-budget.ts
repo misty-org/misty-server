@@ -7,6 +7,10 @@ export interface ExecutionBudget {
   deadline?: string;
 }
 
+/** The most execution Misty grants a run: four hours for a development eval, 30 minutes otherwise
+ * (plan_models.go, evalExecutionLimitMS). */
+const MAX_EXECUTION_MS = 4 * 60 * 60_000;
+
 export function modelTimeout(budget: ExecutionBudget, now: number, legacyDeadline: number): number {
   // Existing admissions retain their absolute timeout policy while draining.
   if (budget.version === 0) {
@@ -14,7 +18,7 @@ export function modelTimeout(budget: ExecutionBudget, now: number, legacyDeadlin
     return Math.min(30 * 60_000, legacyDeadline - now);
   }
   const deadline = Date.parse(budget.deadline ?? "");
-  if (budget.version !== 1 || !budget.active || !Number.isSafeInteger(budget.remaining_ms) || budget.remaining_ms > 30 * 60_000 || !Number.isFinite(deadline))
+  if (budget.version !== 1 || !budget.active || !Number.isSafeInteger(budget.remaining_ms) || budget.remaining_ms > MAX_EXECUTION_MS || !Number.isFinite(deadline))
     throw new Error("invalid_execution_budget");
   const remaining = Math.min(budget.remaining_ms, deadline - now);
   if (remaining <= 0) throw new Error("agent_execution_time_limit");
@@ -46,6 +50,7 @@ export function accumulateModelUsage(previous: LanguageModelUsage | undefined, n
 // Older control planes omit this field and retain their 20-turn policy.
 export function modelTurnLimit(value: number | undefined): number {
   if (value === undefined) return 20;
-  if (!Number.isSafeInteger(value) || value < 1 || value > 120) throw new Error("invalid_model_turn_limit");
+  // 200 is a development eval's most (docs/plans/agent-harness-v3.md, change 6); plans stay below.
+  if (!Number.isSafeInteger(value) || value < 1 || value > 200) throw new Error("invalid_model_turn_limit");
   return value;
 }

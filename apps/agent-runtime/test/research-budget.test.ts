@@ -29,6 +29,12 @@ describe("research budget", () => {
     expect(use.stage).toBe("wrap-up");
   });
 
+  it("keeps the larger budget a run had after its checklist was summarized away", () => {
+    const many = calls(...Array.from({ length: researchLimits.close }, (_, i) => fetchPage(`https://site${i}.com`)));
+    expect(researchUse(many, tools).stage).toBe("closed");
+    expect(researchUse(many, tools, 4).stage).toBe("open");
+  });
+
   it("does not call different questions repeats", () => {
     expect(sameQuery(new Set(["rust", "async", "runtime"]), new Set(["postgres", "pricing", "tiers"]))).toBe(false);
   });
@@ -53,11 +59,13 @@ describe("research budget", () => {
   it("does nothing when the run has no research tools", () => {
     expect(researchUse(calls(search("a b c")), {}).cost).toBe(0);
   });
-  it("points a run that can open its own tab at it for facts a fetch can't show", () => {
+  it("sends a run with its own tabs to work on pages instead of answering early", () => {
     const tools = { search: "web_search", fetch: "web_fetch", open: "screen_open" };
-    const use = { searches: 3, fetches: 3, repeats: 0, cost: 6, stage: "wrap-up" as const };
-    expect(researchNote(use, [], tools)).toContain("open them in your own tab with screen_open");
-    expect(researchNote(use, [], { search: "web_search", fetch: "web_fetch" })).not.toContain("screen_open");
+    const wrapUp = { searches: 3, fetches: 3, repeats: 0, cost: 6, stage: "wrap-up" as const };
+    expect(researchNote(wrapUp, [], tools)).toContain("in your own tabs with screen_open");
+    expect(researchNote(wrapUp, [], tools)).not.toContain("Answer now");
+    expect(researchNote({ ...wrapUp, stage: "closed" }, [], tools)).toContain("Keep working in your own tabs");
+    expect(researchNote(wrapUp, [], { search: "web_search", fetch: "web_fetch" })).toContain("Answer now");
   });
   it("gives a long, planned request a longer budget", () => {
     const tools = { search: "web_search", fetch: "web_fetch" };
@@ -65,5 +73,16 @@ describe("research budget", () => {
     expect(researchUse(searches, tools).stage).toBe("wrap-up");
     const plan = { role: "assistant" as const, content: [{ type: "tool-call" as const, toolCallId: "plan", toolName: "log_work_checklist", input: { items: ["a", "b", "c", "d", "e", "f"].map((id) => ({ id, title: id, status: "pending" })) } }] };
     expect(researchUse([plan, ...searches], tools).stage).toBe("open");
+  });
+});
+
+describe("budgetScale with a requirements ledger", () => {
+  it("grows with the requirements Misty listed, up to twenty", async () => {
+    const { budgetScale } = await import("../src/research-budget.js");
+    const { ledgerNote } = await import("../src/requirements-review.js");
+    const lines = Array.from({ length: 26 }, (_, index) => `${index + 1}. Requirement ${index + 1}`).join("\n");
+    expect(budgetScale([{ role: "user", content: ledgerNote(lines.split("\n").slice(0, 7).join("\n")) }])).toBe(7);
+    expect(budgetScale([{ role: "user", content: ledgerNote(lines) }])).toBe(20);
+    expect(budgetScale([{ role: "user", content: "Find a flight" }])).toBe(1);
   });
 });

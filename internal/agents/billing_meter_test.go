@@ -126,6 +126,27 @@ func TestRuntimeTurnSettlementAndAggregateReconciliation(t *testing.T) {
 	}
 }
 
+func TestRuntimeCompletionLeavesServerSideExtractionOutOfTheAggregate(t *testing.T) {
+	turn := billingadapter.Request{Version: 1, AccountID: "account", Operation: "agent.model", OperationID: "agent-runtime:run", Key: "agent-runtime:run:model:model:1", Usage: billingadapter.Usage{Provider: "provider", Model: "model"}}
+	extract := turn
+	extract.Key = "agent-runtime:run:model:model:browse:job:extract"
+	store := &completionStore{reservations: []billingadapter.Reservation{{ID: "turn", Admission: turn}, {ID: "extract", Admission: extract}}}
+	meter := BillingMeter{Service: &billingadapter.Service{Adapter: &offlineCompletionAdapter{}, Store: store}}
+	if err := meter.CompleteRuntimeTurn(t.Context(), "account", "run", "model:1", ModelUsage{InputTokens: 100, OutputTokens: 20}); err != nil {
+		t.Fatal(err)
+	}
+	if err := meter.CompleteRuntimeTurn(t.Context(), "account", "run", "model:browse:job:extract", ModelUsage{InputTokens: 500, OutputTokens: 40}); err != nil {
+		t.Fatal(err)
+	}
+	if !serverSideRunModelCall("agent-runtime:run:model:model:screen:job:1:settle") || serverSideRunModelCall("agent-runtime:run:model:model:12:settle") {
+		t.Fatal("screen-model calls must count as server-side and runtime turns must not")
+	}
+	// The runtime's aggregate counts only its own turns.
+	if err := meter.CompleteRuntime(t.Context(), "account", "run", ModelUsage{InputTokens: 100, OutputTokens: 20}); err != nil || len(store.entries) != 2 {
+		t.Fatal("server-side extraction contradicted the runtime's aggregate", err, len(store.entries))
+	}
+}
+
 func TestRuntimeFullyMeasuredTurnsNeedNoAggregateCharge(t *testing.T) {
 	request := billingadapter.Request{Version: 1, AccountID: "account", Operation: "agent.model", OperationID: "agent-runtime:run", Key: "agent-runtime:run:model:model:1", Usage: billingadapter.Usage{Provider: "provider", Model: "model"}}
 	store := &completionStore{reservations: []billingadapter.Reservation{{ID: "one", Admission: request}}}

@@ -26,6 +26,10 @@ export interface SpaceTaskContext {
   };
   attached_sources: unknown[];
   companion_mode?: "team" | "auto";
+  /** A Teach-mode lesson turn: run the tutor's fast lane (src/teach-turn.ts), not the agent loop. */
+  teach?: boolean;
+  /** Lookups a lesson turn may make: more when planning a lesson, one on a step. */
+  teach_tool_budget?: number;
   display_captures?: Array<NonNullable<SpaceTaskContext["capture"]> & { screen: string; primary: boolean; captured_at?: number; display_id?: number; source?: string; controls?: ScreenControl[] }>;
   capture?: {
     id: string;

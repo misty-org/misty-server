@@ -9,6 +9,10 @@ describe("screenJoined", () => {
     expect(screenJoined([{ output: { type: "json", value: { content: [{ text: JSON.stringify(opened) }] } } }])).toBe(true);
   });
 
+  it("sees tabs a browser_run program opened", () => {
+    expect(screenJoined([{ output: { ok: true, value: "done", catalog_changed: true } }])).toBe(true);
+  });
+
   it("ignores other results and failed opens", () => {
     expect(screenJoined([{ output: { status: "screen_requested" } }])).toBe(false);
     expect(screenJoined([{ output: { status: "failure", catalog_changed: true } }])).toBe(false);

@@ -53,6 +53,7 @@ func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 func (s *Server) mountPublicSyncRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/sync/vault", deps.browserSync.Vault())
 	s.Router.Post(prefix+"/sync/vault", deps.browserSync.Vault())
+	s.Router.Delete(prefix+"/sync/vault", deps.browserSync.Vault())
 	s.Router.Get(prefix+"/sync/vaults", deps.browserSync.Vaults())
 	s.Router.Post(prefix+"/sync/vaults", deps.browserSync.Vaults())
 	s.Router.Get(prefix+"/sync/devices", deps.browserSync.Devices())

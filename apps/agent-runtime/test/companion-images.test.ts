@@ -66,3 +66,17 @@ it("delivers the same decoded bytes and labeled coordinate space to the pinned m
   expect(modelBytes).toEqual(bytes);
   expect(model.doStreamCalls).toHaveLength(1);
 });
+
+it("names the window in front on the primary screen and the focused window capture", () => {
+  const capture = { id: "a", mime_type: "image/png" as const, data_url: "data:image/png;base64,AA==", width: 2, height: 2, content_hash: "h" };
+  const labels = companionImageParts([
+    { ...capture, name: "screen1 — primary (Code: main.rs) (2 × 2)", screen: "screen1", primary: true },
+    { ...capture, name: "screen2 (2 × 2)", screen: "screen2", primary: false },
+    { ...capture, name: "window1 — Code: main.rs (2 × 2)", screen: "window1", primary: false, source: "desktop-window" },
+  ]).flatMap((part) => (part.type === "text" ? [part.text] : []));
+  expect(labels[0]).toContain('screen1 — primary focus (the window in front: "Code: main.rs")');
+  expect(labels[1]).toMatch(/^screen2: /);
+  expect(labels[2]).toContain('window1 — the focused window at full resolution, a closer look at the primary screen ("Code: main.rs")');
+  const cursor = companionImageParts([{ ...capture, name: "screen1 — primary (cursor) (2 × 2)", screen: "screen1", primary: true }]);
+  expect(cursor[0]).toMatchObject({ text: expect.stringContaining("screen1 — primary focus (cursor)") });
+});

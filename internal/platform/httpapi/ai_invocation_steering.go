@@ -33,6 +33,34 @@ func (s *AIService) SteerInvocation() http.HandlerFunc {
 		writeJSON(w, http.StatusAccepted, map[string]any{"sequence": event.Sequence, "state": "queued"})
 	}
 }
+// PauseInvocation and ResumeInvocation: the person takes over an agent's window and hands
+// it back. The run waits at its next boundary while paused, spending no model turns.
+func (s *AIService) PauseInvocation() http.HandlerFunc { return s.invocationHold("user.pause") }
+
+func (s *AIService) ResumeInvocation() http.HandlerFunc { return s.invocationHold("user.resume") }
+
+func (s *AIService) invocationHold(eventType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := s.requireUser(w, r)
+		if !ok {
+			return
+		}
+		var body struct {
+			Key string `json:"idempotencyKey"`
+		}
+		if decodeAIJSON(w, r, &body) != nil || body.Key == "" || len(body.Key) > 200 {
+			http.Error(w, "invalid request", 400)
+			return
+		}
+		payload, _ := json.Marshal(map[string]string{"type": eventType})
+		if _, err := s.database.CommitAIInvocationEvent(r.Context(), userID, chi.URLParam(r, "invocationID"), eventType+":"+body.Key, eventType, payload, ""); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "task_unavailable", "message": "This task has finished or is unavailable."})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"state": eventType})
+	}
+}
+
 func (s *SpacesService) AgentRuntimeSteering() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

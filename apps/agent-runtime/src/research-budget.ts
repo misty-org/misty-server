@@ -1,4 +1,5 @@
 import type { ModelMessage } from "ai";
+import { ledgerHeading } from "./requirements-review.js";
 
 // Research budget (docs/plans/agent-harness.md). Prompts say "be economical"; this layer makes
 // it true. It reads the run's own transcript before every model call, so a replayed run agrees,
@@ -58,13 +59,21 @@ function stageFor(cost: number, scale = 1): ResearchStage {
 }
 
 /**
- * A long request earns a longer budget: one base allowance for every two steps of the
- * run's own checklist (log_work_checklist), never less than one. A quick question has no
- * checklist and keeps the base budget (docs/plans/odysseys-campaign.md).
+ * A long request earns a longer budget: one base allowance for every step of the run's
+ * own checklist (log_work_checklist) or every requirement listed from the request, whichever
+ * is more, never less than one nor more than twenty. A quick question has no
+ * checklist and keeps the base budget; a six-part task gets about 36 lookups before the
+ * wrap-up note (docs/plans/odysseys-campaign.md).
  */
 export function budgetScale(messages: ModelMessage[]): number {
   const steps = new Set<string>();
+  // The requirements Misty listed from a long request (src/requirements-review.ts) count too:
+  // a run with 26 pages to verify outgrew an eight-step checklist's budget at a third of its turns.
+  let requirements = 0;
   for (const message of messages) {
+    if (message.role === "user" && typeof message.content === "string" && message.content.startsWith(ledgerHeading)) {
+      requirements = Math.max(requirements, message.content.split("\n").filter((line) => /^\s*\d+[.)]\s/.test(line)).length);
+    }
     if (message.role !== "assistant" || typeof message.content === "string") continue;
     for (const part of message.content) {
       if (part.type !== "tool-call" || part.toolName !== "log_work_checklist") continue;
@@ -72,11 +81,15 @@ export function budgetScale(messages: ModelMessage[]): number {
       for (const item of items) if (typeof item?.id === "string") steps.add(item.id);
     }
   }
-  return Math.max(1, Math.ceil(steps.size / 2));
+  return Math.min(20, Math.max(1, steps.size, requirements));
 }
 
-/** What the run has spent on research so far, read from its tool calls. */
-export function researchUse(messages: ModelMessage[], tools: ResearchTools): ResearchUse {
+/**
+ * What the run has spent on research so far, read from its tool calls. `minScale` is the largest
+ * budget the run has had: a summarized transcript loses the checklist and requirements that set
+ * it, and on October 20 a 200-turn run lost search and fetch at turn 29 that way.
+ */
+export function researchUse(messages: ModelMessage[], tools: ResearchTools, minScale = 1): ResearchUse {
   const use = { searches: 0, fetches: 0, repeats: 0 };
   const queries: Array<Set<string>> = [];
   const pages = new Set<string>();
@@ -99,7 +112,7 @@ export function researchUse(messages: ModelMessage[], tools: ResearchTools): Res
     }
   }
   const cost = use.searches + use.fetches + use.repeats;
-  return { ...use, cost, stage: stageFor(cost, budgetScale(messages)) };
+  return { ...use, cost, stage: stageFor(cost, Math.max(minScale, budgetScale(messages))) };
 }
 
 /** The tools to hide: both research tools once the budget is closed. */
@@ -122,11 +135,14 @@ export function researchNote(use: ResearchUse, messages: ModelMessage[], tools: 
   if (said) return undefined;
   const spent = `${use.searches} search${use.searches === 1 ? "" : "es"} and ${use.fetches} page read${use.fetches === 1 ? "" : "s"}` +
     (use.repeats ? `, ${use.repeats} of them repeats` : "");
-  // A fact a page holds behind a toggle, a click or JavaScript is found by opening the page, not by searching.
-  const browse = tools.open
-    ? ` Facts on pages a fetch could not show (behind a toggle, a click, JavaScript or a sign-in) are not found by searching: open them in your own tab with ${tools.open} and the first page's url, then go to each other page that needs it with browser_navigate. Browser tools are not counted here, so finish every page the request needs.`
-    : "";
+  // A run with its own tabs does its remaining work on pages, not in searches. "Answer now" made
+  // such runs give up: a 20-school task ended "not finished" after 24 lookups (October 19).
+  if (tools.open) {
+    if (use.stage === "wrap-up")
+      return `${marker}: this run has used ${spent}. Stop searching with new wording. Do the rest of the request on pages: open the sites you already know in your own tabs with ${tools.open}, use their own search boxes, menus and links (browser_steps), and read them with browser_snapshot or browser_extract, which are not counted here. Finish every part the request names before agent_finish.`;
+    return `${marker}: this run has used ${spent}, so web search and fetch are closed. Keep working in your own tabs: ${tools.open} opens a site's address, and its own search, menus and links reach the rest. Finish every part the request names, then call agent_finish and say plainly what you could not confirm.`;
+  }
   if (use.stage === "wrap-up")
-    return `${marker}: this run has used ${spent}. Answer now from what you have unless one specific fact is still missing. If it is, name it and make the single call that finds it; do not search again with new wording.${browse}`;
-  return `${marker}: this run has used ${spent}, so search and page reading are closed. Answer from what you found${tools.open ? ` or from pages you open with ${tools.open}` : ""}, say plainly what you could not confirm, and call agent_finish.`;
+    return `${marker}: this run has used ${spent}. Answer now from what you have unless one specific fact is still missing. If it is, name it and make the single call that finds it; do not search again with new wording.`;
+  return `${marker}: this run has used ${spent}, so search and page reading are closed. Answer from what you found, say plainly what you could not confirm, and call agent_finish.`;
 }

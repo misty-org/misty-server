@@ -131,7 +131,7 @@ func collaborationInstructions(state collaborationState) string {
 		return out.String()
 	}
 	if state.canAsk {
-		out.WriteString("\n\nWhen a missing decision would materially change the result, ask with conversation_ask_user instead of guessing; explore with read tools first and never ask whether to proceed.")
+		out.WriteString("\n\nWhen a detail is missing but a sensible default exists (dates, a quantity, a place, a budget), choose one, say in your answer what you assumed, and keep working. Ask with conversation_ask_user only when no reasonable default exists, or when the choice would spend money, send something or be hard to undo; explore with read tools first and never ask whether to proceed. When the request asks you to pick, rank or recommend, commit to a choice from the best evidence you found and say what you could not confirm; an answer that leaves the choice open does not do what was asked.")
 	}
 	out.WriteString("\n\nBefore multi-step work, publish a live checklist with log_work_checklist: 3-8 concrete steps the user can follow. Keep exactly one step in_progress, mark each done as you finish it, and mark steps you hand to another agent or a coding tool as delegated. Each turn publishes its own checklist; skip it for a single quick answer.")
 	if plan := state.approvedPlan(); plan != nil {

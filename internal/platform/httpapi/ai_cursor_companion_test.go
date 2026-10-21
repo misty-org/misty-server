@@ -197,3 +197,40 @@ func TestCursorCompanionAddsMistyGuideOnlyForMisty(t *testing.T) {
 		t.Fatal("a question naming Misty lacks the guide")
 	}
 }
+
+func TestCursorCompanionAcceptsTheFocusedWindowAfterTheDisplays(t *testing.T) {
+	image := companionTestCapture(t)
+	screen := func(label string, primary bool) aiDisplayCapture {
+		return aiDisplayCapture{aiCaptureAttachment: image, Screen: label, Primary: primary, Source: "desktop-display"}
+	}
+	window := aiDisplayCapture{aiCaptureAttachment: image, Screen: "window1", Source: "desktop-window"}
+	window.Name = "window1 — Code: " + strings.Repeat("t", 400)
+	body := aiInvocationInput{Mode: "companion", DisplayCaptures: []aiDisplayCapture{screen("screen1", true), screen("screen2", false), window}}
+	if err := validateCompanionInput(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len([]rune(body.DisplayCaptures[2].Name)) > 200 {
+		t.Fatal("window title must be bounded")
+	}
+	if !strings.Contains(companionSystemPrompt(body, nil), "point with :window1") {
+		t.Fatal("the model must learn what window1 is")
+	}
+	primaryWindow := window
+	primaryWindow.Primary = true
+	notWindow := window
+	notWindow.Source = "desktop-display"
+	for name, captures := range map[string][]aiDisplayCapture{
+		"window first":       {window, screen("screen1", true)},
+		"window alone":       {window},
+		"screen after":       {screen("screen1", true), window, screen("screen2", false)},
+		"two windows":        {screen("screen1", true), window, window},
+		"primary window":     {screen("screen1", false), primaryWindow},
+		"display source":     {screen("screen1", true), notWindow},
+		"window as screen 2": {screen("screen1", true), {aiCaptureAttachment: image, Screen: "window2", Source: "desktop-window"}},
+	} {
+		body := aiInvocationInput{Mode: "companion", DisplayCaptures: captures}
+		if validateCompanionInput(&body) == nil {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+}

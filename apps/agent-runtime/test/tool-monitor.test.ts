@@ -94,6 +94,32 @@ describe("tool monitor", () => {
     }
   });
 
+  it("plans around an own tab that did not open, twice, but not the person's tab", async () => {
+    const { order, monitor, call } = setup();
+    for (const id of ["a", "b"]) {
+      await call(id, "screen_open", { success: true, output: { status: "uncertain" } }, { url: "https://depop.com/x", newTab: true });
+      expect(order.stoppedReason).toBe("");
+      expect(order.resume()).toBe(true);
+    }
+    await call("c", "screen_open", { success: true, output: { status: "uncertain" } }, { url: "https://depop.com/x" });
+    expect(order.stoppedReason).not.toBe("");
+    const person = setup();
+    await person.call("d", "screen_open", { success: true, output: { status: "uncertain" } }, { target: "current_tab" });
+    expect(person.order.stoppedReason).not.toBe("");
+    expect(monitor.failures()).toHaveLength(1);
+  });
+
+  it("plans around a request for the person that nobody answered", async () => {
+    const pages = modelCatalog([{ name: "browser.request_user_action", description: "", inputSchema: schema }], ["agent_finish"]);
+    const order = serialToolLifecycle();
+    const monitor = toolMonitor({ catalog: pages, order, rejected: new Set(), checkpoint: async () => {} });
+    const toolCall = { toolCallId: "ask", toolName: "browser_request_user_action", input: { reason: "Cloudflare check" } };
+    await monitor.onStart({ toolCall });
+    await monitor.onEnd({ toolCall, durationMs: 1, success: false, error: "The tool could not complete this action." });
+    expect(order.stoppedReason).toBe("");
+    expect(monitor.failures()).toHaveLength(0);
+  });
+
   it("declines the rest of a response after a failure without running it", async () => {
     const { order, monitor } = setup(new Set(["write"]));
     const write = { toolCallId: "write", toolName: "note_update", input: {} };

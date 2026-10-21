@@ -174,4 +174,5 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/lease", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("renew")))
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/complete", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("complete")))
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/fail", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("fail")))
+	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/release", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("release")))
 }

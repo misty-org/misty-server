@@ -58,10 +58,23 @@ func validateCompanionInput(body *aiInvocationInput) error {
 		return errors.New("too many display captures")
 	}
 	seen := map[string]bool{}
-	primary := 0
+	primary, screens := 0, 0
 	for i := range body.DisplayCaptures {
 		capture := &body.DisplayCaptures[i]
-		if capture.Screen != fmt.Sprintf("screen%d", i+1) || seen[capture.Screen] {
+		// A lesson check adds a close-up of the step's region (ai_teach_mode.go).
+		focus := capture.Screen == teachFocusCapture && teachTurn(*body) && !capture.Primary
+		// The focused window is a closer look at the primary display, after the displays.
+		window := capture.Screen == companionWindowCapture
+		if window && (screens == 0 || capture.Primary || capture.Source != "desktop-window") {
+			return errors.New("the focused window must follow the displays")
+		}
+		if window {
+			capture.Name = truncateAgentRuntimeText(capture.Name, 200)
+		}
+		if !focus && !window {
+			screens++
+		}
+		if (!focus && !window && capture.Screen != fmt.Sprintf("screen%d", screens)) || seen[capture.Screen] || (seen[companionWindowCapture] && !window && !focus) {
 			return errors.New("display labels must be unique and ordered")
 		}
 		seen[capture.Screen] = true
@@ -81,6 +94,10 @@ func validateCompanionInput(body *aiInvocationInput) error {
 	}
 	return nil
 }
+
+// companionWindowCapture labels the full-resolution capture of the window in
+// front, which the desktop sends after its displays.
+const companionWindowCapture = "window1"
 
 // maxScreenControls matches the client's limit for one capture.
 const maxScreenControls = 150
@@ -116,7 +133,7 @@ func sanitizeScreenControls(controls []aiScreenControl, width, height int) []aiS
 // tools is the run's catalog, which decides how a screen question without
 // captures is answered.
 func companionSystemPrompt(body aiInvocationInput, tools []string) string {
-	prompt := "\n" + companionTeachPrompt + mistyGuideSection(body)
+	prompt := "\n" + companionTeachPrompt + "\n" + strings.TrimSpace(companionSketchPrompt) + "\n" + mistyGuideSection(body)
 	prompt += `
 The screenshots show what the person is looking at; judge whether they matter. For a question the screen answers (what is this, where is it, how do I do this here), answer from the images and point. When the question is about something on screen but needs facts the screen doesn't show (who is in this video, what does this cost, what is this error about), identify it from the screen, then use web_search and web_fetch to answer; never open a browser or take the screen just to look something up. Do not click or navigate merely to explain visible content.
 When the user asks you to do something, use the tools listed for this run; you do not need per-action approval. The capability notes below say which browser or screen is attached. Use the attached control surface for requested screen actions. Open reference links only from user-provided URLs or actual search/tool source URLs. Never invent citations. Never claim an action succeeded without confirmed tool results. Capture the attached control surface again after every action before reporting completion; if the display screenshot is no longer current or you only have a page crop, use [POINT:none], not stale display coordinates. Pause and explain when sign-in or other user participation is needed. Completed actions remain in history.
@@ -124,6 +141,11 @@ There are no Team/Auto interaction modes. Decide from the request whether to tea
 `
 	switch {
 	case len(body.DisplayCaptures) > 0:
+		for _, capture := range body.DisplayCaptures {
+			if capture.Screen == companionWindowCapture {
+				prompt += "window1 is the window the person is working in, captured again at full resolution from the primary screen. Read small text from it, and point with :window1 when the element is clearer there.\n"
+			}
+		}
 	case agentToolNameAllowed(tools, screenLookTool):
 		prompt += "No display captures accompany this turn yet. For a question about what is on the user's screen, such as where something is or how to do something there, call screen_look first; Misty captures the screens and continues with them attached, so you can answer and point. Do not guess from old history or treat DOM as desktop pixels.\n"
 	default:
@@ -140,7 +162,7 @@ func companionConversationHistory(turns []db.AIConversationTurnRecord, current s
 		if turn.InvocationID == current || strings.TrimSpace(turn.Prompt) == "" {
 			continue
 		}
-		turn.Reply = agentSpeechPoint.ReplaceAllString(turn.Reply, "")
+		turn.Reply = agentSpeechPoint.ReplaceAllString(agentSpeechLessonTags.ReplaceAllString(turn.Reply, ""), "")
 		if turn.State == "failed" {
 			if strings.TrimSpace(turn.Reply) == "" {
 				turn.Reply = strings.TrimSpace(turn.Failure)

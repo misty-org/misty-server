@@ -20,6 +20,7 @@ function catalogChanged(output: unknown, depth = 0): boolean {
   }
   if (typeof output !== "object") return false;
   const record = output as Record<string, unknown>;
-  if (record.catalog_changed === true && record.status === "open") return true;
+  // A screen reports status open; a browser_run program that opened tabs reports no status.
+  if (record.catalog_changed === true && (record.status ?? "open") === "open") return true;
   return Object.values(record).some((value) => typeof value === "object" || typeof value === "string" ? catalogChanged(value, depth + 1) : false);
 }

@@ -58,3 +58,17 @@ it("moves one Anthropic cache breakpoint to the newest message", () => {
   const openai: ModelMessage[] = [{ role: "user", content: "a" }];
   expect(withCacheBreakpoint(openai, "openai/gpt-6-luna")).toBe(openai);
 });
+
+it("also marks where the previous request ended, so a long turn still finds its cache", () => {
+  const messages: ModelMessage[] = [
+    { role: "user", content: "Go" },
+    { role: "assistant", content: "First" },
+    { role: "user", content: "Previous end" },
+    { role: "assistant", content: "Second" },
+    { role: "user", content: "New end" },
+  ];
+  const marked = withCacheBreakpoint(messages, "anthropic/claude-haiku-5-5")
+    .map((message, index) => (message.providerOptions?.anthropic ? index : -1))
+    .filter((index) => index >= 0);
+  expect(marked).toEqual([2, 4]);
+});

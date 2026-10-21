@@ -30,8 +30,6 @@ type screenRequest struct {
 	// Chosen reports that the user's words named the place; otherwise the
 	// desktop reuses an open tab that matches before using Location.
 	Chosen bool `json:"chosen,omitempty"`
-	// Remote is a browser session another device opened for this request.
-	Remote *remoteScreen `json:"remote,omitempty"`
 }
 
 // screenToolRegistrations are offered to desktop runs only; other surfaces
@@ -44,18 +42,20 @@ func (s *SpacesService) screenToolRegistrations(record *db.AIInvocationRecord) [
 	reason := map[string]any{"type": "string", "minLength": 3, "maxLength": 300, "description": "What the screen is for, in a few words the user will see"}
 	return []agenttools.Registration{
 		{Descriptor: screenDescriptor(screenOpenTool,
-			"Open a screen for this task. Pick the target from the user's words: current_tab when they mean the page in front of them "+
-				"(\"this page\", \"this tab\", \"here\"); new_tab for a website in a new tab beside their work (\"in a new tab\"); window for "+
+			"Open a screen for this task. You work only in tabs of your own, never in the person's tabs (to see their page, use screen_look). "+
+				"Pick the target from the user's words: new_tab for a website in a new tab of your own (\"in a new tab\"); window for "+
 				"a separate Misty window that leaves theirs alone (\"in a new window\", \"in the background\", \"on your own\"); desktop "+
 				"for other apps on their Mac or the whole screen, such as Numbers, Finder or Mail, where Misty works with its own cursor "+
 				"after they allow it. Omit target when they did not say, or when they mean a site they already have open (\"my Gmail tab\"), "+
 				"and pass that site's url: Misty reuses an open tab that matches, otherwise opens one where they prefer. "+
 				"If such a screen is already attached, use browser_act with its scopeId instead. With no target, and a url when you know "+
 				"the page, this opens your own browser tab in the background and keeps this run going: browser tools act on it from "+
-				"your next step. A named target ends the current response; Misty opens that screen and continues this conversation "+
+				"your next step. Call it again with another url to keep that page open in another tab of your own (up to 32), as when "+
+				"the person wants pages left open; for pages you only read, navigate a tab you have. new_tab and window open such tabs too. "+
+				"desktop ends the current response; Misty opens that screen and continues this conversation "+
 				"with it attached. Do not ask the user where to work.",
 			map[string]any{"reason": reason,
-				"target": map[string]any{"type": "string", "enum": []string{"current_tab", "new_tab", "window", "desktop"}, "description": "Where to work. Omit for the user's preferred place for new screens."},
+				"target": map[string]any{"type": "string", "enum": []string{"new_tab", "window", "desktop"}, "description": "Where to work. Omit for the user's preferred place for new screens."},
 				"url":    map[string]any{"type": "string", "maxLength": 2048, "description": "Optional https page to open first (new_tab or window)"}}, "reason"),
 			Handler: s.screenRequestHandler(screenOpenTool)},
 		{Descriptor: screenDescriptor(screenLookTool,
@@ -63,6 +63,10 @@ func (s *SpacesService) screenToolRegistrations(record *db.AIInvocationRecord) [
 				"Ends the current response; Misty captures the screen and continues this conversation with the image attached.",
 			map[string]any{"reason": reason}, "reason"),
 			Handler: s.screenRequestHandler(screenLookTool)},
+		s.screenCloseRegistration(),
+		s.browserRunRegistration(),
+		// app.window (app_window_tool.go) returns with the agent browser, which shows Misty's own
+		// pages (docs/design/agent-browser/BRIEF.md); there is no agent window to open them in now.
 	}
 }
 
@@ -88,6 +92,11 @@ func (s *SpacesService) screenRequestHandler(tool string) agenttools.Handler {
 		if input.URL != "" && !strings.HasPrefix(input.URL, "https://") && !strings.HasPrefix(input.URL, "http://") {
 			return nil, serveragent.ErrInvalidRequest("url must be an http or https address.")
 		}
+		if input.URL != "" {
+			if err := addressWithoutHost(ctx, input.URL); err != nil {
+				return nil, err
+			}
+		}
 		record, err := s.database.AIInvocationByID(ctx, invocation.UserID, invocation.RunID)
 		if err != nil {
 			return nil, err
@@ -111,10 +120,11 @@ func (s *SpacesService) screenRequestHandler(tool string) agenttools.Handler {
 				kind = "desktop"
 				input.URL = ""
 			case "current_tab":
-				input.URL = ""
+				// Agents act only in their own tabs (docs/plans/agent-harness-v3.md, decided October 20).
+				return nil, serveragent.ErrInvalidRequest("You work only in tabs of your own, never in the person's. Open the page you need in your own tab (screen_open with its url and no target); to see what the person sees, use screen_look.")
 			case "", "new_tab", "window":
 			default:
-				return nil, serveragent.ErrInvalidRequest("target must be current_tab, new_tab, window or desktop.")
+				return nil, serveragent.ErrInvalidRequest("target must be new_tab, window or desktop.")
 			}
 			if remote, err := s.remoteScreenOpen(ctx, record, body, request.ID, input.URL, input.Reason, desktop, input.Target); remote != nil || err != nil {
 				return remote, err
@@ -139,12 +149,15 @@ func (s *SpacesService) screenRequestHandler(tool string) agenttools.Handler {
 		// The user's words override where new screens usually open. Locations:
 		// current (their tab), window (a new tab in their window), separate.
 		switch input.Target {
-		case "current_tab":
-			screen.Location = "current"
 		case "new_tab":
 			screen.Location = "window"
 		case "window":
 			screen.Location = "separate"
+		}
+		// An agent never works in the person's own tab, whatever the setting says: a new tab of
+		// its own instead (docs/plans/agent-harness-v3.md, decided October 20).
+		if screen.Location == "current" && kind != "look" {
+			screen.Location = "window"
 		}
 		if s.aiInvocations != nil {
 			if _, err := s.aiInvocations.restoreDurable(ctx, *record); err != nil {

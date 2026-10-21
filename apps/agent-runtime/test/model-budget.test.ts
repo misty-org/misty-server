@@ -11,15 +11,15 @@ it("uses the smaller authoritative deadline and remaining allowance", () => {
 
 it("does not replace missing or invalid new-budget responses with an unlimited model call", () => {
   const now=Date.now();
-  for (const value of [{}, { version: 1, active: false, remaining_ms: 10 }, { version: 1, active: true, remaining_ms: 1_800_001, deadline: new Date(now+2000).toISOString() }]) {
+  for (const value of [{}, { version: 1, active: false, remaining_ms: 10 }, { version: 1, active: true, remaining_ms: 14_400_001, deadline: new Date(now+2000).toISOString() }]) {
     expect(() => modelTimeout(value as never,now,now+5000)).toThrow("invalid_execution_budget");
   }
 });
 
 it("rejects invalid turn budgets and preserves legacy default", () => {
   expect(modelTurnLimit(undefined)).toBe(20);
-  expect(modelTurnLimit(120)).toBe(120);
-  for (const value of [0, -1, 121, 1.5, NaN, Infinity, null, "120"]) {
+  expect(modelTurnLimit(200)).toBe(200);
+  for (const value of [0, -1, 201, 1.5, NaN, Infinity, null, "120"]) {
     expect(() => modelTurnLimit(value as number)).toThrow("invalid_model_turn_limit");
   }
 });

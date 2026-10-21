@@ -117,6 +117,23 @@ func (db *Database) AIInvocationContexts(ctx context.Context, userID, invocation
 	return items, err
 }
 
+// DetachAIInvocationContext ends one attached context of a run, such as an agent's own tab
+// it closed; it reports whether one was attached.
+func (db *Database) DetachAIInvocationContext(ctx context.Context, userID, invocationID, opaqueRef string) (bool, error) {
+	detached := false
+	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `UPDATE ai_invocation_contexts SET state='detached', updated_at=NOW()
+			WHERE invocation_id=$1 AND user_id=$2 AND opaque_ref=$3 AND state='attached'`, invocationID, userID, opaqueRef)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		detached = count > 0
+		return err
+	})
+	return detached, err
+}
+
 func browserOnlyAgentCapabilities(raw json.RawMessage) bool {
 	var capabilities []string
 	if json.Unmarshal(raw, &capabilities) != nil || len(capabilities) == 0 {

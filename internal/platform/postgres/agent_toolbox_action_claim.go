@@ -25,7 +25,8 @@ type agentToolboxJournalRow struct {
 func (db *Database) claimAgentToolboxAction(ctx context.Context, action *AgentToolboxAction, fingerprint string, persistedRequest json.RawMessage) (agentToolboxClaim, error) {
 	var claim agentToolboxClaim
 	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		if action.RequireSettledRun {
+		// Reading never adds an effect, and looking is how an uncertain one is reconciled.
+		if action.RequireSettledRun && action.Risk != "read" {
 			if err := requireSettledAgentToolboxRun(ctx, tx, action); err != nil {
 				return err
 			}
@@ -61,6 +62,13 @@ func (db *Database) claimAgentToolboxAction(ctx context.Context, action *AgentTo
 	return claim, err
 }
 
+// harmlessPageAction matches a browser page action that was not marked consequential: a
+// click, toggle or typing in the agent's own page. Sends, posts, payments and deletions
+// need allowConsequential (the page layer refuses them otherwise), so an uncertain
+// outcome here cannot have done one and need not hold up the rest of the run.
+const harmlessPageAction = `tool_name LIKE 'browser.%' AND tool_name NOT LIKE 'browser.workspace.%'
+		AND NOT jsonb_path_exists(COALESCE(request,'{}'::jsonb), 'lax $.**.allowConsequential ? (@ == true)')`
+
 // requireSettledAgentToolboxRun locks the run and rejects the action while an earlier effect is unconfirmed.
 func requireSettledAgentToolboxRun(ctx context.Context, tx *sql.Tx, action *AgentToolboxAction) error {
 	var state string
@@ -75,7 +83,8 @@ func requireSettledAgentToolboxRun(ctx context.Context, tx *sql.Tx, action *Agen
 		return ErrSpaceConflict
 	}
 	var pending string
-	err := tx.QueryRowContext(ctx, `SELECT idempotency_key FROM agent_toolbox_action_journal WHERE run_id=$1 AND user_id=$2 AND idempotency_key<>$3 AND risk<>'read' AND (state IN ('started','unknown') OR (state='failed' AND COALESCE(error_code,'')<>'tool_not_attempted')) ORDER BY created_at,idempotency_key LIMIT 1`, action.RunID, action.UserID, action.IdempotencyKey).Scan(&pending)
+	err := tx.QueryRowContext(ctx, `SELECT idempotency_key FROM agent_toolbox_action_journal WHERE run_id=$1 AND user_id=$2 AND idempotency_key<>$3 AND risk<>'read' AND (state IN ('started','unknown') OR (state='failed' AND COALESCE(error_code,'')<>'tool_not_attempted'))
+		AND NOT (`+harmlessPageAction+`) ORDER BY created_at,idempotency_key LIMIT 1`, action.RunID, action.UserID, action.IdempotencyKey).Scan(&pending)
 	if err == nil {
 		return &PendingRunEffect{IdempotencyKey: pending}
 	}

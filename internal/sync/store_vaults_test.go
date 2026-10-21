@@ -80,4 +80,32 @@ func TestBrowserSyncVaultPerSpace(t *testing.T) {
 	if vaults, err = database.BrowserSyncVaults(ctx, "owner"); err != nil || len(vaults) != 1 {
 		t.Fatalf("vault outlived its Space: %+v %v", vaults, err)
 	}
+
+	// Deleting removes every vault, so the account can create a new personal one.
+	if _, err := database.Conn.Exec(`INSERT INTO spaces(id,owner_user_id) VALUES('team','other');
+		INSERT INTO space_members(space_id,user_id,role) VALUES('team','other','owner'),('team','owner','member')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.CreateBrowserSyncVault(ctx, "owner", "team", spaceRoot, SpaceVaultKeys(syncTestEnvelope()), spaceGrant(device)); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.CreateBrowserSyncVault(ctx, "other", "", spaceRoot, PasswordVaultKeys(syncTestKeyEnvelope()), spaceGrant(device)); err != nil {
+		t.Fatal(err)
+	}
+	if deleted, err := database.DeleteBrowserSyncVaults(ctx, "owner"); err != nil || !deleted {
+		t.Fatalf("delete vaults: %v %v", deleted, err)
+	}
+	if vaults, err = database.BrowserSyncVaults(ctx, "owner"); err != nil || len(vaults) != 0 {
+		t.Fatalf("vaults outlived deletion: %+v %v", vaults, err)
+	}
+	if vaults, err = database.BrowserSyncVaults(ctx, "other"); err != nil || len(vaults) != 1 {
+		t.Fatalf("deletion reached another account: %+v %v", vaults, err)
+	}
+	if deleted, err := database.DeleteBrowserSyncVaults(ctx, "owner"); err != nil || deleted {
+		t.Fatalf("second delete: %v %v", deleted, err)
+	}
+	fresh, _ := syncTestGrant(uuid.NewString(), personalKey)
+	if err := database.CreateBrowserSyncVault(ctx, "owner", "", personalRoot, PasswordVaultKeys(syncTestKeyEnvelope()), fresh); err != nil {
+		t.Fatalf("new vault after delete: %v", err)
+	}
 }

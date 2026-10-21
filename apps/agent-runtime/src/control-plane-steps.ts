@@ -27,7 +27,7 @@ export async function fetchContext(identity: RuntimeIdentity): Promise<SpaceTask
 export async function takeSteering(identity: RuntimeIdentity, boundary: string, close: boolean) {
   "use step";
   try {
-    return await controlPlaneRequest<{ messages: Array<{ sequence: number; text: string }>; closed: boolean }>(
+    return await controlPlaneRequest<{ messages: Array<{ sequence: number; text: string }>; closed: boolean; paused?: boolean }>(
       identity, "steering", { boundary, close }, `${identity.mistyRunId}:steering:${boundary}`,
     );
   } catch (error) {

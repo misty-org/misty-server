@@ -15,6 +15,9 @@ type AISteeringMessage struct {
 type AISteeringBatch struct {
 	Messages []AISteeringMessage `json:"messages"`
 	Closed   bool                `json:"closed"`
+	// Paused is set while the person has taken over the agent's window: the run waits at
+	// its boundary, without model turns, until they resume it.
+	Paused bool `json:"paused"`
 }
 
 // TakeAIInvocationSteering claims an immutable batch at a durable runtime boundary.
@@ -56,7 +59,10 @@ func (db *Database) TakeAIInvocationSteering(ctx context.Context, userID, runID,
 			return err
 		}
 		rows.Close()
-		out.Closed = closeIntake && len(out.Messages) == 0
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT event_type FROM ai_invocation_events WHERE invocation_id=$1 AND event_type IN ('user.pause','user.resume') ORDER BY sequence DESC LIMIT 1),'')='user.pause'`, invocationID).Scan(&out.Paused); err != nil {
+			return err
+		}
+		out.Closed = closeIntake && len(out.Messages) == 0 && !out.Paused
 		through := int64(0)
 		if len(out.Messages) > 0 {
 			through = out.Messages[len(out.Messages)-1].Sequence
@@ -69,7 +75,7 @@ func (db *Database) TakeAIInvocationSteering(ctx context.Context, userID, runID,
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence),0)+1 FROM ai_invocation_events WHERE invocation_id=$1`, invocationID).Scan(&sequence); err != nil {
 			return err
 		}
-		payload, _ := json.Marshal(map[string]any{"id": strconv.FormatInt(sequence, 10), "type": eventType, "messages": out.Messages, "closed": out.Closed, "through": through})
+		payload, _ := json.Marshal(map[string]any{"id": strconv.FormatInt(sequence, 10), "type": eventType, "messages": out.Messages, "closed": out.Closed, "paused": out.Paused, "through": through})
 		_, err = tx.ExecContext(ctx, `INSERT INTO ai_invocation_events(invocation_id,sequence,event_type,payload,receipt_key) VALUES($1,$2,$3,$4,$5)`, invocationID, sequence, eventType, payload, "steering-boundary:"+key)
 		return err
 	})

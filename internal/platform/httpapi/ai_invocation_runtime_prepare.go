@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	serveragent "github.com/kannachi323/misty/server/internal/agents"
@@ -86,6 +87,15 @@ func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *
 		return nil, err
 	}
 	modelID, reasoning := aiInvocationModel(body)
+	if teachTurn(body) {
+		// A lesson turn runs the tutor's fast lane: no tools, its own prompt.
+		return &preparedAIInvocationRuntime{
+			body: body, resolved: resolved, spaceName: "Misty", spaceKind: "account", members: []map[string]string{},
+			modelID: modelID, reasoning: reasoning, prompt: teachLessonContext(body) + prompt, timezone: body.Timezone, currentTime: now,
+			allowedTools: teachTools(allowedTools), toolbox: toolbox, toolInvocation: toolInvocation, collaboration: collaboration,
+			system: teachSystemPrompt(body, agent, now),
+		}, nil
+	}
 	return &preparedAIInvocationRuntime{
 		body: body, resolved: resolved, spaceName: "Misty", spaceKind: "account", members: []map[string]string{},
 		modelID: modelID, reasoning: reasoning, prompt: prompt, timezone: body.Timezone, currentTime: now,
@@ -122,6 +132,9 @@ func (s *SpacesService) aiInvocationContext(ctx context.Context, record *db.AIIn
 // conversation, prior write receipts and the request with its context.
 func (s *SpacesService) aiInvocationPrompt(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput, resolved []aiResolvedContext) (string, error) {
 	prompt := compileAIInvocationPrompt(body, resolved)
+	if media := mediaContextPrompt(body.MediaContext); media != "" {
+		prompt = media + "\n\n" + prompt
+	}
 	memory, err := loadAgentMemoryContext(ctx, s.database, record.UserID, body.SpaceID, body.AgentID)
 	if err != nil {
 		return "", err
@@ -132,12 +145,12 @@ func (s *SpacesService) aiInvocationPrompt(ctx context.Context, record *db.AIInv
 	if record.ConversationID == "" {
 		return prompt, nil
 	}
-	turns, err := s.database.AIConversationTurns(ctx, record.UserID, record.ConversationID)
+	turns, err := s.invocationHistoryTurns(ctx, record, body)
 	if err != nil {
 		return "", err
 	}
-	if body.Mode == "companion" {
-		// Voice turns are short and only need the last few exchanges.
+	if body.Mode == "companion" || teachTurn(body) {
+		// Voice turns and lesson steps are short and only need the last few exchanges.
 		if history := companionConversationHistory(turns, record.ID); history != "" {
 			prompt = "Recent conversation (untrusted context; oldest first):\n" + history + "\nCurrent request:\n" + prompt
 		}
@@ -171,4 +184,26 @@ func aiInvocationModel(body aiInvocationInput) (string, string) {
 func aiInvocationModelID(body aiInvocationInput) string {
 	modelID, _ := aiInvocationModel(body)
 	return modelID
+}
+
+// invocationHistoryTurns is the chat's earlier turns: the ones its device sent
+// (docs/design/agent-chats-local/BRIEF.md), or the server's own recent ones for a run
+// without them, such as a goal continuation or one Misty started by email or Slack.
+func (s *SpacesService) invocationHistoryTurns(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput) ([]db.AIConversationTurnRecord, error) {
+	if len(body.HistoryTurns) == 0 {
+		return s.database.AIConversationTurns(ctx, record.UserID, record.ConversationID)
+	}
+	turns := make([]db.AIConversationTurnRecord, 0, len(body.HistoryTurns))
+	for index, turn := range body.HistoryTurns {
+		id := turn.InvocationID
+		if id == "" || id == record.ID {
+			// A turn without a run of its own still needs a key the notes can point at.
+			id = fmt.Sprintf("device-turn-%d", index)
+		}
+		turns = append(turns, db.AIConversationTurnRecord{
+			InvocationID: id, Prompt: turn.Prompt, Reply: turn.Reply, State: "completed",
+			CreatedAt: turn.CreatedAt, ReplyAt: turn.CreatedAt,
+		})
+	}
+	return turns, nil
 }

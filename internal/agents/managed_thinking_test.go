@@ -46,3 +46,20 @@ func TestRuntimeReasoningStillMapsEveryLevel(t *testing.T) {
 		t.Fatal("a reasoning level was dropped from the model request")
 	}
 }
+
+func TestFreeEvalModelsOnlyWithTheDevelopmentSwitch(t *testing.T) {
+	t.Setenv("MISTY_ENVIRONMENT", "development")
+	t.Setenv("MISTY_ALLOW_MODEL_OVERRIDE", "1")
+	if !FreeEvalModel("nim/moonshotai/kimi-k2.6") || FreeEvalModel("anthropic/claude-haiku-5.5") {
+		t.Fatal("only nim/ ids are free eval models")
+	}
+	t.Setenv("MISTY_ALLOW_MODEL_OVERRIDE", "")
+	if FreeEvalModel("nim/moonshotai/kimi-k2.6") {
+		t.Fatal("a free eval model needs the development switch")
+	}
+	t.Setenv("MISTY_ENVIRONMENT", "production")
+	t.Setenv("MISTY_ALLOW_MODEL_OVERRIDE", "1")
+	if FreeEvalModel("nim/moonshotai/kimi-k2.6") {
+		t.Fatal("production never runs a free eval model")
+	}
+}

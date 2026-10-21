@@ -103,6 +103,12 @@ type AgentSessionSummary struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 	// LastReadAt is when the user last saw the conversation; nil if never.
 	LastReadAt *time.Time `json:"last_read_at,omitempty"`
+	// KeptOnDeviceID is the device that keeps this chat; empty while none does yet.
+	KeptOnDeviceID string `json:"-"`
+	// Legacy marks a chat from before chats moved to devices; each device copies it once.
+	Legacy bool `json:"-"`
+	// RecentRun reports a turn in the last two days, whose run the server still holds.
+	RecentRun bool `json:"-"`
 }
 
 // ListAgentSessions returns the account's retained sessions, newest first.
@@ -114,7 +120,9 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 	err := db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
 			SELECT id, title, active_until > NOW(), ''::text,
-				conversation_kind,origin_surface,origin_href,privacy_boundary,model_id,model_override,reasoning_effort,created_at,updated_at,COALESCE(agent_id,''),state <> '{}'::jsonb,COALESCE(folder_id,''),last_read_at
+				conversation_kind,origin_surface,origin_href,privacy_boundary,model_id,model_override,reasoning_effort,created_at,updated_at,COALESCE(agent_id,''),state <> '{}'::jsonb,COALESCE(folder_id,''),last_read_at,
+				COALESCE(kept_on_device_id,''),legacy,
+				EXISTS(SELECT 1 FROM ai_invocations i WHERE i.user_id = misty_ask_conversations.user_id AND i.conversation_id = misty_ask_conversations.id AND i.created_at > NOW() - INTERVAL '2 days')
 			FROM misty_ask_conversations
 			WHERE user_id = $1 AND deleted_at IS NULL
 			ORDER BY updated_at DESC
@@ -125,7 +133,7 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 		defer rows.Close()
 		for rows.Next() {
 			var item AgentSessionSummary
-			if err := rows.Scan(&item.ID, &item.Title, &item.Active, &item.SpaceID, &item.ConversationKind, &item.OriginSurface, &item.OriginHref, &item.PrivacyBoundary, &item.ModelID, &item.ModelOverride, &item.ReasoningEffort, &item.CreatedAt, &item.UpdatedAt, &item.AgentID, &item.HasLegacySession, &item.FolderID, &item.LastReadAt); err != nil {
+			if err := rows.Scan(&item.ID, &item.Title, &item.Active, &item.SpaceID, &item.ConversationKind, &item.OriginSurface, &item.OriginHref, &item.PrivacyBoundary, &item.ModelID, &item.ModelOverride, &item.ReasoningEffort, &item.CreatedAt, &item.UpdatedAt, &item.AgentID, &item.HasLegacySession, &item.FolderID, &item.LastReadAt, &item.KeptOnDeviceID, &item.Legacy, &item.RecentRun); err != nil {
 				return err
 			}
 			items = append(items, item)
@@ -133,6 +141,31 @@ func (db *Database) ListAgentSessions(ctx context.Context, userID string) ([]Age
 		return rows.Err()
 	})
 	return items, err
+}
+
+// ErrConversationKeptElsewhere: another of the person's devices keeps this chat.
+var ErrConversationKeptElsewhere = errors.New("conversation is kept on another device")
+
+// KeepConversationOnDevice records the device that keeps a chat from now on: the
+// one that started it, or the first to take it from the inbox. Once a device keeps
+// it, the chat's runs are no longer retained past their own expiry, since the device
+// holds the transcript. A chat another device keeps is refused.
+func (db *Database) KeepConversationOnDevice(ctx context.Context, userID, conversationID, deviceID string) error {
+	return db.TestingWithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		var kept sql.NullString
+		err := tx.QueryRowContext(ctx, `SELECT kept_on_device_id FROM misty_ask_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL FOR UPDATE`, conversationID, userID).Scan(&kept)
+		if errors.Is(err, sql.ErrNoRows) {
+			return serveragent.ErrPersistedSessionNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if kept.Valid && kept.String != deviceID {
+			return ErrConversationKeptElsewhere
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE misty_ask_conversations SET kept_on_device_id=$3 WHERE id=$1 AND user_id=$2`, conversationID, userID, deviceID)
+		return err
+	})
 }
 
 func (db *Database) UpdateMistyConversationModel(ctx context.Context, userID, conversationID, modelID, reasoningEffort, catalogVersion string) error {

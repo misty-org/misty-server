@@ -234,3 +234,28 @@ func TestDelegationChildrenReportStateAndAnswers(t *testing.T) {
 		t.Fatal("children leaked across accounts")
 	}
 }
+
+func TestAClaimNotBegunWithinEightSecondsIsQueuedAgain(t *testing.T) {
+	database := agenticTestDB(t)
+	if _, err := database.Conn.Exec(`ALTER TABLE workflow_device_node_jobs ADD COLUMN control_version int NOT NULL DEFAULT 2,
+  ADD COLUMN deadline_at timestamptz DEFAULT NOW()+interval '30 seconds', ADD COLUMN cancel_requested_at timestamptz,
+  ADD COLUMN last_heartbeat_at timestamptz, ADD COLUMN completed_at timestamptz, ADD COLUMN error_code text;
+ INSERT INTO workflow_device_node_jobs(id,user_id,invocation_id,operation,state,leased_device_id,lease_token_hash,lease_expires_at,delivery_attempts,last_heartbeat_at,execution_started_at) VALUES
+  ('lost','owner','inv','browser.session','leased','device_a','h',NOW()+interval '50 seconds',1,NOW()-interval '9 seconds',NULL),
+  ('fresh','owner','inv','browser.session','leased','device_a','h',NOW()+interval '58 seconds',1,NOW()-interval '1 second',NULL),
+  ('begun','owner','inv','browser.steps','executing','device_a','h',NOW()+interval '50 seconds',1,NOW()-interval '9 seconds',NOW())`); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.ReapWorkflowDeviceJobs("owner"); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string]string{"lost": "queued", "fresh": "leased", "begun": "executing"} {
+		var state string
+		if err := database.Conn.QueryRow(`SELECT state FROM workflow_device_node_jobs WHERE id=$1`, id).Scan(&state); err != nil {
+			t.Fatal(err)
+		}
+		if state != want {
+			t.Fatalf("%s: got %s, want %s", id, state, want)
+		}
+	}
+}

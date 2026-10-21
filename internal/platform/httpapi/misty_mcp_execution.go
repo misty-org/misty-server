@@ -29,7 +29,9 @@ func (s *SpacesService) executeAIInvocationMCPTool(ctx context.Context, access *
 		}
 		return s.requestAIUserAction(ctx, access.record.UserID, access.record.ID, call)
 	}
-	if strings.HasPrefix(call.Name, "browser.") {
+	// A tab's tools wait for its device here; browser.run waits on its own job at the session's
+	// workspace scope, as screen_open does (browser_run.go).
+	if strings.HasPrefix(call.Name, "browser.") && call.Name != browserRunTool {
 		if err := s.aiBrowserDeviceWait(ctx, access, call, false); err != nil {
 			return nil, err
 		}

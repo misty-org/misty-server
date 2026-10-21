@@ -83,16 +83,20 @@ export function pruneStalePageSnapshots(messages: ModelMessage[]): { messages: M
 }
 
 /**
- * Marks the newest message as an Anthropic cache breakpoint and clears older
- * marks; Anthropic allows four and caches everything before the newest one.
- * Other providers cache unchanged prefixes on their own.
+ * Marks the newest message as an Anthropic cache breakpoint, and the end of the previous
+ * request (the message before the newest assistant turn), clearing older marks. Anthropic
+ * allows four. It finds an earlier cache entry only within about 20 blocks of a breakpoint, and
+ * a turn of parallel calls with pushed page states adds more, so the second mark keeps the
+ * previous request's prefix in reach. Other providers cache unchanged prefixes on their own.
  */
 export function withCacheBreakpoint(messages: ModelMessage[], modelId: string): ModelMessage[] {
   if (!modelId.startsWith("anthropic/") || !messages.length) return messages;
+  const lastAssistant = messages.findLastIndex((message) => message.role === "assistant");
+  const marked = new Set([messages.length - 1, lastAssistant - 1].filter((index) => index >= 0));
   return messages.map((message, index) => {
     const options = { ...(message.providerOptions ?? {}) } as Record<string, Record<string, unknown>>;
     const { cacheControl: _previous, ...anthropic } = options.anthropic ?? {};
-    if (index === messages.length - 1) anthropic.cacheControl = { type: "ephemeral" };
+    if (marked.has(index)) anthropic.cacheControl = { type: "ephemeral" };
     if (Object.keys(anthropic).length) options.anthropic = anthropic;
     else delete options.anthropic;
     const { providerOptions: _old, ...rest } = message;

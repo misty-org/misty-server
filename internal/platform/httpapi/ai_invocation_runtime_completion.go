@@ -182,7 +182,13 @@ func (s *SpacesService) agentRuntimeCompleteAIInvocation(w http.ResponseWriter, 
 			body.Status = "incomplete"
 			body.ErrorCode = "unconfirmed_effects"
 			body.ErrorMessage = "Some actions have not been confirmed. Review the run before retrying."
-			body.Text = body.ErrorMessage
+			// The answer stays, with the warning after it: replacing it left the person with
+			// only the warning for a run that had done its work (October 19).
+			if strings.TrimSpace(body.Text) == "" {
+				body.Text = body.ErrorMessage
+			} else {
+				body.Text = strings.TrimSpace(body.Text) + "\n\n" + body.ErrorMessage
+			}
 		}
 	}
 	// Count the run against its conversation's goal and continue it when due.

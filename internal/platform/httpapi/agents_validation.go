@@ -154,6 +154,16 @@ func (s *AgentsService) WorkflowNodeLeaseAction(action string) http.HandlerFunc 
 				state = "uncertain"
 			}
 			job, err = s.database.FinishWorkflowDeviceNodeJob(userID, deviceID, jobID, body.LeaseToken, state, nil, body.ErrorCode)
+		case "release":
+			// A claim that came back after its worker stopped (a restart, a sign-in change) was
+			// dropped and stayed leased until the run gave up on it, 30 s later. The device
+			// puts it back instead, before it began, so the next claim takes it at once.
+			if err := s.database.ReleaseUnstartedWorkflowDeviceNodeJob(userID, deviceID, jobID, body.LeaseToken); err != nil {
+				writeAgentError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
 		default:
 			http.Error(w, "unsupported action", http.StatusBadRequest)
 			return

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -253,6 +254,8 @@ func writeAgentError(w http.ResponseWriter, err error) {
 	case errors.Is(err, db.ErrInvalidLease), errors.Is(err, db.ErrInvalidJobState):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "invalid_or_expired_lease"})
 	default:
+		// The caller sees a bare 500; the reason belongs in the server log.
+		log.Printf("agent request failed: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }

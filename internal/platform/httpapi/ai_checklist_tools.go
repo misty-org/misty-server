@@ -39,6 +39,8 @@ func (s *SpacesService) checklistToolRegistrations(record *db.AIInvocationRecord
 				},
 			}},
 			"replace": map[string]any{"type": "boolean", "description": "True to replace the whole checklist."},
+			// The run's time budget follows it (agent-runtime src/time-budget.ts).
+			"minutes": map[string]any{"type": "integer", "minimum": 1, "maximum": 240, "description": "With your first checklist: how long the whole task should take you, in minutes, as the person would expect it from a quick assistant. Most tasks are 3-15: a quick lookup 2-3, a few pages on one site 5, comparing several sites 8-12, a multi-site plan with tabs kept open 15. Say 30 or more only when the person asked for in-depth research or a long written deliverable. Your time budget follows it; be honest, not generous."},
 		}, []string{"items"}), Handler: s.checklistHandler(record, state)}}
 }
 
@@ -47,6 +49,7 @@ func (s *SpacesService) checklistHandler(record *db.AIInvocationRecord, state co
 		var input struct {
 			Items   []db.ChecklistItem `json:"items"`
 			Replace bool               `json:"replace"`
+			Minutes int                `json:"minutes"`
 		}
 		if json.Unmarshal(request.Arguments, &input) != nil {
 			return nil, agenttools.ErrArgumentsInvalid
@@ -58,7 +61,17 @@ func (s *SpacesService) checklistHandler(record *db.AIInvocationRecord, state co
 		if err != nil {
 			return nil, err
 		}
-		return checklistResult(checklist)
+		result, err := checklistResult(checklist)
+		if err != nil || input.Minutes <= 0 {
+			return result, err
+		}
+		// The estimate goes back with the list: the run's time budget and the evals read it.
+		var reply map[string]any
+		if json.Unmarshal(result, &reply) != nil {
+			return result, nil
+		}
+		reply["estimateMinutes"] = input.Minutes
+		return json.Marshal(reply)
 	}
 }
 

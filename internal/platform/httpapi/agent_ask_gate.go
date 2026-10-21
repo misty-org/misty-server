@@ -33,7 +33,7 @@ func permissionGateFrom(ctx context.Context) permissionGate {
 // selfGatedTools decide their own permission inside the handler.
 var selfGatedTools = map[string]bool{
 	appsExecuteTool: true, itemsDeleteTool: true, spacesManageTool: true, workflowUnscheduleTool: true,
-	screenActTool: true, "browser.steps": true, recallSearchTool: true, recallTimelineTool: true, recallForgetTool: true, "browser.fill_form": true, "browser.skill": true,
+	screenActTool: true, "browser.steps": true, recallSearchTool: true, recallTimelineTool: true, recallForgetTool: true, "browser.fill_form": true, browserRunTool: true, "browser.skill": true,
 	// Delegation hands the same mode to the child, which asks for itself.
 	toolboxAgentsDelegateTasks: true, toolboxAgentsWait: true, codeDelegateTool: true, codeWaitTool: true,
 }

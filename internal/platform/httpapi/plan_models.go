@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	serveragent "github.com/kannachi323/misty/server/internal/agents"
 	"github.com/kannachi323/misty/server/internal/aimodels"
 	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
@@ -75,4 +76,24 @@ func planTurnLimit(ctx context.Context, database *db.Database, user string) int 
 		return 90
 	}
 	return 0
+}
+
+// evalTurnLimit is the plan's turn limit, or a development eval's own (at most 200) where the
+// stack allows client model choice. Evals compare against benchmarks run with long step budgets
+// (docs/plans/odysseys-campaign.md).
+func evalTurnLimit(requested, plan int) int {
+	if requested <= 0 || !serveragent.ClientModelChoice() {
+		return plan
+	}
+	return min(requested, 200)
+}
+
+// evalExecutionLimitMS gives a development eval that asks for its own turn limit four hours
+// of execution instead of the 30-minute default: the eval stops a run when it stops making
+// progress, not on a clock (evals/odysseys/watchdog.ts). 0 keeps the default.
+func evalExecutionLimitMS(requestedTurns int) int64 {
+	if requestedTurns <= 0 || !serveragent.ClientModelChoice() {
+		return 0
+	}
+	return int64(4 * time.Hour / time.Millisecond)
 }

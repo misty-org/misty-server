@@ -362,6 +362,7 @@ func (db *Database) verifyAICleanupJob(ctx context.Context, jobID, userID string
 
 // PurgeExpiredAITransients enforces the 24-hour ceiling for unaccepted quick
 // transforms while preserving applied artifacts and retained conversation history.
+// A chat a device keeps is not retained here: its device holds the transcript.
 // Retaining history never extends invocation/device authority, which still expires.
 func (db *Database) PurgeExpiredAITransients(ctx context.Context, limit int) (int64, error) {
 	if limit < 1 || limit > 1000 {
@@ -378,6 +379,7 @@ func (db *Database) PurgeExpiredAITransients(ctx context.Context, limit int) (in
 				    LEFT JOIN ai_user_settings prefs ON prefs.user_id=c.user_id
 				    WHERE c.id=i.conversation_id AND c.user_id=i.user_id
 				      AND c.deleted_at IS NULL AND c.retention_expires_at>NOW()
+				      AND c.kept_on_device_id IS NULL
 				      AND COALESCE(prefs.enabled,true)
 				      AND i.created_at+COALESCE(prefs.retention_days,30)*INTERVAL '1 day'>NOW()
 				  ))

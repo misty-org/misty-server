@@ -1,3 +1,4 @@
+import "./network.js";
 import express, { type Request } from "express";
 import { rateLimit } from "express-rate-limit";
 import { instanceModelConfig } from "./model-provider.js";

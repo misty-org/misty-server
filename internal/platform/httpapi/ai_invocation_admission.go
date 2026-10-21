@@ -173,7 +173,7 @@ func (s *AIService) bindConversationModel(w http.ResponseWriter, r *http.Request
 	// The conversation's own pick beats the account's Thinking choice.
 	// A model the Gateway retired falls back with a notice.
 	if override := bound.ModelOverride; override != "" && agent.ClientModelChoice() {
-		if agent.SenseModelRetired(r.Context(), "thinking", override) {
+		if !agent.FreeEvalModel(override) && agent.SenseModelRetired(r.Context(), "thinking", override) {
 			_ = s.database.SetMistyConversationModelOverride(r.Context(), userID, st.conversationID, "")
 			st.modelFallbackNotice = true
 		} else {
@@ -193,7 +193,7 @@ func (s *AIService) bindConversationModel(w http.ResponseWriter, r *http.Request
 // applyRequestedModelOverride pins the model the request asked for, if any.
 func (s *AIService) applyRequestedModelOverride(w http.ResponseWriter, r *http.Request, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
 	if requested := strings.TrimSpace(body.ModelOverride); requested != "" && agent.ClientModelChoice() {
-		if !agent.SenseModelAvailable(r.Context(), "thinking", requested) {
+		if !agent.FreeEvalModel(requested) && !agent.SenseModelAvailable(r.Context(), "thinking", requested) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_model", "message": "Choose an available model."})
 			return false
 		}
@@ -329,7 +329,7 @@ func (s *AIService) storeInvocationRecord(w http.ResponseWriter, r *http.Request
 		recordTrigger = "schedule"
 	}
 	stored, created, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-		DispatchRuntime: true, ModelTurnLimit: planTurnLimit(r.Context(), s.database, userID),
+		DispatchRuntime: true, ModelTurnLimit: evalTurnLimit(body.EvalTurnLimit, planTurnLimit(r.Context(), s.database, userID)), ExecutionLimitMS: evalExecutionLimitMS(body.EvalTurnLimit),
 		ID: "invocation_" + uuid.NewString(), UserID: userID, SpaceID: st.spaceID, ConversationID: st.conversationID,
 		SurfaceID: body.SurfaceID, Mode: body.Mode, Trigger: recordTrigger, State: "queued",
 		IdempotencyKey: body.IdempotencyKey, RequestPayload: requestPayload, ExpiresAt: now.Add(aiInvocationTTL),

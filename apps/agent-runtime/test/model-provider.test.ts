@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WORKFLOW_DESERIALIZE, WORKFLOW_SERIALIZE } from "@workflow/serde";
 import { InstanceModel } from "../src/instance-model.js";
 import {
+  imagesOutOfToolResults,
   instanceModelConfig,
   resolveEmbeddingModel,
   resolveInstanceModel,
@@ -146,5 +147,39 @@ describe("direct Anthropic", () => {
   it("keeps Anthropic models on the Gateway without a key, and other models off Anthropic", () => {
     expect(resolveInstanceModel("anthropic/claude-haiku-5.5", options, { AI_GATEWAY_API_KEY: "x" }).model.provider).toBe("gateway");
     expect(resolveInstanceModel("google/gemini-3.5-flash-lite", options, anthropicKey).model.provider).toBe("gateway");
+  });
+});
+
+describe("NVIDIA's free endpoints", () => {
+  const nimKey = { AI_GATEWAY_API_KEY: "gateway-fixture", NVIDIA_API_KEY: "nvapi-fixture" };
+
+  it("sends nim/ models to NVIDIA's chat completions with the key, under NVIDIA's model name", async () => {
+    const fetch = rejectingFetch();
+    vi.stubGlobal("fetch", fetch);
+    const resolved = resolveInstanceModel("nim/moonshotai/kimi-k2.6", options, nimKey);
+    expect(resolved.model.provider).not.toBe("gateway");
+    expect(resolved.options.providerOptions).not.toHaveProperty("gateway");
+    await expect(resolved.model.doGenerate(resolved.options)).rejects.toThrow();
+    const [url, request] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(new Headers(request.headers).get("authorization")).toBe("Bearer nvapi-fixture");
+    const body = JSON.parse(request.body as string);
+    expect(body.model).toBe("moonshotai/kimi-k2.6");
+    expect(body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("moves screenshots out of tool results into the next user message", () => {
+    const shot = { type: "file" as const, data: { type: "data" as const, data: "iVBORw0KGgo=" }, mediaType: "image/png" };
+    const prompt = imagesOutOfToolResults([
+      { role: "tool", content: [{ type: "tool-result", toolCallId: "c1", toolName: "browser_visual", output: { type: "content", value: [{ type: "text", text: "{\"url\":\"a\"}" }, shot] } }] },
+    ]);
+    expect(prompt).toEqual([
+      { role: "tool", content: [{ type: "tool-result", toolCallId: "c1", toolName: "browser_visual", output: { type: "text", value: "{\"url\":\"a\"}\n(1 screenshot in the next message)" } }] },
+      { role: "user", content: [{ type: "text", text: "Screenshots from the tool results above:" }, shot] },
+    ]);
+  });
+
+  it("leaves nim/ models on the Gateway without a key", () => {
+    expect(resolveInstanceModel("nim/moonshotai/kimi-k2.6", options, { AI_GATEWAY_API_KEY: "x" }).model.provider).toBe("gateway");
   });
 });

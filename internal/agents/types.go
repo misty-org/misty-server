@@ -47,8 +47,9 @@ const MaxModelOutputTokens int64 = 2200
 
 // MaxAgentTurnOutputTokens caps one model call of a runtime agent run, which
 // may write a whole document, table or form answer in a single tool call.
-// Billing holds this much per turn and settles what the call used.
-const MaxAgentTurnOutputTokens int64 = 8192
+// Billing holds this much per turn and settles what the call used. 32k leaves room for
+// a long final report after the model's thinking (8k cut Odysseys memos off mid-answer).
+const MaxAgentTurnOutputTokens int64 = 32_000
 
 const (
 	MaxUserMessageBytes      = 32 << 10

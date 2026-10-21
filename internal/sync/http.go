@@ -124,6 +124,16 @@ func (s *BrowserSyncService) Vault() http.HandlerFunc {
 			transport.WriteJSON(w, 200, map[string]any{"vault": vault})
 			return
 		}
+		if r.Method == http.MethodDelete {
+			// An account holds one vault at a time; deleting it is how a new one is made.
+			deleted, err := s.store.DeleteBrowserSyncVaults(r.Context(), user)
+			if err != nil {
+				writeSyncError(w, err)
+				return
+			}
+			transport.WriteJSON(w, 200, map[string]bool{"deleted": deleted})
+			return
+		}
 		var body struct {
 			RootPublicKey []byte          `json:"root_public_key"`
 			KeyEnvelope   SyncKeyEnvelope `json:"key_envelope"`

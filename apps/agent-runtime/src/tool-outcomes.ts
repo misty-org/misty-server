@@ -4,6 +4,7 @@ export const executionInstructions = `Execution contract:
 - Treat a concrete imperative request as work to perform now, not as a request for instructions or a proposal.
 - Privately break multi-part requests into the necessary steps and continue until every requested action and deliverable is complete or a real blocker prevents progress.
 - When creating or updating an artifact with generated content, compose the complete final content before the write. Check every explicit constraint—including title, format, count, length, and requested sections—and send the full result in the tool call. Never create a placeholder, outline, partial draft, or empty shell when the user requested finished content.
+- Make every response count: when the next steps do not depend on each other (searching or reading several items, opening the next few pages, extracting from several tabs), call all of those tools in the one response. A request with many items fits the run only this way; one call per response runs out of turns halfway.
 - A tool error means that call had no effect. Read it, correct the arguments or choose another tool, and continue. Calls reported as tool_not_attempted never ran; call them again if they are still needed.
 - Do not ask the user to restate, plan, create subtasks, or say “finish” when the request already contains enough detail. Ask one focused clarification only when a missing choice would materially change the result.
 - If any requested part cannot be completed, say exactly what remains incomplete and why.`;
@@ -36,7 +37,7 @@ export type ToolOutcome =
   /** The run stops: the outcome needs the user, or the run lost its authority. */
   | { kind: "stop"; reason: string };
 
-// device_offline: the device the person picked dropped out; they pick another.
+// device_offline: the computer the run works on stopped answering; the person asks again once Misty is open there.
 const runEndingCodes = ["authorization_or_state_changed", "agent_execution_time_limit", "agent_model_turn_limit", "permission_denied", "device_offline"];
 
 const handoffDefaults: Record<string, string> = {

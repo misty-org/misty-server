@@ -30,14 +30,3 @@ func (db *Database) StoreDevicePolicy(ctx context.Context, userID, deviceID stri
 		return nil
 	})
 }
-
-// DevicePolicyAllows reports whether a device's current signed policy lets
-// agents use a surface there; for folders, the named folder must be shared.
-func (db *Database) DevicePolicyAllows(ctx context.Context, userID, deviceID, surface, scopeID string) (bool, error) {
-	allowed := false
-	err := db.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM device_policies WHERE device_id=$1 AND user_id=$2 AND agent_surfaces ? $3
-			AND ($3<>'folders' OR EXISTS(SELECT 1 FROM jsonb_array_elements(shared_folders) f WHERE f->>'scopeId'=$4)))`, deviceID, userID, surface, scopeID).Scan(&allowed)
-	})
-	return allowed, err
-}

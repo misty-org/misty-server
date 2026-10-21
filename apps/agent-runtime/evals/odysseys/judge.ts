@@ -3,9 +3,11 @@
 // the trajectory's action history and every screenshot in order, and the same
 // success/failure parse. A rubric scores 1 when the trajectory satisfies it; a task is
 // perfect when every rubric does. Differences from the official runs are only the judge
-// model (MISTY_ODYSSEYS_JUDGE, a Claude model on Misty's own key) and a cap on pictures.
+// model (MISTY_ODYSSEYS_JUDGE: a Claude model on Misty's own key, or a free `nim/` model, see
+// docs/plans/free-model-evals.md) and a cap of 60 pictures
+// (the recorder skips unchanged ones, so long runs rarely reach it).
 import { readFileSync } from "node:fs";
-import { generateText } from "ai";
+import { streamText } from "ai";
 import { RoutedModel } from "../../src/model-calls.js";
 import type { Step } from "./recorder.js";
 import type { OdysseysTask } from "./tasks.js";
@@ -46,8 +48,12 @@ export interface TaskVerdict {
   outputTokens: number;
 }
 
+/** Rubrics judged at once on a free model (MISTY_ODYSSEYS_JUDGE_LANES): its rate limit is shared
+ * with the agent, but tasks run one at a time, so grading has it to itself. */
+const judgeLanes = Math.max(1, Math.min(8, Number(process.env.MISTY_ODYSSEYS_JUDGE_LANES || 5)));
+
 /** Grades every rubric of one task; the last `maxImages` screenshots go to each call. */
-export async function judgeTask(model: string, task: OdysseysTask, steps: Step[], screenshots: string[], maxImages = 24): Promise<TaskVerdict> {
+export async function judgeTask(model: string, task: OdysseysTask, steps: Step[], screenshots: string[], maxImages = 60): Promise<TaskVerdict> {
   const history = steps.map((step, index) => {
     const parts = [step.response.trim() ? `Response: ${step.response.trim()}` : "", step.action ? `Action: ${step.action}` : ""].filter(Boolean);
     return parts.length ? `${index + 1}. ${parts.join("\n")}` : "";
@@ -57,27 +63,66 @@ export async function judgeTask(model: string, task: OdysseysTask, steps: Step[]
   }));
   let inputTokens = 0;
   let outputTokens = 0;
-  const rubrics: RubricResult[] = [];
-  for (const rubric of task.rubrics) {
+  // Each rubric item is judged on its own, as the original does; the calls run together,
+  // except on a free model's rate limit (docs/plans/free-model-evals.md), where a few at a time
+  // (judgeLanes) keep a 429 from being graded as a failed rubric.
+  const free = model.startsWith("nim/");
+  const judgeOne = async (rubric: OdysseysTask["rubrics"][number]): Promise<RubricResult> => {
     const lines = [`Rubric ID: ${rubric.id}`, `Requirement: ${rubric.requirement.trim()}`, ...(rubric.verification.trim() ? [`Verification: ${rubric.verification.trim()}`] : [])];
     const text = `User Task (context only): ${task.prompt.trim()}\n\nEvaluate ONLY this rubric item:\n${lines.join("\n")}` +
       `\n\nFull Action History:\n${history}\n\nScreenshots attached below: ${images.length} (trajectory had ${steps.length} total step(s)).` +
       `\n\nDecide whether the rubric (${rubric.id}) is satisfied. Use the required 'Thoughts:' / 'Status:' format.`;
+    // No clock ends a judge call; like a run (watchdog.ts), it is asked again only when it goes
+    // quiet: no token, thinking included, for three minutes.
+    const ask = async () => {
+      const quiet = new AbortController();
+      let heard = Date.now();
+      const look = setInterval(() => Date.now() - heard > 180_000 && quiet.abort(), 15_000);
+      try {
+        const stream = streamText({
+          model: new RoutedModel(model, { provider: "instance", reasoning: "low" }),
+          // A free model thinks before it answers; room for both, or the verdict can come back empty.
+          system, maxOutputTokens: free ? 16_000 : 4_000, maxRetries: free ? 6 : 2, abortSignal: quiet.signal,
+          messages: [{ role: "user", content: [{ type: "text" as const, text }, ...images] }],
+          onChunk: () => { heard = Date.now(); },
+        });
+        const [answer, usage] = await Promise.all([stream.text, stream.usage]);
+        return { text: answer, usage };
+      } catch (error) {
+        throw quiet.signal.aborted ? new Error("judge_quiet") : error;
+      } finally {
+        clearInterval(look);
+      }
+    };
     try {
-      const result = await generateText({
-        model: new RoutedModel(model, { provider: "instance", reasoning: "low" }),
-        system, maxOutputTokens: 4_000, maxRetries: 2,
-        messages: [{ role: "user", content: [{ type: "text" as const, text }, ...images] }],
-      });
+      let result: Awaited<ReturnType<typeof ask>> | undefined;
+      // A reply with no "Status:" line is no verdict at all (an empty answer is not a failed
+      // rubric): ask again, twice at most.
+      const verdict = (reply: { text: string }) => /Status:\s*["']?(success|failure)/i.test(reply.text);
+      for (let attempt = 0; !result || (!verdict(result) && attempt < 3); attempt++) {
+        result = await ask().catch((error: unknown) => {
+          if (attempt < 2 && String(error).includes("judge_quiet")) return undefined;
+          throw error;
+        });
+      }
       inputTokens += result.usage.inputTokens ?? 0;
       outputTokens += result.usage.outputTokens ?? 0;
       const status = /Status:\s*["']?(success|failure)["']?/i.exec(result.text);
       const thoughts = /Thoughts:\s*([\s\S]+?)(?:Status:|$)/.exec(result.text);
-      rubrics.push({ id: rubric.id, success: status?.[1]?.toLowerCase() === "success", reasoning: (thoughts?.[1] ?? result.text).trim().slice(0, 1_200) });
+      return { id: rubric.id, success: status?.[1]?.toLowerCase() === "success", reasoning: (thoughts?.[1] ?? result.text).trim().slice(0, 1_200) };
     } catch (error) {
-      rubrics.push({ id: rubric.id, success: false, reasoning: `Error judging rubric ${rubric.id}: ${String(error).slice(0, 300)}` });
+      return { id: rubric.id, success: false, reasoning: `Error judging rubric ${rubric.id}: ${String(error).slice(0, 300)}` };
     }
-  }
+  };
+  const rubrics: RubricResult[] = new Array(task.rubrics.length);
+  let next = 0;
+  const lane = async () => {
+    while (next < task.rubrics.length) {
+      const index = next++;
+      rubrics[index] = await judgeOne(task.rubrics[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: free ? judgeLanes : task.rubrics.length }, lane));
   const passed = rubrics.filter((item) => item.success).length;
   return { rubrics, average: rubrics.length ? passed / rubrics.length : 0, perfect: rubrics.length > 0 && passed === rubrics.length, inputTokens, outputTokens };
 }

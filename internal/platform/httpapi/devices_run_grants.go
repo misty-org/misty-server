@@ -10,29 +10,12 @@ import (
 )
 
 // Every device context an agent chat attaches carries a run grant signed by
-// the device that asked (docs/design/devices/BRIEF.md). A signed-in device may
-// let agents work on itself before it is added: that reaches only the computer
-// the person is at. Work on another device also needs both devices added and
-// the target's own policy to allow the surface. The runtime may request less
+// the device that asked (docs/design/devices/BRIEF.md), and names that same
+// device: an agent run works only on the computer the person sent it from. A
+// signed-in device may do so before it is added. The runtime may request less
 // than a grant, never more.
 
 var errDeviceGrantRequired = errors.New("a signed device grant is required")
-
-func deviceContextSurface(kind string) string {
-	switch kind {
-	case "local_folder":
-		return "folders"
-	case "project_folder":
-		// No device policy offers this surface, so a project is reachable
-		// only from the computer it is on.
-		return "code"
-	case "workspace", "browser_tab":
-		return "browser"
-	case "terminal":
-		return "terminal"
-	}
-	return ""
-}
 
 // unverifiedRunGrantRequester reads who claims to have signed a grant so its
 // key can be looked up; the signature is checked right after.
@@ -59,7 +42,7 @@ func verifyDeviceContextGrants(ctx context.Context, database *db.Database, userI
 		if !deviceIDPattern.MatchString(requester) {
 			return errDeviceGrantRequired
 		}
-		keyText, requesterState, err := database.UnifiedDeviceKey(ctx, userID, requester)
+		keyText, _, err := database.UnifiedDeviceKey(ctx, userID, requester)
 		if err != nil {
 			return errDeviceGrantRequired
 		}
@@ -76,22 +59,9 @@ func verifyDeviceContextGrants(ctx context.Context, database *db.Database, userI
 		if json.Unmarshal(deviceContext.Capabilities, &capabilities) != nil || !grant.allows(deviceContext.OpaqueRef, capabilities) {
 			return errDeviceGrantRequired
 		}
-		if grant.TargetDeviceID == requester {
-			continue
-		}
-		// Reaching another device needs this one added.
-		if requesterState != "admitted" {
-			return errDeviceGrantRequired
-		}
-		// Work on another device: it must be added too, and its own signed
-		// policy must let agents use this surface there.
-		_, targetState, err := database.UnifiedDeviceKey(ctx, userID, grant.TargetDeviceID)
-		if err != nil || targetState != "admitted" {
-			return errDeviceGrantRequired
-		}
-		surface := deviceContextSurface(deviceContext.Kind)
-		allowed, err := database.DevicePolicyAllows(ctx, userID, grant.TargetDeviceID, surface, deviceContext.OpaqueRef)
-		if err != nil || surface == "" || !allowed {
+		// An agent run works only on the device the person sent it from: a grant
+		// that names any other device is refused, whatever that device allows.
+		if grant.TargetDeviceID != requester {
 			return errDeviceGrantRequired
 		}
 	}

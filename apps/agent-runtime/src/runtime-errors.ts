@@ -36,6 +36,17 @@ export function recoverableToolError(error: unknown): { code: string; message: s
   };
 }
 
+/**
+ * A model provider failing on its side (a 5xx, or a rate limit) after the call's own retries.
+ * The run waits it out between turns (workflows/space-task-agent.ts) instead of failing: on
+ * October 21 a free endpoint's one "Internal Server Error" ended a run 33 seconds in.
+ */
+export function providerOutage(error: unknown): boolean {
+  const normalized = runtimeErrorDescription(error).toLowerCase();
+  return normalized.includes("gatewayinternalservererror") || normalized.includes("service temporarily unavailable") ||
+    ((normalized.includes("dostreamstep") || normalized.includes("ai_apicallerror")) && /internal server error|bad gateway|service unavailable|gateway timeout|too many requests|rate limit/.test(normalized));
+}
+
 export function classifyRuntimeError(error: unknown): { code: string; message: string } {
   // Workflow step failures may arrive as serialized errors or wrap the
   // provider error in a cause. Inspect diagnostic fields, never raw responses.
@@ -87,9 +98,13 @@ export function classifyRuntimeError(error: unknown): { code: string; message: s
       message: "Misty's AI provider rejected its API key. The server administrator needs to replace the key.",
     };
   }
-  if (normalized.includes("gatewayinternalservererror") || normalized.includes("service temporarily unavailable")) {
+  // A provider's own 5xx after the step's retries (a free endpoint's "Internal Server Error").
+  if (providerOutage(error)) {
     return { code: "model_gateway_unavailable", message: "Misty's model providers are temporarily unavailable. Please try again shortly." };
   }
+  // The person sees a generic failure; the reason belongs in the runtime's log, or the failure
+  // can never be found (a whole Odysseys run ended this way with nothing logged).
+  console.error(`[misty-agent-runtime] unclassified_failure ${runtimeErrorDescription(error).replace(/\s+/g, " ").slice(0, 1_500)}`);
   return { code: "agent_runtime_failed", message: "Misty could not complete this request." };
 }
 

@@ -14,6 +14,9 @@ import (
 const (
 	ConversationModeAct  = "act"
 	ConversationModePlan = "plan"
+	// ConversationModeTeach is a lesson at the cursor: turns run the tutor's
+	// fast lane, which teaches one step and never acts.
+	ConversationModeTeach = "teach"
 
 	MaxAgentQuestions       = 4
 	MaxAgentQuestionOptions = 4
@@ -51,7 +54,7 @@ func (db *Database) ConversationMode(ctx context.Context, user, conversation str
 }
 
 func (db *Database) SetConversationMode(ctx context.Context, user, conversation, mode string) error {
-	if mode != ConversationModeAct && mode != ConversationModePlan {
+	if mode != ConversationModeAct && mode != ConversationModePlan && mode != ConversationModeTeach {
 		return ErrSpaceInvalid
 	}
 	return db.TestingWithRLSContext(ctx, userRLSSettings(user), func(tx *sql.Tx) error {

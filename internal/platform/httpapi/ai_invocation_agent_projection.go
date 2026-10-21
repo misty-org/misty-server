@@ -61,7 +61,9 @@ func (s *SpacesService) projectLinkedAIInvocationEvent(ctx context.Context, run 
 			eventType = "tool.failed"
 		}
 		s.aiInvocations.append(id, aiInvocationEvent{Type: eventType, ToolCallID: strings.TrimPrefix(nodeID, "tool:"), ToolName: toolName})
-	} else if strings.HasPrefix(nodeID, "model:") && state == "completed" {
+	} else if (strings.HasPrefix(nodeID, "model:") || strings.HasPrefix(nodeID, "teach:")) && state == "completed" {
+		// teach:* nodes carry a lesson turn's text as it streams (agent-runtime
+		// src/teach-turn.ts); they are not model calls and are never metered.
 		var value struct {
 			TextDelta string `json:"text_delta"`
 		}

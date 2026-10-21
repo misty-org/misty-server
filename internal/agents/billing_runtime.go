@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
+	"strings"
 	"time"
 )
 
@@ -76,7 +77,9 @@ func (m BillingMeter) CompleteRuntime(ctx context.Context, account, run string, 
 				return billingadapter.ErrConflict
 			}
 			settled[e.Request.ReservationID] = true
-			if !u.Estimated {
+			// A model call the server made during the run (browser.extract) is settled on
+			// its own and was never in the runtime's aggregate, so it is not subtracted.
+			if !u.Estimated && !serverSideRunModelCall(e.Request.Key) {
 				for k, n := range e.Request.Usage.Units {
 					// Some SDK aggregate results omit detail counters. Absence does not
 					// mean zero and cannot contradict authoritative per-turn measurements.
@@ -136,4 +139,25 @@ func (m BillingMeter) runtimeBilling(ctx context.Context, account, run string, f
 	defer cancel()
 	group := "agent-runtime:" + run
 	return store.WithRuntimeBillingLock(ctx, account, group, func(locked context.Context) error { return f(locked, store, group) })
+}
+
+// serverSideRunModelCall reports a settlement for a model call the server made for a
+// run (browser.extract's model:browse:<job>:extract, browser.act's screen model
+// model:screen:<job>:<n>), rather than one of the runtime's own turns, model:<n>.
+func serverSideRunModelCall(settleKey string) bool {
+	key := strings.TrimSuffix(settleKey, ":settle")
+	index := strings.Index(key, ":model:model:")
+	if index < 0 {
+		return false
+	}
+	node := key[index+len(":model:model:"):]
+	if node == "" {
+		return false
+	}
+	for _, char := range node {
+		if char < '0' || char > '9' {
+			return true
+		}
+	}
+	return false
 }

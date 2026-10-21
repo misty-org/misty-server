@@ -7,8 +7,10 @@ Each task is one composer request on the local stack, with this computer as the 
 Differences from the paper's setup, kept on purpose:
 
 - The agent is Misty's product (its tools, its own tab, web search and fetch), not a screenshot-only computer-use loop in a VM.
-- The judge runs on a Claude model on Misty's own key (`MISTY_ODYSSEYS_JUDGE`), not Gemini 3.1 Flash-Lite, and sees at most the last 24 screenshots.
+- The judge runs on a Claude model on Misty's own key (`MISTY_ODYSSEYS_JUDGE`), not Gemini 3.1 Flash-Lite, and sees at most the last 60 screenshots (unchanged pages are pictured once).
 - The browser profile has no saved sign-ins (`MISTY_EVAL_EPHEMERAL_PAGES=1` on the desktop).
+
+Without paid credit, the agent and the judge run on NVIDIA's free hosted models (`nim/…`); see [docs/plans/free-model-evals.md](../../../../../docs/plans/free-model-evals.md). Scores on a free model compare only with other passes on the same model.
 
 ## Splits
 
@@ -38,8 +40,14 @@ Differences from the paper's setup, kept on purpose:
 | `MISTY_ODYSSEYS_TASKS` | Task ids or id prefixes, instead of a split |
 | `MISTY_ODYSSEYS_LIMIT`, `_OFFSET` | How many tasks, from where (default 10 from 0) |
 | `MISTY_ODYSSEYS_MODEL`, `_EFFORT` | The agent's model and effort (Haiku 5.5, `low`) |
+| `MISTY_ODYSSEYS_TURNS` | Model turns per task (200, the most a dev eval may ask for); the dev stack honors it only with `MISTY_ALLOW_MODEL_OVERRIDE`, which also gives the run four hours of execution |
 | `MISTY_ODYSSEYS_JUDGE` | The judge model (Haiku 5.5) |
+| `MISTY_ODYSSEYS_WATCH_MINUTES` | How often the progress watch (`watchdog.ts`) looks at a run (3). No clock ends a run: it is stopped only after two quiet looks or two looks with nothing but repeated results, and still graded |
+| `MISTY_ODYSSEYS_TASK_MINUTES` | An optional hard cap per task; unset, there is none |
+| `MISTY_ODYSSEYS_JUDGE_LANES` | Rubrics judged at once on a free (`nim/`) judge (5) |
+| `MISTY_ODYSSEYS_REGRADE` | A task folder to judge again from its saved steps and pictures, without running it |
+| `MISTY_ODYSSEYS_RESUME` | A task folder from an earlier pass (`reports/<time>/<task>`): the task continues in that run's conversation from where it stopped, and is graded on both runs' steps |
 | `MISTY_ODYSSEYS_EARLY_STOP` | `1` (default) stops when 4 of the first 6 tasks fail |
 | `MISTY_ODYSSEYS_CAP` | The campaign's spend cap in dollars (50), kept across passes in `reports/ledger.json` |
 
-Each pass writes `reports/<time>/report.json` and, per task, a folder with `steps.jsonl`, the screenshots and `result.json` (the judge's reasoning per rubric item).
+Each run prints `RUN ENDED <task> <terminal> …` the moment the agent stops, before grading (a run that did no work is not graded). Each pass writes `reports/<time>/report.json` and, per task, a folder with `steps.jsonl`, the screenshots and `result.json` (the judge's reasoning per rubric item).

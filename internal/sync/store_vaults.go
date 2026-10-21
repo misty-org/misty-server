@@ -184,3 +184,24 @@ func (db *Store) CreateBrowserSyncVault(ctx context.Context, userID, spaceID str
 	}
 	return cloudusage.Commit(ctx, tx)
 }
+
+// DeleteBrowserSyncVaults deletes every vault the account holds: the personal
+// one and each Space vault sealed to its root, which nothing could open once
+// that root is gone. Their devices, events, records and blobs go with them;
+// the server only ever held their ciphertext. Reports whether a personal vault
+// existed, so the account can create a new one afterwards.
+func (db *Store) DeleteBrowserSyncVaults(ctx context.Context, userID string) (bool, error) {
+	tx, err := db.Conn.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var personal bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM browser_sync_vaults WHERE user_id=$1 AND key_envelope IS NOT NULL)`, userID).Scan(&personal); err != nil {
+		return false, err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM browser_sync_vaults WHERE user_id=$1`, userID); err != nil {
+		return false, err
+	}
+	return personal, cloudusage.Commit(ctx, tx)
+}

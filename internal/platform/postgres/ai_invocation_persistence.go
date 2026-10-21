@@ -12,7 +12,9 @@ import (
 var ErrAIConversationBusy = errors.New("conversation already has an active invocation")
 
 type AIInvocationRecord struct {
-	ModelTurnLimit     int
+	ModelTurnLimit int
+	// ExecutionLimitMS is a development eval's own execution allowance; 0 keeps the default.
+	ExecutionLimitMS   int64
 	DispatchRuntime    bool
 	ID                 string
 	UserID             string
@@ -100,12 +102,12 @@ func createAIInvocationRecordTx(ctx context.Context, tx *sql.Tx, record AIInvoca
 		}
 		var inserted bool
 		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ai_invocations(id,user_id,space_id,conversation_id,surface_id,mode,trigger_kind,state,idempotency_key,request_payload,expires_at,model_turn_limit)
-			VALUES($1,$2,NULLIF($3,''),NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,$12)
+			INSERT INTO ai_invocations(id,user_id,space_id,conversation_id,surface_id,mode,trigger_kind,state,idempotency_key,request_payload,expires_at,model_turn_limit,execution_limit_ms)
+			VALUES($1,$2,NULLIF($3,''),NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,$12,COALESCE(NULLIF($13::bigint,0),1800000))
 			ON CONFLICT(user_id,idempotency_key) DO UPDATE SET updated_at=ai_invocations.updated_at
 				RETURNING id,user_id,COALESCE(space_id,''),COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
 					runtime_kind,runtime_run_id,COALESCE(agent_run_id,''),runtime_heartbeat_at,expires_at,created_at,updated_at,model_turn_limit,(xmax=0)
-			`, record.ID, record.UserID, record.SpaceID, record.ConversationID, record.SurfaceID, record.Mode, record.Trigger, record.State, record.IdempotencyKey, record.RequestPayload, record.ExpiresAt, modelTurnLimit).Scan(
+			`, record.ID, record.UserID, record.SpaceID, record.ConversationID, record.SurfaceID, record.Mode, record.Trigger, record.State, record.IdempotencyKey, record.RequestPayload, record.ExpiresAt, modelTurnLimit, record.ExecutionLimitMS).Scan(
 			&stored.ID, &stored.UserID, &stored.SpaceID, &stored.ConversationID, &stored.SurfaceID, &stored.Mode, &stored.Trigger, &stored.State, &stored.IdempotencyKey, &stored.RequestPayload,
 			&stored.RuntimeKind, &stored.RuntimeRunID, &stored.AgentRunID, &stored.RuntimeHeartbeatAt, &stored.ExpiresAt, &stored.CreatedAt, &stored.UpdatedAt, &stored.ModelTurnLimit, &inserted,
 		)

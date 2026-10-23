@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
 
@@ -21,7 +21,7 @@ func answerNextCard(t *testing.T, service *SpacesService, userID, subject, decis
 	ctx := context.Background()
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
 		var id string
-		err := service.database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		err := service.database.SpaceTx(ctx, func(tx *sql.Tx) error {
 			return tx.QueryRowContext(ctx, `SELECT id FROM agent_app_requests WHERE owner_user_id=$1 AND subject=$2 AND state='pending'`, userID, subject).Scan(&id)
 		})
 		if errors.Is(err, sql.ErrNoRows) {

@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"time"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // TestingValidateAISelection exercises the public invocation boundary without
@@ -68,7 +68,6 @@ func TestingValidateAIDeviceContext(id, opaqueScope string, metadata map[string]
 	}
 	return validateAIInvocationInput(&body)
 }
-
 
 func TestingAISearchScore(query, content string) int      { return aiSearchScore(query, content) }
 func TestingAIRelevantChunk(content, query string) string { return aiRelevantChunk(content, query) }

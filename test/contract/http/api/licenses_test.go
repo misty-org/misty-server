@@ -5,7 +5,7 @@ import (
 
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestLicenseAllowsUse(t *testing.T) {

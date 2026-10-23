@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/billingadapter"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/email"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
@@ -32,10 +32,10 @@ type AccountVerification struct {
 }
 
 func NewAccountVerification(database *db.Database, sender email.EmailVerificationSender) *AccountVerification {
-	secret := []byte(envconfig.Getenv("MISTY_SIGNUP_SIGNAL_SECRET"))
+	secret := []byte(config.Getenv("MISTY_SIGNUP_SIGNAL_SECRET"))
 	if len(secret) < 16 {
 		// Signals compare within one deployment; the billing secret is stable there.
-		secret = []byte("misty-signup-signals:" + envconfig.Getenv("MISTY_BILLING_SECRET"))
+		secret = []byte("misty-signup-signals:" + config.Getenv("MISTY_BILLING_SECRET"))
 	}
 	return &AccountVerification{database: database, sender: sender, secret: secret, now: time.Now}
 }
@@ -69,7 +69,7 @@ func (v *AccountVerification) signal(value string) string {
 // signupSignals are the hashed network (IPv4 /24, IPv6 /48) and install.
 func (v *AccountVerification) signupSignals(r *http.Request) (string, string) {
 	network := ""
-	if ip := net.ParseIP(TestingClientIPFromRequest(r)); ip != nil {
+	if ip := net.ParseIP(ClientIPFromRequest(r)); ip != nil {
 		if v4 := ip.To4(); v4 != nil {
 			network = v4.Mask(net.CIDRMask(24, 32)).String()
 		} else {
@@ -110,10 +110,10 @@ func (v *AccountVerification) send(ctx context.Context, r *http.Request, userID,
 	if err = v.database.UpsertEmailVerificationToken(ctx, userID, security.HashToken(token), v.now().Add(emailVerificationTTL)); err != nil {
 		return err
 	}
-	base := strings.TrimRight(strings.TrimSpace(envconfig.Getenv("MISTY_PUBLIC_API_URL")), "/")
+	base := strings.TrimRight(strings.TrimSpace(config.Getenv("MISTY_PUBLIC_API_URL")), "/")
 	if base == "" {
 		scheme := "http"
-		if TestingIsSecureRequest(r) {
+		if IsSecureRequest(r) {
 			scheme = "https"
 		}
 		base = scheme + "://" + r.Host
@@ -217,7 +217,7 @@ func (v *AccountVerification) Referral() http.HandlerFunc {
 			http.Error(w, "referral unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		site := strings.TrimRight(strings.TrimSpace(envconfig.Getenv("MISTY_WEBSITE_URL")), "/")
+		site := strings.TrimRight(strings.TrimSpace(config.Getenv("MISTY_WEBSITE_URL")), "/")
 		if site == "" {
 			site = "https://mistysys.com"
 		}

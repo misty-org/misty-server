@@ -8,14 +8,14 @@ import (
 	"errors"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMiddleware {
-	return func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor, request serveragent.ToolRequest, next agenttools.Handler) (json.RawMessage, error) {
+	return func(ctx context.Context, invocation agenttools.Invocation, descriptor agenttools.Descriptor, request agent.ToolRequest, next agenttools.Handler) (json.RawMessage, error) {
 		// Ask pauses before every change, ahead of the journal so a declined
 		// change never records an effect.
 		if gate := permissionGateFrom(ctx); gate != nil {
@@ -37,11 +37,11 @@ func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMid
 		if descriptor.Name == appsExecuteTool || descriptor.Locality == agenttools.LocalityRouted {
 			return next(ctx, invocation, request)
 		}
-		if descriptor.Risk == serveragent.RiskRead && !strings.HasPrefix(descriptor.Name, "browser.") {
+		if descriptor.Risk == agent.RiskRead && !strings.HasPrefix(descriptor.Name, "browser.") {
 			return boundedNext()
 		}
 		if database == nil || strings.TrimSpace(invocation.UserID) == "" || strings.TrimSpace(descriptor.AuditEvent) == "" || strings.TrimSpace(invocation.RunID) == "" && strings.TrimSpace(invocation.SessionID) == "" {
-			return nil, workflowv2.ErrCapabilityDenied
+			return nil, workflow.ErrCapabilityDenied
 		}
 		spaceID := strings.TrimSpace(invocation.SpaceID)
 		if spaceID == "" {
@@ -53,7 +53,7 @@ func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMid
 			}
 		}
 		if strings.TrimSpace(request.ID) == "" {
-			return nil, workflowv2.ErrCapabilityDenied
+			return nil, workflow.ErrCapabilityDenied
 		}
 		// The logical call owns its effect identity. Changed arguments must
 		// conflict with that effect, never allocate another mutation.
@@ -63,7 +63,7 @@ func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMid
 			// Routing clears the target session across spaces, but the original
 			// logical call must keep its identity when retried in any destination.
 			sessionID = call.sessionID
-			journalRequest = TestingMustAPIRawJSON(map[string]any{"space_id": call.spaceID, "arguments": request.Arguments})
+			journalRequest = MustAPIRawJSON(map[string]any{"space_id": call.spaceID, "arguments": request.Arguments})
 		}
 		identity := strings.Join([]string{invocation.UserID, invocation.RunID, sessionID, request.ID}, "\x00")
 		legacyIdentity := strings.Join([]string{invocation.UserID, spaceID, invocation.AgentID, invocation.AgentInstanceID, invocation.RunID, invocation.SessionID, invocation.Source, invocation.Trigger, descriptor.Name, request.ID, string(request.Arguments)}, "\x00")
@@ -86,7 +86,7 @@ func agentToolboxExecutionJournal(database *db.Database) agenttools.ExecutionMid
 // Handlers report invalid arguments before any effect, so the model may
 // correct the call instead of the run treating its outcome as unknown.
 func notAttemptedOnValidation(result json.RawMessage, err error) (json.RawMessage, error) {
-	var invalid serveragent.ErrInvalidRequest
+	var invalid agent.ErrInvalidRequest
 	if errors.As(err, &invalid) || errors.Is(err, agenttools.ErrArgumentsInvalid) {
 		return result, errors.Join(db.ErrAgentToolboxNotAttempted, err)
 	}

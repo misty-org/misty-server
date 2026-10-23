@@ -11,7 +11,7 @@ export default defineConfig({
     include: ["test/**/*.test.ts"],
     exclude: runtimeIntegration
       ? configDefaults.exclude
-      : [...configDefaults.exclude, "test/runtime-lifecycle.test.ts"],
+      : [...configDefaults.exclude, "test/runtime-*.test.ts"],
     environment: "node",
   },
 });

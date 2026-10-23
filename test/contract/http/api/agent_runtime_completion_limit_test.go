@@ -14,9 +14,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 type completionLimitMeter struct {

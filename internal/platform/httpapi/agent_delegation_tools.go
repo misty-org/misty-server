@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-// Sub-agents (docs/plans/agentic-browser.md, Phase 4). agent_delegate starts
-// up to three child runs (with the parent, four views of its chat, docs/design/agent-browser/BRIEF.md). Each is an ordinary invocation that runs under the
+// Sub-agents (docs/agents/harness.md, Sub-agents and the notebook). agent_delegate starts
+// up to three child runs (with the parent, four views of its chat, docs/agents/browser.md). Each is an ordinary invocation that runs under the
 // parent's lease, agent and approval setting, never more; with a browser, the
 // parent's device opens a tab per child and signs that child's grant itself.
 // Children report into the parent's notebook and return their answers here.
@@ -57,18 +57,18 @@ func delegationToolDescriptors() []agenttools.Descriptor {
 		},
 	}
 	return []agenttools.Descriptor{
-		{Name: toolboxAgentsDelegateTasks, Version: 1, Risk: serveragent.RiskWrite, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone, AuditEvent: "agent.delegated",
+		{Name: toolboxAgentsDelegateTasks, Version: 1, Risk: agent.RiskWrite, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AuditEvent: "agent.delegated",
 			Description: "Split independent parts of a large task across up to three sub-agents that work at the same time, each in its own browser view when this run has a browser. Give them out like a queue: when one finishes and more parts remain, call it again. Use it for breadth: researching several companies, products or sources, or filling several separate forms. Each task must stand alone. Sub-agents act with your permissions, write their findings to this task's notebook and return their answers; this call waits for them for up to about four minutes, then returns whatever is still running so you can call agent_wait.",
-			InputSchema: TestingMustAPIRawJSON(map[string]any{
+			InputSchema: MustAPIRawJSON(map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"tasks"},
 				"properties": map[string]any{
 					"tasks":   map[string]any{"type": "array", "minItems": 1, "maxItems": maxDelegatedTasks, "items": task},
 					"browser": map[string]any{"type": "boolean", "description": "Give each sub-agent its own browser tab. Default true when this run has a browser."},
 				},
 			}), OutputSchema: agentToolObjectOutputSchema()},
-		{Name: toolboxAgentsWait, Version: 1, Risk: serveragent.RiskRead, Idempotent: true, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone,
+		{Name: toolboxAgentsWait, Version: 1, Risk: agent.RiskRead, Idempotent: true, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer,
 			Description: "Wait up to about four minutes for this task's sub-agents to finish, and return each one's state and answer.",
-			InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema()},
+			InputSchema: MustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema()},
 	}
 }
 
@@ -78,16 +78,16 @@ func parseDelegatedTasks(raw json.RawMessage) ([]delegatedTask, bool, error) {
 		Browser *bool           `json:"browser"`
 	}
 	if json.Unmarshal(raw, &input) != nil || len(input.Tasks) == 0 || len(input.Tasks) > maxDelegatedTasks {
-		return nil, false, serveragent.ErrInvalidRequest(fmt.Sprintf("give 1–%d tasks", maxDelegatedTasks))
+		return nil, false, agent.ErrInvalidRequest(fmt.Sprintf("give 1–%d tasks", maxDelegatedTasks))
 	}
 	for index, task := range input.Tasks {
 		if strings.TrimSpace(task.Goal) == "" || len(task.Goal) > 4000 || len(task.Context) > 8000 {
-			return nil, false, serveragent.ErrInvalidRequest(fmt.Sprintf("task %d needs a goal of up to 4000 characters", index+1))
+			return nil, false, agent.ErrInvalidRequest(fmt.Sprintf("task %d needs a goal of up to 4000 characters", index+1))
 		}
 		if len(task.OutputSchema) > 0 && string(task.OutputSchema) != "null" {
 			var schema map[string]any
 			if len(task.OutputSchema) > 8<<10 || json.Unmarshal(task.OutputSchema, &schema) != nil || schema["type"] != "object" {
-				return nil, false, serveragent.ErrInvalidRequest(fmt.Sprintf("task %d's output_schema must be a JSON Schema with type object", index+1))
+				return nil, false, agent.ErrInvalidRequest(fmt.Sprintf("task %d's output_schema must be a JSON Schema with type object", index+1))
 			}
 		} else {
 			input.Tasks[index].OutputSchema = nil
@@ -123,23 +123,23 @@ func (s *SpacesService) delegationToolRegistrations(record *db.AIInvocationRecor
 	}
 	descriptors := delegationToolDescriptors()
 	return []agenttools.Registration{
-		{Descriptor: descriptors[0], Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: descriptors[0], Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			return s.delegate(ctx, record, body, request)
 		}},
-		{Descriptor: descriptors[1], Handler: func(ctx context.Context, invocation agenttools.Invocation, _ serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: descriptors[1], Handler: func(ctx context.Context, invocation agenttools.Invocation, _ agent.ToolRequest) (json.RawMessage, error) {
 			children, err := s.database.DelegationChildren(ctx, record.UserID, record.ID, "")
 			if err != nil {
 				return nil, err
 			}
 			if len(children) == 0 {
-				return nil, serveragent.ErrInvalidRequest("this task has no sub-agents; start them with agent_delegate")
+				return nil, agent.ErrInvalidRequest("this task has no sub-agents; start them with agent_delegate")
 			}
 			return s.awaitChildren(ctx, record, "")
 		}},
 	}
 }
 
-func (s *SpacesService) delegate(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) delegate(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput, request agent.ToolRequest) (json.RawMessage, error) {
 	tasks, wantBrowser, err := parseDelegatedTasks(request.Arguments)
 	if err != nil {
 		return nil, err
@@ -221,26 +221,26 @@ func (s *SpacesService) spawnChildTabs(ctx context.Context, record *db.AIInvocat
 		agentID = "misty-unified"
 	}
 	// The conversation finds the parent's own agent window, where the children's tabs open beside its own.
-	input := TestingMustAPIRawJSON(map[string]any{"scopeId": scope, "count": count, "labels": labels, "conversationId": record.ConversationID})
+	input := MustAPIRawJSON(map[string]any{"scopeId": scope, "count": count, "labels": labels, "conversationId": record.ConversationID})
 	// On another device's session, its own task holds the lease.
-	config := TestingMustAPIRawJSON(map[string]any{"agentId": agentID, "taskId": scopeTaskID(body, scope)})
+	config := MustAPIRawJSON(map[string]any{"agentId": agentID, "taskId": scopeTaskID(body, scope)})
 	job, err := s.database.QueueAIInvocationDeviceNodeJob(ctx, record.UserID, record.ID, "delegate_tabs_"+callID, 1, scope, spawnTabsOp, spawnTabsOp, input, config,
-		TestingMustAPIRawJSON(map[string]any{"type": "object"}), agentToolObjectOutputSchema())
+		MustAPIRawJSON(map[string]any{"type": "object"}), agentToolObjectOutputSchema())
 	if err != nil {
 		return nil, err
 	}
 	current, err := waitForDeviceJob(ctx, s.database, record.UserID, job.ID, job.DeadlineAt)
 	if err != nil || current.State != "completed" {
-		return nil, serveragent.ErrInvalidRequest("Misty could not open browser tabs for the sub-agents. Call agent_delegate with browser false to run them without one.")
+		return nil, agent.ErrInvalidRequest("Misty could not open browser tabs for the sub-agents. Call agent_delegate with browser false to run them without one.")
 	}
 	var output struct {
 		Tabs []aiInvocationDeviceContext `json:"tabs"`
 	}
 	if json.Unmarshal(current.Output, &output) != nil {
-		return nil, serveragent.ErrInvalidRequest("the device opened the wrong number of tabs for the sub-agents")
+		return nil, agent.ErrInvalidRequest("the device opened the wrong number of tabs for the sub-agents")
 	}
 	if err := validateDeviceOpenedTabs(output.Tabs, device, count); err != nil {
-		return nil, serveragent.ErrInvalidRequest("Misty could not open browser tabs for the sub-agents. Call agent_delegate with browser false to run them without one.")
+		return nil, agent.ErrInvalidRequest("Misty could not open browser tabs for the sub-agents. Call agent_delegate with browser false to run them without one.")
 	}
 	if err := verifyDeviceContextGrants(ctx, s.database, record.UserID, body.AgentID, output.Tabs); err != nil {
 		return nil, err
@@ -250,7 +250,7 @@ func (s *SpacesService) spawnChildTabs(ctx context.Context, record *db.AIInvocat
 
 func (s *SpacesService) startDelegatedInvocation(ctx context.Context, parent *db.AIInvocationRecord, body aiInvocationInput, callID string, index int, task delegatedTask, tab *aiInvocationDeviceContext) (string, error) {
 	model := strings.TrimSpace(body.ModelID)
-	if route, err := s.database.AIModelBrowsingRoute(ctx, parent.UserID, parent.ID); err == nil && route.Model != "" && serveragent.ClientModelChoice() {
+	if route, err := s.database.AIModelBrowsingRoute(ctx, parent.UserID, parent.ID); err == nil && route.Model != "" && agent.ClientModelChoice() {
 		// Children navigate on the account's Browsing model.
 		model = route.Model
 	}

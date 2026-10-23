@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 // handleUpstream applies one provider event.

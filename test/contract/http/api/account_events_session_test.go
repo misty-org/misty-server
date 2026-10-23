@@ -38,7 +38,7 @@ func TestAccountEventsRevalidateSessionWithoutReconnecting(t *testing.T) {
 	server := httptest.NewServer(NewAIService(database, nil).AccountEvents())
 	defer server.Close()
 	req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
-	req.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: access})
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: access})
 	res, err := http.DefaultClient.Do(req)
 	if err != nil || res.StatusCode != http.StatusOK {
 		t.Fatal("open stream", res, err)

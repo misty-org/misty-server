@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/agents"
+	. "github.com/kannachi323/misty/server/internal/agent"
 )
 
 type timeoutOnceProvider struct {
@@ -26,7 +26,7 @@ func (provider *timeoutOnceProvider) NextContext(_ context.Context, _ ModelReque
 func TestAgentCompletionRetriesOneTransientProviderTimeout(t *testing.T) {
 	provider := &timeoutOnceProvider{}
 	service := NewService(nil, provider)
-	text, _, err := service.CompleteWithTierContext(context.Background(), "user", "hello", "assistant_ai", TierLow)
+	text, _, err := service.CompleteContext(context.Background(), "user", "hello", "assistant_ai")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 	"github.com/kannachi323/misty/server/test/testkit"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"github.com/lib/pq"
@@ -112,8 +112,8 @@ func TestSessionLookupWorksWithRuntimeRLSRole(t *testing.T) {
 func openRuntimeRoleDatabase(t *testing.T, adminDatabase *Database) *Database {
 	t.Helper()
 
-	runtimeUser := strings.TrimSpace(envconfig.Getenv("DB_USER"))
-	runtimePassword := strings.TrimSpace(envconfig.Getenv("DB_PASSWORD"))
+	runtimeUser := strings.TrimSpace(config.Getenv("DB_USER"))
+	runtimePassword := strings.TrimSpace(config.Getenv("DB_PASSWORD"))
 	if runtimeUser == "" || runtimePassword == "" {
 		t.Skip("DB_USER and DB_PASSWORD are required to exercise the runtime RLS role")
 	}

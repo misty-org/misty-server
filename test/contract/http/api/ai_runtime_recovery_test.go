@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 func TestQuickAIRuntimeRecoveryUsesPinnedWorkerAndCommittedState(t *testing.T) {
@@ -83,7 +83,7 @@ func TestQuickAIRuntimeRecoveryUsesPinnedWorkerAndCommittedState(t *testing.T) {
 	service.SetAgentRuntime(config)
 	mutate := func(query string, args ...any) {
 		t.Helper()
-		if err := database.TestingSpaceTx(t.Context(), func(tx *sql.Tx) error { _, err := tx.ExecContext(t.Context(), query, args...); return err }); err != nil {
+		if err := database.SpaceTx(t.Context(), func(tx *sql.Tx) error { _, err := tx.ExecContext(t.Context(), query, args...); return err }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -158,7 +158,7 @@ func TestQuickAIRuntimeRecoveryUsesPinnedWorkerAndCommittedState(t *testing.T) {
 		t.Fatal("workflow exit was mistaken for successful completion")
 	}
 	var messages, failures int
-	if err := database.TestingSpaceTx(t.Context(), func(tx *sql.Tx) error {
+	if err := database.SpaceTx(t.Context(), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(t.Context(), `SELECT COUNT(*) FILTER(WHERE event_type='assistant.message'),COUNT(*) FILTER(WHERE event_type='invocation.failed') FROM ai_invocation_events WHERE invocation_id=$1`, id).Scan(&messages, &failures)
 	}); err != nil || messages != 1 || failures != 1 {
 		t.Fatalf("lost committed history: messages=%d failures=%d %v", messages, failures, err)
@@ -169,7 +169,7 @@ func TestQuickAIRuntimeRecoveryUsesPinnedWorkerAndCommittedState(t *testing.T) {
 	// Other tests can leave unrelated live invocations in this shared database.
 	// Inspect this run's durable delivery rather than a database-wide scan count.
 	var pending int
-	if err := database.TestingSpaceTx(t.Context(), func(tx *sql.Tx) error {
+	if err := database.SpaceTx(t.Context(), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(t.Context(), `SELECT count(*) FROM agent_runtime_deliveries WHERE run_id=$1 AND operation='runtime.reconcile' AND state IN ('pending','leased')`, id).Scan(&pending)
 	}); err != nil || pending != 0 || state() != "failed" {
 		t.Fatalf("terminal run requeued: %d %v", pending, err)

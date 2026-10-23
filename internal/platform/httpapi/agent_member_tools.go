@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	serveragent "github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Agents talk to other members' agents through these tools. Every agent is a
@@ -44,25 +44,25 @@ func agentMemberToolRegistrations(database *db.Database) []agenttools.Registrati
 }
 
 func agentMemberToolSchema(properties map[string]any, required []string) json.RawMessage {
-	return TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
+	return MustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
 }
 
 var agentRequestWaitProperty = map[string]any{"type": "integer", "minimum": 0, "maximum": 40, "description": "Seconds to wait for the reply before returning. Defaults to 30."}
 
 func agentsDirectoryToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
-		Name: agentsDirectoryTool, Version: 1, Risk: serveragent.RiskRead, Approval: agenttools.ApprovalNone,
+		Name: agentsDirectoryTool, Version: 1, Risk: serveragent.RiskRead,
 		Description: "List the agents that are members of Spaces you share, with who owns each one and what it does. Use an agent's id with agent_request.",
 		InputSchema: agentMemberToolSchema(map[string]any{
 			"space": map[string]any{"type": "string", "minLength": 1, "maxLength": 200, "description": "Space name or id. Omit to list every Space you belong to."},
 		}, []string{}),
-		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
+		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true,
 	}
 }
 
 func agentsRequestToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
-		Name: agentsRequestTool, Version: 1, Risk: serveragent.RiskWrite, Approval: agenttools.ApprovalNone,
+		Name: agentsRequestTool, Version: 1, Risk: serveragent.RiskWrite,
 		Description: "Ask another member's agent, in a Space you share, to do something and wait for its reply. " +
 			"It works only in that Space with its owner's permissions there, and your account pays for that work. " +
 			"Its owner may need to approve the request before it starts. " +
@@ -74,20 +74,20 @@ func agentsRequestToolDescriptor() agenttools.Descriptor {
 			"message":      map[string]any{"type": "string", "minLength": 1, "maxLength": 16_000},
 			"wait_seconds": agentRequestWaitProperty,
 		}, []string{"agent", "message"}),
-		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true,
+		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer,
 		Idempotent: true, AuditEvent: "agent.request.created",
 	}
 }
 
 func agentsRequestStatusToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
-		Name: agentsRequestStatusTool, Version: 1, Risk: serveragent.RiskRead, Approval: agenttools.ApprovalNone,
+		Name: agentsRequestStatusTool, Version: 1, Risk: serveragent.RiskRead,
 		Description: "Wait for and read the reply to a request sent with agent_request.",
 		InputSchema: agentMemberToolSchema(map[string]any{
 			"request_id":   map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 			"wait_seconds": agentRequestWaitProperty,
 		}, []string{"request_id"}),
-		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
+		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true,
 	}
 }
 

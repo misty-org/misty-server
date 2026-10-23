@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	. "github.com/kannachi323/misty/server/internal/app"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 func TestRouteInventory(t *testing.T) {
@@ -43,7 +43,7 @@ func TestRouteInventory(t *testing.T) {
 	actual := strings.Join(routes, "\n") + "\n"
 
 	const inventoryPath = "routes.golden"
-	if envconfig.Getenv("UPDATE_ROUTE_GOLDEN") == "1" {
+	if config.Getenv("UPDATE_ROUTE_GOLDEN") == "1" {
 		if err := os.WriteFile(inventoryPath, []byte(actual), 0o644); err != nil {
 			t.Fatalf("update route inventory: %v", err)
 		}

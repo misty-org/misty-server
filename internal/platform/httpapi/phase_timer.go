@@ -8,7 +8,7 @@ import (
 )
 
 // phaseTimer logs how long each phase of a slow handler took, as one line, for finding where
-// an agent's tool calls spend their time (docs/plans/agent-harness-v2.md, change 5).
+// an agent's tool calls spend their time (docs/agents/harness.md, Device jobs).
 type phaseTimer struct {
 	name, run   string
 	start, last time.Time

@@ -5,17 +5,17 @@ import (
 	"encoding/json"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // grantNeed is what one action would need from the person: the action, the
 // one resource it touches, and for payments the amount. The server derives it
 // from the call it is about to run; nothing here comes from the person.
 type grantNeed struct {
-	action    serveragent.GrantAction
-	scopeKind serveragent.ScopeKind
+	action    agent.GrantAction
+	scopeKind agent.ScopeKind
 	scopeID   string
 	// label names the scope for people, e.g. "push to misty-org/misty".
 	label  string
@@ -39,14 +39,14 @@ func grantAmountFrom(raw json.RawMessage) *grantAmount {
 // rememberable reports whether this need can become a grant: a concrete scope
 // of the right kind, and a payment with a known amount to cap it at.
 func (need grantNeed) rememberable() bool {
-	if !serveragent.ValidGrantScope(need.action, need.scopeKind, need.scopeID) {
+	if !agent.ValidGrantScope(need.action, need.scopeKind, need.scopeID) {
 		return false
 	}
-	return need.action != serveragent.GrantPayment || (need.amount != nil && need.amount.AmountMinor > 0 && need.amount.Currency != "")
+	return need.action != agent.GrantPayment || (need.amount != nil && need.amount.AmountMinor > 0 && need.amount.Currency != "")
 }
 
 func (need grantNeed) constraints() json.RawMessage {
-	if need.action == serveragent.GrantPayment && need.amount != nil {
+	if need.action == agent.GrantPayment && need.amount != nil {
 		raw, _ := json.Marshal(need.amount)
 		return raw
 	}
@@ -58,7 +58,7 @@ func (need grantNeed) covers(grant *db.AgentGrant) bool {
 	if grant == nil {
 		return false
 	}
-	if need.action != serveragent.GrantPayment {
+	if need.action != agent.GrantPayment {
 		return true
 	}
 	limit := grantAmountFrom(grant.Constraints)
@@ -67,7 +67,7 @@ func (need grantNeed) covers(grant *db.AgentGrant) bool {
 
 // grantDecision is Decide's answer plus what a pause should record.
 type grantDecision struct {
-	decision serveragent.Decision
+	decision agent.Decision
 	mode     string
 	agentID  string
 }
@@ -79,9 +79,9 @@ type grantDecision struct {
 func (s *SpacesService) decideGrant(ctx context.Context, invocation agenttools.Invocation, need grantNeed) (grantDecision, error) {
 	out := grantDecision{mode: s.invocationPermissionMode(ctx, invocation)}
 	out.agentID = s.grantAgentID(ctx, invocation)
-	class := serveragent.ClassOf(need.action)
+	class := agent.ClassOf(need.action)
 	covered := false
-	if class == serveragent.ClassPermission && out.mode == serveragent.PermissionAuto && out.agentID != "" && need.rememberable() {
+	if class == agent.ClassPermission && out.mode == agent.PermissionAuto && out.agentID != "" && need.rememberable() {
 		grant, err := s.database.ActiveAgentGrant(ctx, invocation.UserID, out.agentID, string(need.action), string(need.scopeKind), need.scopeID)
 		if err != nil {
 			return out, err
@@ -90,14 +90,14 @@ func (s *SpacesService) decideGrant(ctx context.Context, invocation agenttools.I
 			_ = s.database.TouchAgentGrant(ctx, invocation.UserID, grant.ID)
 		}
 	}
-	out.decision = serveragent.Decide(out.mode, class, covered)
+	out.decision = agent.Decide(out.mode, class, covered)
 	return out, nil
 }
 
 // invocationPermissionMode is the run's frozen Ask or Auto, or the agent's
 // default for runs admitted before modes were frozen. Unknown means Ask.
 func (s *SpacesService) invocationPermissionMode(ctx context.Context, invocation agenttools.Invocation) string {
-	if mode := serveragent.NormalizePermissionMode(invocation.PermissionMode); mode != "" {
+	if mode := agent.NormalizePermissionMode(invocation.PermissionMode); mode != "" {
 		return mode
 	}
 	return s.agentPermissionMode(ctx, invocation.UserID, invocation.AgentID)
@@ -111,25 +111,25 @@ func (s *SpacesService) agentPermissionMode(ctx context.Context, user, agentID s
 
 func agentPermissionModeFrom(ctx context.Context, database *db.Database, user, agentID string) string {
 	if database == nil {
-		return serveragent.PermissionAsk
+		return agent.PermissionAsk
 	}
 	var err error
 	if agentID == "" || agentID == "misty-unified" {
 		if agentID, err = database.ManagedMistyAgentID(ctx, user); err != nil {
-			return serveragent.PermissionAsk
+			return agent.PermissionAsk
 		}
 		if agentID == "" {
-			return serveragent.PermissionAuto
+			return agent.PermissionAuto
 		}
 	}
 	mode, err := database.AgentDefaultRunMode(ctx, user, agentID)
 	if err != nil {
-		return serveragent.PermissionAsk
+		return agent.PermissionAsk
 	}
-	if mode = serveragent.NormalizePermissionMode(mode); mode != "" {
+	if mode = agent.NormalizePermissionMode(mode); mode != "" {
 		return mode
 	}
-	return serveragent.PermissionAuto
+	return agent.PermissionAuto
 }
 
 // grantAgentID is the agent a grant is held by: the run's agent, or the
@@ -169,13 +169,13 @@ func admitPermissionMode(ctx context.Context, database *db.Database, user string
 func (s *SpacesService) continuationPermissionMode(ctx context.Context, user, conversation, agentID, previous string) string {
 	mode, err := s.database.ConversationPermissionMode(ctx, user, conversation)
 	if err != nil {
-		return serveragent.PermissionAsk
+		return agent.PermissionAsk
 	}
 	if mode == "" {
 		mode = s.agentPermissionMode(ctx, user, agentID)
 	}
-	if serveragent.NormalizePermissionMode(previous) == serveragent.PermissionAsk {
-		return serveragent.PermissionAsk
+	if agent.NormalizePermissionMode(previous) == agent.PermissionAsk {
+		return agent.PermissionAsk
 	}
 	return mode
 }

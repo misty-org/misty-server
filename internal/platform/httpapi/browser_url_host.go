@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 // addressWithoutHost turns an address whose host has no DNS record at all into a correction the
@@ -32,7 +32,7 @@ func addressWithoutHost(ctx context.Context, raw string) error {
 	_, err = net.DefaultResolver.LookupHost(ctx, host)
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
-		return serveragent.ErrInvalidRequest(fmt.Sprintf("%s does not exist, so the address is wrong and nothing was opened. Find the site's real address with web_search (search for its name), then open that.", host))
+		return agent.ErrInvalidRequest(fmt.Sprintf("%s does not exist, so the address is wrong and nothing was opened. Find the site's real address with web_search (search for its name), then open that. If the site itself is gone (renamed, merged into another, shut down), do not retry other spellings of the same address: search for where its coverage lives now, open that, and say so in your answer.", host))
 	}
 	return nil
 }
@@ -47,7 +47,7 @@ func localNetworkHost(host string) bool {
 }
 
 // navigationAddressWithoutHost applies addressWithoutHost to browser.navigate's url.
-func navigationAddressWithoutHost(ctx context.Context, tool serveragent.ToolRequest) error {
+func navigationAddressWithoutHost(ctx context.Context, tool agent.ToolRequest) error {
 	if tool.Name != "browser.navigate" {
 		return nil
 	}

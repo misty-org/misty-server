@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 // Space data tools act inside one Space. Account-level runs use the same tool
@@ -52,7 +52,7 @@ func spaceDataToolDescriptors() []agenttools.Descriptor {
 // run, plus space.list for naming destinations. agent.context is omitted because
 // the run context already states the time and timezone.
 func routedSpaceRegistrations(database *db.Database, except ...string) []agenttools.Registration {
-	registrations := []agenttools.Registration{{Descriptor: spacesListToolDescriptor(), Handler: func(ctx context.Context, invocation agenttools.Invocation, _ serveragent.ToolRequest) (json.RawMessage, error) {
+	registrations := []agenttools.Registration{{Descriptor: spacesListToolDescriptor(), Handler: func(ctx context.Context, invocation agenttools.Invocation, _ agent.ToolRequest) (json.RawMessage, error) {
 		return listAgentSpaces(ctx, database, invocation)
 	}}}
 	for _, descriptor := range spaceDataToolDescriptors() {
@@ -68,10 +68,10 @@ func routedSpaceRegistrations(database *db.Database, except ...string) []agentto
 
 func spacesListToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
-		Name: "space.list", Version: 1, Risk: serveragent.RiskRead, Approval: agenttools.ApprovalNone,
+		Name: "space.list", Version: 1, Risk: agent.RiskRead,
 		Description:  "List the Spaces this account can access, including the personal Space, and which ones you are in. Use a Space's name or id as the `space` argument of other tools.",
-		InputSchema:  TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "required": []string{}, "additionalProperties": false}),
-		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
+		InputSchema:  MustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "required": []string{}, "additionalProperties": false}),
+		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true,
 	}
 }
 
@@ -107,7 +107,7 @@ func routeSpaceDescriptor(database *db.Database, descriptor agenttools.Descripto
 	if _, taken := properties["space"]; taken {
 		return agenttools.Registration{}, false
 	}
-	read := descriptor.Risk == serveragent.RiskRead
+	read := descriptor.Risk == agent.RiskRead
 	create := strings.HasSuffix(descriptor.Name, ".create")
 	hint := "Space name or id. Omit to search every Space you can access."
 	switch {
@@ -129,14 +129,14 @@ func routeSpaceDescriptor(database *db.Database, descriptor agenttools.Descripto
 	routed := descriptor
 	routed.InputSchema = encoded
 	routed.Description = strings.ReplaceAll(descriptor.Description, "the current Space", "a Space")
-	routed.RequiredPermission, routed.AgentPermission, routed.OwnerOnly = "", "", false
+	routed.RequiredPermission, routed.OwnerOnly = "", false
 	routed.Locality = agenttools.LocalityRouted
 	routed.Sources, routed.Triggers, routed.Aliases = nil, nil, nil
 	return agenttools.Registration{Descriptor: routed, Handler: routedSpaceHandler(database, routed.Name, read, create)}, true
 }
 
 func routedSpaceHandler(database *db.Database, name string, read, create bool) agenttools.Handler {
-	return func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+	return func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 		arguments, reference, err := splitSpaceArgument(request.Arguments)
 		if err != nil {
 			return nil, err
@@ -150,7 +150,7 @@ func routedSpaceHandler(database *db.Database, name string, read, create bool) a
 			return nil, err
 		}
 		toolbox := spaceAgentToolbox(database)
-		inner := serveragent.ToolRequest{ID: request.ID, Name: name, Arguments: arguments}
+		inner := agent.ToolRequest{ID: request.ID, Name: name, Arguments: arguments}
 		if len(targets) == 1 {
 			return executeToolInSpace(ctx, database, toolbox, invocation, targets[0], inner)
 		}
@@ -189,13 +189,13 @@ func routedSpaceTargets(spaces []db.Space, userID, reference string, read, creat
 		case 1:
 			return matches, nil
 		case 0:
-			return nil, serveragent.ErrInvalidRequest("unknown space " + strconv.Quote(reference) + "; available: " + spaceChoices(spaces))
+			return nil, agent.ErrInvalidRequest("unknown space " + strconv.Quote(reference) + "; available: " + spaceChoices(spaces))
 		default:
-			return nil, serveragent.ErrInvalidRequest("several Spaces are named " + strconv.Quote(reference) + "; pass one id: " + spaceChoices(matches))
+			return nil, agent.ErrInvalidRequest("several Spaces are named " + strconv.Quote(reference) + "; pass one id: " + spaceChoices(matches))
 		}
 	}
 	if len(spaces) == 0 {
-		return nil, serveragent.ErrInvalidRequest("this account has no Spaces yet")
+		return nil, agent.ErrInvalidRequest("this account has no Spaces yet")
 	}
 	if read {
 		return spaces[:min(len(spaces), maxRoutedReadSpaces)], nil
@@ -207,7 +207,7 @@ func routedSpaceTargets(spaces []db.Space, userID, reference string, read, creat
 			}
 		}
 	}
-	return nil, serveragent.ErrInvalidRequest("pass space for this change; available: " + spaceChoices(spaces))
+	return nil, agent.ErrInvalidRequest("pass space for this change; available: " + spaceChoices(spaces))
 }
 
 func spaceChoices(spaces []db.Space) string {
@@ -220,7 +220,7 @@ func spaceChoices(spaces []db.Space) string {
 
 // executeToolInSpace runs one Space tool with the owner's permissions in that
 // Space. The Space toolbox authorizes and journals the effect.
-func executeToolInSpace(ctx context.Context, database *db.Database, toolbox *agenttools.Registry, invocation agenttools.Invocation, space db.Space, request serveragent.ToolRequest) (json.RawMessage, error) {
+func executeToolInSpace(ctx context.Context, database *db.Database, toolbox *agenttools.Registry, invocation agenttools.Invocation, space db.Space, request agent.ToolRequest) (json.RawMessage, error) {
 	target := agenttools.Invocation{
 		UserID: invocation.UserID, SpaceID: space.ID, AgentID: invocation.AgentID, RunID: invocation.RunID,
 		Source: "space_conversation", Trigger: "message", OriginalInput: invocation.OriginalInput,
@@ -230,7 +230,7 @@ func executeToolInSpace(ctx context.Context, database *db.Database, toolbox *age
 	return executeSpaceAgentToolbox(context.WithValue(ctx, globalSpaceCallKey{}, call), toolbox, target, database, request)
 }
 
-func fanOutSpaceRead(ctx context.Context, database *db.Database, toolbox *agenttools.Registry, invocation agenttools.Invocation, spaces []db.Space, request serveragent.ToolRequest) (json.RawMessage, error) {
+func fanOutSpaceRead(ctx context.Context, database *db.Database, toolbox *agenttools.Registry, invocation agenttools.Invocation, spaces []db.Space, request agent.ToolRequest) (json.RawMessage, error) {
 	type spaceResult struct {
 		SpaceID   string          `json:"space_id"`
 		SpaceName string          `json:"space_name"`
@@ -245,7 +245,7 @@ func fanOutSpaceRead(ctx context.Context, database *db.Database, toolbox *agentt
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}
-		if errors.Is(err, workflowv2.ErrCapabilityDenied) || errors.Is(err, db.ErrSpaceForbidden) || errors.Is(err, db.ErrSpaceNotFound) {
+		if errors.Is(err, workflow.ErrCapabilityDenied) || errors.Is(err, db.ErrSpaceForbidden) || errors.Is(err, db.ErrSpaceNotFound) {
 			continue // This Space does not grant that read; it is not a failure.
 		}
 		if err != nil {
@@ -262,7 +262,7 @@ func fanOutSpaceRead(ctx context.Context, database *db.Database, toolbox *agentt
 		if firstErr != nil {
 			return nil, firstErr
 		}
-		return nil, workflowv2.ErrCapabilityDenied
+		return nil, workflow.ErrCapabilityDenied
 	}
 	return json.Marshal(map[string]any{"spaces": results})
 }

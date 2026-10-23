@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestVoiceToolsWorkOnFilesAndPassTheAskGate(t *testing.T) {
@@ -21,15 +21,15 @@ func TestVoiceToolsWorkOnFilesAndPassTheAskGate(t *testing.T) {
 	for _, registration := range registrations {
 		descriptor := registration.Descriptor
 		// Both spend and save, so Ask pauses them; neither can start a capture.
-		if descriptor.Risk != serveragent.RiskWrite || !gatedByAsk(descriptor) || strings.Contains(string(descriptor.InputSchema), "mic") {
+		if descriptor.Risk != agent.RiskWrite || !gatedByAsk(descriptor) || strings.Contains(string(descriptor.InputSchema), "mic") {
 			t.Fatalf("%s is not a gated file-only tool", descriptor.Name)
 		}
 	}
 	ctx := context.Background()
-	if _, err := service.executeVoiceToNotes(ctx, agenttools.Invocation{UserID: "u"}, serveragent.ToolRequest{Arguments: []byte(`{"transcript_id":"t","mode":"poem"}`)}); !errors.Is(err, agenttools.ErrArgumentsInvalid) {
+	if _, err := service.executeVoiceToNotes(ctx, agenttools.Invocation{UserID: "u"}, agent.ToolRequest{Arguments: []byte(`{"transcript_id":"t","mode":"poem"}`)}); !errors.Is(err, agenttools.ErrArgumentsInvalid) {
 		t.Fatalf("unknown mode = %v", err)
 	}
-	if _, err := service.executeVoiceTranscribe(ctx, agenttools.Invocation{UserID: "u"}, serveragent.ToolRequest{Arguments: []byte(`{}`)}); !errors.Is(err, agenttools.ErrArgumentsInvalid) {
+	if _, err := service.executeVoiceTranscribe(ctx, agenttools.Invocation{UserID: "u"}, agent.ToolRequest{Arguments: []byte(`{}`)}); !errors.Is(err, agenttools.ErrArgumentsInvalid) {
 		t.Fatalf("missing item = %v", err)
 	}
 }

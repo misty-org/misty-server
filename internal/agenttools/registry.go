@@ -5,19 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-)
-
-type ApprovalPolicy string
-
-const (
-	ApprovalNone           ApprovalPolicy = "none"
-	ApprovalExplicitIntent ApprovalPolicy = "explicit_intent"
-	ApprovalInteractive    ApprovalPolicy = "interactive"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 type Locality string
@@ -32,7 +23,7 @@ const (
 )
 
 // Layer is the permission layer a tool touches
-// (docs/design/spaces-as-profiles/BRIEF.md#private-and-public). Public tools
+// (docs/spaces/as-profiles.md#private-and-public). Public tools
 // read and change the Space's shared items, which the database still filters
 // to "public, or owned by the viewer". Private tools reach a person's own
 // trees: memory, devices, connected apps, private chats and agent settings.
@@ -48,7 +39,6 @@ var (
 	ErrInvalidRegistration = errors.New("invalid Agent Toolbox registration")
 	ErrToolNotFound        = errors.New("Agent Toolbox tool not found")
 	ErrCapabilityDenied    = errors.New("Agent Toolbox capability denied")
-	ErrApprovalRequired    = errors.New("Agent Toolbox approval required")
 	ErrArgumentsInvalid    = errors.New("Agent Toolbox arguments do not match the declared schema")
 	ErrResultInvalid       = errors.New("Agent Toolbox result does not match the declared schema")
 )
@@ -61,11 +51,7 @@ type Descriptor struct {
 	InputSchema        json.RawMessage
 	OutputSchema       json.RawMessage
 	RequiredPermission string
-	AgentPermission    string
-	AllowCustomAgent   bool
 	OwnerOnly          bool
-	Approval           ApprovalPolicy
-	ApprovalBySource   map[string]ApprovalPolicy
 	Locality           Locality
 	Layer              Layer
 	Idempotent         bool
@@ -90,25 +76,21 @@ type Invocation struct {
 	Trigger               string
 	OriginalInput         string
 	ExplicitTools         map[string]bool
-	ApprovedTools         map[string]bool
 	ConversationScopeKind string
 	ConversationID        string
-	// DelegatedApproval is used by runtimes that persist and resume approval
-	// inside the tool handler. The descriptor still advertises the real policy;
-	// the handler remains responsible for enforcing it before any external write.
-	DelegatedApproval bool
 	// PermissionMode is the run's Ask or Auto, frozen when the run was admitted.
 	// Empty follows the agent's default.
-	PermissionMode string // PublicLayerOnly marks a run the private layer doesn't open for, such as a
+	PermissionMode string
+	// PublicLayerOnly marks a run the private layer doesn't open for, such as a
 	// teammate's ask of someone's agent. Its tools see public items only.
 	PublicLayerOnly bool
 }
 
-type Handler func(context.Context, Invocation, serveragent.ToolRequest) (json.RawMessage, error)
+type Handler func(context.Context, Invocation, agent.ToolRequest) (json.RawMessage, error)
 
 type Authorizer func(context.Context, Invocation, Descriptor) (bool, error)
 
-type ExecutionMiddleware func(context.Context, Invocation, Descriptor, serveragent.ToolRequest, Handler) (json.RawMessage, error)
+type ExecutionMiddleware func(context.Context, Invocation, Descriptor, agent.ToolRequest, Handler) (json.RawMessage, error)
 
 type Registration struct {
 	Descriptor Descriptor
@@ -183,8 +165,8 @@ func (r *Registry) Descriptors() []Descriptor {
 	return items
 }
 
-func (r *Registry) Resolve(ctx context.Context, invocation Invocation, requested []string, authorize Authorizer) (serveragent.ToolManifest, error) {
-	manifest := serveragent.ToolManifest{Tools: []serveragent.ToolDefinition{}}
+func (r *Registry) Resolve(ctx context.Context, invocation Invocation, requested []string, authorize Authorizer) (agent.ToolManifest, error) {
+	manifest := agent.ToolManifest{Tools: []agent.ToolDefinition{}}
 	seen := map[string]bool{}
 	for _, requestedName := range requested {
 		tool, _, ok := r.lookup(requestedName)
@@ -193,22 +175,22 @@ func (r *Registry) Resolve(ctx context.Context, invocation Invocation, requested
 		}
 		allowed, err := toolAllowed(ctx, invocation, tool.descriptor, authorize)
 		if err != nil {
-			return serveragent.ToolManifest{}, err
+			return agent.ToolManifest{}, err
 		}
 		if !allowed {
 			continue
 		}
 		seen[tool.descriptor.Name] = true
-		manifest.Tools = append(manifest.Tools, serveragent.ToolDefinition{Name: tool.descriptor.Name, Description: tool.descriptor.Description, Risk: tool.descriptor.Risk, InputSchema: append(json.RawMessage(nil), tool.descriptor.InputSchema...)})
+		manifest.Tools = append(manifest.Tools, agent.ToolDefinition{Name: tool.descriptor.Name, Description: tool.descriptor.Description, Risk: tool.descriptor.Risk, InputSchema: append(json.RawMessage(nil), tool.descriptor.InputSchema...)})
 	}
 	return manifest, nil
 }
 
-func (r *Registry) Execute(ctx context.Context, invocation Invocation, request serveragent.ToolRequest, authorize Authorizer) (json.RawMessage, error) {
+func (r *Registry) Execute(ctx context.Context, invocation Invocation, request agent.ToolRequest, authorize Authorizer) (json.RawMessage, error) {
 	return r.ExecuteWithMiddleware(ctx, invocation, request, authorize, nil)
 }
 
-func (r *Registry) ExecuteWithMiddleware(ctx context.Context, invocation Invocation, request serveragent.ToolRequest, authorize Authorizer, middleware ExecutionMiddleware) (json.RawMessage, error) {
+func (r *Registry) ExecuteWithMiddleware(ctx context.Context, invocation Invocation, request agent.ToolRequest, authorize Authorizer, middleware ExecutionMiddleware) (json.RawMessage, error) {
 	tool, canonicalName, ok := r.lookup(request.Name)
 	if !ok {
 		return nil, ErrToolNotFound
@@ -227,12 +209,12 @@ func (r *Registry) ExecuteWithMiddleware(ctx context.Context, invocation Invocat
 		return nil, ErrArgumentsInvalid
 	}
 	request.Name = canonicalName
-	execute := func(nextCtx context.Context, nextInvocation Invocation, nextRequest serveragent.ToolRequest) (json.RawMessage, error) {
+	execute := func(nextCtx context.Context, nextInvocation Invocation, nextRequest agent.ToolRequest) (json.RawMessage, error) {
 		result, executeErr := tool.handler(nextCtx, nextInvocation, nextRequest)
 		if executeErr != nil {
 			return nil, executeErr
 		}
-		if len(result) > serveragent.MaxToolResultBytes || !matchesSchema(tool.outputSchema, result) {
+		if len(result) > agent.MaxToolResultBytes || !matchesSchema(tool.outputSchema, result) {
 			return nil, ErrResultInvalid
 		}
 		return result, nil
@@ -246,23 +228,10 @@ func (r *Registry) ExecuteWithMiddleware(ctx context.Context, invocation Invocat
 	if err != nil {
 		return nil, err
 	}
-	if len(result) > serveragent.MaxToolResultBytes || !matchesSchema(tool.outputSchema, result) {
+	if len(result) > agent.MaxToolResultBytes || !matchesSchema(tool.outputSchema, result) {
 		return nil, ErrResultInvalid
 	}
 	return result, nil
-}
-
-// Compile once at registration so every tool shares the same JSON Schema
-// semantics.
-func compileToolSchema(raw json.RawMessage) (*jsonschema.Resolved, error) {
-	if len(raw) == 0 {
-		raw = json.RawMessage(`{}`)
-	}
-	return compileSchema(raw)
-}
-func matchesSchema(schema *jsonschema.Resolved, raw json.RawMessage) bool {
-	var value any
-	return schema != nil && json.Unmarshal(raw, &value) == nil && schema.Validate(value) == nil
 }
 
 func (r *Registry) lookup(name string) (registeredTool, string, bool) {
@@ -298,114 +267,6 @@ func stringAllowed(value string, allowed []string) bool {
 		}
 	}
 	return false
-}
-
-func normalizeDescriptor(descriptor Descriptor) Descriptor {
-	// Old manifests remain readable. Agents share their owner’s tool access and
-	// never require a second per-action grant; executors still authorize targets.
-	descriptor.Approval = ApprovalNone
-	descriptor.ApprovalBySource = nil
-	descriptor.AllowCustomAgent = true
-	descriptor.AgentPermission = ""
-	descriptor.Name = strings.TrimSpace(descriptor.Name)
-	descriptor.Description = strings.TrimSpace(descriptor.Description)
-	descriptor.RequiredPermission = strings.TrimSpace(descriptor.RequiredPermission)
-	descriptor.AgentPermission = strings.TrimSpace(descriptor.AgentPermission)
-	descriptor.AuditEvent = strings.TrimSpace(descriptor.AuditEvent)
-	if descriptor.Version == 0 {
-		descriptor.Version = 1
-	}
-	if descriptor.Approval == "" {
-		descriptor.Approval = ApprovalNone
-	}
-	if descriptor.Locality == "" {
-		descriptor.Locality = LocalityServer
-	}
-	aliases := make([]string, 0, len(descriptor.Aliases))
-	for _, alias := range descriptor.Aliases {
-		alias = strings.TrimSpace(alias)
-		if alias != "" && alias != descriptor.Name {
-			aliases = append(aliases, alias)
-		}
-	}
-	sort.Strings(aliases)
-	descriptor.Aliases = aliases
-	if len(descriptor.ApprovalBySource) > 0 {
-		overrides := make(map[string]ApprovalPolicy, len(descriptor.ApprovalBySource))
-		for source, policy := range descriptor.ApprovalBySource {
-			source = strings.TrimSpace(source)
-			if source != "" {
-				overrides[source] = policy
-			}
-		}
-		descriptor.ApprovalBySource = overrides
-	}
-	descriptor.Sources = normalizeStrings(descriptor.Sources)
-	descriptor.Triggers = normalizeStrings(descriptor.Triggers)
-	return descriptor
-}
-
-func normalizeStrings(values []string) []string {
-	seen := map[string]bool{}
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value != "" && !seen[value] {
-			seen[value] = true
-			result = append(result, value)
-		}
-	}
-	sort.Strings(result)
-	return result
-}
-
-func validateRegistration(descriptor Descriptor, handler Handler) error {
-	if descriptor.Name == "" || descriptor.Description == "" || handler == nil || descriptor.Version < 1 {
-		return ErrInvalidRegistration
-	}
-	if descriptor.Risk != serveragent.RiskRead && descriptor.Risk != serveragent.RiskWrite && descriptor.Risk != serveragent.RiskDangerous {
-		return fmt.Errorf("%w: invalid risk for %s", ErrInvalidRegistration, descriptor.Name)
-	}
-	if descriptor.Approval != ApprovalNone && descriptor.Approval != ApprovalExplicitIntent && descriptor.Approval != ApprovalInteractive {
-		return fmt.Errorf("%w: invalid approval policy for %s", ErrInvalidRegistration, descriptor.Name)
-	}
-	for source, policy := range descriptor.ApprovalBySource {
-		if policy != ApprovalNone && policy != ApprovalExplicitIntent && policy != ApprovalInteractive {
-			return fmt.Errorf("%w: invalid approval policy for %s source %s", ErrInvalidRegistration, descriptor.Name, source)
-		}
-	}
-	if descriptor.Locality != LocalityServer && descriptor.Locality != LocalityDevice && descriptor.Locality != LocalityProvider && descriptor.Locality != LocalityRouted {
-		return fmt.Errorf("%w: invalid locality for %s", ErrInvalidRegistration, descriptor.Name)
-	}
-	if descriptor.Layer != LayerPublic && descriptor.Layer != LayerPrivate {
-		return fmt.Errorf("%w: tool %s declares no layer", ErrInvalidRegistration, descriptor.Name)
-	}
-	if descriptor.Risk != serveragent.RiskRead && descriptor.AuditEvent == "" {
-		return fmt.Errorf("%w: write tool %s has no audit event", ErrInvalidRegistration, descriptor.Name)
-	}
-	if len(descriptor.InputSchema) > 0 && !json.Valid(descriptor.InputSchema) {
-		return fmt.Errorf("%w: invalid input schema for %s", ErrInvalidRegistration, descriptor.Name)
-	}
-	if len(descriptor.OutputSchema) > 0 && !json.Valid(descriptor.OutputSchema) {
-		return fmt.Errorf("%w: invalid output schema for %s", ErrInvalidRegistration, descriptor.Name)
-	}
-	return nil
-}
-
-func cloneDescriptor(descriptor Descriptor) Descriptor {
-	descriptor.InputSchema = append(json.RawMessage(nil), descriptor.InputSchema...)
-	descriptor.OutputSchema = append(json.RawMessage(nil), descriptor.OutputSchema...)
-	descriptor.Aliases = append([]string(nil), descriptor.Aliases...)
-	descriptor.Sources = append([]string(nil), descriptor.Sources...)
-	descriptor.Triggers = append([]string(nil), descriptor.Triggers...)
-	if len(descriptor.ApprovalBySource) > 0 {
-		overrides := make(map[string]ApprovalPolicy, len(descriptor.ApprovalBySource))
-		for source, policy := range descriptor.ApprovalBySource {
-			overrides[source] = policy
-		}
-		descriptor.ApprovalBySource = overrides
-	}
-	return descriptor
 }
 
 // PublicOnly drops every private-layer registration, for runs that may not

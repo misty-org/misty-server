@@ -136,6 +136,21 @@ export function unfinishedModelResult(aborted: boolean, stepCount: number, finis
   return { code: "agent_response_incomplete", message: "The model did not finish this request. Review its completed work before starting another request." };
 }
 
+/**
+ * Whether a run that ended on an unrecognized finish reason still has its answer worth keeping: the
+ * model wrote a whole answer and stopped (the provider named the stop oddly) and nothing failed.
+ * The run still ends incomplete, since nobody confirmed it was done, but the answer is kept above
+ * the reason instead of being replaced by "The model did not finish this request."
+ */
+export function keepsAnswerAfterOddStop(
+  unfinished: { code: string } | null,
+  finishReason: string,
+  answer: string,
+  failures: number,
+): boolean {
+  return unfinished?.code === "agent_response_incomplete" && finishReason !== "length" && failures === 0 && answer.trim().length >= 40;
+}
+
 export function finalText(steps: Array<{ text?: string }>): string {
   for (let index = steps.length - 1; index >= 0; index -= 1) {
     const text = steps[index]?.text?.trim();

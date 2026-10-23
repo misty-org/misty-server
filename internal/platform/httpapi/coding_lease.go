@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // A lease covers at most this many universal tokens and this long; the device
@@ -57,20 +57,20 @@ func (run *codingRun) invocation() agenttools.Invocation {
 // remote, for the delegating agent. Ask ignores them, so none are sent.
 func (s *SpacesService) codingGrants(ctx context.Context, run *codingRun, repo string) []string {
 	invocation := run.invocation()
-	if s.invocationPermissionMode(ctx, invocation) != serveragent.PermissionAuto {
+	if s.invocationPermissionMode(ctx, invocation) != agent.PermissionAuto {
 		return []string{}
 	}
 	agentID := s.grantAgentID(ctx, invocation)
 	out := []string{}
-	check := func(action serveragent.GrantAction, kind serveragent.ScopeKind, scope string) {
+	check := func(action agent.GrantAction, kind agent.ScopeKind, scope string) {
 		if grant, err := s.database.ActiveAgentGrant(ctx, run.record.UserID, agentID, string(action), string(kind), scope); err == nil && grant != nil {
 			out = append(out, string(action))
 		}
 	}
-	check(serveragent.GrantProjectEdit, serveragent.ScopeProject, run.body.CodingProject)
-	check(serveragent.GrantProjectInstall, serveragent.ScopeProject, run.body.CodingProject)
+	check(agent.GrantProjectEdit, agent.ScopeProject, run.body.CodingProject)
+	check(agent.GrantProjectInstall, agent.ScopeProject, run.body.CodingProject)
 	if repo != "" {
-		check(serveragent.GrantGitPush, serveragent.ScopeRepo, repo)
+		check(agent.GrantGitPush, agent.ScopeRepo, repo)
 	}
 	return out
 }
@@ -134,7 +134,7 @@ func (s *SpacesService) CodingLease() http.HandlerFunc {
 			return
 		}
 		if s.usageMeter != nil {
-			if _, err := serveragent.ReserveMeasuredUsage(s.usageMeter, user, codingUsageKey(run.record.ID, lease.ID), codingBillingProvider(body.Engine),
+			if _, err := agent.ReserveMeasuredUsage(s.usageMeter, user, codingUsageKey(run.record.ID, lease.ID), codingBillingProvider(body.Engine),
 				firstAIText(body.Model, body.Engine), map[string]int64{"external_tokens": budget}, "coding:"+run.record.ID); err != nil {
 				writeBillingError(w, err)
 				return
@@ -190,7 +190,7 @@ func codingEngineRefusal(engine string, run *codingRun, grants []string) string 
 		return false
 	}
 	plan := run.body.CollaborationMode == db.ConversationModePlan
-	auto := serveragent.NormalizePermissionMode(run.body.PermissionMode) == serveragent.PermissionAuto
+	auto := agent.NormalizePermissionMode(run.body.PermissionMode) == agent.PermissionAuto
 	switch engine {
 	case "grok", "dsh":
 		if !auto || plan || !has("project.edit") || !has("project.install") || !has("git.push") {

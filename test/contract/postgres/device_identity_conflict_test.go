@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestDeviceRegistrationIdentityConflictWithRuntimeRole(t *testing.T) {

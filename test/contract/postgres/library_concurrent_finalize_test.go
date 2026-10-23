@@ -2,15 +2,12 @@ package db
 
 import (
 	"context"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestConcurrentLibraryFinalizationIsIdempotent(t *testing.T) {
 	database := openTestDatabase(t)

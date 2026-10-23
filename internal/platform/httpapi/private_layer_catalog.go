@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // validateAgentToolLayers runs at startup: every tool any run can be offered
@@ -33,7 +33,7 @@ func validateAgentToolLayers() (err error) {
 // apps, devices, screens, the run notebook, sub-agents and coding.
 func agentToolCatalogDescriptors() []agenttools.Descriptor {
 	service := &SpacesService{}
-	noop := func(context.Context, agenttools.Invocation, serveragent.ToolRequest) (json.RawMessage, error) {
+	noop := func(context.Context, agenttools.Invocation, agent.ToolRequest) (json.RawMessage, error) {
 		return nil, nil
 	}
 	record := &db.AIInvocationRecord{ID: "layer-check", UserID: "layer-check", ConversationID: "layer-check",
@@ -45,7 +45,10 @@ func agentToolCatalogDescriptors() []agenttools.Descriptor {
 	// The toolboxes check their own registrations as they build; the
 	// connected tools are checked as declared, since runs mix them freely.
 	extra := append(agentMemberToolRegistrations(nil), service.accountAdminToolRegistrations()...)
-	extra = append(extra, recallToolRegistrationsFor(service)...)
+	// accountAdminToolRegistrations already offers them while Memory is on.
+	if !recallConfig().Enabled {
+		extra = append(extra, recallToolRegistrationsFor(service)...)
+	}
 	descriptors := buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, delegation: noop, extra: extra, allLayers: true}).Descriptors()
 	descriptors = append(descriptors, spaceAgentToolbox(nil).Descriptors()...)
 	descriptors = append(descriptors, buildAgentToolbox(nil, agentToolboxOptions{memberRequest: true, allLayers: true}).Descriptors()...)

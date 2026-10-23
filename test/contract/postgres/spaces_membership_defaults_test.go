@@ -4,12 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"testing"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testing.T) {
 	database := openTestDatabase(t)
@@ -167,7 +164,7 @@ func TestOwnershipTransferDoesNotTransferContributorUsage(t *testing.T) {
 	}
 	setUsage := func(spaceID, contributorID string, used int64) {
 		t.Helper()
-		if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := database.SpaceTx(ctx, func(tx *sql.Tx) error {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO space_storage_contributions(
 				id,space_id,user_id,source_kind,source_id,logical_bytes,state
 			) VALUES($1,$2,$3,'library_item',$4,$5,'active')`, "contribution_"+spaceID, spaceID, contributorID, "transfer_fixture_"+spaceID, used); err != nil {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Following sub-agents: waiting for them, reporting their answers to the
@@ -81,7 +81,7 @@ func delegationResult(children []db.DelegationChild, running int) json.RawMessag
 	if running > 0 {
 		out["next"] = "Some sub-agents are still working. Do other work or call agent_wait."
 	}
-	return TestingMustAPIRawJSON(out)
+	return MustAPIRawJSON(out)
 }
 
 // publishDelegation shows the parent's sub-agents in its conversation.

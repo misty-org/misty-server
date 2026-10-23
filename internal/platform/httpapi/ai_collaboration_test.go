@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 type goalEvidence = []struct {
@@ -34,22 +34,22 @@ func TestGoalEvidenceComplete(t *testing.T) {
 }
 
 func TestPlanModeToolsAllowOnlyReads(t *testing.T) {
-	handler := func(context.Context, agenttools.Invocation, serveragent.ToolRequest) (json.RawMessage, error) {
+	handler := func(context.Context, agenttools.Invocation, agent.ToolRequest) (json.RawMessage, error) {
 		return json.RawMessage(`{}`), nil
 	}
 	tool := func(name, risk string) agenttools.Registration {
-		descriptor := agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: name, Version: 1, Description: name, Risk: risk, Approval: agenttools.ApprovalNone, Locality: agenttools.LocalityServer, InputSchema: agentToolSchema(map[string]any{}, nil)}
-		if risk != serveragent.RiskRead {
+		descriptor := agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: name, Version: 1, Description: name, Risk: risk, Locality: agenttools.LocalityServer, InputSchema: agentToolSchema(map[string]any{}, nil)}
+		if risk != agent.RiskRead {
 			descriptor.AuditEvent = "test.write"
 		}
 		return agenttools.Registration{Descriptor: descriptor, Handler: handler}
 	}
 	toolbox := agenttools.MustNew(
-		tool("note.read", serveragent.RiskRead), tool("note.create", serveragent.RiskWrite),
-		tool("browser.inspect", serveragent.RiskRead), tool("browser.act", serveragent.RiskWrite),
-		tool("browser.request_user_action", serveragent.RiskRead), tool("agent.background", serveragent.RiskWrite),
-		tool(collaborationAskUser, serveragent.RiskRead), tool(collaborationProposePlan, serveragent.RiskRead),
-		tool(collaborationUpdatePlan, serveragent.RiskRead), tool("folder.delete", serveragent.RiskDangerous),
+		tool("note.read", agent.RiskRead), tool("note.create", agent.RiskWrite),
+		tool("browser.inspect", agent.RiskRead), tool("browser.act", agent.RiskWrite),
+		tool("browser.request_user_action", agent.RiskRead), tool("agent.background", agent.RiskWrite),
+		tool(collaborationAskUser, agent.RiskRead), tool(collaborationProposePlan, agent.RiskRead),
+		tool(collaborationUpdatePlan, agent.RiskRead), tool("folder.delete", agent.RiskDangerous),
 	)
 	names := []string{}
 	for _, descriptor := range toolbox.Descriptors() {

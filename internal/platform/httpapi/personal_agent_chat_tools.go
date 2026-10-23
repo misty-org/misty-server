@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 const toolboxMessagesSend = "message.send"
@@ -35,7 +35,7 @@ type spaceConversationToolActor struct {
 	service *SpacesService
 }
 
-func executeSpaceConversationTool(ctx context.Context, database *db.Database, actor spaceConversationToolActor, originalPrompt string, tool serveragent.ToolRequest) (json.RawMessage, error) {
+func executeSpaceConversationTool(ctx context.Context, database *db.Database, actor spaceConversationToolActor, originalPrompt string, tool agent.ToolRequest) (json.RawMessage, error) {
 	if result, handled, err := executeAgentMemoryTool(ctx, database, actor, tool); handled {
 		return result, err
 	}
@@ -60,7 +60,7 @@ func executeSpaceConversationTool(ctx context.Context, database *db.Database, ac
 	if tool.Name == "space.search_messages" || tool.Name == "file.search" {
 		return executeSpaceSearchTool(ctx, database, actor, tool)
 	}
-	return nil, workflowv2.ErrCapabilityDenied
+	return nil, workflow.ErrCapabilityDenied
 }
 
 func agentToolTimezone(originalInput string) string {
@@ -94,7 +94,7 @@ func parseAgentToolTime(value, field, timezone string) (*time.Time, error) {
 	}
 	location, locationErr := time.LoadLocation(firstNonEmpty(strings.TrimSpace(timezone), "UTC"))
 	if locationErr != nil {
-		return nil, serveragent.ErrInvalidRequest("timezone must be a valid IANA timezone such as America/Los_Angeles")
+		return nil, agent.ErrInvalidRequest("timezone must be a valid IANA timezone such as America/Los_Angeles")
 	}
 	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04"} {
 		if local, localErr := time.ParseInLocation(layout, value, location); localErr == nil {
@@ -108,7 +108,7 @@ func parseAgentToolTime(value, field, timezone string) (*time.Time, error) {
 		local = time.Date(local.Year(), local.Month(), local.Day(), 23, 59, 0, 0, location).UTC()
 		return &local, nil
 	}
-	return nil, serveragent.ErrInvalidRequest(field + " must be an ISO 8601 date or timestamp")
+	return nil, agent.ErrInvalidRequest(field + " must be an ISO 8601 date or timestamp")
 }
 
 func TestingParseAgentToolTime(value, timezone string) (*time.Time, error) {
@@ -153,7 +153,7 @@ func resolveAgentMembers(members []db.SpaceMember, query string) []db.SpaceMembe
 	return partial
 }
 
-func (s *SpacesService) explicitMessageFileContext(ctx context.Context, userID string, membership *db.AskExecutionContext, spaceID string, attachmentIDs, libraryItemIDs []string) (string, string, []workflowv2.ContentRef) {
+func (s *SpacesService) explicitMessageFileContext(ctx context.Context, userID string, membership *db.AskExecutionContext, spaceID string, attachmentIDs, libraryItemIDs []string) (string, string, []workflow.ContentRef) {
 	refs := make([]explicitAttachmentRef, 0, len(attachmentIDs)+len(libraryItemIDs))
 	for _, id := range attachmentIDs {
 		refs = append(refs, explicitAttachmentRef{Kind: "chat_attachment", ResourceID: id})

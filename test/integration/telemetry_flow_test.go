@@ -10,20 +10,12 @@ import (
 
 	"github.com/google/uuid"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	"github.com/kannachi323/misty/server/internal/platform/telemetry"
 )
 
-type capturedTelemetry struct{ registrations, starts, cancellations int }
+type capturedTelemetry struct{ registrations int }
 
 func (client *capturedTelemetry) UserRegistered(string, string, string) { client.registrations++ }
-func (client *capturedTelemetry) SubscriptionStarted(string, telemetry.SubscriptionProperties) {
-	client.starts++
-}
-func (client *capturedTelemetry) SubscriptionRenewed(string, telemetry.SubscriptionProperties) {}
-func (client *capturedTelemetry) SubscriptionCanceled(string, telemetry.SubscriptionProperties) {
-	client.cancellations++
-}
-func (client *capturedTelemetry) Close(context.Context) {}
+func (client *capturedTelemetry) Close(context.Context)                 {}
 
 func TestRegistrationTelemetryRequiresExplicitConsent(t *testing.T) {
 	database := openIntegrationDatabase(t)

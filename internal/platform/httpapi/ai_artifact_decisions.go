@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	agent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func (s *AIService) DecideArtifact() http.HandlerFunc {
@@ -70,7 +70,7 @@ func (s *AIService) DecideArtifact() http.HandlerFunc {
 				writeJSON(w, http.StatusConflict, map[string]any{"code": "artifact_already_decided", "message": "This draft has already been decided."})
 				return
 			}
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		artifact, found, conflict := s.invocations.decideArtifact(userID, artifactID, body.Decision)
@@ -123,7 +123,7 @@ func (s *AIService) CompleteArtifact() http.HandlerFunc {
 			}
 		}
 		if err := s.database.CompleteAIArtifact(r.Context(), userID, artifactID, body.State, body.Error); err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		artifact, found := s.invocations.completeArtifact(userID, artifactID, body.State, body.Error)

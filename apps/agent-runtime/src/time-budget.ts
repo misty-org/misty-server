@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 
-// The person's time (docs/plans/odysseys-campaign.md). A run that is right but slow still fails
+// The person's time (docs/agents/evals/odysseys.md). A run that is right but slow still fails
 // the person waiting on it, and how slow is too slow depends on the task: a quick lookup should
 // take a few minutes, deep research much longer. The agent says how long the task should take
 // with its first checklist (`minutes`); the budget follows that estimate, ten minutes when it
@@ -8,7 +8,7 @@ import type { ModelMessage } from "ai";
 // 130% can only write its answer. A run whose recent steps still find new things is not cut
 // off by the clock (an unfinished task helps nobody): it keeps going until it stops progressing.
 
-export const DEFAULT_ESTIMATE_MINUTES = 10;
+const DEFAULT_ESTIMATE_MINUTES = 10;
 const MIN_ESTIMATE_MINUTES = 2;
 const MAX_ESTIMATE_MINUTES = 120;
 /** Without a request for long work, an estimate counts for at most this many minutes. */
@@ -17,7 +17,7 @@ const longWork =
   /\b(deep|in-depth|thorough|comprehensive|exhaustive) (research|dive|analysis|review)|\b(write|draft|produce) (me )?(a |an |the )?(full |complete |long |detailed )?(paper|report|essay|thesis|white ?paper)|\bovernight\b|\btake (your|as much) time\b/i;
 
 /** Whether the person's request asks for long work, which may take more than half an hour. */
-export function asksForLongWork(messages: ModelMessage[]): boolean {
+function asksForLongWork(messages: ModelMessage[]): boolean {
   const first = messages.find((message) => message.role === "user");
   const text =
     typeof first?.content === "string"

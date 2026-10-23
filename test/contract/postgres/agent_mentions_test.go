@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestMentionsAndTranscriptBelongToThePersonWhoAsked(t *testing.T) {

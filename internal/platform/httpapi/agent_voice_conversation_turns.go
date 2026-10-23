@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 // handleClient applies one client event. end reports a clean session end.

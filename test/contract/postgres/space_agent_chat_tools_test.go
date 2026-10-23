@@ -3,13 +3,10 @@ package db
 import (
 	"context"
 	"encoding/json"
+	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	"strings"
 	"testing"
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
-
-
-import ()
 
 func TestPrivateSpaceAgentSendsExactMessageThroughServerOwnedToolbox(t *testing.T) {
 	database := openTestDatabase(t)
@@ -169,7 +166,7 @@ func TestFamilySpaceResearchCanBeSavedAndPostedWithCitations(t *testing.T) {
 		t.Fatalf("post cited summary: %v", err)
 	}
 	messages, err := database.SpaceMessages(ctx, owner.ID, space.ID, 0, 20)
-	if err != nil || len(messages) != 1 || !strings.Contains(api.TestingSpansToPlainText(messages[0].Content), sourceURL) {
+	if err != nil || len(messages) != 1 || !strings.Contains(api.SpansToPlainText(messages[0].Content), sourceURL) {
 		t.Fatalf("Family Space cited summary = %#v, %v", messages, err)
 	}
 }

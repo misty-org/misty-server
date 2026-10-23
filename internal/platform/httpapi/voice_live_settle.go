@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/kannachi323/misty/server/internal/billingadapter"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // VoiceLiveSettle is called by the agent runtime, signed with the control

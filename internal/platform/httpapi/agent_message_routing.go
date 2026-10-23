@@ -3,8 +3,8 @@ package api
 import (
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func resolveAgentMessageRecipient(members []db.SpaceMember, actorUserID, requestedUserID, prompt, message string) (*db.SpaceMember, error) {
@@ -14,7 +14,7 @@ func resolveAgentMessageRecipient(members []db.SpaceMember, actorUserID, request
 				return &members[index], nil
 			}
 		}
-		return nil, serveragent.ErrInvalidRequest("recipientUserId must identify another member of this Space")
+		return nil, agent.ErrInvalidRequest("recipientUserId must identify another member of this Space")
 	}
 	combined := prompt + " " + message
 	matches := []db.SpaceMember{}
@@ -40,9 +40,9 @@ func resolveAgentMessageAudience(requested string, hasRecipient bool) (string, e
 		if hasRecipient {
 			return "private", nil
 		}
-		return "", serveragent.ErrInvalidRequest("choose audience private (with recipientUserId) or space; ask the user if their intent is unclear")
+		return "", agent.ErrInvalidRequest("choose audience private (with recipientUserId) or space; ask the user if their intent is unclear")
 	}
-	return "", serveragent.ErrInvalidRequest("audience must be auto, private, or space")
+	return "", agent.ErrInvalidRequest("audience must be auto, private, or space")
 }
 
 func agentMessageContent(message string, recipient *db.SpaceMember) []db.MessageSpan {

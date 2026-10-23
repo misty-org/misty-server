@@ -20,7 +20,7 @@ func TestRequestObservabilityUsesSafeCallerCorrelationID(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(previous) })
 
 	router := chi.NewRouter()
-	router.Use(TestingRequestObservabilityMiddleware)
+	router.Use(RequestObservabilityMiddleware)
 	router.Get("/spaces/{spaceID}", func(w http.ResponseWriter, r *http.Request) {
 		if got := TestingRequestIDFromContext(r.Context()); got != "client-request-123" {
 			t.Fatalf("context request id = %q", got)
@@ -55,7 +55,7 @@ func TestRequestObservabilityUsesSafeCallerCorrelationID(t *testing.T) {
 }
 
 func TestRequestObservabilityReplacesUnsafeCorrelationID(t *testing.T) {
-	handler := TestingRequestObservabilityMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := RequestObservabilityMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := TestingRequestIDFromContext(r.Context()); !strings.HasPrefix(got, "req_") {
 			t.Fatalf("generated request id = %q", got)
 		}
@@ -80,7 +80,7 @@ func TestRequestObservabilitySuppressesRoutineMePolling(t *testing.T) {
 			t.Cleanup(func() { log.SetOutput(previous) })
 
 			router := chi.NewRouter()
-			router.Use(TestingRequestObservabilityMiddleware)
+			router.Use(RequestObservabilityMiddleware)
 			router.Get("/api/me", func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(status)
 			})
@@ -104,7 +104,7 @@ func TestRequestObservabilityStillLogsMeServerFailures(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(previous) })
 
 	router := chi.NewRouter()
-	router.Use(TestingRequestObservabilityMiddleware)
+	router.Use(RequestObservabilityMiddleware)
 	router.Get("/api/me", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed", http.StatusInternalServerError)
 	})

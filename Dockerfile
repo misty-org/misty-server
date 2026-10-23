@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     && { cp "$(go env GOPATH)/bin/${TARGETOS}_${TARGETARCH}/goose" /out/goose 2>/dev/null \
          || cp "$(go env GOPATH)/bin/goose" /out/goose; }
 COPY . .
-RUN /host/goose -dir internal/platform/postgres/migrations validate
+RUN /host/goose -dir internal/platform/db/migrations validate
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOMAXPROCS=2 CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -p 2 \
     -trimpath \
     -ldflags="-s -w" \
@@ -32,7 +32,7 @@ RUN apt-get update \
 
 COPY --from=builder --chown=10001:10001 /out/misty-server /usr/local/bin/misty-server
 COPY --from=builder --chown=10001:10001 /out/goose /usr/local/bin/goose
-COPY --chown=10001:10001 internal/platform/postgres/migrations /app/migrations
+COPY --chown=10001:10001 internal/platform/db/migrations /app/migrations
 COPY --chmod=0555 scripts/docker/api-entrypoint.sh /usr/local/bin/misty-dev-api-entrypoint
 
 USER 10001:10001

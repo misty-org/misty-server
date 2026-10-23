@@ -13,7 +13,7 @@ import (
 
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // stubPresigner records what the service asked to sign without contacting R2.
@@ -50,10 +50,10 @@ func (p *stubPresigner) PresignGet(_ context.Context, key, filename string, ttl 
 func directTransferService(t *testing.T, presigner LibraryObjectPresigner) *SpaceLibraryService {
 	t.Helper()
 	return &SpaceLibraryService{
-		TestingStore:        NewMemoryLibraryObjectStore(),
-		TestingUploadLimits: DefaultUploadLimits(),
-		TestingPresigner:    presigner,
-		TestingTransfers:    TransferTTLs{UploadURLTTL: 15 * time.Minute, DownloadURLTTL: 2 * time.Minute},
+		Store:        NewMemoryLibraryObjectStore(),
+		UploadLimits: DefaultUploadLimits(),
+		Presigner:    presigner,
+		Transfers:    TransferTTLs{UploadURLTTL: 15 * time.Minute, DownloadURLTTL: 2 * time.Minute},
 	}
 }
 
@@ -66,7 +66,7 @@ func TestUploadTransferReturnsAbsoluteSignedPutWithoutMistyCredentials(t *testin
 		RequestedByteSize: 21, ClientSHA256: hex.EncodeToString(digest[:]), ClientDeclaredMIMEType: "text/plain",
 	}
 
-	transfer, err := service.TestingUploadTransfer(context.Background(), upload, "misty-upload-token", time.Now().Add(time.Hour))
+	transfer, err := service.UploadTransfer(context.Background(), upload, "misty-upload-token", time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestUploadTransferReturnsAbsoluteSignedPutWithoutMistyCredentials(t *testin
 	}
 	// The absolute R2 URL must never carry a Misty upload token: the client
 	// sends it with no cookies and no Misty authorization header.
-	if _, leaked := transfer.Headers[TestingLibraryUploadTokenHeader]; leaked {
+	if _, leaked := transfer.Headers[LibraryUploadTokenHeader]; leaked {
 		t.Fatalf("signed transfer leaked the Misty upload token: %#v", transfer.Headers)
 	}
 	if transfer.URL[:8] != "https://" {
@@ -96,10 +96,10 @@ func TestUploadTransferReturnsAbsoluteSignedPutWithoutMistyCredentials(t *testin
 // A store that cannot sign keeps the relative proxy route, which is what
 // makes local development work without R2 credentials.
 func TestUploadTransferUsesTheProxyWhenTheStoreCannotSign(t *testing.T) {
-	service := &SpaceLibraryService{TestingStore: NewMemoryLibraryObjectStore(), TestingUploadLimits: DefaultUploadLimits()}
+	service := &SpaceLibraryService{Store: NewMemoryLibraryObjectStore(), UploadLimits: DefaultUploadLimits()}
 	upload := &db.LibraryUpload{ID: "upload_1", SpaceID: "space_1", ObjectKey: "library/proxyfixture001", ClientDeclaredMIMEType: "text/plain"}
 
-	transfer, err := service.TestingUploadTransfer(context.Background(), upload, "misty-upload-token", time.Now().Add(time.Hour))
+	transfer, err := service.UploadTransfer(context.Background(), upload, "misty-upload-token", time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestUploadTransferUsesTheProxyWhenTheStoreCannotSign(t *testing.T) {
 	if transfer.URL != "/spaces/space_1/library/uploads/upload_1/content" {
 		t.Fatalf("URL = %q, want the relative proxy route", transfer.URL)
 	}
-	if transfer.Headers[TestingLibraryUploadTokenHeader] != "misty-upload-token" {
+	if transfer.Headers[LibraryUploadTokenHeader] != "misty-upload-token" {
 		t.Fatal("proxy transfer must carry the Misty upload token")
 	}
 }
@@ -122,7 +122,7 @@ func TestWriteDownloadReturnsSignedDescriptorInsteadOfBytes(t *testing.T) {
 		MIMEType: "application/pdf", ByteSize: 4096, SHA256: "0",
 	}
 
-	service.TestingWriteDownload(recorder, request, download)
+	service.WriteDownload(recorder, request, download)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", recorder.Code)
@@ -162,7 +162,7 @@ func TestJournalAssetDownloadReturnsVerifiedR2Descriptor(t *testing.T) {
 		SHA256:    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 
-	service.TestingWriteJournalAssetDownload(recorder, request, download)
+	service.WriteJournalAssetDownload(recorder, request, download)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", recorder.Code)
@@ -177,14 +177,14 @@ func TestJournalAssetDownloadReturnsVerifiedR2Descriptor(t *testing.T) {
 		descriptor.SHA256 != download.SHA256 {
 		t.Fatalf("descriptor = %#v", descriptor)
 	}
-	if recorder.Header().Get(TestingLibrarySignedDownloadHeader) != "1" {
+	if recorder.Header().Get(LibrarySignedDownloadHeader) != "1" {
 		t.Fatal("signed download marker is missing")
 	}
 }
 
 func TestJournalAssetDownloadNeverFallsBackToServerBytes(t *testing.T) {
 	service := &SpaceLibraryService{
-		TestingStore: NewMemoryLibraryObjectStore(),
+		Store: NewMemoryLibraryObjectStore(),
 	}
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(
@@ -193,7 +193,7 @@ func TestJournalAssetDownloadNeverFallsBackToServerBytes(t *testing.T) {
 		nil,
 	)
 
-	service.TestingWriteJournalAssetDownload(
+	service.WriteJournalAssetDownload(
 		recorder,
 		request,
 		&db.LibraryDownload{
@@ -218,11 +218,11 @@ func TestJournalAssetPurposesNeverUseTheProxy(t *testing.T) {
 		UploadPurposeNoteAttachment,
 		UploadPurposeDrawingAsset,
 	} {
-		if !TestingIsJournalAssetPurpose(purpose) {
+		if !IsJournalAssetPurpose(purpose) {
 			t.Fatalf("%q was not recognized as a Journal asset purpose", purpose)
 		}
 	}
-	if TestingIsJournalAssetPurpose(UploadPurposeLibrary) {
+	if IsJournalAssetPurpose(UploadPurposeLibrary) {
 		t.Fatal("Library upload was treated as a Journal asset")
 	}
 }
@@ -231,11 +231,11 @@ func TestJournalAssetPurposesNeverUseTheProxy(t *testing.T) {
 // A development store that cannot sign transparently keeps the proxy route,
 // which is what lets local development work without R2 credentials.
 func TestDirectTransferFollowsStoreCapability(t *testing.T) {
-	signing, err := NewSpaceLibraryService(&db.Database{}, &S3LibraryObjectStore{TestingBucket: "misty", TestingPresigner: &recordingPresigner{}}, true, DefaultUploadLimits())
+	signing, err := NewSpaceLibraryService(&db.Database{}, &S3LibraryObjectStore{Bucket: "misty", Presigner: &recordingPresigner{}}, true, DefaultUploadLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !signing.TestingDirectTransfersActive() {
+	if !signing.DirectTransfersActive() {
 		t.Fatal("a signing store did not enable direct transfer")
 	}
 
@@ -243,7 +243,7 @@ func TestDirectTransferFollowsStoreCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if local.TestingDirectTransfersActive() {
+	if local.DirectTransfersActive() {
 		t.Fatal("a store that cannot sign reported direct transfer as active")
 	}
 }
@@ -251,12 +251,12 @@ func TestDirectTransferFollowsStoreCapability(t *testing.T) {
 // The TTLs remain tunable, but an unbounded lifetime is still rejected, since
 // a long-lived signed URL is effectively a public one.
 func TestTransferTTLsMustStayBounded(t *testing.T) {
-	service := &SpaceLibraryService{TestingStore: NewMemoryLibraryObjectStore(), TestingUploadLimits: DefaultUploadLimits()}
+	service := &SpaceLibraryService{Store: NewMemoryLibraryObjectStore(), UploadLimits: DefaultUploadLimits()}
 
-	if err := service.TestingConfigureTransfers(TransferTTLs{UploadURLTTL: 48 * time.Hour, DownloadURLTTL: 2 * time.Minute}); err == nil {
+	if err := service.ConfigureTransfers(TransferTTLs{UploadURLTTL: 48 * time.Hour, DownloadURLTTL: 2 * time.Minute}); err == nil {
 		t.Fatal("configureTransfers() accepted a 48h upload URL lifetime")
 	}
-	if err := service.TestingConfigureTransfers(DefaultTransferTTLs()); err != nil {
+	if err := service.ConfigureTransfers(DefaultTransferTTLs()); err != nil {
 		t.Fatalf("configureTransfers(defaults) = %v", err)
 	}
 }

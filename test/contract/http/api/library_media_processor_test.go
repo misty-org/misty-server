@@ -9,9 +9,7 @@ import (
 	"testing"
 
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-
 )
-
 
 func TestFFmpegLibraryMediaProcessorCreatesMetadataStrippedPreview(t *testing.T) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
@@ -45,4 +43,3 @@ func TestFFmpegLibraryMediaProcessorCreatesMetadataStrippedPreview(t *testing.T)
 		t.Fatalf("preview = %dx%d %#v", decoded.Bounds().Dx(), decoded.Bounds().Dy(), preview)
 	}
 }
-

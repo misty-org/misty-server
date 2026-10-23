@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/billingadapter"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func embedRetrievalChunk(ctx context.Context, server *Server, chunk db.AIEmbeddingChunk) error {
@@ -19,7 +19,9 @@ func embedRetrievalChunk(ctx context.Context, server *Server, chunk db.AIEmbeddi
 	key := "retrieval-embedding:" + chunk.AttemptID
 	analyzer := server.AIAnalyzer.WithBilling(service, chunk.AccountID, key)
 	model, err := analyzer.AccountEmbeddingModel(ctx)
- if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	vectors, _, err := analyzer.Embed(ctx, []string{chunk.Content})
 	if err != nil {
 		return err

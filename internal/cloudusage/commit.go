@@ -3,7 +3,7 @@ package cloudusage
 import (
 	"context"
 	"database/sql"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 // Commit checks only accounts whose payload grew in this transaction. Shrinks
@@ -43,7 +43,7 @@ func Commit(ctx context.Context, tx *sql.Tx) error {
 		if c.added <= c.removed {
 			continue
 		}
-		adapter, err := envconfig.BillingAdapter()
+		adapter, err := config.BillingAdapter()
 		if err != nil {
 			return err
 		}

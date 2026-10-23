@@ -10,7 +10,7 @@ import {
   messageBytes,
   planCompaction,
   renderTranscript,
-} from "../src/context-compaction.js";
+} from "../src/context/context-compaction.js";
 
 function step(n: number, result = `page ${n} body `.repeat(20)): ModelMessage[] {
   return [

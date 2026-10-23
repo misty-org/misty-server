@@ -6,22 +6,21 @@ import (
 	"time"
 )
 
-
 import (
 	"errors"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestParseLibrarySearchRejectsInvalidStructuredValues(t *testing.T) {
-	if _, err := TestingParseLibrarySearch("type:executable"); !errors.Is(err, ErrLibraryInvalid) {
+	if _, err := ParseLibrarySearch("type:executable"); !errors.Is(err, ErrLibraryInvalid) {
 		t.Fatalf("type error = %v", err)
 	}
-	if _, err := TestingParseLibrarySearch("after:tomorrow"); !errors.Is(err, ErrLibraryInvalid) {
+	if _, err := ParseLibrarySearch("after:tomorrow"); !errors.Is(err, ErrLibraryInvalid) {
 		t.Fatalf("date error = %v", err)
 	}
-	parsed, err := TestingParseLibrarySearch(`summer trip album:"Road trip" hidden:false`)
+	parsed, err := ParseLibrarySearch(`summer trip album:"Road trip" hidden:false`)
 	if err != nil || parsed.Text != "summer trip" || parsed.Album != "Road trip" || parsed.Hidden == nil || *parsed.Hidden {
 		t.Fatalf("parsed search = %#v, %v", parsed, err)
 	}

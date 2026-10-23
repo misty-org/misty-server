@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/agents"
+	. "github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
@@ -113,7 +113,7 @@ func TestRuntimeProviderAsksForTheAgentResponseSchema(t *testing.T) {
 }
 
 func TestGatewayAgentSchemaUsesPortableNonNullableFilePlan(t *testing.T) {
-	schema := TestingAgentResponseJSONSchema()
+	schema := AgentResponseJSONSchema()
 	properties := schema["properties"].(map[string]any)
 	filePlan := properties["file_plan"].(map[string]any)
 	if filePlan["type"] != "object" {

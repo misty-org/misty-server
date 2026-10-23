@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"sync"
 	"testing"
 	"time"

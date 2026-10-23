@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/aimodels"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 const daySummaryMaxOutput = 1200
@@ -81,15 +81,15 @@ func (s *SpacesService) daySummary(ctx context.Context, user, date, language str
 	model := defaultRoleModel("day-summary")
 	provider := aimodels.UsageProvider(model)
 	key := "day-summary:" + uuid.NewString()
-	var reservation *serveragent.UsageReservation
+	var reservation *agent.UsageReservation
 	if s.usageMeter != nil {
 		var err error
-		if reservation, err = serveragent.ReserveMeasuredUsage(s.usageMeter, user, key, provider, model, map[string]int64{"input_bytes": int64(size), "output_tokens": daySummaryMaxOutput}, ""); err != nil {
+		if reservation, err = agent.ReserveMeasuredUsage(s.usageMeter, user, key, provider, model, map[string]int64{"input_bytes": int64(size), "output_tokens": daySummaryMaxOutput}, ""); err != nil {
 			return modelruntime.DaySummaryResult{}, err
 		}
 	}
 	result, err := s.models.DaySummary(ctx, modelruntime.DaySummaryRequest{Route: modelruntime.Instance(), Model: model, Date: date, Items: items, Language: language, MaxOutputTokens: daySummaryMaxOutput})
-	if settleErr := serveragent.FinishMeteredCall(s.usageMeter, reservation, key+":settle", "day_summary", provider, model, result.Usage, err); settleErr != nil && err == nil {
+	if settleErr := agent.FinishMeteredCall(s.usageMeter, reservation, key+":settle", "day_summary", provider, model, result.Usage, err); settleErr != nil && err == nil {
 		return result, settleErr
 	}
 	return result, err

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 )
 
@@ -15,7 +15,7 @@ import (
 // its mappings against this list.
 func TestingAgentCatalogToolNames() []string {
 	service := &SpacesService{}
-	noop := func(context.Context, agenttools.Invocation, serveragent.ToolRequest) (json.RawMessage, error) {
+	noop := func(context.Context, agenttools.Invocation, agent.ToolRequest) (json.RawMessage, error) {
 		return nil, nil
 	}
 	seen := map[string]bool{}
@@ -25,12 +25,14 @@ func TestingAgentCatalogToolNames() []string {
 		}
 	}
 	extra := append(agentMemberToolRegistrations(nil), service.accountAdminToolRegistrations()...)
-	// Memory tools are offered only while Memory is on.
-	extra = append(extra, recallToolRegistrationsFor(service)...)
+	// Memory tools are offered only while Memory is on; the account tools already include them then.
+	if !recallConfig().Enabled {
+		extra = append(extra, recallToolRegistrationsFor(service)...)
+	}
 	add(buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, delegation: noop, extra: extra, allLayers: true}).Descriptors())
 	add(spaceAgentToolbox(nil).Descriptors())
 	add(browserToolDescriptors())
-	for _, name := range []string{webSearchTool, appsSearchTool, appsSchemasTool, appsConnectedTool, appsConnectTool, appsExecuteTool, screenOpenTool, screenLookTool, screenCloseTool, appWindowTool} {
+	for _, name := range []string{webSearchTool, appsSearchTool, appsSchemasTool, appsConnectedTool, appsConnectTool, appsExecuteTool, screenOpenTool, screenLookTool, screenCloseTool} {
 		seen[name] = true
 	}
 	names := make([]string, 0, len(seen))

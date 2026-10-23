@@ -79,7 +79,7 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 		if message == "" {
 			message = "Agent run failed"
 		}
-		result := TestingMustAPIRawJSON(map[string]any{"text": body.Text, "usage": json.RawMessage(body.Usage), "runtime_status": body.Status, "message": message})
+		result := MustAPIRawJSON(map[string]any{"text": body.Text, "usage": json.RawMessage(body.Usage), "runtime_status": body.Status, "message": message})
 		finished, err := s.database.FinishSpaceRun(r.Context(), run.ID, state, result, code)
 		if err != nil {
 			writeAgentError(w, err)

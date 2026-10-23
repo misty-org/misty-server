@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"os"
 	"strings"
 	"testing"
@@ -43,7 +43,7 @@ func TestBillingOutboxPersistsIdenticalRetriesAndRejectsConflictingUsage(t *test
 	defer scoped.Close()
 
 	for _, name := range []string{"20270216000000_billing_adapter_outbox.sql", "20270217000000_billing_runtime_groups.sql", "20270218000000_billing_admission_intents.sql"} {
-		migration, err := os.ReadFile("../../../internal/platform/postgres/upgrades/" + name)
+		migration, err := os.ReadFile("../../../test/fixtures/schema-history/" + name)
 		if err != nil {
 			t.Fatal(err)
 		}

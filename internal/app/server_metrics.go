@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 
 	"github.com/kannachi323/misty/server/internal/platform/metrics"
 )
@@ -101,5 +101,5 @@ func (s *Server) registerDomainGauges(registry *metrics.Registry) {
 // route, its traffic volume, and its error rate, so exposing it by default
 // would be a real disclosure.
 func metricsToken() string {
-	return strings.TrimSpace(envconfig.Getenv("MISTY_METRICS_TOKEN"))
+	return strings.TrimSpace(config.Getenv("MISTY_METRICS_TOKEN"))
 }

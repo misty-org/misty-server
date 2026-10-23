@@ -2,7 +2,7 @@ package api
 
 import (
 	"errors"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/test/testkit"
 	"os"
 	"testing"
@@ -23,7 +23,7 @@ func TestAgentMethodRuntimePinsAndTargetBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := database.SaveAgentMethod(ctx, owner.ID, db.AgentMethod{AgentID: agent.ID, Kind: "workflow", Enabled: true, Definition: db.AgentMethodDefinition{Title: "Read browser", Instructions: "Read the assigned browser only.", Target: "separate_window", RequiredTools: []string{"browser.inspect"}}}, 0)
+	m, err := database.SaveAgentMethod(ctx, owner.ID, db.AgentMethod{AgentID: agent.ID, Kind: "workflow", Enabled: true, Definition: db.AgentMethodDefinition{Title: "Read browser", Instructions: "Read the assigned browser only.", Target: "current_window", RequiredTools: []string{"browser.inspect"}}}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,9 +36,9 @@ func TestAgentMethodRuntimePinsAndTargetBoundaries(t *testing.T) {
 	body.TaskID = "task"
 	body.DeviceContexts = []aiInvocationDeviceContext{{}}
 	if _, err := resolveInvocationMethod(ctx, database, owner.ID, &body); err == nil {
-		t.Fatal("separate workflow accepted main")
+		t.Fatal("this-window workflow accepted team execution")
 	}
-	body.WindowLabel = "misty-agent-fixture"
+	body.ExecutionMode = "agent"
 	if _, err := resolveInvocationMethod(ctx, database, owner.ID, &body); err != nil || body.Prompt != m.Definition.Instructions {
 		t.Fatal("pin not resolved", err)
 	}

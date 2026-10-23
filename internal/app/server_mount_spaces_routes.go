@@ -9,21 +9,15 @@ import (
 	"strings"
 	"time"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
 func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, realtime *api.RealtimeService) {
-
-	s.mountMCPRoutes(prefix, spaces)
+	s.mountAccountRoutes(prefix, spaces)
 	s.Router.Get(prefix+"/agent-runs/{runID}", spaces.PersonalAgentRunDetail())
 	s.Router.Post(prefix+"/agent-runs/{runID}/cancel", spaces.CancelPersonalAgentRun())
-	s.Router.Get(prefix+"/search/global", spaces.GlobalSearch())
-	s.Router.Get(prefix+"/connections", spaces.ConnectedAccounts())
-	s.Router.Post(prefix+"/connections/{provider}/authorize", spaces.BeginConnectedAccountAuthorization())
-	s.Router.Get(prefix+"/oauth/connections/{provider}/callback", spaces.ConnectedAccountAuthorizationCallback())
-	s.Router.Delete(prefix+"/connections/{connectionID}", spaces.DeleteConnectedAccount())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces", api.ConditionalGET(spaces.Spaces()))
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces", spaces.Spaces())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}", spaces.Space())
@@ -38,15 +32,9 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/code-projects", spaces.SpaceCodeProjects())
 	s.Router.Delete(prefix+"/spaces/{spaceID}/code-projects/{projectID}", spaces.SpaceCodeProject())
 	s.Router.Get(prefix+"/spaces/{spaceID}/agent-artifacts", spaces.AgentArtifacts())
-	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/agents/{agentID}", spaces.SpaceAgent())
-	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/agents/{agentID}", spaces.SpaceAgent())
 	s.Router.Get(prefix+"/agent-mentions", spaces.AgentMentions())
 	s.Router.Get(prefix+"/agent-requests/{requestID}", spaces.AgentMemberRequest())
 	s.Router.Get(prefix+"/agent-requests/{requestID}/transcript", spaces.AgentRequestTranscript())
-	s.Router.Post(prefix+"/a2a/spaces/{spaceID}/agents/{agentID}", spaces.A2AAgent())
-	s.Router.Get(prefix+"/a2a/spaces/{spaceID}/agents/{agentID}/.well-known/agent-card.json", spaces.A2AAgentCard())
-	s.Router.Post(prefix+"/a2a/agents/{agentID}/token", spaces.A2AAgentToken())
-	s.Router.Get(prefix+"/a2a/push", spaces.A2APushInbox())
 	s.Router.Get(prefix+"/spaces/{spaceID}/members/{userID}/avatar", spaces.MemberAvatar())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/invitations", spaces.Invite())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/invitations", spaces.Invite())
@@ -84,11 +72,6 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/nodes/{nodeID}", spaces.Node())
 	s.Router.Post(prefix+"/spaces/{spaceID}/nodes/{nodeID}/resolve", spaces.ResolveTicket())
 	s.Router.Get(prefix+"/spaces/resolve/{ticket}", spaces.Resolve())
-	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/integrations", spaces.SpaceIntegrations())
-	// Connections are created only through branded OAuth/install flows. The
-	// legacy PUT route is intentionally not mounted because callers must never
-	// supply their own credential/vault reference.
-	s.Router.Post(prefix+"/spaces/{spaceID}/integrations/{provider}/bind", spaces.BindConnectedAccountToSpaceProvider())
 	s.Router.Post(prefix+"/realtime/tickets", realtime.Ticket())
 	s.Router.Get(prefix+"/realtime", realtime.Connect())
 }
@@ -101,12 +84,12 @@ func (s *Server) StartRealtime() error {
 }
 
 func spaceLinkEncryptionKeyFromEnv() (string, error) {
-	if key := strings.TrimSpace(envconfig.Getenv("SPACE_LINK_ENCRYPTION_KEY")); key != "" {
+	if key := strings.TrimSpace(config.Getenv("SPACE_LINK_ENCRYPTION_KEY")); key != "" {
 		return key, nil
 	}
-	seed := strings.TrimSpace(envconfig.Getenv("DOCUMENT_SIGNING_KEY"))
+	seed := strings.TrimSpace(config.Getenv("DOCUMENT_SIGNING_KEY"))
 	if seed == "" {
-		if strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production") {
+		if strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_ENVIRONMENT")), "production") {
 			return "", fmt.Errorf("SPACE_LINK_ENCRYPTION_KEY is required in production")
 		}
 		seed = "misty-development-space-link-key"
@@ -175,4 +158,13 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/complete", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("complete")))
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/fail", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("fail")))
 	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/release", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("release")))
+}
+
+func serverFeatureEnabled(name string) bool {
+	return strings.EqualFold(strings.TrimSpace(config.Getenv(name)), "true")
+}
+
+func serverConnectedDevicesConfigured() bool {
+	return strings.TrimSpace(config.Getenv("MISTY_DEVICE_TICKET_PRIVATE_KEY")) != "" &&
+		strings.TrimSpace(config.Getenv("MISTY_DEVICE_PAIRING_PEPPER")) != ""
 }

@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 import { expect, it } from "vitest";
-import { DROPPED_SNAPSHOT, pruneStalePageSnapshots, withCacheBreakpoint } from "../src/prompt-cache.js";
+import { DROPPED_SNAPSHOT, pruneStalePageSnapshots, withCacheBreakpoint } from "../src/context/prompt-cache.js";
 
 const tree = (n: number) => `- button "Item ${n}" [ref=e${n}]\n`.repeat(1_000);
 const result = (id: string, toolName: string, value: unknown): ModelMessage => ({

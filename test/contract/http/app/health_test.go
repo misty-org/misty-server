@@ -9,8 +9,8 @@ import (
 
 	. "github.com/kannachi323/misty/server/internal/app"
 
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 func TestHealthIsSanitizedAndFailsWhenCriticalDependenciesAreUnavailable(t *testing.T) {
@@ -20,7 +20,7 @@ func TestHealthIsSanitizedAndFailsWhenCriticalDependenciesAreUnavailable(t *test
 	request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	recorder := httptest.NewRecorder()
 
-	TestingNewHealthMonitor(server).Handler().ServeHTTP(recorder, request)
+	NewHealthMonitor(server).Handler().ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusServiceUnavailable, recorder.Body.String())
@@ -31,7 +31,7 @@ func TestHealthIsSanitizedAndFailsWhenCriticalDependenciesAreUnavailable(t *test
 	if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("Cache-Control = %q, want no-store", got)
 	}
-	var snapshot TestingHealthSnapshot
+	var snapshot HealthSnapshot
 	if err := json.Unmarshal(recorder.Body.Bytes(), &snapshot); err != nil {
 		t.Fatalf("decode health response: %v", err)
 	}
@@ -41,14 +41,14 @@ func TestHealthIsSanitizedAndFailsWhenCriticalDependenciesAreUnavailable(t *test
 }
 
 func TestSummarizeHealthUses503OnlyForCriticalFailures(t *testing.T) {
-	status, code := TestingSummarizeHealth(map[string]TestingHealthCheck{
+	status, code := SummarizeHealth(map[string]HealthCheck{
 		"database": {Status: "ok", Critical: true},
 		"storage":  {Status: "unconfigured", Critical: false},
 	})
 	if status != "degraded" || code != http.StatusOK {
 		t.Fatalf("optional failure summary = (%q,%d), want (degraded,200)", status, code)
 	}
-	status, code = TestingSummarizeHealth(map[string]TestingHealthCheck{
+	status, code = SummarizeHealth(map[string]HealthCheck{
 		"database": {Status: "unavailable", Critical: true},
 	})
 	if status != "unavailable" || code != http.StatusServiceUnavailable {
@@ -59,17 +59,17 @@ func TestSummarizeHealthUses503OnlyForCriticalFailures(t *testing.T) {
 func TestPublicAPIHealthRequiresHTTPSInProduction(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	t.Setenv("MISTY_PUBLIC_API_URL", "http://mistysys.com/api")
-	if got := TestingPublicAPIConfigurationCheck(); got.Status != "degraded" {
+	if got := PublicAPIConfigurationCheck(); got.Status != "degraded" {
 		t.Fatalf("HTTP production API health = %+v, want degraded", got)
 	}
 	t.Setenv("MISTY_PUBLIC_API_URL", "https://mistysys.com/api")
-	if got := TestingPublicAPIConfigurationCheck(); got.Status != "ready" {
+	if got := PublicAPIConfigurationCheck(); got.Status != "ready" {
 		t.Fatalf("HTTPS production API health = %+v, want ready", got)
 	}
 }
 
 func TestDisabledOptionalBillingIsHealthy(t *testing.T) {
-	status, code := TestingSummarizeHealth(map[string]TestingHealthCheck{
+	status, code := SummarizeHealth(map[string]HealthCheck{
 		"database": {Status: "ok", Critical: true},
 		"billing":  {Status: "disabled", Mode: "configuration", Critical: false},
 	})

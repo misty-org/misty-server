@@ -1,6 +1,6 @@
 package console
 
-import db "github.com/kannachi323/misty/server/internal/platform/postgres"
+import "github.com/kannachi323/misty/server/internal/platform/db"
 
 templ syncPage(v syncView) {
 	@pageHeader("Sync", "Vaults, devices and per-device workspaces. Content is end-to-end encrypted; only counts are visible.")
@@ -137,7 +137,7 @@ templ settingRow(s setting) {
 }
 
 templ billingPage(v billingView) {
-	@pageHeader("Billing", "Billing adapter delivery and license distribution")
+	@pageHeader("Billing", "Billing adapter delivery. Plans live in the billing service.")
 	if v.Err != "" {
 		@problem(v.Err)
 	}
@@ -148,17 +148,4 @@ templ billingPage(v billingView) {
 		@healthRow("Outbox", v.Billing.OutboxRetrying == 0, plural(v.Billing.OutboxPending, "pending event", "pending events")+" · "+itoa(v.Billing.OutboxRetrying)+" retrying · oldest "+agoPtr(v.Billing.OutboxOldest))
 		@healthRow("Open reservations", true, itoa(v.Billing.Reservations)+" · oldest "+agoPtr(v.Billing.ReservationsOldest))
 	</ul>
-	@sectionLabel("Licenses")
-	<div class="table">
-		<div class="table-head"><span>Tier</span><span>Status</span><span>Accounts</span></div>
-		for _, l := range v.Billing.Licenses {
-			<div class="table-row">
-				<span>{ humanize(l.Kind) }</span>
-				<span>
-					@stateTag(l.State)
-				</span>
-				<span>{ itoa(l.Count) }</span>
-			</div>
-		}
-	</div>
 }

@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	platformmetrics "github.com/kannachi323/misty/server/internal/platform/metrics"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 var (
@@ -31,7 +31,7 @@ const (
 type AgentsService struct {
 	database         *db.Database
 	connectedDevices ConnectedDevicesConfig
-	voiceAnalyzer    *serveragent.SmartLibraryAnalyzer
+	voiceAnalyzer    *agent.SmartLibraryAnalyzer
 	voiceLimiter     *SlidingWindowLimiter
 	voiceMetrics     *platformmetrics.Registry
 	voiceLive        VoiceLiveConfig
@@ -46,7 +46,7 @@ func NewAgentsService(database *db.Database) *AgentsService {
 
 func (s *AgentsService) SetVoiceMetrics(metrics *platformmetrics.Registry) { s.voiceMetrics = metrics }
 
-func (s *AgentsService) SetVoiceAnalyzer(analyzer *serveragent.SmartLibraryAnalyzer) {
+func (s *AgentsService) SetVoiceAnalyzer(analyzer *agent.SmartLibraryAnalyzer) {
 	s.voiceAnalyzer = analyzer
 }
 
@@ -138,8 +138,8 @@ func (s *AgentsService) WorkflowNodeLeaseAction(action string) http.HandlerFunc 
 				writeAgentError(w, lookupErr)
 				return
 			}
-			var schema workflowv2.JSONSchema
-			if json.Unmarshal(current.OutputSchema, &schema) != nil || workflowv2.ValidateJSON(schema, body.Output) != nil {
+			var schema workflow.JSONSchema
+			if json.Unmarshal(current.OutputSchema, &schema) != nil || workflow.ValidateJSON(schema, body.Output) != nil {
 				http.Error(w, "invalid workflow node output", http.StatusUnprocessableEntity)
 				return
 			}

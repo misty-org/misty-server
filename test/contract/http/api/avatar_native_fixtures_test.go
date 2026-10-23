@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	"io"
 	"net/http/httptest"
@@ -37,7 +37,7 @@ func TestNativeAvatarPNGFixtures(t *testing.T) {
 				t.Fatal(err)
 			}
 			response := httptest.NewRecorder()
-			_, valid := TestingReadAvatarPNG(response, httptest.NewRequest("PUT", "/me/avatar", bytes.NewReader(data)))
+			_, valid := ReadAvatarPNG(response, httptest.NewRequest("PUT", "/me/avatar", bytes.NewReader(data)))
 			status := response.Code
 			if valid {
 				status = 200
@@ -50,7 +50,7 @@ func TestNativeAvatarPNGFixtures(t *testing.T) {
 }
 
 func TestNativeAvatarFilesystemRoundTrip(t *testing.T) {
-	directory := envconfig.Getenv("MISTY_TEST_AVATAR_DIRECTORY")
+	directory := config.Getenv("MISTY_TEST_AVATAR_DIRECTORY")
 	if directory == "" {
 		t.Skip("Archived cross-runtime integration proof; the Go fixture checks remain active")
 	}

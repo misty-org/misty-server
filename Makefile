@@ -22,7 +22,7 @@ run: ## Run the API server
 test: ## Full suite — bootstraps Docker Postgres on :5435
 	./test.sh
 
-test-unit: ## Go tests only (needs Postgres already up)
+test-unit: ## Every Go test without the Docker bootstrap (DB tests need Postgres already up)
 	go test -p 1 ./... -count=1
 
 lint: ## golangci-lint
@@ -32,11 +32,24 @@ lint: ## golangci-lint
 		exit 1; }
 	"$(GOLANGCI)" run
 
-fmt: ## Format all Go source
-	gofmt -w .
+# gofmt writes LF, and many files here use CRLF. Both targets strip CR before
+# formatting, and fmt writes CRLF files back with CRLF.
+GO_SOURCES = find . -name '*.go' -not -path '*/node_modules/*'
 
-fmt-check: ## Fail if any file is unformatted
-	@files="$$(gofmt -l .)"; \
+fmt: ## Format all Go source, keeping each file's line endings
+	@$(GO_SOURCES) | while read -r f; do \
+		if grep -q "$$(printf '\r')" "$$f"; then \
+			tr -d '\r' < "$$f" | gofmt | awk '{printf "%s\r\n", $$0}' > "$$f.fmt" || { rm -f "$$f.fmt"; exit 1; }; \
+			if cmp -s "$$f" "$$f.fmt"; then rm "$$f.fmt"; else mv "$$f.fmt" "$$f"; fi; \
+		else gofmt -w "$$f"; fi; \
+	done
+
+fmt-check: ## Fail if any file is unformatted (CRLF line endings are fine)
+	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
+	$(GO_SOURCES) | while read -r f; do \
+		mkdir -p "$$tmp/$$(dirname "$$f")"; tr -d '\r' < "$$f" > "$$tmp/$$f"; \
+	done; \
+	files="$$(cd "$$tmp" && gofmt -l .)"; \
 	if [ -n "$$files" ]; then echo "$$files"; exit 1; fi
 
 vet: ## go vet
@@ -48,4 +61,4 @@ sizes: ## Enforce the 500-line file cap
 migrate: ## Apply database migrations
 	./scripts/goose.sh up
 
-check: fmt-check vet sizes lint test ## Everything CI runs
+check: fmt-check vet sizes lint test ## Every check to run before pushing (there is no CI)

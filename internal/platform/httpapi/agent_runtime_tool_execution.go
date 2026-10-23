@@ -6,10 +6,10 @@ import (
 	"errors"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 type agentRuntimeToolCall struct {
@@ -47,7 +47,7 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 	} else if !errors.Is(err, db.ErrSpaceNotFound) {
 		return nil, agenttools.Invocation{}, nil, err
 	}
-	delegationHandler := func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+	delegationHandler := func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 		var input struct {
 			Prompt string `json:"prompt"`
 		}
@@ -63,7 +63,7 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 		if err != nil {
 			return nil, err
 		}
-		return TestingMustAPIRawJSON(map[string]any{"run_id": child.ID, "state": child.State, "worker": "background"}), nil
+		return MustAPIRawJSON(map[string]any{"run_id": child.ID, "state": child.State, "worker": "background"}), nil
 	}
 
 	browserTabs := []string{}
@@ -94,9 +94,8 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 		Source:                "space_conversation",
 		Trigger:               "message",
 		OriginalInput:         string(run.Input),
-		DelegatedApproval:     true,
 		ConversationScopeKind: db.ConversationScopeEveryone,
-		PermissionMode:        serveragent.NormalizePermissionMode(run.EffectiveRunMode),
+		PermissionMode:        agent.NormalizePermissionMode(run.EffectiveRunMode),
 	}
 	authorize := authorizeSpaceAgentTool(s.database)
 	if _, err := toolbox.Resolve(ctx, invocation, names, authorize); err != nil {
@@ -132,13 +131,13 @@ func (s *SpacesService) executePersonalAgentRuntimeTool(ctx context.Context, run
 		// Someone else's ask: no private item of the owner's opens on any read.
 		ctx = db.WithPublicLayerOnly(ctx)
 	}
-	result, err := toolbox.ExecuteWithMiddleware(ctx, invocation, serveragent.ToolRequest{
+	result, err := toolbox.ExecuteWithMiddleware(ctx, invocation, agent.ToolRequest{
 		ID: call.CallID, Name: call.Name, Arguments: call.Arguments,
 	}, authorize, agentToolboxExecutionJournal(s.database))
 	if errors.Is(err, db.ErrAgentToolboxActionUnknown) {
-		return agentRuntimeToolOutcome{Result: TestingMustAPIRawJSON(map[string]any{"status": "uncertain", "effect_id": call.CallID, "reason": "The action may have completed. Its outcome must be reconciled before retrying."})}, nil
+		return agentRuntimeToolOutcome{Result: MustAPIRawJSON(map[string]any{"status": "uncertain", "effect_id": call.CallID, "reason": "The action may have completed. Its outcome must be reconciled before retrying."})}, nil
 	}
-	if errors.Is(err, workflowv2.ErrDeviceUnavailable) {
+	if errors.Is(err, workflow.ErrDeviceUnavailable) {
 		var target struct {
 			ScopeID string `json:"scopeId"`
 		}

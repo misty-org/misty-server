@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Asking the person to approve what they already asked for ("Confirm post",

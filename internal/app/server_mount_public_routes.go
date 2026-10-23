@@ -44,6 +44,7 @@ func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 // referral routes.
 func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/me", api.GetMe(s.Database))
+	s.Router.Put(prefix+"/me/password", api.ChangePassword(s.Database))
 	s.Router.Post(prefix+"/me/email/verify", deps.verification.Resend())
 	s.Router.Get(prefix+"/me/referral", deps.verification.Referral())
 	s.Router.Post(prefix+"/me/referral/claim", deps.verification.ClaimReferral())
@@ -54,6 +55,7 @@ func (s *Server) mountPublicSyncRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/sync/vault", deps.browserSync.Vault())
 	s.Router.Post(prefix+"/sync/vault", deps.browserSync.Vault())
 	s.Router.Delete(prefix+"/sync/vault", deps.browserSync.Vault())
+	s.Router.Put(prefix+"/sync/vault/key", deps.browserSync.VaultKey())
 	s.Router.Get(prefix+"/sync/vaults", deps.browserSync.Vaults())
 	s.Router.Post(prefix+"/sync/vaults", deps.browserSync.Vaults())
 	s.Router.Get(prefix+"/sync/devices", deps.browserSync.Devices())
@@ -116,7 +118,6 @@ func (s *Server) mountOperationalRoutes(deps *mountDeps) {
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/context", s.Spaces.AgentRuntimeContext())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/model-provider", s.Spaces.AgentRuntimeModelProvider())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/mcp-token", s.Spaces.AgentRuntimeMCPAccess())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/tools", s.Spaces.AgentRuntimeTool())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/events", s.Spaces.AgentRuntimeEvent())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/complete", s.Spaces.AgentRuntimeComplete())
 	s.Router.Post("/mcp", s.Spaces.MistyMCP().ServeHTTP)

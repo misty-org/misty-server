@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 func TestAIInvocationValidationRejectsOversizedAndUnanchoredSelection(t *testing.T) {
@@ -137,7 +137,6 @@ func TestAIInvocationValidationRejectsRawLocalPaths(t *testing.T) {
 		t.Fatal("raw local path accepted in context metadata")
 	}
 }
-
 
 func TestAccountRetrievalHelpersRankAndBoundUntrustedContent(t *testing.T) {
 	if api.TestingAISearchScore("launch blockers", "Launch plan with two blockers") <= api.TestingAISearchScore("launch blockers", "Unrelated launch note") {

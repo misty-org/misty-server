@@ -11,8 +11,8 @@ import (
 	"syscall"
 
 	"github.com/kannachi323/misty/server/internal/console"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func main() {
@@ -42,12 +42,12 @@ func main() {
 	cfg := console.Config{
 		Addr:          *addr,
 		APIURL:        *apiURL,
-		MetricsToken:  envconfig.Getenv("MISTY_METRICS_TOKEN"),
-		Environment:   envconfig.Getenv("MISTY_ENVIRONMENT"),
+		MetricsToken:  config.Getenv("MISTY_METRICS_TOKEN"),
+		Environment:   config.Getenv("MISTY_ENVIRONMENT"),
 		HandoffPath:   *handoff,
 		ServerDir:     serverDir,
 		EnvSchemaPath: *envSchema,
-		LookupEnv:     envconfig.LookupEnv,
+		LookupEnv:     config.LookupEnv,
 	}
 	if err := console.Run(ctx, cfg, database); err != nil {
 		fmt.Fprintf(os.Stderr, "misty-console: %v\n", err)

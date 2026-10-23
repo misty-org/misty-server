@@ -3,10 +3,10 @@ package api
 import (
 	"encoding/json"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
-func agentRuntimeModelUsage(output json.RawMessage) serveragent.ModelUsage {
+func agentRuntimeModelUsage(output json.RawMessage) agent.ModelUsage {
 	type runtimeUsage struct {
 		InputTokens       *int64 `json:"inputTokens"`
 		OutputTokens      *int64 `json:"outputTokens"`
@@ -21,7 +21,7 @@ func agentRuntimeModelUsage(output json.RawMessage) serveragent.ModelUsage {
 		Usage json.RawMessage `json:"usage"`
 	}
 	if json.Unmarshal(output, &envelope) != nil {
-		return serveragent.ModelUsage{Estimated: true}
+		return agent.ModelUsage{Estimated: true}
 	}
 	raw := output
 	if len(envelope.Usage) > 0 && string(envelope.Usage) != "null" {
@@ -31,12 +31,12 @@ func agentRuntimeModelUsage(output json.RawMessage) serveragent.ModelUsage {
 	if json.Unmarshal(raw, &value) != nil {
 		// Public lifecycle records redact keys containing "token". Only raw signed
 		// callback counters are authoritative; redacted or malformed usage is unavailable.
-		return serveragent.ModelUsage{Estimated: true}
+		return agent.ModelUsage{Estimated: true}
 	}
 	if value.InputTokens == nil || value.OutputTokens == nil || *value.InputTokens < 0 || *value.OutputTokens < 0 || *value.InputTokens > 1_000_000_000 || *value.OutputTokens > 1_000_000_000 {
-		return serveragent.ModelUsage{Estimated: true}
+		return agent.ModelUsage{Estimated: true}
 	}
-	result := serveragent.ModelUsage{InputTokens: *value.InputTokens, OutputTokens: *value.OutputTokens,
+	result := agent.ModelUsage{InputTokens: *value.InputTokens, OutputTokens: *value.OutputTokens,
 		CachedInputTokensMissing: value.InputTokenDetails.CacheReadTokens == nil, ReasoningTokensMissing: value.OutputTokenDetails.ReasoningTokens == nil,
 		Estimated: *value.InputTokens == 0 && *value.OutputTokens == 0}
 	if value.InputTokenDetails.CacheReadTokens != nil {
@@ -46,7 +46,7 @@ func agentRuntimeModelUsage(output json.RawMessage) serveragent.ModelUsage {
 		result.ReasoningTokens = *value.OutputTokenDetails.ReasoningTokens
 	}
 	if result.CachedInputTokens < 0 || result.CachedInputTokens > result.InputTokens || result.ReasoningTokens < 0 || result.ReasoningTokens > result.OutputTokens {
-		return serveragent.ModelUsage{Estimated: true}
+		return agent.ModelUsage{Estimated: true}
 	}
 	return result
 }

@@ -2,13 +2,11 @@ package db
 
 import (
 	"encoding/json"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
 	"time"
 )
-
-import ()
 
 func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	fixture := newNoteFixture(t, "account-export")

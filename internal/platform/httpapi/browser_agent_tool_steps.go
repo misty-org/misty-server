@@ -3,13 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 // browserToolScopeID reads the scope a browser tool acts on.
@@ -33,7 +32,7 @@ func browserToolSchema(name string) (json.RawMessage, error) {
 		}
 	}
 	if len(schema) == 0 {
-		return nil, workflowv2.ErrCapabilityDenied
+		return nil, workflow.ErrCapabilityDenied
 	}
 	return schema, nil
 }
@@ -77,7 +76,7 @@ func browserToolSurface(body aiInvocationInput, scopeID string) string {
 func (s *SpacesService) applyAIInvocationBrowserConfig(
 	ctx context.Context,
 	invocation agenttools.Invocation,
-	tool serveragent.ToolRequest,
+	tool agent.ToolRequest,
 	scopeID string,
 	configData map[string]any,
 ) error {
@@ -144,7 +143,7 @@ func (s *SpacesService) applyBrowserUploadConfig(
 }
 
 // validateBrowserToolArguments rejects a bad extract or upload request before the device acts.
-func validateBrowserToolArguments(tool serveragent.ToolRequest) error {
+func validateBrowserToolArguments(tool agent.ToolRequest) error {
 	if tool.Name == "browser.extract" {
 		// Reject a bad instruction or schema before the device reads the page.
 		if _, _, err := validBrowserExtractRequest(tool.Arguments); err != nil {
@@ -161,7 +160,7 @@ func validateBrowserToolArguments(tool serveragent.ToolRequest) error {
 func (s *SpacesService) approveBrowserPageSteps(
 	ctx context.Context,
 	invocation agenttools.Invocation,
-	tool serveragent.ToolRequest,
+	tool agent.ToolRequest,
 	scopeID string,
 ) (json.RawMessage, error) {
 	approval, waiting, err := s.browserPageStepsApproval(ctx, invocation, tool, scopeID)
@@ -180,7 +179,7 @@ func (s *SpacesService) approveBrowserPageSteps(
 func (s *SpacesService) approveScreenAct(
 	ctx context.Context,
 	invocation agenttools.Invocation,
-	tool serveragent.ToolRequest,
+	tool agent.ToolRequest,
 	scopeID string,
 ) (json.RawMessage, error) {
 	var act struct {
@@ -188,9 +187,9 @@ func (s *SpacesService) approveScreenAct(
 		AllowConsequential bool   `json:"allowConsequential"`
 	}
 	_ = json.Unmarshal(tool.Arguments, &act)
-	need := grantNeed{action: serveragent.ActionToolWrite}
+	need := grantNeed{action: agent.ActionToolWrite}
 	if act.AllowConsequential {
-		need.action = serveragent.ActionScreenControl
+		need.action = agent.ActionScreenControl
 	}
 	approval, waiting, err := s.confirmAgentAction(ctx, invocation, need, "screen.act:"+scopeID, act.Goal,
 		"On screen: "+truncateAgentRuntimeText(act.Goal, 180), act.Goal)
@@ -201,102 +200,4 @@ func (s *SpacesService) approveScreenAct(
 		return waiting, nil
 	}
 	return nil, s.useAgentActionApproval(ctx, invocation.UserID, approval)
-}
-
-// queueBrowserDeviceJob queues the device job for a browser tool. A canceled
-// job that never started is re-armed so the tool can still run.
-func (s *SpacesService) queueBrowserDeviceJob(
-	ctx context.Context,
-	invocation agenttools.Invocation,
-	tool serveragent.ToolRequest,
-	scopeID string,
-	schema json.RawMessage,
-	configData map[string]any,
-) (*db.WorkflowDeviceNodeJob, error) {
-	config := TestingMustAPIRawJSON(configData)
-	var job *db.WorkflowDeviceNodeJob
-	var err error
-	if isAIInvocationRuntimeID(invocation.RunID) {
-		job, err = s.database.QueueAIInvocationDeviceNodeJob(
-			ctx, invocation.UserID, invocation.RunID, "browser_tool_"+tool.ID, 1,
-			scopeID, tool.Name, tool.Name, tool.Arguments, config,
-			schema, agentToolObjectOutputSchema(),
-		)
-	} else {
-		job, err = s.database.QueueWorkflowDeviceNodeJob(
-			ctx, invocation.UserID, invocation.RunID, "browser_tool_"+tool.ID, 1,
-			scopeID, tool.Name, tool.Name, tool.Arguments, config,
-			schema, agentToolObjectOutputSchema(),
-		)
-	}
-	if errors.Is(err, db.ErrDeviceNotFound) {
-		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if job.State == "canceled" && job.ControlVersion == 2 && job.ExecutionStartedAt == nil {
-		job, err = s.database.RearmUnstartedBrowserJob(ctx, invocation.UserID, job)
-		if err != nil {
-			return nil, errors.Join(db.ErrAgentToolboxNotAttempted, err)
-		}
-	}
-	return job, nil
-}
-
-// awaitBrowserDeviceJob waits for a queued device job and maps its final state to the tool result.
-func (s *SpacesService) awaitBrowserDeviceJob(
-	ctx context.Context,
-	invocation agenttools.Invocation,
-	tool serveragent.ToolRequest,
-	job *db.WorkflowDeviceNodeJob,
-) (json.RawMessage, error) {
-	current, err := waitForDeviceJob(ctx, s.database, invocation.UserID, job.ID, job.DeadlineAt)
-	if err != nil {
-		return s.stopBrowserDeviceTool(invocation.UserID, job.ID, tool.Name)
-	}
-	switch current.State {
-	case "completed":
-		if tool.Name == "browser.extract" {
-			return s.browserExtract(ctx, invocation, current.ID, tool.Arguments, current.Output)
-		}
-		return current.Output, nil
-	case "uncertain":
-		if browserObservation(tool.Name) {
-			return nil, browserObservationFailure(current.ErrorCode)
-		}
-		return nil, db.ErrAgentToolboxActionUnknown
-	case "canceled":
-		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
-	default:
-		return nil, browserDeviceFailureForOperation(current.ErrorCode, current.Operation)
-	}
-}
-
-// withJoinedContexts adds the run's stored browser tabs that its request did not
-// carry, such as the agent's own tab opened mid-run, so their task and surface resolve.
-func (s *SpacesService) withJoinedContexts(ctx context.Context, record *db.AIInvocationRecord, body *aiInvocationInput) error {
-	stored, err := s.database.AIInvocationContexts(ctx, record.UserID, record.ID)
-	if err != nil {
-		return err
-	}
-	for _, item := range stored {
-		if item.Kind != "browser_tab" {
-			continue
-		}
-		known := false
-		for _, carried := range body.DeviceContexts {
-			if carried.OpaqueRef == item.OpaqueRef && carried.DeviceID == item.DeviceID {
-				known = true
-				break
-			}
-		}
-		if !known {
-			body.DeviceContexts = append(body.DeviceContexts, aiInvocationDeviceContext{
-				DeviceID: item.DeviceID, Kind: item.Kind, OpaqueRef: item.OpaqueRef, DisplayName: item.DisplayName,
-				Capabilities: item.Capabilities, Metadata: item.Metadata,
-			})
-		}
-	}
-	return nil
 }

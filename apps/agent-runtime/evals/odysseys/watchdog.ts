@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-// The progress watch (docs/plans/odysseys-campaign.md). Odysseys tasks are long on purpose, so no
+// The progress watch (docs/agents/evals/odysseys.md). Odysseys tasks are long on purpose, so no
 // clock ends a run. Every few minutes the eval looks at what the run did since its last look:
 // - progressing: a result it had not produced before (a new page, new data, a changed page);
 // - looping: tool calls whose results all repeat earlier ones, for `loopChecks` looks in a row;
@@ -28,7 +28,9 @@ export class ProgressWatch {
 
   constructor(
     private readonly label: string,
-    private readonly stallChecks = 2,
+    // A provider outage is waited out for up to 7.5 minutes with no events (workflows/space-task-agent.ts):
+    // four quiet looks, not two, so a run in that wait is not stopped for a provider's outage.
+    private readonly stallChecks = 4,
     private readonly loopChecks = 2,
   ) {}
 

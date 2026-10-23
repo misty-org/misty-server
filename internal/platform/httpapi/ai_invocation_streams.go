@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/metrics"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 const invocationWindowBytes = 256 << 10

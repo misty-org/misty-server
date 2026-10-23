@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 const AccessTokenTTL = 5 * time.Minute
@@ -39,11 +39,11 @@ var developmentKey = sync.OnceValues(func() ([]byte, error) {
 // SessionSignerFromEnv requires a stable deployment secret in production.
 // Development uses a process-local random key, so restart signs users out.
 func SessionSignerFromEnv() (*SessionSigner, error) {
-	raw := strings.TrimSpace(envconfig.Getenv("MISTY_AUTH_SIGNING_KEY"))
+	raw := strings.TrimSpace(config.Getenv("MISTY_AUTH_SIGNING_KEY"))
 	var key []byte
 	var err error
 	if raw == "" {
-		if strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production") {
+		if strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_ENVIRONMENT")), "production") {
 			return nil, errors.New("MISTY_AUTH_SIGNING_KEY is required in production")
 		}
 		key, err = developmentKey()
@@ -54,7 +54,7 @@ func SessionSignerFromEnv() (*SessionSigner, error) {
 		return nil, err
 	}
 	signer := &SessionSigner{key: key, keyID: sessionKeyID(key), keys: map[string][]byte{sessionKeyID(key): key}}
-	if previous := strings.TrimSpace(envconfig.Getenv("MISTY_AUTH_SIGNING_KEY_PREVIOUS")); previous != "" {
+	if previous := strings.TrimSpace(config.Getenv("MISTY_AUTH_SIGNING_KEY_PREVIOUS")); previous != "" {
 		previousKey, err := decodeSessionKey(previous)
 		if err != nil {
 			return nil, err

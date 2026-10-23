@@ -32,8 +32,8 @@ function publicAddress(raw: string): URL | null {
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return null;
   const v4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
-    if (a === 10 || a === 127 || a === 0 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b < 128)) return null;
+    const [a, b, c] = [Number(v4[1]), Number(v4[2]), Number(v4[3])];
+    if (a === 10 || a === 127 || a === 0 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b < 128) || (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0 && c === 0)) return null;
   }
   if (host.includes(":") && (host === "::1" || host === "::" || /^f[cd]/.test(host) || /^fe[89ab]/.test(host) || host.startsWith("::ffff:"))) return null;
   return url;
@@ -50,7 +50,7 @@ async function body(response: Response): Promise<{ text: string; truncated: bool
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    if (size + value.length >= maxBytes) {
+    if (size + value.length > maxBytes) {
       chunks.push(value.slice(0, maxBytes - size));
       await reader.cancel();
       return { text: new TextDecoder().decode(concat(chunks)), truncated: true };

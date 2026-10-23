@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
@@ -29,12 +29,12 @@ func TestEveryAgentToolDeclaresALayer(t *testing.T) {
 }
 
 func TestRegisteringAToolWithoutALayerFails(t *testing.T) {
-	handler := func(context.Context, agenttools.Invocation, serveragent.ToolRequest) (json.RawMessage, error) {
+	handler := func(context.Context, agenttools.Invocation, agent.ToolRequest) (json.RawMessage, error) {
 		return json.RawMessage(`{}`), nil
 	}
 	for _, layer := range []agenttools.Layer{"", "shared"} {
 		_, err := agenttools.New(agenttools.Registration{
-			Descriptor: agenttools.Descriptor{Name: "probe.read", Description: "Probe", Risk: serveragent.RiskRead, Layer: layer},
+			Descriptor: agenttools.Descriptor{Name: "probe.read", Description: "Probe", Risk: agent.RiskRead, Layer: layer},
 			Handler:    handler,
 		})
 		if !errors.Is(err, agenttools.ErrInvalidRegistration) {

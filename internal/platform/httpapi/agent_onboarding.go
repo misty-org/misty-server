@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // recordInvocationOnboarding notes the Get started steps a newly accepted request
@@ -36,7 +36,7 @@ func (s *AIService) AgentOnboarding() http.HandlerFunc {
 		}
 		steps, err := s.database.AgentOnboardingSteps(r.Context(), userID)
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"steps": steps})

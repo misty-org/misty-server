@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/agents"
+	. "github.com/kannachi323/misty/server/internal/agent"
 )
 
 // countingProvider records how many calls actually reached the model, which is
@@ -60,7 +60,7 @@ func TestProviderBudgetCapsDailySpendEvenAsMinutesPass(t *testing.T) {
 		PerMinute: 100, PerHour: 100, PerDay: 7, MaxConcurrent: 8,
 	})
 	current := time.Now()
-	provider.TestingNow = func() time.Time { return current }
+	provider.Now = func() time.Time { return current }
 
 	// Walking the clock forward clears the minute and hour windows, but the
 	// daily ceiling is what actually bounds a day's bill.
@@ -83,9 +83,9 @@ func TestProviderBudgetRefusalDoesNotConsumeOtherWindows(t *testing.T) {
 	}
 	// Two calls landed; the day limit refused the rest. Those refusals must not
 	// have burned minute budget, or a blocked day would also wedge the minute.
-	provider.TestingMu.Lock()
-	minuteUsed := len(provider.TestingMinute.TestingEvents)
-	provider.TestingMu.Unlock()
+	provider.Mu.Lock()
+	minuteUsed := len(provider.Minute.Events)
+	provider.Mu.Unlock()
 	if minuteUsed != 2 {
 		t.Fatalf("minute window charged %d calls, want only the 2 that ran", minuteUsed)
 	}
@@ -185,7 +185,7 @@ func TestProviderTokenBudgetRecoversAsTheWindowRolls(t *testing.T) {
 		TokensPerHour: 150_000, TokensPerDay: 10_000_000,
 	})
 	current := time.Now()
-	provider.TestingNow = func() time.Time { return current }
+	provider.Now = func() time.Time { return current }
 
 	_, _ = provider.Next(ModelRequest{})
 	_, _ = provider.Next(ModelRequest{})
@@ -220,8 +220,8 @@ func TestUnsetBudgetFieldsFallBackToSafeDefaultsNotZero(t *testing.T) {
 		t.Fatalf("a budget with unset windows refused a call: %v", err)
 	}
 	defaults := DefaultProviderBudget()
-	if provider.TestingMinute.TestingLimit != defaults.PerMinute || provider.TestingTokenDay.TestingLimit != defaults.TokensPerDay {
+	if provider.Minute.Limit != defaults.PerMinute || provider.TokenDay.Limit != defaults.TokensPerDay {
 		t.Fatalf("unset fields = %d/%d, want the safe defaults %d/%d",
-			provider.TestingMinute.TestingLimit, provider.TestingTokenDay.TestingLimit, defaults.PerMinute, defaults.TokensPerDay)
+			provider.Minute.Limit, provider.TokenDay.Limit, defaults.PerMinute, defaults.TokensPerDay)
 	}
 }

@@ -11,9 +11,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
@@ -71,7 +71,7 @@ func TestCodingPlanGatePostgres(t *testing.T) {
 		t.Helper()
 		cookie, _ := signer.Mint(user, "session-"+user, "access", time.Now().Add(time.Hour))
 		r := httptest.NewRequestWithContext(ctx, method, target, bytes.NewReader([]byte(body)))
-		r.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: cookie})
+		r.AddCookie(&http.Cookie{Name: SessionCookieName, Value: cookie})
 		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("User-Agent", "MistyDesktop/0.4.0 (macos)")
 		r.Header.Set("X-Misty-CSRF", "1")

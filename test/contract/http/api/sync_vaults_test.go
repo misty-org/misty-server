@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	browsersync "github.com/kannachi323/misty/server/internal/sync"
+	"github.com/kannachi323/misty/server/internal/browsersync"
 )
 
 func syncVaultTestEnvelope() browsersync.SyncEnvelope {
@@ -51,7 +51,7 @@ func TestSyncVaultsPerSpace(t *testing.T) {
 	personalPublic, personalRoot, _ := ed25519.GenerateKey(rand.Reader)
 	personalVault := uuid.NewString()
 	e := syncVaultTestEnvelope()
-	wrapper := browsersync.SyncKeyEnvelope{Version: 1, KDF: "argon2id-m65536-t3-p1", Salt: base64.StdEncoding.EncodeToString(make([]byte, 16)), Nonce: e.Nonce, Ciphertext: e.Ciphertext}
+	wrapper := browsersync.SyncKeyEnvelope{Version: 1, KDF: browsersync.SyncKDFAccount, Salt: base64.StdEncoding.EncodeToString(make([]byte, 16)), Nonce: e.Nonce, Ciphertext: e.Ciphertext}
 	if rec := performConversationRequest(t, router, "POST", "/sync/vault", ownerToken, map[string]any{
 		"root_public_key": []byte(personalPublic), "key_envelope": wrapper, "device": syncVaultTestGrant(personalVault, deviceID, devicePublic, personalRoot),
 	}); rec.Code != 201 {

@@ -4,21 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // The collaboration tools a run may call, and what each one does.
 
 func collaborationDescriptor(name, description string, properties map[string]any, required []string) agenttools.Descriptor {
 	return agenttools.Descriptor{
-		Name: name, Version: 1, Description: description, Risk: serveragent.RiskRead,
+		Name: name, Version: 1, Description: description, Risk: agent.RiskRead,
 		InputSchema: agentToolSchema(properties, required), OutputSchema: agentToolObjectOutputSchema(),
-		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true,
+		Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true,
 	}
 }
 
@@ -125,7 +124,7 @@ func questionAnswersResult(set *db.AgentQuestionSet) (json.RawMessage, error) {
 }
 
 func (s *SpacesService) askUserHandler(record *db.AIInvocationRecord) agenttools.Handler {
-	return func(ctx context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+	return func(ctx context.Context, _ agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 		var input struct {
 			Questions []db.AgentQuestion `json:"questions"`
 		}
@@ -140,7 +139,7 @@ func (s *SpacesService) askUserHandler(record *db.AIInvocationRecord) agenttools
 		}
 		set, err := s.database.OpenAgentQuestionSet(ctx, record.UserID, record.ID, request.ID, record.ConversationID, input.Questions, questionTTL)
 		if errors.Is(err, db.ErrSpaceInvalid) {
-			return nil, serveragent.ErrInvalidRequest("Ask 1-4 questions, each with a short header, a full question and 2-4 distinct options. Do not add an Other option; the user can always write their own answer.")
+			return nil, agent.ErrInvalidRequest("Ask 1-4 questions, each with a short header, a full question and 2-4 distinct options. Do not add an Other option; the user can always write their own answer.")
 		}
 		if err != nil {
 			return nil, err
@@ -167,135 +166,14 @@ func (s *SpacesService) askUserHandler(record *db.AIInvocationRecord) agenttools
 		case "answered":
 			return questionAnswersResult(set)
 		case "pending":
-			return TestingMustAPIRawJSON(map[string]any{
+			return MustAPIRawJSON(map[string]any{
 				"status": "awaiting_answer", "question_set": set.ID,
 				"message":      "The questions are showing above the user's composer. This run ends here; Misty continues the conversation once the user answers.",
 				"user_message": "Answer the question above and Misty continues.",
 			}), nil
 		case "superseded":
-			return TestingMustAPIRawJSON(map[string]any{"status": "skipped", "note": "The user sent a new message instead of answering. Read it and continue from it."}), nil
+			return MustAPIRawJSON(map[string]any{"status": "skipped", "note": "The user sent a new message instead of answering. Read it and continue from it."}), nil
 		}
-		return nil, serveragent.ErrInvalidRequest("The questions ended without an answer. Continue with clearly stated assumptions, or ask again only if it is essential.")
-	}
-}
-
-func (s *SpacesService) proposePlanHandler(record *db.AIInvocationRecord) agenttools.Handler {
-	return func(ctx context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
-		var input db.AgentPlanPayload
-		if json.Unmarshal(request.Arguments, &input) != nil {
-			return nil, agenttools.ErrArgumentsInvalid
-		}
-		plan, err := s.database.ProposeAgentPlan(ctx, record.UserID, record.ConversationID, record.ID, "agent", input)
-		if errors.Is(err, db.ErrSpaceInvalid) {
-			return nil, serveragent.ErrInvalidRequest("A plan needs a title, a summary of at most 1,200 characters, and 1-12 steps, each with a unique id, an imperative title and a risk of read, write, draft, consequential or dangerous.")
-		}
-		if err != nil {
-			return nil, err
-		}
-		s.showCollaborationEvent(ctx, record, aiInvocationEvent{Type: "plan.proposed", aiCollaborationEventFields: aiCollaborationEventFields{Plan: plan}})
-		return TestingMustAPIRawJSON(map[string]any{
-			"status": "plan_proposed", "plan": plan.ID, "version": plan.Version,
-			"message":      "The plan is showing to the user. This run ends here; the user runs it, edits it or asks you to keep planning.",
-			"user_message": "Review the plan above. Run it, edit it, or keep planning.",
-		}), nil
-	}
-}
-
-func (s *SpacesService) updatePlanHandler(record *db.AIInvocationRecord, state collaborationState) agenttools.Handler {
-	return func(ctx context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
-		var input struct {
-			Steps []db.AgentPlanProgressUpdate `json:"steps"`
-		}
-		if json.Unmarshal(request.Arguments, &input) != nil {
-			return nil, agenttools.ErrArgumentsInvalid
-		}
-		plan, err := s.database.UpdateAgentPlanProgress(ctx, record.UserID, record.ConversationID, input.Steps)
-		if errors.Is(err, db.ErrSpaceInvalid) {
-			return nil, serveragent.ErrInvalidRequest("Use the approved plan's step ids and one of pending, in_progress, done, skipped or blocked.")
-		}
-		if errors.Is(err, db.ErrSpaceConflict) {
-			return nil, serveragent.ErrInvalidRequest("This conversation has no approved plan in progress.")
-		}
-		if err != nil {
-			return nil, err
-		}
-		s.showCollaborationEvent(ctx, record, aiInvocationEvent{Type: "plan.updated", aiCollaborationEventFields: aiCollaborationEventFields{Plan: plan}})
-		// plan.update is an alias of the live checklist, seeded from the plan.
-		items := make([]db.ChecklistItem, 0, len(input.Steps))
-		for _, step := range input.Steps {
-			items = append(items, db.ChecklistItem{ID: step.ID, Status: step.Status, Note: step.Note})
-		}
-		state.plan = plan
-		_, _ = s.publishChecklist(ctx, record, state, items, false)
-		remaining := []string{}
-		for _, step := range plan.Payload.Steps {
-			if status := plan.Progress[step.ID].Status; status != "done" && status != "skipped" {
-				remaining = append(remaining, step.ID)
-			}
-		}
-		return json.Marshal(map[string]any{"status": "recorded", "plan_state": plan.State, "remaining": remaining})
-	}
-}
-
-// goalEvidenceComplete is true when every success criterion has evidence. A
-// goal without criteria needs at least one piece of evidence.
-func goalEvidenceComplete(criteria []string, evidence []struct {
-	Criterion string `json:"criterion"`
-	Proof     string `json:"proof"`
-}) bool {
-	normalize := func(value string) string { return strings.ToLower(strings.Join(strings.Fields(value), " ")) }
-	proven := map[string]bool{}
-	for _, item := range evidence {
-		if strings.TrimSpace(item.Proof) != "" {
-			proven[normalize(item.Criterion)] = true
-		}
-	}
-	if len(criteria) == 0 {
-		return len(proven) > 0
-	}
-	for _, criterion := range criteria {
-		if !proven[normalize(criterion)] {
-			return false
-		}
-	}
-	return true
-}
-
-func (s *SpacesService) updateGoalHandler(record *db.AIInvocationRecord) agenttools.Handler {
-	return func(ctx context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
-		var input struct {
-			Status   string `json:"status"`
-			Summary  string `json:"summary"`
-			Evidence []struct {
-				Criterion string `json:"criterion"`
-				Proof     string `json:"proof"`
-			} `json:"evidence"`
-			NextSteps []string `json:"next_steps"`
-		}
-		if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.Summary) == "" {
-			return nil, agenttools.ErrArgumentsInvalid
-		}
-		goal, err := s.database.CurrentAgentGoal(ctx, record.UserID, record.ConversationID)
-		if err != nil {
-			return nil, err
-		}
-		if goal == nil || goal.Status != "pursuing" {
-			return nil, serveragent.ErrInvalidRequest("This conversation has no goal being pursued.")
-		}
-		status := map[string]string{"in_progress": "pursuing", "achieved": "achieved", "unmet": "unmet"}[input.Status]
-		if status == "" {
-			return nil, agenttools.ErrArgumentsInvalid
-		}
-		if status == "achieved" && !goalEvidenceComplete(goal.SuccessCriteria, input.Evidence) {
-			return nil, serveragent.ErrInvalidRequest("Achieved needs inspected evidence for every success criterion, quoting each one exactly. Inspect what is missing, or report in_progress.")
-		}
-		report, _ := json.Marshal(map[string]any{"status": input.Status, "summary": truncateAgentRuntimeText(strings.TrimSpace(input.Summary), 2000),
-			"evidence": input.Evidence, "next_steps": input.NextSteps, "invocation_id": record.ID, "reported_at": time.Now().UTC()})
-		updated, err := s.database.ReportAgentGoal(ctx, record.UserID, record.ConversationID, status, report)
-		if err != nil {
-			return nil, err
-		}
-		s.showCollaborationEvent(ctx, record, aiInvocationEvent{Type: "goal.updated", aiCollaborationEventFields: aiCollaborationEventFields{Goal: updated}})
-		return json.Marshal(map[string]any{"status": "recorded", "goal_status": updated.Status})
+		return nil, agent.ErrInvalidRequest("The questions ended without an answer. Continue with clearly stated assumptions, or ask again only if it is essential.")
 	}
 }

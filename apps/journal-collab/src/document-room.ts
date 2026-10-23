@@ -1,13 +1,7 @@
 import { YServer } from "y-partyserver";
-import * as Y from "yjs";
 import type { Connection, ConnectionContext } from "partyserver";
 
 import { jsonResponse } from "./control-protocol";
-import {
-  DOCUMENT_WARNING_BYTES,
-  readDocumentSnapshot,
-  writeDocumentSnapshot,
-} from "./document-persistence";
 import { documentStatusMessage } from "./document-status";
 import { pushNoteProjection } from "./document-note-projection";
 import { closeSocket, countSockets } from "./room-connections";
@@ -15,6 +9,7 @@ import { admitSocket } from "./room-admission";
 import { exportDocumentUpdate } from "./room-document-export";
 import { logRoomEvent } from "./room-log";
 import { gateDocumentUpdate } from "./room-message-gate";
+import { loadRoomSnapshot, saveRoomSnapshot, type RoomSnapshotContext } from "./room-snapshot";
 import { bindControlResourceID, parseControlRequest } from "./room-control-request";
 import { handleRoomControl, type RoomControlContext } from "./room-control";
 import {
@@ -244,13 +239,7 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
    */
   override async onLoad(): Promise<void> {
     if (this.state.purged) return;
-    const snapshot = await readDocumentSnapshot(this.ctx.storage);
-    if (snapshot) {
-      Y.applyUpdate(this.document, snapshot.update);
-      if (snapshot.source !== "current") {
-        this.log("document_snapshot_recovered", { source: snapshot.source });
-      }
-    }
+    await loadRoomSnapshot(this.snapshotContext());
   }
 
   /**
@@ -262,33 +251,19 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
    */
   override async onSave(): Promise<void> {
     if (this.state.purged) return;
-    const update = Y.encodeStateAsUpdate(this.document);
-    try {
-      const manifest = await writeDocumentSnapshot(this.ctx.storage, update);
-      this.broadcastCustomMessage(
-        documentStatusMessage(
-          manifest.byteLength >= DOCUMENT_WARNING_BYTES ? "warning" : "saved",
-          manifest.byteLength,
-        ),
-      );
-      if (this.supportsNoteProjection) {
-        try {
-          await this.publishNoteProjection();
-        } catch (projectionError) {
-          this.log("note_projection_failed", { error: String(projectionError) });
-        }
-      }
-    } catch (error) {
-      const code =
-        error instanceof Error && error.message === "document_limit_exceeded"
-          ? "document_limit_exceeded"
-          : "document_persistence_failed";
-      this.broadcastCustomMessage(
-        documentStatusMessage("error", update.byteLength, code),
-      );
-      this.log(code, { document_bytes: update.byteLength });
-      throw error;
-    }
+    await saveRoomSnapshot(this.snapshotContext());
+  }
+
+  private snapshotContext(): RoomSnapshotContext {
+    return {
+      storage: this.ctx.storage,
+      document: this.document,
+      broadcast: (message) => this.broadcastCustomMessage(message),
+      publishNoteProjection: this.supportsNoteProjection
+        ? () => this.publishNoteProjection()
+        : undefined,
+      log: (event, details) => this.log(event, details),
+    };
   }
 
   private publishNoteProjection(): Promise<void> {

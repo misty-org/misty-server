@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Conversation titles come from a separate, cheap model call that runs beside

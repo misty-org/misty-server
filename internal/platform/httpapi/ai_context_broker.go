@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 const (
@@ -61,8 +61,11 @@ func (broker aiContextBroker) retrieveAccount(ctx context.Context, userID, query
 	if query == "" || limit <= 0 {
 		return nil, nil
 	}
-	embeddingModel := "google/gemini-embedding-2"; if len(spaceIDs)>1 { embeddingModel=spaceIDs[1] }
- indexed, indexErr := broker.database.SearchAIRetrieval(ctx, userID, query, embedding, limit, spaceID, embeddingModel)
+	embeddingModel := "google/gemini-embedding-2"
+	if len(spaceIDs) > 1 {
+		embeddingModel = spaceIDs[1]
+	}
+	indexed, indexErr := broker.database.SearchAIRetrieval(ctx, userID, query, embedding, limit, spaceID, embeddingModel)
 	if indexErr != nil {
 		return nil, indexErr
 	}
@@ -183,7 +186,7 @@ func (broker aiContextBroker) resolveOne(ctx context.Context, userID string, ref
 		}
 		var content strings.Builder
 		for index := len(messages) - 1; index >= 0; index-- {
-			text := strings.TrimSpace(TestingSpansToPlainText(messages[index].Content))
+			text := strings.TrimSpace(SpansToPlainText(messages[index].Content))
 			if text == "" {
 				continue
 			}

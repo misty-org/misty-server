@@ -1,6 +1,5 @@
 import type { Client as MCPClient } from "@misty/mcp-client-runtime";
 import { controlPlaneRequest } from "./control-plane.js";
-import { ControlPlaneError } from "./control-plane-error.js";
 import { closeRunSession, rememberRunAccess, runClient } from "./mcp-sessions.js";
 import { rethrowStepError } from "./runtime-errors.js";
 import type {
@@ -93,7 +92,7 @@ export async function requestMCPToolExecution(
 
 export async function discoverRemoteMCPTools(
   context: RuntimeToolContext,
-): Promise<{ supported: boolean; tools: MCPRemoteTool[] }> {
+): Promise<MCPRemoteTool[]> {
   "use step";
   let access: MCPRunAccess;
   try {
@@ -104,12 +103,6 @@ export async function discoverRemoteMCPTools(
       `${context.mistyRunId}:mcp-list`,
     );
   } catch (error) {
-    if (
-      error instanceof ControlPlaneError &&
-      (error.status === 404 || error.status === 405 || error.status === 501)
-    ) {
-      return { supported: false, tools: [] };
-    }
     rethrowStepError(error);
   }
   if (
@@ -133,9 +126,7 @@ export async function discoverRemoteMCPTools(
     const tools = await collectToolPages((cursor) =>
       client.listTools(cursor ? { cursor } : undefined),
     );
-    return {
-      supported: true,
-      tools: tools.map((item) => {
+    return tools.map((item) => {
         const readOnly = item.annotations?.readOnlyHint === true;
         const locality = (item._meta as Record<string, unknown> | undefined)?.["misty/locality"];
         return {
@@ -150,8 +141,7 @@ export async function discoverRemoteMCPTools(
           // a run holds one durable wait at a time.
           concurrent: readOnly && (locality === "server" || locality === "provider") && item.name !== "browser.request_user_action",
         };
-      }),
-    };
+      });
   } catch (error) {
     closeRunSession(context.mistyRunId, context.controlPlaneURL);
     throw error;

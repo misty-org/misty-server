@@ -3,14 +3,11 @@ package db
 import (
 	"context"
 	"errors"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestOwnedSpacesShareOneStoragePool(t *testing.T) {
 	database := openTestDatabase(t)

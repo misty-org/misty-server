@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 )
 
@@ -16,27 +16,25 @@ func nativeAgentToolDescriptors() []agenttools.Descriptor {
 		if required == nil {
 			required = []string{}
 		}
-		return TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
+		return MustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
 	}
 	text := map[string]any{"type": "string", "maxLength": 16000}
-	base := agenttools.Descriptor{Version: 1, OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Sources: agentToolboxSpaceSources, Triggers: []string{"message"}, AllowCustomAgent: true, Idempotent: true}
+	base := agenttools.Descriptor{Version: 1, OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Sources: agentToolboxSpaceSources, Triggers: []string{"message"}, Idempotent: true}
 	list := base
 	list.Name = "agent.list"
 	list.Description = "List this user's personal agents in the browser workspace."
-	list.Risk = serveragent.RiskRead
+	list.Risk = agent.RiskRead
 	list.InputSchema = schema(map[string]any{}, nil)
-	list.Approval = agenttools.ApprovalNone
 	manage := base
 	manage.Name = "agent.configure"
 	manage.Description = "Create, update, or delete a personal agent when the user requests agent configuration. A new agent starts in the personal Space; `space` (name or id from space_list) also brings it into that Space, where everyone there can ask it for work. For update, provide the current version from agent_list. Browser workspace tools and model policy are automatic. Never delete the default Misty agent. Deletion requires an explicit request to delete the named agent, not just stop its task."
-	manage.Risk = serveragent.RiskWrite
-	manage.Approval = agenttools.ApprovalExplicitIntent
+	manage.Risk = agent.RiskWrite
 	manage.AuditEvent = "agents.configured"
 	manage.InputSchema = schema(map[string]any{"operation": map[string]any{"type": "string", "enum": []string{"create", "update", "delete"}}, "agent_id": text, "version": map[string]any{"type": "integer", "minimum": 1}, "name": text, "role": text, "description": text, "instructions": text, "avatar_emoji": map[string]any{"type": "string", "maxLength": 32}, "enabled": map[string]any{"type": "boolean"}, "space": map[string]any{"type": "string", "minLength": 1, "maxLength": 200}}, []string{"operation"})
 	return []agenttools.Descriptor{list, manage}
 }
 
-func executeNativeAgentTool(ctx context.Context, database *db.Database, i agenttools.Invocation, r serveragent.ToolRequest) (json.RawMessage, error) {
+func executeNativeAgentTool(ctx context.Context, database *db.Database, i agenttools.Invocation, r agent.ToolRequest) (json.RawMessage, error) {
 	agents, err := database.PersonalAgents(ctx, i.UserID)
 	if err != nil {
 		return nil, err

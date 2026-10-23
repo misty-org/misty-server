@@ -28,9 +28,6 @@ see **Verify** below.
    (decided October 16, 2026, after a custom Calendar config limited
    connections to read-only).
 
-The CLI ignores the retired `MISTY_COMPOSIO_URL` and
-`MISTY_COMPOSIO_CALENDAR_*` settings in older files.
-
 ## How it works
 
 - **Identity.** Each Misty account maps to a pseudonymous Composio user

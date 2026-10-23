@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/integrations/composio"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Connected apps run through Composio. Each account has one session that can
@@ -48,7 +48,7 @@ type appRequest struct {
 func appRequestView(request *db.AgentAppRequest) *appRequest {
 	view := &appRequest{ID: request.ID, Kind: request.Kind, Subject: request.Subject, Title: request.Title, Summary: request.Summary, State: request.State, ExpiresAt: request.ExpiresAt,
 		Rememberable: request.Rememberable, RememberLabel: request.RememberLabel, PermissionMode: request.PermissionMode}
-	if request.GrantAction == string(serveragent.GrantPayment) {
+	if request.GrantAction == string(agent.GrantPayment) {
 		view.PaymentCap = grantAmountFrom(request.GrantConstraints)
 	}
 	return view
@@ -101,11 +101,11 @@ func (s *SpacesService) withAppsSession(ctx context.Context, user string, call f
 // Anything else keeps its unknown outcome.
 func appsError(err error) error {
 	if errors.Is(err, composio.ErrUnavailable) {
-		return serveragent.ErrInvalidRequest("Connected apps are not set up on this Misty server.")
+		return agent.ErrInvalidRequest("Connected apps are not set up on this Misty server.")
 	}
 	var apiErr *composio.APIError
 	if composio.Rejected(err) && errors.As(err, &apiErr) {
-		return serveragent.ErrInvalidRequest(apiErr.Message)
+		return agent.ErrInvalidRequest(apiErr.Message)
 	}
 	return err
 }

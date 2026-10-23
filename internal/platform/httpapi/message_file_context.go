@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 // explicitAttachmentRef names one file a person attached to a message: a chat
@@ -21,12 +21,12 @@ type explicitAttachmentRef struct {
 
 // explicitAttachmentContext reads the attached files for an agent's prompt,
 // within a shared budget, and says which ones it couldn't read and why.
-func (s *SpacesService) explicitAttachmentContext(ctx context.Context, userID, spaceID string, refs []explicitAttachmentRef) (string, string, []workflowv2.ContentRef) {
+func (s *SpacesService) explicitAttachmentContext(ctx context.Context, userID, spaceID string, refs []explicitAttachmentRef) (string, string, []workflow.ContentRef) {
 	if s.library == nil {
 		return "", "Attached files were not read because attached-file access is unavailable.", nil
 	}
 	var content, warnings strings.Builder
-	sources := []workflowv2.ContentRef{}
+	sources := []workflow.ContentRef{}
 	remaining := 20_000
 	for _, ref := range refs {
 		if remaining <= 0 {
@@ -53,7 +53,7 @@ func (s *SpacesService) explicitAttachmentContext(ctx context.Context, userID, s
 		}
 		remaining -= len(text)
 		content.WriteString("\n\n[Explicitly attached file: " + name + "]\n" + text)
-		sources = append(sources, workflowv2.ContentRef{SourceKind: ref.Kind, ProviderID: "misty", ResourceID: ref.ResourceID, Version: explicitSourceVersion(ref.Version), Fingerprint: download.SHA256, DisplayName: name, MIMEType: download.MIMEType, PermissionScope: "message:" + spaceID})
+		sources = append(sources, workflow.ContentRef{SourceKind: ref.Kind, ProviderID: "misty", ResourceID: ref.ResourceID, Version: explicitSourceVersion(ref.Version), Fingerprint: download.SHA256, DisplayName: name, MIMEType: download.MIMEType, PermissionScope: "message:" + spaceID})
 	}
 	return content.String(), warnings.String(), sources
 }
@@ -66,7 +66,7 @@ func explicitSourceVersion(value any) string {
 }
 
 func explicitAttachmentError(err error) string {
-	if errors.Is(err, workflowv2.ErrUnsupportedContent) {
+	if errors.Is(err, workflow.ErrUnsupportedContent) {
 		return "unsupported file type; images, audio, and video are not read in this beta"
 	}
 	if errors.Is(err, db.ErrLibraryForbidden) || errors.Is(err, db.ErrSpaceForbidden) {

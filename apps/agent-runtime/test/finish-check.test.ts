@@ -49,4 +49,11 @@ describe("finish check", () => {
     expect(named.remaining).toHaveLength(1);
     expect(afterRefusal(report, [ask("Draft a thank-you note I can paste.")], readOnly).outcome).toBe("completed");
   });
+
+  it("counts opening a tab and running a program as actions, so \"open their channels\" is backed", () => {
+    expect(isWrite("screen_open", { url: "https://www.youtube.com/@Fireship" }, () => true)).toBe(true);
+    expect(isWrite("browser_run", { code: "return 1;" }, () => true)).toBe(true);
+    const done = [ask("Can you open their youtube channels in the browser so i can take a look?"), ...call("a", "screen_open", { url: "https://www.youtube.com/@Fireship" })];
+    expect(unbackedCompletion({ outcome: "completed", summary: "All 13 tabs opened." }, done, () => true)).toBeUndefined();
+  });
 });

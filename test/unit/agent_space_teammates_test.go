@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
@@ -79,7 +79,7 @@ func TestMistyAccountBrowserContextRequiresMatchingDeviceAttachment(t *testing.T
 }
 
 func TestAgentRuntimeRulesHaveNoBuiltInPersonaOrCrossConversationContext(t *testing.T) {
-	persona := serveragent.TestingAgentPersona()
+	persona := agent.TestingAgentPersona()
 	for _, want := range []string{"explicitly selected agent identity", "There is no built-in assistant", "approved version", "current conversation", "Never reuse content from another direct or limited-group conversation"} {
 		if !strings.Contains(persona, want) {
 			t.Fatalf("Agent runtime rules are missing %q:\n%s", want, persona)
@@ -95,7 +95,7 @@ func TestPrivateSpaceToolboxRegistrationsAreCompleteAndGuardWrites(t *testing.T)
 		if descriptor.Version < 1 || descriptor.Description == "" || descriptor.Locality == "" {
 			t.Fatalf("incomplete descriptor: %#v", descriptor)
 		}
-		if descriptor.Risk != "read" && (descriptor.Approval != "none" || descriptor.AuditEvent == "") {
+		if descriptor.Risk != "read" && descriptor.AuditEvent == "" {
 			t.Fatalf("write tool requires approval or lacks audit policy: %#v", descriptor)
 		}
 	}
@@ -104,11 +104,6 @@ func TestPrivateSpaceToolboxRegistrationsAreCompleteAndGuardWrites(t *testing.T)
 		t.Fatalf("Toolbox tools = %v, want %v", names, want)
 	}
 }
-
-
-
-
-
 
 func TestMistyMemoryNeverStoresSecrets(t *testing.T) {
 	if !api.TestingMistyMemoryLooksSensitive("My API key is abc123") {

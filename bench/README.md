@@ -5,11 +5,11 @@ credentials in the environment of the computer running k6; do not commit them.
 
 ## First smoke run
 
-Start staging on the home server with `misty server staging up`. From the
-computer that runs k6, keep an SSH tunnel open:
+Start staging on the computer that hosts it with `misty server staging up`.
+From the computer that runs k6, keep an SSH tunnel open:
 
 ```sh
-ssh -L 8082:127.0.0.1:8082 user@home-server
+ssh -L 8082:127.0.0.1:8082 user@staging-host
 ```
 
 Create a staging-only account through Misty's sign-up screen pointed at this

@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
 )

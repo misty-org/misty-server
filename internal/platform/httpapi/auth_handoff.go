@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
@@ -44,10 +44,10 @@ func NewAuthHandoffService(database *db.Database, startURL, websiteURL string) (
 	if database == nil {
 		return nil, errors.New("auth handoff database is required")
 	}
-	if err := TestingValidateResetURL(startURL); err != nil {
+	if err := ValidateResetURL(startURL); err != nil {
 		return nil, err
 	}
-	if err := TestingValidateResetURL(websiteURL); err != nil {
+	if err := ValidateResetURL(websiteURL); err != nil {
 		return nil, err
 	}
 
@@ -80,7 +80,7 @@ func (s *AuthHandoffService) Mint() http.HandlerFunc {
 		// the common "open my account settings" case.
 		_ = decodeJSON(w, r, &body)
 
-		redirectPath := TestingNormalizeHandoffPath(body.Path)
+		redirectPath := NormalizeHandoffPath(body.Path)
 		if redirectPath == "" {
 			http.Error(w, "unsupported handoff path", http.StatusBadRequest)
 			return
@@ -137,7 +137,7 @@ func (s *AuthHandoffService) Start() http.HandlerFunc {
 
 		// Re-validate on the way out: the stored path came from the allowlist,
 		// but a bad row must never become an open redirect.
-		if TestingNormalizeHandoffPath(redirectPath) == "" {
+		if NormalizeHandoffPath(redirectPath) == "" {
 			redirectPath = defaultHandoffPath
 		}
 		http.Redirect(w, r, s.websiteURL+redirectPath, http.StatusSeeOther)
@@ -156,9 +156,9 @@ func (s *AuthHandoffService) buildStartLink(token string) (string, error) {
 	return startURL.String(), nil
 }
 
-// TestingNormalizeHandoffPath returns the allowlisted path, or "" when the
+// NormalizeHandoffPath returns the allowlisted path, or "" when the
 // caller asked for something that is not an account surface.
-func TestingNormalizeHandoffPath(rawPath string) string {
+func NormalizeHandoffPath(rawPath string) string {
 	trimmed := strings.TrimSpace(rawPath)
 	if trimmed == "" {
 		return defaultHandoffPath

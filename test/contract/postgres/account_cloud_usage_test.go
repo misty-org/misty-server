@@ -14,9 +14,6 @@ import (
 	"testing"
 )
 
-
-import ()
-
 func TestAccountCloudGrowthRollsBackAndShrinkSurvivesOutage(t *testing.T) {
 	database := openTestDatabase(t)
 	t.Setenv("MISTY_BILLING_ADAPTER", "none")
@@ -58,7 +55,7 @@ func TestAccountCloudGrowthRollsBackAndShrinkSurvivesOutage(t *testing.T) {
 	t.Setenv("MISTY_BILLING_SECRET", "cloud-fixture-01234567890123456789")
 	t.Setenv("MISTY_ENVIRONMENT", "development")
 	update := func(text string) error {
-		return database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		return database.SpaceTx(ctx, func(tx *sql.Tx) error {
 			_, err := tx.ExecContext(ctx, `UPDATE space_notes SET markdown_projection=$2 WHERE id=$1`, note.ID, text)
 			return err
 		})
@@ -67,7 +64,7 @@ func TestAccountCloudGrowthRollsBackAndShrinkSurvivesOutage(t *testing.T) {
 		t.Fatal("growth was not rejected", e)
 	}
 	var value string
-	if e = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if e = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `SELECT markdown_projection FROM space_notes WHERE id=$1`, note.ID).Scan(&value)
 	}); e != nil || value != "" {
 		t.Fatal("rejected content committed", value, e)
@@ -84,7 +81,7 @@ func TestAccountCloudGrowthRollsBackAndShrinkSurvivesOutage(t *testing.T) {
 	}
 	// The sync caller's normal RLS context must still inventory this account's
 	// retained Space content and restore its previous RLS mode afterwards.
-	if e = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if e = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.rls_mode','user',true)`); err != nil {
 			return err
 		}

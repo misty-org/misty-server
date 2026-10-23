@@ -1,9 +1,0 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Projects</title><style>body{font:15px system-ui;margin:24px}dialog{border:2px solid #333}</style></head>
-<body><h1>Projects</h1><ul><li>Apollo <button data-p="Apollo">Archive</button></li><li>Gemini <button data-p="Gemini">Archive</button></li><li>Mercury <button data-p="Mercury">Archive</button></li></ul>
-<dialog id="confirm" aria-labelledby="ct"><h2 id="ct">Archive project?</h2><p id="cp"></p><button id="yes">Yes, archive</button> <button id="no">Cancel</button></dialog><p id="status" role="status"></p>
-<script>
-window.__evalState={archived:[]};let pending='';const dlg=document.getElementById('confirm');
-document.addEventListener('click',e=>{const p=e.target.dataset?.p;if(p){pending=p;document.getElementById('cp').textContent='Archive '+p+'? You can restore it later.';dlg.showModal()}});
-document.getElementById('yes').onclick=()=>{window.__evalState.archived.push(pending);dlg.close();document.getElementById('status').textContent=pending+' archived'};
-document.getElementById('no').onclick=()=>dlg.close();
-</script></body></html>

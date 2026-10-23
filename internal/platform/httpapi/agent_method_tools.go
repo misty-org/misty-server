@@ -3,16 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"sort"
 	"strings"
-	"unicode"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-// Saved workflows (memory.workflow, docs/plans/agent-harness.md phase 7) are owned
+// Saved workflows (memory.workflow, docs/agents/harness.md, Workflows as memory) are owned
 // by one agent and stored as methods. The agent reads a workflow's rendered
 // instructions and follows them in its current run, so a workflow never starts a
 // second run or grants a tool. Each has two owners: the person's request, which
@@ -21,7 +19,7 @@ import (
 // tree; a run sees and saves only its own Space's workflows.
 func methodToolRegistrations(database *db.Database, search memorySearchFunc) []agenttools.Registration {
 	base := agenttools.Descriptor{Version: 1, OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer,
-		AllowCustomAgent: true, Approval: agenttools.ApprovalNone, Risk: serveragent.RiskRead, Idempotent: true}
+		Risk: agent.RiskRead, Idempotent: true}
 	list, use, find := base, base, base
 	list.Name = "memory.workflow.list"
 	list.Description = "List the saved workflows this agent has, with the inputs each one takes."
@@ -38,7 +36,7 @@ func methodToolRegistrations(database *db.Database, search memorySearchFunc) []a
 		"inputs": map[string]any{"type": "object", "maxProperties": 12},
 	}, []string{"method"})
 	save := base
-	save.Name, save.Risk, save.Idempotent, save.AuditEvent = "memory.workflow.save", serveragent.RiskWrite, false, "agent.method.saved"
+	save.Name, save.Risk, save.Idempotent, save.AuditEvent = "memory.workflow.save", agent.RiskWrite, false, "agent.method.saved"
 	save.Description = "Save a reusable workflow for this agent, or update one by id. Use only when the user asked to save or change a workflow. " +
 		"Inputs are named blanks the user fills each time it runs."
 	save.InputSchema = agentToolSchema(map[string]any{
@@ -58,7 +56,7 @@ func methodToolRegistrations(database *db.Database, search memorySearchFunc) []a
 		}},
 	}, []string{"title", "instructions"})
 	learn := base
-	learn.Name, learn.Risk, learn.Idempotent, learn.AuditEvent = "memory.workflow.learn", serveragent.RiskWrite, false, "agent.workflow.learned"
+	learn.Name, learn.Risk, learn.Idempotent, learn.AuditEvent = "memory.workflow.learn", agent.RiskWrite, false, "agent.workflow.learned"
 	learn.Description = "After a saved workflow ran well, record the steps that worked so the next run goes faster: which sources, pages, tools and order, and what to skip. " +
 		"Write reusable steps, never the person's data or this run's results. Saves a new version; the person's own instructions stay unchanged."
 	learn.InputSchema = agentToolSchema(map[string]any{
@@ -79,7 +77,7 @@ func methodToolRegistrations(database *db.Database, search memorySearchFunc) []a
 		return db.AgentMethod{}, false, nil
 	}
 	return []agenttools.Registration{
-		{Descriptor: find, Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: find, Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			var input struct {
 				Request string `json:"request"`
 			}
@@ -96,7 +94,7 @@ func methodToolRegistrations(database *db.Database, search memorySearchFunc) []a
 			// Vectors for new workflows may still be on their way.
 			return json.Marshal(map[string]any{"workflows": matchWorkflows(methods, input.Request, 3)})
 		}},
-		{Descriptor: learn, Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: learn, Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			var input struct{ Method, Steps string }
 			if json.Unmarshal(request.Arguments, &input) != nil {
 				return nil, agenttools.ErrArgumentsInvalid
@@ -106,7 +104,7 @@ func methodToolRegistrations(database *db.Database, search memorySearchFunc) []a
 				return nil, err
 			}
 			if !found {
-				return nil, serveragent.ErrInvalidRequest("no enabled workflow " + input.Method + "; call memory_workflow_list")
+				return nil, agent.ErrInvalidRequest("no enabled workflow " + input.Method + "; call memory_workflow_list")
 			}
 			lesson, err := database.AddAgentMethodLesson(ctx, invocation.UserID, method.ID, input.Steps, invocation.RunID)
 			if err != nil {
@@ -114,10 +112,10 @@ func methodToolRegistrations(database *db.Database, search memorySearchFunc) []a
 			}
 			return json.Marshal(map[string]any{"workflow": method.Definition.Title, "version": lesson.Version})
 		}},
-		{Descriptor: save, Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: save, Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			return saveAgentMethod(ctx, database, invocation, request)
 		}},
-		{Descriptor: list, Handler: func(ctx context.Context, invocation agenttools.Invocation, _ serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: list, Handler: func(ctx context.Context, invocation agenttools.Invocation, _ agent.ToolRequest) (json.RawMessage, error) {
 			methods, err := agentMethodsFor(ctx, database, invocation)
 			if err != nil {
 				return nil, err
@@ -129,7 +127,7 @@ func methodToolRegistrations(database *db.Database, search memorySearchFunc) []a
 			}
 			return json.Marshal(map[string]any{"methods": items})
 		}},
-		{Descriptor: use, Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: use, Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			var input struct {
 				Method string         `json:"method"`
 				Inputs map[string]any `json:"inputs"`
@@ -148,7 +146,7 @@ func methodToolRegistrations(database *db.Database, search memorySearchFunc) []a
 				}
 				instructions, err := db.RenderAgentMethod(method.Definition, input.Inputs)
 				if err != nil {
-					return nil, serveragent.ErrInvalidRequest("those inputs do not fit " + method.Definition.Title + "; check its inputs in memory_workflow_list")
+					return nil, agent.ErrInvalidRequest("those inputs do not fit " + method.Definition.Title + "; check its inputs in memory_workflow_list")
 				}
 				result := map[string]any{"method": method.Definition.Title, "instructions": instructions}
 				if lesson, err := database.LatestAgentMethodLesson(ctx, invocation.UserID, method.ID); err == nil && lesson.Version > 0 {
@@ -161,7 +159,7 @@ func methodToolRegistrations(database *db.Database, search memorySearchFunc) []a
 				}
 				return json.Marshal(result)
 			}
-			return nil, serveragent.ErrInvalidRequest("no enabled method " + reference + "; call memory_workflow_list")
+			return nil, agent.ErrInvalidRequest("no enabled method " + reference + "; call memory_workflow_list")
 		}},
 	}
 }
@@ -189,7 +187,7 @@ func agentMethodsFor(ctx context.Context, database *db.Database, invocation agen
 	return enabled, nil
 }
 
-func saveAgentMethod(ctx context.Context, database *db.Database, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func saveAgentMethod(ctx context.Context, database *db.Database, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		ID           string                `json:"id"`
 		Title        string                `json:"title"`
@@ -201,7 +199,7 @@ func saveAgentMethod(ctx context.Context, database *db.Database, invocation agen
 		return nil, agenttools.ErrArgumentsInvalid
 	}
 	if invocation.AgentID == "" {
-		return nil, serveragent.ErrInvalidRequest("memory_workflow_save is available only to agents")
+		return nil, agent.ErrInvalidRequest("memory_workflow_save is available only to agents")
 	}
 	if input.Inputs == nil {
 		input.Inputs = []db.AgentMethodInput{}
@@ -225,86 +223,15 @@ func saveAgentMethod(ctx context.Context, database *db.Database, invocation agen
 			}
 		}
 		if expected == 0 {
-			return nil, serveragent.ErrInvalidRequest("no method " + id + " for this agent; call memory_workflow_list")
+			return nil, agent.ErrInvalidRequest("no method " + id + " for this agent; call memory_workflow_list")
 		}
 	}
 	if err := db.ValidateAgentMethod(method.Definition); err != nil {
-		return nil, serveragent.ErrInvalidRequest("a method needs a title under 120 characters, instructions under 6000 and at most 12 inputs")
+		return nil, agent.ErrInvalidRequest("a method needs a title under 120 characters, instructions under 6000 and at most 12 inputs")
 	}
 	saved, err := database.SaveAgentMethod(ctx, invocation.UserID, method, expected)
 	if err != nil {
-		return nil, serveragent.ErrInvalidRequest("the method could not be saved; it may have changed, so read it again with memory_workflow_list")
+		return nil, agent.ErrInvalidRequest("the method could not be saved; it may have changed, so read it again with memory_workflow_list")
 	}
 	return json.Marshal(map[string]any{"method": map[string]any{"id": saved.ID, "title": saved.Definition.Title, "version": saved.Version}})
-}
-
-// findWorkflowsByMeaning ranks the run's workflows by how close they are in
-// meaning to the request, best first.
-func findWorkflowsByMeaning(ctx context.Context, database *db.Database, search memorySearchFunc, invocation agenttools.Invocation, methods []db.AgentMethod, request string, limit int) []map[string]any {
-	if search == nil || len(methods) == 0 {
-		return nil
-	}
-	space, err := runMemorySpace(ctx, database, invocation)
-	if err != nil {
-		return nil
-	}
-	hits, err := search(ctx, invocation.UserID, space, []string{db.MemoryWorkflows}, request, 20)
-	if err != nil {
-		return nil
-	}
-	byID := make(map[string]db.AgentMethod, len(methods))
-	for _, method := range methods {
-		byID[method.ID] = method
-	}
-	out := []map[string]any{}
-	for _, hit := range hits {
-		method, ok := byID[hit.RecordID]
-		if !ok || len(out) == limit {
-			continue
-		}
-		out = append(out, map[string]any{"id": method.ID, "title": method.Definition.Title,
-			"description": method.Definition.Description, "inputs": method.Definition.Inputs})
-	}
-	return out
-}
-
-// matchWorkflows ranks saved workflows by how many of the request's words their
-// title, description and instructions share, best first.
-func matchWorkflows(methods []db.AgentMethod, request string, limit int) []map[string]any {
-	words := func(text string) map[string]bool {
-		set := map[string]bool{}
-		for _, word := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) }) {
-			if len(word) > 2 {
-				set[word] = true
-			}
-		}
-		return set
-	}
-	wanted := words(request)
-	type scored struct {
-		method db.AgentMethod
-		score  int
-	}
-	ranked := []scored{}
-	for _, method := range methods {
-		score := 0
-		for word := range words(method.Definition.Title + " " + method.Definition.Description + " " + method.Definition.Instructions) {
-			if wanted[word] {
-				score++
-			}
-		}
-		if score > 0 {
-			ranked = append(ranked, scored{method, score})
-		}
-	}
-	sort.SliceStable(ranked, func(a, b int) bool { return ranked[a].score > ranked[b].score })
-	out := []map[string]any{}
-	for _, item := range ranked {
-		if len(out) == limit {
-			break
-		}
-		out = append(out, map[string]any{"id": item.method.ID, "title": item.method.Definition.Title,
-			"description": item.method.Definition.Description, "inputs": item.method.Definition.Inputs, "shared_words": item.score})
-	}
-	return out
 }

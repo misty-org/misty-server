@@ -9,12 +9,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/lib/pq"
 )
 
-func testRealtimeClient(s *RealtimeService, user string, capacity int) *TestingRealtimeClient {
-	c := &TestingRealtimeClient{TestingUserID: user, TestingSend: make(chan []byte, capacity), TestingDone: make(chan struct{})}
+func testRealtimeClient(s *RealtimeService, user string, capacity int) *RealtimeClient {
+	c := &RealtimeClient{UserID: user, Send: make(chan []byte, capacity), Done: make(chan struct{})}
 	s.register(c)
 	return c
 }
@@ -23,20 +23,20 @@ func TestRealtimeResetAndOverflow(t *testing.T) {
 	s := NewRealtimeService(nil, "")
 	healthy := testRealtimeClient(s, "a", 2)
 	slow := testRealtimeClient(s, "a", 1)
-	slow.TestingSend <- []byte(`old`)
+	slow.Send <- []byte(`old`)
 	s.broadcastReset()
-	if got := string(<-healthy.TestingSend); got != string(realtimeReset) {
+	if got := string(<-healthy.Send); got != string(realtimeReset) {
 		t.Fatalf("reset = %s", got)
 	}
 	select {
-	case <-slow.TestingDone:
+	case <-slow.Done:
 	default:
 		t.Fatal("full queue must force recovery, not drop reset")
 	}
 	if s.ConnectionCount() != 1 || len(s.clientsByUser["a"]) != 1 {
 		t.Fatal("stale client index")
 	}
-	s.TestingUnregister(healthy)
+	s.Unregister(healthy)
 	if len(s.clientsByUser) != 0 {
 		t.Fatal("empty account retained")
 	}
@@ -83,7 +83,7 @@ func TestRealtimeFanoutPreservesAccountAndResourceBoundaries(t *testing.T) {
 	second := testRealtimeClient(s, "member", 4)
 	outsider := testRealtimeClient(s, "outsider", 4)
 	s.BroadcastEvent(1)
-	one, two := <-first.TestingSend, <-second.TestingSend
+	one, two := <-first.Send, <-second.Send
 	if string(one) != string(two) || &one[0] != &two[0] {
 		t.Fatal("devices should share the authorized encoded event")
 	}
@@ -98,11 +98,11 @@ func TestRealtimeFanoutPreservesAccountAndResourceBoundaries(t *testing.T) {
 	}
 	participant := testRealtimeClient(s, "participant", 4)
 	s.BroadcastEvent(2) // Space membership does not grant access to a private conversation.
-	if len(first.TestingSend) != 0 || len(second.TestingSend) != 0 || len(outsider.TestingSend) != 0 {
+	if len(first.Send) != 0 || len(second.Send) != 0 || len(outsider.Send) != 0 {
 		t.Fatal("unauthorized event delivered")
 	}
 	// One authorization pass resolves each recipient separately.
-	if got := <-participant.TestingSend; !strings.Contains(string(got), `"type":"event"`) {
+	if got := <-participant.Send; !strings.Contains(string(got), `"type":"event"`) {
 		t.Fatalf("participant did not receive the private event: %s", got)
 	}
 	if _, err := conn.Exec(`DELETE FROM space_members WHERE user_id IN ('member','participant')`); err != nil {
@@ -113,7 +113,7 @@ func TestRealtimeFanoutPreservesAccountAndResourceBoundaries(t *testing.T) {
 		t.Fatal("candidate membership was cached", candidates, err)
 	}
 	s.BroadcastEvent(1)
-	if len(first.TestingSend) != 0 || len(second.TestingSend) != 0 || len(participant.TestingSend) != 0 {
+	if len(first.Send) != 0 || len(second.Send) != 0 || len(participant.Send) != 0 {
 		t.Fatal("revoked member received event")
 	}
 }

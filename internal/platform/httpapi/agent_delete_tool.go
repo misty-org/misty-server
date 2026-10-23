@@ -6,9 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // item.delete is the one delete tool for Misty items. Deleting asks first
@@ -19,7 +19,7 @@ const itemsDeleteTool = "item.delete"
 func (s *SpacesService) deleteToolRegistration() agenttools.Registration {
 	return agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
-			Name: itemsDeleteTool, Version: 1, Risk: serveragent.RiskWrite, Approval: agenttools.ApprovalNone,
+			Name: itemsDeleteTool, Version: 1, Risk: agent.RiskWrite,
 			Description: "Delete a note, drawing or thread, or move a file to the trash. " +
 				"Use only when the user asked to delete that exact item; the user may see an approval card first. Every kind except notes and drawings also needs its Space.",
 			InputSchema: agentToolSchema(map[string]any{
@@ -27,13 +27,13 @@ func (s *SpacesService) deleteToolRegistration() agenttools.Registration {
 				"id":    map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 				"space": map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 			}, []string{"kind", "id"}),
-			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true, AuditEvent: "item.deleted",
+			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AuditEvent: "item.deleted",
 		},
 		Handler: s.executeItemDelete,
 	}
 }
 
-func (s *SpacesService) executeItemDelete(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) executeItemDelete(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		Kind  string `json:"kind"`
 		ID    string `json:"id"`
@@ -43,7 +43,7 @@ func (s *SpacesService) executeItemDelete(ctx context.Context, invocation agentt
 		return nil, agenttools.ErrArgumentsInvalid
 	}
 	id := strings.TrimSpace(input.ID)
-	notFound := serveragent.ErrInvalidRequest("no " + input.Kind + " " + id + " that you can delete")
+	notFound := agent.ErrInvalidRequest("no " + input.Kind + " " + id + " that you can delete")
 	var title, spaceID string
 	var remove func() error
 	switch input.Kind {
@@ -75,7 +75,7 @@ func (s *SpacesService) executeItemDelete(ctx context.Context, invocation agentt
 	if strings.TrimSpace(title) == "" {
 		title = "Untitled " + input.Kind
 	}
-	need := grantNeed{action: serveragent.GrantItemDelete, scopeKind: serveragent.ScopeSpace, scopeID: spaceID, label: "delete items in " + s.spaceLabel(ctx, invocation.UserID, spaceID)}
+	need := grantNeed{action: agent.GrantItemDelete, scopeKind: agent.ScopeSpace, scopeID: spaceID, label: "delete items in " + s.spaceLabel(ctx, invocation.UserID, spaceID)}
 	approval, waiting, err := s.confirmAgentAction(ctx, invocation, need, "misty.items.delete", []string{input.Kind, id}, "Delete "+input.Kind+" “"+title+"”", "This cannot be undone from the agent.")
 	if err != nil || waiting != nil {
 		return waiting, err
@@ -85,7 +85,7 @@ func (s *SpacesService) executeItemDelete(ctx context.Context, invocation agentt
 	}
 	if err := remove(); err != nil {
 		if errors.Is(err, db.ErrSpaceForbidden) || errors.Is(err, db.ErrLibraryForbidden) {
-			return nil, serveragent.ErrInvalidRequest("you do not have permission to delete that " + input.Kind)
+			return nil, agent.ErrInvalidRequest("you do not have permission to delete that " + input.Kind)
 		}
 		return nil, err
 	}

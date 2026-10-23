@@ -14,7 +14,7 @@ Set up the backend before the [desktop app](../README.md#get-started).
 - curl, for Cloudflare API setup.
 - A Cloudflare account with a domain and a workers.dev subdomain enabled. Create an API token with access to the selected account and zone: account/zone read, Tunnel edit, DNS edit, and Workers Scripts edit. See [Cloudflare's tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
 
-Go, Node.js, PostgreSQL, Redis, Wrangler, and cloudflared run inside the containers. Desktop development needs its own [native toolchain](../README.md#1-prerequisites). The full development stack still uses Cloudflare; a complete local-only collaboration mode is not implemented.
+Go, Node.js, PostgreSQL, Wrangler, and cloudflared run inside the containers. Desktop development needs its own [native toolchain](../README.md#prerequisites). The full development stack still uses Cloudflare; a complete local-only collaboration mode is not implemented.
 
 ### 2. Installation
 

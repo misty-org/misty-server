@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func personalAgentRuntimeCompletionOutcome(status, errorCode string) (state, code string, valid bool) {
@@ -52,11 +52,11 @@ func (s *SpacesService) publishPersonalAgentCompletion(ctx context.Context, run 
 	} else {
 		message, publishErr = s.database.CreatePersonalAgentSpaceMessage(ctx, run.OwnerUserID, run.SpaceID, run.AgentID, "Completed: "+summary)
 	}
-	details := TestingMustAPIRawJSON(map[string]any{"run_id": run.ID})
+	details := MustAPIRawJSON(map[string]any{"run_id": run.ID})
 	state := "failed"
 	if publishErr == nil {
 		state = "completed"
-		details = TestingMustAPIRawJSON(map[string]any{"run_id": run.ID, "message_id": message.ID})
+		details = MustAPIRawJSON(map[string]any{"run_id": run.ID, "message_id": message.ID})
 	}
 	if finishErr := s.database.FinishRunResponsePublication(ctx, actionID, state, details); finishErr != nil {
 		return finishErr

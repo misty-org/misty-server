@@ -19,8 +19,8 @@ linters:
   settings:
     revive:
       rules:
-        # Package naming is the rule this repo cares most about — see CLAUDE.md.
-        # Directory name and package name must agree.
+        # Package naming matters most here: directory name and package name
+        # should agree.
         - name: package-comments
           disabled: true
         - name: var-naming

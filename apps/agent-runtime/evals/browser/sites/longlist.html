@@ -1,8 +1,0 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Parts catalog</title>
-<style>body{font:14px system-ui;margin:24px}#list{height:420px;overflow:auto;border:1px solid #ccc;position:relative}#spacer{position:relative}.row{position:absolute;left:0;right:0;height:28px;padding:4px 8px;box-sizing:border-box;border-bottom:1px solid #eee}</style></head>
-<body><h1>Parts catalog</h1><p>1,000 parts. Scroll the list to see more.</p><div id="list" role="list" aria-label="Parts" tabindex="0"><div id="spacer"></div></div>
-<script>
-const N=1000,H=28;const code=i=>'PX-'+((i*7919)%100000).toString().padStart(5,'0');const list=document.getElementById('list'),spacer=document.getElementById('spacer');spacer.style.height=N*H+'px';
-function render(){const first=Math.floor(list.scrollTop/H),last=Math.min(N,first+Math.ceil(420/H)+2);spacer.innerHTML='';for(let i=first;i<last;i++){const r=document.createElement('div');r.className='row';r.setAttribute('role','listitem');r.style.top=i*H+'px';r.textContent='Part #'+(i+1)+' — code '+code(i+1);spacer.appendChild(r)}}
-list.addEventListener('scroll',render);render();window.__evalCode=code;
-</script></body></html>

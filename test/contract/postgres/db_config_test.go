@@ -3,7 +3,7 @@ package db
 import (
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestDatabaseSSLMode(t *testing.T) {
@@ -17,7 +17,7 @@ func TestDatabaseSSLMode(t *testing.T) {
 		"db.example.com":      "require",
 	}
 	for host, want := range tests {
-		if got := TestingDatabaseSSLMode(host); got != want {
+		if got := DatabaseSSLMode(host); got != want {
 			t.Errorf("databaseSSLMode(%q) = %q, want %q", host, got, want)
 		}
 	}

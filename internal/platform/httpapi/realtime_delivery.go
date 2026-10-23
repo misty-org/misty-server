@@ -6,45 +6,45 @@ import (
 	"errors"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 var realtimeReset = []byte(`{"type":"replay","events":[],"resync_required":true}`)
 
 // Slow consumers reconnect and read durable state; the listener never waits for
 // their socket writes and never silently loses a revocation or reset.
-func (s *RealtimeService) deliver(client *TestingRealtimeClient, payload []byte) {
+func (s *RealtimeService) deliver(client *RealtimeClient, payload []byte) {
 	select {
-	case <-client.TestingDone:
+	case <-client.Done:
 		return
 	default:
 	}
 	select {
-	case client.TestingSend <- payload:
+	case client.Send <- payload:
 	default:
 		if client.conn != nil {
 			_ = client.conn.Close()
 		}
-		s.TestingUnregister(client)
+		s.Unregister(client)
 	}
 }
 
 func (s *RealtimeService) broadcastReset() {
-	s.TestingMu.RLock()
-	clients := make([]*TestingRealtimeClient, 0, len(s.clients))
+	s.Mu.RLock()
+	clients := make([]*RealtimeClient, 0, len(s.clients))
 	for client := range s.clients {
 		clients = append(clients, client)
 	}
-	s.TestingMu.RUnlock()
+	s.Mu.RUnlock()
 	for _, client := range clients {
 		s.deliver(client, realtimeReset)
 	}
 }
 
 func (s *RealtimeService) BroadcastEvent(eventID int64) {
-	s.TestingMu.RLock()
+	s.Mu.RLock()
 	empty := len(s.clients) == 0
-	s.TestingMu.RUnlock()
+	s.Mu.RUnlock()
 	if empty {
 		return
 	}
@@ -55,14 +55,14 @@ func (s *RealtimeService) BroadcastEvent(eventID int64) {
 		s.broadcastReset()
 		return
 	}
-	s.TestingMu.RLock()
-	targets := map[string][]*TestingRealtimeClient{}
+	s.Mu.RLock()
+	targets := map[string][]*RealtimeClient{}
 	for _, user := range members {
 		for client := range s.clientsByUser[user] {
 			targets[user] = append(targets[user], client)
 		}
 	}
-	s.TestingMu.RUnlock()
+	s.Mu.RUnlock()
 	if len(targets) == 0 {
 		return
 	}
@@ -98,7 +98,7 @@ func (s *RealtimeService) BroadcastEvent(eventID int64) {
 	}
 }
 
-func (s *RealtimeService) broadcastEventPerUser(ctx context.Context, eventID int64, targets map[string][]*TestingRealtimeClient) {
+func (s *RealtimeService) broadcastEventPerUser(ctx context.Context, eventID int64, targets map[string][]*RealtimeClient) {
 	var payload []byte
 	for user, clients := range targets {
 		event, err := s.database.EventByIDForUser(ctx, user, eventID)
@@ -121,4 +121,14 @@ func (s *RealtimeService) broadcastEventPerUser(ctx context.Context, eventID int
 			s.deliver(client, payload)
 		}
 	}
+}
+
+// ViewerSpaceCount reports how many Spaces currently have at least one viewer.
+func (s *RealtimeService) ViewerSpaceCount() int {
+	if s == nil {
+		return 0
+	}
+	s.Mu.RLock()
+	defer s.Mu.RUnlock()
+	return len(s.Viewers)
 }

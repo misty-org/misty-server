@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // The memory tree (docs/plans/spaces-as-profiles.md, phase 7) is one per

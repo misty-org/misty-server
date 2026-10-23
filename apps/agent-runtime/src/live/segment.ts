@@ -13,7 +13,7 @@ export type Word = {
   speaker?: string;
 };
 
-export type SegmentState = "provisional" | "pending" | "complete" | "translation-error";
+type SegmentState = "provisional" | "pending" | "complete" | "translation-error";
 
 /**
  * One phrase of a live transcript. A segment is revised in place (same `id`,
@@ -45,9 +45,3 @@ export type Segment<L extends string = Language> = {
 /** Optional per-segment presentation hook (for example script conversion). */
 export type SegmentFormat<L extends string = Language> = (segment: Segment<L>) => Segment<L>;
 export const identityFormat = <L extends string>(segment: Segment<L>) => segment;
-
-/** A stable label for a speaker: the mic is always the local person. */
-export function speakerKey(segment: { channel?: Channel; speaker?: string }) {
-  if (segment.channel === "mic") return segment.speaker ? `you:${segment.speaker}` : "you";
-  return `${segment.channel ?? "audio"}:${segment.speaker ?? "?"}`;
-}

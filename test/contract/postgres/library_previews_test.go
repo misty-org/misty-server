@@ -3,13 +3,10 @@ package db
 import (
 	"context"
 	"errors"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestLibraryPreviewDerivativeAuthorizationAndReuse(t *testing.T) {
 	database := openTestDatabase(t)

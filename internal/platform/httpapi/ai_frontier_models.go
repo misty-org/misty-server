@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 func (s *AIService) FrontierModels() http.HandlerFunc {
@@ -20,10 +20,10 @@ func (s *AIService) FrontierModels() http.HandlerFunc {
 		}
 		if accountModel {
 			provider, native, _ := strings.Cut(model, "/")
-			writeJSON(w, http.StatusOK, map[string]any{"catalog_version": serveragent.FrontierModelCatalogVersion, "default_model_id": model, "models": []serveragent.FrontierGatewayModel{{ID: model, Name: native, ProviderID: provider, ProviderName: provider, Capabilities: []string{"chat", "tools", "vision"}, ReasoningLevels: []string{"default", "none", "low", "medium", "high", "xhigh", "max"}}}})
+			writeJSON(w, http.StatusOK, map[string]any{"catalog_version": agent.FrontierModelCatalogVersion, "default_model_id": model, "models": []agent.FrontierGatewayModel{{ID: model, Name: native, ProviderID: provider, ProviderName: provider, Capabilities: []string{"chat", "tools", "vision"}, ReasoningLevels: []string{"default", "none", "low", "medium", "high", "xhigh", "max"}}}})
 			return
 		}
-		models, err := serveragent.FrontierGatewayModels(r.Context())
+		models, err := agent.FrontierGatewayModels(r.Context())
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 				"code": "model_catalog_unavailable", "message": "Misty's model catalog is temporarily unavailable.",
@@ -31,8 +31,8 @@ func (s *AIService) FrontierModels() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"catalog_version":  serveragent.FrontierModelCatalogVersion,
-			"default_model_id": serveragent.FrontierDefaultModelID(),
+			"catalog_version":  agent.FrontierModelCatalogVersion,
+			"default_model_id": agent.FrontierDefaultModelID(),
 			"models":           models,
 		})
 	}

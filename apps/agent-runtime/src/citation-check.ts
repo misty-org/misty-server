@@ -1,7 +1,7 @@
 import type { ModelMessage } from "ai";
 import { pageKey, type ResearchTools } from "./research-budget.js";
 
-// Citation grounding (docs/plans/agent-harness.md). A search result is a lead, not a source:
+// Citation grounding (docs/agents/harness.md, Completion). A search result is a lead, not a source:
 // its snippet can be stale or cut off. A final answer may cite a page only if the run read it,
 // with web_fetch or in a browser. The first agent_finish that cites an unread page is refused
 // once with the list (a plain-text final answer is checked the same way), so the model reads those pages, drops the citation, or says the fact

@@ -17,7 +17,7 @@ export type TaskCompletion = z.infer<typeof taskCompletionSchema>;
 export const taskCompletionInputSchema = taskCompletionSchema.extend({
   summary: z.string().trim().max(12000).optional(),
 });
-export type TaskCompletionInput = z.infer<typeof taskCompletionInputSchema>;
+type TaskCompletionInput = z.infer<typeof taskCompletionInputSchema>;
 
 /**
  * The text answer agent_finish confirms: the latest model response written as plain text,

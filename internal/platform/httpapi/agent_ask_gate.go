@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 )
 
@@ -33,14 +33,14 @@ func permissionGateFrom(ctx context.Context) permissionGate {
 // selfGatedTools decide their own permission inside the handler.
 var selfGatedTools = map[string]bool{
 	appsExecuteTool: true, itemsDeleteTool: true, spacesManageTool: true, workflowUnscheduleTool: true,
-	screenActTool: true, "browser.steps": true, recallSearchTool: true, recallTimelineTool: true, recallForgetTool: true, "browser.fill_form": true, browserRunTool: true, "browser.skill": true,
+	screenActTool: true, "browser.steps": true, recallSearchTool: true, recallTimelineTool: true, recallTreeTool: true, recallForgetTool: true, "browser.fill_form": true, browserRunTool: true, "browser.skill": true,
 	// Delegation hands the same mode to the child, which asks for itself.
 	toolboxAgentsDelegateTasks: true, toolboxAgentsWait: true, codeDelegateTool: true, codeWaitTool: true,
 }
 
 // gatedByAsk reports whether a tool call needs the generic Ask pause.
 func gatedByAsk(descriptor agenttools.Descriptor) bool {
-	if descriptor.Risk == serveragent.RiskRead || descriptor.Locality == agenttools.LocalityRouted {
+	if descriptor.Risk == agent.RiskRead || descriptor.Locality == agenttools.LocalityRouted {
 		return false
 	}
 	if selfGatedTools[descriptor.Name] || strings.HasPrefix(descriptor.Name, "log.work.") {
@@ -58,7 +58,7 @@ func (s *SpacesService) askGate(ctx context.Context, invocation agenttools.Invoc
 	}
 	digest := sha256.Sum256(append([]byte(descriptor.Name+"\x00"), arguments...))
 	title := toolActionTitle(descriptor)
-	approval, waiting, err := s.gateAction(ctx, invocation, grantNeed{action: serveragent.ActionToolWrite},
+	approval, waiting, err := s.gateAction(ctx, invocation, grantNeed{action: agent.ActionToolWrite},
 		"tool."+descriptor.Name, hex.EncodeToString(digest[:]), title, toolActionSummary(arguments))
 	if err != nil || waiting != nil {
 		return waiting, err

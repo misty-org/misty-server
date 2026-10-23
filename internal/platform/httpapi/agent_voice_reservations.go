@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 )
 
@@ -19,7 +19,7 @@ type voiceHold struct {
 // uses ordinary reservations, so crash recovery needs no new billing protocol.
 type voiceReservations struct {
 	operation, user string
- model string
+	model           string
 	holds           []*voiceHold
 	accounted       agent.RealtimeVoiceUsage
 	inputSeconds    int
@@ -206,6 +206,16 @@ func voiceBillingEstimate(service *billingadapter.Service) func(context.Context,
 	}
 }
 
-func (b *voiceReservations) modelID() string { if b.model != "" { return b.model }; return agent.AgentRealtimeModel }
+func (b *voiceReservations) modelID() string {
+	if b.model != "" {
+		return b.model
+	}
+	return agent.AgentRealtimeModel
+}
 
-func voiceProviderModel(provider voiceProvider) string { if p, ok := provider.(interface{ ModelID() string }); ok { return p.ModelID() }; return agent.AgentRealtimeModel }
+func voiceProviderModel(provider voiceProvider) string {
+	if p, ok := provider.(interface{ ModelID() string }); ok {
+		return p.ModelID()
+	}
+	return agent.AgentRealtimeModel
+}

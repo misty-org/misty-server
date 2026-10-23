@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { expect, it, vi } from "vitest";
 
 vi.mock("../src/model-provider.js", () => ({ instanceModelConfig: vi.fn() }));
-vi.mock("../src/vercel-harness.js", () => ({ vercelHarness: { version: "test" } }));
+vi.mock("../src/workflow-harness.js", () => ({ workflowHarness: { version: "test" } }));
 vi.mock("../src/signature.js", async (importOriginal) => ({
   ...await importOriginal<typeof SignatureModule>(),
   decodeControlSecret: () => Buffer.alloc(32),

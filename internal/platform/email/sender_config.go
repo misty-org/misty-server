@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 const defaultMailjetAPIBaseURL = "https://api.mailjet.com"
@@ -61,15 +61,15 @@ func (LogSender) SendEmailVerification(_ context.Context, recipientEmail, verify
 }
 
 type MailjetSender struct {
-	TestingApiBaseURL string
-	TestingApiKey     string
-	TestingSecretKey  string
-	TestingFromEmail  string
-	TestingFromName   string
-	TestingHttpClient *http.Client
+	APIBaseURL string
+	APIKey     string
+	SecretKey  string
+	FromEmail  string
+	FromName   string
+	HTTPClient *http.Client
 }
 
-type TestingMailjetSendRequest struct {
+type MailjetSendRequest struct {
 	Messages []mailjetMessage `json:"Messages"`
 }
 
@@ -106,9 +106,9 @@ type mailjetMessageResult struct {
 }
 
 func NewSenderFromEnv() (Sender, error) {
-	apiKey := strings.TrimSpace(envconfig.Getenv("MAILJET_API_KEY"))
-	secretKey := strings.TrimSpace(envconfig.Getenv("MAILJET_SECRET_KEY"))
-	fromEmail := strings.TrimSpace(envconfig.Getenv("MAILJET_FROM_EMAIL"))
+	apiKey := strings.TrimSpace(config.Getenv("MAILJET_API_KEY"))
+	secretKey := strings.TrimSpace(config.Getenv("MAILJET_SECRET_KEY"))
+	fromEmail := strings.TrimSpace(config.Getenv("MAILJET_FROM_EMAIL"))
 
 	if apiKey == "" && secretKey == "" && fromEmail == "" {
 		return LogSender{}, nil
@@ -117,18 +117,18 @@ func NewSenderFromEnv() (Sender, error) {
 		return nil, fmt.Errorf("MAILJET_API_KEY, MAILJET_SECRET_KEY, and MAILJET_FROM_EMAIL must all be set")
 	}
 
-	apiBaseURL := strings.TrimRight(strings.TrimSpace(envconfig.Getenv("MAILJET_API_BASE_URL")), "/")
+	apiBaseURL := strings.TrimRight(strings.TrimSpace(config.Getenv("MAILJET_API_BASE_URL")), "/")
 	if apiBaseURL == "" {
 		apiBaseURL = defaultMailjetAPIBaseURL
 	}
 
 	return &MailjetSender{
-		TestingApiBaseURL: apiBaseURL,
-		TestingApiKey:     apiKey,
-		TestingSecretKey:  secretKey,
-		TestingFromEmail:  fromEmail,
-		TestingFromName:   strings.TrimSpace(envconfig.Getenv("MAILJET_FROM_NAME")),
-		TestingHttpClient: &http.Client{Timeout: 10 * time.Second},
+		APIBaseURL: apiBaseURL,
+		APIKey:     apiKey,
+		SecretKey:  secretKey,
+		FromEmail:  fromEmail,
+		FromName:   strings.TrimSpace(config.Getenv("MAILJET_FROM_NAME")),
+		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 	}, nil
 }
 

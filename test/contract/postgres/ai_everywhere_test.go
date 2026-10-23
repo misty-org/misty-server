@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestAIConversationTurnsExposeOriginalPromptAndDurableOutcome(t *testing.T) {

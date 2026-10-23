@@ -15,9 +15,9 @@ import (
 
 const collaborationControlResponseLimit = 6 << 20
 
-var TestingNoteControlHTTPClient = &http.Client{Timeout: 10 * time.Second}
+var NoteControlHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
-type TestingNoteControlEnvelope struct {
+type NoteControlEnvelope struct {
 	ResourceID string          `json:"resource_id"`
 	Command    string          `json:"command"`
 	Payload    json.RawMessage `json:"payload"`
@@ -35,7 +35,7 @@ func (s *SpacesService) ProcessNoteControlCommands(ctx context.Context, limit in
 	delivered := 0
 	var processingErrors []error
 	for _, command := range commands {
-		if err := s.TestingDeliverNoteControlCommand(ctx, command.NoteID, command.Command, command.Payload); err != nil {
+		if err := s.DeliverNoteControlCommand(ctx, command.NoteID, command.Command, command.Payload); err != nil {
 			if markErr := s.database.MarkNoteControlFailed(ctx, command.ID, err.Error()); markErr != nil {
 				processingErrors = append(processingErrors, fmt.Errorf("record failed note command %s: %w", command.ID, markErr))
 			}
@@ -50,7 +50,7 @@ func (s *SpacesService) ProcessNoteControlCommands(ctx context.Context, limit in
 	return delivered, errors.Join(processingErrors...)
 }
 
-func (s *SpacesService) TestingDeliverNoteControlCommand(
+func (s *SpacesService) DeliverNoteControlCommand(
 	ctx context.Context,
 	noteID, command string,
 	payload []byte,
@@ -58,7 +58,7 @@ func (s *SpacesService) TestingDeliverNoteControlCommand(
 	return s.deliverCollaborationControlCommand(
 		ctx,
 		"note-room",
-		s.TestingJournalCollab.RoomID(noteID),
+		s.JournalCollab.RoomID(noteID),
 		noteID,
 		command,
 		payload,
@@ -82,14 +82,14 @@ func (s *SpacesService) requestCollaborationControlCommand(
 	if !json.Valid(payload) {
 		return nil, errors.New("collaboration control payload is invalid JSON")
 	}
-	body, err := json.Marshal(TestingNoteControlEnvelope{ResourceID: resourceID, Command: command, Payload: json.RawMessage(payload)})
+	body, err := json.Marshal(NoteControlEnvelope{ResourceID: resourceID, Command: command, Payload: json.RawMessage(payload)})
 	if err != nil {
 		return nil, err
 	}
 	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	endpoint := fmt.Sprintf(
 		"%s/parties/%s/%s",
-		s.TestingJournalCollab.httpOrigin(),
+		s.JournalCollab.httpOrigin(),
 		party,
 		room,
 	)
@@ -99,9 +99,9 @@ func (s *SpacesService) requestCollaborationControlCommand(
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Misty-Timestamp", timestamp)
-	request.Header.Set("X-Misty-Signature", s.TestingJournalCollab.SignControlRequest(timestamp, body))
+	request.Header.Set("X-Misty-Signature", s.JournalCollab.SignControlRequest(timestamp, body))
 
-	response, err := TestingNoteControlHTTPClient.Do(request)
+	response, err := NoteControlHTTPClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("send collaboration control command: %w", err)
 	}

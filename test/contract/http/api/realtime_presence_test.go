@@ -5,14 +5,13 @@ import (
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
-
 import (
 	"context"
 	"fmt"
 	"testing"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 
 	"github.com/kannachi323/misty/server/test/testkit"
 )
@@ -57,17 +56,17 @@ func uniqueTestEmail(label string) string {
 	return fmt.Sprintf("presence-%s-%d@example.com", label, time.Now().UnixNano())
 }
 
-func newTestRealtimeClient(userID string) *TestingRealtimeClient {
-	return &TestingRealtimeClient{TestingUserID: userID, TestingSend: make(chan []byte, 10), TestingDone: make(chan struct{})}
+func newTestRealtimeClient(userID string) *RealtimeClient {
+	return &RealtimeClient{UserID: userID, Send: make(chan []byte, 10), Done: make(chan struct{})}
 }
 
 type presenceMessage struct {
-	Type    string                  `json:"type"`
-	SpaceID string                  `json:"space_id"`
-	Viewers []TestingPresenceViewer `json:"viewers"`
+	Type    string           `json:"type"`
+	SpaceID string           `json:"space_id"`
+	Viewers []PresenceViewer `json:"viewers"`
 }
 
-func viewerStatus(viewers []TestingPresenceViewer, userID string) (active bool, found bool) {
+func viewerStatus(viewers []PresenceViewer, userID string) (active bool, found bool) {
 	for _, viewer := range viewers {
 		if viewer.UserID == userID {
 			return viewer.Active, true
@@ -76,10 +75,10 @@ func viewerStatus(viewers []TestingPresenceViewer, userID string) (active bool, 
 	return false, false
 }
 
-func readPresenceMessage(t *testing.T, client *TestingRealtimeClient) presenceMessage {
+func readPresenceMessage(t *testing.T, client *RealtimeClient) presenceMessage {
 	t.Helper()
 	select {
-	case payload := <-client.TestingSend:
+	case payload := <-client.Send:
 		var msg presenceMessage
 		if err := json.Unmarshal(payload, &msg); err != nil {
 			t.Fatalf("unmarshal presence message: %v", err)
@@ -91,10 +90,10 @@ func readPresenceMessage(t *testing.T, client *TestingRealtimeClient) presenceMe
 	}
 }
 
-func assertNoMessage(t *testing.T, client *TestingRealtimeClient, context string) {
+func assertNoMessage(t *testing.T, client *RealtimeClient, context string) {
 	t.Helper()
 	select {
-	case payload := <-client.TestingSend:
+	case payload := <-client.Send:
 		t.Fatalf("%s: expected no message, got %s", context, payload)
 	default:
 	}
@@ -125,7 +124,7 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 	ownerClient := newTestRealtimeClient(owner.ID)
 	outsiderClient := newTestRealtimeClient(outsider.ID)
 
-	service.TestingSetViewing(ownerClient, space.ID, true)
+	service.SetViewing(ownerClient, space.ID, true)
 	msg := readPresenceMessage(t, ownerClient)
 	if msg.Type != "presence" || msg.SpaceID != space.ID || len(msg.Viewers) != 1 || msg.Viewers[0].UserID != owner.ID || !msg.Viewers[0].Active {
 		t.Fatalf("owner presence message = %#v, want solo active owner", msg)
@@ -134,13 +133,13 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 	// The outsider is not a member of this Space. Claiming to view it must be
 	// silently rejected: no broadcast to the real member, and no confirmation
 	// back to the outsider either.
-	service.TestingSetViewing(outsiderClient, space.ID, true)
+	service.SetViewing(outsiderClient, space.ID, true)
 	assertNoMessage(t, ownerClient, "owner after outsider's rejected viewing claim")
 	assertNoMessage(t, outsiderClient, "outsider after rejected viewing claim")
 
-	service.TestingMu.RLock()
-	_, outsiderTrackedAsViewer := service.TestingViewers[space.ID][outsiderClient]
-	service.TestingMu.RUnlock()
+	service.Mu.RLock()
+	_, outsiderTrackedAsViewer := service.Viewers[space.ID][outsiderClient]
+	service.Mu.RUnlock()
 	if outsiderTrackedAsViewer {
 		t.Fatal("outsider must not be tracked as a viewer of a Space it does not belong to")
 	}
@@ -158,7 +157,7 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 		t.Fatalf("RespondToSpaceInvite() error = %v", err)
 	}
 	memberClient := newTestRealtimeClient(member.ID)
-	service.TestingSetViewing(memberClient, space.ID, true)
+	service.SetViewing(memberClient, space.ID, true)
 
 	ownerMsg := readPresenceMessage(t, ownerClient)
 	ownerActive, ownerFound := viewerStatus(ownerMsg.Viewers, owner.ID)
@@ -173,7 +172,7 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 
 	// The member going idle (still viewing, but Misty isn't in their focus)
 	// keeps them in the viewer list but flips their status.
-	service.TestingSetViewing(memberClient, space.ID, false)
+	service.SetViewing(memberClient, space.ID, false)
 	ownerMsgAfterIdle := readPresenceMessage(t, ownerClient)
 	memberActiveAfterIdle, memberFoundAfterIdle := viewerStatus(ownerMsgAfterIdle.Viewers, member.ID)
 	if len(ownerMsgAfterIdle.Viewers) != 2 || !memberFoundAfterIdle || memberActiveAfterIdle {
@@ -182,7 +181,7 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 
 	// The member navigating away (viewing "") removes them and notifies the
 	// remaining viewer.
-	service.TestingSetViewing(memberClient, "", false)
+	service.SetViewing(memberClient, "", false)
 	ownerMsgAfterLeave := readPresenceMessage(t, ownerClient)
 	if len(ownerMsgAfterLeave.Viewers) != 1 || ownerMsgAfterLeave.Viewers[0].UserID != owner.ID {
 		t.Fatalf("owner presence after member left = %#v, want solo owner", ownerMsgAfterLeave)
@@ -191,19 +190,19 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 	// Disconnecting (unregister) also cleans up viewer state and notifies
 	// anyone still watching.
 	secondMemberClient := newTestRealtimeClient(member.ID)
-	service.TestingSetViewing(secondMemberClient, space.ID, true)
+	service.SetViewing(secondMemberClient, space.ID, true)
 	readPresenceMessage(t, ownerClient) // drain the join broadcast
 	readPresenceMessage(t, secondMemberClient)
 
-	service.TestingUnregister(secondMemberClient)
+	service.Unregister(secondMemberClient)
 	ownerMsgAfterDisconnect := readPresenceMessage(t, ownerClient)
 	if len(ownerMsgAfterDisconnect.Viewers) != 1 || ownerMsgAfterDisconnect.Viewers[0].UserID != owner.ID {
 		t.Fatalf("owner presence after disconnect = %#v, want solo owner", ownerMsgAfterDisconnect)
 	}
 
-	service.TestingMu.RLock()
-	_, spaceStillTracked := service.TestingViewers[space.ID][secondMemberClient]
-	service.TestingMu.RUnlock()
+	service.Mu.RLock()
+	_, spaceStillTracked := service.Viewers[space.ID][secondMemberClient]
+	service.Mu.RUnlock()
 	if spaceStillTracked {
 		t.Fatal("disconnected client must be removed from the viewers map")
 	}

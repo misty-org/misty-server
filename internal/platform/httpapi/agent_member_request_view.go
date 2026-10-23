@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // What an agent sees about a request it sent: A2A-style state and the reply.
@@ -60,5 +60,5 @@ func agentRequestView(request *db.AgentMemberRequest) json.RawMessage {
 	default:
 		view["note"] = "Still working. Call agent_request_status with this request_id to keep waiting."
 	}
-	return TestingMustAPIRawJSON(view)
+	return MustAPIRawJSON(view)
 }

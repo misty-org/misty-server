@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // RecallConfig is Memory on the server. It is off unless MISTY_RECALL=true.
@@ -21,10 +21,10 @@ type RecallConfig struct {
 
 func recallConfig() RecallConfig {
 	limit := 2000
-	if parsed, err := strconv.Atoi(strings.TrimSpace(envconfig.Getenv("MISTY_RECALL_BACKLOG_CAP"))); err == nil && parsed > 0 && parsed <= 100_000 {
+	if parsed, err := strconv.Atoi(strings.TrimSpace(config.Getenv("MISTY_RECALL_BACKLOG_CAP"))); err == nil && parsed > 0 && parsed <= 100_000 {
 		limit = parsed
 	}
-	return RecallConfig{Enabled: strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_RECALL")), "true"), BacklogCap: limit}
+	return RecallConfig{Enabled: strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_RECALL")), "true"), BacklogCap: limit}
 }
 
 const memoryBacklogMessage = "Memory is catching up, so new pages aren't being kept for now. It continues on its own once it has caught up."
@@ -138,7 +138,9 @@ func memoryQueryFrom(r *http.Request) (db.MemoryQuery, string, bool) {
 }
 
 // MemoryForget deletes everything, one site, or a time range in one Space.
-// POST {space_id, all} | {space_id, site} | {space_id, from, to}.
+// POST {space_id, all} | {space_id, site} | {space_id, from, to}. With node_id
+// it forgets one node of the memory tree instead (see ForgetMemoryNode), and
+// with dry_run it only counts what that would forget.
 func (s *SpacesService) MemoryForget() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, ok := s.memoryUser(w, r)
@@ -151,6 +153,8 @@ func (s *SpacesService) MemoryForget() http.HandlerFunc {
 			Site    string    `json:"site"`
 			From    time.Time `json:"from"`
 			To      time.Time `json:"to"`
+			NodeID  string    `json:"node_id"`
+			DryRun  bool      `json:"dry_run"`
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		if decodeAIJSON(w, r, &body) != nil {
@@ -160,6 +164,23 @@ func (s *SpacesService) MemoryForget() http.HandlerFunc {
 		space, err := requestMemorySpace(r.Context(), s.database, user, body.SpaceID)
 		if err != nil {
 			writeMemorySpaceError(w, err)
+			return
+		}
+		if body.NodeID != "" {
+			counts, err := s.database.ForgetMemoryNode(r.Context(), user, space, body.NodeID, body.From, body.To, body.DryRun)
+			if errors.Is(err, db.ErrSpaceInvalid) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_forget", "message": "That isn't something Memory can forget."})
+				return
+			}
+			if err != nil {
+				writeAgentError(w, err)
+				return
+			}
+			key := "forgotten"
+			if body.DryRun {
+				key = "would_forget"
+			}
+			writeJSON(w, http.StatusOK, map[string]any{key: counts.Total(), "counts": counts})
 			return
 		}
 		n, err := s.database.ForgetMemory(r.Context(), user, db.MemoryForget{SpaceID: space, All: body.All, Site: body.Site, From: body.From, To: body.To})

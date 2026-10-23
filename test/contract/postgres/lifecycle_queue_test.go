@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func lifecycleHint(t *testing.T, hints <-chan struct{}) {

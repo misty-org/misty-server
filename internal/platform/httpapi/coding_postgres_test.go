@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
 
@@ -22,7 +22,7 @@ func TestCodingDelegationPostgres(t *testing.T) {
 	owner, _ := database.CreateUser("coding-owner@example.test", "password123")
 	device := "device_" + uuid.NewString()
 	// The device that holds the project was last seen an hour ago: offline.
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO trusted_devices(id,user_id,name,public_key,last_seen_at) VALUES($1,$2,'Studio Mac',repeat('k',44),now()-interval '1 hour')`, device, owner.ID)
 		return err
 	}); err != nil {

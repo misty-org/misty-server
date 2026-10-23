@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // spaceDeleteTarget finds one Space item to delete and returns its title and
@@ -63,7 +63,7 @@ func spaceThread(ctx context.Context, database *db.Database, userID, spaceID, id
 func (s *SpacesService) renameToolRegistration() agenttools.Registration {
 	return agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
-			Name: "item.rename", Version: 1, Risk: serveragent.RiskWrite, Approval: agenttools.ApprovalNone,
+			Name: "item.rename", Version: 1, Risk: agent.RiskWrite,
 			Description: "Rename a drawing or a thread. Threads also need their Space. Notes rename through their own update tool.",
 			InputSchema: agentToolSchema(map[string]any{
 				"kind":  map[string]any{"type": "string", "enum": []string{"drawing", "thread"}},
@@ -71,15 +71,15 @@ func (s *SpacesService) renameToolRegistration() agenttools.Registration {
 				"name":  map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 				"space": map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 			}, []string{"kind", "id", "name"}),
-			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true, AuditEvent: "item.renamed",
+			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "item.renamed",
 		},
-		Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			var input struct{ Kind, ID, Name, Space string }
 			if json.Unmarshal(request.Arguments, &input) != nil {
 				return nil, agenttools.ErrArgumentsInvalid
 			}
 			id, name := strings.TrimSpace(input.ID), strings.TrimSpace(input.Name)
-			notFound := serveragent.ErrInvalidRequest("no " + input.Kind + " " + id + " that you can rename")
+			notFound := agent.ErrInvalidRequest("no " + input.Kind + " " + id + " that you can rename")
 			if input.Kind == "drawing" {
 				drawing, err := s.database.RenameSpaceDrawing(ctx, invocation.UserID, id, name)
 				if err != nil {

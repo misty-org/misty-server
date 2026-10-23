@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 type accountExportDocument struct {
@@ -51,7 +51,7 @@ func (s *SpacesService) AccountExportManifest() http.HandlerFunc {
 		}
 		documents := make([]accountExportDocument, 0, len(export.Journal))
 		for _, resource := range export.Journal {
-			ticket, ticketErr := s.TestingJournalCollab.MintJournalExportTicket(
+			ticket, ticketErr := s.JournalCollab.MintJournalExportTicket(
 				userID, resource.SpaceID, resource.Kind, resource.ID,
 				resource.ACLVersion,
 			)
@@ -68,14 +68,14 @@ func (s *SpacesService) AccountExportManifest() http.HandlerFunc {
 			})
 		}
 		assets := make([]accountExportAsset, 0, len(export.Assets))
-		if len(export.Assets) > 0 && (s.library == nil || s.library.TestingPresigner == nil) {
+		if len(export.Assets) > 0 && (s.library == nil || s.library.Presigner == nil) {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 				"code": "account_export_assets_unavailable",
 			})
 			return
 		}
 		for _, asset := range export.Assets {
-			download, downloadErr := s.library.TestingPresigner.PresignGet(
+			download, downloadErr := s.library.Presigner.PresignGet(
 				r.Context(), asset.ObjectKey, asset.Filename, 15*time.Minute,
 			)
 			if downloadErr != nil {

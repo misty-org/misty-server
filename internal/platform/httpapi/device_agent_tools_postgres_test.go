@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
 
@@ -58,7 +58,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	if err := attach("workspace", "workspace:bad", "Bad", `["folder.read"]`); !errors.Is(err, db.ErrSpaceInvalid) {
 		t.Fatalf("a workspace grant asked for files: %v", err)
 	}
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		// The desktop is online: it heartbeats while the app is open.
 		if _, err := tx.ExecContext(ctx, `UPDATE trusted_devices SET last_seen_at=NOW() WHERE id=$1`, device.ID); err != nil {
 			return err
@@ -97,14 +97,14 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	var jobID string
 	var input, operation string
 	for deadline := time.Now().Add(10 * time.Second); jobID == "" && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
-		_ = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		_ = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 			return tx.QueryRowContext(ctx, `SELECT id,input::text,operation FROM workflow_device_node_jobs WHERE invocation_id=$1 AND operation=$2`, record.ID, filesReadTool).Scan(&jobID, &input, &operation)
 		})
 	}
 	if jobID == "" || operation != filesReadTool || !strings.Contains(input, `"scopeId": "scope_reports"`) && !strings.Contains(input, `"scopeId":"scope_reports"`) {
 		t.Fatalf("queued job = %q %q %q", jobID, operation, input)
 	}
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `UPDATE workflow_device_node_jobs SET state='completed',output='{"text":"Revenue grew"}',completed_at=NOW() WHERE id=$1`, jobID)
 		return err
 	}); err != nil {
@@ -130,7 +130,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	}()
 	var sendInput string
 	for deadline := time.Now().Add(10 * time.Second); sendInput == "" && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
-		_ = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		_ = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 			return tx.QueryRowContext(ctx, `SELECT input::text FROM workflow_device_node_jobs WHERE invocation_id=$1 AND operation=$2`, record.ID, filesSendTool).Scan(&sendInput)
 		})
 	}

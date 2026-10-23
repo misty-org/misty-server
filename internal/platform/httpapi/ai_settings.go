@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func (s *AIService) Settings() http.HandlerFunc {
@@ -19,7 +19,7 @@ func (s *AIService) Settings() http.HandlerFunc {
 		case http.MethodGet:
 			settings, preferences, err := s.database.AISettings(r.Context(), userID)
 			if err != nil {
-				TestingWriteAIError(w, err)
+				WriteAIError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"settings": settings, "preferences": preferences})
@@ -48,7 +48,7 @@ func (s *AIService) Settings() http.HandlerFunc {
 			}
 			settings, err := s.database.UpdateAISettings(r.Context(), userID, body.Enabled, body.RetentionDays, cursorCompanionEnabled, memoryEnabled)
 			if err != nil {
-				TestingWriteAIError(w, err)
+				WriteAIError(w, err)
 				return
 			}
 			if !settings.Enabled {
@@ -77,151 +77,16 @@ func (s *AIService) AppActionsSetting() http.HandlerFunc {
 			return
 		}
 		if body.Ask == nil && body.Payments == nil {
-			TestingWriteAIError(w, db.ErrSpaceInvalid)
+			WriteAIError(w, db.ErrSpaceInvalid)
 			return
 		}
 		if err := s.database.SetAIAppActionsAsk(r.Context(), userID, body.Ask, body.Payments); err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		settings, _, err := s.database.AISettings(r.Context(), userID)
 		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"settings": settings})
-	}
-}
-
-// normalizeAgentSite turns "https://www.Example.com/path" into "example.com",
-// the host agents may not act on (with its subdomains). Devices apply the same
-// rule (src-tauri/src/infra/browser_page/site_blocks.rs).
-func normalizeAgentSite(site string) (string, bool) {
-	host := strings.ToLower(strings.TrimSpace(site))
-	host = strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://")
-	if cut := strings.IndexAny(host, "/?#"); cut >= 0 {
-		host = host[:cut]
-	}
-	host = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(host, "*."), "www."), ".")
-	if host == "" || len(host) > 253 || !strings.Contains(host, ".") {
-		return "", false
-	}
-	for _, label := range strings.Split(host, ".") {
-		if label == "" || len(label) > 63 {
-			return "", false
-		}
-		for _, char := range label {
-			if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-') {
-				return "", false
-			}
-		}
-	}
-	return host, true
-}
-
-// AgentSitesSetting changes which sites agents may read but not act on.
-func (s *AIService) AgentSitesSetting() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		var body struct {
-			BlockSensitive *bool     `json:"block_sensitive"`
-			BlockedSites   *[]string `json:"blocked_sites"`
-		}
-		if decodeAIJSON(w, r, &body) != nil {
-			return
-		}
-		if body.BlockSensitive == nil && body.BlockedSites == nil {
-			TestingWriteAIError(w, db.ErrSpaceInvalid)
-			return
-		}
-		var sites []string
-		if body.BlockedSites != nil {
-			sites = []string{}
-			seen := map[string]bool{}
-			for _, raw := range *body.BlockedSites {
-				site, valid := normalizeAgentSite(raw)
-				if !valid {
-					writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_site", "message": "“" + truncateAgentRuntimeText(strings.TrimSpace(raw), 80) + "” isn’t a site address. Use a form like example.com."})
-					return
-				}
-				if !seen[site] {
-					seen[site] = true
-					sites = append(sites, site)
-				}
-			}
-			if len(sites) > 200 {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"code": "too_many_sites", "message": "Block at most 200 sites."})
-				return
-			}
-		}
-		if err := s.database.SetAIAgentSiteBlocks(r.Context(), userID, body.BlockSensitive, sites); err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		settings, _, err := s.database.AISettings(r.Context(), userID)
-		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"settings": settings})
-	}
-}
-
-// KeepAwakeSetting changes whether a computer stays awake while an agent works
-// on it (docs/design/agents-on-devices/BRIEF.md).
-func (s *AIService) KeepAwakeSetting() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		var body struct {
-			KeepAwake *bool `json:"keep_awake_for_agents"`
-		}
-		if decodeAIJSON(w, r, &body) != nil {
-			return
-		}
-		if body.KeepAwake == nil {
-			TestingWriteAIError(w, db.ErrSpaceInvalid)
-			return
-		}
-		if err := s.database.SetAIKeepAwake(r.Context(), userID, *body.KeepAwake); err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		settings, _, err := s.database.AISettings(r.Context(), userID)
-		if err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"settings": settings})
-	}
-}
-
-// ScreenLocationSetting changes only where agents open a new screen when a task
-// needs one: a new tab in the user's Misty window, a separate window, or ask.
-func (s *AIService) ScreenLocationSetting() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		var body struct {
-			Location string `json:"location"`
-		}
-		if decodeAIJSON(w, r, &body) != nil {
-			return
-		}
-		if err := s.database.SetAIScreenLocation(r.Context(), userID, body.Location); err != nil {
-			TestingWriteAIError(w, err)
-			return
-		}
-		settings, _, err := s.database.AISettings(r.Context(), userID)
-		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"settings": settings})
@@ -255,7 +120,7 @@ func (s *AIService) SurfacePreference() http.HandlerFunc {
 			Proactive: body.Proactive, SavedActions: body.SavedActions,
 		})
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"preference": preference})
@@ -311,7 +176,7 @@ func (s *AIService) InvocationFeedback() http.HandlerFunc {
 			return
 		}
 		if err := s.database.RecordAIFeedback(r.Context(), userID, chi.URLParam(r, "invocationID"), body.Rating, body.Reason, body.Comment); err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

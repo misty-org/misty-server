@@ -19,7 +19,7 @@ const daySummaryRequest = z.object({
   language: z.string().max(16).optional(),
   maxOutputTokens: z.number().int().min(256).max(8_000).optional(),
 });
-export type DaySummaryRequest = z.infer<typeof daySummaryRequest>;
+type DaySummaryRequest = z.infer<typeof daySummaryRequest>;
 
 const result = z.object({
   markdown: z.string(),

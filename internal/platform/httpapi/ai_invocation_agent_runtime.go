@@ -1,17 +1,13 @@
 package api
 
 import (
-	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/aimodels"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
 )
 
 func isAIInvocationRuntimeID(value string) bool {
@@ -91,7 +87,7 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 		"run_mode": prepared.body.PermissionMode, "system": prepared.system, "prompt": prepared.prompt,
 		"attached_sources": []any{}, "file_warnings": "", "allowed_tools": prepared.allowedTools,
 		"model_turn_limit":      record.ModelTurnLimit,
-		"context_window_tokens": serveragent.ModelContextWindow(r.Context(), agentRoute.Model),
+		"context_window_tokens": agent.ModelContextWindow(r.Context(), agentRoute.Model),
 		"capture":               prepared.body.Capture,
 		"display_captures":      prepared.body.DisplayCaptures,
 		"companion_mode":        prepared.body.CompanionMode,
@@ -100,49 +96,6 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 		"attachments":           attachments,
 		"browser_replay":        s.browserWorkflowReplayContext(r.Context(), record, prepared.body),
 	})
-}
-
-func (s *SpacesService) agentRuntimeToolAIInvocation(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		DeviceHookToken string          `json:"device_hook_token"`
-		RuntimeRunID    string          `json:"runtime_run_id"`
-		CallID          string          `json:"call_id"`
-		Name            string          `json:"name"`
-		Arguments       json.RawMessage `json:"arguments"`
-	}
-	if !readAgentRuntimeRequest(s.agentRuntime, w, r, &body) {
-		return
-	}
-	if strings.TrimSpace(body.CallID) == "" || len(body.Arguments) == 0 {
-		writeJSON(w, http.StatusForbidden, map[string]string{"code": "tool_denied"})
-		return
-	}
-	record, err := s.database.ValidateAIInvocationRuntime(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID)
-	if err != nil {
-		writeAgentError(w, err)
-		return
-	}
-	prepared, err := s.prepareAIInvocationRuntime(r.Context(), record)
-	if err != nil {
-		writeAgentError(w, err)
-		return
-	}
-	// The legacy endpoint executes exactly like the MCP route.
-	access := &mcpRuntimeAccess{record: record, prepared: prepared, claims: mcpAccessClaims{RuntimeRunID: body.RuntimeRunID}}
-	result, err := s.executeAIInvocationMCPTool(r.Context(), access, agentRuntimeToolCall{RuntimeRunID: body.RuntimeRunID, CallID: body.CallID, Name: body.Name, Arguments: body.Arguments, DeviceHookToken: body.DeviceHookToken})
-	var intervention *aiInterventionRequired
-	switch {
-	case errors.As(err, &intervention):
-		writeJSON(w, http.StatusAccepted, map[string]any{"intervention_wait": intervention.wait})
-	case errors.Is(err, errAIInvocationDeviceWait):
-		writeJSON(w, http.StatusAccepted, map[string]any{"device_wait": true})
-	case errors.Is(err, db.ErrSpaceForbidden), errors.Is(err, workflowv2.ErrCapabilityDenied):
-		writeJSON(w, http.StatusForbidden, map[string]string{"code": "tool_denied"})
-	case err != nil:
-		writeAgentError(w, err)
-	default:
-		writeJSON(w, http.StatusOK, map[string]any{"result": json.RawMessage(result)})
-	}
 }
 
 func runtimeToolStatus(name string) string {

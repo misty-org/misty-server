@@ -28,7 +28,7 @@ func TestLibraryPreviewCacheHeaders(t *testing.T) {
 			request.Header.Set("If-None-Match", test.ifNoneMatch)
 			response := httptest.NewRecorder()
 			response.Header().Set("Vary", "Origin")
-			notModified := TestingWriteLibraryPreviewCacheHeaders(response, request, sha)
+			notModified := WriteLibraryPreviewCacheHeaders(response, request, sha)
 			if notModified != test.notModified {
 				t.Fatalf("notModified = %v, want %v", notModified, test.notModified)
 			}

@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Files up to the attachment reader's limit go to the runtime inline.

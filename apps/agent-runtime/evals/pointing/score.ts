@@ -1,5 +1,5 @@
 /** One question about one screenshot, with the box a correct point lands in. */
-export interface PointingFixture {
+interface PointingFixture {
   id: string;
   /** Image file next to the fixture JSON, sent exactly as the companion sends a display. */
   image: string;

@@ -14,15 +14,15 @@ func (f noteControlTransport) RoundTrip(r *http.Request) (*http.Response, error)
 
 func TestNoteControlSignsResourceBinding(t *testing.T) {
 	config := JournalCollabConfig{Host: "collab.invalid", controlSecret: []byte("test-control-secret"), roomSalt: []byte("test-room-salt")}
-	service := &SpacesService{TestingJournalCollab: config}
-	previous := TestingNoteControlHTTPClient
-	t.Cleanup(func() { TestingNoteControlHTTPClient = previous })
-	TestingNoteControlHTTPClient = &http.Client{Transport: noteControlTransport(func(r *http.Request) (*http.Response, error) {
+	service := &SpacesService{JournalCollab: config}
+	previous := NoteControlHTTPClient
+	t.Cleanup(func() { NoteControlHTTPClient = previous })
+	NoteControlHTTPClient = &http.Client{Transport: noteControlTransport(func(r *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var envelope TestingNoteControlEnvelope
+		var envelope NoteControlEnvelope
 		if err := json.Unmarshal(body, &envelope); err != nil {
 			t.Fatal(err)
 		}
@@ -37,7 +37,7 @@ func TestNoteControlSignsResourceBinding(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}, nil
 	})}
-	if err := service.TestingDeliverNoteControlCommand(t.Context(), "note-unopened", "bootstrap", []byte(`{"title":"Research","markdown":"Verified"}`)); err != nil {
+	if err := service.DeliverNoteControlCommand(t.Context(), "note-unopened", "bootstrap", []byte(`{"title":"Research","markdown":"Verified"}`)); err != nil {
 		t.Fatal(err)
 	}
 }

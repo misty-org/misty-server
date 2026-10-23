@@ -20,7 +20,7 @@ export function flushPoint(buffer: string): number {
 }
 
 /** The tutor's read-only tools: model-visible names, the catalog names they run as. */
-export const TEACH_TOOLS = { web_search: "web.search", web_fetch: "web.fetch" } as const;
+const TEACH_TOOLS = { web_search: "web.search", web_fetch: "web.fetch" } as const;
 
 /** A call the budget no longer covers gets this result instead of running. */
 export const TEACH_BUDGET_SPENT = {

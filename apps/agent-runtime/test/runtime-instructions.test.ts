@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withRuntimeInstructions } from "../src/prompt-cache.js";
+import { withRuntimeInstructions } from "../src/context/prompt-cache.js";
 
 describe("withRuntimeInstructions", () => {
   it("puts the fixed instructions before the part that changes every run", () => {

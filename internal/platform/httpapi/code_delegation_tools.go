@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Coding is delegated to the person's own coding tools on the computer that
@@ -40,9 +40,9 @@ func codingToolChoice(id string) string {
 
 func codeDelegationDescriptors() []agenttools.Descriptor {
 	return []agenttools.Descriptor{
-		{Name: codeDelegateTool, Version: 1, Risk: serveragent.RiskWrite, Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone, AuditEvent: "coding.delegated",
+		{Name: codeDelegateTool, Version: 1, Risk: agent.RiskWrite, Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, AuditEvent: "coding.delegated",
 			Description: "Hand a coding task in an attached project to the person's own coding tool (such as Claude Code or Codex) on the computer that holds the project. State the task fully: the tool does not see this conversation. It works with the chat's Ask or Auto and asks the person before changes that need them. In Plan it only researches and proposes. Waits about four minutes, then returns what is still running so you can call code_wait. Mark the step delegated in your checklist.",
-			InputSchema: TestingMustAPIRawJSON(map[string]any{
+			InputSchema: MustAPIRawJSON(map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"task"},
 				"properties": map[string]any{
 					"project": map[string]any{"type": "string", "maxLength": 512, "description": "The attached project's name or id; optional when one project is attached."},
@@ -50,9 +50,9 @@ func codeDelegationDescriptors() []agenttools.Descriptor {
 					"mode":    map[string]any{"type": "string", "enum": []string{"edit", "plan"}, "description": "plan researches read-only and proposes; edit (default) does the work."},
 				},
 			}), OutputSchema: agentToolObjectOutputSchema()},
-		{Name: codeWaitTool, Version: 1, Risk: serveragent.RiskRead, Idempotent: true, Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone,
+		{Name: codeWaitTool, Version: 1, Risk: agent.RiskRead, Idempotent: true, Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer,
 			Description: "Wait up to about four minutes for delegated coding to finish, and return each run's state and answer.",
-			InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema()},
+			InputSchema: MustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema()},
 	}
 }
 
@@ -64,10 +64,10 @@ func (s *SpacesService) codeDelegationToolRegistrations(ctx context.Context, rec
 	}
 	descriptors := codeDelegationDescriptors()
 	return []agenttools.Registration{
-		{Descriptor: descriptors[0], Handler: func(ctx context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: descriptors[0], Handler: func(ctx context.Context, _ agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			return s.delegateCoding(ctx, record, body, projects, state, request)
 		}},
-		{Descriptor: descriptors[1], Handler: func(ctx context.Context, _ agenttools.Invocation, _ serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: descriptors[1], Handler: func(ctx context.Context, _ agenttools.Invocation, _ agent.ToolRequest) (json.RawMessage, error) {
 			return s.awaitChildren(ctx, record, "")
 		}},
 	}
@@ -84,10 +84,10 @@ func pickProject(projects []deviceGrant, name string) (deviceGrant, error) {
 	for _, project := range projects {
 		names = append(names, project.name)
 	}
-	return deviceGrant{}, serveragent.ErrInvalidRequest("name one of the attached projects: " + strings.Join(names, ", "))
+	return deviceGrant{}, agent.ErrInvalidRequest("name one of the attached projects: " + strings.Join(names, ", "))
 }
 
-func (s *SpacesService) delegateCoding(ctx context.Context, parent *db.AIInvocationRecord, body aiInvocationInput, projects []deviceGrant, state collaborationState, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) delegateCoding(ctx context.Context, parent *db.AIInvocationRecord, body aiInvocationInput, projects []deviceGrant, state collaborationState, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		Project string `json:"project"`
 		Task    string `json:"task"`
@@ -99,7 +99,7 @@ func (s *SpacesService) delegateCoding(ctx context.Context, parent *db.AIInvocat
 	// The catalog leaves coding out for plans without it; a call that names
 	// the tool anyway is refused here.
 	if err := codingIncluded(ctx, s.database, parent.UserID); err != nil {
-		return TestingMustAPIRawJSON(map[string]any{
+		return MustAPIRawJSON(map[string]any{
 			"status": codePlanUpgradeRequired, "code": codePlanUpgradeRequired,
 			"message":      "This account's plan doesn't include coding, so the coding didn't start. Tell the person coding is part of Misty Pro and above, and don't try again.",
 			"user_message": planUpgradeMessage,
@@ -137,7 +137,7 @@ func (s *SpacesService) delegateCoding(ctx context.Context, parent *db.AIInvocat
 		}
 		device := firstAIText(project.deviceName, "The computer with this project")
 		_ = s.aiInvocations.fail(childID, device+" "+reason+".")
-		return TestingMustAPIRawJSON(map[string]any{
+		return MustAPIRawJSON(map[string]any{
 			"status": "device_offline", "device": device,
 			"message":      device + " " + reason + ", so the coding couldn't start. Ask the person to open Misty on it, then call code_delegate again.",
 			"user_message": "Waiting for " + device + ". Open Misty on it to continue.",

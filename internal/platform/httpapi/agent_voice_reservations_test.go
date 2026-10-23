@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 )
 
@@ -142,4 +142,3 @@ func TestVoiceOverReservationUsageRequiresReconciliation(t *testing.T) {
 		t.Fatal(f.states, f.completions)
 	}
 }
-

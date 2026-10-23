@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 // Egress accounting.
@@ -42,7 +42,7 @@ func EgressBudgetFromEnv() EgressBudget {
 }
 
 func positiveEnvBytes(name string, fallback int64) int64 {
-	value, err := strconv.ParseInt(strings.TrimSpace(envconfig.Getenv(name)), 10, 64)
+	value, err := strconv.ParseInt(strings.TrimSpace(config.Getenv(name)), 10, 64)
 	if err != nil || value <= 0 {
 		return fallback
 	}
@@ -56,13 +56,13 @@ type egressRecord struct {
 
 // EgressGuard tracks bytes served and refuses once a ceiling is reached.
 type EgressGuard struct {
-	TestingMu      sync.Mutex
-	TestingNow     func() time.Time
-	budget         EgressBudget
-	TestingPerKey  map[string]*egressRecord
-	global         egressRecord
-	TestingMaxKeys int
-	refusals       int64
+	Mu       sync.Mutex
+	Now      func() time.Time
+	budget   EgressBudget
+	PerKey   map[string]*egressRecord
+	global   egressRecord
+	MaxKeys  int
+	refusals int64
 }
 
 func NewEgressGuard(budget EgressBudget) *EgressGuard {
@@ -70,10 +70,10 @@ func NewEgressGuard(budget EgressBudget) *EgressGuard {
 		budget = DefaultEgressBudget()
 	}
 	return &EgressGuard{
-		TestingNow:     time.Now,
-		budget:         budget,
-		TestingPerKey:  make(map[string]*egressRecord),
-		TestingMaxKeys: defaultLimiterMaxKeys,
+		Now:     time.Now,
+		budget:  budget,
+		PerKey:  make(map[string]*egressRecord),
+		MaxKeys: defaultLimiterMaxKeys,
 	}
 }
 
@@ -86,9 +86,9 @@ func (g *EgressGuard) Allow(key string, size int64) bool {
 	if size < 0 {
 		size = 0
 	}
-	g.TestingMu.Lock()
-	defer g.TestingMu.Unlock()
-	now := g.TestingNow()
+	g.Mu.Lock()
+	defer g.Mu.Unlock()
+	now := g.Now()
 
 	if g.global.windowEnd.Before(now) {
 		g.global = egressRecord{windowEnd: now.Add(24 * time.Hour)}
@@ -98,20 +98,20 @@ func (g *EgressGuard) Allow(key string, size int64) bool {
 		return false
 	}
 
-	record := g.TestingPerKey[key]
+	record := g.PerKey[key]
 	if record == nil || record.windowEnd.Before(now) {
 		if record == nil {
-			if len(g.TestingPerKey) >= g.TestingMaxKeys {
+			if len(g.PerKey) >= g.MaxKeys {
 				g.purgeLocked(now)
 			}
-			if len(g.TestingPerKey) >= g.TestingMaxKeys {
+			if len(g.PerKey) >= g.MaxKeys {
 				// Tracking is saturated; the global ceiling still applies.
 				g.global.bytes += size
 				return true
 			}
 		}
 		record = &egressRecord{windowEnd: now.Add(24 * time.Hour)}
-		g.TestingPerKey[key] = record
+		g.PerKey[key] = record
 	}
 	if record.bytes >= g.budget.PerIdentityDailyBytes {
 		g.refusals++
@@ -124,9 +124,9 @@ func (g *EgressGuard) Allow(key string, size int64) bool {
 }
 
 func (g *EgressGuard) purgeLocked(now time.Time) {
-	for key, record := range g.TestingPerKey {
+	for key, record := range g.PerKey {
 		if record.windowEnd.Before(now) {
-			delete(g.TestingPerKey, key)
+			delete(g.PerKey, key)
 		}
 	}
 }

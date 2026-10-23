@@ -134,14 +134,4 @@ describe("tool monitor", () => {
     expect(order.resume()).toBe(true);
     expect(order.declined("queued")).toBeUndefined();
   });
-
-  it("requires a fresh screenshot after native workspace input", async () => {
-    const { order, monitor, call } = setup();
-    await call("click", "browser_workspace_interact", { success: true, output: { ok: true } });
-    expect(monitor.activeTools(["note_search", "browser_workspace_visual"])).toEqual(["browser_workspace_visual"]);
-    expect(order.resume()).toBe(true);
-    await call("look", "browser_workspace_visual", { success: true, output: { documentId: "screen-2" } });
-    expect(monitor.requiredInspection).toBe("");
-    expect(monitor.activeTools(["note_search", "browser_workspace_visual"])).toHaveLength(2);
-  });
 });

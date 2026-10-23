@@ -2,12 +2,9 @@ package db
 
 import (
 	"context"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"testing"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func noteLifecycleState(t *testing.T, fixture noteFixture, noteID string) string {
 	t.Helper()

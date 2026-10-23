@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // loadAgentMemoryContext is the run's recent memories from the Space it was

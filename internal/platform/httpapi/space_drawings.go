@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // SpaceDrawings lists and creates first-class collaborative drawings.
@@ -137,7 +137,7 @@ func (s *SpacesService) SpaceDrawingCollaborationTicket() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		ticket, err := s.TestingJournalCollab.MintDrawingTicket(
+		ticket, err := s.JournalCollab.MintDrawingTicket(
 			userID,
 			drawing.SpaceID,
 			drawing.ID,

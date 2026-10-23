@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 const (
@@ -163,7 +163,7 @@ func (s *AIService) MistyAttachment() http.HandlerFunc {
 			}
 			completed, completeErr := s.database.CompleteAIConversationAttachment(r.Context(), userID, id)
 			if completeErr != nil {
-				TestingWriteAIError(w, completeErr)
+				WriteAIError(w, completeErr)
 				return
 			}
 			writeJSON(w, http.StatusOK, mistyAttachmentDTO(*completed))

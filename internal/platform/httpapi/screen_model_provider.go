@@ -9,7 +9,7 @@ import (
 
 	"github.com/kannachi323/misty/server/internal/aimodels"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // screenModelRoute is the run's frozen vision route, which follows the

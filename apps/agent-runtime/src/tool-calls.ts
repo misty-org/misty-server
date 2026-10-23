@@ -15,7 +15,7 @@ export async function executeTool(context: RuntimeToolContext, callId: string, n
   try {
     return await continueToolExecution({
       request: (attempt) =>
-        requestToolExecution(context, callId, name, input, deviceToken(attempt), `${context.mistyRunId}:tool:${callId}`),
+        requestToolExecution(context, callId, name, input, deviceToken(attempt)),
       // Engine wake tokens are opaque. Go owns the separate user-action wait
       // and requires a trusted user decision before sending this wake signal.
       intervention: async (attempt) => (await agentDeviceHook.create({ token: deviceToken(attempt) })).available,
@@ -33,29 +33,16 @@ async function requestToolExecution(
   name: string,
   input: unknown,
   deviceHookToken: string,
-  idempotencyKey: string,
 ): Promise<ToolExecutionResponse> {
   "use step";
   const started = Date.now();
   try {
-    let access: MCPRunAccess;
-    try {
-      // The run's bearer is reused while it has more than a minute left.
-      access = cachedRunAccess(context.mistyRunId, context.controlPlaneURL)
-        ?? await controlPlaneRequest<MCPRunAccess>(context, "mcp-token", { intervention_wait_version: 1 }, `${context.mistyRunId}:mcp-token:${callId}`);
-    } catch (error) {
-      // This fallback only happens before an MCP tool call starts, so a rolling
-      // deploy cannot duplicate a consequential action.
-      if (error instanceof ControlPlaneError && (error.status === 404 || error.status === 405 || error.status === 501)) {
-        return await controlPlaneRequest<ToolExecutionResponse>(context, "tools", {
-          call_id: callId, name, arguments: input, device_hook_token: deviceHookToken,
-        }, idempotencyKey);
-      }
-      throw error;
-    }
+    // The run's bearer is reused while it has more than a minute left.
+    const access = cachedRunAccess(context.mistyRunId, context.controlPlaneURL)
+      ?? await controlPlaneRequest<MCPRunAccess>(context, "mcp-token", { intervention_wait_version: 1 }, `${context.mistyRunId}:mcp-token:${callId}`);
     const authorized = Date.now();
     const response = await requestMCPToolExecution(context, access, callId, name, input, deviceHookToken);
-    // One line per call for the trace tool (evals/browser/trace.ts); never arguments or results.
+    // One line per call for timing; never arguments or results.
     console.info(`[misty-agent-runtime] tool_timing ${JSON.stringify({ run: context.mistyRunId, call: callId, tool: name, token_ms: authorized - started, mcp_ms: Date.now() - authorized })}`);
     return response;
   } catch (error) {

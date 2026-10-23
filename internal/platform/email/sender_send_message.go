@@ -13,12 +13,12 @@ import (
 )
 
 func (s *MailjetSender) sendMessage(ctx context.Context, recipientEmail, recipientName, subject, textBody, htmlBody, logLabel string) error {
-	payload := TestingMailjetSendRequest{
+	payload := MailjetSendRequest{
 		Messages: []mailjetMessage{
 			{
 				From: mailjetContact{
-					Email: s.TestingFromEmail,
-					Name:  s.TestingFromName,
+					Email: s.FromEmail,
+					Name:  s.FromName,
 				},
 				To: []mailjetContact{
 					{
@@ -38,16 +38,16 @@ func (s *MailjetSender) sendMessage(ctx context.Context, recipientEmail, recipie
 		return fmt.Errorf("marshal mailjet %s request: %w", logLabel, err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.TestingApiBaseURL+"/v3.1/send", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.APIBaseURL+"/v3.1/send", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create mailjet %s request: %w", logLabel, err)
 	}
 
-	req.SetBasicAuth(s.TestingApiKey, s.TestingSecretKey)
+	req.SetBasicAuth(s.APIKey, s.SecretKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := s.TestingHttpClient.Do(req)
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("send %s email via mailjet: %w", logLabel, err)
 	}

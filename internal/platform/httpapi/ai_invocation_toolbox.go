@@ -5,15 +5,15 @@ import (
 	"encoding/json"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // aiInvocationToolbox resolves one chat run's complete catalog: Misty data
 // tools, attached browser tools and the agent's connected tools. The runtime
 // context, the MCP server and every tool call use this same resolution.
-func (s *SpacesService) aiInvocationToolbox(ctx context.Context, record *db.AIInvocationRecord, agentID, prompt string, collaboration collaborationState) (*agenttools.Registry, agenttools.Invocation, serveragent.ToolManifest, error) {
+func (s *SpacesService) aiInvocationToolbox(ctx context.Context, record *db.AIInvocationRecord, agentID, prompt string, collaboration collaborationState) (*agenttools.Registry, agenttools.Invocation, agent.ToolManifest, error) {
 	actor := spaceConversationToolActor{userID: record.UserID, agentID: agentID, runID: record.ID, sessionID: record.ConversationID, memorySearch: s.searchMemory, service: s}
 	connected := append(s.aiInvocationConnectedTools(ctx, record), s.deviceToolRegistrations(ctx, record)...)
 	connected = append(connected, s.collaborationToolRegistrations(record, collaboration)...)
@@ -40,7 +40,7 @@ func (s *SpacesService) aiInvocationConnectedTools(ctx context.Context, record *
 	return append(tools, s.accountAdminToolRegistrations()...)
 }
 
-func resolveAIInvocationSpaceToolbox(ctx context.Context, database *db.Database, actor spaceConversationToolActor, prompt string, connected ...agenttools.Registration) (*agenttools.Registry, agenttools.Invocation, serveragent.ToolManifest, error) {
+func resolveAIInvocationSpaceToolbox(ctx context.Context, database *db.Database, actor spaceConversationToolActor, prompt string, connected ...agenttools.Registration) (*agenttools.Registry, agenttools.Invocation, agent.ToolManifest, error) {
 	browserTabs, browserCapabilities := aiInvocationBrowserGrants(ctx, database, actor.userID, actor.runID)
 	options := agentToolboxOptions{
 		accountLevel: actor.spaceID == "", browserTabs: browserTabs, browserCapabilities: browserCapabilities, browser: actor.service,
@@ -54,14 +54,14 @@ func resolveAIInvocationSpaceToolbox(ctx context.Context, database *db.Database,
 	}
 	// agent_delegate replaces the older background worker where it is offered.
 	if actor.agentID == "" && !subagents {
-		options.delegation = func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		options.delegation = func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			var input struct {
 				Prompt string `json:"prompt"`
 			}
 			if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.Prompt) == "" {
 				return nil, db.ErrSpaceInvalid
 			}
-			identity, err := database.EnsureAskIdentity(ctx, actor.userID, serveragent.InitialSelectedModelID)
+			identity, err := database.EnsureAskIdentity(ctx, actor.userID, agent.InitialSelectedModelID)
 			if err != nil {
 				return nil, err
 			}

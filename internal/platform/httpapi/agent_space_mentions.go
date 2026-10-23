@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // startAgentMentionRequests turns @mentions of agent members in a Space chat
@@ -98,11 +98,11 @@ func (s *SpacesService) publishMentionReply(ctx context.Context, run *db.SpaceRu
 		reply = "Done."
 	}
 	message, publishErr := s.database.CreateAgentMemberRequestMessage(ctx, request, "agent_member_reply", reply)
-	details := TestingMustAPIRawJSON(map[string]any{"run_id": run.ID, "request_id": request.ID})
+	details := MustAPIRawJSON(map[string]any{"run_id": run.ID, "request_id": request.ID})
 	state := "failed"
 	if publishErr == nil {
 		state = "completed"
-		details = TestingMustAPIRawJSON(map[string]any{"run_id": run.ID, "request_id": request.ID, "message_id": message.ID})
+		details = MustAPIRawJSON(map[string]any{"run_id": run.ID, "request_id": request.ID, "message_id": message.ID})
 	}
 	if finishErr := s.database.FinishRunResponsePublication(ctx, actionID, state, details); finishErr != nil {
 		return finishErr

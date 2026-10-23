@@ -31,7 +31,7 @@ vi.mock("../src/control-plane.js", () => ({
   },
 }));
 vi.mock("../src/mcp-runtime.js", () => ({
-  discoverRemoteMCPTools: async () => ({ supported: true, tools: [] }),
+  discoverRemoteMCPTools: async () => [],
   requestMCPToolExecution: vi.fn(),
 }));
 vi.mock("@ai-sdk/workflow", () => ({

@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 type aiInterventionRequired struct{ wait *db.AIInterventionWait }
@@ -37,9 +37,9 @@ func (s *SpacesService) requestAIUserAction(ctx context.Context, user, run strin
 		return nil, &aiInterventionRequired{wait}
 	}
 	if wait.State != "ready" {
-		return TestingMustAPIRawJSON(map[string]any{"denied": true, "reason": "user_action_declined_or_expired", "waitId": wait.ID}), nil
+		return MustAPIRawJSON(map[string]any{"denied": true, "reason": "user_action_declined_or_expired", "waitId": wait.ID}), nil
 	}
-	return TestingMustAPIRawJSON(map[string]any{"ready": true, "waitId": wait.ID, "scopeId": wait.ScopeID, "requiresFreshInspection": true, "message": "The user confirmed readiness. Inspect the original target again; this is not verification of account identity or any browser effect."}), nil
+	return MustAPIRawJSON(map[string]any{"ready": true, "waitId": wait.ID, "scopeId": wait.ScopeID, "requiresFreshInspection": true, "message": "The user confirmed readiness. Inspect the original target again; this is not verification of account identity or any browser effect."}), nil
 }
 func (s *SpacesService) AIUserInterventionControl() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

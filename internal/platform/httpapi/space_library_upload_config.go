@@ -7,38 +7,38 @@ import (
 	"sync"
 	"time"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 const (
-	TestingLibraryUploadTokenHeader    = "X-Misty-Library-Upload-Token"
-	TestingLibrarySignedDownloadHeader = "X-Misty-Signed-Download"
-	libraryUploadLifetime              = 30 * time.Minute
+	LibraryUploadTokenHeader    = "X-Misty-Library-Upload-Token"
+	LibrarySignedDownloadHeader = "X-Misty-Signed-Download"
+	libraryUploadLifetime       = 30 * time.Minute
 )
 
 var librarySHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type SpaceLibraryService struct {
-	database     *db.Database
-	TestingStore LibraryObjectStore
+	database *db.Database
+	Store    LibraryObjectStore
 	// egress bounds bytes served per account and across the deployment.
-	egress                      *EgressGuard
-	TestingUploadsEnabled       bool
-	TestingAttachmentsEnabled   bool
-	previewsEnabled             bool
-	editingEnabled              bool
-	mediaProcessor              LibraryMediaProcessor
-	metadataExtractor           LibraryMetadataExtractor
-	exportsEnabled              bool
-	TestingUploadLimits         UploadLimits
-	TestingNoteAssetsEnabled    bool
-	TestingDrawingAssetsEnabled bool
-	TestingTransfers            TransferTTLs
+	egress               *EgressGuard
+	UploadsEnabled       bool
+	AttachmentsEnabled   bool
+	previewsEnabled      bool
+	editingEnabled       bool
+	mediaProcessor       LibraryMediaProcessor
+	metadataExtractor    LibraryMetadataExtractor
+	exportsEnabled       bool
+	UploadLimits         UploadLimits
+	NoteAssetsEnabled    bool
+	DrawingAssetsEnabled bool
+	Transfers            TransferTTLs
 	// presigner is non-nil only when the configured object store can sign R2
 	// operations. Local development leaves it nil and keeps the proxy route.
-	TestingPresigner     LibraryObjectPresigner
+	Presigner            LibraryObjectPresigner
 	reconciliationMu     sync.Mutex
 	reconciliationCursor string
 }
@@ -66,7 +66,7 @@ func TransferTTLsFromEnv() TransferTTLs {
 }
 
 func positiveEnvDuration(name string, fallback time.Duration) time.Duration {
-	value, err := time.ParseDuration(strings.TrimSpace(envconfig.Getenv(name)))
+	value, err := time.ParseDuration(strings.TrimSpace(config.Getenv(name)))
 	if err != nil || value <= 0 {
 		return fallback
 	}
@@ -80,24 +80,24 @@ func positiveEnvDuration(name string, fallback time.Duration) time.Duration {
 // misconfigured into proxying file bytes: the R2 store always signs, so direct
 // transfer is always on there. The local and in-memory development stores
 // cannot sign, so they transparently keep the proxy route.
-func (s *SpaceLibraryService) TestingConfigureTransfers(ttls TransferTTLs) error {
+func (s *SpaceLibraryService) ConfigureTransfers(ttls TransferTTLs) error {
 	if _, err := validatePresignTTL(ttls.UploadURLTTL); err != nil {
 		return fmt.Errorf("upload URL TTL: %w", err)
 	}
 	if _, err := validatePresignTTL(ttls.DownloadURLTTL); err != nil {
 		return fmt.Errorf("download URL TTL: %w", err)
 	}
-	s.TestingTransfers = ttls
-	if presigner, ok := s.TestingStore.(LibraryObjectPresigner); ok {
-		s.TestingPresigner = presigner
+	s.Transfers = ttls
+	if presigner, ok := s.Store.(LibraryObjectPresigner); ok {
+		s.Presigner = presigner
 	}
 	return nil
 }
 
 // directTransfersActive reports whether signed URLs are in use. It is purely a
 // question of whether the store can sign; there is no off switch.
-func (s *SpaceLibraryService) TestingDirectTransfersActive() bool {
-	return s.TestingPresigner != nil
+func (s *SpaceLibraryService) DirectTransfersActive() bool {
+	return s.Presigner != nil
 }
 
 // UploadPurpose names the kind of upload being performed. Each purpose has its
@@ -159,7 +159,7 @@ func (l UploadLimits) Max(purpose UploadPurpose) int64 {
 	}
 }
 
-func (l UploadLimits) TestingValidate() error {
+func (l UploadLimits) Validate() error {
 	for _, limit := range []struct {
 		purpose UploadPurpose
 		value   int64
@@ -178,7 +178,7 @@ func (l UploadLimits) TestingValidate() error {
 }
 
 func (s *SpaceLibraryService) SetSubsystems(attachmentsEnabled, previewsEnabled, editingEnabled, exportsEnabled bool) {
-	s.TestingAttachmentsEnabled = attachmentsEnabled
+	s.AttachmentsEnabled = attachmentsEnabled
 	s.previewsEnabled = previewsEnabled
 	s.editingEnabled = editingEnabled
 	s.exportsEnabled = exportsEnabled
@@ -188,12 +188,12 @@ func (s *SpaceLibraryService) SetMetadataExtractor(extractor LibraryMetadataExtr
 	s.metadataExtractor = extractor
 }
 
-func (s *SpaceLibraryService) TestingUploadPurposeEnabled(purpose UploadPurpose) bool {
+func (s *SpaceLibraryService) UploadPurposeEnabled(purpose UploadPurpose) bool {
 	switch purpose {
 	case UploadPurposeLibrary:
-		return s.TestingUploadsEnabled
+		return s.UploadsEnabled
 	case UploadPurposeChatAttachment:
-		return s.TestingAttachmentsEnabled
+		return s.AttachmentsEnabled
 	case UploadPurposeNoteAttachment:
 		// Note assets authorize against the parent note, which only the note
 		// routes can check. The generic Library upload endpoint must never
@@ -210,10 +210,10 @@ func (s *SpaceLibraryService) TestingUploadPurposeEnabled(purpose UploadPurpose)
 // SetNoteAssetsEnabled turns on the note-asset upload purpose for the note
 // routes, which perform the parent-note permission check themselves.
 func (s *SpaceLibraryService) SetNoteAssetsEnabled(enabled bool) {
-	s.TestingNoteAssetsEnabled = enabled
+	s.NoteAssetsEnabled = enabled
 }
 
 // SetDrawingAssetsEnabled enables image references for Drawing routes.
 func (s *SpaceLibraryService) SetDrawingAssetsEnabled(enabled bool) {
-	s.TestingDrawingAssetsEnabled = enabled
+	s.DrawingAssetsEnabled = enabled
 }

@@ -2,14 +2,11 @@ package db
 
 import (
 	"context"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestLibraryEditRenditionReservationCompletionAndDownload(t *testing.T) {
 	database := openTestDatabase(t)

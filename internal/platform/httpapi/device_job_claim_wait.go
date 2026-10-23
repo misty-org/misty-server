@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // A device that is running an agent's browser work holds its next claim open
-// for a short while (docs/plans/agentic-browser.md, Phase 2: faster device
-// hop). The next job of the run is handed over the moment it is queued,
+// for a short while (docs/agents/harness.md,
+// Device jobs). The next job of the run is handed over the moment it is queued,
 // instead of after a notification reaches the device and it asks again.
 // The claim, its lease and every check are the ordinary queue's; when the
 // held claim ends empty or drops, the device falls back to notifications.

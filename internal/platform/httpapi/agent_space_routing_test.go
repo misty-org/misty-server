@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestRoutedSpaceTargets(t *testing.T) {

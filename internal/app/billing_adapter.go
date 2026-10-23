@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/billingadapter"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func configureBilling(database *db.Database) error {
 
-	adapter, err := envconfig.BillingAdapter()
+	adapter, err := config.BillingAdapter()
 	if err != nil {
 		return err
 	}

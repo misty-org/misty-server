@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
 
@@ -51,7 +51,7 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 	ctx := t.Context()
 	exec := func(query string, args ...any) {
 		t.Helper()
-		if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error { _, err := tx.ExecContext(ctx, query, args...); return err }); err != nil {
+		if err := database.SpaceTx(ctx, func(tx *sql.Tx) error { _, err := tx.ExecContext(ctx, query, args...); return err }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -120,10 +120,10 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 			t.Fatalf("delegated run offers %s", forbidden)
 		}
 	}
-	if !hasToolboxTool(childToolbox, "note.search") || !hasToolboxTool(childToolbox, "memory.pref.list") || childInvocation.UserID != bob.ID || childInvocation.SpaceID != space.ID || childInvocation.DelegatedApproval {
+	if !hasToolboxTool(childToolbox, "note.search") || !hasToolboxTool(childToolbox, "memory.pref.list") || childInvocation.UserID != bob.ID || childInvocation.SpaceID != space.ID {
 		t.Fatalf("delegated invocation = %#v", childInvocation)
 	}
-	if _, err := service.meterPersonalAgentRuntimeModel(ctx, child, "model:1", workflowv2.StepRunning, json.RawMessage(`{"input_bytes":64}`)); err != nil {
+	if _, err := service.meterPersonalAgentRuntimeModel(ctx, child, "model:1", workflow.StepRunning, json.RawMessage(`{"input_bytes":64}`)); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.settlePersonalAgentRuntimeUsage(ctx, child, "success", json.RawMessage(`{}`)); err != nil {
@@ -142,7 +142,7 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 	}
 
 	// The requester reads the finished reply.
-	if _, err := database.FinishSpaceRun(ctx, child.ID, "completed", TestingMustAPIRawJSON(map[string]any{"text": "Launch is Friday."}), ""); err != nil {
+	if _, err := database.FinishSpaceRun(ctx, child.ID, "completed", MustAPIRawJSON(map[string]any{"text": "Launch is Friday."}), ""); err != nil {
 		t.Fatal(err)
 	}
 	status, err := executeAgentsRequestStatus(ctx, database, invocation, agent.ToolRequest{Arguments: json.RawMessage(`{"request_id":"` + sent.RequestID + `","wait_seconds":0}`)})

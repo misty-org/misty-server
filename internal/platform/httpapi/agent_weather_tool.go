@@ -49,7 +49,7 @@ func currentWeather(ctx context.Context, location string) (json.RawMessage, erro
 	if err := weatherGET(ctx, forecastURL, &forecast); err != nil {
 		return nil, err
 	}
-	return TestingMustAPIRawJSON(map[string]any{
+	return MustAPIRawJSON(map[string]any{
 		"location": map[string]any{
 			"name": place.Name, "region": place.Admin1, "country": place.Country,
 			"latitude": place.Latitude, "longitude": place.Longitude,

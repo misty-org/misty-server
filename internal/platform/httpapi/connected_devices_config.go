@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 const (
@@ -24,7 +24,7 @@ type ConnectedDevicesConfig struct {
 }
 
 func ConnectedDevicesConfigFromEnv() (ConnectedDevicesConfig, error) {
-	privateKey, err := parseEd25519PrivateKey(envconfig.Getenv("MISTY_DEVICE_TICKET_PRIVATE_KEY"))
+	privateKey, err := parseEd25519PrivateKey(config.Getenv("MISTY_DEVICE_TICKET_PRIVATE_KEY"))
 	if err != nil {
 		return ConnectedDevicesConfig{}, fmt.Errorf("MISTY_DEVICE_TICKET_PRIVATE_KEY: %w", err)
 	}
@@ -35,7 +35,7 @@ func ConnectedDevicesConfigFromEnv() (ConnectedDevicesConfig, error) {
 	publicKey := privateKey.Public().(ed25519.PublicKey)
 	keyID := connectedDeviceKeyID(publicKey)
 	keys := map[string]ed25519.PublicKey{keyID: publicKey}
-	for _, encoded := range strings.Split(envconfig.Getenv("MISTY_DEVICE_TICKET_PREVIOUS_PUBLIC_KEYS"), ",") {
+	for _, encoded := range strings.Split(config.Getenv("MISTY_DEVICE_TICKET_PREVIOUS_PUBLIC_KEYS"), ",") {
 		encoded = strings.TrimSpace(encoded)
 		if encoded == "" {
 			continue
@@ -57,7 +57,7 @@ func TestingConnectedDevicesConfig(privateKey ed25519.PrivateKey, pairingPepper 
 }
 
 func decodeConnectedDeviceSecret(name string) ([]byte, error) {
-	value := strings.TrimSpace(envconfig.Getenv(name))
+	value := strings.TrimSpace(config.Getenv(name))
 	raw, err := base64.StdEncoding.DecodeString(value)
 	if err != nil || len(raw) < 32 {
 		return nil, fmt.Errorf("%s must be at least 32 base64-encoded random bytes", name)

@@ -3,12 +3,9 @@ package db
 import (
 	"context"
 	"errors"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"testing"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestLibraryCopyOnWriteEditVersionsAndRevert(t *testing.T) {
 	database := openTestDatabase(t)

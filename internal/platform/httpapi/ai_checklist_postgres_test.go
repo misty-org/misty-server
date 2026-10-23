@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
 
@@ -18,7 +18,7 @@ func TestLiveChecklistPostgres(t *testing.T) {
 	ctx := t.Context()
 	owner, _ := database.CreateUser("checklist-owner@example.test", "password123")
 	conversation := "conversation_" + uuid.NewString()
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO misty_ask_conversations(id,user_id) VALUES($1,$2)`, conversation, owner.ID)
 		return err
 	}); err != nil {
@@ -26,7 +26,7 @@ func TestLiveChecklistPostgres(t *testing.T) {
 	}
 	countGrants := func() int {
 		count := 0
-		_ = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		_ = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 			return tx.QueryRowContext(ctx, `SELECT count(*) FROM agent_grants WHERE grantor_user_id=$1`, owner.ID).Scan(&count)
 		})
 		return count

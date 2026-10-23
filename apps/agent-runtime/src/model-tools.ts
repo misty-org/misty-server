@@ -5,7 +5,7 @@ import type { MCPRemoteTool } from "./types.js";
 const maxModelTools = 128;
 
 /** The model sees Misty's tool names with dots as underscores. */
-export function modelToolName(name: string): string {
+function modelToolName(name: string): string {
   return name.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64);
 }
 
@@ -55,7 +55,7 @@ export function catalogTools(catalog: ModelCatalog, run: (callId: string, name: 
 }
 
 type ContentPart = { type: "text"; text: string } | { type: "image-data"; data: string; mediaType: string };
-export type ModelToolOutput = { type: "text"; value: string } | { type: "content"; value: ContentPart[] };
+type ModelToolOutput = { type: "text"; value: string } | { type: "content"; value: ContentPart[] };
 
 const imageDataURL = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/;
 
@@ -81,7 +81,7 @@ export function visualToolOutput(name: string, output: unknown): ModelToolOutput
 }
 
 /** Returns a result's `image` as an image part next to the rest of the result. */
-export function imageOutput(output: Record<string, unknown>, fallback?: string): ModelToolOutput {
+function imageOutput(output: Record<string, unknown>, fallback?: string): ModelToolOutput {
   const { image, ...observed } = output as { image?: { dataUrl?: string }; [key: string]: unknown };
   const match = image?.dataUrl?.match(imageDataURL);
   if (match?.[1] && match[2]) {

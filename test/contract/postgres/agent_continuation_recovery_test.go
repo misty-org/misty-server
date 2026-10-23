@@ -2,13 +2,10 @@ package db
 
 import (
 	"encoding/json"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestRecoveryPreservesRuntimeAndExactDeviceWait(t *testing.T) {
 	database := openTestDatabase(t)

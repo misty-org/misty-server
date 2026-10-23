@@ -5,7 +5,7 @@ export interface HarnessStart {
   controlPlaneURL: string;
   adapterVersion: typeof MISTY_HARNESS_VERSION;
 }
-export type HarnessResume = { kind: "device"; token: string; available: boolean };
+type HarnessResume = { kind: "device"; token: string; available: boolean };
 export interface MistyHarness {
   readonly version: typeof MISTY_HARNESS_VERSION;
   start(input: HarnessStart): Promise<{ runtimeRunId: string }>;

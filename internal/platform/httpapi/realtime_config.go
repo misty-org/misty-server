@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/lib/pq"
 )
 
@@ -19,12 +19,12 @@ const (
 	realtimePingPeriod = 30 * time.Second
 )
 
-type TestingRealtimeClient struct {
-	TestingUserID string
-	conn          *websocket.Conn
-	TestingSend   chan []byte
-	TestingDone   chan struct{}
-	once          sync.Once
+type RealtimeClient struct {
+	UserID string
+	conn   *websocket.Conn
+	Send   chan []byte
+	Done   chan struct{}
+	once   sync.Once
 	// viewingSpaceID is the space this client last told us it's actively
 	// viewing (empty when not viewing any space's chat). Mutated only while
 	// holding RealtimeService.mu.
@@ -34,30 +34,33 @@ type TestingRealtimeClient struct {
 	// while viewingSpaceID is non-empty. Mutated only while holding
 	// RealtimeService.mu.
 	active bool
+	// lastTypingAt bounds typing frame processing for this socket.
+	lastTypingAt time.Time
+	typingScopes map[string]bool
 }
 
 type RealtimeService struct {
 	database      *db.Database
 	dsn           string
 	listener      *pq.Listener
-	TestingMu     sync.RWMutex
-	clients       map[*TestingRealtimeClient]struct{}
-	clientsByUser map[string]map[*TestingRealtimeClient]struct{}
+	Mu            sync.RWMutex
+	clients       map[*RealtimeClient]struct{}
+	clientsByUser map[string]map[*RealtimeClient]struct{}
 	// viewers maps a space ID to the set of clients currently viewing that
 	// space's chat, for the "active users" presence capsule. Guarded by mu.
-	TestingViewers map[string]map[*TestingRealtimeClient]struct{}
-	closed         chan struct{}
-	closeOnce      sync.Once
+	Viewers   map[string]map[*RealtimeClient]struct{}
+	closed    chan struct{}
+	closeOnce sync.Once
 }
 
 func NewRealtimeService(database *db.Database, dsn string) *RealtimeService {
 	return &RealtimeService{
-		database:       database,
-		dsn:            dsn,
-		clients:        map[*TestingRealtimeClient]struct{}{},
-		clientsByUser:  map[string]map[*TestingRealtimeClient]struct{}{},
-		TestingViewers: map[string]map[*TestingRealtimeClient]struct{}{},
-		closed:         make(chan struct{}),
+		database:      database,
+		dsn:           dsn,
+		clients:       map[*RealtimeClient]struct{}{},
+		clientsByUser: map[string]map[*RealtimeClient]struct{}{},
+		Viewers:       map[string]map[*RealtimeClient]struct{}{},
+		closed:        make(chan struct{}),
 	}
 }
 
@@ -86,14 +89,14 @@ func (s *RealtimeService) Close() error {
 		if s.listener != nil {
 			err = s.listener.Close()
 		}
-		s.TestingMu.Lock()
+		s.Mu.Lock()
 		for client := range s.clients {
 			_ = client.conn.Close()
 		}
-		s.clients = map[*TestingRealtimeClient]struct{}{}
-		s.clientsByUser = map[string]map[*TestingRealtimeClient]struct{}{}
-		s.TestingViewers = map[string]map[*TestingRealtimeClient]struct{}{}
-		s.TestingMu.Unlock()
+		s.clients = map[*RealtimeClient]struct{}{}
+		s.clientsByUser = map[string]map[*RealtimeClient]struct{}{}
+		s.Viewers = map[string]map[*RealtimeClient]struct{}{}
+		s.Mu.Unlock()
 	})
 	return err
 }
@@ -156,30 +159,30 @@ func (s *RealtimeService) broadcastControl(payload []byte) {
 		envelopeFields["note_id"] = control.NoteID
 	}
 	envelope, _ := json.Marshal(envelopeFields)
-	s.TestingMu.RLock()
-	clients := make([]*TestingRealtimeClient, 0)
+	s.Mu.RLock()
+	clients := make([]*RealtimeClient, 0)
 	for client := range s.clients {
-		if affected[client.TestingUserID] {
+		if affected[client.UserID] {
 			clients = append(clients, client)
 		}
 	}
-	s.TestingMu.RUnlock()
+	s.Mu.RUnlock()
 	for _, client := range clients {
 		s.deliver(client, envelope)
 		if control.KeepConnection {
 			continue
 		}
-		go func(target *TestingRealtimeClient) {
+		go func(target *RealtimeClient) {
 			timer := time.NewTimer(150 * time.Millisecond)
 			defer timer.Stop()
 			select {
 			case <-timer.C:
-			case <-target.TestingDone:
+			case <-target.Done:
 				return
 			}
 			_ = target.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Space access changed"), time.Now().Add(time.Second))
 			_ = target.conn.Close()
-			s.TestingUnregister(target)
+			s.Unregister(target)
 		}(client)
 	}
 }

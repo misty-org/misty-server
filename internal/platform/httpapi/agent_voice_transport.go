@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 // openVoiceTransport opens the account's voice. Every plan uses the voice

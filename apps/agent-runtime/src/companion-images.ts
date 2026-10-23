@@ -40,7 +40,7 @@ function companionFocus(capture: NonNullable<SpaceTaskContext["display_captures"
 }
 
 /** Misty's own controls on one screenshot, named by Misty itself rather than read off the pixels. */
-export function mistyControlList(screen: string, controls: ScreenControl[]): string {
+function mistyControlList(screen: string, controls: ScreenControl[]): string {
   const rows = controls.map(
     (control) => `- ${JSON.stringify(control.label)} ${control.role} at ${control.x},${control.y} (${control.width}x${control.height})${control.reveal === "hover" ? ", hidden until the pointer is over it" : ""}`,
   );

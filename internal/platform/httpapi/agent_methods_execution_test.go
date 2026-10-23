@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
@@ -99,7 +99,7 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 	service.SetAgentRuntime(AgentRuntimeConfig{Kind: "vercel-workflow", URL: runtime.URL, InternalAPIURL: "https://api.example.test", secret: secret, client: runtime.Client()})
 	spaces := &SpacesService{database: database, aiInvocations: service.invocations}
 	router := chi.NewRouter()
-	router.Post("/methods/run", service.RunAgentMethod())
+	router.Post("/invocations", service.CreateInvocation())
 	router.Put("/methods/{methodID}/schedule", service.WorkflowSchedule())
 	router.Post("/invocations/{invocationID}/cancel", service.CancelInvocation())
 	router.Get("/conversations", service.MistyConversations())
@@ -120,7 +120,7 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 			t.Fatal(e)
 		}
 		r := httptest.NewRequest("POST", path, bytes.NewReader(raw))
-		r.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: token(user)})
+		r.AddCookie(&http.Cookie{Name: SessionCookieName, Value: token(user)})
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, r)
 		return w
@@ -130,7 +130,7 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 	// It must still load before a workflow can start its separate browser window.
 	get := func(path, user string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
-		r.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: token(user)})
+		r.AddCookie(&http.Cookie{Name: SessionCookieName, Value: token(user)})
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, r)
 		return w
@@ -170,15 +170,15 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 			t.Fatal("canonical conversation leaked in foreign list")
 		}
 	}
-	input := map[string]any{"version_id": originalVersion, "inputs": map[string]any{"topic": "Ocean currents"}, "conversation_id": conversation, "idempotency_key": "manual-method-once", "prompt": "Forged prompt"}
-	if w := invoke("/methods/run", other.ID, input); w.Code < 400 {
+	input := map[string]any{"method_version_id": originalVersion, "method_inputs": map[string]any{"topic": "Ocean currents"}, "mode": "drawer", "surface_id": "global", "trigger": "message", "conversation_id": conversation, "idempotency_key": "manual-method-once", "prompt": "Forged prompt"}
+	if w := invoke("/invocations", other.ID, input); w.Code < 400 {
 		t.Fatal("foreign workflow admitted", w.Body.String())
 	}
-	invalid := map[string]any{"version_id": originalVersion, "inputs": map[string]any{"topic": 42}, "conversation_id": conversation, "idempotency_key": "invalid-input"}
-	if w := invoke("/methods/run", owner.ID, invalid); w.Code != 400 {
+	invalid := map[string]any{"method_version_id": originalVersion, "method_inputs": map[string]any{"topic": 42}, "mode": "drawer", "surface_id": "global", "trigger": "message", "conversation_id": conversation, "idempotency_key": "invalid-input"}
+	if w := invoke("/invocations", owner.ID, invalid); w.Code != 400 {
 		t.Fatalf("typed input validation %d %s", w.Code, w.Body)
 	}
-	w := invoke("/methods/run", owner.ID, input)
+	w := invoke("/invocations", owner.ID, input)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("manual admission %d %s", w.Code, w.Body)
 	}
@@ -188,7 +188,7 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 	if json.Unmarshal(w.Body.Bytes(), &admitted) != nil || admitted.ID == "" {
 		t.Fatal("no admitted run")
 	}
-	duplicate := invoke("/methods/run", owner.ID, input)
+	duplicate := invoke("/invocations", owner.ID, input)
 	var again struct {
 		ID string `json:"invocationId"`
 	}
@@ -211,7 +211,7 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 	assertPin(admitted.ID)
 	// The manual HTTP path queues a durable delivery; dispatch it to the fixture.
 	var deliveries int
-	if err = database.TestingWithRLSContext(ctx, db.TestingServiceRLSSettings(), func(tx *sql.Tx) error {
+	if err = database.WithRLSContext(ctx, db.ServiceRLSSettings(), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `SELECT count(*) FROM agent_runtime_deliveries WHERE run_id=$1 AND operation='invocation.start'`, admitted.ID).Scan(&deliveries)
 	}); err != nil || deliveries != 1 {
 		t.Fatal("manual dispatch not durable once", deliveries, err)
@@ -317,7 +317,7 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 	scheduleBody := map[string]any{"inputs": map[string]any{"topic": "Ocean currents"}, "prompt": "Forged schedule instructions", "timezone": "UTC", "rules": []any{map[string]any{"frequency": "daily", "times": []string{"09:00"}}}}
 	raw, _ := json.Marshal(scheduleBody)
 	put := httptest.NewRequest(http.MethodPut, "/methods/"+method.ID+"/schedule", bytes.NewReader(raw))
-	put.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: token(owner.ID)})
+	put.AddCookie(&http.Cookie{Name: SessionCookieName, Value: token(owner.ID)})
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, put)
 	if w.Code != http.StatusOK {
@@ -330,7 +330,7 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 		t.Fatal("schedule not attached to its workflow")
 	}
 	now := time.Now().UTC()
-	if err = database.TestingWithRLSContext(ctx, db.TestingServiceRLSSettings(), func(tx *sql.Tx) error {
+	if err = database.WithRLSContext(ctx, db.ServiceRLSSettings(), func(tx *sql.Tx) error {
 		_, e := tx.ExecContext(ctx, `UPDATE workflow_schedules SET next_run_at=$2 WHERE id=$1`, created.Schedule.ID, now)
 		return e
 	}); err != nil {

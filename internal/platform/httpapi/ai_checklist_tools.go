@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // collaborationChecklist publishes the run's live checklist. plan.update is an
@@ -45,7 +45,7 @@ func (s *SpacesService) checklistToolRegistrations(record *db.AIInvocationRecord
 }
 
 func (s *SpacesService) checklistHandler(record *db.AIInvocationRecord, state collaborationState) agenttools.Handler {
-	return func(ctx context.Context, _ agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+	return func(ctx context.Context, _ agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 		var input struct {
 			Items   []db.ChecklistItem `json:"items"`
 			Replace bool               `json:"replace"`
@@ -56,7 +56,7 @@ func (s *SpacesService) checklistHandler(record *db.AIInvocationRecord, state co
 		}
 		checklist, err := s.publishChecklist(ctx, record, state, input.Items, input.Replace)
 		if errors.Is(err, db.ErrSpaceInvalid) {
-			return nil, serveragent.ErrInvalidRequest("Each step needs an id, a title when new, and one of pending, in_progress, done, skipped or blocked; at most 20 steps.")
+			return nil, agent.ErrInvalidRequest("Each step needs an id, a title when new, and one of pending, in_progress, done, skipped or blocked; at most 20 steps.")
 		}
 		if err != nil {
 			return nil, err
@@ -91,7 +91,7 @@ func (s *SpacesService) publishChecklist(ctx context.Context, record *db.AIInvoc
 		}
 	}
 	if conversation == "" {
-		return nil, serveragent.ErrInvalidRequest("This run has no conversation to show a checklist in.")
+		return nil, agent.ErrInvalidRequest("This run has no conversation to show a checklist in.")
 	}
 	checklist, err := s.database.SaveAgentChecklist(ctx, record.UserID, record.ID, conversation, body.DelegatedFrom, planChecklistSeed(state.approvedPlan()), items, replace)
 	if err != nil {

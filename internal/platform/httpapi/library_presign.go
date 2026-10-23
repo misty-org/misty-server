@@ -96,13 +96,13 @@ func (s *S3LibraryObjectStore) PresignPut(ctx context.Context, key string, metad
 		return PresignedTransfer{}, errors.New("invalid Library object checksum")
 	}
 	encodedChecksum := base64.StdEncoding.EncodeToString(checksum)
-	presigned, err := s.TestingPresigner.PresignPutObject(ctx, &s3.PutObjectInput{
-		Bucket:         aws.String(s.TestingBucket),
+	presigned, err := s.Presigner.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket:         aws.String(s.Bucket),
 		Key:            aws.String(key),
 		ContentLength:  aws.Int64(metadata.ByteSize),
 		ContentType:    aws.String(metadata.MIMEType),
 		ChecksumSHA256: aws.String(encodedChecksum),
-		Metadata:       map[string]string{TestingLibrarySHA256MetadataKey: metadata.SHA256},
+		Metadata:       map[string]string{LibrarySHA256MetadataKey: metadata.SHA256},
 	}, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return PresignedTransfer{}, mapLibraryS3Error(err)
@@ -114,7 +114,7 @@ func (s *S3LibraryObjectStore) PresignPut(ctx context.Context, key string, metad
 	headers := map[string]string{}
 	addPresignedTransferHeader(headers, presigned.SignedHeader, "Content-Type", metadata.MIMEType)
 	addPresignedTransferHeader(headers, presigned.SignedHeader, "x-amz-checksum-sha256", encodedChecksum)
-	addPresignedTransferHeader(headers, presigned.SignedHeader, "x-amz-meta-"+TestingLibrarySHA256MetadataKey, metadata.SHA256)
+	addPresignedTransferHeader(headers, presigned.SignedHeader, "x-amz-meta-"+LibrarySHA256MetadataKey, metadata.SHA256)
 	return PresignedTransfer{
 		URL:       presigned.URL,
 		Method:    presigned.Method,
@@ -151,8 +151,8 @@ func (s *S3LibraryObjectStore) PresignGet(ctx context.Context, key, filename str
 		return PresignedDownload{}, err
 	}
 	disposition := safeContentDisposition(filename)
-	presigned, err := s.TestingPresigner.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket:                     aws.String(s.TestingBucket),
+	presigned, err := s.Presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket:                     aws.String(s.Bucket),
 		Key:                        aws.String(key),
 		ResponseContentDisposition: aws.String(disposition),
 	}, s3.WithPresignExpires(ttl))

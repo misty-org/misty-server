@@ -8,7 +8,7 @@ import { SpentTickets, verifyLiveTicket, type LiveTicket } from "./ticket.js";
 const spent = new SpentTickets();
 const sonioxURL = "wss://stt-rt.soniox.com/transcribe-websocket";
 
-export function liveTranscriptionEnabled(env: NodeJS.ProcessEnv = process.env) {
+function liveTranscriptionEnabled(env: NodeJS.ProcessEnv = process.env) {
   return ["1", "true"].includes((env.MISTY_RUNTIME_LIVE_TRANSCRIBE ?? "").trim().toLowerCase()) && !!env.SONIOX_API_KEY?.trim();
 }
 

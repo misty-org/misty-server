@@ -5,25 +5,25 @@ import (
 	"encoding/json"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // note.tag sets a note's shared tags, the ones everyone in the Space sees.
 func noteTagsToolRegistration(database *db.Database) agenttools.Registration {
 	return agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
-			Name: "note.tag", Version: 1, Risk: serveragent.RiskWrite, Approval: agenttools.ApprovalNone,
+			Name: "note.tag", Version: 1, Risk: agent.RiskWrite,
 			Description: "Replace a note's shared tags in the current Space. Pass the full list; an empty list clears them.",
 			InputSchema: agentToolSchema(map[string]any{
 				"id":   map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 				"tags": map[string]any{"type": "array", "maxItems": 30, "items": map[string]any{"type": "string", "minLength": 1, "maxLength": 60}},
 			}, []string{"id", "tags"}),
-			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
+			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true,
 			AuditEvent: "note.tags.updated", Sources: agentToolboxSpaceSources,
 		},
-		Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			var input struct {
 				ID   string   `json:"id"`
 				Tags []string `json:"tags"`
@@ -33,10 +33,10 @@ func noteTagsToolRegistration(database *db.Database) agenttools.Registration {
 			}
 			note, err := database.SpaceNoteByID(ctx, invocation.UserID, strings.TrimSpace(input.ID))
 			if err != nil || note.SpaceID != invocation.SpaceID {
-				return nil, serveragent.ErrInvalidRequest("no note " + input.ID + " in this Space; call note_search")
+				return nil, agent.ErrInvalidRequest("no note " + input.ID + " in this Space; call note_search")
 			}
 			if err := database.UpdateNoteSharedTags(ctx, invocation.UserID, note.ID, input.Tags); err != nil {
-				return nil, serveragent.ErrInvalidRequest("those tags could not be saved; you may not be able to edit this note")
+				return nil, agent.ErrInvalidRequest("those tags could not be saved; you may not be able to edit this note")
 			}
 			return json.Marshal(map[string]any{"note_id": note.ID, "tags": input.Tags})
 		},

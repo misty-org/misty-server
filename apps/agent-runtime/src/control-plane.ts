@@ -42,7 +42,6 @@ export async function controlPlaneRequest<T>(
     | "budget"
     | "steering"
     | "mcp-token"
-    | "tools"
     | "events"
     | "complete",
   payload: Record<string, unknown>,
@@ -68,7 +67,7 @@ export async function controlPlaneRequest<T>(
       [signatureHeaders.idempotency]: idempotencyKey,
     },
     body,
-    signal: AbortSignal.timeout(action === "tools" ? 5 * 60_000 : 30_000),
+    signal: AbortSignal.timeout(30_000),
   });
   const text = await response.text();
   if (!response.ok) {

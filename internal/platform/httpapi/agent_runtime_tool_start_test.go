@@ -4,16 +4,16 @@ import (
 	"context"
 	"testing"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestOnlyReadsAreAnnouncedOnArrival(t *testing.T) {
-	if !announcesToolStart(agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: "web.search", Risk: serveragent.RiskRead}) {
+	if !announcesToolStart(agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: "web.search", Risk: agent.RiskRead}) {
 		t.Fatal("a read must be announced when it arrives")
 	}
-	for _, risk := range []string{serveragent.RiskWrite, serveragent.RiskDangerous} {
+	for _, risk := range []string{agent.RiskWrite, agent.RiskDangerous} {
 		if announcesToolStart(agenttools.Descriptor{Layer: agenttools.LayerPublic, Name: "note.update", Risk: risk}) {
 			t.Fatalf("a %s tool keeps its runtime start checkpoint", risk)
 		}

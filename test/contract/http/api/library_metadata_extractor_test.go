@@ -46,7 +46,7 @@ func TestFFprobeLibraryMetadataExtractor(t *testing.T) {
 }
 
 func TestParseISO6709(t *testing.T) {
-	latitude, longitude, ok := TestingParseISO6709("+37.7749-122.4194/")
+	latitude, longitude, ok := ParseISO6709("+37.7749-122.4194/")
 	if !ok || latitude != 37.7749 || longitude != -122.4194 {
 		t.Fatalf("parseISO6709() = %f,%f,%v", latitude, longitude, ok)
 	}

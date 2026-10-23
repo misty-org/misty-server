@@ -6,10 +6,10 @@ import (
 	"errors"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 const (
@@ -55,7 +55,7 @@ func spaceAgentToolbox(database *db.Database) *agenttools.Registry {
 
 func buildAgentToolbox(database *db.Database, options agentToolboxOptions) *agenttools.Registry {
 	messageTriggers := []string{"message"}
-	legacyHandler := func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+	legacyHandler := func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 		if request.Name == toolboxMessagesSearch {
 			request.Name = "space.search_messages"
 		}
@@ -85,7 +85,7 @@ func buildAgentToolbox(database *db.Database, options agentToolboxOptions) *agen
 		// Work asked in a Space chat never changes the agent's memory. Reading
 		// it is private: only the owner's own ask keeps it.
 		for _, descriptor := range memoryAgentToolDescriptors() {
-			if descriptor.Risk == serveragent.RiskRead {
+			if descriptor.Risk == agent.RiskRead {
 				registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
 			}
 		}
@@ -97,7 +97,7 @@ func buildAgentToolbox(database *db.Database, options agentToolboxOptions) *agen
 		registrations = append(registrations, agenttools.Registration{Descriptor: withToolTriggers(descriptor, messageTriggers), Handler: legacyHandler})
 	}
 	for _, descriptor := range nativeAgentToolDescriptors() {
-		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: func(ctx context.Context, i agenttools.Invocation, r serveragent.ToolRequest) (json.RawMessage, error) {
+		registrations = append(registrations, agenttools.Registration{Descriptor: descriptor, Handler: func(ctx context.Context, i agenttools.Invocation, r agent.ToolRequest) (json.RawMessage, error) {
 			return executeNativeAgentTool(ctx, database, i, r)
 		}})
 	}
@@ -109,7 +109,7 @@ func buildAgentToolbox(database *db.Database, options agentToolboxOptions) *agen
 		if service == nil {
 			service = &SpacesService{database: database}
 		}
-		browserHandler := func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		browserHandler := func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			return service.executeBrowserAgentToolInvocation(ctx, invocation, request)
 		}
 		for _, descriptor := range browserToolDescriptors() {
@@ -135,15 +135,14 @@ func agentDelegationToolDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
 		Name: toolboxAgentsDelegate, Version: 1,
 		Description: "Delegate a bounded independent subtask to a background worker in the current Space and return its audited run result.",
-		Risk:        serveragent.RiskWrite,
-		InputSchema: TestingMustAPIRawJSON(map[string]any{
+		Risk:        agent.RiskWrite,
+		InputSchema: MustAPIRawJSON(map[string]any{
 			"type": "object", "required": []string{"prompt"}, "additionalProperties": false,
 			"properties": map[string]any{
 				"prompt": map[string]any{"type": "string", "minLength": 1, "maxLength": 16_000},
 			},
 		}),
 		OutputSchema: agentToolObjectOutputSchema(), RequiredPermission: db.PermissionAskRun,
-		AgentPermission: db.PermissionAskRun, AllowCustomAgent: true, Approval: agenttools.ApprovalExplicitIntent,
 		Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: false, AuditEvent: "agent.run.started",
 		Sources: []string{"space_conversation"}, Triggers: []string{"message"},
 	}
@@ -201,15 +200,15 @@ func authorizeSpaceAgentTool(database *db.Database) agenttools.Authorizer {
 	}
 }
 
-func executeSpaceAgentToolbox(ctx context.Context, toolbox *agenttools.Registry, invocation agenttools.Invocation, database *db.Database, request serveragent.ToolRequest) (json.RawMessage, error) {
+func executeSpaceAgentToolbox(ctx context.Context, toolbox *agenttools.Registry, invocation agenttools.Invocation, database *db.Database, request agent.ToolRequest) (json.RawMessage, error) {
 	result, err := toolbox.ExecuteWithMiddleware(ctx, invocation, request, authorizeSpaceAgentTool(database), agentToolboxExecutionJournal(database))
-	if errors.Is(err, agenttools.ErrCapabilityDenied) || errors.Is(err, agenttools.ErrToolNotFound) || errors.Is(err, agenttools.ErrApprovalRequired) {
-		return nil, workflowv2.ErrCapabilityDenied
+	if errors.Is(err, agenttools.ErrCapabilityDenied) || errors.Is(err, agenttools.ErrToolNotFound) {
+		return nil, workflow.ErrCapabilityDenied
 	}
 	return result, err
 }
 
-func manifestToolNames(manifest serveragent.ToolManifest) []string {
+func manifestToolNames(manifest agent.ToolManifest) []string {
 	names := make([]string, 0, len(manifest.Tools))
 	for _, tool := range manifest.Tools {
 		names = append(names, tool.Name)

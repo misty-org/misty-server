@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Screens open on demand. A run started on the desktop can ask for one with
@@ -43,8 +43,8 @@ func (s *SpacesService) screenToolRegistrations(record *db.AIInvocationRecord) [
 	return []agenttools.Registration{
 		{Descriptor: screenDescriptor(screenOpenTool,
 			"Open a screen for this task. You work only in tabs of your own, never in the person's tabs (to see their page, use screen_look). "+
-				"Pick the target from the user's words: new_tab for a website in a new tab of your own (\"in a new tab\"); window for "+
-				"a separate Misty window that leaves theirs alone (\"in a new window\", \"in the background\", \"on your own\"); desktop "+
+				"Pick the target from the user's words: new_tab for a website in a new tab of your own (\"in a new tab\", \"in a new window\", "+
+				"\"in the background\", \"on your own\"); desktop "+
 				"for other apps on their Mac or the whole screen, such as Numbers, Finder or Mail, where Misty works with its own cursor "+
 				"after they allow it. Omit target when they did not say, or when they mean a site they already have open (\"my Gmail tab\"), "+
 				"and pass that site's url: Misty reuses an open tab that matches, otherwise opens one where they prefer. "+
@@ -65,32 +65,30 @@ func (s *SpacesService) screenToolRegistrations(record *db.AIInvocationRecord) [
 			Handler: s.screenRequestHandler(screenLookTool)},
 		s.screenCloseRegistration(),
 		s.browserRunRegistration(),
-		// app.window (app_window_tool.go) returns with the agent browser, which shows Misty's own
-		// pages (docs/design/agent-browser/BRIEF.md); there is no agent window to open them in now.
 	}
 }
 
 func screenDescriptor(name, description string, properties map[string]any, required ...string) agenttools.Descriptor {
 	return agenttools.Descriptor{
-		Name: name, Version: 1, Description: description, Risk: serveragent.RiskRead,
-		InputSchema:  TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}),
-		OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer,
-		Idempotent: true, AllowCustomAgent: true, AuditEvent: name,
+		Name: name, Version: 1, Description: description, Risk: agent.RiskRead,
+		InputSchema:  MustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}),
+		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer,
+		Idempotent: true, AuditEvent: name,
 	}
 }
 
 func (s *SpacesService) screenRequestHandler(tool string) agenttools.Handler {
-	return func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+	return func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 		var input struct {
 			Reason string `json:"reason"`
 			URL    string `json:"url"`
 			Target string `json:"target"`
 		}
 		if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.Reason) == "" {
-			return nil, serveragent.ErrInvalidRequest("Describe what the screen is for.")
+			return nil, agent.ErrInvalidRequest("Describe what the screen is for.")
 		}
 		if input.URL != "" && !strings.HasPrefix(input.URL, "https://") && !strings.HasPrefix(input.URL, "http://") {
-			return nil, serveragent.ErrInvalidRequest("url must be an http or https address.")
+			return nil, agent.ErrInvalidRequest("url must be an http or https address.")
 		}
 		if input.URL != "" {
 			if err := addressWithoutHost(ctx, input.URL); err != nil {
@@ -120,11 +118,11 @@ func (s *SpacesService) screenRequestHandler(tool string) agenttools.Handler {
 				kind = "desktop"
 				input.URL = ""
 			case "current_tab":
-				// Agents act only in their own tabs (docs/plans/agent-harness-v3.md, decided October 20).
-				return nil, serveragent.ErrInvalidRequest("You work only in tabs of your own, never in the person's. Open the page you need in your own tab (screen_open with its url and no target); to see what the person sees, use screen_look.")
+				// Agents act only in their own tabs (docs/agents/harness.md, browser_run).
+				return nil, agent.ErrInvalidRequest("You work only in tabs of your own, never in the person's. Open the page you need in your own tab (screen_open with its url and no target); to see what the person sees, use screen_look.")
 			case "", "new_tab", "window":
 			default:
-				return nil, serveragent.ErrInvalidRequest("target must be new_tab, window or desktop.")
+				return nil, agent.ErrInvalidRequest("target must be new_tab, window or desktop.")
 			}
 			if remote, err := s.remoteScreenOpen(ctx, record, body, request.ID, input.URL, input.Reason, desktop, input.Target); remote != nil || err != nil {
 				return remote, err
@@ -147,15 +145,14 @@ func (s *SpacesService) screenRequestHandler(tool string) agenttools.Handler {
 		}
 		screen := &screenRequest{Kind: kind, URL: input.URL, Reason: strings.TrimSpace(input.Reason), Location: settings.ScreenLocation, Chosen: input.Target != ""}
 		// The user's words override where new screens usually open. Locations:
-		// current (their tab), window (a new tab in their window), separate.
+		// current (their tab) or window (a new tab in their window). The old
+		// window target, a separate agent window, opens a new tab too.
 		switch input.Target {
-		case "new_tab":
+		case "new_tab", "window":
 			screen.Location = "window"
-		case "window":
-			screen.Location = "separate"
 		}
 		// An agent never works in the person's own tab, whatever the setting says: a new tab of
-		// its own instead (docs/plans/agent-harness-v3.md, decided October 20).
+		// its own instead (docs/agents/harness.md, browser_run).
 		if screen.Location == "current" && kind != "look" {
 			screen.Location = "window"
 		}

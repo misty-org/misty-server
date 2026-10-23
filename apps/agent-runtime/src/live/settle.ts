@@ -1,7 +1,7 @@
 import { controlPlaneURL } from "../control-plane.js";
 import { decodeControlSecret, signRequest, signatureHeaders } from "../signature.js";
 
-export type Settlement = { session_id: string; user: string; used_ms: number };
+type Settlement = { session_id: string; user: string; used_ms: number };
 
 /**
  * Reports a closed live session's measured audio to the Go API, which settles

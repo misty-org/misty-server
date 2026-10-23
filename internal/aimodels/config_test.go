@@ -15,16 +15,3 @@ func TestOpenAIModelsGoDirectOnlyWithAnInstanceKey(t *testing.T) {
 		t.Fatal("a non-OpenAI model skipped the Gateway")
 	}
 }
-
-func TestEverySenseOwnsKnownRoles(t *testing.T) {
-	for _, sense := range Senses {
-		if len(sense.Roles) == 0 {
-			t.Fatalf("%s owns no roles", sense.ID)
-		}
-		for _, role := range sense.Roles {
-			if _, ok := FindRole(role); !ok {
-				t.Fatalf("%s owns unknown role %s", sense.ID, role)
-			}
-		}
-	}
-}

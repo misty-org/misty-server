@@ -19,7 +19,7 @@ import (
 
 func TestRepositoryLayout(t *testing.T) {
 	root := repositoryRoot(t)
-	for _, name := range []string{"accounts", "billingadapter", "sync", "spaces", "library", "agents", "workflows", "integrations"} {
+	for _, name := range []string{"accounts", "billingadapter", "browsersync", "spaces", "library", "agent", "workflow", "integrations"} {
 		requireDirectory(t, filepath.Join(root, "internal", name))
 	}
 	for _, legacy := range []string{"api", "db", "agent", "billing", "workflow"} {
@@ -131,7 +131,8 @@ func TestEnvironmentContractIsExplicit(t *testing.T) {
 			}
 			identifier, isIdentifier := selector.X.(*ast.Ident)
 			literal, isLiteral := call.Args[0].(*ast.BasicLit)
-			if !isIdentifier || !isLiteral || identifier.Name != "envconfig" {
+			if !isIdentifier || !isLiteral || (identifier.Name != "config" && identifier.Name != "envconfig") ||
+				(selector.Sel.Name != "Getenv" && selector.Sel.Name != "LookupEnv") {
 				return true
 			}
 			name, err := strconv.Unquote(literal.Value)
@@ -182,7 +183,7 @@ func TestDomainImportDirection(t *testing.T) {
 		for _, imported := range pkg.Imports {
 			if strings.Contains(imported, "/internal/app") ||
 				strings.Contains(imported, "/internal/platform/httpapi") ||
-				strings.Contains(imported, "/internal/platform/postgres") {
+				strings.Contains(imported, "/internal/platform/db") {
 				t.Errorf("domain package %s imports concrete adapter %s", pkg.ImportPath, imported)
 			}
 		}
@@ -190,8 +191,8 @@ func TestDomainImportDirection(t *testing.T) {
 }
 
 func isIndependentDomain(importPath string) bool {
-	for _, domain := range []string{"accounts", "spaces", "journal", "library", "discovery", "integrations", "agents", "workflows"} {
-		if strings.Contains(importPath, "/internal/"+domain) {
+	for _, domain := range []string{"accounts", "spaces", "journal", "library", "discovery", "integrations", "agent", "workflow"} {
+		if strings.HasSuffix(importPath, "/internal/"+domain) || strings.Contains(importPath, "/internal/"+domain+"/") {
 			return true
 		}
 	}

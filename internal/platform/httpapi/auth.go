@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"github.com/kannachi323/misty/server/internal/platform/telemetry"
 	"golang.org/x/crypto/bcrypt"
@@ -28,6 +28,8 @@ func RegisterWithVerification(database *db.Database, analytics telemetry.Client,
 			Username string `json:"username"`
 			Email    string `json:"email"`
 			Password string `json:"password"`
+			// Credential: the password is one the app derived on the device.
+			Credential bool `json:"credential"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -79,6 +81,13 @@ func RegisterWithVerification(database *db.Database, analytics telemetry.Client,
 			}
 		}
 
+		if body.Credential {
+			if err := database.SetCredentialPassword(user.ID, true); err != nil {
+				http.Error(w, "failed to create user", http.StatusInternalServerError)
+				return
+			}
+			user.CredentialPassword = true
+		}
 		verification.AfterSignup(r, user, false)
 		writeAuthSession(w, r, database, user, http.StatusCreated)
 	}
@@ -151,11 +160,12 @@ func writeAuthSession(
 		return
 	}
 
-	writeJSON(w, status, map[string]string{
-		"user_id":  user.ID,
-		"username": user.Username,
-		"email":    user.Email,
-		"provider": user.Provider,
+	writeJSON(w, status, map[string]any{
+		"user_id":            user.ID,
+		"username":           user.Username,
+		"email":              user.Email,
+		"provider":           user.Provider,
+		"credential_account": user.CredentialPassword,
 	})
 }
 
@@ -164,7 +174,7 @@ func writeAuthSession(
 // credentialed requests directly to the API origin, so the session should
 // never be exposed to sibling subdomains.
 func writeSessionCookie(w http.ResponseWriter, r *http.Request, token string, ttl time.Duration) {
-	writeAuthCookie(w, r, TestingSessionCookieName, token, ttl)
+	writeAuthCookie(w, r, SessionCookieName, token, ttl)
 }
 
 func Logout(database *db.Database) http.HandlerFunc {
@@ -174,7 +184,7 @@ func Logout(database *db.Database) http.HandlerFunc {
 			http.Error(w, "authentication unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		for _, item := range []struct{ name, kind string }{{RefreshCookieName, "refresh"}, {TestingSessionCookieName, "access"}} {
+		for _, item := range []struct{ name, kind string }{{RefreshCookieName, "refresh"}, {SessionCookieName, "access"}} {
 			cookie, err := r.Cookie(item.name)
 			if err != nil {
 				continue
@@ -194,11 +204,11 @@ func Logout(database *db.Database) http.HandlerFunc {
 	}
 }
 
-func TestingIsSecureRequest(r *http.Request) bool {
+func IsSecureRequest(r *http.Request) bool {
 	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
-func TestingSessionCookieSameSite(r *http.Request, secure bool) http.SameSite {
+func SessionCookieSameSite(r *http.Request, secure bool) http.SameSite {
 	if secure && r.Header.Get("Origin") != "" {
 		return http.SameSiteNoneMode
 	}

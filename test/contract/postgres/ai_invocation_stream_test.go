@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestInvocationStreamPagesHintsIsolationAndRecovery(t *testing.T) {
@@ -50,7 +50,7 @@ func TestInvocationStreamPagesHintsIsolationAndRecovery(t *testing.T) {
 	}
 	defer stopPeer()
 	rollback := errors.New("rollback fixture")
-	err = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	err = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET state='running' WHERE id=$1`, record.ID); err != nil {
 			return err
 		}
@@ -81,7 +81,7 @@ func TestInvocationStreamPagesHintsIsolationAndRecovery(t *testing.T) {
 	}
 	// Bulk history fixture exercises serialized-byte and row limits independently
 	// of the already-tested idempotent event writer.
-	err = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	err = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO ai_invocation_events(invocation_id,sequence,event_type,payload,receipt_key)
    SELECT $1,n,'response.delta',jsonb_build_object('type','response.delta','delta',repeat('x',10000)),'bulk-'||n FROM generate_series(2,300)n`, record.ID)
 		return err
@@ -154,12 +154,12 @@ func TestInvocationStreamPagesHintsIsolationAndRecovery(t *testing.T) {
 	if _, err := peer.ReadAIInvocationEventPage(ctx, user.ID, record.ID, 0); !errors.Is(err, ErrSpaceNotFound) {
 		t.Fatal("deleted invocation remained readable", err)
 	}
-	raw, err := os.ReadFile("../../../internal/platform/postgres/migrations/20271001060000_invocation_stream_notifications.sql")
+	raw, err := os.ReadFile("../../../internal/platform/db/migrations/20271001060000_invocation_stream_notifications.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
 	parts := strings.Split(string(raw), "-- +goose Down")
-	err = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	err = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, parts[1]); err != nil {
 			return err
 		}

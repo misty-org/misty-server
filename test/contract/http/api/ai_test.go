@@ -11,8 +11,8 @@ import (
 
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestAIHandlersRequireAuthentication(t *testing.T) {
@@ -56,7 +56,7 @@ func TestWriteAIRateLimitIsStructuredAndDoesNotSuggestAutomaticRetry(t *testing.
 
 func TestWriteAIErrorReturnsCanceledWithoutProviderDetails(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	TestingWriteAIError(recorder, context.Canceled)
+	WriteAIError(recorder, context.Canceled)
 	if recorder.Code != 499 || !strings.Contains(recorder.Body.String(), `"code":"request_canceled"`) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -66,7 +66,7 @@ func TestWriteAIErrorReturnsStructuredHostedAILimit(t *testing.T) {
 	for _, testCase := range []struct{ scope, reason string }{{"personal", "personal_ai_limit_reached"}, {"space", "personal_ai_limit_reached"}} {
 		t.Run(testCase.scope, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			TestingWriteAIError(recorder, agent.CreditsExhaustedError{Required: 25, Available: 10, Scope: testCase.scope})
+			WriteAIError(recorder, agent.CreditsExhaustedError{Required: 25, Available: 10, Scope: testCase.scope})
 			if recorder.Code != http.StatusPaymentRequired {
 				t.Fatalf("status = %d", recorder.Code)
 			}
@@ -78,18 +78,5 @@ func TestWriteAIErrorReturnsStructuredHostedAILimit(t *testing.T) {
 				t.Fatalf("payload = %#v", payload)
 			}
 		})
-	}
-}
-
-func TestAutomaticRoutingIsTheSameForEveryPlan(t *testing.T) {
-	tests := map[db.Tier]agent.AgentTier{
-		db.TierBasic: agent.TierMed,
-		db.TierPro:   agent.TierMed,
-		db.TierMax:   agent.TierMed,
-	}
-	for subscription, want := range tests {
-		if got := TestingAgentTierForLicenseTier(subscription); got != want {
-			t.Fatalf("agentTierForLicenseTier(%q) = %q, want %q", subscription, got, want)
-		}
 	}
 }

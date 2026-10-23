@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/spaces"
 )
 
@@ -75,36 +75,36 @@ func newAgentGrantView(grant db.AgentGrant) agentGrantView {
 // grantLabel describes a grant in plain words, e.g. "Push to misty-org/misty".
 func grantLabel(grant db.AgentGrant) string {
 	scope := grant.ScopeID
-	if grant.ScopeKind == string(serveragent.ScopeConnectedAccount) {
+	if grant.ScopeKind == string(agent.ScopeConnectedAccount) {
 		scope = strings.TrimSuffix(strings.ReplaceAll(scope, ":", " · "), " · default")
 	}
-	switch serveragent.GrantAction(grant.Action) {
-	case serveragent.GrantAppAction:
+	switch agent.GrantAction(grant.Action) {
+	case agent.GrantAppAction:
 		return "Act in " + scope
-	case serveragent.GrantBrowserSend:
+	case agent.GrantBrowserSend:
 		return "Send on " + scope
-	case serveragent.GrantBrowserDelete:
+	case agent.GrantBrowserDelete:
 		return "Delete on " + scope
-	case serveragent.GrantBrowserPublish:
+	case agent.GrantBrowserPublish:
 		return "Publish on " + scope
-	case serveragent.GrantPayment:
+	case agent.GrantPayment:
 		if limit := grantAmountFrom(grant.Constraints); limit != nil {
 			return "Pay through " + scope + " up to " + formatGrantAmount(*limit)
 		}
 		return "Pay through " + scope
-	case serveragent.GrantSpaceAdmin:
+	case agent.GrantSpaceAdmin:
 		return "Manage members of a Space"
-	case serveragent.GrantItemDelete:
+	case agent.GrantItemDelete:
 		return "Delete items in a Space"
-	case serveragent.GrantScheduleRemove:
+	case agent.GrantScheduleRemove:
 		return "Remove a workflow schedule"
-	case serveragent.GrantProjectEdit:
+	case agent.GrantProjectEdit:
 		return "Edit files in " + scope
-	case serveragent.GrantProjectInstall:
+	case agent.GrantProjectInstall:
 		return "Install packages in " + scope
-	case serveragent.GrantGitPush:
+	case agent.GrantGitPush:
 		return "Push to " + scope
-	case serveragent.GrantRecallRead:
+	case agent.GrantRecallRead:
 		return "Search your Memory"
 	}
 	return grant.Action
@@ -115,18 +115,18 @@ func grantLabel(grant db.AgentGrant) string {
 // schedule, a site origin, an app account or merchant. Project and repository
 // grants are created by the coding flow, which checks the device and remote.
 func (s *SpacesService) validateGrantScope(ctx context.Context, user string, request *db.AgentAppRequest) error {
-	action := serveragent.GrantAction(request.GrantAction)
-	kind := serveragent.ScopeKind(request.GrantScopeKind)
-	if !serveragent.ValidGrantScope(action, kind, request.GrantScopeID) {
+	action := agent.GrantAction(request.GrantAction)
+	kind := agent.ScopeKind(request.GrantScopeKind)
+	if !agent.ValidGrantScope(action, kind, request.GrantScopeID) {
 		return db.ErrSpaceInvalid
 	}
-	if action == serveragent.GrantPayment && grantAmountFrom(request.GrantConstraints) == nil {
+	if action == agent.GrantPayment && grantAmountFrom(request.GrantConstraints) == nil {
 		return db.ErrSpaceInvalid
 	}
 	switch kind {
-	case serveragent.ScopeSpace:
+	case agent.ScopeSpace:
 		permission := spaces.PermissionLibraryView
-		if action == serveragent.GrantSpaceAdmin {
+		if action == agent.GrantSpaceAdmin {
 			permission = spaces.PermissionSpaceInvite
 		}
 		allowed, err := s.database.HasSpacePermission(ctx, user, request.GrantScopeID, permission)
@@ -136,19 +136,19 @@ func (s *SpacesService) validateGrantScope(ctx context.Context, user string, req
 		if !allowed {
 			return db.ErrSpaceForbidden
 		}
-	case serveragent.ScopeSchedule:
+	case agent.ScopeSchedule:
 		if _, err := s.database.AgentMethodByID(ctx, user, request.GrantScopeID); err != nil {
 			return db.ErrSpaceForbidden
 		}
-	case serveragent.ScopeOrigin:
+	case agent.ScopeOrigin:
 		parsed, err := url.Parse(request.GrantScopeID)
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" {
 			return db.ErrSpaceInvalid
 		}
-	case serveragent.ScopeProject, serveragent.ScopeRepo:
+	case agent.ScopeProject, agent.ScopeRepo:
 		return s.validateCodingScope(ctx, user, kind, request.GrantScopeID)
-	case serveragent.ScopeRecall:
-		if request.GrantScopeID != serveragent.RecallScopeID {
+	case agent.ScopeRecall:
+		if request.GrantScopeID != agent.RecallScopeID {
 			return db.ErrSpaceInvalid
 		}
 	}
@@ -190,9 +190,9 @@ func (s *SpacesService) AgentSiteGrant() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		action := map[string]serveragent.GrantAction{"send": serveragent.GrantBrowserSend, "delete": serveragent.GrantBrowserDelete,
-			"publish": serveragent.GrantBrowserPublish}[body.Kind]
-		request := &db.AgentAppRequest{GrantAction: string(action), GrantScopeKind: string(serveragent.ScopeOrigin), GrantScopeID: strings.TrimSpace(body.Origin)}
+		action := map[string]agent.GrantAction{"send": agent.GrantBrowserSend, "delete": agent.GrantBrowserDelete,
+			"publish": agent.GrantBrowserPublish}[body.Kind]
+		request := &db.AgentAppRequest{GrantAction: string(action), GrantScopeKind: string(agent.ScopeOrigin), GrantScopeID: strings.TrimSpace(body.Origin)}
 		if action == "" || s.validateGrantScope(r.Context(), user, request) != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_grant"})
 			return

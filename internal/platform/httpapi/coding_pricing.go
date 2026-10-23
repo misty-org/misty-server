@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 // Work done in a person's own coding tool is already paid for by their
@@ -21,7 +21,7 @@ const defaultCodingExternalFactor = 0.25
 const cachedReadWeight = 0.1
 
 func codingExternalFactor() float64 {
-	value, err := strconv.ParseFloat(strings.TrimSpace(envconfig.Getenv("MISTY_CODING_EXTERNAL_FACTOR")), 64)
+	value, err := strconv.ParseFloat(strings.TrimSpace(config.Getenv("MISTY_CODING_EXTERNAL_FACTOR")), 64)
 	if err != nil || value <= 0 || value > 1 || math.IsNaN(value) {
 		return defaultCodingExternalFactor
 	}
@@ -42,9 +42,9 @@ func (u codingUsage) weighted(factor float64) int64 {
 
 // billed is the usage the billing service is told about, each class scaled
 // by the factor and rounded up.
-func (u codingUsage) billed(factor float64) serveragent.ModelUsage {
+func (u codingUsage) billed(factor float64) agent.ModelUsage {
 	scale := func(n int64) int64 { return int64(math.Ceil(float64(n) * factor)) }
-	return serveragent.ModelUsage{InputTokens: scale(u.Input + u.CacheWrite), CachedInputTokens: scale(u.CacheRead), OutputTokens: scale(u.Output)}
+	return agent.ModelUsage{InputTokens: scale(u.Input + u.CacheWrite), CachedInputTokens: scale(u.CacheRead), OutputTokens: scale(u.Output)}
 }
 
 // codingBillingProvider names the provider behind each coding tool, so usage

@@ -1,6 +1,6 @@
 package api
 
-import db "github.com/kannachi323/misty/server/internal/platform/postgres"
+import "github.com/kannachi323/misty/server/internal/platform/db"
 
 func TestingLicenseAllowsUse(license *db.License) bool {
 	if license == nil {

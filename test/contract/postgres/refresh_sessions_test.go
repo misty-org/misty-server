@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
@@ -71,7 +71,7 @@ func TestRefreshRotationGraceExpires(t *testing.T) {
 	if !rotate(t, database, sid, "old", "new", userID) {
 		t.Fatal("first rotation rejected")
 	}
-	err := database.TestingWithRLSContext(context.Background(), TestingServiceRLSSettings(), func(tx *sql.Tx) error {
+	err := database.WithRLSContext(context.Background(), ServiceRLSSettings(), func(tx *sql.Tx) error {
 		_, err := tx.Exec(`UPDATE sessions SET refresh_rotated_at=$2 WHERE token_hash=$1`,
 			sid, time.Now().Add(-RefreshRotationGrace-time.Minute))
 		return err

@@ -2,19 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/test/testkit"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-	agent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestRoutedSpaceToolsPostgres(t *testing.T) {
 	if os.Getenv("TEST_DB_NAME") != "misty_global_agents_test" {
@@ -50,7 +47,7 @@ func TestRoutedSpaceToolsPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload := TestingMustAPIRawJSON(map[string]string{"agent_id": identity.ID, "execution_mode": "user", "prompt": "Create a task in Family"})
+	payload := MustAPIRawJSON(map[string]string{"agent_id": identity.ID, "execution_mode": "user", "prompt": "Create a task in Family"})
 	record, _, err := database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{ID: "invocation_global_test", UserID: owner.ID, SpaceID: origin.ID, Mode: "drawer", SurfaceID: "global", Trigger: "message", State: "running", IdempotencyKey: "global-test", RequestPayload: payload, ExpiresAt: time.Now().Add(time.Hour)})
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +56,7 @@ func TestRoutedSpaceToolsPostgres(t *testing.T) {
 	invocation := agenttools.Invocation{UserID: owner.ID, AgentID: identity.ID, RunID: record.ID, SessionID: conversation, Source: "space_conversation", Trigger: "message", OriginalInput: "Create a task in Family"}
 	toolbox := buildAgentToolbox(database, agentToolboxOptions{accountLevel: true})
 	run := func(id, name string, arguments any) (json.RawMessage, error) {
-		return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, agent.ToolRequest{ID: id, Name: name, Arguments: TestingMustAPIRawJSON(arguments)})
+		return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, agent.ToolRequest{ID: id, Name: name, Arguments: MustAPIRawJSON(arguments)})
 	}
 	list, err := run("list", "space.list", map[string]any{})
 	if err != nil {

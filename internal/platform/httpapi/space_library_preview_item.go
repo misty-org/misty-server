@@ -38,7 +38,7 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 			return
 		}
 		if source.PreviewObjectKey == "" {
-			reader, metadata, openErr := s.TestingStore.Open(r.Context(), source.ObjectKey)
+			reader, metadata, openErr := s.Store.Open(r.Context(), source.ObjectKey)
 			if openErr != nil {
 				writeLibraryError(w, openErr)
 				return
@@ -61,7 +61,7 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 				return
 			}
 			objectKey := "library/" + strings.ReplaceAll(uuid.NewString(), "-", "")
-			putErr := s.TestingStore.Put(r.Context(), objectKey, previewReader, LibraryObjectMetadata{ByteSize: rendered.ByteSize, SHA256: rendered.SHA256, MIMEType: rendered.MIMEType})
+			putErr := s.Store.Put(r.Context(), objectKey, previewReader, LibraryObjectMetadata{ByteSize: rendered.ByteSize, SHA256: rendered.SHA256, MIMEType: rendered.MIMEType})
 			_ = previewReader.Close()
 			if putErr != nil {
 				writeLibraryError(w, putErr)
@@ -69,20 +69,20 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 			}
 			completed, completeErr := s.database.CompleteLibraryPreview(r.Context(), userID, spaceID, itemID, source.SourceIdentity, objectKey, rendered.MIMEType, rendered.ByteSize, rendered.SHA256, original)
 			if completeErr != nil {
-				_ = s.TestingStore.Delete(r.Context(), objectKey)
+				_ = s.Store.Delete(r.Context(), objectKey)
 				writeLibraryError(w, completeErr)
 				return
 			}
 			if completed.DiscardObjectKey != "" && completed.ObjectKey != objectKey {
-				if _, existingErr := s.TestingStore.Head(r.Context(), completed.ObjectKey); errors.Is(existingErr, ErrLibraryObjectNotFound) {
+				if _, existingErr := s.Store.Head(r.Context(), completed.ObjectKey); errors.Is(existingErr, ErrLibraryObjectNotFound) {
 					if completed.MIMEType != rendered.MIMEType || completed.ByteSize != rendered.ByteSize || completed.SHA256 != rendered.SHA256 {
-						_ = s.TestingStore.Delete(r.Context(), objectKey)
+						_ = s.Store.Delete(r.Context(), objectKey)
 						writeJSON(w, http.StatusConflict, map[string]string{"code": "library_preview_mismatch"})
 						return
 					}
 					repairedKey, repairErr := s.database.ReplaceMissingLibraryPreviewDeduplicationObject(r.Context(), userID, spaceID, itemID, source.SourceIdentity, completed.ObjectKey, objectKey)
 					if repairErr != nil {
-						_ = s.TestingStore.Delete(r.Context(), objectKey)
+						_ = s.Store.Delete(r.Context(), objectKey)
 						writeLibraryError(w, repairErr)
 						return
 					}
@@ -91,22 +91,22 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 						completed.DiscardObjectKey = ""
 					}
 				} else if existingErr != nil {
-					_ = s.TestingStore.Delete(r.Context(), objectKey)
+					_ = s.Store.Delete(r.Context(), objectKey)
 					writeLibraryError(w, existingErr)
 					return
 				}
 			}
 			if completed.DiscardObjectKey != "" {
-				_ = s.TestingStore.Delete(r.Context(), completed.DiscardObjectKey)
+				_ = s.Store.Delete(r.Context(), completed.DiscardObjectKey)
 			}
 			source.PreviewObjectKey, source.PreviewMIME, source.PreviewBytes, source.PreviewSHA256 = completed.ObjectKey, completed.MIMEType, completed.ByteSize, completed.SHA256
 		}
-		if _, headErr := s.TestingStore.Head(r.Context(), source.PreviewObjectKey); errors.Is(headErr, ErrLibraryObjectNotFound) {
+		if _, headErr := s.Store.Head(r.Context(), source.PreviewObjectKey); errors.Is(headErr, ErrLibraryObjectNotFound) {
 			if s.mediaProcessor == nil {
 				writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"code": "preview_unavailable"})
 				return
 			}
-			sourceReader, sourceMetadata, openSourceErr := s.TestingStore.Open(r.Context(), source.ObjectKey)
+			sourceReader, sourceMetadata, openSourceErr := s.Store.Open(r.Context(), source.ObjectKey)
 			if openSourceErr != nil {
 				writeLibraryError(w, openSourceErr)
 				return
@@ -133,7 +133,7 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 				return
 			}
 			replacementKey := "library/" + strings.ReplaceAll(uuid.NewString(), "-", "")
-			putErr := s.TestingStore.Put(r.Context(), replacementKey, previewReader, LibraryObjectMetadata{ByteSize: rendered.ByteSize, SHA256: rendered.SHA256, MIMEType: rendered.MIMEType})
+			putErr := s.Store.Put(r.Context(), replacementKey, previewReader, LibraryObjectMetadata{ByteSize: rendered.ByteSize, SHA256: rendered.SHA256, MIMEType: rendered.MIMEType})
 			_ = previewReader.Close()
 			if putErr != nil {
 				writeLibraryError(w, putErr)
@@ -141,22 +141,22 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 			}
 			repairedKey, repairErr := s.database.ReplaceMissingLibraryPreviewDeduplicationObject(r.Context(), userID, spaceID, itemID, source.SourceIdentity, source.PreviewObjectKey, replacementKey)
 			if repairErr != nil {
-				_ = s.TestingStore.Delete(r.Context(), replacementKey)
+				_ = s.Store.Delete(r.Context(), replacementKey)
 				writeLibraryError(w, repairErr)
 				return
 			}
 			if repairedKey != replacementKey {
-				_ = s.TestingStore.Delete(r.Context(), replacementKey)
+				_ = s.Store.Delete(r.Context(), replacementKey)
 			}
 			source.PreviewObjectKey = repairedKey
 		} else if headErr != nil {
 			writeLibraryError(w, headErr)
 			return
 		}
-		if TestingWriteLibraryPreviewCacheHeaders(w, r, source.PreviewSHA256) {
+		if WriteLibraryPreviewCacheHeaders(w, r, source.PreviewSHA256) {
 			return
 		}
-		reader, metadata, err := s.TestingStore.Open(r.Context(), source.PreviewObjectKey)
+		reader, metadata, err := s.Store.Open(r.Context(), source.PreviewObjectKey)
 		if err != nil {
 			writeLibraryError(w, err)
 			return
@@ -175,7 +175,7 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 	}
 }
 
-func TestingWriteLibraryPreviewCacheHeaders(w http.ResponseWriter, r *http.Request, sha string) bool {
+func WriteLibraryPreviewCacheHeaders(w http.ResponseWriter, r *http.Request, sha string) bool {
 	etag := `"` + sha + `"`
 	w.Header().Set("ETag", etag)
 	w.Header().Add("Vary", "Authorization")
@@ -205,7 +205,7 @@ func (s *SpaceLibraryService) DownloadAttachment() http.HandlerFunc {
 			writeLibraryError(w, err)
 			return
 		}
-		s.TestingWriteDownload(w, r, download)
+		s.WriteDownload(w, r, download)
 	}
 }
 

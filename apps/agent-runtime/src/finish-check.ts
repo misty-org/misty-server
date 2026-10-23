@@ -40,6 +40,10 @@ function failed(output: unknown): boolean {
 /** Whether a call changed something: a non-read Composio action, or a tool the catalog marks as a write. */
 export function isWrite(toolName: string, input: unknown, readOnly: (name: string) => boolean): boolean {
   if (bookkeeping.test(toolName)) return false;
+  // Opening a tab and running a program in the agent's own tabs are the actions of a request such
+  // as "open their channels": a run that did them has done something, not only read (the check
+  // refused a correct finish, and the run ended "did not finish").
+  if (toolName === "screen_open" || toolName === "browser_run") return true;
   if (toolName === "integration_execute") {
     const slug = String((input as { tool_slug?: unknown } | undefined)?.tool_slug ?? "").toUpperCase();
     return slug !== "" && !readAction.test(slug);

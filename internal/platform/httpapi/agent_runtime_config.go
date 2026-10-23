@@ -18,7 +18,7 @@ import (
 
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 const (

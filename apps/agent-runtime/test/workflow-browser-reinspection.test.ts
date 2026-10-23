@@ -2,14 +2,14 @@ import { beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ completions: [] as any[], actions: [] as string[], active: [] as string[][], turn: 0 }));
 vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "test-runtime" }), FatalError: class extends Error {}, RetryableError: class extends Error {}, defineHook: () => ({}) }));
 vi.mock("../src/control-plane.js", () => ({ controlPlaneRequest: async (_: unknown, operation: string, body: unknown) => {
-  if (operation === "context") return { model_id: "fixture/model", system: "", prompt: "Click the inspected target", allowed_tools: ["browser.click", "browser.inspect"] };
+  if (operation === "context") return { model_id: "fixture/model", system: "", prompt: "Click the inspected target", allowed_tools: ["browser.upload", "browser.inspect"] };
   if (operation === "complete") fixture.completions.push(body);
   if (operation === "steering") return { messages: [], closed: true };
     if (operation === "budget") return { version: 1, remaining_ms: 1800000, active: true, deadline: new Date(Date.now()+1800000).toISOString() };
   return {};
 } }));
 vi.mock("../src/mcp-runtime.js", () => ({
-  discoverRemoteMCPTools: async () => ({ supported: true, tools: ["browser.click", "browser.inspect"].map(name => ({ name, description: name, inputSchema: { type: "object", properties: {} } })) }),
+  discoverRemoteMCPTools: async () => ["browser.upload", "browser.inspect"].map(name => ({ name, description: name, inputSchema: { type: "object", properties: {} } })),
   requestMCPToolExecution: async (_: unknown, __: unknown, ___: unknown, name: string) => {
     fixture.actions.push(name);
     return { result: fixture.actions.length === 1 ? { status: "failure", reason: "browser_snapshot_stale", attempted: false } : { ok: true } };
@@ -34,7 +34,7 @@ import { runSpaceTaskAgent } from "../workflows/space-task-agent.js";
 beforeEach(() => { fixture.completions=[]; fixture.actions=[]; fixture.active=[]; fixture.turn=0; });
 it("requires a new inspection turn and then permits a freshly planned browser action", async () => {
   await runSpaceTaskAgent({ mistyRunId: "run-test", controlPlaneURL: "https://api.test" });
-  expect(fixture.actions).toEqual(["browser.click", "browser.inspect", "browser.click"]);
+  expect(fixture.actions).toEqual(["browser.upload", "browser.inspect", "browser.upload"]);
   expect(fixture.active[1]).toHaveLength(1);
   expect(fixture.active[2]!.length).toBeGreaterThan(1);
   expect(fixture.completions[0].status).toBe("success");

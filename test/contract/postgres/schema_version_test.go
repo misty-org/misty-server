@@ -4,11 +4,11 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestLatestMigrationVersionMatchesNewestMigrationFile(t *testing.T) {
-	version, err := TestingLatestMigrationVersion()
+	version, err := LatestMigrationVersion()
 	if err != nil {
 		t.Fatalf("latestMigrationVersion() error = %v", err)
 	}
@@ -20,7 +20,7 @@ func TestLatestMigrationVersionMatchesNewestMigrationFile(t *testing.T) {
 func TestCheckSchemaVersionPassesForFullyMigratedDatabase(t *testing.T) {
 	database := openTestDatabase(t)
 
-	if err := database.TestingCheckSchemaVersion(); err != nil {
+	if err := database.CheckSchemaVersion(); err != nil {
 		t.Fatalf("checkSchemaVersion() on a freshly migrated test database returned an error: %v", err)
 	}
 }
@@ -48,7 +48,7 @@ func TestCheckSchemaVersionDetectsADatabaseMissingTheLatestMigration(t *testing.
 		}
 	})
 
-	if err := database.TestingCheckSchemaVersion(); err == nil {
+	if err := database.CheckSchemaVersion(); err == nil {
 		t.Fatal("checkSchemaVersion() did not return an error for a database missing the latest migration")
 	}
 }

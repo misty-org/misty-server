@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Conversation history for one turn follows the common harness pattern: the
@@ -102,7 +102,7 @@ func (s *SpacesService) conversationHistory(ctx context.Context, record *db.AIIn
 		log.Printf("conversation notes unavailable for %s: %v", record.ConversationID, err)
 		summary = nil
 	}
-	plan := planConversationHistory(turns, record.ID, summary, conversationHistoryBudget(serveragent.ModelContextWindow(ctx, modelID)))
+	plan := planConversationHistory(turns, record.ID, summary, conversationHistoryBudget(agent.ModelContextWindow(ctx, modelID)))
 	missing := false
 	if len(plan.summarize) > 0 {
 		updated, err := s.extendConversationSummary(ctx, record, summary, plan, conversationSummaryWait)

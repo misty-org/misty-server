@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 
 	"github.com/go-chi/chi/v5"
 )

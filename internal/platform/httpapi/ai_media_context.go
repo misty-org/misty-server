@@ -9,7 +9,7 @@ import (
 
 // A question at the cursor can carry what the video in front of the person was saying:
 // its title, address, the current time and the captions around it, read from the page
-// on the device (src-tauri browser_media_session.rs). It is page data, never instructions.
+// on the device (src-tauri browser/page_tools/media_tools/session.rs). It is page data, never instructions.
 
 const (
 	maxMediaTranscriptLines = 200

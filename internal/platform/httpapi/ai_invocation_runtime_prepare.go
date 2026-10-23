@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	serveragent "github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 type preparedAIInvocationRuntime struct {
@@ -187,7 +187,7 @@ func aiInvocationModelID(body aiInvocationInput) string {
 }
 
 // invocationHistoryTurns is the chat's earlier turns: the ones its device sent
-// (docs/design/agent-chats-local/BRIEF.md), or the server's own recent ones for a run
+// (docs/agents/chats-local.md), or the server's own recent ones for a run
 // without them, such as a goal continuation or one Misty started by email or Slack.
 func (s *SpacesService) invocationHistoryTurns(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput) ([]db.AIConversationTurnRecord, error) {
 	if len(body.HistoryTurns) == 0 {

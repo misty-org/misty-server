@@ -20,7 +20,7 @@ func TestSpacePersonalItemsKeepFavoritesIndependentFromVisits(t *testing.T) {
 	// Seed only membership infrastructure: this contract exercises personal
 	// metadata, independently of Space creation's billing integrations.
 	spaceID := "space_personal_items_test"
-	err = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	err = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO security_domains(id,kind,owner_user_id,space_id) VALUES('sd_personal_items_test','space',$1,$2)`, owner.ID, spaceID); err != nil {
 			return err
 		}
@@ -60,7 +60,7 @@ func TestSpacePersonalItemsKeepFavoritesIndependentFromVisits(t *testing.T) {
 	if _, err = database.UpdateSpacePersonalItem(ctx, owner.ID, spaceID, "settings:private", nil, true); err == nil {
 		t.Fatal("invalid item accepted")
 	}
-	err = database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	err = database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,'member')`, spaceID, other.ID)
 		return err
 	})

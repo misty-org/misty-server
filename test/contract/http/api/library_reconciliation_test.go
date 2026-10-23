@@ -10,7 +10,7 @@ import (
 
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestMemoryLibraryObjectInventoryPagesWithoutOpeningBodies(t *testing.T) {
@@ -58,17 +58,17 @@ func TestObjectMatchesExpectationRequiresSizeAndChecksum(t *testing.T) {
 		ByteSize:  12,
 		SHA256:    strings.Repeat("a", 64),
 	}
-	if !TestingObjectMatchesExpectation(LibraryObjectMetadata{
+	if !ObjectMatchesExpectation(LibraryObjectMetadata{
 		ByteSize: 12, SHA256: strings.Repeat("a", 64),
 	}, expected) {
 		t.Fatal("matching immutable metadata was rejected")
 	}
-	if TestingObjectMatchesExpectation(LibraryObjectMetadata{
+	if ObjectMatchesExpectation(LibraryObjectMetadata{
 		ByteSize: 13, SHA256: strings.Repeat("a", 64),
 	}, expected) {
 		t.Fatal("size mismatch was accepted")
 	}
-	if TestingObjectMatchesExpectation(LibraryObjectMetadata{
+	if ObjectMatchesExpectation(LibraryObjectMetadata{
 		ByteSize: 12, SHA256: strings.Repeat("b", 64),
 	}, expected) {
 		t.Fatal("checksum mismatch was accepted")

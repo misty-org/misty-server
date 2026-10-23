@@ -2,6 +2,7 @@
   "name": "@misty/agent-runtime",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "nitro dev",
@@ -12,12 +13,8 @@
     "eval:pointing": "vitest run --config evals/pointing/vitest.config.ts",
     "world:setup": "bootstrap",
     "postinstall": "node scripts/patch-workflow-schema.ts",
-    "eval:browser": "vitest run --config evals/browser/vitest.config.ts",
-    "eval:code": "vitest run --config evals/code/vitest.config.ts",
-    "eval:workflows": "vitest run --config evals/workflows/vitest.config.ts",
     "eval:odysseys": "vitest run --config evals/odysseys/vitest.config.ts",
     "eval:free-model": "vitest run --config evals/free-model/vitest.config.ts",
-    "trace": "node evals/browser/trace.ts",
     "eval:voice": "vitest run --config evals/voice/vitest.config.ts"
   },
   "dependencies": {
@@ -35,7 +32,6 @@
     "@workflow/serde": "4.1.0",
     "@workflow/world-local": "4.2.4",
     "@workflow/world-postgres": "4.3.3",
-    "@workflow/world-vercel": "4.6.2",
     "ai": "7.0.66",
     "ajv-formats": "3.0.1",
     "express": "5.2.1",

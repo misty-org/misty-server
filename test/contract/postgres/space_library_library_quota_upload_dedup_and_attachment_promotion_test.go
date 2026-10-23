@@ -4,14 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestLibraryQuotaUploadDedupAndAttachmentPromotion(t *testing.T) {
 	database := openTestDatabase(t)

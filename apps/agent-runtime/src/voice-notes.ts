@@ -18,7 +18,7 @@ const voiceNotesRequest = z.object({
   language: z.string().max(16).optional(),
   maxOutputTokens: z.number().int().min(256).max(16_000).optional(),
 });
-export type VoiceNotesRequest = z.infer<typeof voiceNotesRequest>;
+type VoiceNotesRequest = z.infer<typeof voiceNotesRequest>;
 
 const result = z.object({
   title: z.string(),
@@ -26,7 +26,6 @@ const result = z.object({
   actionItems: z.array(z.object({ text: z.string(), owner: z.string().optional(), due: z.string().optional() })),
   chapters: z.array(z.object({ start: z.number(), title: z.string(), summary: z.string() })),
 });
-export type VoiceNotesResult = z.infer<typeof result>;
 
 export const voiceNotesSystem = `You write notes from a transcript of speech for the person who captured it.
 Rules:

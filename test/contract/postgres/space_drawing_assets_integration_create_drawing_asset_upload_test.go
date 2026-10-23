@@ -2,14 +2,11 @@ package db
 
 import (
 	"errors"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func createDrawingAssetUpload(
 	t *testing.T,

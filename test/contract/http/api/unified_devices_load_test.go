@@ -22,7 +22,7 @@ import (
 
 func uuidString() string { return uuid.NewString() }
 
-// Load check for the device channel (docs/plans/devices-unification.md): many
+// Load check for the device channel (docs/sync/devices.md): many
 // idle sockets cost no database work between liveness batches. Opt in with
 // MISTY_DEVICE_LOAD_TEST=5000 (the socket count).
 func TestDeviceChannelIdleSocketsCostNoDatabaseWork(t *testing.T) {

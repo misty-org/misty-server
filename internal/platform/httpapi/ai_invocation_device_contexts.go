@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func validateAIInvocationDeviceContexts(references []aiContextReference, contexts []aiInvocationDeviceContext, spaceID string) error {

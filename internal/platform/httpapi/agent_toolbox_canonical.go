@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 const canonicalAgentToolSource = "canonical_run"
@@ -53,7 +53,3 @@ func activeBrowserGrantTabs(grants []db.AgentDeviceGrant) []string {
 	}
 	return tabs
 }
-
-
-
-

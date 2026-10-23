@@ -3,7 +3,7 @@ import { classifyToolOutcome, handoffMessage } from "./tool-outcomes.js";
 
 /**
  * Replays a workflow's saved browser actions before any model call
- * (agentic-browser plan, Phase 3). Each saved step names its control by
+ * (docs/agents/harness.md, Workflows as memory). Each saved step names its control by
  * locator; the device finds it on the current page. Calls run through the same
  * gateway as the model's: authorized, journaled and approval-gated. The first
  * step the page no longer matches hands the task to the agent.
@@ -15,7 +15,7 @@ export interface BrowserReplay {
   recorded_at?: string;
 }
 
-export type ReplayOutcome =
+type ReplayOutcome =
   | { kind: "completed"; text: string; actions: number }
   /** The page no longer matched; the agent continues from here. */
   | { kind: "diverged"; note: string; actions: number }

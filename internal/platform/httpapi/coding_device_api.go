@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // CodingApproval asks the person before a change a coding tool wants, with the
@@ -82,11 +82,11 @@ func codingGrantNeed(run *codingRun, action, repo, tool, path, command string) (
 	switch action {
 	case "git.push":
 		if repo == "" {
-			return grantNeed{action: serveragent.GrantGitPush}, "Push commits"
+			return grantNeed{action: agent.GrantGitPush}, "Push commits"
 		}
-		return grantNeed{action: serveragent.GrantGitPush, scopeKind: serveragent.ScopeRepo, scopeID: repo, label: "push to " + repo}, "Push to " + repo
+		return grantNeed{action: agent.GrantGitPush, scopeKind: agent.ScopeRepo, scopeID: repo, label: "push to " + repo}, "Push to " + repo
 	case "project.install":
-		return grantNeed{action: serveragent.GrantProjectInstall, scopeKind: serveragent.ScopeProject, scopeID: project, label: "install packages in this project"},
+		return grantNeed{action: agent.GrantProjectInstall, scopeKind: agent.ScopeProject, scopeID: project, label: "install packages in this project"},
 			"Install: " + truncateAgentRuntimeText(command, 160)
 	}
 	title := "Change files in the project"
@@ -95,7 +95,7 @@ func codingGrantNeed(run *codingRun, action, repo, tool, path, command string) (
 	} else if path != "" {
 		title = "Edit " + truncateAgentRuntimeText(path, 160)
 	}
-	return grantNeed{action: serveragent.GrantProjectEdit, scopeKind: serveragent.ScopeProject, scopeID: project, label: "edit files in this project"}, title
+	return grantNeed{action: agent.GrantProjectEdit, scopeKind: agent.ScopeProject, scopeID: project, label: "edit files in this project"}, title
 }
 
 // CodingEnginesReport saves which coding tools a device has:

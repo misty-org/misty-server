@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/google/uuid"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +33,7 @@ func TestAgentRuntimeDeploymentPinSurvivesConfigurationChanges(t *testing.T) {
 		t.Fatalf("worker silently replaced: %#v %v", again, err)
 	}
 	for _, column := range []string{"runtime_adapter_version", "runtime_endpoint", "runtime_callback_endpoint"} {
-		err := database.TestingSpaceTx(t.Context(), func(tx *sql.Tx) error {
+		err := database.SpaceTx(t.Context(), func(tx *sql.Tx) error {
 			_, err := tx.ExecContext(t.Context(), `UPDATE ai_invocations SET `+column+`='replacement' WHERE id=$1`, id)
 			return err
 		})

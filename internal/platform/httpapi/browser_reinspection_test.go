@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestBrowserUnavailableMCPErrorPreservesPublicReason(t *testing.T) {

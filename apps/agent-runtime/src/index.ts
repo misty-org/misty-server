@@ -6,7 +6,7 @@ import { embedCall, generateTextCall, modelCallFailure, speechCall, transcribeCa
 import { transcribeDiarizedCall } from "./transcribe-diarized.js";
 import { voiceNotesCall } from "./voice-notes.js";
 import { daySummaryCall } from "./day-summary.js";
-import { vercelHarness as harness } from "./vercel-harness.js";
+import { workflowHarness as harness } from "./workflow-harness.js";
 import { MISTY_HARNESS_VERSION } from "./harness.js";
 import { controlPlaneURL } from "./control-plane.js";
 import {

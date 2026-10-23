@@ -20,9 +20,9 @@ vi.mock("../src/control-plane.js", () => ({
   },
 }));
 vi.mock("../src/mcp-runtime.js", () => ({
-  discoverRemoteMCPTools: async () => ({ supported: true, tools: [{ name: "browser.read", description: "read", inputSchema: { type: "object", properties: {} } }] }),
+  discoverRemoteMCPTools: async () => [{ name: "browser.read", description: "read", inputSchema: { type: "object", properties: {} } }],
 }));
-vi.mock("../src/compaction-step.js", () => ({
+vi.mock("../src/context/compaction-step.js", () => ({
   summarizeOlderSteps: async (_identity: unknown, _model: string, older: ModelMessage[], window: number, sequence: number) => {
     fixture.summaries.push({ older: older.length, window, sequence });
     return "Done so far: read the first pages.";

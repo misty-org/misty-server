@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ModelMessage } from "ai";
-import { condense, summarizedSteps, type Condenser } from "../src/condenser.js";
+import { condense, summarizedSteps, type Condenser } from "../src/context/condenser.js";
 import { toolState, toolUseTool } from "../src/toolsets.js";
 
 const text = (content: string): ModelMessage => ({ role: "user", content });

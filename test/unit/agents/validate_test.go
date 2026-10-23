@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/agents"
+	. "github.com/kannachi323/misty/server/internal/agent"
 )
 
 func TestValidateFilePlanAcceptsSafePlan(t *testing.T) {

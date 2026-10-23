@@ -4,13 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"testing"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	"testing"
 )
-
-
-import ()
 
 func TestSpaceAgentWriteCallbacksAreIdempotent(t *testing.T) {
 	database := openTestDatabase(t)

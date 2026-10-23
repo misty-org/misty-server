@@ -2,11 +2,9 @@ package db
 
 import (
 	"context"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"testing"
 )
-
-import ()
 
 func testLibraryLifecycle(
 	t *testing.T,

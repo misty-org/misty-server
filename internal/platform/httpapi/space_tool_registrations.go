@@ -2,7 +2,7 @@ package api
 
 import (
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // spaceToolRegistrations are Space-bound tools with their own handlers, beside

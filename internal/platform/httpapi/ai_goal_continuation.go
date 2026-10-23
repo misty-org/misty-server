@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // afterAIInvocationGoalRun counts a finished run against its conversation's goal

@@ -7,13 +7,13 @@ import (
 	"sync"
 	"time"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 
 	"github.com/google/uuid"
 )
 
 func Run() {
-	runtimeConfig := envconfig.LoadRuntime()
+	runtimeConfig := config.LoadRuntime()
 
 	server, err := CreateServer()
 	if err != nil {
@@ -70,7 +70,7 @@ func Run() {
 	}
 
 	log.Printf("Misty server running on :%s", runtimeConfig.Port)
-	if err := runHTTPServer(TestingNewHTTPServer(":"+runtimeConfig.Port, server.Router), stopWorkers); err != nil {
+	if err := runHTTPServer(NewHTTPServer(":"+runtimeConfig.Port, server.Router), stopWorkers); err != nil {
 		panic(err)
 	}
 	log.Println("Misty server stopped")

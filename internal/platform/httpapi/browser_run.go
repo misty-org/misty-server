@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-// browser.run (docs/plans/agent-harness-v3.md, change 1): the agent writes a short program against
+// browser.run (docs/agents/harness.md, browser_run): the agent writes a short program against
 // a page API, and the computer the run was sent from runs it in a sandbox against the agent's own
 // tabs. One call can open pages, act on them and read many items, where a step tool takes a turn
 // for each. Every page call is the device operation a step tool would run, under the run's grant
@@ -28,27 +28,29 @@ const browserRunDescription = "Run a short JavaScript program in your own browse
 	"openTab(url) opens a new tab of yours and waits for it to load; listTabs() lists your tabs; getTab(idOrUrlPart) finds one. On a tab: " +
 	"read({maxChars}) gives {url, title, tree} with a ref on each control; text({maxChars}) gives the page as markdown; find(words) gives [{ref, line}]; " +
 	"goto(url); click(target); type(target, text, {submit: true}) types like a person (search boxes, suggestions); fill(target, text); select(target, value); " +
-	"check(target); hover(target); press(key, target); scroll(\"down\"); waitFor({text | textGone | urlIncludes, timeoutMs}); keep() marks a page the person asked to keep open. " +
+	"check(target); hover(target); press(key, target); scroll(\"down\"); scrollTo(text) brings text into view; waitFor({text | textGone | urlIncludes, timeoutMs}); keep() marks a page the person asked to keep open. " +
+	"openTab, getTab and listTabs are async: await them. A page left open as proof is pictured as it stands at the end, so scrollTo the text that shows what you report first. " +
 	"A target is a ref from read() such as \"e12\", a locator {role: \"button\", name: \"Search\"}, or words such as \"Search button\". " +
 	"note(object) records a finding; log(...) prints. A failed step throws with the real reason: catch it or let the program end there. " +
 	"Example: const t = await openTab(\"https://example.com\"); await t.type({role: \"searchbox\", name: \"\"}, \"joggers\", {submit: true}); " +
-	"await t.waitFor({text: \"results\"}); return (await t.text({maxChars: 6000})).text;"
+	"await t.waitFor({text: \"results\"}); return (await t.text({maxChars: 6000})).text; " +
+	"A video is a source too (a tutorial's steps are in it): open its page, try { await t.click(\"Show transcript\"); } catch (e) {}, then read t.text() for the title, description and spoken steps, and summarize them."
 
 func (s *SpacesService) browserRunRegistration() agenttools.Registration {
 	descriptor := screenDescriptor(browserRunTool, browserRunDescription,
 		map[string]any{"code": map[string]any{"type": "string", "minLength": 1, "maxLength": maxProgramCode, "description": "The program body (JavaScript)."}},
 		"code")
-	descriptor.Risk = serveragent.RiskWrite
+	descriptor.Risk = agent.RiskWrite
 	descriptor.Idempotent = false
 	return agenttools.Registration{Descriptor: descriptor, Handler: s.browserRunHandler}
 }
 
-func (s *SpacesService) browserRunHandler(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) browserRunHandler(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		Code string `json:"code"`
 	}
 	if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.Code) == "" || len(input.Code) > maxProgramCode {
-		return nil, serveragent.ErrInvalidRequest("Pass the program as code (1–20000 characters).")
+		return nil, agent.ErrInvalidRequest("Pass the program as code (1–20000 characters).")
 	}
 	record, err := s.database.AIInvocationByID(ctx, invocation.UserID, invocation.RunID)
 	if err != nil {
@@ -60,7 +62,7 @@ func (s *SpacesService) browserRunHandler(ctx context.Context, invocation agentt
 	}
 	target := sessionTarget(contexts)
 	if target == nil || !contextAllows(target, browserRunTool) {
-		return nil, serveragent.ErrInvalidRequest("This run has no browser of its own on this computer, so browser_run is not available; use screen_open and the page tools.")
+		return nil, agent.ErrInvalidRequest("This run has no browser of its own on this computer, so browser_run is not available; use screen_open and the page tools.")
 	}
 	name, online := s.deviceDisplayName(ctx, record.UserID, target.DeviceID)
 	if !online {
@@ -74,9 +76,9 @@ func (s *SpacesService) browserRunHandler(ctx context.Context, invocation agentt
 	}
 	waitCtx, cancel := context.WithTimeout(ctx, browserRunWait)
 	defer cancel()
-	jobInput := TestingMustAPIRawJSON(map[string]any{"scopeId": target.OpaqueRef, "conversationId": record.ConversationID, "code": input.Code})
+	jobInput := MustAPIRawJSON(map[string]any{"scopeId": target.OpaqueRef, "conversationId": record.ConversationID, "code": input.Code})
 	job, err := s.database.QueueAIInvocationDeviceNodeJob(waitCtx, record.UserID, record.ID, "browser_run_"+request.ID, 1, target.OpaqueRef, browserRunTool, browserRunTool, jobInput,
-		TestingMustAPIRawJSON(config), TestingMustAPIRawJSON(map[string]any{"type": "object"}), agentToolObjectOutputSchema())
+		MustAPIRawJSON(config), MustAPIRawJSON(map[string]any{"type": "object"}), agentToolObjectOutputSchema())
 	if err != nil {
 		return nil, err
 	}

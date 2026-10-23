@@ -1,0 +1,203 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+func hasSpacePermissionTx(ctx context.Context, tx *sql.Tx, userID, spaceID, permission string) (bool, error) {
+	role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
+	if err != nil {
+		return false, err
+	}
+	// Owners can do everything; every other member can do everything except
+	// manage the Space itself. There are no roles or per-member overrides.
+	if role == "owner" {
+		return true, nil
+	}
+	return fixedMemberPermission(permission), nil
+}
+
+func fixedMemberPermission(permission string) bool {
+	switch permission {
+	case PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload,
+		PermissionLibraryView, PermissionLibraryUpload, PermissionLibraryAdd,
+		PermissionLibraryEdit, PermissionLibraryDownload, PermissionLibraryImport,
+		PermissionStorageViewOwn, PermissionStudioView, PermissionAskRun:
+		return true
+	default:
+		return false
+	}
+}
+
+func requireSpacePermissionTx(ctx context.Context, tx *sql.Tx, userID, spaceID, permission string) error {
+	allowed, err := hasSpacePermissionTx(ctx, tx, userID, spaceID, permission)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrLibraryForbidden
+	}
+	return nil
+}
+
+func (db *Database) SpaceStorageUsage(ctx context.Context, userID, spaceID string) (*SpaceStorageUsage, error) {
+	out := &SpaceStorageUsage{SpaceID: spaceID}
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionStorageViewOwn); err != nil {
+			return err
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT owner_user_id FROM spaces WHERE id=$1`, spaceID).Scan(&out.OwnerUserID); err != nil {
+			return err
+		}
+		if out.OwnerUserID == userID {
+			// Keep the selected Space counter authoritative at read time. Older
+			// deployments can leave the derived cache at zero even though its
+			// contribution and reservation ledgers contain storage.
+			if _, err := tx.ExecContext(ctx, `WITH actual AS (
+				SELECT
+					COALESCE((SELECT sum(logical_bytes) FROM space_storage_contributions WHERE space_id=$1 AND state IN ('active','recovery')),0) used,
+					COALESCE((SELECT sum(reserved_bytes) FROM space_upload_reservations WHERE space_id=$1 AND state='active'),0)
+					+ COALESCE((SELECT sum(reserved_bytes) FROM space_rendition_reservations WHERE space_id=$1 AND state='active'),0) reserved
+			)
+			UPDATE space_storage_usage u
+			SET used_bytes=actual.used,reserved_bytes=actual.reserved,version=u.version+1,updated_at=NOW()
+			FROM actual
+			WHERE u.space_id=$1 AND (u.used_bytes<>actual.used OR u.reserved_bytes<>actual.reserved)`, spaceID); err != nil {
+				return err
+			}
+		}
+		quota, err := storageQuotaStateTx(ctx, tx, userID, spaceID, false)
+		if err != nil {
+			return err
+		}
+		out.Personal, out.Space = quota.Personal, quota.Space
+		out.PersonalUsedBytes, out.PersonalReservedBytes = quota.Personal.UsedBytes, quota.Personal.ReservedBytes
+		out.PersonalLimitBytes, out.PersonalRemainingBytes, out.PersonalOverQuota = quota.Personal.LimitBytes, quota.Personal.RemainingBytes, quota.Personal.OverQuota
+		out.SpaceUsedBytes, out.SpaceReservedBytes = quota.Space.UsedBytes, quota.Space.ReservedBytes
+		out.SpaceLimitBytes, out.SpaceRemainingBytes, out.SpaceOverQuota = quota.Space.LimitBytes, quota.Space.RemainingBytes, quota.Space.OverQuota
+		out.UsedBytes, out.ReservedBytes, out.LimitBytes, out.RemainingBytes = quota.Personal.UsedBytes, quota.Personal.ReservedBytes, quota.Personal.LimitBytes, quota.Personal.RemainingBytes
+		if err := tx.QueryRowContext(ctx, `SELECT version FROM space_storage_usage WHERE space_id=$1`, spaceID).Scan(&out.Version); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (db *Database) CreateLibraryUpload(ctx context.Context, userID, spaceID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time) (*LibraryUpload, error) {
+	return db.CreateLibraryUploadForConversation(ctx, userID, spaceID, "", purpose, filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt)
+}
+
+func (db *Database) CreateLibraryUploadForConversation(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time) (*LibraryUpload, error) {
+	return db.CreateLibraryUploadWithProvenance(ctx, userID, spaceID, conversationID, purpose, filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt, nil)
+}
+
+// CreateLibraryUploadWithProvenance starts an upload. With provenance, the
+// uploader's agent made the file and it becomes a Space item of the agent's
+// Space when it finishes.
+func (db *Database) CreateLibraryUploadWithProvenance(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time, provenance *AgentArtifactProvenance) (*LibraryUpload, error) {
+	permission, purposeKnown := UploadPurposePermission(purpose)
+	maxBytes := MaxUploadBytesForPurpose(purpose)
+	if !purposeKnown || byteSize < 1 || byteSize > maxBytes || byteSize > MaxSpaceStorageBytes || len(clientSHA) != 64 || filename == "" || objectKey == "" || tokenHash == "" {
+		return nil, ErrLibraryInvalid
+	}
+	out := &LibraryUpload{ID: "upload_" + uuid.NewString(), SpaceID: spaceID, UserID: userID, ObjectKey: objectKey, OriginalFilename: filename, Purpose: purpose, ClientDeclaredMIMEType: declaredMIME, RequestedByteSize: byteSize, ClientSHA256: clientSHA, State: "initiated", UploadTokenHash: tokenHash, ExpiresAt: expiresAt, Version: 1}
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, permission); err != nil {
+			return err
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT security_domain_id FROM spaces WHERE id=$1 FOR SHARE`, spaceID).Scan(&out.SecurityDomainID); err != nil {
+			return err
+		}
+		if provenance != nil {
+			if err := requireAgentArtifactUploadTx(ctx, tx, userID, spaceID, purpose, provenance); err != nil {
+				return err
+			}
+		}
+		if purpose == "attachment" {
+			if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
+				return err
+			}
+			if conversationID != "" {
+				if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
+					return err
+				}
+			}
+		}
+		if _, err := reserveStorageQuotaTx(ctx, tx, userID, spaceID, byteSize); err != nil {
+			return err
+		}
+		if err := tx.QueryRowContext(ctx, `INSERT INTO space_library_uploads(id,space_id,security_domain_id,user_id,object_key,original_filename,purpose,client_declared_mime_type,requested_byte_size,client_sha256,state,upload_token_hash,expires_at,conversation_id)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'initiated',$11,$12,NULLIF($13,'')) RETURNING created_at,updated_at`, out.ID, spaceID, out.SecurityDomainID, userID, objectKey, filename, purpose, declaredMIME, byteSize, clientSHA, tokenHash, expiresAt, conversationID).Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_upload_reservations(upload_id,space_id,user_id,reserved_bytes,state,expires_at) VALUES($1,$2,$3,$4,'active',$5)`, out.ID, spaceID, userID, byteSize, expiresAt); err != nil {
+			return err
+		}
+		if provenance != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE space_library_uploads SET agent_id=$2,agent_conversation_id=NULLIF($3,''),agent_run_id=NULLIF($4,''),agent_artifact_kind=$5 WHERE id=$1`,
+				out.ID, provenance.AgentID, provenance.ConversationID, provenance.RunID, provenance.Kind); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE space_storage_usage SET reserved_bytes=reserved_bytes+$1,version=version+1,updated_at=NOW() WHERE space_id=$2`, byteSize, spaceID); err != nil {
+			return err
+		}
+		return insertLibraryAuditTx(ctx, tx, spaceID, out.SecurityDomainID, userID, "library.upload.initiated", "upload", out.ID, "success", map[string]any{"purpose": purpose, "reserved_bytes": byteSize})
+	})
+	return out, err
+}
+
+func (db *Database) LibraryUpload(ctx context.Context, userID, spaceID, uploadID string) (*LibraryUpload, error) {
+	out := &LibraryUpload{}
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
+			return ErrLibraryForbidden
+		}
+		return scanLibraryUpload(tx.QueryRowContext(ctx, `SELECT id,space_id,security_domain_id,user_id,object_key,original_filename,purpose,client_declared_mime_type,requested_byte_size,client_sha256,verified_byte_size,COALESCE(verified_sha256,''),COALESCE(detected_mime_type,''),state,COALESCE(file_id,''),upload_token_hash,COALESCE(error_code,''),expires_at,version,created_at,updated_at FROM space_library_uploads WHERE id=$1 AND space_id=$2 AND user_id=$3`, uploadID, spaceID, userID), out)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrLibraryNotFound
+	}
+	return out, err
+}
+
+// LibraryUploadDeduplicationObjectKey returns the object currently selected as
+// the deduplication target for an upload. The object store must verify this key
+// before finalization reuses it; a ready database row alone does not prove the
+// immutable object still exists in R2.
+func (db *Database) LibraryUploadDeduplicationObjectKey(ctx context.Context, userID, spaceID, uploadID string) (string, error) {
+	var objectKey string
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		canUploadLibrary, err := hasSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryUpload)
+		if err != nil {
+			return err
+		}
+		canUploadAttachment, err := hasSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAttachmentUpload)
+		if err != nil {
+			return err
+		}
+		if !canUploadLibrary && !canUploadAttachment {
+			return ErrLibraryForbidden
+		}
+		err = tx.QueryRowContext(ctx, `SELECT b.r2_object_key
+			FROM space_library_uploads u
+			JOIN library_blobs b ON b.security_domain_id=u.security_domain_id AND b.sha256=u.client_sha256 AND b.byte_size=u.requested_byte_size AND b.lifecycle_state='ready'
+			WHERE u.id=$1 AND u.space_id=$2 AND u.user_id=$3 AND u.state='uploaded_unverified' AND b.r2_object_key<>u.object_key
+			LIMIT 1`, uploadID, spaceID, userID).Scan(&objectKey)
+		if errors.Is(err, sql.ErrNoRows) {
+			objectKey = ""
+			return nil
+		}
+		return err
+	})
+	return objectKey, err
+}

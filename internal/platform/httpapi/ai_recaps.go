@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	agent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 var aiRecapSurfaceIDs = map[string]bool{"global": true, "activity": true}
@@ -29,7 +29,7 @@ func (s *AIService) Recaps() http.HandlerFunc {
 		}
 		items, err := s.database.AIRecaps(r.Context(), userID, space)
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"recaps": items})
@@ -70,7 +70,7 @@ func (s *AIService) Recap() http.HandlerFunc {
 			Timezone: strings.TrimSpace(body.Timezone), Prompt: strings.TrimSpace(body.Prompt),
 		}, time.Now().UTC())
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"recap": item})

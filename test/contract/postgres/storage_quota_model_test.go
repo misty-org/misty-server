@@ -3,15 +3,12 @@ package db
 import (
 	"context"
 	"errors"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func joinQuotaTestSpace(t *testing.T, database *Database, ctx context.Context, owner User, member User, name string) Space {
 	t.Helper()

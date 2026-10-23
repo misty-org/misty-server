@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
@@ -27,14 +27,14 @@ func TestAgentItemToolsPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,'member')`, work.ID, teammate.ID)
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// This account lets agents act without approval cards.
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO ai_user_settings(user_id,app_actions_ask) VALUES($1,false) ON CONFLICT(user_id) DO UPDATE SET app_actions_ask=false`, owner.ID)
 		return err
 	}); err != nil {

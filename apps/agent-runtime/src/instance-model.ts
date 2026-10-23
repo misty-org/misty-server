@@ -43,7 +43,7 @@ export class InstanceModel implements LanguageModelV4 {
 }
 
 /** How long a model stream may go without a part before it counts as stalled. */
-export const STREAM_STALL_MS = 120_000;
+const STREAM_STALL_MS = 120_000;
 
 /**
  * A provider stream that stops sending would otherwise hold the step for the run's whole time

@@ -14,8 +14,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 func TestAgentModelTurnBudgetRuntimeEndpoint(t *testing.T) {

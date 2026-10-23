@@ -19,7 +19,7 @@ var usageLimitMessages = map[string]string{
 	// Too many new agent tasks at once, not an allowance: it clears as tasks finish.
 	"concurrency": "Too many agent tasks are running at once. Wait for one to finish, then try again.",
 	"rate":        "You're starting agent tasks faster than they can run. Wait a minute, then try again.",
-	"email":   "Confirm your email to start using AI. Check your inbox for the link.",
+	"email":       "Confirm your email to start using AI. Check your inbox for the link.",
 }
 
 func writeBillingError(w http.ResponseWriter, err error) {

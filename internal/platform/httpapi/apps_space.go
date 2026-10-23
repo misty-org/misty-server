@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 	"github.com/kannachi323/misty/server/internal/integrations/composio"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // A run uses the person's own connected accounts, never anyone else's.
@@ -93,11 +93,11 @@ func (s *SpacesService) loadRunApps(ctx context.Context, client *composio.Client
 func appsNeedError(apps runApps, toolkit string, need appsNeed) error {
 	switch need {
 	case appsNeedConnect:
-		return serveragent.ErrInvalidRequest("The user has not connected " + toolkit + ". Call integration_connect with app " + toolkit + " first.")
+		return agent.ErrInvalidRequest("The user has not connected " + toolkit + ". Call integration_connect with app " + toolkit + " first.")
 	case appsNeedChoose:
-		return serveragent.ErrInvalidRequest("The user has several " + toolkit + " accounts. Pass account as one of: " + apps.choices(toolkit) + ".")
+		return agent.ErrInvalidRequest("The user has several " + toolkit + " accounts. Pass account as one of: " + apps.choices(toolkit) + ".")
 	case appsNeedOther:
-		return serveragent.ErrInvalidRequest("That " + toolkit + " account isn't one of the user's. Pass account as one of: " + apps.choices(toolkit) + ", or leave it out.")
+		return agent.ErrInvalidRequest("That " + toolkit + " account isn't one of the user's. Pass account as one of: " + apps.choices(toolkit) + ", or leave it out.")
 	}
 	return nil
 }

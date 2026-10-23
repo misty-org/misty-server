@@ -1,5 +1,5 @@
 // Counts the request asks for, checked against the answer without a model call
-// (docs/plans/agent-harness-v3.md, change 4). A run reported "completed" with 8 of the 10
+// (docs/agents/harness.md, Completion). A run reported "completed" with 8 of the 10
 // pediatricians asked for, and the model review let it stand (Odysseys, October 20).
 //
 // For each "at least N things" (or "N things", "around N things") in the request, the answer's
@@ -11,7 +11,7 @@ const asked = /\b(?:at least|minimum of|around|about|exactly|find|list|compare|o
 /** Words that follow a number without naming things to list. */
 const notThings = /^(minutes?|hours?|days?|weeks?|months?|years?|times?|steps?|percent|dollars?|stars?|miles?|tabs?|pages?|sections?|sentences?|words?|points?|options?)$/i;
 
-export interface CountRequirement {
+interface CountRequirement {
   count: number;
   thing: string;
 }
@@ -56,7 +56,7 @@ function sections(answer: string): Section[] {
 }
 
 /** Requested counts the answer's matching section falls short of. */
-export function countShortfalls(request: string, answer: string): Array<CountRequirement & { listed: number }> {
+function countShortfalls(request: string, answer: string): Array<CountRequirement & { listed: number }> {
   const parts = sections(answer);
   const short: Array<CountRequirement & { listed: number }> = [];
   for (const requirement of requestedCounts(request)) {

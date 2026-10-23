@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestAgentRuntimeStartReceiptsRecoverWithoutResubmission(t *testing.T) {
@@ -92,7 +92,7 @@ func TestAgentRuntimeStartReceiptsRecoverWithoutResubmission(t *testing.T) {
 		t.Fatalf("activation receipt not recovered: %#v %v", receipt, err)
 	}
 	canceled := create()
-	if err := database.TestingSpaceTx(t.Context(), func(tx *sql.Tx) error {
+	if err := database.SpaceTx(t.Context(), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(t.Context(), `UPDATE ai_invocations SET state='canceled' WHERE id=$1`, canceled)
 		return err
 	}); err != nil {

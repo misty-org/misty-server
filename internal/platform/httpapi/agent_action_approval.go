@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // confirmAgentAction applies the run's Ask or Auto to one of Misty's own
@@ -32,10 +32,10 @@ func (s *SpacesService) gateAction(ctx context.Context, invocation agenttools.In
 		return nil, nil, err
 	}
 	switch decided.decision {
-	case serveragent.DecisionAllow:
+	case agent.DecisionAllow:
 		return nil, nil, nil
-	case serveragent.DecisionDeny:
-		return nil, nil, serveragent.ErrInvalidRequest("“" + title + "” is not allowed for this agent. Do not retry it; continue without it or ask the user.")
+	case agent.DecisionDeny:
+		return nil, nil, agent.ErrInvalidRequest("“" + title + "” is not allowed for this agent. Do not retry it; continue without it or ask the user.")
 	}
 	title, summary = truncateAgentRuntimeText(title, 200), truncateAgentRuntimeText(summary, 3800)
 	request := db.AgentAppRequest{
@@ -67,16 +67,16 @@ func (s *SpacesService) gateAction(ctx context.Context, invocation agenttools.In
 	case "approved":
 		return pending, nil, nil
 	case "pending":
-		return nil, TestingMustAPIRawJSON(map[string]any{
+		return nil, MustAPIRawJSON(map[string]any{
 			"status": "awaiting_approval", "request": pending.ID,
 			"message":      "An approval card for “" + title + "” is showing in the chat. This run ends here and continues after the user decides.",
 			"user_message": "“" + title + "” is waiting for your approval above.",
 		}), nil
 	case "declined":
-		return nil, nil, serveragent.ErrInvalidRequest("The user declined “" + title + "”. Do not retry it; continue without it or ask the user.")
+		return nil, nil, agent.ErrInvalidRequest("The user declined “" + title + "”. Do not retry it; continue without it or ask the user.")
 	}
 	// An approval that timed out counts as declined.
-	return nil, nil, serveragent.ErrInvalidRequest("The approval request for “" + title + "” expired without an answer, which counts as declined. Call the tool again to ask the user again.")
+	return nil, nil, agent.ErrInvalidRequest("The approval request for “" + title + "” expired without an answer, which counts as declined. Call the tool again to ask the user again.")
 }
 
 // useAgentActionApproval consumes an approval right before the action runs,
@@ -90,7 +90,7 @@ func (s *SpacesService) useAgentActionApproval(ctx context.Context, userID strin
 		return err
 	}
 	if !used {
-		return serveragent.ErrInvalidRequest("that approval was already used; call the tool again to ask the user again")
+		return agent.ErrInvalidRequest("that approval was already used; call the tool again to ask the user again")
 	}
 	return nil
 }

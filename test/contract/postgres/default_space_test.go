@@ -3,11 +3,9 @@ package db
 import (
 	"context"
 	"errors"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"testing"
 )
-
-import ()
 
 func TestEveryAccountStartsWithAProtectedPersonalSpace(t *testing.T) {
 	database := openTestDatabase(t)

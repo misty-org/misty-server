@@ -5,13 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 // Exercise the production claim/begin/renew path against PostgreSQL, including
 // revocation of a download's source after its destination job was admitted.

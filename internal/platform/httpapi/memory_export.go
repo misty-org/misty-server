@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // MemoryExport downloads everything Memory kept as a zip: memory.jsonl with

@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	agent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // scheduledRunTrigger marks invocations a workflow schedule started. The stored
@@ -62,7 +62,7 @@ func (s *AIService) WorkflowSchedule() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"schedule": saved})
 		case http.MethodDelete:
 			if err := s.database.DeleteWorkflowSchedule(r.Context(), userID, methodID); err != nil {
-				TestingWriteAIError(w, err)
+				WriteAIError(w, err)
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
@@ -260,7 +260,7 @@ func (s *AIService) UpcomingWorkflowRuns() http.HandlerFunc {
 		}
 		items, err := s.database.UpcomingWorkflowRuns(r.Context(), userID)
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"runs": items})

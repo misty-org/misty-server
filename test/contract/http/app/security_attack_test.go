@@ -188,7 +188,7 @@ func TestAttackForgedInternalAndCrossSiteCalls(t *testing.T) {
 	server := attackServer(t)
 	user := registerAttackUser(t, server, "forge_user", "198.51.100.40:4000")
 	for _, path := range []string{
-		"/internal/agent-runtime/runs/run_00000000-0000-0000-0000-000000000000/tools",
+		"/internal/agent-runtime/runs/run_00000000-0000-0000-0000-000000000000/events",
 		"/internal/agent-runtime/runs/run_00000000-0000-0000-0000-000000000000/complete",
 		"/mcp",
 	} {

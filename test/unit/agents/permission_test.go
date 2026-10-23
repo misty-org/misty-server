@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/agents"
+	. "github.com/kannachi323/misty/server/internal/agent"
 )
 
 func TestPermissionPolicyModes(t *testing.T) {
@@ -32,7 +32,7 @@ func TestPermissionPolicyModes(t *testing.T) {
 }
 
 func TestToolRequestsAreBoundToManifestAndManifestRisk(t *testing.T) {
-	requests, rejected := TestingAuthorizeToolRequests(ToolManifest{Tools: []ToolDefinition{{Name: "provider.send_message", Risk: RiskDangerous}}}, []ToolRequest{
+	requests, rejected := AuthorizeToolRequests(ToolManifest{Tools: []ToolDefinition{{Name: "provider.send_message", Risk: RiskDangerous}}}, []ToolRequest{
 		{ID: "allowed", Name: "provider.send_message", Risk: RiskRead, Arguments: json.RawMessage(`{"channel":"C1"}`)},
 		{ID: "unknown", Name: "provider.delete_all", Risk: RiskRead, Arguments: json.RawMessage(`{}`)},
 		{ID: "malformed", Name: "provider.send_message", Risk: RiskRead, Arguments: json.RawMessage(`[]`)},

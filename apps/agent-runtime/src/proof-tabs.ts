@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 
-// Proof tabs (docs/plans/agent-harness-v2.md, change 2). Odysseys asks for pages "kept open"
+// Proof tabs (docs/agents/harness.md, Completion). Odysseys asks for pages "kept open"
 // as proof in most of its tasks, and those items failed most often: the agent read the page with
 // a fetch, closed the tab, or left it on a generic page or behind a dialog. When the request asks
 // for pages left open, the first finish goes back once, unless the agent has just listed its
@@ -30,10 +30,15 @@ function calledRecently(messages: ModelMessage[], tool: string, within = 4): boo
 }
 
 /** The reason to send a finish back to check its tabs, or undefined. */
-export function proofTabsRefusal(request: string, messages: ModelMessage[], tabList: string): string | undefined {
-  if (!asksForOpenPages(request) || calledRecently(messages, tabList)) return undefined;
+export function proofTabsRefusal(request: string, messages: ModelMessage[], tabList: string | undefined, program?: string): string | undefined {
+  if (!asksForOpenPages(request) || (!program && (!tabList || calledRecently(messages, tabList)))) return undefined;
+  // A run with programs checks its own tabs with one (the person's tab list is not its to use),
+  // and brings what it reports into view: each kept tab is pictured as it stands at the end.
+  const how = program
+    ? `call ${program} with \`return listTabs()\` (every tab's address and title) and, for each page the request names, \`await t.scrollTo("the text that shows what you report")\` so the evidence is on screen, then \`await t.keep()\` so the tab stays awake and is pictured when you finish (a tab you do not keep() sleeps)`
+    : `call ${tabList}`;
   return (
-    `The person asked for pages to be left open, and those tabs are part of the answer. Before finishing, call ${tabList} ` +
+    `The person asked for pages to be left open, and those tabs are part of the answer. Before finishing, ${how}, ` +
     "and check each page the request names against your tabs: it is open in its own tab, on the right page (the item, not a search " +
     "or home page), in the state asked for (the search run, the option or size chosen, scrolled to the evidence) and not covered by " +
     "a dialog or banner. Open or fix any that are missing, then call agent_finish again."
@@ -45,7 +50,7 @@ const errorPage = /\b404\b|page not found|not found|can.?t (find|locate)|no long
 
 /**
  * Kept tabs (browser_run's keep()) that end on an error or empty page, from the run's latest
- * program results (docs/plans/agent-harness-v3.md, change 4): the proof the person asked to see
+ * program results (docs/agents/harness.md, Completion): the proof the person asked to see
  * must show the page, not "We Can't Find That Page".
  */
 export function brokenProofTabs(messages: ModelMessage[]): string[] {

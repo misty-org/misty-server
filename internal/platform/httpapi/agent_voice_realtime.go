@@ -52,7 +52,7 @@ func (s *AgentsService) AgentVoiceRealtimeTicket() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, http.StatusCreated, map[string]any{"ticket": token, "expires_in": 60 })
+		writeJSON(w, http.StatusCreated, map[string]any{"ticket": token, "expires_in": 60})
 	}
 }
 

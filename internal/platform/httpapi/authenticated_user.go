@@ -2,7 +2,7 @@ package api
 
 import (
 	"github.com/kannachi323/misty/server/internal/accounts"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"net/http"
 )
 

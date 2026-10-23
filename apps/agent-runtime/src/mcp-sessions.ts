@@ -3,8 +3,8 @@ import { resolveMCPEndpoint } from "./mcp-endpoint.js";
 import type { MCPRunAccess } from "./types.js";
 
 /**
- * One MCP session per run instead of one per tool call (agentic-browser plan,
- * Phase 2). A run keeps its five-minute bearer until a minute before it
+ * One MCP session per run instead of one per tool call (docs/agents/harness.md,
+ * Device jobs). A run keeps its five-minute bearer until a minute before it
  * expires and one connected client, so most calls skip the token exchange and
  * the MCP handshake. Go still authorizes every request against the run's
  * binding; the bearer only ever names this run. A session missing here (a

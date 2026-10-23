@@ -65,7 +65,7 @@ func (s *SpaceLibraryService) ProcessRenditionJobs(ctx context.Context, workerID
 		if job == nil {
 			return processed, nil
 		}
-		reader, metadata, err := s.TestingStore.Open(ctx, job.SourceObjectKey)
+		reader, metadata, err := s.Store.Open(ctx, job.SourceObjectKey)
 		if err != nil || metadata.ByteSize != job.SourceBytes || metadata.SHA256 != job.SourceSHA256 {
 			if reader != nil {
 				_ = reader.Close()
@@ -89,7 +89,7 @@ func (s *SpaceLibraryService) ProcessRenditionJobs(ctx context.Context, workerID
 			processed++
 			continue
 		}
-		putErr := s.TestingStore.Put(ctx, objectKey, output, LibraryObjectMetadata{ByteSize: rendered.ByteSize, SHA256: rendered.SHA256, MIMEType: rendered.MIMEType})
+		putErr := s.Store.Put(ctx, objectKey, output, LibraryObjectMetadata{ByteSize: rendered.ByteSize, SHA256: rendered.SHA256, MIMEType: rendered.MIMEType})
 		_ = output.Close()
 		if putErr != nil {
 			rendered.Cleanup()
@@ -100,13 +100,13 @@ func (s *SpaceLibraryService) ProcessRenditionJobs(ctx context.Context, workerID
 		completed, completeErr := s.database.CompleteLibraryRenditionJob(ctx, job, objectKey, rendered.MIMEType, rendered.ByteSize, rendered.SHA256)
 		rendered.Cleanup()
 		if completeErr != nil {
-			_ = s.TestingStore.Delete(ctx, objectKey)
+			_ = s.Store.Delete(ctx, objectKey)
 			_ = s.database.FailLibraryRenditionJob(ctx, job, "rendition_finalize_failed")
 			processed++
 			continue
 		}
 		if completed.DiscardObjectKey != "" {
-			if err := s.TestingStore.Delete(ctx, completed.DiscardObjectKey); err != nil && !errors.Is(err, ErrLibraryObjectNotFound) {
+			if err := s.Store.Delete(ctx, completed.DiscardObjectKey); err != nil && !errors.Is(err, ErrLibraryObjectNotFound) {
 				return processed, err
 			}
 		}
@@ -129,7 +129,7 @@ func (s *SpaceLibraryService) PurgeExpiredRenditions(ctx context.Context, limit 
 			return purged, nil
 		}
 		if candidate.ObjectKey != "" {
-			if err := s.TestingStore.Delete(ctx, candidate.ObjectKey); err != nil && !errors.Is(err, ErrLibraryObjectNotFound) {
+			if err := s.Store.Delete(ctx, candidate.ObjectKey); err != nil && !errors.Is(err, ErrLibraryObjectNotFound) {
 				_ = s.database.FailLibraryRenditionPurge(ctx, candidate)
 				return purged, err
 			}

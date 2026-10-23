@@ -4,7 +4,7 @@
 // success/failure parse. A rubric scores 1 when the trajectory satisfies it; a task is
 // perfect when every rubric does. Differences from the official runs are only the judge
 // model (MISTY_ODYSSEYS_JUDGE: a Claude model on Misty's own key, or a free `nim/` model, see
-// docs/plans/free-model-evals.md) and a cap of 60 pictures
+// docs/agents/evals/free-model.md) and a cap of 60 pictures
 // (the recorder skips unchanged ones, so long runs rarely reach it).
 import { readFileSync } from "node:fs";
 import { streamText } from "ai";
@@ -34,13 +34,15 @@ Thoughts: <your reasoning, citing specific steps/screenshots>
 Status: "success" or "failure"
 `;
 
-export interface RubricResult {
+interface RubricResult {
   id: string;
+  /** The model that gave the verdict: the fallback when the judge model was down. */
+  judgedBy?: string;
   success: boolean;
   reasoning: string;
 }
 
-export interface TaskVerdict {
+interface TaskVerdict {
   rubrics: RubricResult[];
   average: number;
   perfect: boolean;
@@ -64,10 +66,14 @@ export async function judgeTask(model: string, task: OdysseysTask, steps: Step[]
   let inputTokens = 0;
   let outputTokens = 0;
   // Each rubric item is judged on its own, as the original does; the calls run together,
-  // except on a free model's rate limit (docs/plans/free-model-evals.md), where a few at a time
+  // except on a free model's rate limit (docs/agents/evals/free-model.md), where a few at a time
   // (judgeLanes) keep a 429 from being graded as a failed rubric.
-  const free = model.startsWith("nim/");
+  const free = model.startsWith("nim/") || model.startsWith("gemini/");
+  const fallbackModel = process.env.MISTY_ODYSSEYS_JUDGE_FALLBACK?.trim() ?? "";
   const judgeOne = async (rubric: OdysseysTask["rubrics"][number]): Promise<RubricResult> => {
+    // The judge's model, until it fails for its own reasons (a free tier's 503s last for hours): then
+    // this rubric, and the next ones, are judged by the fallback model, and the result says so.
+    let judge = model;
     const lines = [`Rubric ID: ${rubric.id}`, `Requirement: ${rubric.requirement.trim()}`, ...(rubric.verification.trim() ? [`Verification: ${rubric.verification.trim()}`] : [])];
     const text = `User Task (context only): ${task.prompt.trim()}\n\nEvaluate ONLY this rubric item:\n${lines.join("\n")}` +
       `\n\nFull Action History:\n${history}\n\nScreenshots attached below: ${images.length} (trajectory had ${steps.length} total step(s)).` +
@@ -80,9 +86,9 @@ export async function judgeTask(model: string, task: OdysseysTask, steps: Step[]
       const look = setInterval(() => Date.now() - heard > 180_000 && quiet.abort(), 15_000);
       try {
         const stream = streamText({
-          model: new RoutedModel(model, { provider: "instance", reasoning: "low" }),
+          model: new RoutedModel(judge, { provider: "instance", reasoning: "low" }),
           // A free model thinks before it answers; room for both, or the verdict can come back empty.
-          system, maxOutputTokens: free ? 16_000 : 4_000, maxRetries: free ? 6 : 2, abortSignal: quiet.signal,
+          system, maxOutputTokens: free ? 16_000 : 4_000, maxRetries: free && !fallbackModel ? 6 : 2, abortSignal: quiet.signal,
           messages: [{ role: "user", content: [{ type: "text" as const, text }, ...images] }],
           onChunk: () => { heard = Date.now(); },
         });
@@ -100,8 +106,18 @@ export async function judgeTask(model: string, task: OdysseysTask, steps: Step[]
       // rubric): ask again, twice at most.
       const verdict = (reply: { text: string }) => /Status:\s*["']?(success|failure)/i.test(reply.text);
       for (let attempt = 0; !result || (!verdict(result) && attempt < 3); attempt++) {
-        result = await ask().catch((error: unknown) => {
-          if (attempt < 2 && String(error).includes("judge_quiet")) return undefined;
+        result = await ask().catch(async (error: unknown) => {
+          // A quiet call, a rate limit or a provider error says nothing about the run: wait
+          // longer each time and ask again, rather than grading the agent on the judge's outage.
+          if (attempt < 5 && /judge_quiet|429|rate.?limit|quota|exhaust|overload|unavailable|50\d|fetch failed/i.test(String(error))) {
+            if (fallbackModel && judge !== fallbackModel) {
+              process.stderr.write(`JUDGE_FALLBACK ${rubric.id}: ${judge} -> ${fallbackModel}\n`);
+              judge = fallbackModel;
+              return undefined;
+            }
+            await new Promise((done) => setTimeout(done, 30_000 * (attempt + 1)));
+            return undefined;
+          }
           throw error;
         });
       }
@@ -109,7 +125,7 @@ export async function judgeTask(model: string, task: OdysseysTask, steps: Step[]
       outputTokens += result.usage.outputTokens ?? 0;
       const status = /Status:\s*["']?(success|failure)["']?/i.exec(result.text);
       const thoughts = /Thoughts:\s*([\s\S]+?)(?:Status:|$)/.exec(result.text);
-      return { id: rubric.id, success: status?.[1]?.toLowerCase() === "success", reasoning: (thoughts?.[1] ?? result.text).trim().slice(0, 1_200) };
+      return { id: rubric.id, judgedBy: judge, success: status?.[1]?.toLowerCase() === "success", reasoning: (thoughts?.[1] ?? result.text).trim().slice(0, 1_200) };
     } catch (error) {
       return { id: rubric.id, success: false, reasoning: `Error judging rubric ${rubric.id}: ${String(error).slice(0, 300)}` };
     }

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Collaboration tools let an agent ask structured questions, propose a plan in
@@ -93,7 +93,7 @@ func planModeTools(toolbox *agenttools.Registry, names []string) []string {
 	allowed := make([]string, 0, len(names))
 	for _, name := range names {
 		// Delegated coding inherits Plan: the tool gets a read-only launch.
-		if (risk[name] == serveragent.RiskRead || name == codeDelegateTool) && planModeToolPermitted(name) {
+		if (risk[name] == agent.RiskRead || name == codeDelegateTool) && planModeToolPermitted(name) {
 			allowed = append(allowed, name)
 		}
 	}

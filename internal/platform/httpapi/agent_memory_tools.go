@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 const (
@@ -18,13 +18,13 @@ const (
 
 func memoryAgentToolDescriptors() []agenttools.Descriptor {
 	return []agenttools.Descriptor{
-		{Name: "memory.pref.list", Version: 1, Description: "Review what this agent remembers for the user in this Space. With a query, returns the memories closest in meaning first, so \"seat preference\" finds \"I like aisle seats\".", Risk: serveragent.RiskRead, InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "maxLength": 500}}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
-		{Name: "memory.pref.update", Version: 1, Description: "Correct a durable preference only when the user explicitly asks to change what is remembered. Preserve the existing scope. Use the memory ID from memory_pref_list.", Risk: serveragent.RiskWrite, InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "required": []string{"memoryId", "content"}, "properties": map[string]any{"memoryId": map[string]any{"type": "string", "maxLength": 200}, "content": map[string]any{"type": "string", "minLength": 1, "maxLength": 1000}}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalExplicitIntent, Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources, AuditEvent: "misty.memory.updated"},
+		{Name: "memory.pref.list", Version: 1, Description: "Review what this agent remembers for the user in this Space. With a query, returns the memories closest in meaning first, so \"seat preference\" finds \"I like aisle seats\".", Risk: agent.RiskRead, InputSchema: MustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "maxLength": 500}}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources},
+		{Name: "memory.pref.update", Version: 1, Description: "Correct a durable preference only when the user explicitly asks to change what is remembered. Preserve the existing scope. Use the memory ID from memory_pref_list.", Risk: agent.RiskWrite, InputSchema: MustAPIRawJSON(map[string]any{"type": "object", "required": []string{"memoryId", "content"}, "properties": map[string]any{"memoryId": map[string]any{"type": "string", "maxLength": 200}, "content": map[string]any{"type": "string", "minLength": 1, "maxLength": 1000}}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true, Sources: agentToolboxSpaceSources, AuditEvent: "misty.memory.updated"},
 		{
 			Name: toolboxMemoryRemember, Version: 1,
 			Description: "Remember a concise fact, preference, or standing instruction only when the user explicitly asks Misty to remember it. Never store credentials, secrets, financial identifiers, health records, or inferred sensitive traits.",
-			Risk:        serveragent.RiskWrite,
-			InputSchema: TestingMustAPIRawJSON(map[string]any{
+			Risk:        agent.RiskWrite,
+			InputSchema: MustAPIRawJSON(map[string]any{
 				"type": "object", "required": []string{"content", "kind", "scope"},
 				"properties": map[string]any{
 					"content": map[string]any{"type": "string", "minLength": 1, "maxLength": 1000},
@@ -33,32 +33,32 @@ func memoryAgentToolDescriptors() []agenttools.Descriptor {
 					"reason":  map[string]any{"type": "string", "maxLength": 500},
 				}, "additionalProperties": false,
 			}),
-			OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalExplicitIntent,
-			Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "misty.memory.remembered",
+			OutputSchema: agentToolObjectOutputSchema(),
+			Layer:        agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "misty.memory.remembered",
 			Sources: agentToolboxSpaceSources,
 		},
 		{
 			Name: toolboxMemoryForget, Version: 1,
 			Description: "Forget one remembered item when the user explicitly asks. Use the exact memory ID provided in remembered context.",
-			Risk:        serveragent.RiskWrite,
-			InputSchema: TestingMustAPIRawJSON(map[string]any{
+			Risk:        agent.RiskWrite,
+			InputSchema: MustAPIRawJSON(map[string]any{
 				"type": "object", "required": []string{"memoryId"},
 				"properties":           map[string]any{"memoryId": map[string]any{"type": "string", "minLength": 1, "maxLength": 200}},
 				"additionalProperties": false,
 			}),
-			OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalExplicitIntent,
-			Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "misty.memory.forgotten",
+			OutputSchema: agentToolObjectOutputSchema(),
+			Layer:        agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true, AuditEvent: "misty.memory.forgotten",
 			Sources: agentToolboxSpaceSources,
 		},
 	}
 }
 
-func executeAgentMemoryTool(ctx context.Context, database *db.Database, actor spaceConversationToolActor, tool serveragent.ToolRequest) (json.RawMessage, bool, error) {
+func executeAgentMemoryTool(ctx context.Context, database *db.Database, actor spaceConversationToolActor, tool agent.ToolRequest) (json.RawMessage, bool, error) {
 	if tool.Name != toolboxMemoryRemember && tool.Name != toolboxMemoryForget && tool.Name != "memory.pref.list" && tool.Name != "memory.pref.update" {
 		return nil, false, nil
 	}
 	if database == nil {
-		return nil, true, workflowv2.ErrCapabilityDenied
+		return nil, true, workflow.ErrCapabilityDenied
 	}
 	// Every memory tool reads and writes only the run's Space.
 	space, err := actorMemorySpace(ctx, database, actor)
@@ -95,7 +95,7 @@ func executeAgentMemoryTool(ctx context.Context, database *db.Database, actor sp
 		if err := database.UpdateAgentMemory(ctx, actor.userID, actor.agentID, space, input.MemoryID, input.Content); err != nil {
 			return nil, true, err
 		}
-		return TestingMustAPIRawJSON(map[string]any{"updated": true, "memory_id": input.MemoryID}), true, nil
+		return MustAPIRawJSON(map[string]any{"updated": true, "memory_id": input.MemoryID}), true, nil
 	}
 	if tool.Name == toolboxMemoryForget {
 		var input struct {
@@ -107,7 +107,7 @@ func executeAgentMemoryTool(ctx context.Context, database *db.Database, actor sp
 		if err := database.ForgetMistyMemory(ctx, actor.userID, space, input.MemoryID, actor.agentID); err != nil {
 			return nil, true, err
 		}
-		return TestingMustAPIRawJSON(map[string]any{"forgotten": true, "memory_id": input.MemoryID}), true, nil
+		return MustAPIRawJSON(map[string]any{"forgotten": true, "memory_id": input.MemoryID}), true, nil
 	}
 	var input struct {
 		Content string `json:"content"`
@@ -123,7 +123,7 @@ func executeAgentMemoryTool(ctx context.Context, database *db.Database, actor sp
 		return nil, true, db.ErrSpaceInvalid
 	}
 	if mistyMemoryLooksSensitive(input.Content) {
-		return nil, true, serveragent.ErrInvalidRequest("secrets and credentials are never remembered")
+		return nil, true, agent.ErrInvalidRequest("secrets and credentials are never remembered")
 	}
 	item, err := database.RememberMistyMemory(ctx, actor.userID, db.RememberMistyMemoryInput{
 		AgentID: actor.agentID, SpaceID: space, Kind: input.Kind, Content: input.Content, Reason: input.Reason,
@@ -132,7 +132,7 @@ func executeAgentMemoryTool(ctx context.Context, database *db.Database, actor sp
 	if err != nil {
 		return nil, true, err
 	}
-	return TestingMustAPIRawJSON(map[string]any{
+	return MustAPIRawJSON(map[string]any{
 		"remembered": true, "memory_id": item.ID, "scope": input.Scope, "kind": item.Kind,
 	}), true, nil
 }

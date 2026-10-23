@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // screen.close closes one of the agent's own extra tabs: a sign-in page, a duplicate or a
 // page the person did not ask to keep, so the tabs left open at the end are the ones the
-// request named (docs/plans/odysseys-campaign.md). The run's first tab stays; it is the
+// request named (docs/agents/evals/odysseys.md). The run's first tab stays; it is the
 // session's, and the agent navigates it instead.
 const screenCloseTool = "screen.close"
 
@@ -28,12 +28,12 @@ func (s *SpacesService) screenCloseRegistration() agenttools.Registration {
 	}
 }
 
-func (s *SpacesService) screenCloseHandler(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) screenCloseHandler(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		ScopeID string `json:"scopeId"`
 	}
 	if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.ScopeID) == "" {
-		return nil, serveragent.ErrInvalidRequest("Pass the scopeId of the tab to close.")
+		return nil, agent.ErrInvalidRequest("Pass the scopeId of the tab to close.")
 	}
 	record, err := s.database.AIInvocationByID(ctx, invocation.UserID, invocation.RunID)
 	if err != nil {
@@ -48,7 +48,7 @@ func (s *SpacesService) screenCloseHandler(ctx context.Context, invocation agent
 	}
 	target := sessionTarget(contexts)
 	if target == nil {
-		return nil, serveragent.ErrInvalidRequest("This run has no tabs of its own to close.")
+		return nil, agent.ErrInvalidRequest("This run has no tabs of its own to close.")
 	}
 	own := ownTabs(contexts, target.DeviceID)
 	index := -1
@@ -59,9 +59,9 @@ func (s *SpacesService) screenCloseHandler(ctx context.Context, invocation agent
 	}
 	switch {
 	case index < 0:
-		return nil, serveragent.ErrInvalidRequest("That is not one of your own tabs. Your tabs: " + strings.Join(own, ", ") + ".")
+		return nil, agent.ErrInvalidRequest("That is not one of your own tabs. Your tabs: " + strings.Join(own, ", ") + ".")
 	case index == 0:
-		return nil, serveragent.ErrInvalidRequest("Your first tab stays open; navigate it to a page the person wants instead.")
+		return nil, agent.ErrInvalidRequest("Your first tab stays open; navigate it to a page the person wants instead.")
 	}
 	name, online := s.deviceDisplayName(ctx, record.UserID, target.DeviceID)
 	if !online {
@@ -73,10 +73,10 @@ func (s *SpacesService) screenCloseHandler(ctx context.Context, invocation agent
 	}
 	waitCtx, cancel := context.WithTimeout(ctx, remoteSessionWait)
 	defer cancel()
-	jobInput := TestingMustAPIRawJSON(map[string]any{"scopeId": target.OpaqueRef, "conversationId": record.ConversationID, "closeScope": input.ScopeID})
-	config := TestingMustAPIRawJSON(map[string]any{"agentId": agentID})
+	jobInput := MustAPIRawJSON(map[string]any{"scopeId": target.OpaqueRef, "conversationId": record.ConversationID, "closeScope": input.ScopeID})
+	config := MustAPIRawJSON(map[string]any{"agentId": agentID})
 	job, err := s.database.QueueAIInvocationDeviceNodeJob(waitCtx, record.UserID, record.ID, "browser_close_"+request.ID, 1, target.OpaqueRef, remoteSessionOp, remoteSessionOp, jobInput, config,
-		TestingMustAPIRawJSON(map[string]any{"type": "object"}), agentToolObjectOutputSchema())
+		MustAPIRawJSON(map[string]any{"type": "object"}), agentToolObjectOutputSchema())
 	if err != nil {
 		return nil, err
 	}

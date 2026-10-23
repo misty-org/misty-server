@@ -9,9 +9,9 @@ import (
 	"slices"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Test hooks: run one Space or chat tool through the same toolbox resolution
@@ -28,7 +28,7 @@ func TestingExecuteSpaceConversationTool(ctx context.Context, database *db.Datab
 		SessionID: "testing:" + userID + ":" + spaceID,
 	}
 	digest := sha256.Sum256([]byte(prompt + "\x00" + name + "\x00" + string(arguments)))
-	return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, serveragent.ToolRequest{ID: "test-" + hex.EncodeToString(digest[:]), Name: name, Arguments: arguments})
+	return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, agent.ToolRequest{ID: "test-" + hex.EncodeToString(digest[:]), Name: name, Arguments: arguments})
 }
 
 func TestingResolveAIInvocationSpaceToolNames(ctx context.Context, database *db.Database, userID, spaceID, invocationID, prompt string) ([]string, error) {
@@ -55,10 +55,10 @@ func TestingExecuteAIInvocationSpaceToolWithConversation(ctx context.Context, da
 	if err != nil {
 		return nil, err
 	}
-	if !slices.ContainsFunc(manifest.Tools, func(tool serveragent.ToolDefinition) bool { return tool.Name == name }) {
+	if !slices.ContainsFunc(manifest.Tools, func(tool agent.ToolDefinition) bool { return tool.Name == name }) {
 		return nil, agenttools.ErrCapabilityDenied
 	}
-	return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, serveragent.ToolRequest{
+	return executeSpaceAgentToolbox(ctx, toolbox, invocation, database, agent.ToolRequest{
 		ID: "testing-" + name, Name: name, Arguments: arguments,
 	})
 }
@@ -72,6 +72,6 @@ func TestingAdmitToolInvocation(ctx context.Context, database *db.Database, user
 	} else if !errors.Is(err, db.ErrSpaceNotFound) {
 		return err
 	}
-	_, _, err := database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{ID: id, UserID: userID, SpaceID: spaceID, SurfaceID: "notes", Mode: "quick", Trigger: "selection", State: "running", IdempotencyKey: id, RequestPayload: TestingMustAPIRawJSON(map[string]any{"prompt": prompt}), ExpiresAt: time.Now().Add(time.Hour)})
+	_, _, err := database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{ID: id, UserID: userID, SpaceID: spaceID, SurfaceID: "notes", Mode: "quick", Trigger: "selection", State: "running", IdempotencyKey: id, RequestPayload: MustAPIRawJSON(map[string]any{"prompt": prompt}), ExpiresAt: time.Now().Add(time.Hour)})
 	return err
 }

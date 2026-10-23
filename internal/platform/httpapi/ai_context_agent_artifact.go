@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func (broker aiContextBroker) resolveAgentArtifact(ctx context.Context, userID string, reference aiContextReference) (aiResolvedContext, bool, error) {

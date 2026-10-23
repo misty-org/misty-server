@@ -29,7 +29,7 @@ func TestCookieCSRFProtection(t *testing.T) {
 			r.Header.Set("Origin", item.origin)
 			r.Header.Set("X-Misty-CSRF", item.header)
 			if item.cookie {
-				r.AddCookie(&http.Cookie{Name: api.TestingSessionCookieName, Value: "session"})
+				r.AddCookie(&http.Cookie{Name: api.SessionCookieName, Value: "session"})
 			}
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, r)

@@ -41,11 +41,11 @@ func TestCaptureUsesOnlySafeServerProperties(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &TestingPostHogClient{
-		TestingToken: "phc_test", TestingHost: server.URL, TestingEnvironment: "production", TestingServerVersion: "1.0.0",
-		TestingHttp: server.Client(), TestingQueue: make(chan TestingCapture, 4), TestingDone: make(chan struct{}),
+	client := &PostHogClient{
+		Token: "phc_test", Host: server.URL, Environment: "production", ServerVersion: "1.0.0",
+		HTTP: server.Client(), Queue: make(chan Capture, 4), Done: make(chan struct{}),
 	}
-	go client.TestingRun()
+	go client.Run()
 	client.UserRegistered("opaque-user-id", "alice@example.com", "production")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -78,7 +78,7 @@ func TestServerPropertiesAreAllowlisted(t *testing.T) {
 	if TestingSafeStatus("card_number") != "canceled" {
 		t.Fatal("unsafe status was retained")
 	}
-	if TestingSafePlatform("alice@example.com") {
+	if SafePlatform("alice@example.com") {
 		t.Fatal("unsafe platform was retained")
 	}
 }

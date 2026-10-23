@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 type memberRequestFixture struct {
@@ -54,7 +54,7 @@ func newMemberRequestFixture(t *testing.T) memberRequestFixture {
 
 func addTestSpaceMember(t *testing.T, database *Database, spaceID, userID string) {
 	t.Helper()
-	if err := database.TestingSpaceTx(context.Background(), func(tx *sql.Tx) error {
+	if err := database.SpaceTx(context.Background(), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(context.Background(), `INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,'member')`, spaceID, userID)
 		return err
 	}); err != nil {
@@ -64,7 +64,7 @@ func addTestSpaceMember(t *testing.T, database *Database, spaceID, userID string
 
 func setTestRunState(t *testing.T, database *Database, runID, state string) {
 	t.Helper()
-	if err := database.TestingSpaceTx(context.Background(), func(tx *sql.Tx) error {
+	if err := database.SpaceTx(context.Background(), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(context.Background(), `UPDATE space_runs SET state=$2 WHERE id=$1`, runID, state)
 		return err
 	}); err != nil {
@@ -166,7 +166,7 @@ func TestAgentMemberRequestLimitsAndRemoval(t *testing.T) {
 	if err := f.database.ValidateAgentMemberRequestRun(ctx, request.ChildRunID); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := f.database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`, f.space.ID, f.bob.ID)
 		return err
 	}); err != nil {
@@ -199,7 +199,7 @@ func TestCancellingRequesterStopsMemberWork(t *testing.T) {
 		t.Fatalf("member work after the requester stopped = %#v, %v", child, err)
 	}
 	var payload json.RawMessage
-	if err := f.database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := f.database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `SELECT payload FROM space_events WHERE space_id=$1 AND event_type='agent.request.created'`, f.space.ID).Scan(&payload)
 	}); err != nil {
 		t.Fatalf("request was not recorded in the Space activity: %v", err)
@@ -209,7 +209,7 @@ func TestCancellingRequesterStopsMemberWork(t *testing.T) {
 func testRunJobCount(t *testing.T, database *Database, runID string) int {
 	t.Helper()
 	var count int
-	if err := database.TestingSpaceTx(context.Background(), func(tx *sql.Tx) error {
+	if err := database.SpaceTx(context.Background(), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM agent_run_jobs WHERE run_id=$1`, runID).Scan(&count)
 	}); err != nil {
 		t.Fatal(err)

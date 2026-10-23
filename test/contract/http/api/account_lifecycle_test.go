@@ -21,7 +21,7 @@ func TestPostProviderRevocationUsesFormOrBearerWithoutLeakingTokens(t *testing.T
 	}))
 	defer server.Close()
 
-	if err := TestingPostProviderRevocation(
+	if err := PostProviderRevocation(
 		context.Background(), server.URL,
 		url.Values{"token": {"refresh-secret"}}, "",
 	); err != nil {
@@ -30,7 +30,7 @@ func TestPostProviderRevocationUsesFormOrBearerWithoutLeakingTokens(t *testing.T
 	if formBody != "token=refresh-secret" || authorization != "" {
 		t.Fatalf("form revocation = body:%q auth:%q", formBody, authorization)
 	}
-	if err := TestingPostProviderRevocation(
+	if err := PostProviderRevocation(
 		context.Background(), server.URL, nil, "access-secret",
 	); err != nil {
 		t.Fatal(err)
@@ -45,7 +45,7 @@ func TestPostProviderRevocationFailsClosedOnProviderError(t *testing.T) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer server.Close()
-	if err := TestingPostProviderRevocation(
+	if err := PostProviderRevocation(
 		context.Background(), server.URL, nil, "access-secret",
 	); err == nil {
 		t.Fatal("provider failure was treated as successful revocation")

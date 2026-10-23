@@ -22,7 +22,7 @@ var safeRequestID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$`)
 // emits one bounded, structured completion event. It deliberately logs the
 // route template rather than the raw URL so Space ids, filenames, query values,
 // and signed credentials never enter process logs.
-func TestingRequestObservabilityMiddleware(next http.Handler) http.Handler {
+func RequestObservabilityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := r.Header.Get("X-Request-ID")
 		if !safeRequestID.MatchString(requestID) {

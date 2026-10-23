@@ -9,9 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
-
 
 func (hub *aiInvocationHub) append(id string, event aiInvocationEvent) error {
 	return hub.appendReceipt(id, event, "event:"+uuid.NewString())
@@ -104,7 +103,6 @@ func (hub *aiInvocationHub) fail(id, message string) error {
 func (hub *aiInvocationHub) cancel(id string) error {
 	return hub.append(id, aiInvocationEvent{Type: "invocation.canceled", State: "canceled"})
 }
-
 
 func (hub *aiInvocationHub) cancelForUser(userID, id string) (string, bool) {
 	hub.mu.Lock()

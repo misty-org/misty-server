@@ -3,8 +3,8 @@ package api
 import (
 	"errors"
 	"github.com/go-chi/chi/v5"
-	agent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"net/http"
 )
 

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-// Teach mode (docs/design/agents-at-cursor/BRIEF.md, revision 4): a lesson at the
+// Teach mode (docs/agents/cursor-companion.md, revision 4): a lesson at the
 // cursor. Its turns skip the agent loop and run the tutor's fast lane, one
 // streamed model call with no tools that teaches one step and stops. The lesson
 // itself lives on the device; each turn carries its state, the server keeps none.

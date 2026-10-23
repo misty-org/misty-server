@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // aiProgressItem is one entry of a reply's work, in order: something Misty
@@ -37,7 +37,7 @@ func (s *AIService) InvocationProgress() http.HandlerFunc {
 		}
 		events, _, err := s.database.AIInvocationEvents(r.Context(), userID, chi.URLParam(r, "invocationID"), 0)
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"items": aiInvocationProgress(events)})
@@ -46,7 +46,7 @@ func (s *AIService) InvocationProgress() http.HandlerFunc {
 
 // InvocationState returns only whether a request is still going. A device
 // running another device's browser session uses it to close the session when
-// the request is stopped (docs/design/agents-on-devices/BRIEF.md).
+// the request is stopped (docs/sync/devices.md).
 func (s *AIService) InvocationState() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
@@ -55,7 +55,7 @@ func (s *AIService) InvocationState() http.HandlerFunc {
 		}
 		record, err := s.database.AIInvocationByID(r.Context(), userID, chi.URLParam(r, "invocationID"))
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")

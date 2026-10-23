@@ -35,7 +35,7 @@ func TestBillingAdapterCustomerIdentityAndOutage(t *testing.T) {
 	adapter := &customerAdapter{summary: json.RawMessage(`{"url":"https://billing.example/checkout"}`)}
 	database.Billing = &billingadapter.Service{Adapter: adapter}
 	request := httptest.NewRequest("POST", "/billing/checkout-session", strings.NewReader(`{"tier":"custom-plan","interval":"month"}`))
-	request.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: token})
+	request.AddCookie(&http.Cookie{Name: SessionCookieName, Value: token})
 	request.Header.Set("Idempotency-Key", "customer-click")
 	response := httptest.NewRecorder()
 	CreateCheckoutSession(database).ServeHTTP(response, request)
@@ -45,7 +45,7 @@ func TestBillingAdapterCustomerIdentityAndOutage(t *testing.T) {
 	// A billing outage cannot stop the account/browser from loading.
 	adapter.err = billingadapter.ErrUnavailable
 	request = httptest.NewRequest("GET", "/me", nil)
-	request.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: token})
+	request.AddCookie(&http.Cookie{Name: SessionCookieName, Value: token})
 	response = httptest.NewRecorder()
 	GetMe(database).ServeHTTP(response, request)
 	if response.Code != 200 || !strings.Contains(response.Body.String(), `"allows_use":true`) || !strings.Contains(response.Body.String(), `"kind":"unavailable"`) {
@@ -69,14 +69,14 @@ func TestCommandEstimateUsesAuthenticatedAccountAndNativeBytes(t *testing.T) {
 	adapter := &customerAdapter{summary: json.RawMessage(`{"command":{"estimated_units":1234,"estimated_percentage":0.01234,"maximum":1000000,"maximum_percentage":10}}`)}
 	database.Billing = &billingadapter.Service{Adapter: adapter}
 	request := httptest.NewRequest("POST", "/billing/estimate", strings.NewReader(`{"text":"你好","model":"test-model"}`))
-	request.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: token})
+	request.AddCookie(&http.Cookie{Name: SessionCookieName, Value: token})
 	response := httptest.NewRecorder()
 	EstimateAIUsage(database).ServeHTTP(response, request)
 	if response.Code != 200 || adapter.action != "check" || adapter.request.AccountID != user.ID || adapter.request.Usage.Units["input_bytes"] != 6 || adapter.request.Usage.Units["input_tokens"] != 0 || !strings.Contains(response.Body.String(), `"estimated_units":1234`) {
 		t.Fatalf("estimate %d %s %#v", response.Code, response.Body.String(), adapter.request)
 	}
 	request = httptest.NewRequest("POST", "/billing/estimate", strings.NewReader(`{"text":"draft","account_id":"other-user"}`))
-	request.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: token})
+	request.AddCookie(&http.Cookie{Name: SessionCookieName, Value: token})
 	response = httptest.NewRecorder()
 	EstimateAIUsage(database).ServeHTTP(response, request)
 	if response.Code != 400 {

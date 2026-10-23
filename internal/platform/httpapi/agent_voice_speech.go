@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 var agentSpeechPoint = regexp.MustCompile(`\[POINT:[^\]\r\n]*\]`)

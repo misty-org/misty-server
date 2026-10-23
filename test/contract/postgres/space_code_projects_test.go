@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestCodeProjectsAreLinkedToSpacesByTheirOwner(t *testing.T) {
@@ -47,7 +47,7 @@ func TestCodeProjectsAreLinkedToSpacesByTheirOwner(t *testing.T) {
 	if _, err := f.database.LinkSpaceCodeProject(ctx, f.bob.ID, f.space.ID, link); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := f.database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`, f.space.ID, f.bob.ID)
 		return err
 	}); err != nil {

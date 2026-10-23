@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // InstanceProtocolVersion is the client protocol the server speaks.
@@ -43,7 +43,7 @@ type InstanceDescriptor struct {
 
 func Instance(store instanceStateStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		name := strings.TrimSpace(envconfig.Getenv("MISTY_INSTANCE_NAME"))
+		name := strings.TrimSpace(config.Getenv("MISTY_INSTANCE_NAME"))
 		if name == "" {
 			name = "Misty"
 		}
@@ -64,7 +64,7 @@ func Instance(store instanceStateStore) http.HandlerFunc {
 				Library:            true,
 				Notes:              true,
 				Drawings:           true,
-				HostedBilling:      strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_BILLING_ADAPTER")), "http"),
+				HostedBilling:      strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_BILLING_ADAPTER")), "http"),
 				HostedIntegrations: true,
 				HostedAI:           true,
 				StorageBackend:     "s3",

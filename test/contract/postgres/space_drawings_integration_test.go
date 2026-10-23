@@ -4,12 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"testing"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestSpaceDrawingAccessAndLifecycle(t *testing.T) {
 	fixture := newNoteFixture(t, "drawing-lifecycle")

@@ -1,16 +1,14 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	"io"
 	"net/http"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 type agentMethodSave struct {
@@ -68,66 +66,6 @@ func (s *AIService) AgentMethods() http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{"method": item})
 	}
 }
-func (s *AIService) InstantiateAgentMethod() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		var body struct {
-			VersionID string         `json:"version_id"`
-			Inputs    map[string]any `json:"inputs"`
-		}
-		if decodeAIJSON(w, r, &body) != nil {
-			return
-		}
-		m, err := s.database.AgentMethodVersion(r.Context(), user, body.VersionID)
-		if err != nil {
-			writeAgentMethodError(w, err)
-			return
-		}
-		if !m.Enabled {
-			writeAgentMethodError(w, db.ErrSpaceConflict)
-			return
-		}
-		prompt, err := db.RenderAgentMethod(m.Definition, body.Inputs)
-		if err != nil {
-			writeAgentMethodError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"prompt": prompt, "method": m})
-	}
-}
-func (s *AIService) RunAgentMethod() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		_, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		var body struct {
-			aiInvocationInput
-			VersionID string         `json:"version_id"`
-			Inputs    map[string]any `json:"inputs"`
-		}
-		if decodeAIJSON(w, r, &body) != nil {
-			return
-		}
-		if strings.TrimSpace(body.ConversationID) == "" || strings.TrimSpace(body.IdempotencyKey) == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"message": "A conversation and a stable request key are required."})
-			return
-		}
-		body.MethodVersionID = body.VersionID
-		body.MethodInputs = body.Inputs
-		body.Mode = "drawer"
-		body.SurfaceID = "global"
-		body.Trigger = "message"
-		raw, _ := json.Marshal(body.aiInvocationInput)
-		request := r.Clone(r.Context())
-		request.Body = io.NopCloser(bytes.NewReader(raw))
-		request.ContentLength = int64(len(raw))
-		s.CreateInvocation()(w, request)
-	}
-}
 
 // Resolve immutable owned versions on every runtime boundary. Definitions never grant tools.
 func resolveInvocationMethod(ctx context.Context, database *db.Database, user string, body *aiInvocationInput) (*db.AgentMethod, error) {
@@ -156,10 +94,6 @@ func resolveInvocationMethod(ctx context.Context, database *db.Database, user st
 	case "cloud":
 		if body.ExecutionMode != "" && body.ExecutionMode != "user" {
 			return nil, fmt.Errorf("%w: workflow requires cloud execution", db.ErrSpaceInvalid)
-		}
-	case "separate_window":
-		if body.ExecutionMode != "team" || !strings.HasPrefix(body.WindowLabel, "misty-agent-") || len(body.DeviceContexts) == 0 || body.TaskID == "" {
-			return nil, fmt.Errorf("%w: this workflow needs its assigned Misty browser window online", db.ErrSpaceConflict)
 		}
 	case "current_window":
 		if body.ExecutionMode != "agent" || body.WindowLabel != "main" || len(body.DeviceContexts) == 0 || body.TaskID == "" {
@@ -230,6 +164,6 @@ func writeAgentMethodError(w http.ResponseWriter, err error) {
 	case errors.Is(err, db.ErrSpaceConflict):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "method_conflict", "message": "The method changed, reached its limit, or needs an available device. Refresh before retrying."})
 	default:
-		TestingWriteAIError(w, err)
+		WriteAIError(w, err)
 	}
 }

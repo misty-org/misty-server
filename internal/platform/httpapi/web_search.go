@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 // Misty's own web search: one plain call to Serper on Misty's key, with no model
@@ -28,7 +28,7 @@ const (
 	webSearchCacheSize  = 2_000
 )
 
-func webSearchKey() string { return strings.TrimSpace(envconfig.Getenv("MISTY_SERPER_API_KEY")) }
+func webSearchKey() string { return strings.TrimSpace(config.Getenv("MISTY_SERPER_API_KEY")) }
 
 // webSearchToolRegistrations offer web search once Misty has a search key.
 func (s *SpacesService) webSearchToolRegistrations(_ context.Context, _ string) []agenttools.Registration {
@@ -49,7 +49,7 @@ func webSearchKindNames() []string {
 
 func webSearchDescriptor() agenttools.Descriptor {
 	return agenttools.Descriptor{
-		Name: webSearchTool, Version: 1, Risk: serveragent.RiskRead,
+		Name: webSearchTool, Version: 1, Risk: agent.RiskRead,
 		Description: "Search the web for current or outside information: research, news, prices, documentation, or facts you are unsure of. " +
 			"Write the query as keywords someone would put in a title or page, not as a question to you. " +
 			"kind picks Google's tab: web (default), news, videos (YouTube and others, with channel and length), images, places (businesses with address, rating and phone), " +
@@ -57,7 +57,7 @@ func webSearchDescriptor() agenttools.Descriptor {
 			"or autocomplete (what people commonly search for a phrase, without links; useful to find the right words). " +
 			"Returns titles, links and short snippets; read a page with web.fetch when the snippets are not enough, and cite the links you use. " +
 			"Runs on Misty, so it needs no app or sign-in. Use it for web research instead of search apps.",
-		InputSchema: TestingMustAPIRawJSON(map[string]any{
+		InputSchema: MustAPIRawJSON(map[string]any{
 			"type": "object", "required": []string{"query"}, "additionalProperties": false,
 			"properties": map[string]any{
 				"query": map[string]any{"type": "string", "minLength": 1, "maxLength": 400, "description": "What to find, as search keywords"},
@@ -70,8 +70,8 @@ func webSearchDescriptor() agenttools.Descriptor {
 				"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 10},
 			},
 		}),
-		OutputSchema: agentToolObjectOutputSchema(), Approval: agenttools.ApprovalNone, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityProvider,
-		Idempotent: true, AllowCustomAgent: true, AuditEvent: webSearchTool,
+		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityProvider,
+		Idempotent: true, AuditEvent: webSearchTool,
 	}
 }
 
@@ -109,7 +109,7 @@ func storeWebSearch(key string, answer webSearchAnswer) {
 	webSearchCache.entries[key] = webSearchCached{answer: answer, at: time.Now()}
 }
 
-func (s *SpacesService) webSearch(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) webSearch(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		Query      string   `json:"query"`
 		Kind       string   `json:"kind"`
@@ -139,10 +139,10 @@ func (s *SpacesService) webSearch(ctx context.Context, invocation agenttools.Inv
 		}
 		key := "web-search:" + invocation.RunID + ":" + callID
 		// Searches bill as web.search: the credits Serper charged, at its per-credit fee.
-		var reservation *serveragent.UsageReservation
+		var reservation *agent.UsageReservation
 		searchMeter, metered := s.usageMeter.(interface {
-			ReserveWebSearch(string, string, string, int64) (*serveragent.UsageReservation, error)
-			SettleWebSearch(*serveragent.UsageReservation, string, int64, error) error
+			ReserveWebSearch(string, string, string, int64) (*agent.UsageReservation, error)
+			SettleWebSearch(*agent.UsageReservation, string, int64, error) error
 		})
 		if metered {
 			var err error
@@ -160,7 +160,7 @@ func (s *SpacesService) webSearch(ctx context.Context, invocation agenttools.Inv
 			}
 		}
 		if err != nil {
-			return nil, serveragent.ErrInvalidRequest("The web search did not work this time. Try a shorter query, or continue without it.")
+			return nil, agent.ErrInvalidRequest("The web search did not work this time. Try a shorter query, or continue without it.")
 		}
 		storeWebSearch(string(cacheKey), answer)
 	}

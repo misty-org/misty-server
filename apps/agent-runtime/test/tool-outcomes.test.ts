@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyToolOutcome, endsRun, executionInstructions, unconfirmedToolResultReason } from "../src/tool-outcomes.js";
+import { keepsAnswerAfterOddStop, classifyToolOutcome, endsRun, executionInstructions, unconfirmedToolResultReason } from "../src/tool-outcomes.js";
 
 describe("tool outcome policy", () => {
   it("requires complete generated artifacts before a write", () => {
@@ -58,5 +58,16 @@ describe("tool outcome policy", () => {
     expect(unconfirmedToolResultReason({ unavailable: true })).toContain("unavailable");
     expect(unconfirmedToolResultReason({ id: "note-1" })).toBe("");
     expect(classifyToolOutcome({ success: true, readOnly: false, rejected: false, output: { id: "note-1" } }).kind).toBe("confirmed");
+  });
+
+  it("keeps a whole answer when the provider named the stop oddly, and nothing else", () => {
+    const odd = { code: "agent_response_incomplete" };
+    const answer = "All 13 tabs opened successfully and are kept open in your browser.";
+    expect(keepsAnswerAfterOddStop(odd, "other", answer, 0)).toBe(true);
+    expect(keepsAnswerAfterOddStop(odd, "length", answer, 0)).toBe(false);
+    expect(keepsAnswerAfterOddStop(odd, "other", answer, 1)).toBe(false);
+    expect(keepsAnswerAfterOddStop(odd, "other", "ok", 0)).toBe(false);
+    expect(keepsAnswerAfterOddStop({ code: "agent_model_turn_limit" }, "other", answer, 0)).toBe(false);
+    expect(keepsAnswerAfterOddStop(null, "stop", answer, 0)).toBe(false);
   });
 });

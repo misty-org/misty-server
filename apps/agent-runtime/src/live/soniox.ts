@@ -1,7 +1,7 @@
 // Adapted from @audeeo/core (MIT, Matthew Chen), github.com/kannachi323/audeeo at packages/core, rev 2be9ad63. See LICENSE in this folder.
 import { identityFormat, type Channel, type Language, type Segment, type SegmentFormat, type Word } from "./segment.js";
 
-export type SonioxToken = {
+type SonioxToken = {
   text: string;
   is_final: boolean;
   translation_status?: string;
@@ -20,14 +20,14 @@ export type SonioxContext = {
   translation_terms?: { source: string; target: string }[];
 };
 
-export type SonioxConfigOptions = {
+type SonioxConfigOptions = {
   model?: string;
   context?: SonioxContext;
   diarization?: boolean;
 };
 
 const aliases: Record<string, string> = { cmn: "zh", "zh-cn": "zh", "zh-tw": "zh", "zh-hk": "zh", nb: "no", nn: "no", fil: "tl" };
-export const sonioxLanguage = (language: Language) => aliases[language] || language;
+const sonioxLanguage = (language: Language) => aliases[language] || language;
 
 function hasContext(context?: SonioxContext) {
   return !!context && !!(context.general?.length || context.text || context.terms?.length || context.translation_terms?.length);
@@ -51,7 +51,7 @@ export function sonioxConfig(source: Language, target: Language, options: Soniox
   };
 }
 
-export type SonioxCaptionOptions<L extends string = Language> = {
+type SonioxCaptionOptions<L extends string = Language> = {
   channel?: Channel;
   format?: SegmentFormat<L>;
   /** Skip translation output, for transcribe-only sessions. */

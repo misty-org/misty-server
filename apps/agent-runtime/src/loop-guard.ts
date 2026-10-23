@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 
-// The loop guard (docs/plans/agent-harness-v2.md, change 1). Runs spent minutes repeating one
+// The loop guard (docs/agents/harness.md, Completion). Runs spent minutes repeating one
 // call: the same page opened again and again, the same fetch of a page that didn't answer.
 // browser-use breaks loops after three steps on one page without progress. Here a note to change
 // approach comes, once per pattern, when:

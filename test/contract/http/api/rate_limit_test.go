@@ -36,7 +36,7 @@ func TestForgotPasswordRateLimitKeyUsesForwardedIP(t *testing.T) {
 	req.RemoteAddr = "10.0.0.8:1234"
 	req.Header.Set("X-Forwarded-For", "203.0.113.5, 10.0.0.8")
 
-	key := TestingForgotPasswordRateLimitKey(req, "User@example.com")
+	key := ForgotPasswordRateLimitKey(req, "User@example.com")
 	if key != "203.0.113.5|user@example.com" {
 		t.Fatalf("forgotPasswordRateLimitKey() = %q", key)
 	}
@@ -48,7 +48,7 @@ func TestClientIPIgnoresForwardedHeadersByDefault(t *testing.T) {
 	req.Header.Set("X-Forwarded-For", "203.0.113.5")
 	req.Header.Set("X-Real-IP", "203.0.113.6")
 
-	if got := TestingClientIPFromRequest(req); got != "10.0.0.8" {
+	if got := ClientIPFromRequest(req); got != "10.0.0.8" {
 		t.Fatalf("clientIPFromRequest() = %q, want remote address", got)
 	}
 }
@@ -67,7 +67,7 @@ func TestNormalizeRateLimitPath(t *testing.T) {
 	}
 
 	for input, want := range tests {
-		if got := TestingNormalizeRateLimitPath(input); got != want {
+		if got := NormalizeRateLimitPath(input); got != want {
 			t.Fatalf("normalizeRateLimitPath(%q) = %q, want %q", input, got, want)
 		}
 	}
@@ -75,8 +75,8 @@ func TestNormalizeRateLimitPath(t *testing.T) {
 
 func TestAPIRateLimiterMiddleware(t *testing.T) {
 	limiter := NewAPIRateLimiter()
-	limiter.TestingNow = func() time.Time { return time.Unix(0, 0) }
-	limiter.TestingRoutePolicies["POST /login"] = RateLimitPolicy{Limit: 1, Window: time.Minute}
+	limiter.Now = func() time.Time { return time.Unix(0, 0) }
+	limiter.RoutePolicies["POST /login"] = RateLimitPolicy{Limit: 1, Window: time.Minute}
 
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -104,7 +104,7 @@ func TestAPIRateLimiterMiddleware(t *testing.T) {
 
 func TestAPIRateLimiterReservesMCPForAuthenticatedRunLimit(t *testing.T) {
 	limiter := NewAPIRateLimiter()
-	policy, ok := limiter.TestingRoutePolicies["POST /mcp"]
+	policy, ok := limiter.RoutePolicies["POST /mcp"]
 	if !ok {
 		t.Fatal("expected an explicit public MCP rate-limit policy")
 	}
@@ -126,13 +126,13 @@ func TestAPIRateLimiterReservesMCPForAuthenticatedRunLimit(t *testing.T) {
 	}
 }
 
-func TestAPIRateLimiterSharesLibraryReauthenticationBudgetAcrossSpaces(t *testing.T) {
+func TestAPIRateLimiterSharesOneBudgetAcrossSpaces(t *testing.T) {
 	limiter := NewAPIRateLimiter()
-	limiter.TestingNow = func() time.Time { return time.Unix(0, 0) }
-	limiter.TestingRoutePolicies["POST /spaces/{spaceID}/library/reauthenticate"] = RateLimitPolicy{Limit: 1, Window: time.Minute}
+	limiter.Now = func() time.Time { return time.Unix(0, 0) }
+	limiter.RoutePolicies["POST /spaces/{spaceID}/leave"] = RateLimitPolicy{Limit: 1, Window: time.Minute}
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 	for index, spaceID := range []string{"first", "second"} {
-		request := httptest.NewRequest(http.MethodPost, "/api/spaces/"+spaceID+"/library/reauthenticate", nil)
+		request := httptest.NewRequest(http.MethodPost, "/api/spaces/"+spaceID+"/leave", nil)
 		request.RemoteAddr = "203.0.113.10:1234"
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, request)

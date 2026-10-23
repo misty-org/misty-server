@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
 const healthCacheTTL = 15 * time.Second
 
-type TestingHealthCheck struct {
+type HealthCheck struct {
 	Status     string `json:"status"`
 	Mode       string `json:"mode"`
 	Critical   bool   `json:"critical"`
@@ -23,26 +23,26 @@ type TestingHealthCheck struct {
 	DurationMS int64  `json:"duration_ms,omitempty"`
 }
 
-type TestingHealthSnapshot struct {
-	Status         string                        `json:"status"`
-	Version        string                        `json:"version"`
-	Environment    string                        `json:"environment"`
-	ReleaseChannel string                        `json:"release_channel"`
-	GeneratedAt    time.Time                     `json:"generated_at"`
-	UptimeSeconds  int64                         `json:"uptime_seconds"`
-	Checks         map[string]TestingHealthCheck `json:"checks"`
+type HealthSnapshot struct {
+	Status         string                 `json:"status"`
+	Version        string                 `json:"version"`
+	Environment    string                 `json:"environment"`
+	ReleaseChannel string                 `json:"release_channel"`
+	GeneratedAt    time.Time              `json:"generated_at"`
+	UptimeSeconds  int64                  `json:"uptime_seconds"`
+	Checks         map[string]HealthCheck `json:"checks"`
 }
 
 type healthMonitor struct {
 	server    *Server
 	startedAt time.Time
 	mu        sync.Mutex
-	cached    TestingHealthSnapshot
+	cached    HealthSnapshot
 	status    int
 	expiresAt time.Time
 }
 
-func TestingNewHealthMonitor(server *Server) *healthMonitor {
+func NewHealthMonitor(server *Server) *healthMonitor {
 	return &healthMonitor{server: server, startedAt: time.Now().UTC()}
 }
 
@@ -57,7 +57,7 @@ func (monitor *healthMonitor) Handler() http.HandlerFunc {
 	}
 }
 
-func (monitor *healthMonitor) snapshot(parent context.Context) (TestingHealthSnapshot, int) {
+func (monitor *healthMonitor) snapshot(parent context.Context) (HealthSnapshot, int) {
 	monitor.mu.Lock()
 	defer monitor.mu.Unlock()
 	if time.Now().UTC().Before(monitor.expiresAt) {
@@ -70,9 +70,9 @@ func (monitor *healthMonitor) snapshot(parent context.Context) (TestingHealthSna
 	return monitor.cached, monitor.status
 }
 
-func (monitor *healthMonitor) evaluate(ctx context.Context) (TestingHealthSnapshot, int) {
+func (monitor *healthMonitor) evaluate(ctx context.Context) (HealthSnapshot, int) {
 	now := time.Now().UTC()
-	checks := map[string]TestingHealthCheck{}
+	checks := map[string]HealthCheck{}
 	checks["database"] = activeHealthCheck(ctx, true, func(ctx context.Context) error {
 		if monitor.server == nil || monitor.server.Database == nil || monitor.server.Database.Conn == nil {
 			return errors.New("database is not started")
@@ -95,44 +95,44 @@ func (monitor *healthMonitor) evaluate(ctx context.Context) (TestingHealthSnapsh
 		return monitor.server.Realtime.Health()
 	})
 
-	checks["public_api"] = TestingPublicAPIConfigurationCheck()
+	checks["public_api"] = PublicAPIConfigurationCheck()
 	agentGatewayCheck := environmentConfigurationCheck("AI_GATEWAY_API_KEY|VERCEL_OIDC_TOKEN")
-	if _, err := envconfig.AgentModel(); err != nil {
-		agentGatewayCheck = TestingHealthCheck{Status: "unavailable", Mode: "configuration", Critical: false}
+	if _, err := config.AgentModel(); err != nil {
+		agentGatewayCheck = HealthCheck{Status: "unavailable", Mode: "configuration", Critical: false}
 	}
 	checks["agent_gateway"] = agentGatewayCheck
 	// Pre-rename key, still emitted so any external dashboard or alert watching
 	// it keeps reporting while it is repointed at agent_gateway.
 	checks["agent_runtime"] = agentGatewayCheck
 	checks["email"] = environmentConfigurationCheck("MAILJET_API_KEY", "MAILJET_SECRET_KEY", "MAILJET_FROM_EMAIL")
-	checks["billing"] = TestingHealthCheck{Status: "disabled", Mode: "configuration", Critical: false}
-	if strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_BILLING_ADAPTER")), "http") {
+	checks["billing"] = HealthCheck{Status: "disabled", Mode: "configuration", Critical: false}
+	if strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_BILLING_ADAPTER")), "http") {
 		checks["billing"] = environmentConfigurationCheck("MISTY_BILLING_URL", "MISTY_BILLING_SECRET")
 	}
 
-	overall, status := TestingSummarizeHealth(checks)
-	version := strings.TrimSpace(envconfig.Getenv("MISTY_SERVER_VERSION"))
+	overall, status := SummarizeHealth(checks)
+	version := strings.TrimSpace(config.Getenv("MISTY_SERVER_VERSION"))
 	if version == "" {
 		version = "development"
 	}
-	environment := strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT"))
+	environment := strings.TrimSpace(config.Getenv("MISTY_ENVIRONMENT"))
 	if environment == "" {
 		environment = "development"
 	}
-	release := strings.TrimSpace(envconfig.Getenv("MISTY_RELEASE_CHANNEL"))
+	release := strings.TrimSpace(config.Getenv("MISTY_RELEASE_CHANNEL"))
 	if release == "" {
 		release = environment
 	}
-	return TestingHealthSnapshot{
+	return HealthSnapshot{
 		Status: overall, Version: version, Environment: environment,
 		ReleaseChannel: release, GeneratedAt: now,
 		UptimeSeconds: int64(now.Sub(monitor.startedAt).Seconds()), Checks: checks,
 	}, status
 }
 
-func activeHealthCheck(ctx context.Context, critical bool, check func(context.Context) error) TestingHealthCheck {
+func activeHealthCheck(ctx context.Context, critical bool, check func(context.Context) error) HealthCheck {
 	started := time.Now()
-	result := TestingHealthCheck{Status: "ok", Mode: "active", Critical: critical}
+	result := HealthCheck{Status: "ok", Mode: "active", Critical: critical}
 	if err := check(ctx); err != nil {
 		result.Status = "unavailable"
 		result.Message = "dependency check failed"
@@ -141,12 +141,12 @@ func activeHealthCheck(ctx context.Context, critical bool, check func(context.Co
 	return result
 }
 
-func environmentConfigurationCheck(groups ...string) TestingHealthCheck {
-	result := TestingHealthCheck{Status: "ready", Mode: "configuration", Critical: false}
+func environmentConfigurationCheck(groups ...string) HealthCheck {
+	result := HealthCheck{Status: "ready", Mode: "configuration", Critical: false}
 	for _, group := range groups {
 		configured := false
 		for _, key := range strings.Split(group, "|") {
-			if strings.TrimSpace(envconfig.Getenv(key)) != "" {
+			if strings.TrimSpace(config.Getenv(key)) != "" {
 				configured = true
 				break
 			}
@@ -160,21 +160,21 @@ func environmentConfigurationCheck(groups ...string) TestingHealthCheck {
 	return result
 }
 
-func TestingPublicAPIConfigurationCheck() TestingHealthCheck {
-	result := TestingHealthCheck{Status: "ready", Mode: "configuration", Critical: false}
-	value := strings.TrimSpace(envconfig.Getenv("MISTY_PUBLIC_API_URL"))
+func PublicAPIConfigurationCheck() HealthCheck {
+	result := HealthCheck{Status: "ready", Mode: "configuration", Critical: false}
+	value := strings.TrimSpace(config.Getenv("MISTY_PUBLIC_API_URL"))
 	parsed, err := url.Parse(value)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 		result.Status, result.Message = "unconfigured", "configuration incomplete"
 		return result
 	}
-	if strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production") && parsed.Scheme != "https" {
+	if strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_ENVIRONMENT")), "production") && parsed.Scheme != "https" {
 		result.Status, result.Message = "degraded", "production API base must use HTTPS"
 	}
 	return result
 }
 
-func TestingSummarizeHealth(checks map[string]TestingHealthCheck) (string, int) {
+func SummarizeHealth(checks map[string]HealthCheck) (string, int) {
 	overall := "ok"
 	for _, check := range checks {
 		if check.Critical && check.Status != "ok" {

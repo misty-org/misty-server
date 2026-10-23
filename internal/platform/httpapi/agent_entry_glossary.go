@@ -2,7 +2,7 @@ package api
 
 import "strings"
 
-// agent.entry and the glossary (docs/plans/agent-harness.md, phase 2). The
+// agent.entry and the glossary (docs/agents/harness.md, Agent vocabulary). The
 // entry says where a request came from and how its reply is read; the glossary
 // maps the agent's own names to the app's labels today, so renaming a section
 // changes one line here and nothing in the agent.

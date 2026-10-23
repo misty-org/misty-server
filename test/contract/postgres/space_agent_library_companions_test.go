@@ -3,15 +3,12 @@ package db
 import (
 	"context"
 	"encoding/json"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
+	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	"strings"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
-
-
-import ()
 
 func TestSpaceAgentReadsUpdatesAndPromotesLibraryItems(t *testing.T) {
 	database := openTestDatabase(t)

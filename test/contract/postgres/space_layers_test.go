@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // asMember runs fn as one person under the app role, so the RLS policies
@@ -21,7 +21,7 @@ func asMember(t *testing.T, database *Database, userID string, fn func(*sql.Tx) 
 	if !appRole {
 		t.Skip("misty_app role is not installed")
 	}
-	if err := database.TestingWithRLSContext(context.Background(), accounts.UserScope(userID), func(tx *sql.Tx) error {
+	if err := database.WithRLSContext(context.Background(), accounts.UserScope(userID), func(tx *sql.Tx) error {
 		if _, err := tx.Exec(`SET LOCAL ROLE misty_app`); err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ func TestLeavingASpaceDeletesThePrivateLayer(t *testing.T) {
 		t.Fatal(err)
 	}
 	var privateState, publicState string
-	if err := f.database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := f.database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRow(`SELECT lifecycle_state FROM space_notes WHERE id=$1`, private.ID).Scan(&privateState); err != nil {
 			return err
 		}

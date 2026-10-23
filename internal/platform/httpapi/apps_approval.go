@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 	"github.com/kannachi323/misty/server/internal/integrations/composio"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // appsApproval applies the run's Ask or Auto to one exact app action. Sends,
@@ -28,7 +28,7 @@ func (s *SpacesService) appsApproval(ctx context.Context, invocation agenttools.
 // consequential actions name the one connected account they act through.
 func appsGrantNeed(info composio.ToolInfo, call appsCall, kind composio.Kind) grantNeed {
 	if !kind.NeedsApproval() && !appsPaymentAction(info.Slug) {
-		return grantNeed{action: serveragent.ActionToolWrite}
+		return grantNeed{action: agent.ActionToolWrite}
 	}
 	app := strings.TrimSpace(info.Toolkit.Name)
 	if app == "" {
@@ -36,7 +36,7 @@ func appsGrantNeed(info composio.ToolInfo, call appsCall, kind composio.Kind) gr
 	}
 	toolkit := strings.ToLower(strings.TrimSpace(info.Toolkit.Slug))
 	if appsPaymentAction(info.Slug) {
-		need := grantNeed{action: serveragent.GrantPayment, scopeKind: serveragent.ScopeMerchant, scopeID: toolkit, amount: appsPaymentAmount(call)}
+		need := grantNeed{action: agent.GrantPayment, scopeKind: agent.ScopeMerchant, scopeID: toolkit, amount: appsPaymentAmount(call)}
 		if need.amount != nil {
 			need.label = fmt.Sprintf("pay through %s up to %s", app, formatGrantAmount(*need.amount))
 		}
@@ -49,7 +49,7 @@ func appsGrantNeed(info composio.ToolInfo, call appsCall, kind composio.Kind) gr
 	} else {
 		label += " (" + account + ")"
 	}
-	return grantNeed{action: serveragent.GrantAppAction, scopeKind: serveragent.ScopeConnectedAccount, scopeID: toolkit + ":" + account, label: label}
+	return grantNeed{action: agent.GrantAppAction, scopeKind: agent.ScopeConnectedAccount, scopeID: toolkit + ":" + account, label: label}
 }
 
 // appsPaymentAmount reads an amount in minor units and its currency when the

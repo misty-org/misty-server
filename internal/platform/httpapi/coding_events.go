@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // codingEvent is one event a device mirrors from its coding tool, in the
@@ -108,7 +108,7 @@ func (s *SpacesService) recordCodingEvent(ctx context.Context, run *codingRun, l
 			return nil
 		}
 		// The checklist is shown when the run has a chat to show it in.
-		var invalid serveragent.ErrInvalidRequest
+		var invalid agent.ErrInvalidRequest
 		if _, err := s.publishChecklist(ctx, run.record, collaborationState{mode: db.ConversationModeAct}, items, true); err != nil && !errors.As(err, &invalid) {
 			return err
 		}
@@ -145,7 +145,7 @@ func (s *SpacesService) settleCodingLeases(ctx context.Context, run *codingRun, 
 		return err
 	}
 	meter, _ := s.usageMeter.(interface {
-		CompleteRuntimeTurn(context.Context, string, string, string, serveragent.ModelUsage) error
+		CompleteRuntimeTurn(context.Context, string, string, string, agent.ModelUsage) error
 	})
 	factor := codingExternalFactor()
 	for _, lease := range leases {

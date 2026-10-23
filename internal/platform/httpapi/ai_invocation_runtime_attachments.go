@@ -7,12 +7,12 @@ import (
 	"errors"
 	"io"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func (s *SpacesService) aiInvocationModelAttachments(ctx context.Context, record *db.AIInvocationRecord) ([]map[string]any, error) {
 	items := []map[string]any{}
-	if record == nil || s.library == nil || s.library.TestingStore == nil {
+	if record == nil || s.library == nil || s.library.Store == nil {
 		return items, nil
 	}
 	var input aiInvocationInput
@@ -27,7 +27,7 @@ func (s *SpacesService) aiInvocationModelAttachments(ctx context.Context, record
 			continue
 		}
 		total += attachment.ModelByteSize
-		reader, _, openErr := s.library.TestingStore.Open(ctx, attachment.ModelObjectKey)
+		reader, _, openErr := s.library.Store.Open(ctx, attachment.ModelObjectKey)
 		if openErr != nil {
 			return nil, openErr
 		}

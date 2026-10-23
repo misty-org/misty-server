@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 )
 
@@ -23,8 +23,8 @@ const (
 // the system. Live captures start only from the person's own click.
 func (s *SpacesService) voiceToolRegistrations() []agenttools.Registration {
 	base := agenttools.Descriptor{
-		Version: 1, Risk: serveragent.RiskWrite, Approval: agenttools.ApprovalNone,
-		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true,
+		Version: 1, Risk: agent.RiskWrite,
+		OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer,
 	}
 	id := map[string]any{"type": "string", "minLength": 1, "maxLength": 200}
 	transcribe := base
@@ -52,7 +52,7 @@ func (s *SpacesService) voiceToolRegistrations() []agenttools.Registration {
 	}
 }
 
-func (s *SpacesService) executeVoiceTranscribe(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) executeVoiceTranscribe(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		LibraryItemID string `json:"library_item_id"`
 		Space         string `json:"space"`
@@ -62,7 +62,7 @@ func (s *SpacesService) executeVoiceTranscribe(ctx context.Context, invocation a
 		return nil, agenttools.ErrArgumentsInvalid
 	}
 	if s.library == nil || s.models == nil || !s.models.Enabled() {
-		return nil, serveragent.ErrInvalidRequest("transcribing files isn't available right now")
+		return nil, agent.ErrInvalidRequest("transcribing files isn't available right now")
 	}
 	space, err := s.spaceAdminTarget(ctx, invocation, input.Space)
 	if err != nil {
@@ -70,7 +70,7 @@ func (s *SpacesService) executeVoiceTranscribe(ctx context.Context, invocation a
 	}
 	transcript, err := s.transcribeLibraryItem(ctx, invocation.UserID, space.ID, strings.TrimSpace(input.LibraryItemID), input.Language)
 	if message, ok := err.(voiceFileError); ok {
-		return nil, serveragent.ErrInvalidRequest(string(message))
+		return nil, agent.ErrInvalidRequest(string(message))
 	}
 	if err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func (s *SpacesService) executeVoiceTranscribe(ctx context.Context, invocation a
 	})
 }
 
-func (s *SpacesService) executeVoiceToNotes(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) executeVoiceToNotes(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		TranscriptID string `json:"transcript_id"`
 		NoteID       string `json:"note_id"`
@@ -100,11 +100,11 @@ func (s *SpacesService) executeVoiceToNotes(ctx context.Context, invocation agen
 		return nil, agenttools.ErrArgumentsInvalid
 	}
 	if s.models == nil || !s.models.Enabled() {
-		return nil, serveragent.ErrInvalidRequest("notes from speech aren't available right now")
+		return nil, agent.ErrInvalidRequest("notes from speech aren't available right now")
 	}
 	transcript, err := s.database.VoiceTranscript(ctx, invocation.UserID, strings.TrimSpace(input.TranscriptID))
 	if err != nil {
-		return nil, serveragent.ErrInvalidRequest("no transcript " + input.TranscriptID + " that you can read")
+		return nil, agent.ErrInvalidRequest("no transcript " + input.TranscriptID + " that you can read")
 	}
 	written, err := s.writeVoiceNote(ctx, invocation.UserID, transcript, input.Mode, "", input.Template, strings.TrimSpace(input.NoteID), "")
 	if err != nil {

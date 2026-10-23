@@ -6,7 +6,7 @@ export interface ToolExecutionResponse {
   tool_error?: { code: string; message: string };
 }
 
-export interface ToolExecutionContinuation {
+interface ToolExecutionContinuation {
   request(attempt: number): Promise<ToolExecutionResponse>;
   device(attempt: number): Promise<boolean>;
   intervention?(attempt: number): Promise<boolean>;
@@ -15,7 +15,7 @@ export interface ToolExecutionContinuation {
 /** Misty reported this call as failed without effect: it rejected the call
  * before execution or recorded a definite failure. Unknown write outcomes
  * arrive as an `uncertain` result instead, never as this error. */
-export class ToolRejectedError extends Error {
+class ToolRejectedError extends Error {
   constructor(readonly code: string, message: string) {
     super(`${code}: ${message}`);
     this.name = "ToolRejectedError";
@@ -30,7 +30,7 @@ export function rejectedWithoutEffect(error: unknown): boolean {
 }
 
 /** Engine-independent outcomes for the authoritative transport response. */
-export type HarnessToolOutcome =
+type HarnessToolOutcome =
   | { status: "success"; result: unknown }
   | { status: "failure"; code: string; message: string }
   | { status: "device_required" }

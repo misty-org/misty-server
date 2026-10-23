@@ -23,7 +23,7 @@ func TestReadAvatarPNGAcceptsValidPNG(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/me/avatar", bytes.NewReader(encoded.Bytes()))
 	recorder := httptest.NewRecorder()
 
-	data, ok := TestingReadAvatarPNG(recorder, req)
+	data, ok := ReadAvatarPNG(recorder, req)
 	if !ok || !bytes.Equal(data, encoded.Bytes()) {
 		t.Fatalf("readAvatarPNG() accepted=%v bytes=%d, want valid PNG", ok, len(data))
 	}
@@ -33,7 +33,7 @@ func TestReadAvatarPNGRejectsNonPNG(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/me/avatar", strings.NewReader("not an image"))
 	recorder := httptest.NewRecorder()
 
-	if _, ok := TestingReadAvatarPNG(recorder, req); ok {
+	if _, ok := ReadAvatarPNG(recorder, req); ok {
 		t.Fatal("readAvatarPNG() accepted non-PNG bytes")
 	}
 	if recorder.Code != http.StatusBadRequest {

@@ -13,7 +13,7 @@ groups:
           severity: page
         annotations:
           summary: Misty API 5xx rate is above 3%
-          runbook: docs/operations/public-beta-operations.md#api-deployment-and-rollback
+          runbook: server/deploy/README.md#deploy
       - alert: MistyAPIHighP95Latency
         expr: |
           histogram_quantile(
@@ -49,7 +49,7 @@ groups:
           severity: page
         annotations:
           summary: Journal permission and deletion controls are not draining
-          runbook: docs/operations/public-beta-operations.md#journal-worker-deployment-and-rollback
+          runbook: server/deploy/README.md#deploy
       - alert: MistyLibraryJobBacklog
         expr: |
           (

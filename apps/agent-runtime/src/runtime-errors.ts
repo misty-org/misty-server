@@ -3,7 +3,7 @@ import { ControlPlaneError } from "./control-plane-error.js";
 import { classifyMCPTransportError } from "./mcp-errors.js";
 
 /** Billing refusals: the run stops with the reason the person can act on. */
-export const usageRefusals = new Set(["billing_admission_denied", "hosted_ai_limit_reached", "usage_limit_reached", "email_unverified"]);
+const usageRefusals = new Set(["billing_admission_denied", "hosted_ai_limit_reached", "usage_limit_reached", "email_unverified"]);
 
 /** Step failures retry only for transient control-plane or transport errors. */
 export function rethrowStepError(error: unknown): never {
@@ -44,6 +44,8 @@ export function recoverableToolError(error: unknown): { code: string; message: s
 export function providerOutage(error: unknown): boolean {
   const normalized = runtimeErrorDescription(error).toLowerCase();
   return normalized.includes("gatewayinternalservererror") || normalized.includes("service temporarily unavailable") ||
+    // A stream that went quiet through every retry (src/instance-model.ts): the endpoint hung.
+    normalized.includes("model_stream_stalled") ||
     ((normalized.includes("dostreamstep") || normalized.includes("ai_apicallerror")) && /internal server error|bad gateway|service unavailable|gateway timeout|too many requests|rate limit/.test(normalized));
 }
 

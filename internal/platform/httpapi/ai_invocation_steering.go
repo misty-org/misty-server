@@ -33,6 +33,7 @@ func (s *AIService) SteerInvocation() http.HandlerFunc {
 		writeJSON(w, http.StatusAccepted, map[string]any{"sequence": event.Sequence, "state": "queued"})
 	}
 }
+
 // PauseInvocation and ResumeInvocation: the person takes over an agent's window and hands
 // it back. The run waits at its next boundary while paused, spending no model turns.
 func (s *AIService) PauseInvocation() http.HandlerFunc { return s.invocationHold("user.pause") }

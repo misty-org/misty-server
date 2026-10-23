@@ -7,15 +7,15 @@ import (
 	"log"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 // The runtime sends no "running" checkpoint for a read-only call
-// (docs/plans/agentic-browser.md, Phase 2: fewer checkpoints). The call is
+// (docs/agents/harness.md, Device jobs). The call is
 // announced here when it arrives instead, which saves the runtime a durable
 // step and a round trip per read. Writes keep their own start checkpoint.
 //
@@ -25,7 +25,7 @@ import (
 // not show the call twice. Announcing never blocks the call itself.
 
 func announcesToolStart(descriptor agenttools.Descriptor) bool {
-	return descriptor.Risk == serveragent.RiskRead
+	return descriptor.Risk == agent.RiskRead
 }
 
 func (s *SpacesService) announceAIInvocationToolStart(ctx context.Context, record *db.AIInvocationRecord, call agentRuntimeToolCall) {
@@ -64,21 +64,21 @@ func (s *SpacesService) announcePersonalAgentToolStart(ctx context.Context, run 
 	if validJSONObject(call.Arguments) {
 		input = sanitizeAgentLifecycleJSON(call.Arguments)
 	}
-	if err := s.database.CheckpointWorkflowStep(ctx, run.ID, workflowv2.StepEvent{NodeID: nodeID, State: workflowv2.StepRunning, Attempt: 1, Input: input, Output: json.RawMessage(`{}`)}); err != nil {
+	if err := s.database.CheckpointWorkflowStep(ctx, run.ID, workflow.StepEvent{NodeID: nodeID, State: workflow.StepRunning, Attempt: 1, Input: input, Output: json.RawMessage(`{}`)}); err != nil {
 		log.Printf("announce %s for %s: %v", call.Name, run.ID, err)
 		return
 	}
 	if err := s.database.TouchPersonalAgentTaskRuntime(ctx, run.ID, call.RuntimeRunID, phase, 40); err != nil {
 		log.Printf("announce %s for %s: %v", call.Name, run.ID, err)
 	}
-	s.projectLinkedAIInvocationEvent(ctx, run, nodeID, string(workflowv2.StepRunning), phase, nil)
+	s.projectLinkedAIInvocationEvent(ctx, run, nodeID, string(workflow.StepRunning), phase, nil)
 }
 
-// toolResultForEvals is the call's raw result, clipped, for the workflow eval
-// (server/apps/agent-runtime/evals/workflows) so its judge can see what the agent
+// toolResultForEvals is the call's raw result, clipped, for the Odysseys eval
+// (server/apps/agent-runtime/evals/odysseys) so its judge can see what the agent
 // read. Only a non-production server with MISTY_AI_TOOL_RESULT_EVENTS=1 sends it.
 func toolResultForEvals(result json.RawMessage) string {
-	if strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production") || strings.TrimSpace(envconfig.Getenv("MISTY_AI_TOOL_RESULT_EVENTS")) != "1" || len(result) == 0 {
+	if strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_ENVIRONMENT")), "production") || strings.TrimSpace(config.Getenv("MISTY_AI_TOOL_RESULT_EVENTS")) != "1" || len(result) == 0 {
 		return ""
 	}
 	return truncateAgentRuntimeText(string(result), 64_000)

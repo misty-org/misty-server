@@ -126,8 +126,8 @@ func looksLikeRawLocalPath(value string) bool {
 		strings.HasPrefix(lower, "file://")
 }
 
-type TestingAICaptureAttachment = aiCaptureAttachment
+type AICaptureAttachment = aiCaptureAttachment
 
-func TestingValidateAICapture(capture *TestingAICaptureAttachment) error {
+func TestingValidateAICapture(capture *AICaptureAttachment) error {
 	return validateAICapture(capture)
 }

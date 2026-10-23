@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/aimodels"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
@@ -176,9 +176,9 @@ func (s *SpacesService) CompanionRefinePoint() http.HandlerFunc {
 		provider := aimodels.UsageProvider(model)
 		prompt := "Find: " + request.Label + ". A first estimate put it near (" + strconv.Itoa(int(request.Hint.X)) + ", " + strconv.Itoa(int(request.Hint.Y)) + "); correct it if that is wrong. This crop is " + strconv.Itoa(request.Image.Width) + " x " + strconv.Itoa(request.Image.Height) + " pixels."
 		key := "companion-refine:" + record.ID + ":" + strconv.Itoa(call)
-		var reservation *serveragent.UsageReservation
+		var reservation *agent.UsageReservation
 		if s.usageMeter != nil {
-			reservation, err = serveragent.ReserveMeasuredUsage(s.usageMeter, user, key, provider, model, map[string]int64{"input_bytes": int64(len(companionRefineSystem) + len(prompt) + len(data)), "output_tokens": companionRefineMaxOutput}, "")
+			reservation, err = agent.ReserveMeasuredUsage(s.usageMeter, user, key, provider, model, map[string]int64{"input_bytes": int64(len(companionRefineSystem) + len(prompt) + len(data)), "output_tokens": companionRefineMaxOutput}, "")
 			if err != nil {
 				writeJSON(w, http.StatusPaymentRequired, map[string]string{"code": "refine_budget", "message": "Your AI allowance is used up."})
 				return
@@ -191,7 +191,7 @@ func (s *SpacesService) CompanionRefinePoint() http.HandlerFunc {
 		})
 		cancel()
 		// Settlement failures stay in the durable outbox; never give the call away.
-		_ = serveragent.FinishMeteredCall(s.usageMeter, reservation, key+":settle", "assistant_ai", provider, model, result.Usage, err)
+		_ = agent.FinishMeteredCall(s.usageMeter, reservation, key+":settle", "assistant_ai", provider, model, result.Usage, err)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "refine_failed", "message": "The model could not place the pointer. Try again."})
 			return

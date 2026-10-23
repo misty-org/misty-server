@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -98,10 +98,10 @@ func (s *SpaceLibraryService) DeleteEditVersion() http.HandlerFunc {
 	}
 }
 
-func (s *SpaceLibraryService) TestingWriteDownload(w http.ResponseWriter, r *http.Request, download *db.LibraryDownload) {
+func (s *SpaceLibraryService) WriteDownload(w http.ResponseWriter, r *http.Request, download *db.LibraryDownload) {
 	// Bandwidth is billed per byte by object storage and by the host, so the
 	// ceiling is checked before anything is streamed.
-	if s.egress != nil && !s.egress.Allow(TestingRateLimitIdentity(r), download.ByteSize) {
+	if s.egress != nil && !s.egress.Allow(RateLimitIdentity(r), download.ByteSize) {
 		WriteQuotaExceeded(w)
 		return
 	}
@@ -111,8 +111,8 @@ func (s *SpaceLibraryService) TestingWriteDownload(w http.ResponseWriter, r *htt
 	}
 	// Authorization already succeeded above. With direct transfer the VPS hands
 	// back a short-lived signed URL instead of streaming the bytes itself.
-	if s.TestingDirectTransfersActive() {
-		descriptor, err := s.TestingPresigner.PresignGet(r.Context(), download.ObjectKey, filename, s.TestingTransfers.DownloadURLTTL)
+	if s.DirectTransfersActive() {
+		descriptor, err := s.Presigner.PresignGet(r.Context(), download.ObjectKey, filename, s.Transfers.DownloadURLTTL)
 		if err != nil {
 			writeLibraryError(w, err)
 			return
@@ -121,11 +121,11 @@ func (s *SpaceLibraryService) TestingWriteDownload(w http.ResponseWriter, r *htt
 		// An explicit marker, rather than the content type, tells the client this
 		// is a descriptor. A user's own uploaded .json file would otherwise be
 		// indistinguishable from a descriptor on the proxy path.
-		w.Header().Set(TestingLibrarySignedDownloadHeader, "1")
+		w.Header().Set(LibrarySignedDownloadHeader, "1")
 		writeJSON(w, http.StatusOK, descriptor)
 		return
 	}
-	reader, metadata, err := s.TestingStore.Open(r.Context(), download.ObjectKey)
+	reader, metadata, err := s.Store.Open(r.Context(), download.ObjectKey)
 	if err != nil {
 		writeLibraryError(w, err)
 		return
@@ -147,12 +147,12 @@ func (s *SpaceLibraryService) TestingWriteDownload(w http.ResponseWriter, r *htt
 // writeJournalAssetDownload always returns a signed R2 descriptor. Journal
 // image bodies are never opened or proxied by the API, including in local
 // development.
-func (s *SpaceLibraryService) TestingWriteJournalAssetDownload(
+func (s *SpaceLibraryService) WriteJournalAssetDownload(
 	w http.ResponseWriter,
 	r *http.Request,
 	download *db.LibraryDownload,
 ) {
-	if !s.TestingDirectTransfersActive() {
+	if !s.DirectTransfersActive() {
 		writeJSON(
 			w,
 			http.StatusServiceUnavailable,
@@ -160,15 +160,15 @@ func (s *SpaceLibraryService) TestingWriteJournalAssetDownload(
 		)
 		return
 	}
-	if s.egress != nil && !s.egress.Allow(TestingRateLimitIdentity(r), download.ByteSize) {
+	if s.egress != nil && !s.egress.Allow(RateLimitIdentity(r), download.ByteSize) {
 		WriteQuotaExceeded(w)
 		return
 	}
-	descriptor, err := s.TestingPresigner.PresignGet(
+	descriptor, err := s.Presigner.PresignGet(
 		r.Context(),
 		download.ObjectKey,
 		download.Filename,
-		s.TestingTransfers.DownloadURLTTL,
+		s.Transfers.DownloadURLTTL,
 	)
 	if err != nil {
 		writeLibraryError(w, err)
@@ -178,7 +178,7 @@ func (s *SpaceLibraryService) TestingWriteJournalAssetDownload(
 	descriptor.ByteSize = download.ByteSize
 	descriptor.SHA256 = download.SHA256
 	w.Header().Set("Cache-Control", "private, no-store")
-	w.Header().Set(TestingLibrarySignedDownloadHeader, "1")
+	w.Header().Set(LibrarySignedDownloadHeader, "1")
 	writeJSON(w, http.StatusOK, descriptor)
 }
 

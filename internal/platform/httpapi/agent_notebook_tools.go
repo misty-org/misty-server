@@ -7,12 +7,12 @@ import (
 	"log"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-// The run notebook (docs/plans/agentic-browser.md, Phase 4): a plan and
+// The run notebook (docs/agents/harness.md, Sub-agents and the notebook): a plan and
 // findings with sources that live outside the model's context, so long runs
 // re-read them after compaction and sub-agents report into them. Each write
 // shows in the conversation and is mirrored to a note in the personal Space.
@@ -30,12 +30,12 @@ type aiNotebookEvent struct {
 
 func notebookToolDescriptors() []agenttools.Descriptor {
 	return []agenttools.Descriptor{
-		{Name: toolboxNotebookRead, Version: 1, Risk: serveragent.RiskRead, Idempotent: true, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone,
+		{Name: toolboxNotebookRead, Version: 1, Risk: agent.RiskRead, Idempotent: true, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer,
 			Description: "Read this task's notebook: its plan and its findings so far, including what sub-agents reported. Read it before continuing a long task, after earlier steps were summarized, and before writing the final answer.",
-			InputSchema: TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema()},
-		{Name: toolboxNotebookWrite, Version: 1, Risk: serveragent.RiskWrite, Idempotent: true, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Approval: agenttools.ApprovalNone, AuditEvent: "agent.notebook.written",
+			InputSchema: MustAPIRawJSON(map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}), OutputSchema: agentToolObjectOutputSchema()},
+		{Name: toolboxNotebookWrite, Version: 1, Risk: agent.RiskWrite, Idempotent: true, Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AuditEvent: "agent.notebook.written",
 			Description: "Write to this task's notebook, which the person sees in the conversation. section plan holds the steps and their status as a short Markdown checklist; findings holds facts as you learn them, each with its source URL. mode replace rewrites the section; append adds to the end. Keep the plan current on multi-step tasks and add findings as you go, so nothing is lost if earlier steps are summarized.",
-			InputSchema: TestingMustAPIRawJSON(map[string]any{
+			InputSchema: MustAPIRawJSON(map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"section", "content"},
 				"properties": map[string]any{
 					"section": map[string]any{"type": "string", "enum": []string{"plan", "findings"}},
@@ -65,14 +65,14 @@ func (s *SpacesService) notebookToolRegistrations(record *db.AIInvocationRecord,
 	key := notebookKey(record, body)
 	descriptors := notebookToolDescriptors()
 	return []agenttools.Registration{
-		{Descriptor: descriptors[0], Handler: func(ctx context.Context, invocation agenttools.Invocation, _ serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: descriptors[0], Handler: func(ctx context.Context, invocation agenttools.Invocation, _ agent.ToolRequest) (json.RawMessage, error) {
 			notebook, err := s.database.AgentNotebook(ctx, invocation.UserID, key)
 			if err != nil {
 				return nil, err
 			}
 			return json.Marshal(map[string]any{"plan": notebook.Plan, "findings": notebook.Findings})
 		}},
-		{Descriptor: descriptors[1], Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		{Descriptor: descriptors[1], Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			var input struct {
 				Section string `json:"section"`
 				Content string `json:"content"`
@@ -84,7 +84,7 @@ func (s *SpacesService) notebookToolRegistrations(record *db.AIInvocationRecord,
 			appendText := input.Mode == "append" || (input.Mode == "" && input.Section == "findings")
 			notebook, err := s.database.WriteAgentNotebook(ctx, invocation.UserID, key, input.Section, input.Content, appendText)
 			if errors.Is(err, db.ErrNotebookFull) {
-				return nil, serveragent.ErrInvalidRequest(err.Error())
+				return nil, agent.ErrInvalidRequest(err.Error())
 			}
 			if err != nil {
 				return nil, err

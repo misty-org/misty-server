@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func screenRecord(t *testing.T, body map[string]any) *db.AIInvocationRecord {
@@ -72,8 +72,10 @@ func TestARunThatCanOpenItsOwnTabLearnsTheBrowserToolsUpFront(t *testing.T) {
 	if strings.Contains(own, "Either call ends this response") {
 		t.Fatal("an own tab is still described as a hand-off")
 	}
-	body := aiInvocationInput{DeviceContexts: []aiInvocationDeviceContext{{Kind: "workspace", Capabilities: json.RawMessage(`["web.fetch","browser.session"]`)}}}
-	if !invocationCanOpenOwnTab(body) || invocationCanOpenOwnTab(aiInvocationInput{}) {
+	capabilities := json.RawMessage(`["web.fetch","browser.session"]`)
+	body := aiInvocationInput{DeviceContexts: []aiInvocationDeviceContext{{Kind: "workspace", Metadata: json.RawMessage(`{"source":"desktop"}`), Capabilities: capabilities}}}
+	forwarded := aiInvocationInput{DeviceContexts: []aiInvocationDeviceContext{{Kind: "workspace", Capabilities: capabilities}}}
+	if !invocationCanOpenOwnTab(body) || invocationCanOpenOwnTab(forwarded) || invocationCanOpenOwnTab(aiInvocationInput{}) {
 		t.Fatal("own tab detection is wrong")
 	}
 }

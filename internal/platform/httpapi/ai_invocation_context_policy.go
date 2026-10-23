@@ -3,7 +3,7 @@ package api
 import (
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func shouldRetrieveAccountContext(prompt string) bool {

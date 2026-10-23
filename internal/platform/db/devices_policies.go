@@ -1,0 +1,32 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+)
+
+// StoreDevicePolicy keeps a device's own signed permissions. Versions only
+// move forward, so a replayed older policy cannot undo a newer one.
+func (db *Database) StoreDevicePolicy(ctx context.Context, userID, deviceID string, policy DevicePolicyRecord) error {
+	surfaces, _ := json.Marshal(policy.AgentSurfaces)
+	if policy.SharedFolders == nil {
+		policy.SharedFolders = []DeviceSharedFolder{}
+	}
+	folders, _ := json.Marshal(policy.SharedFolders)
+	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `INSERT INTO device_policies(device_id,user_id,policy_version,payload,signature,files,clipboard,agent_surfaces,shared_folders)
+			SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9 FROM trusted_devices WHERE id=$1 AND user_id=$2 AND identity_version=2 AND admission_state IN ('pending','admitted')
+			ON CONFLICT(device_id) DO UPDATE SET policy_version=EXCLUDED.policy_version,payload=EXCLUDED.payload,signature=EXCLUDED.signature,files=EXCLUDED.files,
+				clipboard=EXCLUDED.clipboard,agent_surfaces=EXCLUDED.agent_surfaces,shared_folders=EXCLUDED.shared_folders,updated_at=NOW()
+			WHERE device_policies.policy_version < EXCLUDED.policy_version`,
+			deviceID, userID, policy.Version, policy.Payload, policy.Signature, policy.Files, policy.Clipboard, surfaces, folders)
+		if err != nil {
+			return err
+		}
+		if count, _ := result.RowsAffected(); count != 1 {
+			return ErrDevicePolicyStale
+		}
+		return nil
+	})
+}

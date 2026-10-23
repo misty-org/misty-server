@@ -4,10 +4,6 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-
-
-	agent "github.com/kannachi323/misty/server/internal/agents"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 // Legacy unscoped completion cannot bypass Misty's Space admission.
@@ -20,7 +16,6 @@ func (s *AIService) Complete() http.HandlerFunc {
 	}
 }
 
-
 func TestingWriteAIRateLimit(w http.ResponseWriter, retryAfter time.Duration) {
 	seconds := retryAfterSeconds(retryAfter)
 	w.Header().Set("Retry-After", strconv.Itoa(seconds))
@@ -28,14 +23,6 @@ func TestingWriteAIRateLimit(w http.ResponseWriter, retryAfter time.Duration) {
 		"code": "rate_limited", "message": "Agent request limit reached. Try again later.",
 		"retry_after_seconds": seconds,
 	})
-}
-
-// agentTierForLicenseTier deliberately routes every paid plan to the same tier;
-// TestAutomaticRoutingIsTheSameForEveryPlan guards that. The parameter is the
-// seam for per-plan routing if tiers are ever priced differently, so it stays
-// even though it is currently unused.
-func TestingAgentTierForLicenseTier(_ db.Tier) agent.AgentTier {
-	return agent.TierMed
 }
 
 func (s *AIService) requireUser(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -52,5 +39,5 @@ func (s *AIService) requireUser(w http.ResponseWriter, r *http.Request) (string,
 }
 
 func decodeAIJSON(w http.ResponseWriter, r *http.Request, dst any) error {
-	return TestingDecodeAIJSONWithLimit(w, r, dst, TestingMaxAIJSONBodyBytes)
+	return DecodeAIJSONWithLimit(w, r, dst, MaxAIJSONBodyBytes)
 }

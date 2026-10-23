@@ -1,11 +1,11 @@
-// The leak check (docs/design/agent-browser/BRIEF.md, "Memory"). Closed agent tabs and windows
+// The leak check (docs/agents/browser.md, "Memory"). Closed agent tabs and windows
 // once left their WebKit page processes running, and a day of runs reached 250 processes for 54
 // open pages. Every pass lists the computer's page processes before it starts and again after its
 // runs end, once their tabs have slept: a new one that no open view uses was left behind.
 
 type Bridge = { url: string; token: string };
 
-export interface PageProcesses {
+interface PageProcesses {
   /** Every WebKit page process on this computer. */
   all: number[];
   /** The ones Misty's open web views use. */

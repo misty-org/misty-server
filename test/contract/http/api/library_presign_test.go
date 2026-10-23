@@ -16,7 +16,7 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 type recordingPresigner struct {
@@ -31,7 +31,7 @@ func (p *recordingPresigner) PresignPutObject(_ context.Context, input *s3.PutOb
 	if signedHeader == nil {
 		signedHeader = http.Header{
 			"Content-Type":                        []string{aws.ToString(input.ContentType)},
-			"X-Amz-Meta-Misty-Library-Sha256":     []string{input.Metadata[TestingLibrarySHA256MetadataKey]},
+			"X-Amz-Meta-Misty-Library-Sha256":     []string{input.Metadata[LibrarySHA256MetadataKey]},
 			"X-Amz-Signed-Checksum-Hoisted-Query": []string{aws.ToString(input.ChecksumSHA256)},
 		}
 	}
@@ -51,7 +51,7 @@ func testObjectMetadata(t *testing.T) LibraryObjectMetadata {
 
 func TestPresignPutBindsKeySizeAndChecksum(t *testing.T) {
 	presigner := &recordingPresigner{}
-	store := &S3LibraryObjectStore{TestingBucket: "misty", TestingPresigner: presigner}
+	store := &S3LibraryObjectStore{Bucket: "misty", Presigner: presigner}
 	metadata := testObjectMetadata(t)
 
 	transfer, err := store.PresignPut(context.Background(), "library/presignfixture1", metadata, 15*time.Minute)
@@ -77,7 +77,7 @@ func TestPresignPutBindsKeySizeAndChecksum(t *testing.T) {
 	// expects as request headers. The checksum can be hoisted into the URL query
 	// by the AWS signer and should not be echoed as a browser header then.
 	if transfer.Headers["Content-Type"] != metadata.MIMEType ||
-		transfer.Headers["x-amz-meta-"+TestingLibrarySHA256MetadataKey] != metadata.SHA256 {
+		transfer.Headers["x-amz-meta-"+LibrarySHA256MetadataKey] != metadata.SHA256 {
 		t.Fatalf("headers = %#v", transfer.Headers)
 	}
 	if _, ok := transfer.Headers["x-amz-checksum-sha256"]; ok {
@@ -102,7 +102,7 @@ func TestPresignPutReturnsChecksumHeaderWhenPresignerSignsIt(t *testing.T) {
 		"Host":                            []string{"r2.example"},
 		"Content-Length":                  []string{"15"},
 	}}
-	store := &S3LibraryObjectStore{TestingBucket: "misty", TestingPresigner: presigner}
+	store := &S3LibraryObjectStore{Bucket: "misty", Presigner: presigner}
 
 	transfer, err := store.PresignPut(context.Background(), "library/presignfixture1", metadata, 15*time.Minute)
 	if err != nil {
@@ -121,7 +121,7 @@ func TestPresignPutReturnsChecksumHeaderWhenPresignerSignsIt(t *testing.T) {
 }
 
 func TestPresignRejectsBadKeyAndTTL(t *testing.T) {
-	store := &S3LibraryObjectStore{TestingBucket: "misty", TestingPresigner: &recordingPresigner{}}
+	store := &S3LibraryObjectStore{Bucket: "misty", Presigner: &recordingPresigner{}}
 	metadata := testObjectMetadata(t)
 
 	if _, err := store.PresignPut(context.Background(), "../etc/passwd", metadata, time.Minute); err == nil {
@@ -140,7 +140,7 @@ func TestPresignRejectsBadKeyAndTTL(t *testing.T) {
 
 func TestPresignGetForcesSafeAttachmentDisposition(t *testing.T) {
 	presigner := &recordingPresigner{}
-	store := &S3LibraryObjectStore{TestingBucket: "misty", TestingPresigner: presigner}
+	store := &S3LibraryObjectStore{Bucket: "misty", Presigner: presigner}
 
 	download, err := store.PresignGet(context.Background(), "library/presignfixture1", "../../report\r\n.pdf", 2*time.Minute)
 	if err != nil {
@@ -184,42 +184,42 @@ func TestUploadLimitsRejectValuesAboveDatabaseCeiling(t *testing.T) {
 	limits := DefaultUploadLimits()
 	limits.ChatAttachment = db.DefaultChatAttachmentMaxFileBytes + 1
 
-	if err := limits.TestingValidate(); err == nil {
+	if err := limits.Validate(); err == nil {
 		t.Fatal("validate() accepted a chat limit above the database ceiling")
 	}
 
 	limits = DefaultUploadLimits()
 	limits.Library = 0
-	if err := limits.TestingValidate(); err == nil {
+	if err := limits.Validate(); err == nil {
 		t.Fatal("validate() accepted a zero Library limit")
 	}
 }
 
 func TestUploadPurposeEnabledRejectsJournalAssetsOnGenericEndpoint(t *testing.T) {
 	service := &SpaceLibraryService{
-		TestingUploadsEnabled: true, TestingAttachmentsEnabled: true,
-		TestingNoteAssetsEnabled: true, TestingDrawingAssetsEnabled: true,
+		UploadsEnabled: true, AttachmentsEnabled: true,
+		NoteAssetsEnabled: true, DrawingAssetsEnabled: true,
 	}
 
 	// Note assets authorize against the parent note, so the Space-wide Library
 	// upload endpoint must never accept them even when the feature is on.
-	if service.TestingUploadPurposeEnabled(UploadPurposeNoteAttachment) {
+	if service.UploadPurposeEnabled(UploadPurposeNoteAttachment) {
 		t.Fatal("generic Library upload endpoint accepted the note_attachment purpose")
 	}
-	if service.TestingUploadPurposeEnabled(UploadPurposeDrawingAsset) {
+	if service.UploadPurposeEnabled(UploadPurposeDrawingAsset) {
 		t.Fatal("generic Library upload endpoint accepted the drawing_attachment purpose")
 	}
-	if !service.TestingUploadPurposeEnabled(UploadPurposeLibrary) || !service.TestingUploadPurposeEnabled(UploadPurposeChatAttachment) {
+	if !service.UploadPurposeEnabled(UploadPurposeLibrary) || !service.UploadPurposeEnabled(UploadPurposeChatAttachment) {
 		t.Fatal("library and chat attachment purposes should be enabled")
 	}
-	if service.TestingUploadPurposeEnabled("avatar") {
+	if service.UploadPurposeEnabled("avatar") {
 		t.Fatal("unknown purpose accepted")
 	}
 }
 
 func TestDrawingAssetMIMEAllowlistRejectsActiveAndGenericContent(t *testing.T) {
 	for _, allowed := range []string{"image/png", "image/jpeg", "IMAGE/WEBP"} {
-		if !TestingSupportedDrawingAssetMIME(allowed) {
+		if !SupportedDrawingAssetMIME(allowed) {
 			t.Fatalf("safe drawing MIME %q was rejected", allowed)
 		}
 	}
@@ -228,7 +228,7 @@ func TestDrawingAssetMIMEAllowlistRejectsActiveAndGenericContent(t *testing.T) {
 		"text/html",
 		"application/octet-stream",
 	} {
-		if TestingSupportedDrawingAssetMIME(rejected) {
+		if SupportedDrawingAssetMIME(rejected) {
 			t.Fatalf("unsafe drawing MIME %q was accepted", rejected)
 		}
 	}
@@ -242,7 +242,7 @@ func TestJournalAssetMIMEAllowlistIsRasterOnly(t *testing.T) {
 		"application/octet-stream",
 		"video/mp4",
 	} {
-		if TestingSupportedDrawingAssetMIME(rejected) {
+		if SupportedDrawingAssetMIME(rejected) {
 			t.Fatalf("active or non-image Journal MIME %q was accepted", rejected)
 		}
 	}

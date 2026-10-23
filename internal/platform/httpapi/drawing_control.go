@@ -23,7 +23,7 @@ func (s *SpacesService) ProcessDrawingControlCommands(
 		err := s.deliverCollaborationControlCommand(
 			ctx,
 			"drawing-room",
-			s.TestingJournalCollab.DrawingRoomID(command.DrawingID),
+			s.JournalCollab.DrawingRoomID(command.DrawingID),
 			command.DrawingID,
 			command.Command,
 			command.Payload,

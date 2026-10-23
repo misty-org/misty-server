@@ -3,10 +3,10 @@ package api
 import (
 	"strings"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-func TestingSpansToPlainText(spans []db.MessageSpan) string {
+func SpansToPlainText(spans []db.MessageSpan) string {
 	var builder strings.Builder
 	for _, span := range spans {
 		switch span.Type {

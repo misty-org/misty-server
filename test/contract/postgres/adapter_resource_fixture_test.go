@@ -5,15 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 // These are arbitrary operator-supplied ceilings used to exercise concurrent
 // resource accounting. No commercial allowance calculation runs in the server.
@@ -22,7 +19,6 @@ const FreeStorageBytes = int64(2_000_000_000)
 const BasicSpaceLimit = 3
 
 const MaxSpaceLimit = 10
-
 
 const BasicStorageBytes = int64(2_000_000_000)
 
@@ -82,7 +78,7 @@ func useResourceAdapterFixture(t *testing.T, database *Database) {
 
 // Historical labels choose fake adapter responses for upgrade fixtures only.
 func setAdapterFixtureCohort(database *Database, licenseID string, tier Tier, status string, expiresAt *time.Time) error {
-	return database.TestingWithRLSContext(context.Background(), TestingServiceRLSSettings(), func(tx *sql.Tx) error {
+	return database.WithRLSContext(context.Background(), ServiceRLSSettings(), func(tx *sql.Tx) error {
 		_, err := tx.Exec(`UPDATE licenses SET tier=$2,status=$3,expires_at=$4 WHERE id=$1`, licenseID, tier, status, expiresAt)
 		return err
 	})

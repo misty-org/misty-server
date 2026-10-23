@@ -8,10 +8,10 @@ import (
 	"errors"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 	"github.com/kannachi323/misty/server/internal/integrations/composio"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 type appsCall struct {
@@ -23,10 +23,10 @@ type appsCall struct {
 // appsExecute runs one app tool. Reads run directly and may be retried. Writes
 // are journaled under the call ID with encrypted results; sends, shares,
 // deletes and payments first wait for the user when the account asks for that.
-func (s *SpacesService) appsExecute(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) appsExecute(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var call appsCall
 	if json.Unmarshal(request.Arguments, &call) != nil || !composio.ValidToolSlug(call.ToolSlug) {
-		return nil, serveragent.ErrInvalidRequest("tool_slug must be an exact slug from integration_search, such as GMAIL_SEND_EMAIL")
+		return nil, agent.ErrInvalidRequest("tool_slug must be an exact slug from integration_search, such as GMAIL_SEND_EMAIL")
 	}
 	if len(call.Arguments) == 0 || string(call.Arguments) == "null" {
 		call.Arguments = json.RawMessage(`{}`)
@@ -41,7 +41,7 @@ func (s *SpacesService) appsExecute(ctx context.Context, invocation agenttools.I
 	}
 	info, err := client.Tool(ctx, call.ToolSlug)
 	if composio.NotFound(err) {
-		return nil, serveragent.ErrInvalidRequest("Unknown app tool " + call.ToolSlug + ". Use integration_search to find exact slugs.")
+		return nil, agent.ErrInvalidRequest("Unknown app tool " + call.ToolSlug + ". Use integration_search to find exact slugs.")
 	}
 	if err != nil {
 		return nil, appsError(err)
@@ -79,14 +79,14 @@ func (s *SpacesService) appsExecute(ctx context.Context, invocation agenttools.I
 		IdempotencyKey: effect, RequireSettledRun: invocation.Source == "space_conversation" && invocation.RunID != "",
 		UserID: invocation.UserID, SpaceID: invocation.SpaceID, AgentID: invocation.AgentID, AgentInstanceID: invocation.AgentInstanceID,
 		RunID: invocation.RunID, SessionID: invocation.SessionID, ToolName: appsExecuteTool, AuditEvent: appsExecuteTool,
-		Risk: serveragent.RiskWrite, Source: invocation.Source, RedactPayload: true,
-		Request:       TestingMustAPIRawJSON(map[string]any{"tool_slug": call.ToolSlug, "kind": kind, "arguments_hash": appsArgumentsHash(call), "account": call.Account}),
+		Risk: agent.RiskWrite, Source: invocation.Source, RedactPayload: true,
+		Request:       MustAPIRawJSON(map[string]any{"tool_slug": call.ToolSlug, "kind": kind, "arguments_hash": appsArgumentsHash(call), "account": call.Account}),
 		ProtectResult: func(value json.RawMessage) ([]byte, error) { return s.protectAgentEffectResult(effect, value) },
 		RestoreResult: func(value []byte) (json.RawMessage, error) { return s.restoreAgentEffectResult(effect, value) },
 	}, func() (json.RawMessage, error) {
 		if approval != nil {
 			if used, err := s.database.ResolveAgentAppRequest(bounded, invocation.UserID, approval.ID, "approved", "used"); err != nil || !used {
-				return nil, errors.Join(db.ErrAgentToolboxNotAttempted, serveragent.ErrInvalidRequest("That approval was already used. Call integration_execute again to ask the user again."))
+				return nil, errors.Join(db.ErrAgentToolboxNotAttempted, agent.ErrInvalidRequest("That approval was already used. Call integration_execute again to ask the user again."))
 			}
 		}
 		result, err := s.runAppTool(bounded, invocation.UserID, call)
@@ -115,7 +115,7 @@ func (s *SpacesService) runAppTool(ctx context.Context, user string, call appsCa
 			message += " (log " + execution.LogID + ")"
 		}
 		// The app answered with a failure, so the action changed nothing.
-		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, serveragent.ErrInvalidRequest(message))
+		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, agent.ErrInvalidRequest(message))
 	}
 	data := execution.Data
 	if len(data) == 0 {

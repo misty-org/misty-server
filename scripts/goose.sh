@@ -43,7 +43,7 @@ case "$DB_SSLMODE" in
     exit 2
     ;;
 esac
-MIGRATIONS_DIR="${MIGRATIONS_DIR:-internal/platform/postgres/migrations}"
+MIGRATIONS_DIR="${MIGRATIONS_DIR:-internal/platform/db/migrations}"
 
 if [[ $# -eq 0 ]]; then
   echo "Usage: $0 <goose-command> [args...]"

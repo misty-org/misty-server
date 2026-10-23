@@ -18,7 +18,7 @@ func TestRunCatalogRetainsGrantedBrowserTools(t *testing.T) {
 			continue
 		}
 		granted++
-		if descriptor.Approval != "none" || !strings.Contains(descriptor.Description, "scope-browser") {
+		if !strings.Contains(descriptor.Description, "scope-browser") {
 			t.Fatalf("unexpected browser descriptor: %+v", descriptor)
 		}
 	}

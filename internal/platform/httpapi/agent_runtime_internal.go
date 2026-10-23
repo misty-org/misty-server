@@ -9,10 +9,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 type agentRuntimeIdentity struct {
@@ -63,7 +62,7 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 			return
 		}
 		membership = runtimeSnapshotMembership(run, membership)
-		fileContext, fileWarnings, sources := "", "", []workflowv2.ContentRef{}
+		fileContext, fileWarnings, sources := "", "", []workflow.ContentRef{}
 		var system, prompt string
 		var capture *aiCaptureAttachment
 		var displayCaptures []aiDisplayCapture
@@ -193,7 +192,7 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 			"run_id": run.ID, "agent_id": run.AgentID, "space_id": spaceID, "run_mode": run.EffectiveRunMode,
 			"space_name": spaceName, "is_default": false, "timezone": timezone, "current_time": now.Format(time.RFC3339), "members": []any{},
 			"model_id": agentRoute.Model, "reasoning_effort": agentRoute.Reasoning, "vision_model_id": visionRoute.Model,
-			"context_window_tokens": serveragent.ModelContextWindow(r.Context(), agentRoute.Model), "system": system,
+			"context_window_tokens": agent.ModelContextWindow(r.Context(), agentRoute.Model), "system": system,
 			"prompt": prompt, "attached_sources": sources, "file_warnings": fileWarnings,
 			"allowed_tools": allowedTools, "capture": capture, "display_captures": displayCaptures, "companion_mode": companionMode, "managed_misty": managedMisty,
 		})
@@ -220,137 +219,4 @@ func runtimeSnapshotMembership(run *db.SpaceRun, current *db.AskExecutionContext
 		out.ReasoningEffort = snapshot.ReasoningEffort
 	}
 	return &out
-}
-
-func (s *SpacesService) AgentRuntimeTool() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if isAIInvocationRuntimeID(chi.URLParam(r, "runID")) {
-			s.agentRuntimeToolAIInvocation(w, r)
-			return
-		}
-		var body struct {
-			RuntimeRunID    string          `json:"runtime_run_id"`
-			CallID          string          `json:"call_id"`
-			Name            string          `json:"name"`
-			Arguments       json.RawMessage `json:"arguments"`
-			DeviceHookToken string          `json:"device_hook_token"`
-		}
-		if !readAgentRuntimeRequest(s.agentRuntime, w, r, &body) {
-			return
-		}
-		if strings.TrimSpace(body.CallID) == "" || len(body.CallID) > 200 || len(body.Arguments) == 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_tool_call"})
-			return
-		}
-		run, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		outcome, err := s.executePersonalAgentRuntimeTool(r.Context(), run, agentRuntimeToolCall{
-			RuntimeRunID: body.RuntimeRunID, CallID: body.CallID, Name: body.Name, Arguments: body.Arguments,
-			DeviceHookToken: body.DeviceHookToken,
-		})
-		if err != nil {
-			if errors.Is(err, agenttools.ErrCapabilityDenied) || errors.Is(err, agenttools.ErrToolNotFound) || errors.Is(err, agenttools.ErrApprovalRequired) || errors.Is(err, workflowv2.ErrCapabilityDenied) {
-				writeJSON(w, http.StatusForbidden, map[string]string{"code": "tool_denied"})
-				return
-			}
-			writeAgentError(w, err)
-			return
-		}
-		if outcome.DeviceWait {
-			writeJSON(w, http.StatusAccepted, map[string]any{"device_wait": true})
-			return
-		}
-		if outcome.Approval != nil {
-			writeJSON(w, http.StatusAccepted, map[string]any{"approval": outcome.Approval})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"result": json.RawMessage(outcome.Result)})
-	}
-}
-
-func (s *SpacesService) AgentRuntimeEvent() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if isAIInvocationRuntimeID(chi.URLParam(r, "runID")) {
-			s.agentRuntimeEventAIInvocation(w, r)
-			return
-		}
-		var body struct {
-			RuntimeRunID string          `json:"runtime_run_id"`
-			NodeID       string          `json:"node_id"`
-			State        string          `json:"state"`
-			Phase        string          `json:"phase"`
-			Attempt      int             `json:"attempt"`
-			Input        json.RawMessage `json:"input"`
-			Progress     int             `json:"progress"`
-			Output       json.RawMessage `json:"output"`
-			ErrorCode    string          `json:"error_code"`
-			ErrorMessage string          `json:"error_message"`
-		}
-		if !readAgentRuntimeRequest(s.agentRuntime, w, r, &body) {
-			return
-		}
-		if len(body.NodeID) < 1 || len(body.NodeID) > 200 || len(body.Phase) < 1 || len(body.Phase) > 80 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_event"})
-			return
-		}
-		run, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID)
-		if err != nil {
-			if strings.HasPrefix(body.NodeID, "model:") && body.State == "completed" {
-				if stopped, lookupErr := s.database.PersonalAgentRuntimeRecord(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID); lookupErr == nil && (stopped.State == "canceled" || stopped.State == "completed" || stopped.State == "completed_with_errors" || stopped.State == "failed") {
-					if _, settleErr := s.meterPersonalAgentRuntimeModel(r.Context(), stopped, body.NodeID, workflowv2.StepCompleted, body.Output); settleErr != nil {
-						writeAgentError(w, settleErr)
-						return
-					}
-					writeJSON(w, http.StatusOK, map[string]bool{"accepted": true})
-					return
-				}
-			}
-			writeAgentError(w, err)
-			return
-		}
-		state := workflowv2.StepState(body.State)
-		switch state {
-		case workflowv2.StepRunning, workflowv2.StepCompleted, workflowv2.StepFailed:
-		default:
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_event_state"})
-			return
-		}
-		if len(body.Output) == 0 || !validJSONObject(body.Output) {
-			body.Output = json.RawMessage(`{}`)
-		}
-		if len(body.Input) == 0 || !validJSONObject(body.Input) {
-			body.Input = json.RawMessage(`{}`)
-		}
-		body.Input = sanitizeAgentLifecycleJSON(body.Input)
-		rawModelOutput := body.Output
-		body.Output = sanitizeAgentLifecycleJSON(body.Output)
-		var stepErr error
-		if state == workflowv2.StepFailed {
-			stepErr = errors.New(strings.TrimSpace(body.ErrorMessage))
-		}
-		if body.Attempt < 1 {
-			body.Attempt = 1
-		}
-		overLimit := false
-		if strings.HasPrefix(body.NodeID, "model:") {
-			var err error
-			if overLimit, err = s.meterPersonalAgentRuntimeModel(r.Context(), run, body.NodeID, state, rawModelOutput); err != nil {
-				writeAgentError(w, err)
-				return
-			}
-		}
-		if err := s.database.CheckpointWorkflowStep(r.Context(), run.ID, workflowv2.StepEvent{NodeID: body.NodeID, State: state, Attempt: body.Attempt, Input: body.Input, Output: body.Output, Error: stepErr}); err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		if err := s.database.TouchPersonalAgentTaskRuntime(r.Context(), run.ID, body.RuntimeRunID, body.Phase, body.Progress); err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		s.projectLinkedAIInvocationEvent(r.Context(), run, body.NodeID, body.State, body.Phase, body.Output)
-		writeJSON(w, http.StatusOK, map[string]bool{"accepted": true, "over_limit": overLimit})
-	}
 }

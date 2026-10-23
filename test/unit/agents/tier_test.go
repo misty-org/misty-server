@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/agents"
+	. "github.com/kannachi323/misty/server/internal/agent"
 )
 
 type namedTestProvider struct {
@@ -49,7 +49,7 @@ func TestSpaceContentCompletionBillsOnlyRequestingAccount(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			meter := &recordingUsageMeter{}
 			service := NewService(nil, namedTestProvider{provider: "gateway", model: "model", text: "done"}, WithUsageMeter(meter))
-			if _, err := service.CompleteWithToolsForSpaceContext(context.Background(), "member", "space-owner", "space-123", "identity", "prompt", TierLow, testCase.manifest, testCase.execute); err != nil {
+			if _, err := service.CompleteWithToolsForSpaceContext(context.Background(), "member", "space-owner", "space-123", "identity", "prompt", testCase.manifest, testCase.execute); err != nil {
 				t.Fatal(err)
 			}
 			if meter.userID != "member" || meter.spaceID != "" {
@@ -79,10 +79,4 @@ func (meter *recordingUsageMeter) Release(*UsageReservation) error {
 func (meter *recordingUsageMeter) Refund(*UsageReservation, string, string) (UsageSettlement, error) {
 	meter.refunds++
 	return UsageSettlement{CreditsRemaining: 100}, nil
-}
-
-func TestNormalizeAgentTierDefaultsToLow(t *testing.T) {
-	if got := NormalizeAgentTier("unknown"); got != TierLow {
-		t.Fatalf("NormalizeAgentTier() = %q", got)
-	}
 }

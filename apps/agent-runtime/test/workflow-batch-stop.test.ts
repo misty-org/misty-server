@@ -21,7 +21,7 @@ vi.mock("../src/control-plane.js", () => ({
   },
 }));
 vi.mock("../src/mcp-runtime.js", () => ({
-  discoverRemoteMCPTools: async () => ({ supported: true, tools: ["social.send_message", "note.create"].map(name => ({ name, description: name, inputSchema: { type: "object", properties: {} } })) }),
+  discoverRemoteMCPTools: async () => ["social.send_message", "note.create"].map(name => ({ name, description: name, inputSchema: { type: "object", properties: {} } })),
   requestMCPToolExecution: async (_context: unknown, _access: unknown, _id: string, name: string) => {
     fixture.executed.push(name);
     return { result: fixture.result };

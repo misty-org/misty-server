@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/agents"
+	. "github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
@@ -13,34 +13,22 @@ func testModelRuntime() *modelruntime.Client {
 	return modelruntime.New("https://runtime.test", []byte(strings.Repeat("s", 32)), nil)
 }
 
-func TestNewAgentProviderUsesPerTierRoutes(t *testing.T) {
+func TestNewAgentProviderUsesTheFastModelThroughTheRuntime(t *testing.T) {
 	t.Setenv("MISTY_AI_LOW_MODEL", "google/gemini-low")
-	t.Setenv("MISTY_AI_MED_MODEL", "anthropic/claude-med")
-	t.Setenv("MISTY_AI_HIGH_MODEL", "openai/gpt-high")
-
-	router, ok := NewAgentProvider(testModelRuntime()).(*AgentProviderRouter)
-	if !ok {
-		t.Fatalf("NewAgentProvider() did not return an agent router")
+	provider := NewAgentProvider(testModelRuntime())
+	if name, model := ProviderStatus(provider); name != ProviderVercelAI || model != "google/gemini-low" {
+		t.Fatalf("route = %s/%s", name, model)
 	}
-	for tier, want := range map[AgentTier]string{TierLow: "google/gemini-low", TierMed: "anthropic/claude-med", TierHigh: "openai/gpt-high"} {
-		if provider, model := TestingProviderStatus(router.ProviderForTier(tier)); provider != ProviderVercelAI || model != want {
-			t.Fatalf("%s route = %s/%s", tier, provider, model)
-		}
-		if _, ok := router.ProviderForTier(tier).(*RuntimeProvider); !ok {
-			t.Fatalf("%s does not call models through the runtime", tier)
-		}
+	if _, ok := provider.(*RuntimeProvider); !ok {
+		t.Fatal("the agent does not call models through the runtime")
 	}
 }
 
 func TestNewAgentProviderUsesGatewayDefaultsAndNeedsTheRuntime(t *testing.T) {
-	router := NewAgentProvider(testModelRuntime()).(*AgentProviderRouter)
-	for tier, want := range map[AgentTier]string{TierLow: TestingDefaultAgentLowGatewayModel, TierMed: TestingDefaultAgentMedGatewayModel, TierHigh: TestingDefaultAgentHighGatewayModel} {
-		if _, model := TestingProviderStatus(router.ProviderForTier(tier)); model != want {
-			t.Fatalf("%s default model = %q", tier, model)
-		}
+	if _, model := ProviderStatus(NewAgentProvider(testModelRuntime())); model != DefaultAgentLowGatewayModel {
+		t.Fatalf("default model = %q", model)
 	}
-	router = NewAgentProvider(&modelruntime.Client{}).(*AgentProviderRouter)
-	if provider, _ := TestingProviderStatus(router.ProviderForTier(TierHigh)); provider != ProviderMock {
+	if provider, _ := ProviderStatus(NewAgentProvider(&modelruntime.Client{})); provider != ProviderMock {
 		t.Fatalf("agent called a model without the runtime: %q", provider)
 	}
 }
@@ -59,7 +47,7 @@ func TestGroundedAgentCitationsRejectInventedFilesAndLocations(t *testing.T) {
 		{ID: "wrong-page", ScopeID: "scope_12345678", FileName: "report.pdf", RelativePath: "reports/report.pdf", Kind: "pdf_page", Label: "Page 9", Page: 9},
 		{ID: "wrong-file", ScopeID: "scope_12345678", FileName: "secret.pdf", RelativePath: "secret.pdf", Kind: "pdf_page", Label: "Page 1", Page: 1},
 	}
-	grounded := TestingGroundedAgentCitations(request, citations)
+	grounded := GroundedAgentCitations(request, citations)
 	if len(grounded) != 2 || grounded[0].ID != "ok" || grounded[1].ID != "sheet" {
 		t.Fatalf("grounded citations = %#v", grounded)
 	}

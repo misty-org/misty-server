@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestTeachModeAcceptsALessonOnlyOnLessonTurns(t *testing.T) {

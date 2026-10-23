@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/idtoken"
 )

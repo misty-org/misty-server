@@ -139,7 +139,7 @@ func (extractor *FFprobeLibraryMetadataExtractor) Extract(ctx context.Context, s
 		}
 	}
 	for _, key := range []string{"com.apple.quicktime.location.ISO6709", "location"} {
-		if latitude, longitude, ok := TestingParseISO6709(probe.Format.Tags[key]); ok {
+		if latitude, longitude, ok := ParseISO6709(probe.Format.Tags[key]); ok {
 			result["embedded_location"] = map[string]any{"latitude": latitude, "longitude": longitude}
 			break
 		}
@@ -163,7 +163,7 @@ func parseFFprobeRate(value string) float64 {
 
 var iso6709Pattern = regexp.MustCompile(`^([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)`)
 
-func TestingParseISO6709(value string) (float64, float64, bool) {
+func ParseISO6709(value string) (float64, float64, bool) {
 	match := iso6709Pattern.FindStringSubmatch(strings.TrimSpace(value))
 	if len(match) != 3 {
 		return 0, 0, false

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

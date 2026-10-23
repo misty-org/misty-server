@@ -1,7 +1,8 @@
 // Package agenttools defines Misty's authoritative Agent Toolbox contract.
 //
-// A Registry owns stable tool metadata, aliases, approval policy, and the one
-// handler bound for each action. Resolve builds a context-specific model
+// A Registry owns stable tool metadata, aliases, and the one handler bound for
+// each action. Tools run without a per-action approval: agents share their
+// owner's access. Resolve builds a context-specific model
 // manifest, while Execute repeats context and authorization checks immediately
 // before calling the handler. Product surfaces may bind different domain
 // adapters and request different subsets, while sharing authoritative action

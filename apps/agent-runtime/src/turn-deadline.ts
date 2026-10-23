@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 
-// The deliverable deadline (docs/plans/odysseys-campaign.md). A long Odysseys task reached
+// The deliverable deadline (docs/agents/evals/odysseys.md). A long Odysseys task reached
 // the turn limit while still browsing and ended with no answer, losing every page it read.
 // Two turns before the limit the run is told to write its answer; on the last turn only
 // agent_finish is offered, so a run always reports what it found and what remains.

@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/workqueue"
 )
 
@@ -25,7 +25,7 @@ func (g *AbuseGuard) startPersistenceLocked() {
 			Next: func(context.Context) (time.Duration, bool, error) {
 				g.mu.Lock()
 				defer g.mu.Unlock()
-				now := g.TestingNow()
+				now := g.Now()
 				for _, record := range g.strikes {
 					if record.pendingPersistence != 0 && record.blockedUntil.After(now) {
 						return 0, true, nil
@@ -52,7 +52,7 @@ func (g *AbuseGuard) persistNextBlock(ctx context.Context) (int, error) {
 	key := ""
 	var record abuseRecord
 	for candidate, r := range g.strikes {
-		if r.pendingPersistence != 0 && r.blockedUntil.After(g.TestingNow()) {
+		if r.pendingPersistence != 0 && r.blockedUntil.After(g.Now()) {
 			key, record = candidate, *r
 			break
 		}

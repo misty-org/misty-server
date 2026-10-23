@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // ProcessPersonalAgentTasks advances Space run waits and dispatches claimable

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"unicode/utf8"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 type voiceProvider interface {

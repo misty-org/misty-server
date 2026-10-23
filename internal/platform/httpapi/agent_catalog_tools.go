@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Read tools that cover Misty features with no other tool: one search across
@@ -22,13 +22,13 @@ func agentToolSchema(properties map[string]any, required []string) json.RawMessa
 	if required == nil {
 		required = []string{}
 	}
-	return TestingMustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
+	return MustAPIRawJSON(map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false})
 }
 
 func searchAllToolRegistration(database *db.Database) agenttools.Registration {
 	return agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
-			Name: searchAllTool, Version: 1, Risk: serveragent.RiskRead, Approval: agenttools.ApprovalNone,
+			Name: searchAllTool, Version: 1, Risk: agent.RiskRead,
 			Description: "Search notes and messages at once, ranked by relevance. Use it when you do not know where something is; then read the item with its own tool.",
 			InputSchema: agentToolSchema(map[string]any{
 				"query": map[string]any{"type": "string", "minLength": 1, "maxLength": 500},
@@ -36,15 +36,15 @@ func searchAllToolRegistration(database *db.Database) agenttools.Registration {
 				"kinds": map[string]any{"type": "array", "maxItems": 5, "items": map[string]any{"type": "string", "enum": []string{"note", "message"}}},
 				"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
 			}, []string{"query"}),
-			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
+			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPublic, Locality: agenttools.LocalityServer, Idempotent: true,
 		},
-		Handler: func(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+		Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 			return executeSearchAll(ctx, database, invocation, request)
 		},
 	}
 }
 
-func executeSearchAll(ctx context.Context, database *db.Database, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func executeSearchAll(ctx context.Context, database *db.Database, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		Query string   `json:"query"`
 		Space string   `json:"space"`
@@ -107,12 +107,12 @@ func executeSearchAll(ctx context.Context, database *db.Database, invocation age
 func devicesListToolRegistration(database *db.Database) agenttools.Registration {
 	return agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
-			Name: devicesListTool, Version: 1, Risk: serveragent.RiskRead, Approval: agenttools.ApprovalNone,
+			Name: devicesListTool, Version: 1, Risk: agent.RiskRead,
 			Description: "List this account's signed-in devices with their platform and when each was last online.",
 			InputSchema: agentToolSchema(map[string]any{}, nil), OutputSchema: agentToolObjectOutputSchema(),
-			Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, AllowCustomAgent: true, Idempotent: true,
+			Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, Idempotent: true,
 		},
-		Handler: func(ctx context.Context, invocation agenttools.Invocation, _ serveragent.ToolRequest) (json.RawMessage, error) {
+		Handler: func(ctx context.Context, invocation agenttools.Invocation, _ agent.ToolRequest) (json.RawMessage, error) {
 			devices, err := database.TrustedDevices(invocation.UserID)
 			if err != nil {
 				return nil, err

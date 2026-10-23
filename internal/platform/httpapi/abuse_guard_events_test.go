@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 type eventBlockStore struct {

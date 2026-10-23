@@ -17,12 +17,12 @@ func TestTrustedDeviceSignatureBindsMethodPathNonceAndBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload := TestingDeviceSignaturePayload("POST", "/api/devices/device_123/workflow-node-jobs/claim", "1700000000", "unique-nonce-1234", []byte(`{"limit":1}`))
+	payload := DeviceSignaturePayload("POST", "/api/devices/device_123/workflow-node-jobs/claim", "1700000000", "unique-nonce-1234", []byte(`{"limit":1}`))
 	signature := ed25519.Sign(privateKey, []byte(payload))
 	if !ed25519.Verify(publicKey, []byte(payload), signature) {
 		t.Fatal("valid signature rejected")
 	}
-	tampered := TestingDeviceSignaturePayload("POST", "/api/devices/device_123/workflow-node-jobs/claim", "1700000000", "unique-nonce-1234", []byte(`{"limit":2}`))
+	tampered := DeviceSignaturePayload("POST", "/api/devices/device_123/workflow-node-jobs/claim", "1700000000", "unique-nonce-1234", []byte(`{"limit":2}`))
 	if ed25519.Verify(publicKey, []byte(tampered), signature) {
 		t.Fatal("tampered request reused a signature")
 	}
@@ -52,16 +52,16 @@ func TestConnectedDeviceRegistrationRequiresEndpointAndProtocolTogether(t *testi
 	}
 	key := base64.RawURLEncoding.EncodeToString(publicKey)
 	endpointID := "endpoint_abcdefghijklmnopqrstuvwxyz0123456789"
-	if !TestingValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, json.RawMessage(`["misty-device/1"]`), json.RawMessage(`{"connectedDevices":true}`)) {
+	if !ValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, json.RawMessage(`["misty-device/1"]`), json.RawMessage(`{"connectedDevices":true}`)) {
 		t.Fatal("valid connected-device registration rejected")
 	}
-	if TestingValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, nil, json.RawMessage(`{}`)) {
+	if ValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, nil, json.RawMessage(`{}`)) {
 		t.Fatal("endpoint without a protocol was accepted")
 	}
-	if TestingValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, json.RawMessage(`["misty-device/2"]`), json.RawMessage(`{}`)) {
+	if ValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, json.RawMessage(`["misty-device/2"]`), json.RawMessage(`{}`)) {
 		t.Fatal("unsupported protocol was accepted")
 	}
-	if TestingValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, json.RawMessage(`["misty-device/1"]`), json.RawMessage(`{"clipboardPayload":"secret"}`)) {
+	if ValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, json.RawMessage(`["misty-device/1"]`), json.RawMessage(`{"clipboardPayload":"secret"}`)) {
 		t.Fatal("clipboard data was accepted in registration")
 	}
 }

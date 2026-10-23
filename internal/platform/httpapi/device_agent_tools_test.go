@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 )
 

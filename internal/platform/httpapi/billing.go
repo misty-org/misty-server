@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Billing handlers translate authenticated account requests into the optional

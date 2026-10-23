@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/aimodels"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Plans decide which models a run may use. Basic runs Thinking and Seeing on
@@ -59,11 +59,6 @@ func planRoutes(ctx context.Context, database *db.Database, user string, default
 	return defaults, nil
 }
 
-// planAllowsModel reports whether the account's plan may pick a model.
-func planAllowsModel(ctx context.Context, database *db.Database, user, model string) bool {
-	return model == "" || accountPlan(ctx, database, user) != "basic" || model == fastModel()
-}
-
 // planTurnLimit is how many model turns one ordinary request may take. Larger
 // plans run larger tasks in a single request; usage limits still bound cost.
 func planTurnLimit(ctx context.Context, database *db.Database, user string) int {
@@ -80,9 +75,9 @@ func planTurnLimit(ctx context.Context, database *db.Database, user string) int 
 
 // evalTurnLimit is the plan's turn limit, or a development eval's own (at most 200) where the
 // stack allows client model choice. Evals compare against benchmarks run with long step budgets
-// (docs/plans/odysseys-campaign.md).
+// (docs/agents/evals/odysseys.md).
 func evalTurnLimit(requested, plan int) int {
-	if requested <= 0 || !serveragent.ClientModelChoice() {
+	if requested <= 0 || !agent.ClientModelChoice() {
 		return plan
 	}
 	return min(requested, 200)
@@ -92,7 +87,7 @@ func evalTurnLimit(requested, plan int) int {
 // of execution instead of the 30-minute default: the eval stops a run when it stops making
 // progress, not on a clock (evals/odysseys/watchdog.ts). 0 keeps the default.
 func evalExecutionLimitMS(requestedTurns int) int64 {
-	if requestedTurns <= 0 || !serveragent.ClientModelChoice() {
+	if requestedTurns <= 0 || !agent.ClientModelChoice() {
 		return 0
 	}
 	return int64(4 * time.Hour / time.Millisecond)

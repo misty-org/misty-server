@@ -4,13 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"sync"
 	"testing"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 	database := openTestDatabase(t)

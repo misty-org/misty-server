@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
 
@@ -22,7 +22,7 @@ func decideNextApproval(t *testing.T, database *db.Database, userID, subject, st
 	ctx := context.Background()
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
 		var id string
-		err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+		err := database.SpaceTx(ctx, func(tx *sql.Tx) error {
 			return tx.QueryRowContext(ctx, `SELECT id FROM agent_app_requests WHERE owner_user_id=$1 AND subject=$2 AND state='pending'`, userID, subject).Scan(&id)
 		})
 		if errors.Is(err, sql.ErrNoRows) {
@@ -126,7 +126,7 @@ func TestAgentCatalogToolsPostgres(t *testing.T) {
 
 	// Threads: list, post as the agent, and read the post back.
 	teammate, _ := database.CreateUser("catalog-teammate@example.test", "password123")
-	if err := database.TestingSpaceTx(ctx, func(tx *sql.Tx) error {
+	if err := database.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,'member')`, work.ID, teammate.ID)
 		return err
 	}); err != nil {

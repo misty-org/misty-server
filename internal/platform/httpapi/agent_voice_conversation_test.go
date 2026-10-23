@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/gorilla/websocket"
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"net/http"
 	"net/http/httptest"

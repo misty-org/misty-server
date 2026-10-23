@@ -17,11 +17,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-// Unified devices (docs/design/devices/BRIEF.md): admission needs a session AND
+// Unified devices (docs/sync/devices.md): admission needs a session AND
 // a vault-root signature; trust records are signed by keys the server never holds.
 
 type deviceFixture struct {
@@ -118,11 +118,11 @@ func (f *deviceFixture) signed(device testDevice, method, path string, body any)
 	}
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	nonce := base64.StdEncoding.EncodeToString([]byte(uuid.NewString()))
-	canonical := TestingDeviceSignaturePayload(method, path, timestamp, nonce, payload)
+	canonical := DeviceSignaturePayload(method, path, timestamp, nonce, payload)
 	signature := ed25519.Sign(device.key, []byte("misty.device.request.v1\n"+canonical))
 	request := httptest.NewRequest(method, path, bytes.NewReader(payload))
 	request.Header.Set("Content-Type", "application/json")
-	request.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: f.token})
+	request.AddCookie(&http.Cookie{Name: SessionCookieName, Value: f.token})
 	request.Header.Set("X-Misty-Device-Timestamp", timestamp)
 	request.Header.Set("X-Misty-Device-Nonce", nonce)
 	request.Header.Set("X-Misty-Device-Signature", base64.StdEncoding.EncodeToString(signature))

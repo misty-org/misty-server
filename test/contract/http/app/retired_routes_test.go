@@ -38,7 +38,7 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"/sync/ws", "/sync/vault", "/sync/devices", "/sync/control", "/spaces", "/internal/agent-runtime/runs/{runID}/tools"} {
+	for _, required := range []string{"/sync/ws", "/sync/vault", "/sync/devices", "/sync/control", "/spaces", "/internal/agent-runtime/runs/{runID}/events"} {
 		if !found[required] {
 			t.Errorf("retained route missing: %s", required)
 		}

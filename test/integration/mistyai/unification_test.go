@@ -3,15 +3,12 @@ package mistyai_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/test/testkit"
 	"strings"
 	"testing"
 	"time"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestPrivateActivityDelegationAndRevocation(t *testing.T) {
 	database := testkit.OpenDatabase(t)

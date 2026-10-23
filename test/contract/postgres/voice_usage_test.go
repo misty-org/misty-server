@@ -5,14 +5,11 @@ import (
 	"database/sql"
 	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"os"
 	"strings"
 	"testing"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestVoiceUsageJournalRecoversKnownUsageButHoldsUnknownWork(t *testing.T) {
 	dsn := os.Getenv("MISTY_BILLING_TEST_DSN")
@@ -38,8 +35,8 @@ func TestVoiceUsageJournalRecoversKnownUsageButHoldsUnknownWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer scoped.Close()
-	for _, path := range []string{"upgrades/20270216000000_billing_adapter_outbox.sql", "upgrades/20270217000000_billing_runtime_groups.sql", "upgrades/20270218000000_billing_admission_intents.sql", "migrations/20270927130000_voice_usage_journal.sql"} {
-		raw, err := os.ReadFile("../../../internal/platform/postgres/" + path)
+	for _, path := range []string{"test/fixtures/schema-history/20270216000000_billing_adapter_outbox.sql", "test/fixtures/schema-history/20270217000000_billing_runtime_groups.sql", "test/fixtures/schema-history/20270218000000_billing_admission_intents.sql", "internal/platform/db/migrations/20270927130000_voice_usage_journal.sql"} {
+		raw, err := os.ReadFile("../../../" + path)
 		if err != nil {
 			t.Fatal(err)
 		}

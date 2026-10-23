@@ -3,8 +3,8 @@ package api
 import (
 	"testing"
 
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 func TestNormalizeHandoffPath(t *testing.T) {
@@ -32,8 +32,8 @@ func TestNormalizeHandoffPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := TestingNormalizeHandoffPath(tt.raw); got != tt.want {
-				t.Fatalf("TestingNormalizeHandoffPath(%q) = %q, want %q", tt.raw, got, tt.want)
+			if got := NormalizeHandoffPath(tt.raw); got != tt.want {
+				t.Fatalf("NormalizeHandoffPath(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
 		})
 	}

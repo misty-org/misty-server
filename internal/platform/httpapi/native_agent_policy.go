@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // nativeAgentInvocationPolicy reports whether a native agent run may use a
@@ -37,8 +37,7 @@ func nativeAgentInvocationPolicy(ctx context.Context, database *db.Database, inv
 			return true, false, db.ErrSpaceForbidden
 		}
 		// Browser and device descriptors are registered only for live run targets.
-		allowed, err := authorizeConnectedAgentTool(ctx, database, invocation, descriptor)
-		return true, allowed, err
+		return true, true, nil
 	}
 	record, err := database.AIInvocationByID(ctx, invocation.UserID, invocation.RunID)
 	if err != nil {
@@ -59,7 +58,7 @@ func nativeAgentInvocationPolicy(ctx context.Context, database *db.Database, inv
 	}
 	// browser.run opens and works the agent's own tabs, so it needs the computer the run was sent
 	// from, not a tab already attached: offered from the first turn, the model starts with it
-	// instead of reaching for the step tools (docs/plans/agent-harness-v3.md, change 2).
+	// instead of reaching for the step tools (docs/agents/harness.md, Tool surface).
 	if descriptor.Name == browserRunTool {
 		contexts, err := database.AIInvocationContexts(ctx, record.UserID, record.ID)
 		if err != nil {
@@ -74,17 +73,7 @@ func nativeAgentInvocationPolicy(ctx context.Context, database *db.Database, inv
 			return true, false, err
 		}
 	}
-	allowed, err := authorizeConnectedAgentTool(ctx, database, invocation, descriptor)
-	return true, allowed, err
-}
-
-// authorizeConnectedAgentTool checks tools that act through an MCP connector.
-// Misty's own tools and the owner's connected apps need no check beyond the
-// owner's permissions.
-func authorizeConnectedAgentTool(ctx context.Context, database *db.Database, invocation agenttools.Invocation, descriptor agenttools.Descriptor) (bool, error) {
-	switch {
-	}
-	return true, nil
+	return true, true, nil
 }
 
 func invocationHasBrowserContext(ctx context.Context, database *db.Database, record *db.AIInvocationRecord) (bool, error) {

@@ -23,7 +23,7 @@ func TestValidateResetURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := TestingValidateResetURL(tt.raw)
+			err := ValidateResetURL(tt.raw)
 			if (err == nil) != tt.ok {
 				t.Fatalf("validateResetURL(%q) error = %v, want ok=%v", tt.raw, err, tt.ok)
 			}
@@ -33,10 +33,10 @@ func TestValidateResetURL(t *testing.T) {
 
 func TestBuildAndClearPasswordResetCookie(t *testing.T) {
 	expiresAt := time.Now().Add(time.Minute)
-	cookie := TestingBuildPasswordResetCookie("token-123", expiresAt, true)
+	cookie := BuildPasswordResetCookie("token-123", expiresAt, true)
 
-	if cookie.Name != TestingPasswordResetCookieName {
-		t.Fatalf("cookie.Name = %q, want %q", cookie.Name, TestingPasswordResetCookieName)
+	if cookie.Name != PasswordResetCookieName {
+		t.Fatalf("cookie.Name = %q, want %q", cookie.Name, PasswordResetCookieName)
 	}
 	if cookie.Value != "token-123" {
 		t.Fatalf("cookie.Value = %q, want %q", cookie.Value, "token-123")
@@ -46,13 +46,13 @@ func TestBuildAndClearPasswordResetCookie(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	TestingClearPasswordResetCookie(rec, true)
+	ClearPasswordResetCookie(rec, true)
 	resp := rec.Result()
 	defer resp.Body.Close()
 
 	found := false
 	for _, cleared := range resp.Cookies() {
-		if cleared.Name == TestingPasswordResetCookieName {
+		if cleared.Name == PasswordResetCookieName {
 			found = true
 			if !cleared.Secure || !cleared.HttpOnly || cleared.Value != "" {
 				t.Fatal("cleared cookie must retain secure flags and contain no token")
@@ -63,7 +63,7 @@ func TestBuildAndClearPasswordResetCookie(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("cleared %q cookie not found", TestingPasswordResetCookieName)
+		t.Fatalf("cleared %q cookie not found", PasswordResetCookieName)
 	}
 }
 
@@ -71,8 +71,8 @@ func TestReadResetTokenCookie(t *testing.T) {
 	service := &PasswordResetService{}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.AddCookie(&http.Cookie{Name: TestingPasswordResetCookieName, Value: " token "})
-	token, err := service.TestingReadResetTokenCookie(req)
+	req.AddCookie(&http.Cookie{Name: PasswordResetCookieName, Value: " token "})
+	token, err := service.ReadResetTokenCookie(req)
 	if err != nil {
 		t.Fatalf("readResetTokenCookie() error = %v", err)
 	}
@@ -81,8 +81,8 @@ func TestReadResetTokenCookie(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	req.AddCookie(&http.Cookie{Name: TestingPasswordResetCookieName, Value: "   "})
-	if _, err := service.TestingReadResetTokenCookie(req); err == nil {
+	req.AddCookie(&http.Cookie{Name: PasswordResetCookieName, Value: "   "})
+	if _, err := service.ReadResetTokenCookie(req); err == nil {
 		t.Fatal("readResetTokenCookie() succeeded with empty token, want error")
 	}
 }

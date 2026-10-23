@@ -43,7 +43,7 @@ vi.mock("../src/control-plane.js", () => ({
   },
 }));
 vi.mock("../src/mcp-runtime.js", () => ({
-  discoverRemoteMCPTools: async () => ({ supported: true, tools: [] }),
+  discoverRemoteMCPTools: async () => [],
   requestMCPToolExecution: vi.fn(),
 }));
 vi.mock("@ai-sdk/workflow", () => ({
@@ -149,13 +149,6 @@ describe("workflow completion evidence", () => {
     await expect(runSpaceTaskAgent({ mistyRunId: "run-fixture", controlPlaneURL: "https://control.invalid" })).rejects.toThrow("execution-time allowance");
     expect(fixture.timeoutValues).toHaveLength(1);
     expect(fixture.completions).toEqual([expect.objectContaining({ status: "failed", error_code: "agent_execution_time_limit", usage: { inputTokens: 100, outputTokens: 12 } })]);
-  });
-
-  it("retains the absolute deadline policy for older admissions", async () => {
-    fixture.budgetVersion=0; fixture.outcomes=["tool-calls"]; fixture.advanceAfterFirst=6*60*60_000;
-    await expect(runSpaceTaskAgent({ mistyRunId: "run-fixture", controlPlaneURL: "https://control.invalid" })).rejects.toThrow("timed out");
-    expect(fixture.timeoutValues).toHaveLength(1);
-    expect(fixture.completions).toEqual([expect.objectContaining({ status: "failed", error_code: "agent_runtime_timeout" })]);
   });
 });
 

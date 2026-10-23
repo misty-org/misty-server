@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 
-// Pushed page state (docs/plans/agent-harness-v2.md, change 1). After screen_open the agent
+// Pushed page state (docs/agents/harness.md, Context). After screen_open the agent
 // spent a whole turn asking for the new page with browser_snapshot: 39 of 157 calls in one run.
 // browser-use shows the page with every step instead. So after a turn that opened tabs, the
 // runtime takes the newest ones' snapshots itself and adds them to the transcript, as if the

@@ -3,13 +3,10 @@ package db
 import (
 	"context"
 	"encoding/json"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func TestPersonalAgentRuntimeIsFIFOAndSingleActivePerAgent(t *testing.T) {
 	database := openTestDatabase(t)

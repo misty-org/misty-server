@@ -51,14 +51,14 @@ func TestNewSenderFromEnvBuildsMailjetSender(t *testing.T) {
 	if !ok {
 		t.Fatalf("sender type = %T, want *MailjetSender", sender)
 	}
-	if mailjetSender.TestingApiBaseURL != "https://mail.example.com" {
-		t.Fatalf("apiBaseURL = %q, want %q", mailjetSender.TestingApiBaseURL, "https://mail.example.com")
+	if mailjetSender.APIBaseURL != "https://mail.example.com" {
+		t.Fatalf("apiBaseURL = %q, want %q", mailjetSender.APIBaseURL, "https://mail.example.com")
 	}
 }
 
 func TestMailjetSenderSendPasswordResetEmailSuccess(t *testing.T) {
 	var authHeader string
-	var requestBody TestingMailjetSendRequest
+	var requestBody MailjetSendRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader = r.Header.Get("Authorization")
@@ -73,12 +73,12 @@ func TestMailjetSenderSendPasswordResetEmailSuccess(t *testing.T) {
 	defer server.Close()
 
 	sender := &MailjetSender{
-		TestingApiBaseURL: server.URL,
-		TestingApiKey:     "key",
-		TestingSecretKey:  "secret",
-		TestingFromEmail:  "noreply@example.com",
-		TestingFromName:   "Misty",
-		TestingHttpClient: server.Client(),
+		APIBaseURL: server.URL,
+		APIKey:     "key",
+		SecretKey:  "secret",
+		FromEmail:  "noreply@example.com",
+		FromName:   "Misty",
+		HTTPClient: server.Client(),
 	}
 
 	if err := sender.SendPasswordResetEmail(context.Background(), "user@example.com", "https://app.example.com/reset?token=abc"); err != nil {
@@ -117,11 +117,11 @@ func TestMailjetSenderSendMessageFailures(t *testing.T) {
 			defer server.Close()
 
 			sender := &MailjetSender{
-				TestingApiBaseURL: server.URL,
-				TestingApiKey:     "key",
-				TestingSecretKey:  "secret",
-				TestingFromEmail:  "noreply@example.com",
-				TestingHttpClient: server.Client(),
+				APIBaseURL: server.URL,
+				APIKey:     "key",
+				SecretKey:  "secret",
+				FromEmail:  "noreply@example.com",
+				HTTPClient: server.Client(),
 			}
 
 			err := sender.SendPasswordResetEmail(context.Background(), "user@example.com", "https://app.example.com/reset")

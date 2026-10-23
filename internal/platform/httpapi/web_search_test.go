@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 )
 
@@ -42,7 +42,7 @@ func TestWebSearchRegistersOnlyWithAKey(t *testing.T) {
 	}
 	t.Setenv("MISTY_SERPER_API_KEY", "serper-test-key")
 	registrations := (&SpacesService{}).webSearchToolRegistrations(context.Background(), "user")
-	if _, err := agenttools.New(registrations...); err != nil || len(registrations) != 1 || registrations[0].Descriptor.Risk != serveragent.RiskRead {
+	if _, err := agenttools.New(registrations...); err != nil || len(registrations) != 1 || registrations[0].Descriptor.Risk != agent.RiskRead {
 		t.Fatalf("web search registrations = %d, %v", len(registrations), err)
 	}
 }
@@ -53,7 +53,7 @@ func TestWebSearchCallsSerperDirectlyAndCachesRepeats(t *testing.T) {
 		"answerBox": map[string]any{"answer": "About 50 g a day"},
 	})
 	service := &SpacesService{}
-	request := serveragent.ToolRequest{ID: "call-1", Name: webSearchTool, Arguments: json.RawMessage(`{"query":" cached vegetarian protein ","recency":"year","domains":["nih.gov"]}`)}
+	request := agent.ToolRequest{ID: "call-1", Name: webSearchTool, Arguments: json.RawMessage(`{"query":" cached vegetarian protein ","recency":"year","domains":["nih.gov"]}`)}
 	raw, err := service.webSearch(context.Background(), agenttools.Invocation{UserID: "user", RunID: "run"}, request)
 	if err != nil {
 		t.Fatal(err)
@@ -72,10 +72,10 @@ func TestWebSearchCallsSerperDirectlyAndCachesRepeats(t *testing.T) {
 
 func TestWebSearchFailureIsPlainLanguage(t *testing.T) {
 	fakeSerper(t, http.StatusBadGateway, map[string]any{"message": "x"})
-	_, err := (&SpacesService{}).webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, serveragent.ToolRequest{
+	_, err := (&SpacesService{}).webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, agent.ToolRequest{
 		Arguments: json.RawMessage(`{"query":"anything that fails"}`),
 	})
-	var invalid serveragent.ErrInvalidRequest
+	var invalid agent.ErrInvalidRequest
 	if !errors.As(err, &invalid) || !strings.Contains(string(invalid), "did not work") {
 		t.Fatalf("error = %v", err)
 	}
@@ -88,20 +88,20 @@ func TestWebSearchKindsReadTheirOwnResults(t *testing.T) {
 		"places":      []map[string]any{{"title": "Blue Bottle", "address": "1 Main St", "rating": 4.6, "ratingCount": 812, "phoneNumber": "(555) 010-0000", "cid": "123"}},
 	})
 	service := &SpacesService{}
-	raw, err := service.webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, serveragent.ToolRequest{Arguments: json.RawMessage(`{"query":"lofi study music kinds test","kind":"videos"}`)})
+	raw, err := service.webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, agent.ToolRequest{Arguments: json.RawMessage(`{"query":"lofi study music kinds test","kind":"videos"}`)})
 	if err != nil || (*calls)[0]["path"] != "/videos" || !strings.Contains(string(raw), `"channel":"Lofi Girl"`) || !strings.Contains(string(raw), `"duration":"1:02:00"`) {
 		t.Fatalf("videos = %s, %v, %#v", raw, err, *calls)
 	}
-	raw, err = service.webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, serveragent.ToolRequest{Arguments: json.RawMessage(`{"query":"coffee kinds test","kind":"places","location":"Austin, Texas"}`)})
+	raw, err = service.webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, agent.ToolRequest{Arguments: json.RawMessage(`{"query":"coffee kinds test","kind":"places","location":"Austin, Texas"}`)})
 	if err != nil || (*calls)[1]["path"] != "/places" || (*calls)[1]["location"] != "Austin, Texas" ||
 		!strings.Contains(string(raw), "https://maps.google.com/?cid=123") || !strings.Contains(string(raw), `"reviews":812`) {
 		t.Fatalf("places = %s, %v, %#v", raw, err, *calls)
 	}
-	raw, err = service.webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, serveragent.ToolRequest{Arguments: json.RawMessage(`{"query":"lofi kinds test","kind":"autocomplete"}`)})
+	raw, err = service.webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, agent.ToolRequest{Arguments: json.RawMessage(`{"query":"lofi kinds test","kind":"autocomplete"}`)})
 	if err != nil || (*calls)[2]["path"] != "/autocomplete" || !strings.Contains(string(raw), `{"title":"lofi hip hop radio"}`) {
 		t.Fatalf("autocomplete = %s, %v", raw, err)
 	}
-	raw, err = service.webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, serveragent.ToolRequest{Arguments: json.RawMessage(`{"query":"coffee maps test","kind":"maps","near":"@30.27,-97.74,14z"}`)})
+	raw, err = service.webSearch(context.Background(), agenttools.Invocation{UserID: "user"}, agent.ToolRequest{Arguments: json.RawMessage(`{"query":"coffee maps test","kind":"maps","near":"@30.27,-97.74,14z"}`)})
 	if err != nil || (*calls)[3]["path"] != "/maps" || (*calls)[3]["ll"] != "@30.27,-97.74,14z" || !strings.Contains(string(raw), "Blue Bottle") {
 		t.Fatalf("maps = %s, %v", raw, err)
 	}

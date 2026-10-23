@@ -113,6 +113,9 @@ services:
       MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
       # Speaks the voice pipeline (ElevenLabs Flash).
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      # Transcribes recordings (Soniox); live transcription also needs the switch on.
+      SONIOX_API_KEY: ${SONIOX_API_KEY:-}
+      MISTY_RUNTIME_LIVE_TRANSCRIBE: ${MISTY_RUNTIME_LIVE_TRANSCRIBE:-}
       # Agent steps run at once (the engine's default is 10, which queues the
       # eleventh user); the pool holds one connection per step plus headroom.
       WORKFLOW_POSTGRES_WORKER_CONCURRENCY: ${WORKFLOW_POSTGRES_WORKER_CONCURRENCY:-50}

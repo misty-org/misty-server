@@ -3,12 +3,12 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func (s *AIService) Memories() http.HandlerFunc {
@@ -37,7 +37,7 @@ func (s *AIService) Memories() http.HandlerFunc {
 		}
 		items, err := s.database.MistyMemories(r.Context(), userID, space, 100, agentID)
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"memories": items})
@@ -86,7 +86,7 @@ func (s *AIService) Memory() http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

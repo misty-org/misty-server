@@ -6,9 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
@@ -23,7 +23,7 @@ func (s *SpacesService) spaceAdminToolRegistration() agenttools.Registration {
 	}
 	return agenttools.Registration{
 		Descriptor: agenttools.Descriptor{
-			Name: spacesManageTool, Version: 1, Risk: serveragent.RiskWrite, Approval: agenttools.ApprovalNone,
+			Name: spacesManageTool, Version: 1, Risk: agent.RiskWrite,
 			Description: "Administer Spaces. Actions: create (name), rename (space, name), invite (space, email), list_invitations (space), " +
 				"cancel_invitation (space, invitation_id), resend_invitation (space, invitation_id), remove_member (space, member_id from space_member_list), leave (space). " +
 				"Only the Space owner can rename, invite, see or cancel invitations and remove members. " +
@@ -36,7 +36,7 @@ func (s *SpacesService) spaceAdminToolRegistration() agenttools.Registration {
 				"invitation_id": text(200),
 				"member_id":     text(200),
 			}, []string{"action"}),
-			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, AllowCustomAgent: true, AuditEvent: "space.managed",
+			OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer, AuditEvent: "space.managed",
 		},
 		Handler: s.executeSpaceAdmin,
 	}
@@ -59,14 +59,14 @@ type spaceAdminInput struct {
 	MemberID     string `json:"member_id"`
 }
 
-func (s *SpacesService) executeSpaceAdmin(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) executeSpaceAdmin(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input spaceAdminInput
 	if json.Unmarshal(request.Arguments, &input) != nil {
 		return nil, agenttools.ErrArgumentsInvalid
 	}
 	if input.Action == "create" {
 		if strings.TrimSpace(input.Name) == "" {
-			return nil, serveragent.ErrInvalidRequest("create needs a name")
+			return nil, agent.ErrInvalidRequest("create needs a name")
 		}
 		created, err := s.database.CreateSpace(ctx, invocation.UserID, input.Name, "agent:"+invocation.RunID+":"+request.ID)
 		if err != nil {
@@ -82,7 +82,7 @@ func (s *SpacesService) executeSpaceAdmin(ctx context.Context, invocation agentt
 	switch input.Action {
 	case "rename":
 		if strings.TrimSpace(input.Name) == "" {
-			return nil, serveragent.ErrInvalidRequest("rename needs a name")
+			return nil, agent.ErrInvalidRequest("rename needs a name")
 		}
 		renamed, renameErr := s.database.RenameSpace(ctx, invocation.UserID, space.ID, input.Name)
 		result, err = map[string]any{"space": map[string]any{"id": space.ID, "name": nameOf(renamed)}}, renameErr
@@ -108,7 +108,7 @@ func (s *SpacesService) executeSpaceAdmin(ctx context.Context, invocation agentt
 	case "invite", "remove_member", "leave":
 		return s.executeSpaceAccessChange(ctx, invocation, space, input)
 	default:
-		return nil, serveragent.ErrInvalidRequest("unknown action " + input.Action)
+		return nil, agent.ErrInvalidRequest("unknown action " + input.Action)
 	}
 	if err != nil {
 		return nil, spaceAdminError(err)
@@ -124,12 +124,12 @@ func (s *SpacesService) executeSpaceAccessChange(ctx context.Context, invocation
 		"leave":         "Leave " + space.Name,
 	}[input.Action]
 	if input.Action == "invite" && !strings.Contains(input.Email, "@") {
-		return nil, serveragent.ErrInvalidRequest("invite needs the person's email address")
+		return nil, agent.ErrInvalidRequest("invite needs the person's email address")
 	}
 	if input.Action == "remove_member" && strings.TrimSpace(input.MemberID) == "" {
-		return nil, serveragent.ErrInvalidRequest("remove_member needs member_id from space_member_list")
+		return nil, agent.ErrInvalidRequest("remove_member needs member_id from space_member_list")
 	}
-	need := grantNeed{action: serveragent.GrantSpaceAdmin, scopeKind: serveragent.ScopeSpace, scopeID: space.ID, label: "manage members of " + space.Name}
+	need := grantNeed{action: agent.GrantSpaceAdmin, scopeKind: agent.ScopeSpace, scopeID: space.ID, label: "manage members of " + space.Name}
 	approval, waiting, err := s.confirmAgentAction(ctx, invocation, need, "misty.spaces."+input.Action, []string{space.ID, input.Email, input.MemberID}, title, "Space: "+space.Name)
 	if err != nil || waiting != nil {
 		return waiting, err
@@ -169,7 +169,7 @@ func (s *SpacesService) spaceAdminTarget(ctx context.Context, invocation agentto
 		reference = invocation.SpaceID
 	}
 	if reference == "" {
-		return db.Space{}, serveragent.ErrInvalidRequest("pass space; call space_list for names and ids")
+		return db.Space{}, agent.ErrInvalidRequest("pass space; call space_list for names and ids")
 	}
 	spaces, err := s.database.ListSpaces(ctx, invocation.UserID)
 	if err != nil {
@@ -193,15 +193,15 @@ func nameOf(space *db.Space) string {
 func spaceAdminError(err error) error {
 	switch {
 	case errors.Is(err, db.ErrSpaceForbidden):
-		return serveragent.ErrInvalidRequest("only the Space owner can do that")
+		return agent.ErrInvalidRequest("only the Space owner can do that")
 	case errors.Is(err, db.ErrSpaceNotFound), errors.Is(err, db.ErrSpaceInviteNotFound):
-		return serveragent.ErrInvalidRequest("that Space, member or invitation was not found")
+		return agent.ErrInvalidRequest("that Space, member or invitation was not found")
 	case errors.Is(err, db.ErrSpaceInvalid):
-		return serveragent.ErrInvalidRequest("those values are not valid for this action")
+		return agent.ErrInvalidRequest("those values are not valid for this action")
 	case errors.Is(err, db.ErrDefaultSpaceProtected):
-		return serveragent.ErrInvalidRequest("the personal Space cannot be left or shared that way")
+		return agent.ErrInvalidRequest("the personal Space cannot be left or shared that way")
 	case errors.Is(err, db.ErrSpaceLimit), errors.Is(err, db.ErrSpaceOwnershipLimit), errors.Is(err, db.ErrSpacePeopleLimit):
-		return serveragent.ErrInvalidRequest("this account has reached its plan limit for that")
+		return agent.ErrInvalidRequest("this account has reached its plan limit for that")
 	}
 	return err
 }

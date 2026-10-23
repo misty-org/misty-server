@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
@@ -32,7 +32,7 @@ func (s *AIService) DeviceScheduledRuns() http.HandlerFunc {
 		}
 		runs, err := s.database.DeviceScheduledRuns(r.Context(), userID, deviceID, time.Now().UTC())
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
@@ -56,7 +56,7 @@ func (s *AIService) ClaimDeviceScheduledRun() http.HandlerFunc {
 		}
 		token, err := security.GenerateSecureToken()
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		now := time.Now().UTC()
@@ -66,7 +66,7 @@ func (s *AIService) ClaimDeviceScheduledRun() http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			TestingWriteAIError(w, err)
+			WriteAIError(w, err)
 			return
 		}
 		method, err := s.database.AgentMethodByID(r.Context(), userID, schedule.MethodID)
@@ -77,7 +77,7 @@ func (s *AIService) ClaimDeviceScheduledRun() http.HandlerFunc {
 		conversationID := schedule.ConversationID
 		if conversationID == "" {
 			if conversationID, err = createScheduleConversation(r.Context(), s.database, userID, method.Definition.Title, method.AgentID); err != nil {
-				TestingWriteAIError(w, err)
+				WriteAIError(w, err)
 				return
 			}
 		}

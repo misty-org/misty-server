@@ -2,14 +2,11 @@ package db
 
 import (
 	"errors"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 func noteAssetUpload(t *testing.T, fixture noteFixture, userID string, byteSize int64, suffix string) (*LibraryUpload, error) {
 	t.Helper()

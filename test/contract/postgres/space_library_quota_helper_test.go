@@ -3,14 +3,11 @@ package db
 import (
 	"context"
 	"fmt"
+	. "github.com/kannachi323/misty/server/internal/platform/db"
 	"strings"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
-
-
-import ()
 
 // reservedQuota tracks uploads created only to occupy quota so a test can
 // release them again.

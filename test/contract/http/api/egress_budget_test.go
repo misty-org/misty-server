@@ -66,7 +66,7 @@ func TestEgressQuotaResetsAfterTheWindow(t *testing.T) {
 		PerIdentityDailyBytes: 1 << 20, GlobalDailyBytes: 1 << 30,
 	})
 	current := time.Now()
-	guard.TestingNow = func() time.Time { return current }
+	guard.Now = func() time.Time { return current }
 
 	if !guard.Allow("acct:one", 1<<20) {
 		t.Fatal("first transfer refused")
@@ -99,13 +99,13 @@ func TestEgressGuardChargesUpFrontSoConcurrentTransfersCannotOvershoot(t *testin
 
 func TestEgressGuardStateStaysBounded(t *testing.T) {
 	guard := NewEgressGuard(DefaultEgressBudget())
-	guard.TestingMaxKeys = 100
+	guard.MaxKeys = 100
 	for i := 0; i < 5000; i++ {
 		guard.Allow(idFor(i)+string(rune(i)), 1)
 	}
-	guard.TestingMu.Lock()
-	tracked := len(guard.TestingPerKey)
-	guard.TestingMu.Unlock()
+	guard.Mu.Lock()
+	tracked := len(guard.PerKey)
+	guard.Mu.Unlock()
 	if tracked > 100 {
 		t.Fatalf("tracked %d identities, want the cap of 100 to hold", tracked)
 	}

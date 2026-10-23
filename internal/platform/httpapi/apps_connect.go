@@ -6,17 +6,17 @@ import (
 	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
 	"github.com/kannachi323/misty/server/internal/integrations/composio"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // appsConnect makes sure the person has an account for an app. With none it
 // shows a Connect card and waits briefly for the person; if they haven't
 // answered by then, the run hands off: the card stays in the chat and Misty
 // continues the conversation once the app is connected.
-func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.Invocation, request serveragent.ToolRequest) (json.RawMessage, error) {
+func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
 	var input struct {
 		App string `json:"app"`
 	}
@@ -25,7 +25,7 @@ func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.I
 	}
 	app := strings.ToLower(strings.TrimSpace(input.App))
 	if !composio.ValidToolkit(app) {
-		return nil, serveragent.ErrInvalidRequest("app must be an app slug from integration_search, such as googledrive")
+		return nil, agent.ErrInvalidRequest("app must be an app slug from integration_search, such as googledrive")
 	}
 	client, err := composioClient()
 	if err != nil {
@@ -37,7 +37,7 @@ func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.I
 	}
 	name := s.appsName(ctx, invocation.UserID, app)
 	if policy := s.searchAppPolicy(ctx, invocation); !policy.mayConnect(app) {
-		return nil, serveragent.ErrInvalidRequest(policy.refusal(name))
+		return nil, agent.ErrInvalidRequest(policy.refusal(name))
 	}
 	card := db.AgentAppRequest{
 		OwnerUserID: invocation.UserID, RunID: invocation.RunID, Kind: "connect", Subject: app,
@@ -47,7 +47,7 @@ func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.I
 	if err != nil {
 		return nil, err
 	}
-	declined := serveragent.ErrInvalidRequest("The user dismissed using " + name + " here. Continue without it, or ask what they would prefer.")
+	declined := agent.ErrInvalidRequest("The user dismissed using " + name + " here. Continue without it, or ask what they would prefer.")
 	if pending.State == "declined" {
 		return nil, declined
 	}
@@ -77,7 +77,7 @@ func (s *SpacesService) appsConnect(ctx context.Context, invocation agenttools.I
 	if pending.State == "declined" {
 		return nil, declined
 	}
-	return TestingMustAPIRawJSON(map[string]any{
+	return MustAPIRawJSON(map[string]any{
 		"app": app, "status": "waiting_for_user",
 		"message":      "A " + card.Title + " card is showing in the chat. This run ends here and Misty continues once the user connects " + name + ".",
 		"user_message": card.Summary + " Use the card above; Misty continues once it's done.",
@@ -118,7 +118,7 @@ func appsConnectResult(app string, ok bool, err error) (json.RawMessage, error) 
 	if err != nil {
 		return nil, appsError(err)
 	}
-	return TestingMustAPIRawJSON(map[string]any{"app": app, "status": "connected", "connected": ok}), nil
+	return MustAPIRawJSON(map[string]any{"app": app, "status": "connected", "connected": ok}), nil
 }
 
 // appsName is the app's display name, or its slug when Composio has none.

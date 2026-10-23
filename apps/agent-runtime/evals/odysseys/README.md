@@ -1,6 +1,6 @@
 # Odysseys
 
-The Odysseys benchmark ([paper](https://arxiv.org/abs/2604.24964), [tasks](https://github.com/ljang0/Odysseys), MIT) run through Misty's product path, for [docs/plans/odysseys-campaign.md](../../../../../docs/plans/odysseys-campaign.md). Odysseys has 200 long, multi-site tasks from real browsing, each with 3 to 12 rubric items; the headline score is the share of tasks where every rubric item passes ("perfect").
+The Odysseys benchmark ([paper](https://arxiv.org/abs/2604.24964), [tasks](https://github.com/ljang0/Odysseys), MIT) run through Misty's product path, for [docs/agents/evals/odysseys.md](../../../../../docs/agents/evals/odysseys.md). Odysseys has 200 long, multi-site tasks from real browsing, each with 3 to 12 rubric items; the headline score is the share of tasks where every rubric item passes ("perfect").
 
 Each task is one composer request on the local stack, with this computer as the device, so the agent does what it does for a person: search, fetch pages, and open its own browser tab, which joins the run. The recorder pictures the agent's tabs (and tabs it opened for the person) after every browser step and once at the end, through the desktop's debug bridge, without showing them. `judge.ts` is Odysseys' per-rubric judge with its prompt unchanged: one call per rubric item, from the action history and every screenshot.
 
@@ -10,7 +10,7 @@ Differences from the paper's setup, kept on purpose:
 - The judge runs on a Claude model on Misty's own key (`MISTY_ODYSSEYS_JUDGE`), not Gemini 3.1 Flash-Lite, and sees at most the last 60 screenshots (unchanged pages are pictured once).
 - The browser profile has no saved sign-ins (`MISTY_EVAL_EPHEMERAL_PAGES=1` on the desktop).
 
-Without paid credit, the agent and the judge run on NVIDIA's free hosted models (`nim/…`); see [docs/plans/free-model-evals.md](../../../../../docs/plans/free-model-evals.md). Scores on a free model compare only with other passes on the same model.
+Without paid credit, the agent and the judge run on NVIDIA's free hosted models (`nim/…`); see [docs/agents/evals/free-model.md](../../../../../docs/agents/evals/free-model.md). Scores on a free model compare only with other passes on the same model.
 
 ## Splits
 
@@ -47,6 +47,7 @@ Without paid credit, the agent and the judge run on NVIDIA's free hosted models 
 | `MISTY_ODYSSEYS_JUDGE_LANES` | Rubrics judged at once on a free (`nim/`) judge (5) |
 | `MISTY_ODYSSEYS_REGRADE` | A task folder to judge again from its saved steps and pictures, without running it |
 | `MISTY_ODYSSEYS_RESUME` | A task folder from an earlier pass (`reports/<time>/<task>`): the task continues in that run's conversation from where it stopped, and is graded on both runs' steps |
+| `MISTY_ODYSSEYS_RESUME_FAILED` | An earlier pass folder (`reports/<time>`): only its tasks that did not pass go on, each from its own checkpoint with the parts that passed kept (the agent's ledger); passed tasks count as carried. For iterating on fixes: when all pass, `GATE:` prints and `reports/gate.json` is written, then run the full batch once for the score that counts, and now and then after |
 | `MISTY_ODYSSEYS_EARLY_STOP` | `1` (default) stops when 4 of the first 6 tasks fail |
 | `MISTY_ODYSSEYS_CAP` | The campaign's spend cap in dollars (50), kept across passes in `reports/ledger.json` |
 

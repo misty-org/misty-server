@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // LibraryReconciliationReport contains counts only. Object keys, filenames,
@@ -28,7 +28,7 @@ func (s *SpaceLibraryService) ReconcileLibraryObjects(
 	ctx context.Context, orphanGrace time.Duration, limit int,
 ) (LibraryReconciliationReport, error) {
 	report := LibraryReconciliationReport{}
-	if s == nil || s.database == nil || s.TestingStore == nil {
+	if s == nil || s.database == nil || s.Store == nil {
 		return report, errors.New("Library reconciliation is not configured")
 	}
 	if orphanGrace < time.Hour {
@@ -44,7 +44,7 @@ func (s *SpaceLibraryService) ReconcileLibraryObjects(
 	}
 	report.ExpiredUploads = expired
 
-	if inventory, ok := s.TestingStore.(LibraryObjectInventory); ok {
+	if inventory, ok := s.Store.(LibraryObjectInventory); ok {
 		if err := s.reconcileInventoryPage(
 			ctx, inventory, orphanGrace, limit, &report,
 		); err != nil {
@@ -57,7 +57,7 @@ func (s *SpaceLibraryService) ReconcileLibraryObjects(
 		return report, fmt.Errorf("load permanent object expectations: %w", err)
 	}
 	for _, expected := range ready {
-		metadata, headErr := s.TestingStore.Head(ctx, expected.ObjectKey)
+		metadata, headErr := s.Store.Head(ctx, expected.ObjectKey)
 		if errors.Is(headErr, ErrLibraryObjectNotFound) {
 			report.MissingPermanentObjects++
 			continue
@@ -65,7 +65,7 @@ func (s *SpaceLibraryService) ReconcileLibraryObjects(
 		if headErr != nil {
 			return report, fmt.Errorf("verify permanent object: %w", headErr)
 		}
-		if !TestingObjectMatchesExpectation(metadata, expected) {
+		if !ObjectMatchesExpectation(metadata, expected) {
 			report.MismatchedObjects++
 		}
 	}
@@ -75,14 +75,14 @@ func (s *SpaceLibraryService) ReconcileLibraryObjects(
 		return report, fmt.Errorf("load interrupted finalizations: %w", err)
 	}
 	for _, expected := range pending {
-		metadata, headErr := s.TestingStore.Head(ctx, expected.ObjectKey)
+		metadata, headErr := s.Store.Head(ctx, expected.ObjectKey)
 		if errors.Is(headErr, ErrLibraryObjectNotFound) {
 			continue
 		}
 		if headErr != nil {
 			return report, fmt.Errorf("verify interrupted finalization: %w", headErr)
 		}
-		if TestingObjectMatchesExpectation(metadata, expected) {
+		if ObjectMatchesExpectation(metadata, expected) {
 			report.InterruptedFinalizations++
 		} else {
 			report.MismatchedObjects++
@@ -121,7 +121,7 @@ func (s *SpaceLibraryService) reconcileInventoryPage(
 			if object.LastModified.IsZero() || object.LastModified.After(cutoff) {
 				continue
 			}
-			if err := s.TestingStore.Delete(ctx, object.Key); err != nil &&
+			if err := s.Store.Delete(ctx, object.Key); err != nil &&
 				!errors.Is(err, ErrLibraryObjectNotFound) {
 				return fmt.Errorf("delete orphan object: %w", err)
 			}
@@ -136,7 +136,7 @@ func (s *SpaceLibraryService) reconcileInventoryPage(
 	return nil
 }
 
-func TestingObjectMatchesExpectation(
+func ObjectMatchesExpectation(
 	metadata LibraryObjectMetadata, expected db.LibraryObjectExpectation,
 ) bool {
 	return metadata.ByteSize == expected.ByteSize && metadata.SHA256 == expected.SHA256

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func TestAIInvocationProgressInterleavesNotesAndTools(t *testing.T) {

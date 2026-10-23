@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 )
 
-
 import (
 	"encoding/json"
 	"net/http"
@@ -17,7 +16,7 @@ import (
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 
 	"github.com/go-chi/chi/v5"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
@@ -51,7 +50,7 @@ func performConversationRequest(t *testing.T, router *chi.Mux, method, path, tok
 	}
 	if signer, err := security.SessionSignerFromEnv(); err == nil {
 		if _, err := signer.Verify(token, "access"); err == nil {
-			req.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: token})
+			req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: token})
 		} else {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}

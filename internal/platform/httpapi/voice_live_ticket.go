@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 const (

@@ -62,7 +62,7 @@ function directAnthropic(modelId: string, env: Environment) {
 }
 
 /** The Gateway names `claude-haiku-5.5`; Anthropic's own API names `claude-haiku-5-5`. */
-export function anthropicModelName(modelId: string): string {
+function anthropicModelName(modelId: string): string {
   return modelId.slice("anthropic/".length).replaceAll(".", "-");
 }
 
@@ -72,7 +72,7 @@ function nimKey(env: Environment) {
 
 /**
  * A `nim/…` model runs on NVIDIA's hosted endpoints (build.nvidia.com), free with rate limits,
- * so evals can run without paid credit (docs/plans/free-model-evals.md). Development only:
+ * so evals can run without paid credit (docs/agents/evals/free-model.md). Development only:
  * production never admits a model the person didn't get from the catalog.
  */
 function directNim(modelId: string, env: Environment) {
@@ -86,6 +86,27 @@ function nim(modelId: string, env: Environment) {
     baseURL: env.NVIDIA_BASE_URL?.trim() || "https://integrate.api.nvidia.com/v1",
     fetch: loggedFetch,
   }).chatModel(modelId.slice("nim/".length));
+}
+
+function geminiKey(env: Environment) {
+  return env.GEMINI_API_KEY?.trim() || "";
+}
+
+/**
+ * A `gemini/…` model runs on Google's Gemini API through its OpenAI-compatible endpoint. It is
+ * the Odysseys benchmark's own judge family (gemini-3.1-flash-lite). Development only, like `nim/`.
+ */
+function directGemini(modelId: string, env: Environment) {
+  return modelId.startsWith("gemini/") && geminiKey(env) !== "";
+}
+
+function gemini(modelId: string, env: Environment) {
+  return createOpenAICompatible({
+    name: "gemini",
+    apiKey: geminiKey(env),
+    baseURL: env.GEMINI_BASE_URL?.trim() || "https://generativelanguage.googleapis.com/v1beta/openai",
+    fetch: loggedFetch,
+  }).chatModel(modelId.slice("gemini/".length));
 }
 
 type Prompt = LanguageModelV4CallOptions["prompt"];
@@ -121,7 +142,7 @@ function openAI(env: Environment) {
   return createOpenAI({ apiKey: openAIKey(env) });
 }
 
-export function instanceGateway(env: Environment = process.env) {
+function instanceGateway(env: Environment = process.env) {
   return createGateway({
     apiKey: env.AI_GATEWAY_API_KEY?.trim() || env.VERCEL_OIDC_TOKEN?.trim() || undefined,
     baseURL: env.AI_GATEWAY_BASE_URL?.trim() || undefined,
@@ -145,6 +166,10 @@ export function resolveInstanceModel(
     const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};
     // NVIDIA's models switch thinking their own way and may refuse reasoning_effort.
     return { model: nim(modelId, env), options: { ...options, prompt: imagesOutOfToolResults(options.prompt), reasoning: undefined, providerOptions } };
+  }
+  if (directGemini(modelId, env)) {
+    const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};
+    return { model: gemini(modelId, env), options: { ...options, prompt: imagesOutOfToolResults(options.prompt), reasoning: undefined, providerOptions } };
   }
   if (!directOpenAI(modelId, env)) return { model: instanceGateway(env)(modelId), options };
   // Gateway routing options mean nothing to OpenAI itself.

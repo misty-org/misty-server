@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/agents"
+	. "github.com/kannachi323/misty/server/internal/agent"
 )
 
 func TestFilterChatModelsExcludesNonChatAndDuplicates(t *testing.T) {
-	models := TestingFilterChatModels([]GatewayModel{
+	models := FilterChatModels([]GatewayModel{
 		{ID: "provider/chat", Name: "Chat"},
 		{ID: "provider/chat", Name: "Duplicate"},
 		{ID: "provider/text-embedding", Name: "Embedding"},
@@ -23,7 +23,7 @@ func TestFilterChatModelsExcludesNonChatAndDuplicates(t *testing.T) {
 }
 
 func TestGatewayCapabilitiesAcceptsObjectMetadata(t *testing.T) {
-	capabilities := TestingGatewayCapabilities(json.RawMessage(`{"tool_calling":true,"image_generation":false,"vision":true}`))
+	capabilities := GatewayCapabilities(json.RawMessage(`{"tool_calling":true,"image_generation":false,"vision":true}`))
 	if len(capabilities) != 2 || capabilities[0] != "tool_calling" || capabilities[1] != "vision" {
 		t.Fatalf("gatewayCapabilities() = %#v", capabilities)
 	}
@@ -46,7 +46,7 @@ func TestFetchGatewayModelsUsesPublicCatalogWithoutCredentials(t *testing.T) {
 	t.Setenv("AI_GATEWAY_BASE_URL", server.URL)
 	t.Setenv("AI_GATEWAY_API_KEY", "")
 	t.Setenv("VERCEL_OIDC_TOKEN", "")
-	models, err := TestingFetchGatewayModels(context.Background())
+	models, err := FetchGatewayModels(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

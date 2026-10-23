@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/aimodels"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"net/http"
 	"net/http/httptest"
@@ -17,8 +19,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
 // The desktop's screen loop calls the pass-through once per action while its
@@ -91,7 +91,7 @@ func TestScreenModelPassThroughForALiveActJob(t *testing.T) {
 		body := []byte(`{"messages":[{"role":"user","content":"plan"}]}`)
 		r := httptest.NewRequest(http.MethodPost, "/me/screen-model/"+job.ID+"?call="+n, bytes.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
-		r.AddCookie(&http.Cookie{Name: TestingSessionCookieName, Value: access})
+		r.AddCookie(&http.Cookie{Name: SessionCookieName, Value: access})
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, r)
 		return w

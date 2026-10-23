@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ModelMessage } from "ai";
-import { cutOldResults, DIGEST_MARK } from "../src/working-set.js";
+import { cutOldResults, DIGEST_MARK } from "../src/context/working-set.js";
 import { loopNote } from "../src/loop-guard.js";
 
 const call = (id: string, toolName: string, input: unknown): ModelMessage => ({
@@ -79,7 +79,7 @@ describe("proof tabs", () => {
   });
 });
 
-import { condense, workingSet } from "../src/condenser.js";
+import { condense, workingSet } from "../src/context/condenser.js";
 
 describe("condensing with a cached provider", () => {
   it("trims by the transcript's size even when the last call reported a small uncached input", async () => {

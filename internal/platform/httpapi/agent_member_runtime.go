@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // memberRequestRuntimeToolbox is the catalog for work someone else asked of an
@@ -23,7 +23,7 @@ func (s *SpacesService) memberRequestRuntimeToolbox(ctx context.Context, run *db
 	invocation := agenttools.Invocation{
 		UserID: run.OwnerUserID, SpaceID: request.SpaceID, AgentID: run.AgentID, RunID: run.ID,
 		Source: "space_conversation", Trigger: "message", OriginalInput: request.Message,
-		ConversationScopeKind: db.ConversationScopeEveryone, PermissionMode: serveragent.NormalizePermissionMode(run.EffectiveRunMode),
+		ConversationScopeKind: db.ConversationScopeEveryone, PermissionMode: agent.NormalizePermissionMode(run.EffectiveRunMode),
 		PublicLayerOnly: !privateLayerAllowed(layer, run.OwnerUserID),
 	}
 	spaceAuthorize := authorizeSpaceAgentTool(s.database)

@@ -7,16 +7,16 @@ import (
 	"strings"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
-	workflowv2 "github.com/kannachi323/misty/server/internal/workflows"
+	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
 func (s *SpacesService) executeBrowserAgentToolInvocation(
 	ctx context.Context,
 	invocation agenttools.Invocation,
-	tool serveragent.ToolRequest,
+	tool agent.ToolRequest,
 ) (json.RawMessage, error) {
 	scopeID, err := browserToolScopeID(tool.Arguments)
 	if err != nil {
@@ -121,7 +121,7 @@ func browserDeviceFailure(code string) error {
 		return errors.Join(db.ErrAgentToolboxNotAttempted, errBrowserSnapshotStale)
 	}
 	if code == "device_unavailable" || code == "browser_tab_closed" {
-		return workflowv2.ErrDeviceUnavailable
+		return workflow.ErrDeviceUnavailable
 	}
 	return errors.New("browser device tool failed: " + code)
 }
@@ -161,7 +161,7 @@ func (s *SpacesService) stopBrowserDeviceTool(userID, jobID, operation string) (
 		}
 		return job.Output, nil
 	case "canceled":
-		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflowv2.ErrDeviceUnavailable)
+		return nil, errors.Join(db.ErrAgentToolboxNotAttempted, workflow.ErrDeviceUnavailable)
 	case "failed":
 		return nil, browserDeviceFailureForOperation(job.ErrorCode, job.Operation)
 	default:
@@ -187,17 +187,17 @@ func (s *SpacesService) browserGrantSet(ctx context.Context, invocation agenttoo
 	mode := s.invocationPermissionMode(ctx, invocation)
 	set := map[string]any{"mode": mode, "grants": []map[string]string{}, "version": time.Now().UTC().UnixMilli()}
 	agentID := s.grantAgentID(ctx, invocation)
-	if mode != serveragent.PermissionAuto || agentID == "" {
+	if mode != agent.PermissionAuto || agentID == "" {
 		return set
 	}
 	grants, err := s.database.AgentGrants(ctx, invocation.UserID, agentID)
 	if err != nil {
 		return set
 	}
-	kinds := map[string]string{string(serveragent.GrantBrowserSend): "send", string(serveragent.GrantBrowserDelete): "delete", string(serveragent.GrantBrowserPublish): "publish"}
+	kinds := map[string]string{string(agent.GrantBrowserSend): "send", string(agent.GrantBrowserDelete): "delete", string(agent.GrantBrowserPublish): "publish"}
 	out := []map[string]string{}
 	for _, grant := range grants {
-		if kind := kinds[grant.Action]; kind != "" && grant.ScopeKind == string(serveragent.ScopeOrigin) {
+		if kind := kinds[grant.Action]; kind != "" && grant.ScopeKind == string(agent.ScopeOrigin) {
 			out = append(out, map[string]string{"kind": kind, "origin": grant.ScopeID})
 		}
 	}

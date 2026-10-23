@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 // AgentProjectGrants carries a device's old per-project switches ("allow
@@ -30,7 +30,7 @@ func (s *SpacesService) AgentProjectGrants() http.HandlerFunc {
 			return
 		}
 		scope, repo := strings.TrimSpace(body.ScopeID), strings.TrimSpace(body.Repo)
-		if err := s.validateCodingScope(r.Context(), user, serveragent.ScopeProject, scope); err != nil {
+		if err := s.validateCodingScope(r.Context(), user, agent.ScopeProject, scope); err != nil {
 			writeJSON(w, http.StatusConflict, map[string]string{"code": "project_not_attached"})
 			return
 		}
@@ -41,11 +41,11 @@ func (s *SpacesService) AgentProjectGrants() http.HandlerFunc {
 		}
 		created := 0
 		for _, action := range body.Actions {
-			kind, id := serveragent.ScopeProject, scope
-			switch serveragent.GrantAction(action) {
-			case serveragent.GrantProjectEdit, serveragent.GrantProjectInstall:
-			case serveragent.GrantGitPush:
-				kind, id = serveragent.ScopeRepo, repo
+			kind, id := agent.ScopeProject, scope
+			switch agent.GrantAction(action) {
+			case agent.GrantProjectEdit, agent.GrantProjectInstall:
+			case agent.GrantGitPush:
+				kind, id = agent.ScopeRepo, repo
 				if s.validateCodingScope(r.Context(), user, kind, id) != nil {
 					continue
 				}

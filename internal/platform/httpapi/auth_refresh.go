@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
@@ -57,17 +57,17 @@ func writeJWTCookies(w http.ResponseWriter, r *http.Request, access, refresh str
 }
 
 func writeAuthCookie(w http.ResponseWriter, r *http.Request, name, value string, ttl time.Duration) {
-	secure := TestingIsSecureRequest(r)
+	secure := IsSecureRequest(r)
 	maxAge := int(ttl.Seconds())
 	if ttl < 0 {
 		maxAge = -1
 	}
 	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true,
-		Secure: secure, SameSite: TestingSessionCookieSameSite(r, secure), MaxAge: maxAge})
+		Secure: secure, SameSite: SessionCookieSameSite(r, secure), MaxAge: maxAge})
 }
 
 func clearAuthCookies(w http.ResponseWriter, r *http.Request) {
-	writeAuthCookie(w, r, TestingSessionCookieName, "", -time.Second)
+	writeAuthCookie(w, r, SessionCookieName, "", -time.Second)
 	writeAuthCookie(w, r, RefreshCookieName, "", -time.Second)
 	w.Header().Set("Cache-Control", "no-store")
 }
@@ -120,7 +120,7 @@ func CookieCSRFProtection(allowedOrigin func(string) bool) func(http.Handler) ht
 				next.ServeHTTP(w, r)
 				return
 			}
-			_, accessErr := r.Cookie(TestingSessionCookieName)
+			_, accessErr := r.Cookie(SessionCookieName)
 			_, refreshErr := r.Cookie(RefreshCookieName)
 			// Login also needs protection against login CSRF.
 			path := r.URL.Path

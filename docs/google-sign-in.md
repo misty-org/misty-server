@@ -29,7 +29,7 @@ The sign-in callback is separate from the existing Google connected-account
 callback; keep both registered when using both features.
 
 Apply the two new migrations through the normal server setup process and rebuild
-the API and desktop app. Development uses `misty server up --detach`. The new
+the API and desktop app. Development uses `misty server up`. The new
 native login route also requires rebuilding the desktop executable, not only
 refreshing Vite. No Google account consent or live OAuth test was performed by
 the automated tests.
@@ -62,7 +62,7 @@ concurrent first setup, expiry, and row-level security with an unprivileged role
 The test connection needs permission to create temporary schemas and roles.
 
 ```sh
-go test ./internal/platform/postgres -run 'TestGoogle|TestLibraryPassword|TestLibraryCredentials' -count=1
+go test ./internal/platform/db -run 'TestGoogle|TestLibraryPassword|TestLibraryCredentials' -count=1
 go test ./internal/platform/httpapi -count=1
 ```
 

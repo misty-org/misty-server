@@ -10,13 +10,13 @@ import (
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/email"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
 const genericForgotPasswordMessage = "If the account exists, a password reset email will be sent shortly."
-const TestingPasswordResetCookieName = "misty_reset_token"
+const PasswordResetCookieName = "misty_reset_token"
 
 type PasswordResetService struct {
 	database      *db.Database
@@ -34,10 +34,10 @@ func NewPasswordResetService(database *db.Database, sender email.PasswordResetSe
 	if sender == nil {
 		return nil, errors.New("password reset email sender is required")
 	}
-	if err := TestingValidateResetURL(startURL); err != nil {
+	if err := ValidateResetURL(startURL); err != nil {
 		return nil, err
 	}
-	if err := TestingValidateResetURL(redirectURL); err != nil {
+	if err := ValidateResetURL(redirectURL); err != nil {
 		return nil, err
 	}
 
@@ -68,7 +68,7 @@ func (s *PasswordResetService) Forgot() http.HandlerFunc {
 			return
 		}
 
-		if allowed, _ := s.forgotLimiter.Allow(TestingForgotPasswordRateLimitKey(r, emailAddress), s.now()); !allowed {
+		if allowed, _ := s.forgotLimiter.Allow(ForgotPasswordRateLimitKey(r, emailAddress), s.now()); !allowed {
 			http.Error(w, "too many reset requests", http.StatusTooManyRequests)
 			return
 		}
@@ -92,7 +92,7 @@ func (s *PasswordResetService) Reset() http.HandlerFunc {
 			return
 		}
 
-		token, err := s.TestingReadResetTokenCookie(r)
+		token, err := s.ReadResetTokenCookie(r)
 		if err != nil {
 			http.Error(w, "invalid or expired reset token", http.StatusBadRequest)
 			return
@@ -109,7 +109,7 @@ func (s *PasswordResetService) Reset() http.HandlerFunc {
 		err = s.database.ResetPasswordWithToken(security.HashToken(token), body.NewPassword, s.now())
 		switch {
 		case errors.Is(err, db.ErrPasswordResetTokenInvalid):
-			TestingClearPasswordResetCookie(w, TestingIsSecureRequest(r))
+			ClearPasswordResetCookie(w, IsSecureRequest(r))
 			http.Error(w, "invalid or expired reset token", http.StatusBadRequest)
 			return
 		case err != nil:
@@ -117,14 +117,14 @@ func (s *PasswordResetService) Reset() http.HandlerFunc {
 			return
 		}
 
-		TestingClearPasswordResetCookie(w, TestingIsSecureRequest(r))
+		ClearPasswordResetCookie(w, IsSecureRequest(r))
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
 
 func (s *PasswordResetService) Validate() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token, err := s.TestingReadResetTokenCookie(r)
+		token, err := s.ReadResetTokenCookie(r)
 		if err != nil {
 			http.Error(w, "invalid or expired reset token", http.StatusNotFound)
 			return
@@ -133,7 +133,7 @@ func (s *PasswordResetService) Validate() http.HandlerFunc {
 		err = s.database.ValidatePasswordResetToken(security.HashToken(token), s.now())
 		switch {
 		case errors.Is(err, db.ErrPasswordResetTokenInvalid):
-			TestingClearPasswordResetCookie(w, TestingIsSecureRequest(r))
+			ClearPasswordResetCookie(w, IsSecureRequest(r))
 			http.Error(w, "invalid or expired reset token", http.StatusNotFound)
 			return
 		case err != nil:
@@ -156,7 +156,7 @@ func (s *PasswordResetService) Start() http.HandlerFunc {
 		err := s.database.ValidatePasswordResetToken(security.HashToken(token), s.now())
 		switch {
 		case errors.Is(err, db.ErrPasswordResetTokenInvalid):
-			TestingClearPasswordResetCookie(w, TestingIsSecureRequest(r))
+			ClearPasswordResetCookie(w, IsSecureRequest(r))
 			http.Redirect(w, r, s.redirectURL, http.StatusSeeOther)
 			return
 		case err != nil:
@@ -164,7 +164,7 @@ func (s *PasswordResetService) Start() http.HandlerFunc {
 			return
 		}
 
-		http.SetCookie(w, TestingBuildPasswordResetCookie(token, s.now().Add(security.PasswordResetTokenTTL), TestingIsSecureRequest(r)))
+		http.SetCookie(w, BuildPasswordResetCookie(token, s.now().Add(security.PasswordResetTokenTTL), IsSecureRequest(r)))
 		http.Redirect(w, r, s.redirectURL, http.StatusSeeOther)
 	}
 }
@@ -216,8 +216,8 @@ func (s *PasswordResetService) buildResetLink(token string) (string, error) {
 	return resetURL.String(), nil
 }
 
-func (s *PasswordResetService) TestingReadResetTokenCookie(r *http.Request) (string, error) {
-	cookie, err := r.Cookie(TestingPasswordResetCookieName)
+func (s *PasswordResetService) ReadResetTokenCookie(r *http.Request) (string, error) {
+	cookie, err := r.Cookie(PasswordResetCookieName)
 	if err != nil {
 		return "", err
 	}
@@ -230,9 +230,9 @@ func (s *PasswordResetService) TestingReadResetTokenCookie(r *http.Request) (str
 	return token, nil
 }
 
-func TestingBuildPasswordResetCookie(token string, expiresAt time.Time, secure bool) *http.Cookie {
+func BuildPasswordResetCookie(token string, expiresAt time.Time, secure bool) *http.Cookie {
 	return &http.Cookie{
-		Name:     TestingPasswordResetCookieName,
+		Name:     PasswordResetCookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
@@ -243,13 +243,13 @@ func TestingBuildPasswordResetCookie(token string, expiresAt time.Time, secure b
 	}
 }
 
-func TestingClearPasswordResetCookie(w http.ResponseWriter, secure bool) {
-	cookie := TestingBuildPasswordResetCookie("", time.Unix(0, 0), secure)
+func ClearPasswordResetCookie(w http.ResponseWriter, secure bool) {
+	cookie := BuildPasswordResetCookie("", time.Unix(0, 0), secure)
 	cookie.MaxAge = -1
 	http.SetCookie(w, cookie)
 }
 
-func TestingValidateResetURL(rawURL string) error {
+func ValidateResetURL(rawURL string) error {
 	resetURL, err := url.Parse(rawURL)
 	if err != nil {
 		return err

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 )

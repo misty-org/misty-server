@@ -1,4 +1,4 @@
-// Whether a free eval model (docs/plans/free-model-evals.md) can do what an Odysseys pass asks of
+// Whether a free eval model (docs/agents/evals/free-model.md) can do what an Odysseys pass asks of
 // it, in about a dozen requests: call tools and read their results, see a screenshot that a tool
 // returned, accept the agent's 32,000-token output cap, and take a judge's many screenshots in
 // one message. Run before a pass:

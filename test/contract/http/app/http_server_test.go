@@ -14,7 +14,7 @@ import (
 )
 
 func TestNewHTTPServerBoundsHeadersAndIdleConnections(t *testing.T) {
-	server := TestingNewHTTPServer(":0", http.NotFoundHandler())
+	server := NewHTTPServer(":0", http.NotFoundHandler())
 
 	if server.ReadHeaderTimeout <= 0 || server.ReadTimeout <= 0 || server.IdleTimeout <= 0 {
 		t.Fatalf("timeouts = header:%s read:%s idle:%s, want all bounded",
@@ -44,7 +44,7 @@ func TestWriteDeadlineMiddlewareSkipsWebSocketUpgrades(t *testing.T) {
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			var observed atomic.Bool
-			handler := TestingWriteDeadlineMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			handler := WriteDeadlineMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				observed.Store(true)
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -79,7 +79,7 @@ func TestIsWebSocketRequestRequiresBothHeaders(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/realtime", nil)
 		request.Header.Set("Upgrade", testCase.upgrade)
 		request.Header.Set("Connection", testCase.connection)
-		if got := TestingIsWebSocketRequest(request); got != testCase.want {
+		if got := IsWebSocketRequest(request); got != testCase.want {
 			t.Fatalf("isWebSocketRequest(Upgrade:%q Connection:%q) = %v, want %v",
 				testCase.upgrade, testCase.connection, got, testCase.want)
 		}
@@ -94,13 +94,13 @@ func TestIsTransferRequestOnlyMatchesObjectByteRoutes(t *testing.T) {
 		"/v1/spaces/space_1/library/items/item_1/download",
 	}
 	for _, path := range transfers {
-		if !TestingIsTransferRequest(httptest.NewRequest(http.MethodGet, path, nil)) {
+		if !IsTransferRequest(httptest.NewRequest(http.MethodGet, path, nil)) {
 			t.Fatalf("isTransferRequest(%q) = false, want true", path)
 		}
 	}
 	plain := []string{"/api/spaces/space_1/tasks", "/api/me", "/healthz"}
 	for _, path := range plain {
-		if TestingIsTransferRequest(httptest.NewRequest(http.MethodGet, path, nil)) {
+		if IsTransferRequest(httptest.NewRequest(http.MethodGet, path, nil)) {
 			t.Fatalf("isTransferRequest(%q) = true, want false", path)
 		}
 	}
@@ -119,7 +119,7 @@ func TestRunHTTPServerDrainsInFlightRequestsAndStopsWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := TestingNewHTTPServer(listener.Addr().String(), handler)
+	server := NewHTTPServer(listener.Addr().String(), handler)
 
 	var workersStopped atomic.Bool
 	serveDone := make(chan error, 1)

@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 const maxConversationFolderName = 80
@@ -24,7 +24,7 @@ func writeConversationFolderError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "folder_not_found", "message": "That folder no longer exists."})
 		return
 	}
-	TestingWriteAIError(w, err)
+	WriteAIError(w, err)
 }
 
 func writeInvalidFolderName(w http.ResponseWriter) {
@@ -42,7 +42,7 @@ func (s *AIService) MistyConversationFolders() http.HandlerFunc {
 		case http.MethodGet:
 			folders, err := s.database.ListAgentConversationFolders(r.Context(), userID)
 			if err != nil {
-				TestingWriteAIError(w, err)
+				WriteAIError(w, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"folders": folders})

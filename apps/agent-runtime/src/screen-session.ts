@@ -1,4 +1,4 @@
-// A screen that joins a run mid-run (docs/plans/odysseys-campaign.md): screen_open
+// A screen that joins a run mid-run (docs/agents/evals/odysseys.md): screen_open
 // with no place named opens the agent's own browser tab as a device job and
 // attaches it to this run, reporting catalog_changed. The loop then reads Misty's
 // catalog again so the run's browser tools reach the model in the same run.

@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"time"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 	platformmetrics "github.com/kannachi323/misty/server/internal/platform/metrics"
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
 )
 
-const TestingMaxAIJSONBodyBytes = 2 << 20
+const MaxAIJSONBodyBytes = 2 << 20
 
 type AIService struct {
 	database              *db.Database

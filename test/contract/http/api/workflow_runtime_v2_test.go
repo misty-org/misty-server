@@ -5,10 +5,7 @@ import (
 	"testing"
 
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-
 )
-
-
 
 func TestDecodeJSONObjectAcceptsFencedStructuredAgentOutput(t *testing.T) {
 	if got := string(TestingDecodeJSONObject("```json\n{\"answer\":\"done\"}\n```")); got != `{"answer":"done"}` {
@@ -29,6 +26,3 @@ func TestWorkflowEventIdentityAcceptsCanonicalAndProviderEventFields(t *testing.
 		t.Fatalf("identity = %q, %q", provider, eventID)
 	}
 }
-
-
-

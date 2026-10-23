@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 
-	db "github.com/kannachi323/misty/server/internal/platform/postgres"
+	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // memorySearchFunc ranks one person's records in one Space by meaning.

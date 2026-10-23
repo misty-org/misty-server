@@ -1,31 +1,10 @@
 export interface SpaceTaskContext {
- /** Only retained to reject stale routine submissions. */
- routine_execution?: unknown;
   /** A workflow's saved browser steps, replayed before any model call. */
   browser_replay?: unknown;
-  run_id: string;
-  agent_id: string;
-  space_id: string;
-  space_name: string;
-  space_kind: string;
-  timezone: string;
-  current_time: string;
-  members: Array<{ user_id: string; name: string; role: string }>;
   model_id: string;
-  vision_model_id?: string;
   reasoning_effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max" | "";
-  run_mode: "ask" | "auto";
   system: string;
   prompt: string;
-  task?: {
-    id: string;
-    task_key: string;
-    title: string;
-    notes: string;
-    status: string;
-  };
-  attached_sources: unknown[];
-  companion_mode?: "team" | "auto";
   /** A Teach-mode lesson turn: run the tutor's fast lane (src/teach-turn.ts), not the agent loop. */
   teach?: boolean;
   /** Lookups a lesson turn may make: more when planning a lesson, one on a step. */
@@ -49,12 +28,10 @@ export interface SpaceTaskContext {
     height: number;
     content_hash: string;
   }>;
-  file_warnings: string;
   model_turn_limit?: number;
   /** The run model's context window in tokens, from the Gateway catalog. */
   context_window_tokens?: number;
   allowed_tools: string[];
-  managed_misty?: boolean;
 }
 
 export interface RuntimeToolContext {

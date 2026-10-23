@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	agent "github.com/kannachi323/misty/server/internal/agents"
+	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 func TestFrontierCapabilitiesRequireVisionAndTools(t *testing.T) {

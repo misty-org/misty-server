@@ -29,6 +29,7 @@ export function toolMonitor({ catalog, order, checkpoint, rejected }: ToolMonito
   const failures: Array<{ toolName: string; error: string }> = [];
   const rejectedWrites = new Map<string, number>();
   let unopenedTabs = 0;
+  let unclosedTabs = 0;
   let unanswered = 0;
 
   const requireInspection = (name: string) => {
@@ -39,8 +40,6 @@ export function toolMonitor({ catalog, order, checkpoint, rejected }: ToolMonito
   const settle = (name: string, call: ToolCall, outcome: ToolOutcome, visible: string) => {
     if (outcome.kind === "confirmed") {
       if (name === requiredInspection) requiredInspection = "";
-      // Native workspace input consumes its screenshot even on success.
-      if (name === "browser.workspace.interact" && catalog.modelName("browser.workspace.visual")) requireInspection("browser.workspace.visual");
       return;
     }
     if (outcome.kind === "handoff") {
@@ -61,6 +60,13 @@ export function toolMonitor({ catalog, order, checkpoint, rejected }: ToolMonito
     // confirmed (the device was slow to answer) is planned around instead of ending the run.
     if (outcome.kind === "stop" && name === "screen.open" && ownTab(call.input) && ++unopenedTabs <= 2) {
       order.pause(`Opening that tab did not finish (${visible}). Navigate a tab you already have, open it again, or read the page with web_fetch.`);
+      return;
+    }
+    // Closing a tab of the agent's own is just as harmless: one that failed (a login refresh at that
+    // moment failed four closes in one response and turned a finished run into "didn't finish")
+    // leaves the tab open, which costs nothing, so the run carries on.
+    if (outcome.kind === "stop" && name === "screen.close" && ++unclosedTabs <= 8) {
+      order.pause(`Closing that tab did not finish (${visible}). It stays open; carry on with the task, and close it later only if it still matters.`);
       return;
     }
     // Asking the person for help (a bot check, a sign-in) changes no page either: when nobody

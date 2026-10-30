@@ -9,7 +9,6 @@ export class ControlPlaneError extends Error {
     super(message);
     this.name = "ControlPlaneError";
     this.transient =
-      code !== "hosted_ai_limit_reached" &&
       code !== "usage_limit_reached" &&
       (status === 408 || status === 429 || status >= 500);
   }

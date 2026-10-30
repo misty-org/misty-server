@@ -11,7 +11,7 @@ import (
 
 const (
 	ProviderMock = "mock"
-	// ProviderVercelAI names Misty's own AI Gateway account in usage records.
+	// ProviderVercelAI labels a call on the operator's own keys.
 	ProviderVercelAI = "vercel_ai_gateway"
 
 	DefaultVercelAIBaseURL      = "https://ai-gateway.vercel.sh/v1"
@@ -19,8 +19,8 @@ const (
 	DefaultAgentMedGatewayModel = "google/gemini-2.5-flash"
 )
 
-// NewAgentProvider sends Go's own small calls to the fast model on Misty's
-// Gateway through the agent runtime. Without a runtime there is no model, so
+// NewAgentProvider sends Go's own small calls to the fast model on the
+// operator's keys through the agent runtime. Without a runtime there is no model, so
 // the mock answers instead.
 func NewAgentProvider(models *modelruntime.Client) ModelProvider {
 	if !models.Enabled() {

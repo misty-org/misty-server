@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -11,12 +10,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-// A lease covers at most this many universal tokens and this long; the device
-// asks again at a turn boundary.
+// A lease covers at most this many tokens and this long; the device asks
+// again at a turn boundary.
 const (
 	codingLeaseChunk = 400_000
 	codingLeaseTTL   = 30 * time.Minute
@@ -75,17 +73,17 @@ func (s *SpacesService) codingGrants(ctx context.Context, run *codingRun, repo s
 	return out
 }
 
-// CodingLease issues a budget for the next turn: POST /me/coding/{invocationID}/lease
-// {device_id, engine, model, repo}. It refuses plans without coding, outside
-// agents, a spent allowance, and Grok or DeepSeek Shell unless the chat is in
-// Auto with edits, installs and pushes remembered.
+// CodingLease issues a lease for the next turn: POST /me/coding/{invocationID}/lease
+// {device_id, engine, model, repo}. It refuses outside agents, and Grok or
+// DeepSeek Shell unless the chat is in Auto with edits, installs and pushes
+// remembered.
 func (s *SpacesService) CodingLease() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, ok := s.appsUser(w, r)
 		if !ok {
 			return
 		}
-		if !requireCoding(w, r, s.database, user, "coding.lease") {
+		if !requireCoding(w, r, user, "coding.lease") {
 			return
 		}
 		var body struct {
@@ -111,34 +109,13 @@ func (s *SpacesService) CodingLease() http.HandlerFunc {
 			writeJSON(w, http.StatusConflict, map[string]string{"code": "engine_not_allowed", "message": reason})
 			return
 		}
-		budget, err := s.codingBudget(r.Context(), user)
-		if errors.Is(err, errPlanUpgradeRequired) {
-			writeJSON(w, http.StatusPaymentRequired, map[string]string{"code": codePlanUpgradeRequired, "message": planUpgradeMessage})
-			return
-		}
-		if err != nil {
-			writeBillingError(w, err)
-			return
-		}
 		lease, token, err := s.database.IssueCodingLease(r.Context(), user, db.CodingLease{
 			InvocationID: run.record.ID, DeviceID: body.DeviceID, Engine: body.Engine, Model: body.Model,
-			TokenBudget: budget, ExpiresAt: time.Now().Add(codingLeaseTTL),
+			TokenBudget: codingLeaseChunk, ExpiresAt: time.Now().Add(codingLeaseTTL),
 		})
 		if err != nil {
 			writeSpaceError(w, err)
 			return
-		}
-		// A new lease means the device finished its last turn: settle the old ones.
-		if err := s.settleCodingLeases(r.Context(), run, lease.ID); err != nil {
-			writeBillingError(w, err)
-			return
-		}
-		if s.usageMeter != nil {
-			if _, err := agent.ReserveMeasuredUsage(s.usageMeter, user, codingUsageKey(run.record.ID, lease.ID), codingBillingProvider(body.Engine),
-				firstAIText(body.Model, body.Engine), map[string]int64{"external_tokens": budget}, "coding:"+run.record.ID); err != nil {
-				writeBillingError(w, err)
-				return
-			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"lease": map[string]any{
 			"invocation_id": lease.InvocationID, "lease_id": lease.ID, "token_budget": lease.TokenBudget, "expires_at": lease.ExpiresAt.Unix(),
@@ -146,36 +123,6 @@ func (s *SpacesService) CodingLease() http.HandlerFunc {
 			"mode": run.body.PermissionMode, "plan": run.body.CollaborationMode == db.ConversationModePlan,
 		}})
 	}
-}
-
-// codingUsageKey matches the runtime's turn keys so settlement reuses them.
-func codingUsageKey(invocationID, leaseID string) string {
-	return "agent-runtime:" + invocationID + ":model:" + leaseID
-}
-
-// codingBudget is the next lease's size: what is left of the weekly coding
-// allowance, at most one chunk. Plans without coding have none.
-func (s *SpacesService) codingBudget(ctx context.Context, user string) (int64, error) {
-	entitlements, err := s.database.EntitlementsForUser(ctx, user)
-	if err != nil {
-		return 0, err
-	}
-	if !entitlements.Coding || entitlements.WeeklyExternalCodingAllowance <= 0 {
-		return 0, errPlanUpgradeRequired
-	}
-	used, err := s.database.WeeklyCodingUsed(ctx, user)
-	if err != nil {
-		return 0, err
-	}
-	left := entitlements.WeeklyExternalCodingAllowance - used
-	if left <= 0 {
-		resets := codingWeekResets()
-		return 0, &billingadapter.Denial{Limit: "weekly", ResetsAt: &resets}
-	}
-	if left > codingLeaseChunk {
-		left = codingLeaseChunk
-	}
-	return left, nil
 }
 
 // codingEngineRefusal checks what the device chose against the server's rules:
@@ -203,16 +150,4 @@ func codingEngineRefusal(engine string, run *codingRun, grants []string) string 
 		}
 	}
 	return ""
-}
-
-// codingWeekResets is when the weekly coding allowance starts over: next
-// Monday, 00:00 UTC.
-func codingWeekResets() time.Time {
-	now := time.Now().UTC()
-	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	days := (8 - int(start.Weekday())) % 7
-	if days == 0 {
-		days = 7
-	}
-	return start.AddDate(0, 0, days)
 }

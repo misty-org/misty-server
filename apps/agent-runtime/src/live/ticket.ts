@@ -56,8 +56,7 @@ export function verifyLiveTicket(ticket: string, secrets: Buffer[], now = Date.n
 
 /**
  * Remembers spent session ids until their tickets expire, so a ticket opens
- * one stream. The Go API also settles each session once, so a second runtime
- * replica accepting the same ticket could not charge twice.
+ * one stream.
  */
 export class SpentTickets {
   private spent = new Map<string, number>();

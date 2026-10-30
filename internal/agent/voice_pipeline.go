@@ -11,39 +11,39 @@ import (
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
-// PipelineVoiceModel identifies the cheaper voice path in billing: ElevenLabs
-// Scribe speech-to-text, the plan's fast text model, then ElevenLabs Flash
-// text-to-speech. It costs
-// roughly a twentieth of a native speech model per spoken reply, at the price
-// of a little more latency, so Basic accounts use it and paid plans keep
-// Realtime.
+// PipelineVoiceModel identifies the pipeline voice path: ElevenLabs Scribe
+// speech-to-text, the account's fast text model, then ElevenLabs Flash
+// text-to-speech. It costs roughly a twentieth of a native speech model per
+// spoken reply, at the price of a little more latency.
 const PipelineVoiceModel = "misty/voice-pipeline"
 
-// Spoken replies are a sentence or two. Billing bounds each reply by the same
-// numbers, so a reply can never exceed its hold.
+// Spoken replies are a sentence or two; these bound each reply.
 const (
 	pipelineReplyTokens = 300
 	pipelineSpeechChars = 600
 )
 
 // VoicePipeline speaks the same event protocol as VoiceRealtime, so the voice
-// session, its tools and its billing need no second implementation.
+// session and its tools need no second implementation.
 type VoicePipeline struct {
 	models              *modelruntime.Client
 	textModel, ttsModel string
-	listenEndpoint      string
-	voice               string
-	events              chan VoiceRealtimeEvent
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	mu                  sync.Mutex
-	instructions        string
-	tools               map[string]bool
-	toolNames           []string
-	maxOutput           int
-	history             []modelruntime.Message
-	stt                 speechListener
-	sttBytes            int
+	// textRoute and speechRoute run the reply and its speech; the operator's
+	// keys unless WithRoutes names the account's.
+	textRoute, speechRoute modelruntime.Route
+	listenEndpoint         string
+	voice                  string
+	events                 chan VoiceRealtimeEvent
+	ctx                    context.Context
+	cancel                 context.CancelFunc
+	mu                     sync.Mutex
+	instructions           string
+	tools                  map[string]bool
+	toolNames              []string
+	maxOutput              int
+	history                []modelruntime.Message
+	stt                    speechListener
+	sttBytes               int
 	// heard closes when the latest committed turn is transcribed. Realtime
 	// orders commit before response itself; the pipeline must wait so a reply
 	// never answers the previous message.
@@ -60,11 +60,17 @@ func NewVoicePipeline(ctx context.Context, models *modelruntime.Client, textMode
 		return nil, errors.New("the voice pipeline is not configured")
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	return &VoicePipeline{models: models, textModel: textModel, ttsModel: ttsModel, voice: voice, events: make(chan VoiceRealtimeEvent, 256),
+	return &VoicePipeline{models: models, textModel: textModel, ttsModel: ttsModel, textRoute: modelruntime.Instance(), speechRoute: modelruntime.Instance(), voice: voice, events: make(chan VoiceRealtimeEvent, 256),
 		ctx: ctx, cancel: cancel, maxOutput: VoiceConversationOutputTokens, tools: map[string]bool{}, openSTT: openElevenLabsListener}, nil
 }
 
 func (p *VoicePipeline) ModelID() string { return PipelineVoiceModel }
+
+// WithRoutes runs the pipeline's reply and speech on these routes.
+func (p *VoicePipeline) WithRoutes(text, speech modelruntime.Route) *VoicePipeline {
+	p.textRoute, p.speechRoute = text, speech
+	return p
+}
 
 func (p *VoicePipeline) Read() (VoiceRealtimeEvent, error) {
 	select {
@@ -101,7 +107,7 @@ func (p *VoicePipeline) SetOutputLimit(tokens int) error {
 }
 
 // pipelineUsage is the raw usage the session's usage readers accept from the
-// pipeline: native counters billing prices, never a price.
+// pipeline: native counters, never a price.
 func pipelineUsage(units map[string]int64) json.RawMessage {
 	raw, _ := json.Marshal(map[string]any{"misty_pipeline_usage": units})
 	return raw

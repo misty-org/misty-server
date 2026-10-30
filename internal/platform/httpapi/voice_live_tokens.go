@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -76,22 +75,6 @@ func verifyLiveTicket(secrets [][]byte, ticket string, now time.Time) (LiveTicke
 		return claims, errLiveTicket
 	}
 	return claims, nil
-}
-
-// voiceWeeklyMinutes reads "basic=120,pro=600,…" (MISTY_VOICE_WEEKLY_MINUTES).
-// Unknown or malformed entries fall back to the defaults below.
-func voiceWeeklyMinutes(raw string) map[string]int64 {
-	minutes := map[string]int64{"basic": 120, "pro": 600, "max": 1200, "ultra": 6000, "ultra_plus": 12000}
-	for _, entry := range strings.Split(raw, ",") {
-		plan, value, ok := strings.Cut(strings.TrimSpace(entry), "=")
-		n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
-		if ok && err == nil && n >= 0 {
-			if _, known := minutes[strings.TrimSpace(plan)]; known {
-				minutes[strings.TrimSpace(plan)] = n
-			}
-		}
-	}
-	return minutes
 }
 
 // liveChannels accepts "mic" and "system", each once.

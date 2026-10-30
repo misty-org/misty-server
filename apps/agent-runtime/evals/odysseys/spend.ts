@@ -1,4 +1,4 @@
-// What the Odysseys campaign spends on Misty's own Anthropic key, which the AI Gateway
+// What the Odysseys campaign spends on the instance's Anthropic key, which the AI Gateway
 // balance never sees. Each run's agent tokens come from the local billing ledger
 // (usage.ts), the judge's from its own calls; a ledger file keeps the total
 // across passes so the campaign stops at its cap (docs/agents/evals/odysseys.md).
@@ -16,7 +16,7 @@ const searchUsd = 0.001;
 
 export function tokenUsd(model: string, input: number, cached: number, output: number): number {
   // NVIDIA's hosted models are free with rate limits (docs/agents/evals/free-model.md).
-  if (model.startsWith("nim/") || model.startsWith("gemini/")) return 0;
+  if (/^(nim|nvidia|gemini)\//.test(model)) return 0;
   const price = prices[model] ?? prices["anthropic/claude-sonnet-5.5"]!;
   return ((input - cached) * price.input + cached * price.cached + output * price.output) / 1_000_000;
 }

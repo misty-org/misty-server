@@ -1,10 +1,10 @@
-import { createSoniox } from "@soniox/vercel-ai-sdk-provider";
 import { transcribe } from "ai";
 import { z } from "zod";
 import { ModelCallError } from "./model-calls.js";
+import { modelRouteSchema, resolveTranscriptionModel } from "./model-provider.js";
 
 const diarizedRequest = z.object({
-  route: z.object({ provider: z.literal("instance"), reasoning: z.string().optional() }),
+  route: modelRouteSchema,
   model: z.string().regex(/^soniox\/[\w.-]+$/),
   mediaType: z.string().regex(/^(audio|video)\/[\w.+-]+$/),
   audio: z.string().min(1),
@@ -39,9 +39,7 @@ export async function transcribeDiarizedCall(body: unknown, signal?: AbortSignal
   const parsed = diarizedRequest.safeParse(body);
   if (!parsed.success) throw new ModelCallError(400, "invalid_model_call", "Invalid model call");
   const request = parsed.data;
-  const apiKey = process.env.SONIOX_API_KEY?.trim();
-  if (!apiKey) throw new ModelCallError(503, "model_unavailable", "Speaker transcription isn't configured.");
-  const model = createSoniox({ apiKey }).transcription(request.model.slice("soniox/".length));
+  const model = await resolveTranscriptionModel(request.model, request.route);
   const result = await transcribe({
     model,
     audio: Buffer.from(request.audio, "base64"),

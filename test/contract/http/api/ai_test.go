@@ -61,22 +61,3 @@ func TestWriteAIErrorReturnsCanceledWithoutProviderDetails(t *testing.T) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
-
-func TestWriteAIErrorReturnsStructuredHostedAILimit(t *testing.T) {
-	for _, testCase := range []struct{ scope, reason string }{{"personal", "personal_ai_limit_reached"}, {"space", "personal_ai_limit_reached"}} {
-		t.Run(testCase.scope, func(t *testing.T) {
-			recorder := httptest.NewRecorder()
-			WriteAIError(recorder, agent.CreditsExhaustedError{Required: 25, Available: 10, Scope: testCase.scope})
-			if recorder.Code != http.StatusPaymentRequired {
-				t.Fatalf("status = %d", recorder.Code)
-			}
-			var payload map[string]any
-			if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
-				t.Fatal(err)
-			}
-			if payload["code"] != "hosted_ai_limit_reached" || payload["reason"] != testCase.reason || payload["message"] == "" {
-				t.Fatalf("payload = %#v", payload)
-			}
-		})
-	}
-}

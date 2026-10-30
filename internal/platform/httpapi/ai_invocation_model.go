@@ -5,17 +5,25 @@ import (
 	"strings"
 
 	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/kannachi323/misty/server/internal/aimodels"
+	"github.com/kannachi323/misty/server/internal/byok"
 )
 
-// chooseInvocationModel picks the account's model, or the companion's choice,
-// and the reasoning setting for the run.
+// chooseInvocationModel picks the run's model and reasoning: the agent model
+// the account brought (X-Misty-Models), else the operator's model. With
+// neither the request is refused with 409 model_key_needed. A development
+// stack with MISTY_ALLOW_MODEL_OVERRIDE also lets a request choose, for evals.
 func (s *AIService) chooseInvocationModel(w http.ResponseWriter, r *http.Request, userID string, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
 	st.modelID = agent.FrontierDefaultModelID()
 	st.reasoning = agent.ManagedReasoning(body.ThinkingMode, body.ReasoningEffort)
 	st.modelOverrides = map[string]string{}
-	// Everyone runs on the house model and effort (agent.HouseModel). Only a development
-	// stack with MISTY_ALLOW_MODEL_OVERRIDE lets an account or a request choose, for evals.
-	if !agent.ClientModelChoice() {
+	if c := accountCredentials(r.Context(), userID); c != nil {
+		st.modelID, st.reasoning, st.accountModel = c.Models.Agent, accountReasoning(c), true
+	} else if !aimodels.OperatorModels() {
+		writeModelError(w, byok.ErrModelKeyNeeded)
+		return false
+	}
+	if !agent.ClientModelChoice() || st.accountModel {
 		return true
 	}
 	selectedModel, _, accountModel, selectErr := s.accountAgentModel(r.Context(), userID)
@@ -52,13 +60,13 @@ func (s *AIService) bindConversationModel(w http.ResponseWriter, r *http.Request
 		writePersonalAgentError(w, bindErr)
 		return false
 	}
-	if body.ThinkingMode == "" && body.ReasoningEffort == "" {
+	if body.ThinkingMode == "" && body.ReasoningEffort == "" && !st.accountModel {
 		st.reasoning = agent.ManagedReasoning("", bound.ReasoningEffort)
 	}
 	// The conversation's own pick beats the account's Thinking choice.
 	// A model the Gateway retired falls back with a notice.
 	if override := bound.ModelOverride; override != "" && agent.ClientModelChoice() {
-		if !agent.FreeEvalModel(override) && agent.SenseModelRetired(r.Context(), "thinking", override) {
+		if !agent.FrontierModelAvailable(r.Context(), override) {
 			_ = s.database.SetMistyConversationModelOverride(r.Context(), userID, st.conversationID, "")
 			st.modelFallbackNotice = true
 		} else {
@@ -78,7 +86,7 @@ func (s *AIService) bindConversationModel(w http.ResponseWriter, r *http.Request
 // applyRequestedModelOverride pins the model the request asked for, if any.
 func (s *AIService) applyRequestedModelOverride(w http.ResponseWriter, r *http.Request, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
 	if requested := strings.TrimSpace(body.ModelOverride); requested != "" && agent.ClientModelChoice() {
-		if !agent.FreeEvalModel(requested) && !agent.SenseModelAvailable(r.Context(), "thinking", requested) {
+		if !agent.FrontierModelAvailable(r.Context(), requested) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_model", "message": "Choose an available model."})
 			return false
 		}
@@ -113,7 +121,7 @@ func checkInvocationModelAvailable(w http.ResponseWriter, r *http.Request, body 
 // freezeInvocationRoutes plans the model routes for a newly created run and
 // freezes them on the record.
 func (s *AIService) freezeInvocationRoutes(w http.ResponseWriter, r *http.Request, userID, invocationID string, st *aiInvocationAdmitState) bool {
-	planned, forced := planRoutes(r.Context(), s.database, userID, defaultAIRoutes(st.modelID, st.reasoning))
+	planned, forced := runRoutes(r.Context(), s.database, userID, defaultAIRoutes(st.modelID, st.reasoning))
 	if _, routeErr := s.database.FreezeAIModelRoutes(r.Context(), userID, invocationID, planned, st.modelOverrides, forced); routeErr != nil {
 		writeAIProviderError(w, routeErr)
 		return false

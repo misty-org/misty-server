@@ -16,7 +16,8 @@ func TestNormalizeHandoffPath(t *testing.T) {
 		{name: "empty_defaults_to_settings", raw: "", want: "/settings"},
 		{name: "whitespace_defaults_to_settings", raw: "   ", want: "/settings"},
 		{name: "allowlisted_root", raw: "/settings", want: "/settings"},
-		{name: "allowlisted_tab", raw: "/settings/billing", want: "/settings/billing"},
+		{name: "allowlisted_tab", raw: "/settings/account", want: "/settings/account"},
+		{name: "retired_billing_tab", raw: "/settings/billing", want: ""},
 		{name: "trailing_slash_trimmed", raw: "/settings/usage/", want: "/settings/usage"},
 		{name: "bare_slash_defaults", raw: "/", want: "/settings"},
 

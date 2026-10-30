@@ -66,7 +66,7 @@ type AccountPortableExport struct {
 }
 
 // AccountPortableExport returns user-supplied and account-owned data without
-// password hashes, sessions, OAuth secrets, internal object keys, or billing
+// password hashes, sessions, OAuth secrets, internal object keys, or operator
 // credentials. Journal CRDT and asset URLs are attached by the API after fresh
 // authorization checks.
 func (db *Database) AccountPortableExport(

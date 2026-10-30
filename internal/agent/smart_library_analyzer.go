@@ -8,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/kannachi323/misty/server/internal/aimodels"
-	"github.com/kannachi323/misty/server/internal/library"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 	"github.com/kannachi323/misty/server/internal/platform/config"
 )
@@ -21,7 +20,6 @@ const (
 // SmartLibraryAnalyzer holds the shared model services Go calls itself:
 // embeddings, transcription and the realtime voice socket.
 type SmartLibraryAnalyzer struct {
-	billing        *library.Meter
 	ModelResolver  aimodels.Resolver
 	account        string
 	roleConfigs    map[string]*aimodels.Resolved

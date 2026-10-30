@@ -130,3 +130,12 @@ func (db *Database) SpacePeople(ctx context.Context, userID string) ([]SpacePers
 	})
 	return people, err
 }
+
+// addSpaceMembershipTx is the canonical write path for Space memberships.
+func addSpaceMembershipTx(ctx context.Context, tx *sql.Tx, spaceID, userID, role string) error {
+	if role != "owner" && role != "member" {
+		return ErrSpaceInvalid
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO space_members(space_id,user_id,role) VALUES($1,$2,$3)`, spaceID, userID, role)
+	return err
+}

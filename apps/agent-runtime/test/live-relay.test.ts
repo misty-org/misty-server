@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { liveSonioxKey } from "../src/live/credential.js";
 import { LiveSession, type RelayMessage, type SttStream } from "../src/live/session.js";
+import { signatureHeaders } from "../src/signature.js";
 import { SpentTickets, verifyLiveTicket, type LiveTicket } from "../src/live/ticket.js";
 import { speakerTurns } from "../src/transcribe-diarized.js";
 
@@ -63,11 +65,10 @@ const ticket = (max = 60_000): LiveTicket => ({ sid: "s1", sub: "user-1", dev: "
 const frame = (channel: number, ms: number) => Uint8Array.from([channel, ...new Uint8Array(ms * 32)]);
 
 describe("live relay", () => {
-  it("relays diarized segments per channel and settles the audio once", async () => {
+  it("relays diarized segments per channel", async () => {
     const sent: RelayMessage[] = [];
     const configs: Record<string, unknown>[] = [];
-    const settle = vi.fn(async () => true);
-    const session = new LiveSession(ticket(), (m) => sent.push(m), replayStream(fixture("soniox-live-two-speakers.json").results, configs) as never, settle);
+    const session = new LiveSession(ticket(), (m) => sent.push(m), replayStream(fixture("soniox-live-two-speakers.json").results, configs) as never);
     await session.start({ type: "start", language: "en", context: { terms: ["Misty"], text: "Design review" } });
     expect(configs).toHaveLength(2);
     expect(configs[0]).toMatchObject({ model: "stt-rt-v4", enable_speaker_diarization: true, enable_endpoint_detection: true, sample_rate: 16000, context: { terms: ["Misty"], text: "Design review" } });
@@ -83,46 +84,39 @@ describe("live relay", () => {
     ]);
     expect(finals[0]?.words?.map((w) => w.text)).toEqual(["Can", "we", "ship", "Thursday?"]);
     expect(sent.at(-1)).toEqual({ type: "finished", usedMs: 500 });
-    expect(settle).toHaveBeenCalledTimes(1);
-    expect(settle).toHaveBeenCalledWith(500);
   });
 
-  it("stops at the ticket's limit and meters only what was sent", async () => {
+  it("stops at the ticket's limit and counts only what was sent", async () => {
     const sent: RelayMessage[] = [];
-    const settle = vi.fn(async () => true);
-    const session = new LiveSession(ticket(250), (m) => sent.push(m), replayStream([], []) as never, settle);
+    const session = new LiveSession(ticket(250), (m) => sent.push(m), replayStream([], []) as never);
     await session.start({ type: "start" });
     session.audio(frame(0, 200));
     session.audio(frame(0, 200));
     session.audio(frame(0, 200));
-    await vi.waitFor(() => expect(settle).toHaveBeenCalledWith(250));
+    await vi.waitFor(() => expect(sent.at(-1)).toEqual({ type: "finished", usedMs: 250 }));
     expect(sent.some((m) => m.type === "limit")).toBe(true);
-    expect(settle).toHaveBeenCalledTimes(1);
   });
 
   it("ignores audio for channels the ticket didn't grant", async () => {
-    const settle = vi.fn(async () => true);
     const micOnly = { ...ticket(), ch: ["mic"] as LiveTicket["ch"] };
-    const session = new LiveSession(micOnly, () => {}, replayStream([], []) as never, settle);
+    const session = new LiveSession(micOnly, () => {}, replayStream([], []) as never);
     await session.start({ type: "start" });
     session.audio(frame(1, 100));
     session.audio(frame(7, 100));
     session.close();
-    expect(settle).toHaveBeenCalledWith(0);
+    expect(session.usedMs).toBe(0);
   });
 
-  it("reports a provider failure without its details and still settles", async () => {
+  it("reports a provider failure without its details", async () => {
     const sent: RelayMessage[] = [];
-    const settle = vi.fn(async () => true);
     const failing = () => ({
       connect: async () => { throw new Error("401 api key sk-secret rejected"); },
       sendAudio() {}, finish: async () => {}, close() {}, on() { return this; },
     }) as unknown as SttStream;
-    const session = new LiveSession(ticket(), (m) => sent.push(m), failing, settle);
+    const session = new LiveSession(ticket(), (m) => sent.push(m), failing);
     await session.start({ type: "start" });
     expect(JSON.stringify(sent)).not.toContain("sk-secret");
     expect(sent.some((m) => m.type === "error")).toBe(true);
-    expect(settle).toHaveBeenCalledWith(0);
   });
 });
 
@@ -134,5 +128,39 @@ describe("transcribe-diarized speaker turns", () => {
       { speaker: "2", language: "en", start: 1.1, end: 1.7, text: "Hi Dana." },
       { speaker: "1", language: "en", start: 1.9, end: 2.5, text: "Let's start." },
     ]);
+  });
+});
+
+describe("live session keys", () => {
+  const route = (body: unknown, status = 200) =>
+    vi.fn<typeof fetch>(async () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
+
+  it("asks Go for the session's route over the signed channel", async () => {
+    vi.stubEnv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", secret.toString("base64"));
+    const fetcher = route({ provider: "account", credential: { provider: "soniox", apiKey: "soniox-account-key" } });
+    expect(await liveSonioxKey(ticket(), fetcher, { SONIOX_API_KEY: "instance-key" })).toBe("soniox-account-key");
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/internal\/voice\/live\/credential$/);
+    expect(JSON.parse(String(init.body))).toEqual({ session_id: "s1", user: "user-1" });
+    expect(new Headers(init.headers).get(signatureHeaders.signature)).toBeTruthy();
+    vi.unstubAllEnvs();
+  });
+
+  it("uses the instance key for an instance route, and asks for a key with neither", async () => {
+    vi.stubEnv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", secret.toString("base64"));
+    expect(await liveSonioxKey(ticket(), route({ provider: "instance" }), { SONIOX_API_KEY: "instance-key" })).toBe("instance-key");
+    await expect(liveSonioxKey(ticket(), route({ provider: "instance" }), {})).rejects.toThrow("model_key_needed");
+    // An account key for another provider is never swapped for the instance's.
+    await expect(liveSonioxKey(ticket(), route({ provider: "account", credential: { provider: "openai", apiKey: "k" } }), { SONIOX_API_KEY: "instance-key" })).rejects.toThrow("model_key_needed");
+    vi.unstubAllEnvs();
+  });
+
+  it("refuses without repeating what Go sent", async () => {
+    vi.stubEnv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", secret.toString("base64"));
+    const leaked = "sk-echoed-secret";
+    await expect(liveSonioxKey(ticket(), route({ error: leaked }, 500), {})).rejects.toThrow(/^live_route_unavailable: 500$/);
+    const malformed = await liveSonioxKey(ticket(), route({ provider: "account", credential: { apiKey: leaked } }), {}).catch((e: Error) => e);
+    expect((malformed as Error).message).toBe("invalid_model_route");
+    vi.unstubAllEnvs();
   });
 });

@@ -2,7 +2,10 @@ import type * as SignatureModule from "../src/signature.js";
 import type { AddressInfo } from "node:net";
 import { expect, it, vi } from "vitest";
 
-vi.mock("../src/model-provider.js", () => ({ instanceModelConfig: vi.fn() }));
+vi.mock("../src/model-provider.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../src/model-provider.js")>(),
+  instanceModelConfig: vi.fn(),
+}));
 vi.mock("../src/workflow-harness.js", () => ({ workflowHarness: { version: "test" } }));
 vi.mock("../src/signature.js", async (importOriginal) => ({
   ...await importOriginal<typeof SignatureModule>(),

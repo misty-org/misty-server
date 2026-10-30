@@ -9,9 +9,10 @@ import (
 // memorySearchFunc ranks one person's records in one Space by meaning.
 type memorySearchFunc func(ctx context.Context, user, space string, branches []string, query string, limit int) ([]db.MemoryHit, error)
 
-// searchMemory embeds the query once, billed to the person as background
-// work, and ranks one Space's records by meaning. Records still waiting for
-// their vector are not found yet; there is no word search to fall back on.
+// searchMemory embeds the query once, on the person's embedding model, and
+// ranks one Space's records by meaning. Records still waiting for
+// their vector are not found yet; there is no word search to fall back on,
+// so without an embedding model memory search finds nothing.
 func (s *SpacesService) searchMemory(ctx context.Context, user, space string, branches []string, query string, limit int) ([]db.MemoryHit, error) {
 	embedding, ok := s.agentQueryEmbedding(ctx, user, query)
 	if !ok {

@@ -5,6 +5,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { loadBuTasks } from "./bu-bench.js";
 
 type Level = "easy" | "medium" | "hard";
 export type Split = "dev" | "holdout" | "rest";
@@ -24,6 +25,8 @@ export interface OdysseysTask {
   referenceLength: number;
   rubrics: Rubric[];
   split: Split;
+  /** BU Bench's one binary verdict (bu-bench.ts) instead of Odysseys' rubrics. */
+  judge?: "bu-v1";
 }
 
 interface RawTask {
@@ -44,6 +47,7 @@ const quota: Record<Exclude<Split, "rest">, Record<Level, number>> = {
 const rank = (id: string) => createHash("sha1").update(`misty-odysseys-split-v1:${id}`).digest("hex");
 
 export function loadTasks(): OdysseysTask[] {
+  if (process.env.MISTY_ODYSSEYS_DATASET === "bu-v1") return loadBuTasks();
   const raw = JSON.parse(readFileSync(resolve(import.meta.dirname, "data/odysseys.json"), "utf8")) as RawTask[];
   const tasks: OdysseysTask[] = [];
   for (const level of ["easy", "medium", "hard"] as const) {

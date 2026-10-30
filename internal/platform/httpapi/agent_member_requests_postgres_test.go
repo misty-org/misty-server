@@ -1,11 +1,9 @@
 package api
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 
@@ -16,34 +14,7 @@ import (
 	"github.com/kannachi323/misty/server/test/testkit"
 )
 
-// memberBillingMeter records which account each model call is charged to.
-// The requester's own turns are billed by its own run, as before.
-type memberBillingMeter struct {
-	reserved, completed []string
-	commands            []string
-}
-
-func (m *memberBillingMeter) Reserve(userID, _, _, _, _ string, _, _ int64) (*agent.UsageReservation, error) {
-	m.reserved = append(m.reserved, userID)
-	return &agent.UsageReservation{}, nil
-}
-func (m *memberBillingMeter) ReserveMeasured(userID, _, _, _ string, _ map[string]int64, command string) (*agent.UsageReservation, error) {
-	m.reserved, m.commands = append(m.reserved, userID), append(m.commands, command)
-	return &agent.UsageReservation{}, nil
-}
-func (m *memberBillingMeter) CompleteRuntime(_ context.Context, account, _ string, _ agent.ModelUsage) error {
-	m.completed = append(m.completed, account)
-	return nil
-}
-func (*memberBillingMeter) Settle(*agent.UsageReservation, string, string, string, string, agent.ModelUsage) (agent.UsageSettlement, error) {
-	return agent.UsageSettlement{}, nil
-}
-func (*memberBillingMeter) Release(*agent.UsageReservation) error { return nil }
-func (*memberBillingMeter) Refund(*agent.UsageReservation, string, string) (agent.UsageSettlement, error) {
-	return agent.UsageSettlement{}, nil
-}
-
-func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
+func TestAgentMemberRequestToolsAndModelAccountPostgres(t *testing.T) {
 	if os.Getenv("TEST_DB_NAME") != "misty_agent_members_test" {
 		t.Skip("requires isolated agent members test database")
 	}
@@ -72,8 +43,7 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 	if _, err := database.AddSpaceAgent(ctx, bob.ID, space.ID, bobAgent.ID); err != nil {
 		t.Fatal(err)
 	}
-	meter := &memberBillingMeter{}
-	service := &SpacesService{database: database, usageMeter: meter}
+	service := &SpacesService{database: database}
 
 	// The requester's own run offers the member tools.
 	parent, _ := database.SpaceRun(ctx, alice.ID, aliceRun.ID)
@@ -123,14 +93,12 @@ func TestAgentMemberRequestToolsAndBillingPostgres(t *testing.T) {
 	if !hasToolboxTool(childToolbox, "note.search") || !hasToolboxTool(childToolbox, "memory.pref.list") || childInvocation.UserID != bob.ID || childInvocation.SpaceID != space.ID {
 		t.Fatalf("delegated invocation = %#v", childInvocation)
 	}
-	if _, err := service.meterPersonalAgentRuntimeModel(ctx, child, "model:1", workflow.StepRunning, json.RawMessage(`{"input_bytes":64}`)); err != nil {
+	if err := service.admitPersonalAgentRuntimeTurn(ctx, child, "model:1", workflow.StepRunning); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.settlePersonalAgentRuntimeUsage(ctx, child, "success", json.RawMessage(`{}`)); err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(meter.reserved, []string{alice.ID}) || !slices.Equal(meter.completed, []string{alice.ID}) || !slices.Equal(meter.commands, []string{"agent-runtime:" + child.ID}) {
-		t.Fatalf("billing reserved=%v completed=%v commands=%v; want the member who asked", meter.reserved, meter.completed, meter.commands)
+	// Work asked of another member's agent runs on the models of the member who asked.
+	if runModelUser(child) != alice.ID {
+		t.Fatalf("model account = %s; want the member who asked", runModelUser(child))
 	}
 
 	// Taking the agent out of the Space stops the work at its next tool call.

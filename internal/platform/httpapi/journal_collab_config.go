@@ -23,15 +23,27 @@ import (
 const (
 	// Short enough that a revoked user cannot hold a usable ticket for long,
 	// long enough to survive a slow client opening a WebSocket.
-	journalTicketLifetime    = 60 * time.Second
-	journalTicketIssuer      = "misty-api"
-	journalTicketAudience    = "misty-journal-collab"
-	defaultJournalCollabHost = "misty-journal-collab.mistysys.workers.dev"
+	journalTicketLifetime = 60 * time.Second
+	journalTicketIssuer   = "misty-api"
+	journalTicketAudience = "misty-journal-collab"
 )
+
+// ErrCollaborationOff means this server runs without the collaboration
+// service: notes and drawings sync through ordinary sync, and live editing,
+// collaboration tickets and agent edits to their bodies are unavailable.
+var ErrCollaborationOff = errors.New("collaboration_off: this server can't save notes and drawings")
+
+// collaborationEnabled reports whether this server has a collaboration
+// service: PARTYKIT_HOST is set.
+func collaborationEnabled() bool {
+	return strings.TrimSpace(envconfig.Getenv("PARTYKIT_HOST")) != ""
+}
 
 // JournalCollabConfig holds everything needed to talk to the shared note and
 // drawing collaboration service. It is only usable once every field validates.
+// The zero value is collaboration off.
 type JournalCollabConfig struct {
+	Enabled                  bool
 	Host                     string
 	Issuer                   string
 	Audience                 string
@@ -44,17 +56,18 @@ type JournalCollabConfig struct {
 
 // JournalCollabConfigFromEnv reads the collaboration configuration.
 //
-// Journal collaboration is an invariant, not a feature flag. A missing or
-// invalid setting fails startup rather than quietly degrading to local-only
-// notes.
+// Collaboration is on only when PARTYKIT_HOST names the operator's own
+// collaboration service; then every key must be present and valid, or startup
+// fails. Without PARTYKIT_HOST it is off, whatever keys exist.
 func JournalCollabConfigFromEnv() (JournalCollabConfig, error) {
 	config := JournalCollabConfig{
-		Host:     envOrDefault("PARTYKIT_HOST", defaultJournalCollabHost),
+		Enabled:  true,
+		Host:     strings.TrimSpace(envconfig.Getenv("PARTYKIT_HOST")),
 		Issuer:   journalTicketIssuer,
 		Audience: journalTicketAudience,
 	}
 	if config.Host == "" {
-		return JournalCollabConfig{}, errors.New("PARTYKIT_HOST is required for journal collaboration")
+		return JournalCollabConfig{}, nil
 	}
 	if strings.Contains(config.Host, "/") || strings.Contains(config.Host, ":") {
 		return JournalCollabConfig{}, errors.New("PARTYKIT_HOST must be a bare hostname")
@@ -163,6 +176,9 @@ func SignServicePayload(secret []byte, timestamp string, body []byte) string {
 
 // VerifyProjectionSignature checks a projection callback from the Worker.
 func (c JournalCollabConfig) VerifyProjectionSignature(timestamp string, body []byte, signature string) bool {
+	if !c.Enabled {
+		return false
+	}
 	expected := SignServicePayload(c.projectionSecret, timestamp, body)
 	if hmac.Equal([]byte(expected), []byte(signature)) {
 		return true

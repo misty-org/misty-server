@@ -57,7 +57,7 @@ func (s *SpaceLibraryService) Usage() http.HandlerFunc {
 		}
 		if usage.OwnerUserID != userID {
 			writeJSON(w, http.StatusOK, map[string]any{
-				"space_id": usage.SpaceID, "storage_available": usage.PersonalRemainingBytes > 0,
+				"space_id": usage.SpaceID, "storage_available": true,
 			})
 			return
 		}

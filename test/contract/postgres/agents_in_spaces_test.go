@@ -95,7 +95,7 @@ func TestMentioningAnAgentInSpaceChatAsksItsOwner(t *testing.T) {
 		t.Fatalf("mention request = %#v, %v", request, err)
 	}
 	child, err := f.database.SpaceRun(ctx, f.bob.ID, request.ChildRunID)
-	if err != nil || child.BillingUserID != f.alice.ID || child.OwnerUserID != f.bob.ID {
+	if err != nil || child.ModelUserID != f.alice.ID || child.OwnerUserID != f.bob.ID {
 		t.Fatalf("mention work = %#v, %v, want Bob's agent billed to Alice", child, err)
 	}
 	if replay, err := f.database.CreateAgentMemberRequest(ctx, ask); err != nil || replay.ID != request.ID {
@@ -118,7 +118,7 @@ func TestMentioningAnAgentInSpaceChatAsksItsOwner(t *testing.T) {
 		t.Fatalf("agent-to-agent request = %#v, %v", next, err)
 	}
 	nextRun, err := f.database.SpaceRun(ctx, f.alice.ID, next.ChildRunID)
-	if err != nil || nextRun.BillingUserID != f.alice.ID || nextRun.ParentRunID != request.ChildRunID || nextRun.DelegationDepth != 2 {
+	if err != nil || nextRun.ModelUserID != f.alice.ID || nextRun.ParentRunID != request.ChildRunID || nextRun.DelegationDepth != 2 {
 		t.Fatalf("agent-to-agent work = %#v, %v", nextRun, err)
 	}
 	if _, err := f.database.CreateAgentMemberRequest(ctx, AgentMemberRequestInput{SpaceID: f.space.ID, RequesterUserID: f.alice.ID,

@@ -18,7 +18,7 @@ func TestAuthHandoffTokenIsConsumedOnFirstRead(t *testing.T) {
 	}
 
 	tokenHash := security.HashToken("handoff-token")
-	if err := database.CreateAuthHandoffToken(user.ID, tokenHash, "/settings/billing", time.Now().Add(time.Minute)); err != nil {
+	if err := database.CreateAuthHandoffToken(user.ID, tokenHash, "/settings/account", time.Now().Add(time.Minute)); err != nil {
 		t.Fatalf("CreateAuthHandoffToken() error = %v", err)
 	}
 
@@ -29,8 +29,8 @@ func TestAuthHandoffTokenIsConsumedOnFirstRead(t *testing.T) {
 	if gotUserID != user.ID {
 		t.Fatalf("ConsumeAuthHandoffToken() userID = %q, want %q", gotUserID, user.ID)
 	}
-	if gotPath != "/settings/billing" {
-		t.Fatalf("ConsumeAuthHandoffToken() path = %q, want %q", gotPath, "/settings/billing")
+	if gotPath != "/settings/account" {
+		t.Fatalf("ConsumeAuthHandoffToken() path = %q, want %q", gotPath, "/settings/account")
 	}
 
 	// The whole point of this table: a replayed link must not mint a second

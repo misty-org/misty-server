@@ -5,8 +5,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/kannachi323/misty/server/internal/billingadapter"
-
 	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
@@ -20,10 +18,11 @@ func writeAgentResult(w http.ResponseWriter, value any, err error, status int) {
 }
 
 func writeAgentError(w http.ResponseWriter, err error) {
+	if writeModelError(w, err) {
+		return
+	}
 	var invalidRequest agent.ErrInvalidRequest
 	switch {
-	case errors.Is(err, billingadapter.ErrDenied), errors.Is(err, billingadapter.ErrUnavailable):
-		writeBillingError(w, err)
 	case errors.Is(err, db.ErrDeviceIdentityConflict):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "device_identity_conflict", "message": "This device endpoint is already registered with a different signing key. Restore the original device identity or set up a new device identity before trying again."})
 	case errors.Is(err, db.ErrAgentModelTurnLimit):
@@ -54,17 +53,10 @@ func writeAgentError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "run_conflict", "message": "The requested change conflicts with newer Space data. Please retry."})
 	case errors.Is(err, db.ErrSpaceInvalid), errors.Is(err, db.ErrLibraryInvalid):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "invalid_tool_input", "message": "The requested values are not valid for this action."})
-	case errors.Is(err, db.ErrPersonalStorageQuota):
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "reason": "personal_storage_limit_reached", "message": "Your account has reached its cloud storage limit."})
-	case errors.Is(err, db.ErrSpaceStorageQuota):
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "reason": "personal_storage_limit_reached", "message": "Your account has reached its cloud storage limit."})
 	case errors.Is(err, db.ErrLibraryQuota):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "message": "Storage quota has been reached."})
 	case errors.Is(err, db.ErrPersonalAgentModel):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "agent_model_unavailable"})
-	case isHostedAILimitReached(err):
-		scope, _ := hostedAILimitScope(err)
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"code": "hosted_ai_limit_reached", "reason": hostedAILimitReason(scope), "message": hostedAILimitMessage(scope)})
 	case errors.Is(err, db.ErrInvalidLease), errors.Is(err, db.ErrInvalidJobState):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "invalid_or_expired_lease"})
 	default:
@@ -73,24 +65,3 @@ func writeAgentError(w http.ResponseWriter, err error) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }
-
-func isHostedAILimitReached(err error) bool {
-	_, ok := hostedAILimitScope(err)
-	return ok
-}
-
-func hostedAILimitScope(err error) (string, bool) {
-	var agentLimit agent.HostedAILimitReachedError
-	if errors.As(err, &agentLimit) {
-		return agentLimit.Scope, true
-	}
-	var databaseLimit db.HostedAILimitReachedError
-	if errors.As(err, &databaseLimit) {
-		return databaseLimit.Scope, true
-	}
-	return "", false
-}
-
-func hostedAILimitReason(_ string) string { return "personal_ai_limit_reached" }
-
-func hostedAILimitMessage(_ string) string { return "Your account has used its available AI budget." }

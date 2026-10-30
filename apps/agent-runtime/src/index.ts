@@ -1,7 +1,7 @@
 import "./network.js";
 import express, { type Request } from "express";
 import { rateLimit } from "express-rate-limit";
-import { instanceModelConfig } from "./model-provider.js";
+import { instanceModelConfig, routeSecrets, scrubCredential } from "./model-provider.js";
 import { embedCall, generateTextCall, modelCallFailure, speechCall, transcribeCall } from "./model-calls.js";
 import { transcribeDiarizedCall } from "./transcribe-diarized.js";
 import { voiceNotesCall } from "./voice-notes.js";
@@ -101,7 +101,8 @@ for (const [path, call] of [
       return response.json(await call(request.body, controller.signal));
     } catch (error) {
       const failure = modelCallFailure(error);
-      if (failure.status >= 500) reportRuntimeRouteError(`model call ${path}`, error);
+      // A provider may echo the key it was sent; the log never repeats it.
+      if (failure.status >= 500) reportRuntimeRouteError(`model call ${path}`, scrubCredential(error, routeSecrets(request.body?.route)));
       return response.status(failure.status).json(failure.body);
     }
   });

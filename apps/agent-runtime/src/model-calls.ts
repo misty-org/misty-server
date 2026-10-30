@@ -2,6 +2,8 @@ import type { LanguageModelV4, LanguageModelV4CallOptions } from "@ai-sdk/provid
 import { embedMany, generateSpeech, generateText, jsonSchema, Output, transcribe, type ModelMessage } from "ai";
 import { z } from "zod";
 import {
+  modelRouteSchema as route,
+  ModelSetupError,
   resolveConfiguredModel,
   resolveEmbeddingModel,
   resolveSpeechModel,
@@ -11,15 +13,11 @@ import {
 
 // One-shot model calls the Go API makes outside agent runs: Library analysis,
 // embeddings, transcription, the screen planner and short completions. Go
-// chooses the model and meters each call; the runtime only talks to models,
-// always through the AI SDK and always on Misty's own keys.
+// chooses the model and sends its route: the account's own key, or the
+// instance's environment keys. The runtime only talks to models, always
+// through the AI SDK.
 
 const modelId = z.string().min(3).max(200).regex(/^[^\s/]+\/\S+$/);
-
-const route = z.object({
-  provider: z.literal("instance"),
-  reasoning: z.string().max(16).optional(),
-});
 
 const reasoning = z.enum(["provider-default", "none", "minimal", "low", "medium", "high", "xhigh"]);
 
@@ -95,7 +93,8 @@ function parse<T extends z.ZodTypeAny>(schema: T, body: unknown): z.infer<T> {
   return result.data;
 }
 
-/** Applies the reasoning Go admitted to each language-model call. */
+/** Runs each language-model call on the route's key, with its reasoning. The route stays in
+ * memory for this one call and is never serialized. */
 export class RoutedModel implements LanguageModelV4 {
   readonly specificationVersion = "v4" as const;
   readonly provider = "misty.routed";
@@ -103,8 +102,13 @@ export class RoutedModel implements LanguageModelV4 {
 
   constructor(
     readonly modelId: string,
-    private readonly route: ModelRoute,
-  ) {}
+    route: ModelRoute,
+  ) {
+    // Not an own enumerable field, so logging or serializing the model can't reach the key.
+    Object.defineProperty(this, "route", { value: route, enumerable: false });
+  }
+
+  private declare readonly route: ModelRoute;
 
   async doGenerate(options: LanguageModelV4CallOptions) {
     const resolved = await resolveConfiguredModel(this.modelId, options, this.route);
@@ -115,20 +119,6 @@ export class RoutedModel implements LanguageModelV4 {
     const resolved = await resolveConfiguredModel(this.modelId, options, this.route);
     return resolved.model.doStream(resolved.options);
   }
-}
-
-export function usageOf(usage: {
-  inputTokens?: number;
-  outputTokens?: number;
-  inputTokenDetails?: { cacheReadTokens?: number };
-  outputTokenDetails?: { reasoningTokens?: number };
-}) {
-  return {
-    inputTokens: usage.inputTokens ?? 0,
-    cachedInputTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
-    outputTokens: usage.outputTokens ?? 0,
-    reasoningTokens: usage.outputTokenDetails?.reasoningTokens ?? 0,
-  };
 }
 
 export async function generateTextCall(body: unknown, signal?: AbortSignal) {
@@ -162,10 +152,10 @@ export async function generateTextCall(body: unknown, signal?: AbortSignal) {
       ...common,
       output: Output.object({ schema: jsonSchema(request.schema.schema), name: request.schema.name }),
     });
-    return { text: result.text, object: result.output, usage: usageOf(result.usage), finishReason: result.finishReason };
+    return { text: result.text, object: result.output, finishReason: result.finishReason };
   }
   const result = await generateText(common);
-  return { text: result.text, usage: usageOf(result.usage), finishReason: result.finishReason };
+  return { text: result.text, finishReason: result.finishReason };
 }
 
 export async function embedCall(body: unknown, signal?: AbortSignal) {
@@ -175,12 +165,15 @@ export async function embedCall(body: unknown, signal?: AbortSignal) {
   const images = request.images?.some(Boolean) ? request.images : undefined;
   const dimensions = request.dimensions;
   const result = await embedMany({
-    model: await resolveEmbeddingModel(request.model),
+    model: await resolveEmbeddingModel(request.model, request.route),
     values: request.values,
     maxRetries: 1,
     abortSignal: signal,
     providerOptions: {
-      ...(dimensions ? { openai: { dimensions }, "openai-compatible": { dimensions } } : {}),
+      // Each chat-completions provider reads its options under its own name.
+      ...(dimensions
+        ? Object.fromEntries(["openai", "openai-compatible", "openrouter", "nvidia", "ollama"].map((name) => [name, { dimensions }]))
+        : {}),
       google: {
         ...(dimensions ? { outputDimensionality: dimensions } : {}),
         ...(images
@@ -189,13 +182,13 @@ export async function embedCall(body: unknown, signal?: AbortSignal) {
       },
     },
   });
-  return { embeddings: result.embeddings, usage: { inputTokens: result.usage.tokens ?? 0 } };
+  return { embeddings: result.embeddings };
 }
 
 export async function transcribeCall(body: unknown, signal?: AbortSignal) {
   const request = parse(transcribeRequest, body);
   const result = await transcribe({
-    model: await resolveTranscriptionModel(request.model),
+    model: await resolveTranscriptionModel(request.model, request.route),
     audio: Buffer.from(request.audio, "base64"),
     maxRetries: 1,
     abortSignal: signal,
@@ -216,7 +209,7 @@ export async function speechCall(body: unknown, signal?: AbortSignal) {
   const request = parse(speechRequest, body);
   const elevenLabs = request.model.startsWith("elevenlabs/");
   const result = await generateSpeech({
-    model: await resolveSpeechModel(request.model),
+    model: await resolveSpeechModel(request.model, request.route),
     text: request.text,
     // ElevenLabs picks its default voice when none is configured.
     voice: request.voice ?? (elevenLabs ? undefined : "alloy"),
@@ -228,13 +221,14 @@ export async function speechCall(body: unknown, signal?: AbortSignal) {
     maxRetries: 1,
     abortSignal: signal,
   });
-  // Billing charges speech by input characters, which the caller already knows.
   return { audio: Buffer.from(result.audio.uint8Array).toString("base64"), mediaType: result.audio.mediaType };
 }
 
 /** Provider failures keep only a status: response bodies may echo credentials. */
 export function modelCallFailure(error: unknown): { status: number; body: Record<string, unknown> } {
   if (error instanceof ModelCallError) return { status: error.status, body: { code: error.code, message: error.message } };
+  if (error instanceof ModelSetupError)
+    return { status: error.code === "model_key_needed" ? 409 : 400, body: { code: error.code, message: error.detail } };
   const status = (error as { statusCode?: unknown })?.statusCode;
   const upstream = typeof status === "number" && status >= 400 && status < 600 ? status : 0;
   return {

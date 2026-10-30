@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kannachi323/misty/server/internal/aimodels"
 	"github.com/kannachi323/misty/server/internal/platform/config"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
@@ -21,14 +22,20 @@ type InstanceCapabilities struct {
 	Library            bool   `json:"library"`
 	Notes              bool   `json:"notes"`
 	Drawings           bool   `json:"drawings"`
-	HostedBilling      bool   `json:"hosted_billing"`
 	HostedIntegrations bool   `json:"hosted_integrations"`
 	HostedAI           bool   `json:"hosted_ai"`
 	StorageBackend     string `json:"storage_backend"`
 }
 
+// InstanceModels says whether the server has models of its own. Without
+// them every account brings its own model keys (X-Misty-Models).
+type InstanceModels struct {
+	Operator bool `json:"operator"`
+}
+
 // InstanceDescriptor keeps the fields installed desktop apps already read.
-// Misty is hosted only, so deployment and registration are fixed.
+// Registration is "open" while this server takes new accounts and "closed"
+// once it does not (MISTY_REGISTRATION).
 type InstanceDescriptor struct {
 	ServerID          string               `json:"server_id"`
 	Name              string               `json:"name"`
@@ -37,11 +44,14 @@ type InstanceDescriptor struct {
 	MinClientProtocol int                  `json:"min_client_protocol"`
 	MaxClientProtocol int                  `json:"max_client_protocol"`
 	Capabilities      InstanceCapabilities `json:"capabilities"`
+	Models            InstanceModels       `json:"models"`
 	BootstrapRequired bool                 `json:"bootstrap_required"`
 	Registration      string               `json:"registration"`
 }
 
-func Instance(store instanceStateStore) http.HandlerFunc {
+// Instance describes this server. storage is the Library backend in use:
+// "s3", "filesystem" or "memory".
+func Instance(store instanceStateStore, storage string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimSpace(config.Getenv("MISTY_INSTANCE_NAME"))
 		if name == "" {
@@ -60,16 +70,23 @@ func Instance(store instanceStateStore) http.HandlerFunc {
 			MinClientProtocol: InstanceProtocolVersion,
 			MaxClientProtocol: InstanceProtocolVersion,
 			Capabilities: InstanceCapabilities{
-				Collaboration:      true,
+				Collaboration:      collaborationEnabled(),
 				Library:            true,
 				Notes:              true,
 				Drawings:           true,
-				HostedBilling:      strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_BILLING_ADAPTER")), "http"),
 				HostedIntegrations: true,
-				HostedAI:           true,
-				StorageBackend:     "s3",
+				HostedAI:           aimodels.OperatorModels(),
+				StorageBackend:     storage,
 			},
-			Registration: "open",
+			Models:       InstanceModels{Operator: strings.TrimSpace(config.Getenv("MISTY_AGENT_MODEL")) != ""},
+			Registration: instanceRegistration(r.Context(), store),
 		})
 	}
+}
+
+func instanceRegistration(ctx context.Context, store instanceStateStore) string {
+	if counter, ok := store.(accountCounter); ok {
+		return registrationState(ctx, counter)
+	}
+	return "open"
 }

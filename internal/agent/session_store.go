@@ -31,9 +31,6 @@ type sessionEntry struct {
 type Session struct {
 	ID                    string
 	UserID                string
-	BillingUserID         string
-	BillingTurnSequence   int64 `json:"billingTurnSequence"`
-	BillingScope          string
 	ModelID               string
 	ReasoningEffort       string
 	SystemPrompt          string
@@ -86,19 +83,13 @@ func NewSessionStoreWithPersistence(ttl time.Duration, persistence SessionPersis
 	}
 }
 
-func (s *SessionStore) CreateWithBilling(userID, billingUserID string) *Session {
-	return s.CreateWithBillingScope(userID, billingUserID, "")
-}
-
-func (s *SessionStore) CreateWithBillingScope(userID, billingUserID, billingScope string) *Session {
+func (s *SessionStore) Create(userID string) *Session {
 	s.mu.Lock()
 	s.cleanupLocked()
 	now := s.Now()
 	session := &Session{
 		ID:                  "conversation_" + uuid.NewString(),
 		UserID:              userID,
-		BillingUserID:       billingUserID,
-		BillingScope:        billingScope,
 		Mode:                ModeAsk,
 		AllowTools:          true,
 		AllowWriteTools:     true,

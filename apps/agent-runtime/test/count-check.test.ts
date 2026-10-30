@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ModelMessage } from "ai";
 import { countRefusal, requestedCounts } from "../src/count-check.js";
-import { brokenProofTabs } from "../src/proof-tabs.js";
+import { brokenProofTabs, missingSiteTabs } from "../src/proof-tabs.js";
 
 const request = "Find at least 10 pediatricians in Raleigh who accept one of those plans, then find around 10 daycare centers, and give me 3 sections.";
 
@@ -35,3 +35,26 @@ describe("broken proof tabs", () => {
     expect(brokenProofTabs([program({ kept: ["b"], tabs: [{ id: "b", url: "https://uhc.com", title: "UnitedHealthcare" }] })])).toEqual([]);
   });
 });
+
+describe("missing site tabs", () => {
+  const program = (tabs: Array<{ id: string; url: string }>): ModelMessage => ({
+    role: "tool",
+    content: [{ type: "tool-result", toolCallId: "c", toolName: "browser_run", output: { type: "json", value: { tabs } as never } }],
+  });
+  const closed = (open: string): ModelMessage => ({
+    role: "tool",
+    content: [{ type: "tool-result", toolCallId: "d", toolName: "screen_close", output: { type: "text", value: `closed | Closed that tab. Your open tabs: ${open}.` } }],
+  });
+  const ask = "Start on Google, look up kits on RockAuto, then check Amazon for a tool and open the product page; leave those tabs open.";
+
+  it("names a site the request asks for that the run visited and left with no tab open", () => {
+    const visits = [
+      program([{ id: "g", url: "https://www.google.com/search?q=x" }, { id: "r", url: "https://www.rockauto.com/en/catalog" }, { id: "a", url: "https://www.amazon.com/s?k=pliers" }]),
+      closed("r"),
+    ];
+    expect(missingSiteTabs(ask, visits)).toEqual(["amazon"]);
+    expect(missingSiteTabs(ask, visits.slice(0, 1))).toEqual([]);
+    expect(missingSiteTabs("Check Amazon for a tool.", visits)).toEqual([]);
+  });
+});
+

@@ -3,7 +3,6 @@ package browsersync
 import (
 	"context"
 	"database/sql"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 
 	"github.com/lib/pq"
 )
@@ -61,7 +60,7 @@ func (db *Store) RenewBrowserSyncInstance(ctx context.Context, instanceID string
 	if err != nil {
 		return 0, err
 	}
-	return removed + legacy, cloudusage.Commit(ctx, tx)
+	return removed + legacy, tx.Commit()
 }
 
 // ReleaseBrowserSyncInstance ends this process's lease on shutdown so its
@@ -82,7 +81,7 @@ func (db *Store) ReleaseBrowserSyncInstance(ctx context.Context, instanceID stri
  RETURNING c.vault_id,c.device_id,c.last_seen_at`, instanceID); err != nil {
 		return err
 	}
-	return cloudusage.Commit(ctx, tx)
+	return tx.Commit()
 }
 
 // sweepSyncConnections runs a DELETE ... RETURNING vault_id,device_id,last_seen_at,

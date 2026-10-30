@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http/httptest"
-	"time"
 
 	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/platform/db"
@@ -44,10 +43,6 @@ func TestingCompileAIScheduledPrompt() string {
 		Mode: "drawer", SurfaceID: "activity", Trigger: "schedule", Prompt: "Brief me",
 		IdempotencyKey: "testing", Timezone: "America/Los_Angeles",
 	}, nil)
-}
-
-func TestingPublicAIInvocationErrorForHostedReset(resetAt time.Time) string {
-	return publicAIInvocationError(agent.HostedAILimitReachedError{ResetAt: resetAt})
 }
 
 func TestingAgentRuntimeModelUsage(raw json.RawMessage) agent.ModelUsage {

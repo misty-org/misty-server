@@ -41,3 +41,24 @@ func (a *SmartLibraryAnalyzer) transcribeRole(ctx context.Context, role string, 
 	}
 	return a.transcribeWithRoute(ctx, modelruntime.For(c), audio, mime, duration, model)
 }
+
+// TranscribeAgentVoice transcribes one short recording on the account's
+// transcription model, trying the fallback model once when the first fails.
+func (a *SmartLibraryAnalyzer) TranscribeAgentVoice(ctx context.Context, audio []byte, mimeType string, durationMS int64, account string) (string, string, AgentVoiceUsage, error) {
+	a = a.WithAIAccount(account)
+	configured, primary, fallback, err := a.transcriptionModels(ctx, "transcription", "transcription-fallback", envOrDefault("AGENT_TRANSCRIPTION_MODEL", "openai/gpt-4o-mini-transcribe"), MediaSearchTranscriptionFallbackModel)
+	if err != nil {
+		return "", "", AgentVoiceUsage{}, err
+	}
+	return transcribeAgentVoiceModels(ctx, audio, durationMS, primary, fallback, func(model string) ([]MediaTranscriptSegment, ModelUsage, string, int64, error) {
+		role := "transcription-fallback"
+		if model == primary {
+			role = "transcription"
+		}
+		segments, usage, language, actual, err := configured.transcribeRole(ctx, role, audio, mimeType, durationMS, model)
+		if err == nil && actual <= 0 {
+			actual = durationMS
+		}
+		return segments, usage, language, actual, err
+	})
+}

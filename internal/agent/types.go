@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"time"
 )
 
@@ -27,11 +26,6 @@ const (
 	RoleUser  = "user"
 	RoleAgent = "agent"
 
-	// Mirrors db.HostedAIMeterAgent, which the agent package cannot import. The
-	// "assistant_ai" value is intentionally unchanged by the agent rename because
-	// it is persisted in hosted-AI usage and credit ledger rows.
-	hostedAIMeterAgent = "assistant_ai"
-
 	ToolListDirectory    = "list_directory"
 	ToolSearchFiles      = "search_files"
 	ToolPreviewFile      = "preview_file"
@@ -47,7 +41,7 @@ const MaxModelOutputTokens int64 = 2200
 
 // MaxAgentTurnOutputTokens caps one model call of a runtime agent run, which
 // may write a whole document, table or form answer in a single tool call.
-// Billing holds this much per turn and settles what the call used. 32k leaves room for
+// 32k leaves room for
 // a long final report after the model's thinking (8k cut Odysseys memos off mid-answer).
 const MaxAgentTurnOutputTokens int64 = 32_000
 
@@ -57,7 +51,6 @@ const (
 	MaxToolResultBytes       = 6 << 20
 	MaxProviderRequestBytes  = 8 << 20
 	MaxProviderCallsPerTurn  = 3
-	MaxDocumentCallsPerTurn  = 26
 )
 
 type AgentMessageRequest struct {
@@ -119,19 +112,17 @@ type ToolDefinition struct {
 }
 
 type AgentEvent struct {
-	Sequence          int64              `json:"sequence"`
-	Type              string             `json:"type"`
-	RunID             string             `json:"run_id,omitempty"`
-	Text              string             `json:"text,omitempty"`
-	ToolRequests      []ToolRequest      `json:"tool_requests,omitempty"`
-	FilePlan          *FileOperationPlan `json:"file_plan,omitempty"`
-	Message           string             `json:"message,omitempty"`
-	CreatedAt         time.Time          `json:"created_at"`
-	HostedAIUsedRatio float64            `json:"hosted_ai_used_ratio,omitempty"`
-	HostedAIResetAt   *time.Time         `json:"hosted_ai_reset_at,omitempty"`
-	CreditsUsed       int64              `json:"-"`
-	CreditsRemaining  int64              `json:"-"`
-	Citations         []AgentCitation    `json:"citations,omitempty"`
+	Sequence         int64              `json:"sequence"`
+	Type             string             `json:"type"`
+	RunID            string             `json:"run_id,omitempty"`
+	Text             string             `json:"text,omitempty"`
+	ToolRequests     []ToolRequest      `json:"tool_requests,omitempty"`
+	FilePlan         *FileOperationPlan `json:"file_plan,omitempty"`
+	Message          string             `json:"message,omitempty"`
+	CreatedAt        time.Time          `json:"created_at"`
+	CreditsUsed      int64              `json:"-"`
+	CreditsRemaining int64              `json:"-"`
+	Citations        []AgentCitation    `json:"citations,omitempty"`
 }
 
 type ToolRequest struct {
@@ -228,58 +219,6 @@ type ModelUsage struct {
 	CachedInputTokensMissing bool `json:"-"`
 	ReasoningTokensMissing   bool `json:"-"`
 }
-
-type UsageReservation struct {
-	Billing *billingadapter.Reservation
-	// OverLimit: admitted past a usage limit on the command's grace.
-	OverLimit        bool
-	ID               string
-	ReservedMicrousd int64
-	ReservedCredits  int64
-}
-
-type UsageSettlement struct {
-	Settled          bool
-	ChargedMicrousd  int64
-	UsedRatio        float64
-	ResetAt          time.Time
-	CreditsUsed      int64
-	CreditsRemaining int64
-}
-
-type UsageMeter interface {
-	Reserve(userID, idempotencyKey, meter, provider, model string, estimatedInputTokens, maxOutputTokens int64) (*UsageReservation, error)
-	Settle(reservation *UsageReservation, idempotencyKey, meter, provider, model string, usage ModelUsage) (UsageSettlement, error)
-	Release(reservation *UsageReservation) error
-	Refund(reservation *UsageReservation, idempotencyKey, reason string) (UsageSettlement, error)
-}
-
-func ReserveUsage(meter UsageMeter, userID, spaceID, idempotencyKey, usageMeter, provider, model string, estimatedInputTokens, maxOutputTokens int64) (*UsageReservation, error) {
-	// Space context never changes the account-wide AI allowance.
-	return meter.Reserve(userID, idempotencyKey, usageMeter, provider, model, estimatedInputTokens, maxOutputTokens)
-}
-
-// ReserveMeasuredUsage forwards native request sizes; the private adapter owns
-// token estimation. Older test/custom meters still receive their native counter.
-func ReserveMeasuredUsage(meter UsageMeter, userID, key, provider, model string, units map[string]int64, commandID string) (*UsageReservation, error) {
-	if m, ok := meter.(interface {
-		ReserveMeasured(string, string, string, string, map[string]int64, string) (*UsageReservation, error)
-	}); ok {
-		return m.ReserveMeasured(userID, key, provider, model, units, commandID)
-	}
-	return meter.Reserve(userID, key, "assistant_ai", provider, model, units["input_tokens"], units["output_tokens"])
-}
-
-type HostedAILimitReachedError struct {
-	Required  int64
-	Available int64
-	ResetAt   time.Time
-	Scope     string
-}
-
-func (e HostedAILimitReachedError) Error() string { return "weekly hosted AI limit reached" }
-
-type CreditsExhaustedError = HostedAILimitReachedError
 
 type ModelProvider interface {
 	Next(request ModelRequest) (ModelResponse, error)

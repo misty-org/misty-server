@@ -195,7 +195,7 @@ func creatorRunTriggerKind(input CreatorAgentRunInput) string {
 // insertCreatorAgentRun writes the queued space_runs row for a direct run.
 func insertCreatorAgentRun(ctx context.Context, tx *sql.Tx, out *SpaceRun, spaceID, agentID, ownerUserID, trigger string, runInput, snapshot, contextBindings json.RawMessage, mode string, depth int, input CreatorAgentRunInput) error {
 	return scanSpaceRun(tx.QueryRowContext(ctx, `INSERT INTO space_runs(
-				id,space_id,resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,result,
+				id,space_id,resource_kind,resource_id,initiated_by_user_id,model_user_id,trigger_kind,state,input,result,
 				requesting_member_id,source_conversation_id,source_type,agent_id,outputs,artifacts,agent_version_id,source_message_id,
 				attempt,conversation_scope_kind,scope_conversation_id,owner_user_id,initial_run_mode,effective_run_mode,
 				agent_version_snapshot,parent_run_id,delegation_depth,context_bindings)

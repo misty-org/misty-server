@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/kannachi323/misty/server/internal/agent"
 )
 
 func (s *AgentsService) voiceConversationContext(ctx context.Context, user, conversation string) (string, error) {
@@ -31,8 +30,6 @@ func (s *AgentsService) voiceConversationContext(ctx context.Context, user, conv
 }
 
 func (s *AgentsService) runVoiceConversation(ctx context.Context, client *websocket.Conn, provider voiceProvider, operation, user, device, conversation, history string) {
-	billing := s.database.BillingService()
-	budget := &voiceReservations{operation: operation, user: user, model: voiceProviderModel(provider), reserve: billing.Reserve, estimate: voiceBillingEstimate(billing), disabled: !billing.Adapter.Enabled(), record: s.database.RecordVoiceUsage, complete: billing.Complete}
 	boundTask := ""
 	// Bind only this conversation's most recent non-voice task, never an ID
 	// invented by the model. This also lets a new voice session steer existing work.
@@ -79,18 +76,6 @@ func (s *AgentsService) runVoiceConversation(ctx context.Context, client *websoc
 			_, err := s.database.AgentConversationIdentity(ctx, user, conversation)
 			return err
 		},
-		Input: budget.input,
-		Reserve: func(ctx context.Context, u agent.RealtimeVoiceUsage) error {
-			return budget.admit(ctx, "conversation", u)
-		},
-		Settle: func(ctx context.Context, u agent.RealtimeVoiceUsage) error {
-			err := budget.finish(ctx, u)
-			if err == nil {
-				budget.inputSeconds = 0
-			}
-			return err
-		},
-		Checkpoint: budget.checkpoint,
 		Save: func(ctx context.Context, id, prompt, reply string, interrupted bool, started time.Time) error {
 			return s.database.SaveVoiceConversationTurn(ctx, user, conversation, id, prompt, reply, interrupted, started)
 		},

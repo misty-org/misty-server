@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"errors"
@@ -113,6 +114,10 @@ func (s *GoogleSignInService) Complete() http.HandlerFunc {
 			writeJSON(w, http.StatusAccepted, map[string]string{"status": "pending"})
 			return
 		}
+		if flow.ErrorCode == "registration_closed" {
+			writeRegistrationClosed(w)
+			return
+		}
 		if flow.ErrorCode != "" {
 			http.Error(w, googleSignInError(flow.ErrorCode), http.StatusConflict)
 			return
@@ -146,6 +151,23 @@ func (s *GoogleSignInService) Complete() http.HandlerFunc {
 
 func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *idtoken.Payload, email string) (*db.User, error) {
 	if flow.ReauthenticateUserID == "" {
+		// A server closed to new accounts still signs existing ones in.
+		if gate, ok := s.store.(interface {
+			accountCounter
+			GetUserByEmail(string) (*db.User, string, error)
+		}); ok {
+			if existing, _, err := gate.GetUserByEmail(email); err != nil {
+				return nil, err
+			} else if existing == nil {
+				allowed, err := registrationAllowed(context.Background(), gate)
+				if err != nil {
+					return nil, err
+				}
+				if !allowed {
+					return nil, ErrRegistrationClosed
+				}
+			}
+		}
 		return s.store.GoogleUser(email, payload.Subject)
 	}
 	user, err := s.store.GetUserByID(flow.ReauthenticateUserID)
@@ -164,6 +186,8 @@ func googleSignInError(code string) string {
 		return "Google sign-in was cancelled. Return to Misty to try again."
 	case "provider_conflict":
 		return "This email already has a Misty account. Use its original sign-in method."
+	case "registration_closed":
+		return "This server isn't taking new accounts. Ask its operator for access."
 	default:
 		return "Could not verify your Google account. Return to Misty and try again."
 	}

@@ -2,7 +2,6 @@ package browsersync
 
 import (
 	"context"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 
 	"github.com/lib/pq"
 )
@@ -42,7 +41,7 @@ func (db *Store) PutBrowserSyncBlob(ctx context.Context, userID, vault, device s
 	if _, err = tx.ExecContext(ctx, `DELETE FROM browser_sync_blobs WHERE vault_id=$1 AND last_ref_at<now()-interval '60 days'`, vault); err != nil {
 		return err
 	}
-	return cloudusage.Commit(ctx, tx)
+	return tx.Commit()
 }
 
 func (db *Store) BrowserSyncBlobs(ctx context.Context, userID, vault, device string, hashes [][]byte) ([]SyncBlob, error) {
@@ -75,5 +74,5 @@ func (db *Store) BrowserSyncBlobs(ctx context.Context, userID, vault, device str
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	return out, cloudusage.Commit(ctx, tx)
+	return out, tx.Commit()
 }

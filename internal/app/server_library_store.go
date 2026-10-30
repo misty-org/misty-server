@@ -36,22 +36,30 @@ func (config libraryS3Config) empty() bool {
 	return config.endpoint == "" && config.bucket == "" && config.accessKey == "" && config.secretKey == ""
 }
 
-func LibraryStoreFromEnv() (api.LibraryObjectStore, error) {
-	config := libraryS3ConfigFromEnv()
-	environment := strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT"))
+// libraryBackend is "filesystem", "s3", or "" when nothing is configured.
+// MISTY_LIBRARY_BACKEND wins; otherwise a filesystem directory, then S3 keys.
+func libraryBackend() string {
 	backend := strings.ToLower(strings.TrimSpace(envconfig.Getenv("MISTY_LIBRARY_BACKEND")))
-	localRoot := firstConfigured("MISTY_LIBRARY_FILESYSTEM_DIR", "MISTY_LIBRARY_LOCAL_DIR")
 	if backend == "" {
-		if localRoot != "" {
+		if firstConfigured("MISTY_LIBRARY_FILESYSTEM_DIR", "MISTY_LIBRARY_LOCAL_DIR") != "" {
 			backend = "filesystem"
-		} else if !config.empty() {
+		} else if !libraryS3ConfigFromEnv().empty() {
 			backend = "s3"
 		}
 	}
+	return backend
+}
+
+// LibraryStoreFromEnv opens the object store for Library items, attachments
+// and avatars. A self-hosted server can keep them in a directory
+// (MISTY_LIBRARY_FILESYSTEM_DIR), in production too; files then flow through
+// the API instead of signed S3 URLs.
+func LibraryStoreFromEnv() (api.LibraryObjectStore, error) {
+	config := libraryS3ConfigFromEnv()
+	environment := strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT"))
+	backend := libraryBackend()
+	localRoot := firstConfigured("MISTY_LIBRARY_FILESYSTEM_DIR", "MISTY_LIBRARY_LOCAL_DIR")
 	if backend == "filesystem" {
-		if strings.EqualFold(environment, "production") {
-			return nil, fmt.Errorf("filesystem Library storage is not allowed in production")
-		}
 		store, err := api.NewLocalLibraryObjectStore(localRoot)
 		if err != nil {
 			return nil, fmt.Errorf("configure local Library store: %w", err)
@@ -76,6 +84,17 @@ func LibraryStoreFromEnv() (api.LibraryObjectStore, error) {
 		return nil, fmt.Errorf("configure R2 Library store: %w", err)
 	}
 	return store, nil
+}
+
+// libraryStorageName names a Library store for /instance.
+func libraryStorageName(store api.LibraryObjectStore) string {
+	switch store.(type) {
+	case *api.S3LibraryObjectStore:
+		return "s3"
+	case *api.LocalLibraryObjectStore:
+		return "filesystem"
+	}
+	return "memory"
 }
 
 func firstConfigured(names ...string) string {

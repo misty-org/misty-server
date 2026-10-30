@@ -4,62 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"log"
-	"time"
 )
 
-type Tier string
-
-const (
-	TierBasic     Tier = "basic"
-	TierPro       Tier = "pro"
-	TierMax       Tier = "max"
-	TierUltra     Tier = "ultra"
-	TierUltraPlus Tier = "ultra_plus"
-)
-
-// IncludesCoding reports whether a plan includes coding: Pro and above.
-// Unknown plans do not.
-func (tier Tier) IncludesCoding() bool {
-	switch tier {
-	case TierPro, TierMax, TierUltra, TierUltraPlus:
-		return true
-	}
-	return false
-}
-
-const (
-	LicenseStatusActive   = "active"
-	LicenseStatusTrialing = "trialing"
-)
-
-type License struct {
-	ID            string
-	UserID        string
-	Tier          Tier
-	Status        string
-	ExpiresAt     *time.Time
-	LicenseDevice string
-}
-
-func createLicenseTx(tx *sql.Tx, licenseID string, userID string, tier Tier, status string, expiresAt *time.Time) (*License, error) {
-	license := &License{
-		ID:        licenseID,
-		UserID:    userID,
-		Tier:      tier,
-		Status:    status,
-		ExpiresAt: expiresAt,
-	}
-
-	_, err := tx.ExecContext(
-		context.Background(),
-		`INSERT INTO licenses (id, user_id, tier, status, expires_at, license_device) VALUES ($1, $2, $3, $4, $5, '')`,
-		license.ID, license.UserID, license.Tier, license.Status, license.ExpiresAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return license, nil
+// A license row is the account's identity record (users.license_id). It
+// carries no plan; every account can use every feature.
+func createLicenseTx(tx *sql.Tx, licenseID string, userID string) error {
+	_, err := tx.ExecContext(context.Background(), `INSERT INTO licenses (id, user_id, license_device) VALUES ($1, $2, '')`, licenseID, userID)
+	return err
 }
 
 func (db *Database) UpdateLicenseDevice(userID, device string) error {

@@ -39,9 +39,6 @@ func runLifecycleQueues(ctx context.Context, server *Server) {
 			return processed + purged, err
 		}
 	}
-	if server.Spaces != nil {
-		queues["goal-resume"] = func(ctx context.Context) (int, error) { return server.Spaces.ResumeDueGoals(ctx, 25) }
-	}
 	if server.Library != nil {
 		queues["rendition-reservations"] = func(ctx context.Context) (int, error) {
 			return server.Database.ReleaseExpiredLibraryRenditionReservations(ctx, 100)

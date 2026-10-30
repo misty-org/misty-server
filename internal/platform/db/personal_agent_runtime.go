@@ -2,12 +2,9 @@ package db
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"strings"
 	"time"
 )
@@ -163,56 +160,6 @@ func (db *Database) PersonalAgentRuntimeRecord(ctx context.Context, runID, runti
 	return run, err
 }
 
-func releasePersonalAgentRuntimeReservationsTx(ctx context.Context, tx *sql.Tx, runID string) error {
-	group := "agent-runtime:" + runID
-	if _, err := tx.ExecContext(ctx, `UPDATE billing_adapter_intents SET state='abandoned',expires_at=now() WHERE admission->>'operation_id'=$1 AND state='pending'`, group); err != nil {
-		return err
-	}
-	rows, err := tx.QueryContext(ctx, `SELECT r.reservation_id,r.admission FROM billing_adapter_reservations r WHERE r.admission->>'operation_id'=$1 AND NOT EXISTS(SELECT 1 FROM billing_adapter_outbox o WHERE o.payload->>'account_id'=r.account_id AND o.action IN ('settle','settle_group') AND (o.payload->>'reservation_id'=r.reservation_id OR o.payload->'reservation_ids' ? r.reservation_id))`, group)
-	if err != nil {
-		return err
-	}
-	var requests []billingadapter.Request
-	for rows.Next() {
-		var id string
-		var raw []byte
-		if err = rows.Scan(&id, &raw); err != nil {
-			rows.Close()
-			return err
-		}
-		var request billingadapter.Request
-		if err = json.Unmarshal(raw, &request); err != nil {
-			rows.Close()
-			return err
-		}
-		request.ReservationID = id
-		request.Key = "cancel:" + request.Key
-		requests = append(requests, request)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	for _, request := range requests {
-		raw, err := json.Marshal(request)
-		if err != nil {
-			return err
-		}
-		sum := sha256.Sum256([]byte(request.AccountID + "\x00" + request.Key))
-		if _, err = tx.ExecContext(ctx, `INSERT INTO billing_adapter_outbox(id,action,payload) VALUES($1,'release',$2) ON CONFLICT(id) DO NOTHING`, hex.EncodeToString(sum[:]), string(raw)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (db *Database) ReleasePersonalAgentRuntimeReservations(ctx context.Context, runID string) error {
-	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		return releasePersonalAgentRuntimeReservationsTx(ctx, tx, runID)
-	})
-}
-
 func (db *Database) CancelPersonalAgentTaskRunForOwner(ctx context.Context, userID, runID string) (*SpaceRun, error) {
 	out := &SpaceRun{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -244,9 +191,6 @@ func (db *Database) CancelPersonalAgentTaskRunForOwner(ctx context.Context, user
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW() WHERE run_id=$1 AND state='attached'`, runID); err != nil {
-			return err
-		}
-		if err := releasePersonalAgentRuntimeReservationsTx(ctx, tx, runID); err != nil {
 			return err
 		}
 		return nil // Account event trigger publishes the state change.

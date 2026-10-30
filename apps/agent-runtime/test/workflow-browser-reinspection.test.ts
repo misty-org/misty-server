@@ -35,7 +35,7 @@ beforeEach(() => { fixture.completions=[]; fixture.actions=[]; fixture.active=[]
 it("requires a new inspection turn and then permits a freshly planned browser action", async () => {
   await runSpaceTaskAgent({ mistyRunId: "run-test", controlPlaneURL: "https://api.test" });
   expect(fixture.actions).toEqual(["browser.upload", "browser.inspect", "browser.upload"]);
-  expect(fixture.active[1]).toHaveLength(1);
+  expect([...fixture.active[1]!].sort()).toEqual(["agent_finish", "browser_inspect"]);
   expect(fixture.active[2]!.length).toBeGreaterThan(1);
   expect(fixture.completions[0].status).toBe("success");
 });

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/aimodels"
+	"github.com/kannachi323/misty/server/internal/byok"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
@@ -27,6 +28,8 @@ import (
 func TestScreenModelPassThroughForALiveActJob(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := t.Context()
+	// The operator's keys run accounts that brought none.
+	t.Setenv("MISTY_AGENT_MODEL", "openai/gpt-6-luna")
 	user, err := database.CreateUser(uniqueTestEmail("screen-model"), "password123")
 	if err != nil {
 		t.Fatal(err)
@@ -126,13 +129,22 @@ func TestScreenModelPassThroughForALiveActJob(t *testing.T) {
 	if len(forwarded) != 25 || forwarded[0]["model"] != "openai/gpt-6-luna" || forwarded[0]["maxOutputTokens"] != float64(6000) || forwarded[0]["route"].(map[string]any)["provider"] != "instance" {
 		t.Fatalf("forwarded %d calls, first %v", len(forwarded), forwarded[0])
 	}
+	// Once the account brings an OpenAI key, the same call runs on it.
+	byok.Default.Put(user.ID, &byok.Credentials{Version: 1, Providers: map[string]byok.Credential{"openai": {Provider: "openai", APIKey: "sk-account"}}, Models: byok.Models{Agent: "openai/gpt-6-luna"}})
+	t.Cleanup(func() { byok.Default.Forget(user.ID) })
+	if response := call("26"); response.Code != http.StatusOK || len(forwarded) != 26 {
+		t.Fatalf("call with the account's key: %d %s", response.Code, response.Body.String())
+	}
+	if route := forwarded[25]["route"].(map[string]any); route["provider"] != "account" || route["credential"].(map[string]any)["apiKey"] != "sk-account" {
+		t.Fatalf("account route = %v", route)
+	}
 	if response := call("80"); response.Code != http.StatusBadRequest {
 		t.Fatalf("call beyond the job's limit: %d", response.Code)
 	}
 	if _, err := database.FinishWorkflowDeviceNodeJob(user.ID, device.ID, job.ID, token, "completed", json.RawMessage(`{"status":"done"}`), ""); err != nil {
 		t.Fatal(err)
 	}
-	if response := call("25"); response.Code != http.StatusForbidden || len(forwarded) != 25 {
+	if response := call("25"); response.Code != http.StatusForbidden || len(forwarded) != 26 {
 		t.Fatalf("forwarded after the job ended: %d", response.Code)
 	}
 }

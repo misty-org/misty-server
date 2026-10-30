@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
@@ -61,34 +60,17 @@ func (s *SpacesService) transcribeLibraryItem(ctx context.Context, user, spaceID
 	if !strings.HasPrefix(mime, "audio/") && !strings.HasPrefix(mime, "video/") {
 		return db.VoiceTranscript{}, voiceFileError("Only audio and video files can be transcribed.")
 	}
-	model := defaultRoleModel("diarized-transcription")
-	operation := "voice-file:" + uuid.NewString()
-	// Compressed speech runs well above 32 kbit/s, so this over-estimates
-	// the length; settlement charges what was actually heard.
-	estimate := int64(len(audio)) * 8 / 32
-	if estimate > 4*60*60*1000 {
-		estimate = 4 * 60 * 60 * 1000
-	}
-	if estimate < 1000 {
-		estimate = 1000
-	}
-	billing := s.database.BillingService()
-	reservation, err := billing.Reserve(ctx, billingadapter.Request{Version: 1, AccountID: user, Operation: liveVoiceOperation, OperationID: operation, Key: operation + ":reserve",
-		Usage: billingadapter.Usage{Provider: "soniox", Model: model, Units: map[string]int64{"audio_ms": estimate}, Estimated: true}})
+	route, model, err := roleRoute(ctx, s.database, user, "diarized-transcription")
 	if err != nil {
 		return db.VoiceTranscript{}, err
 	}
-	result, err := s.models.TranscribeDiarized(ctx, model, mime, audio, languageHints(language), nil)
+	result, err := s.models.TranscribeDiarized(ctx, route, model, mime, audio, languageHints(language), nil)
 	if err != nil {
-		_ = billing.Complete(ctx, "release", reservation, operation+":release", billingadapter.Usage{}, "provider_failed")
 		return db.VoiceTranscript{}, err
 	}
-	heard := estimate
+	heard := int64(0)
 	if result.DurationInSeconds != nil {
 		heard = int64(*result.DurationInSeconds * 1000)
-	}
-	if err = billing.Complete(ctx, "settle", reservation, operation+":settle", billingadapter.Usage{Provider: "soniox", Model: model, Units: map[string]int64{"audio_ms": heard}}, ""); err != nil {
-		return db.VoiceTranscript{}, err
 	}
 	transcript := db.VoiceTranscript{
 		ID: uuid.NewString(), Title: strings.TrimSuffix(download.Filename, path.Ext(download.Filename)),

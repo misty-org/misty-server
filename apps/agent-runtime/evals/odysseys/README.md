@@ -7,7 +7,7 @@ Each task is one composer request on the local stack, with this computer as the 
 Differences from the paper's setup, kept on purpose:
 
 - The agent is Misty's product (its tools, its own tab, web search and fetch), not a screenshot-only computer-use loop in a VM.
-- The judge runs on a Claude model on Misty's own key (`MISTY_ODYSSEYS_JUDGE`), not Gemini 3.1 Flash-Lite, and sees at most the last 60 screenshots (unchanged pages are pictured once).
+- The judge runs on a Claude model on the instance's Anthropic key (`MISTY_ODYSSEYS_JUDGE`), not Gemini 3.1 Flash-Lite, and sees at most the last 60 screenshots (unchanged pages are pictured once).
 - The browser profile has no saved sign-ins (`MISTY_EVAL_EPHEMERAL_PAGES=1` on the desktop).
 
 Without paid credit, the agent and the judge run on NVIDIA's free hosted models (`nim/…`); see [docs/agents/evals/free-model.md](../../../../../docs/agents/evals/free-model.md). Scores on a free model compare only with other passes on the same model.
@@ -52,3 +52,7 @@ Without paid credit, the agent and the judge run on NVIDIA's free hosted models 
 | `MISTY_ODYSSEYS_CAP` | The campaign's spend cap in dollars (50), kept across passes in `reports/ledger.json` |
 
 Each run prints `RUN ENDED <task> <terminal> …` the moment the agent stops, before grading (a run that did no work is not graded). Each pass writes `reports/<time>/report.json` and, per task, a folder with `steps.jsonl`, the screenshots and `result.json` (the judge's reasoning per rubric item).
+
+## BU Bench V1
+
+The same runner also takes [BU Bench V1](https://github.com/browser-use/benchmark) (100 tasks: 20 each from WebBench, Online-Mind2Web 2, interaction tests, GAIA and BrowseComp), set by `MISTY_ODYSSEYS_DATASET=bu-v1` and `MISTY_BU_BENCH_DIR=<a local checkout of browser-use/benchmark>`. Its tasks ship encrypted so their text stays out of crawlers and training data: `bu-bench.ts` decrypts them in memory and nothing of them is committed here (reports are git-ignored). Each task gets BU's own binary judge, with the system prompt read from the checkout's `judge.py` at run time, on the last ten distinct pictures. BU has no levels; the runner groups lookups and interaction tests as easy, Online-Mind2Web 2 as medium, GAIA and BrowseComp as hard. Select tasks with `MISTY_ODYSSEYS_TASKS` (BU's task ids) or `MISTY_ODYSSEYS_SPLIT=all` with a limit and offset.

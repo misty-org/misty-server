@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -63,15 +62,14 @@ func (s *AgentsService) AgentVoiceTranscription() http.HandlerFunc {
 			}
 		}
 		started := time.Now()
-		text, language, usage, err := s.voiceAnalyzer.TranscribeAgentVoiceWithBilling(ctx, audio, mimeType, durationMS, s.database.BillingService(), userID)
+		text, language, usage, err := s.voiceAnalyzer.TranscribeAgentVoice(ctx, audio, mimeType, durationMS, userID)
 		outcome := "completed"
 		if err != nil {
 			outcome = "failed"
 		}
 		s.voiceMetrics.RecordAIInvocation("agents", "transcription", usage.Model, outcome, time.Since(started), 0)
 		if err != nil {
-			if errors.Is(err, billingadapter.ErrDenied) || errors.Is(err, billingadapter.ErrUnavailable) || errors.Is(err, billingadapter.ErrConflict) {
-				writeBillingError(w, err)
+			if writeModelError(w, err) {
 				return
 			}
 			writeJSON(w, http.StatusBadGateway, map[string]string{"code": "voice_transcription_failed"})

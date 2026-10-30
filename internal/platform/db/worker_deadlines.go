@@ -47,8 +47,6 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 		deadline = `SELECT clock_timestamp() FROM space_drawings d WHERE d.lifecycle_state='deleting'
    AND EXISTS(SELECT 1 FROM space_drawing_control_outbox o WHERE o.drawing_id=d.id
    AND o.command='purge' AND o.delivered_at IS NOT NULL) LIMIT 1`
-	case "billing":
-		deadline = billingWorkerDeadline
 	case "agent-runtime":
 		deadline = agentRuntimeWorkerDeadline
 	case "agent-tasks":
@@ -63,8 +61,6 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 		deadline = accountDeletionWorkerDeadline
 	case "rendition-reservations":
 		deadline = renditionReservationWorkerDeadline
-	case "goal-resume":
-		deadline = `SELECT min(resume_at) FROM agent_goals WHERE status='paused' AND resume_at IS NOT NULL`
 	case "embedding":
 		deadline = `SELECT min(due) FROM (
    (SELECT clock_timestamp() AS due FROM ai_retrieval_chunks c JOIN ai_retrieval_documents d ON d.id=c.document_id

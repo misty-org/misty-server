@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -15,7 +14,7 @@ import (
 	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
-// Misty's own web search: one plain call to Serper on Misty's key, with no model
+// Misty's own web search: one plain call to Serper on the operator's key, with no model
 // in between, so research never asks anyone to sign in to a search service.
 // Results are snippets; web.fetch reads a page when the agent needs more.
 const (
@@ -137,28 +136,10 @@ func (s *SpacesService) webSearch(ctx context.Context, invocation agenttools.Inv
 		if callID == "" {
 			callID = uuid.NewString()
 		}
-		key := "web-search:" + invocation.RunID + ":" + callID
-		// Searches bill as web.search: the credits Serper charged, at its per-credit fee.
-		var reservation *agent.UsageReservation
-		searchMeter, metered := s.usageMeter.(interface {
-			ReserveWebSearch(string, string, string, int64) (*agent.UsageReservation, error)
-			SettleWebSearch(*agent.UsageReservation, string, int64, error) error
-		})
-		if metered {
-			var err error
-			if reservation, err = searchMeter.ReserveWebSearch(invocation.UserID, key, webSearchEngine, webSearchKinds[input.Kind].credits); err != nil {
-				return nil, err
-			}
-		}
 		callContext, cancel := context.WithTimeout(ctx, webSearchTimeout)
 		var err error
 		answer, err = serperSearch(callContext, webSearchKey(), input.Kind, body, input.MaxResults)
 		cancel()
-		if reservation != nil {
-			if settleErr := searchMeter.SettleWebSearch(reservation, key+":settle", answer.Credits, err); settleErr != nil {
-				log.Printf("web search settlement for %s deferred: %v", invocation.RunID, settleErr)
-			}
-		}
 		if err != nil {
 			return nil, agent.ErrInvalidRequest("The web search did not work this time. Try a shorter query, or continue without it.")
 		}

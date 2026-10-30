@@ -64,10 +64,6 @@ func TestAgentRuntimeErrorsStayUsefulWithoutLeakingProviderDetails(t *testing.T)
 	if timeout := api.TestingPublicAgentRuntimeFailure("agent_runtime_timeout", "provider timeout"); !strings.Contains(timeout, "timed out") {
 		t.Fatalf("timeout lost its useful explanation: %q", timeout)
 	}
-	hosted := api.TestingPublicAIInvocationErrorForHostedReset(time.Date(2026, time.August, 24, 0, 0, 0, 0, time.UTC))
-	if !strings.Contains(hosted, "weekly hosted AI pool is used up") || !strings.Contains(hosted, "Aug 24") {
-		t.Fatalf("hosted AI exhaustion was hidden: %q", hosted)
-	}
 }
 
 func TestWeatherToolUsesFixedHostsAndEscapedLocation(t *testing.T) {

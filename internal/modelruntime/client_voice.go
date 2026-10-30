@@ -65,10 +65,10 @@ type DiarizedResult struct {
 	Turns             []Turn   `json:"turns"`
 }
 
-func (c *Client) TranscribeDiarized(ctx context.Context, model, mediaType string, audio []byte, languages []string, context *DiarizedContext) (DiarizedResult, error) {
+func (c *Client) TranscribeDiarized(ctx context.Context, route Route, model, mediaType string, audio []byte, languages []string, context *DiarizedContext) (DiarizedResult, error) {
 	var result DiarizedResult
 	err := c.post(ctx, "/v1/models/transcribe-diarized", DiarizedRequest{
-		Route: Instance(), Model: model, MediaType: mediaType, Audio: base64.StdEncoding.EncodeToString(audio), Languages: languages, Context: context,
+		Route: route, Model: model, MediaType: mediaType, Audio: base64.StdEncoding.EncodeToString(audio), Languages: languages, Context: context,
 	}, &result)
 	return result, err
 }
@@ -144,7 +144,7 @@ func (c *Client) DaySummary(ctx context.Context, request DaySummaryRequest) (Day
 }
 
 // SpeechRequest speaks text for the voice pipeline. The runtime returns raw
-// 24 kHz 16-bit mono PCM; billing charges speech by input characters.
+// 24 kHz 16-bit mono PCM.
 type SpeechRequest struct {
 	Route Route  `json:"route"`
 	Model string `json:"model"`

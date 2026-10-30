@@ -34,28 +34,18 @@ func GetMe(database *db.Database) http.HandlerFunc {
 		}
 
 		verifiedAt, verifyErr := database.EmailVerifiedAt(r.Context(), userID)
-		summary, billingErr := accountBillingSummary(r.Context(), database, userID)
-		if billingErr != nil {
-			summary = map[string]any{"tier": "basic", "status": "active", "trial_eligible": false, "billing": map[string]any{"kind": "unavailable", "customer_portal_available": false}}
-		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id":               user.ID,
-			"username":         user.Username,
-			"email":            user.Email,
-			"provider":         user.Provider,
+			"id":                 user.ID,
+			"username":           user.Username,
+			"email":              user.Email,
+			"provider":           user.Provider,
 			"credential_account": user.CredentialPassword,
-			"avatar_version":   user.AvatarVersion,
-			"created_at":       user.CreatedAt,
-			"tier":             summary["tier"],
-			"status":           summary["status"],
-			"allows_use":       true,
-			"expires_at":       summary["expires_at"],
-			"trial_started_at": summary["trial_started_at"],
-			"trial_eligible":   summary["trial_eligible"],
-			"license_device":   "",
-			"billing":          summary["billing"],
-			"email_verified":   verifyErr == nil && verifiedAt != nil,
+			"avatar_version":     user.AvatarVersion,
+			"created_at":         user.CreatedAt,
+			"allows_use":         true,
+			"license_device":     "",
+			"email_verified":     verifyErr == nil && verifiedAt != nil,
 		})
 	}
 }

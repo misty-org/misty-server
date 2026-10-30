@@ -42,7 +42,6 @@ func assertLibraryRealtimeEvent(t *testing.T, database *Database, ctx context.Co
 
 func TestMissingDeduplicationObjectCanBeReplacedByNewUpload(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, err := database.CreateUser("library-repair-owner@example.com", "password123")
 	if err != nil {
@@ -119,74 +118,4 @@ func containsString(values []string, expected string) bool {
 		}
 	}
 	return false
-}
-
-func TestLibraryQuotaReservationsDrawOnEachAccountsAllowance(t *testing.T) {
-	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
-	ctx := context.Background()
-	owner, _ := database.CreateUser("quota-owner@example.com", "password123")
-	member, _ := database.CreateUser("quota-member@example.com", "password123")
-	spaceID := createTestSpace(t, database, ctx, owner.ID, "Quota").ID
-	invite, err := database.TestingInviteToSpace(ctx, owner.ID, spaceID, member.Email)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.RespondToSpaceInvite(ctx, member.ID, invite.ID, true); err != nil {
-		t.Fatal(err)
-	}
-	digest := strings.Repeat("b", 64)
-	// Storage belongs to the account that uploads it; a shared Space has no pool.
-	ownerHalf := reserveQuotaBytes(t, database, ctx, owner.ID, spaceID, "quota-owner", FreeStorageBytes/2)
-	memberFull := reserveQuotaBytes(t, database, ctx, member.ID, spaceID, "quota-member", FreeStorageBytes)
-	if _, err := database.CreateLibraryUpload(ctx, member.ID, spaceID, "library", "extra.bin", "application/octet-stream", 1, digest, "library/extraobject", "extra-token", time.Now().Add(time.Hour)); !errors.Is(err, ErrLibraryQuota) {
-		t.Fatalf("an account over its own allowance = %v, want ErrLibraryQuota", err)
-	}
-	ownerExtra := reserveQuotaBytes(t, database, ctx, owner.ID, spaceID, "quota-owner-extra", 1)
-	releaseQuota(t, database, ctx, ownerExtra)
-	releaseQuota(t, database, ctx, ownerHalf)
-	releaseQuota(t, database, ctx, memberFull)
-	usage, _ := database.SpaceStorageUsage(ctx, member.ID, spaceID)
-	if usage.ReservedBytes != 0 || usage.RemainingBytes != FreeStorageBytes {
-		t.Fatalf("released reservation usage = %#v", usage)
-	}
-	// Leave room for exactly one more maximum-size Library upload, so two
-	// concurrent reservations by one account resolve to one winner and one denial.
-	raceChunk := DefaultLibraryMaxFileBytes
-	baseReservations := reserveQuotaBytes(t, database, ctx, owner.ID, spaceID, "quota-base", FreeStorageBytes-raceChunk)
-
-	type reservationResult struct {
-		token  string
-		upload *LibraryUpload
-		err    error
-	}
-	start := make(chan struct{})
-	results := make(chan reservationResult, 2)
-	reserve := func(token, key string) {
-		<-start
-		next, reserveErr := database.CreateLibraryUpload(ctx, owner.ID, spaceID, "library", key+".bin", "application/octet-stream", raceChunk, digest, "library/"+key, token, time.Now().Add(time.Hour))
-		results <- reservationResult{token: token, upload: next, err: reserveErr}
-	}
-	go reserve("race-token-a", "race-a")
-	go reserve("race-token-b", "race-b")
-	close(start)
-	first, second := <-results, <-results
-	succeeded, denied := 0, 0
-	for _, result := range []reservationResult{first, second} {
-		switch {
-		case result.err == nil:
-			succeeded++
-			if err := database.RejectLibraryUpload(ctx, owner.ID, spaceID, result.upload.ID, result.token, "invalid", "test_cleanup"); err != nil {
-				t.Fatal(err)
-			}
-		case errors.Is(result.err, ErrLibraryQuota):
-			denied++
-		default:
-			t.Fatalf("concurrent reservation error = %v", result.err)
-		}
-	}
-	if succeeded != 1 || denied != 1 {
-		t.Fatalf("concurrent account quota results: succeeded=%d denied=%d", succeeded, denied)
-	}
-	releaseQuota(t, database, ctx, baseReservations)
 }

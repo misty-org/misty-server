@@ -19,7 +19,7 @@ func TestAIConversationTurnsExposeOriginalPromptAndDurableOutcome(t *testing.T) 
 	now := time.Now().UTC()
 	conversationID := "conversation_11111111-1111-4111-8111-111111111111"
 	invocationID := "invocation_22222222-2222-4222-8222-222222222222"
-	state := json.RawMessage(`{"id":"conversation_11111111-1111-4111-8111-111111111111","userId":"` + owner.ID + `","billingUserId":"` + owner.ID + `","mode":"ask","agentTier":"tier-low","createdAt":"` + now.Format(time.RFC3339Nano) + `","updatedAt":"` + now.Format(time.RFC3339Nano) + `"}`)
+	state := json.RawMessage(`{"id":"conversation_11111111-1111-4111-8111-111111111111","userId":"` + owner.ID + `","mode":"ask","agentTier":"tier-low","createdAt":"` + now.Format(time.RFC3339Nano) + `","updatedAt":"` + now.Format(time.RFC3339Nano) + `"}`)
 	if err := database.CreateAgentSession(ctx, conversationID, owner.ID, state, now.Add(time.Hour), now.Add(24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}

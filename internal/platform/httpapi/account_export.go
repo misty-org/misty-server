@@ -51,6 +51,11 @@ func (s *SpacesService) AccountExportManifest() http.HandlerFunc {
 		}
 		documents := make([]accountExportDocument, 0, len(export.Journal))
 		for _, resource := range export.Journal {
+			// Without a collaboration service, note and drawing bodies are in
+			// the export's own projections; there is no room to download from.
+			if !s.JournalCollab.Enabled {
+				break
+			}
 			ticket, ticketErr := s.JournalCollab.MintJournalExportTicket(
 				userID, resource.SpaceID, resource.Kind, resource.ID,
 				resource.ACLVersion,

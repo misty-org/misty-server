@@ -27,17 +27,12 @@ func DecodeAIJSONWithLimit(w http.ResponseWriter, r *http.Request, dst any, limi
 }
 
 func WriteAIError(w http.ResponseWriter, err error) {
+	if writeModelError(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, context.Canceled):
 		writeJSON(w, 499, map[string]any{"code": "request_canceled", "message": "Agent request canceled."})
-	case isHostedAILimitReached(err):
-		scope, _ := hostedAILimitScope(err)
-		var exhausted agent.HostedAILimitReachedError
-		_ = errors.As(err, &exhausted)
-		writeJSON(w, http.StatusPaymentRequired, map[string]any{
-			"code": "hosted_ai_limit_reached", "reason": hostedAILimitReason(scope), "message": hostedAILimitMessage(scope),
-			"reset_at": exhausted.ResetAt, "upgrade_available": true,
-		})
 	case errors.Is(err, agent.ErrSessionNotFound):
 		http.Error(w, "session not found", http.StatusNotFound)
 	case errors.Is(err, agent.ErrModelUnavailable):

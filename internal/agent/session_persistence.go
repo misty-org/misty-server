@@ -33,9 +33,6 @@ type SessionPersistence interface {
 type persistedSessionState struct {
 	ID                    string            `json:"id"`
 	UserID                string            `json:"userId"`
-	BillingUserID         string            `json:"billingUserId"`
-	BillingTurnSequence   int64             `json:"billingTurnSequence"`
-	BillingScope          string            `json:"billingScope"`
 	ModelID               string            `json:"modelId,omitempty"`
 	ReasoningEffort       string            `json:"reasoningEffort,omitempty"`
 	SystemPrompt          string            `json:"systemPrompt,omitempty"`
@@ -70,9 +67,6 @@ func MarshalPersistentSession(session *Session) (json.RawMessage, error) {
 	state := persistedSessionState{
 		ID:                    session.ID,
 		UserID:                session.UserID,
-		BillingUserID:         session.BillingUserID,
-		BillingScope:          session.BillingScope,
-		BillingTurnSequence:   session.BillingTurnSequence,
 		ModelID:               session.ModelID,
 		ReasoningEffort:       session.ReasoningEffort,
 		SystemPrompt:          session.SystemPrompt,
@@ -109,9 +103,6 @@ func UnmarshalPersistentSession(raw json.RawMessage, expectedID, expectedUserID 
 	if state.Mode == "" {
 		state.Mode = ModeAsk
 	}
-	if state.BillingUserID == "" {
-		state.BillingUserID = state.UserID
-	}
 	allowWrite := true
 	allowTools := true
 	if state.AllowTools != nil {
@@ -123,9 +114,6 @@ func UnmarshalPersistentSession(raw json.RawMessage, expectedID, expectedUserID 
 	return &Session{
 		ID:                    state.ID,
 		UserID:                state.UserID,
-		BillingUserID:         state.BillingUserID,
-		BillingScope:          state.BillingScope,
-		BillingTurnSequence:   state.BillingTurnSequence,
 		ModelID:               state.ModelID,
 		ReasoningEffort:       state.ReasoningEffort,
 		SystemPrompt:          state.SystemPrompt,

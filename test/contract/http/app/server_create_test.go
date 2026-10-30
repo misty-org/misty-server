@@ -62,7 +62,6 @@ func TestPasswordResetURLsRejectNonLocalhostHTTP(t *testing.T) {
 
 func TestStripeWebhookIsNotMounted(t *testing.T) {
 	configureJournalCollabForTest(t)
-	t.Setenv("MISTY_BILLING_ADAPTER", "none")
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatal(err)
@@ -110,17 +109,65 @@ func TestCreateServerAndMountHandlers(t *testing.T) {
 	}
 }
 
-func TestCreateServerRequiresProductionR2Configuration(t *testing.T) {
+func TestCreateServerRequiresProductionLibraryStorage(t *testing.T) {
 	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
 	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	t.Setenv("R2_ENDPOINT", "")
-	t.Setenv("R2_BUCKET", "")
-	t.Setenv("R2_ACCESS_KEY", "")
-	t.Setenv("R2_SECRET_KEY", "")
+	for key, value := range productionCoreValues() {
+		t.Setenv(key, value)
+	}
+	for _, key := range []string{"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY", "MISTY_S3_ENDPOINT", "MISTY_S3_BUCKET", "MISTY_S3_ACCESS_KEY_ID", "MISTY_S3_SECRET_ACCESS_KEY", "MISTY_LIBRARY_BACKEND", "MISTY_LIBRARY_FILESYSTEM_DIR", "MISTY_LIBRARY_LOCAL_DIR"} {
+		t.Setenv(key, "")
+	}
 
-	if _, err := CreateServer(); err == nil || !strings.Contains(err.Error(), "R2_ENDPOINT") {
-		t.Fatalf("CreateServer() error = %v, want missing production R2 rejection", err)
+	if _, err := CreateServer(); err == nil || !strings.Contains(err.Error(), "MISTY_LIBRARY_FILESYSTEM_DIR") {
+		t.Fatalf("CreateServer() error = %v, want missing production Library storage rejection", err)
+	}
+}
+
+func productionCoreValues() map[string]string {
+	return map[string]string{
+		"DB_HOST":                   "database.internal",
+		"DB_USER":                   "misty",
+		"DB_PASSWORD":               "password",
+		"DB_NAME":                   "misty",
+		"MISTY_PUBLIC_API_URL":      "https://api.example.com/api",
+		"SPACE_LINK_ENCRYPTION_KEY": "01234567890123456789012345678901",
+		"PORT":                      "8080",
+	}
+}
+
+func TestValidateProductionEnvironmentAcceptsFilesystemLibrary(t *testing.T) {
+	t.Setenv("MISTY_ENVIRONMENT", "production")
+	for key, value := range productionCoreValues() {
+		t.Setenv(key, value)
+	}
+	for _, key := range []string{"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY", "MISTY_S3_ENDPOINT", "MISTY_LIBRARY_BACKEND"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("MISTY_LIBRARY_FILESYSTEM_DIR", t.TempDir())
+	if err := ValidateProductionEnvironment(); err != nil {
+		t.Fatalf("self-hosted production with a Library directory = %v", err)
+	}
+	store, err := LibraryStoreFromEnv()
+	if err != nil || store == nil {
+		t.Fatalf("filesystem Library store in production = %v", err)
+	}
+}
+
+func TestValidateProductionEnvironmentRequiresEveryS3Key(t *testing.T) {
+	t.Setenv("MISTY_ENVIRONMENT", "production")
+	for key, value := range productionCoreValues() {
+		t.Setenv(key, value)
+	}
+	t.Setenv("MISTY_LIBRARY_FILESYSTEM_DIR", "")
+	t.Setenv("MISTY_LIBRARY_BACKEND", "s3")
+	t.Setenv("R2_ENDPOINT", "https://account.r2.cloudflarestorage.com")
+	t.Setenv("R2_BUCKET", "misty-production")
+	t.Setenv("R2_ACCESS_KEY", "")
+	t.Setenv("R2_SECRET_KEY", "secret")
+	if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), "R2_ACCESS_KEY") {
+		t.Fatalf("S3 storage without its access key = %v", err)
 	}
 }
 
@@ -134,7 +181,7 @@ func TestValidateProductionEnvironmentRequiresCoreConfiguration(t *testing.T) {
 		t.Setenv(key, "")
 	}
 
-	if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), "R2_ENDPOINT") {
+	if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), "DB_HOST") {
 		t.Fatalf("validateProductionEnvironment() error = %v, want first missing variable", err)
 	}
 }
@@ -152,7 +199,6 @@ func TestValidateProductionEnvironmentAcceptsCoreConfiguration(t *testing.T) {
 		"DB_NAME":                   "misty",
 		"MISTY_PUBLIC_API_URL":      "https://api.example.com/api",
 		"SPACE_LINK_ENCRYPTION_KEY": "01234567890123456789012345678901",
-		"MISTY_BILLING_ADAPTER":     "http", "MISTY_BILLING_URL": "https://billing.example.com/adapter", "MISTY_BILLING_SECRET": "01234567890123456789012345678901",
 		"PORT": "8080",
 	}
 	for key, value := range values {

@@ -29,7 +29,7 @@ func (l *APIRateLimiter) limiterFor(method, path string, policy RateLimitPolicy)
 
 const overflowRouteKey = "{overflow}"
 
-// costBearingRoutes spend money or third-party quota on Misty's credentials, so
+// costBearingRoutes spend money or third-party quota on the server's credentials, so
 // they are charged per account rather than per address. Keyed by the normalized
 // path the limiter already computes.
 var costBearingRoutes = map[string]bool{

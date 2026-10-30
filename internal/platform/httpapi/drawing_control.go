@@ -28,7 +28,8 @@ func (s *SpacesService) ProcessDrawingControlCommands(
 			command.Command,
 			command.Payload,
 		)
-		if err != nil {
+		// Without a collaboration service there is no room to tell.
+		if err != nil && !errors.Is(err, ErrCollaborationOff) {
 			if markErr := s.database.MarkDrawingControlFailed(
 				ctx, command.ID, err.Error(),
 			); markErr != nil {

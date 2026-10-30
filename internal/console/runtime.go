@@ -110,8 +110,8 @@ func (s *Server) aiPage(r *http.Request) templ.Component {
 	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
 	defer cancel()
 	if snapshot, err := s.health.Fetch(ctx); err == nil {
-		if check, ok := snapshot.Checks["agent_gateway"]; ok {
-			check.Name = "agent_gateway"
+		if check, ok := snapshot.Checks["agent_runtime"]; ok {
+			check.Name = "agent_runtime"
 			view.Gateway = &check
 		}
 	}
@@ -125,31 +125,4 @@ func (s *Server) aiPage(r *http.Request) templ.Component {
 		view.Err = "Couldn't load AI usage: " + err.Error()
 	}
 	return aiPage(view)
-}
-
-type billingView struct {
-	Billing db.ConsoleBilling
-	Check   *HealthCheck
-	Err     string
-}
-
-func (s *Server) billingPage(r *http.Request) templ.Component {
-	if s.db == nil {
-		return databaseUnavailable("Billing")
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
-	defer cancel()
-	view := billingView{}
-	if snapshot, err := s.health.Fetch(ctx); err == nil {
-		if check, ok := snapshot.Checks["billing"]; ok {
-			check.Name = "billing"
-			view.Check = &check
-		}
-	}
-	billing, err := s.db.ConsoleBilling(ctx)
-	view.Billing = billing
-	if err != nil {
-		view.Err = "Couldn't load billing state: " + err.Error()
-	}
-	return billingPage(view)
 }

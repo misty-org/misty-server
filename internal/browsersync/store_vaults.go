@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 )
 
 // A person holds one vault per Space they belong to. The personal Space's
@@ -188,7 +187,7 @@ func (db *Store) CreateBrowserSyncVault(ctx context.Context, userID, spaceID str
 	if err = ensureBrowserSyncWorkspaces(ctx, tx, grant.VaultID, grant.DeviceID); err != nil {
 		return err
 	}
-	return cloudusage.Commit(ctx, tx)
+	return tx.Commit()
 }
 
 // DeleteBrowserSyncVaults deletes every vault the account holds: the personal
@@ -209,5 +208,5 @@ func (db *Store) DeleteBrowserSyncVaults(ctx context.Context, userID string) (bo
 	if _, err = tx.ExecContext(ctx, `DELETE FROM browser_sync_vaults WHERE user_id=$1`, userID); err != nil {
 		return false, err
 	}
-	return personal, cloudusage.Commit(ctx, tx)
+	return personal, tx.Commit()
 }

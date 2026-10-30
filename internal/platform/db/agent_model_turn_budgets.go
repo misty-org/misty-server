@@ -55,7 +55,7 @@ func (db *Database) ReserveAgentModelTurn(ctx context.Context, userID, runID, ru
 			return err
 		}
 		// Screen planning calls (one per action of a browser_act goal) and
-		// context compaction summaries are metered as usage but do not spend
+		// context compaction summaries are model calls but do not spend
 		// the run's agent turns.
 		if !TurnFreeModelNode(nodeID) {
 			var consumed int
@@ -112,12 +112,12 @@ func CompactionNode(nodeID string) bool {
 }
 
 // BrowsingNode reports a model call made for the run's page tools (such as
-// browser_extract), billed on its browsing route.
+// browser_extract), run on its browsing route.
 func BrowsingNode(nodeID string) bool {
 	return strings.HasPrefix(nodeID, "model:browse:")
 }
 
-// TurnFreeModelNode reports a metered model call that does not spend one of
+// TurnFreeModelNode reports a model call that does not spend one of
 // the run's model turns.
 func TurnFreeModelNode(nodeID string) bool {
 	return ScreenPlanningNode(nodeID) || CompactionNode(nodeID) || BrowsingNode(nodeID)

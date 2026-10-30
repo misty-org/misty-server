@@ -54,7 +54,7 @@ func (db *Database) LibraryItemPreviewSource(ctx context.Context, userID, spaceI
 		}
 		err := tx.QueryRowContext(ctx, `SELECT pb.r2_object_key,pb.server_detected_mime_type,pb.byte_size,pb.sha256 FROM library_derivatives d JOIN library_blobs pb ON pb.id=d.derivative_blob_id AND pb.lifecycle_state='ready' WHERE d.space_library_item_id=$1 AND d.source_file_id=$2 AND d.kind='image_preview' AND d.lifecycle_state='ready' AND d.metadata->>'source_identity'=$3 ORDER BY d.created_at DESC LIMIT 1`, itemID, out.FileID, out.SourceIdentity).Scan(&out.PreviewObjectKey, &out.PreviewMIME, &out.PreviewBytes, &out.PreviewSHA256)
 		if errors.Is(err, sql.ErrNoRows) {
-			if _, err := storageQuotaStateTx(ctx, tx, contributingUserID, spaceID, true); err != nil {
+			if _, err := storageUsageStateTx(ctx, tx, contributingUserID, spaceID, true); err != nil {
 				return err
 			}
 			var expiredReservation int64
@@ -77,7 +77,7 @@ func (db *Database) LibraryItemPreviewSource(ctx context.Context, userID, spaceI
 				return err
 			}
 			const previewReserve = int64(25_000_000)
-			if _, err := reserveStorageQuotaTx(ctx, tx, contributingUserID, spaceID, previewReserve); err != nil {
+			if err := prepareStorageReservationTx(ctx, tx, contributingUserID, spaceID); err != nil {
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO space_rendition_reservations(id,space_id,user_id,source_kind,source_id,reserved_bytes,state,expires_at)

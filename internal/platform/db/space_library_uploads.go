@@ -71,16 +71,14 @@ func (db *Database) SpaceStorageUsage(ctx context.Context, userID, spaceID strin
 				return err
 			}
 		}
-		quota, err := storageQuotaStateTx(ctx, tx, userID, spaceID, false)
+		usage, err := storageUsageStateTx(ctx, tx, userID, spaceID, false)
 		if err != nil {
 			return err
 		}
-		out.Personal, out.Space = quota.Personal, quota.Space
-		out.PersonalUsedBytes, out.PersonalReservedBytes = quota.Personal.UsedBytes, quota.Personal.ReservedBytes
-		out.PersonalLimitBytes, out.PersonalRemainingBytes, out.PersonalOverQuota = quota.Personal.LimitBytes, quota.Personal.RemainingBytes, quota.Personal.OverQuota
-		out.SpaceUsedBytes, out.SpaceReservedBytes = quota.Space.UsedBytes, quota.Space.ReservedBytes
-		out.SpaceLimitBytes, out.SpaceRemainingBytes, out.SpaceOverQuota = quota.Space.LimitBytes, quota.Space.RemainingBytes, quota.Space.OverQuota
-		out.UsedBytes, out.ReservedBytes, out.LimitBytes, out.RemainingBytes = quota.Personal.UsedBytes, quota.Personal.ReservedBytes, quota.Personal.LimitBytes, quota.Personal.RemainingBytes
+		out.Personal, out.Space = usage.Personal, usage.Space
+		out.PersonalUsedBytes, out.PersonalReservedBytes = usage.Personal.UsedBytes, usage.Personal.ReservedBytes
+		out.SpaceUsedBytes, out.SpaceReservedBytes = usage.Space.UsedBytes, usage.Space.ReservedBytes
+		out.UsedBytes, out.ReservedBytes = usage.Personal.UsedBytes, usage.Personal.ReservedBytes
 		if err := tx.QueryRowContext(ctx, `SELECT version FROM space_storage_usage WHERE space_id=$1`, spaceID).Scan(&out.Version); err != nil {
 			return err
 		}
@@ -132,7 +130,7 @@ func (db *Database) CreateLibraryUploadWithProvenance(ctx context.Context, userI
 				}
 			}
 		}
-		if _, err := reserveStorageQuotaTx(ctx, tx, userID, spaceID, byteSize); err != nil {
+		if err := prepareStorageReservationTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `INSERT INTO space_library_uploads(id,space_id,security_domain_id,user_id,object_key,original_filename,purpose,client_declared_mime_type,requested_byte_size,client_sha256,state,upload_token_hash,expires_at,conversation_id)

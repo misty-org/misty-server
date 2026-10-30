@@ -2,10 +2,10 @@ import type { ModelMessage } from "ai";
 import { citationRefusal, unreadCitations } from "./citation-check.js";
 import { unbackedCompletion } from "./finish-check.js";
 import { earlyGiveUp } from "./persistence-check.js";
-import { brokenProofTabs, proofTabsRefusal } from "./proof-tabs.js";
+import { brokenProofTabs, missingSiteTabs, proofTabsRefusal } from "./proof-tabs.js";
 import { countRefusal } from "./count-check.js";
 import { researchUse, type ResearchTools } from "./research-budget.js";
-import { ledgerIssue, type LedgerRow } from "./ledger.js";
+import { ledgerIssue, openRowsIssue, type LedgerRow } from "./ledger.js";
 import type { TaskCompletion } from "./task-completion.js";
 
 // One verification turn before a finish stands (docs/agents/harness.md, Completion). Until October 20
@@ -32,6 +32,8 @@ export interface FinishCheck {
   readOnly: (name: string) => boolean;
   /** Rows the run marked done that its calls do not back (src/ledger.ts). */
   unbackedRows?: LedgerRow[];
+  /** The ledger's parts not yet done or skipped (src/ledger.ts, remaining). */
+  openRows?: TaskCompletion["remaining"];
 }
 
 /** Whether a finish may still be sent back: once, and only with turns left to act on it. */
@@ -60,8 +62,13 @@ export function finishFindings(check: FinishCheck): { issues: string[]; gaveUp: 
   const broken = brokenProofTabs(check.messages);
   if (broken.length)
     issues.push(`Pages you kept as proof show an error or nothing: ${broken.join("; ")}. Open each page again from a search or the site's own links, keep() the working page, and close or replace the broken one.`);
+  const missing = check.program ? missingSiteTabs(check.request, check.messages) : [];
+  if (missing.length)
+    issues.push(`The request names ${missing.join(", ")} and you visited ${missing.length === 1 ? "it" : "them"}, but no tab of yours is open there now. Open the page the request asks for there (the item itself, not a search page), keep() it, and use what it shows.`);
   const unbackedLedger = ledgerIssue(check.unbackedRows ?? []);
   if (unbackedLedger) issues.push(unbackedLedger);
+  const openLedger = openRowsIssue(check.report, check.openRows ?? []);
+  if (openLedger) issues.push(openLedger);
   const counts = countRefusal(check.request, check.report.summary);
   if (counts) issues.push(counts);
   const giveUp = check.long ? earlyGiveUp(check.report, check.turn, check.limit) : undefined;
@@ -83,3 +90,16 @@ export function verificationNote(issues: string[], persist = false): string | un
       "so say plainly in it what is still unconfirmed rather than looking for it again.";
   return `Before your answer goes out, Misty checked it ${persist ? "" : "once "}against the request and this run:\n\n${body}\n\n${close}`;
 }
+
+/** An answer that says the work was delivered ("Completed all 26 requirements", "Delivered a
+ * side-by-side comparison") in place of the comparison itself. */
+const reportOnly =
+  /\b(completed|met|satisfied|fulfilled|addressed) all (\d+ )?(requirements|parts|items|steps)\b|\bdelivered (a |the )?(side-by-side |full |final )?(comparison|summary|recommendation|answer|report)\b/i;
+
+/** The note that sends a report-only answer back, or undefined. */
+export function reportOnlyIssue(summary: string): string | undefined {
+  if (!reportOnly.test(summary)) return undefined;
+  return "Your answer describes the work (what was completed or delivered) instead of giving it. The person reads only this answer: " +
+    "write the comparison, summary and recommendation themselves, in full and formatted for them, with the details and links, and leave out the bookkeeping. Then finish.";
+}
+

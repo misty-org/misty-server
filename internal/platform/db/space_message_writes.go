@@ -45,11 +45,11 @@ func (db *Database) CreateMistySpaceConversationMessageWithContent(ctx context.C
 	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, conversationID, "", content, false)
 }
 
-func (db *Database) createSpaceAgentMessageWithMembership(ctx context.Context, billingUserID, spaceID, conversationID, agentID string, content []MessageSpan, enforceMembership bool) (*SpaceMessage, error) {
-	return db.createSpaceAgentMessageWithProvenance(ctx, billingUserID, spaceID, conversationID, agentID, content, enforceMembership, "", nil)
+func (db *Database) createSpaceAgentMessageWithMembership(ctx context.Context, actingUserID, spaceID, conversationID, agentID string, content []MessageSpan, enforceMembership bool) (*SpaceMessage, error) {
+	return db.createSpaceAgentMessageWithProvenance(ctx, actingUserID, spaceID, conversationID, agentID, content, enforceMembership, "", nil)
 }
 
-func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, billingUserID, spaceID, conversationID, agentID string, content []MessageSpan, enforceMembership bool, replyToMessageID string, origin json.RawMessage) (*SpaceMessage, error) {
+func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, actingUserID, spaceID, conversationID, agentID string, content []MessageSpan, enforceMembership bool, replyToMessageID string, origin json.RawMessage) (*SpaceMessage, error) {
 	if err := ValidateMessage(content, nil); err != nil {
 		return nil, err
 	}
@@ -65,18 +65,18 @@ func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, b
 		senderKind = "system"
 		origin, _ = json.Marshal(map[string]any{"kind": "misty_assistant", "author_name": "Misty"})
 	}
-	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), SpaceID: spaceID, ConversationID: conversationID, SenderUserID: billingUserID, SenderKind: senderKind, SenderAgentID: agentID, Content: content, FileNodeIDs: []string{}, LibraryItemIDs: []string{}, Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID, Origin: origin}
+	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), SpaceID: spaceID, ConversationID: conversationID, SenderUserID: actingUserID, SenderKind: senderKind, SenderAgentID: agentID, Content: content, FileNodeIDs: []string{}, LibraryItemIDs: []string{}, Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID, Origin: origin}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, billingUserID, spaceID); err != nil {
+		if err := requireSpaceMessageWriteTx(ctx, tx, actingUserID, spaceID); err != nil {
 			return err
 		}
 		if enforceMembership {
-			if _, err := askExecutionContextTx(ctx, tx, billingUserID, spaceID, agentID); err != nil {
+			if _, err := askExecutionContextTx(ctx, tx, actingUserID, spaceID, agentID); err != nil {
 				return err
 			}
 		}
 		if conversationID != "" {
-			if err := requireSpaceConversationMemberTx(ctx, tx, billingUserID, spaceID, conversationID); err != nil {
+			if err := requireSpaceConversationMemberTx(ctx, tx, actingUserID, spaceID, conversationID); err != nil {
 				return err
 			}
 		}
@@ -88,7 +88,7 @@ func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, b
 		}
 		raw, _ := json.Marshal(content)
 		if err := tx.QueryRowContext(ctx, `INSERT INTO space_messages(id,space_id,conversation_id,sender_user_id,sender_kind,sender_agent_id,content,reply_to_message_id,origin)
-			VALUES($1,$2,NULLIF($3,''),$4,$5,NULLIF($6,''),$7,NULLIF($8,''),$9) RETURNING seq,created_at`, out.ID, spaceID, conversationID, billingUserID, senderKind, agentID, raw, replyToMessageID, origin).Scan(&out.Seq, &out.CreatedAt); err != nil {
+			VALUES($1,$2,NULLIF($3,''),$4,$5,NULLIF($6,''),$7,NULLIF($8,''),$9) RETURNING seq,created_at`, out.ID, spaceID, conversationID, actingUserID, senderKind, agentID, raw, replyToMessageID, origin).Scan(&out.Seq, &out.CreatedAt); err != nil {
 			return err
 		}
 		if conversationID != "" {
@@ -104,7 +104,7 @@ func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, b
 			}
 		}
 		out.Sender = SpaceMessageSender{Kind: senderKind, AgentID: agentID, DisplayName: out.SenderName}
-		if _, err := recordSpaceEventTx(ctx, tx, spaceID, billingUserID, "message.created", out.ID, out); err != nil {
+		if _, err := recordSpaceEventTx(ctx, tx, spaceID, actingUserID, "message.created", out.ID, out); err != nil {
 			return err
 		}
 		return nil

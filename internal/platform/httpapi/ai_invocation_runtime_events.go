@@ -23,14 +23,10 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 	}
 	record, err := s.database.ValidateAIInvocationRuntime(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID)
 	if err != nil {
-		// A model may finish while Stop is being committed. Accept only its signed
-		// measured accounting checkpoint; never restore task/device authority.
+		// A model may finish while Stop is being committed. Acknowledge its signed
+		// completion; never restore task/device authority.
 		if strings.HasPrefix(body.NodeID, "model:") && body.State == "completed" {
 			if stopped, lookupErr := s.database.AIInvocationRuntimeRecord(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID); lookupErr == nil && aiInvocationTerminal(stopped.State) {
-				if _, settleErr := s.meterAIInvocationRuntimeModel(r.Context(), stopped, body.NodeID, body.State, body.Output); settleErr != nil {
-					writeAgentError(w, settleErr)
-					return
-				}
 				writeJSON(w, http.StatusOK, map[string]bool{"accepted": true})
 				return
 			}
@@ -42,10 +38,8 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_event_state"})
 		return
 	}
-	overLimit := false
 	if strings.HasPrefix(body.NodeID, "model:") {
-		var err error
-		if overLimit, err = s.meterAIInvocationRuntimeModel(r.Context(), record, body.NodeID, body.State, body.Output); err != nil {
+		if err := s.admitAIInvocationRuntimeTurn(r.Context(), record, body.NodeID, body.State); err != nil {
 			writeAgentError(w, err)
 			return
 		}
@@ -102,7 +96,7 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 		writeAgentError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"accepted": true, "over_limit": overLimit})
+	writeJSON(w, http.StatusOK, map[string]bool{"accepted": true})
 }
 
 // Terminal checkpoints change phase to working/tool_failed; output retains the

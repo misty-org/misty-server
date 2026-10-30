@@ -1,4 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type {
@@ -6,38 +7,251 @@ import type {
   LanguageModelV4,
   LanguageModelV4CallOptions,
   SpeechModelV4,
+  TranscriptionModelV3,
   TranscriptionModelV4,
 } from "@ai-sdk/provider";
 import { createGateway } from "ai";
+import { z } from "zod";
 import type { RuntimeIdentity } from "./control-plane.js";
 
 type Environment = Record<string, string | undefined>;
 
 /**
- * Every model runs on Misty's own keys. OpenAI and Anthropic models go straight to
- * their maker when the instance has that key; everything else goes through the AI Gateway.
+ * Models run on the key the route names. An `account` route carries the person's own key for
+ * the model's provider and uses only that. An `instance` route uses the runtime's environment
+ * keys, set by whoever runs the server (single-user self-hosting and evals).
  */
+export const providerIds = [
+  "openai",
+  "anthropic",
+  "google",
+  "openrouter",
+  "gateway",
+  "nvidia",
+  "ollama",
+  "openai-compatible",
+  "elevenlabs",
+  "soniox",
+] as const;
+export type ProviderId = (typeof providerIds)[number];
+
+/** Older names kept so existing model IDs keep working: `nim/` evals and `gemini/` judges. */
+const providerAliases: Record<string, ProviderId> = { nim: "nvidia", gemini: "google" };
+
+const credentialSchema = z.object({
+  provider: z.enum(providerIds),
+  apiKey: z.string().max(8192),
+  baseURL: z.string().max(2048).optional(),
+});
+
+/** The route Go sends with a call: whose key the model runs on, and its reasoning. */
+export const modelRouteSchema = z.discriminatedUnion("provider", [
+  z.object({ provider: z.literal("instance"), reasoning: z.string().max(16).optional() }),
+  z.object({ provider: z.literal("account"), reasoning: z.string().max(16).optional(), credential: credentialSchema }),
+]);
+export type ModelRoute = z.infer<typeof modelRouteSchema>;
+export type ModelCredential = z.infer<typeof credentialSchema>;
+
+const instanceRoute: ModelRoute = { provider: "instance" };
+
+/**
+ * A model that can't run as asked. The message never carries a key or a provider's response,
+ * so it is safe for workflow history, logs and the person.
+ */
+export class ModelSetupError extends Error {
+  constructor(
+    readonly code: "model_key_needed" | "model_unsupported" | "model_base_url_invalid",
+    readonly detail: string,
+  ) {
+    super(`${code}: ${detail}`);
+    this.name = "ModelSetupError";
+  }
+}
+
+const keyNeeded = () => new ModelSetupError("model_key_needed", "Add a model key in Settings → Models.");
+
+/** `<provider>/<model as that provider names it>`, with the old aliases resolved. */
+export function parseModelId(modelId: string): { provider: ProviderId; model: string } {
+  const slash = modelId.indexOf("/");
+  const prefix = slash > 0 ? modelId.slice(0, slash) : "";
+  const model = slash > 0 ? modelId.slice(slash + 1) : "";
+  const provider = providerAliases[prefix] ?? (providerIds as readonly string[]).find((id) => id === prefix);
+  if (!provider || !model || /\s/.test(model) || modelId.length > 200)
+    throw new ModelSetupError("model_unsupported", "Use a model ID of the form provider/model.");
+  return { provider: provider as ProviderId, model };
+}
+
+/** The operator's default agent model, checked at startup. */
 export function instanceModelConfig(env: Environment = process.env) {
   const model = env.MISTY_AGENT_MODEL?.trim() || "";
-  if (model && (!/^[^\s/]+\/\S+$/.test(model) || model.length > 200)) {
-    throw new Error("MISTY_AGENT_MODEL must be a provider/model ID");
+  if (model) {
+    try {
+      parseModelId(model);
+    } catch {
+      throw new Error("MISTY_AGENT_MODEL must be a provider/model ID with a known provider");
+    }
   }
-  return { provider: "gateway", model };
+  return { provider: "instance" as const, model };
 }
 
-/** The route Go admitted for a call: always Misty's own, with its reasoning. */
-export interface ModelRoute {
-  provider: "instance";
-  reasoning?: string;
+const first = (...values: Array<string | undefined>) => values.map((value) => value?.trim() ?? "").find(Boolean) ?? "";
+
+/** The runtime's own key for a provider, from its environment. */
+function instanceCredential(provider: ProviderId, env: Environment): ModelCredential | undefined {
+  const keyed = (apiKey: string, baseURL?: string) => (apiKey ? { provider, apiKey, baseURL: baseURL || undefined } : undefined);
+  switch (provider) {
+    case "openai":
+      return keyed(first(env.OPENAI_API_KEY), first(env.OPENAI_BASE_URL));
+    case "anthropic":
+      return keyed(first(env.ANTHROPIC_API_KEY, env.CLAUDE_API_KEY), first(env.ANTHROPIC_BASE_URL));
+    case "google":
+      return keyed(first(env.GEMINI_API_KEY, env.GOOGLE_GENERATIVE_AI_API_KEY));
+    case "openrouter":
+      return keyed(first(env.OPENROUTER_API_KEY), first(env.OPENROUTER_BASE_URL));
+    case "gateway":
+      return keyed(first(env.AI_GATEWAY_API_KEY, env.VERCEL_OIDC_TOKEN), first(env.AI_GATEWAY_BASE_URL));
+    case "nvidia":
+      return keyed(first(env.NVIDIA_API_KEY), first(env.NVIDIA_BASE_URL));
+    case "ollama":
+      // A local Ollama needs no key.
+      return { provider, apiKey: first(env.OLLAMA_API_KEY), baseURL: first(env.OLLAMA_BASE_URL) || undefined };
+    case "openai-compatible": {
+      const baseURL = first(env.OPENAI_COMPATIBLE_BASE_URL);
+      return baseURL ? { provider, apiKey: first(env.OPENAI_COMPATIBLE_API_KEY), baseURL } : undefined;
+    }
+    case "elevenlabs":
+      return keyed(first(env.ELEVENLABS_API_KEY));
+    case "soniox":
+      return keyed(first(env.SONIOX_API_KEY));
+  }
 }
 
-function openAIKey(env: Environment) {
-  return env.OPENAI_API_KEY?.trim() || "";
+/** Providers the AI Gateway also serves under the same `<maker>/<model>` names. */
+const gatewayServes = new Set<ProviderId>(["openai", "anthropic", "google"]);
+
+/** Providers that run without a key (a local server). */
+const keyOptional = new Set<ProviderId>(["ollama", "openai-compatible"]);
+
+/** Hosts an account's base URL may not name: this runtime, its private network, cloud metadata. */
+function blockedHost(host: string): boolean {
+  const name = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (name === "host.docker.internal") return false;
+  if (!name.includes(".") && !name.includes(":")) return true; // localhost and compose service names
+  if (name.endsWith(".localhost") || name.endsWith(".internal") || name.endsWith(".local")) return true;
+  if (/^(127\.|0\.|169\.254\.)/.test(name) || name === "::1" || name === "::" || name.startsWith("fe80:")) return true;
+  return false;
 }
 
-/** An `openai/…` model with an instance OpenAI key skips the Gateway. */
-function directOpenAI(modelId: string, env: Environment) {
-  return modelId.startsWith("openai/") && openAIKey(env) !== "";
+function accountBaseURL(value: string | undefined): string | undefined {
+  if (!value?.trim()) return undefined;
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new ModelSetupError("model_base_url_invalid", "The model's base URL isn't a valid URL.");
+  }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || blockedHost(url.hostname))
+    throw new ModelSetupError("model_base_url_invalid", "The model's base URL must be a public http(s) address.");
+  return url.toString().replace(/\/$/, "");
+}
+
+interface Target {
+  provider: ProviderId;
+  model: string;
+  credential: ModelCredential;
+}
+
+/** Which provider, model name and key one call uses. */
+export function resolveTarget(modelId: string, route: ModelRoute = instanceRoute, env: Environment = process.env): Target {
+  const { provider, model } = parseModelId(modelId);
+  if (route.provider === "account") {
+    const credential = route.credential;
+    // An account's key is used only for its own provider, never swapped for the instance's.
+    if (credential.provider !== provider) throw keyNeeded();
+    if (!credential.apiKey.trim() && !keyOptional.has(provider)) throw keyNeeded();
+    const baseURL = accountBaseURL(credential.baseURL);
+    if (provider === "openai-compatible" && !baseURL)
+      throw new ModelSetupError("model_base_url_invalid", "An OpenAI-compatible model needs a base URL.");
+    return { provider, model, credential: { provider, apiKey: credential.apiKey.trim(), baseURL } };
+  }
+  const own = instanceCredential(provider, env);
+  if (own) return { provider, model, credential: own };
+  // The operator's Gateway key also serves the makers it carries.
+  const gateway = gatewayServes.has(provider) ? instanceCredential("gateway", env) : undefined;
+  if (gateway) return { provider: "gateway", model: `${provider}/${model}`, credential: gateway };
+  throw keyNeeded();
+}
+
+/** The keys a failure must never repeat: the route's own, or the instance's. */
+export function routeSecrets(route: unknown, env: Environment = process.env): string[] {
+  const parsed = modelRouteSchema.safeParse(route);
+  if (parsed.success && parsed.data.provider === "account") return [parsed.data.credential.apiKey];
+  return providerIds.flatMap((id) => instanceCredential(id, env)?.apiKey || []);
+}
+
+/**
+ * Replaces any key in an error, in place, so a provider that echoes it back can't carry it into
+ * workflow history or logs. The error keeps its class and status, which retries and
+ * classification read.
+ */
+export function scrubCredential<T>(error: T, secrets: string[]): T {
+  const live = secrets.map((secret) => secret.trim()).filter((secret) => secret.length >= 8);
+  if (!live.length) return error;
+  const clean = (text: string) => live.reduce((value, secret) => value.split(secret).join("[redacted]"), text);
+  const seen = new Set<object>();
+  const visit = (value: unknown, depth: number): unknown => {
+    if (typeof value === "string") return clean(value);
+    if (!value || typeof value !== "object" || depth > 6 || seen.has(value)) return value;
+    seen.add(value);
+    if (value instanceof Uint8Array || value instanceof ArrayBuffer) return value;
+    const keys = value instanceof Error ? ["message", "stack", "cause", ...Object.keys(value)] : Object.keys(value);
+    for (const key of new Set(keys)) {
+      try {
+        const record = value as Record<string, unknown>;
+        const next = visit(record[key], depth + 1);
+        if (next !== record[key]) record[key] = next;
+      } catch {
+        // A read-only field stays as it was.
+      }
+    }
+    return value;
+  };
+  return visit(error, 0) as T;
+}
+
+/** A model whose failures, thrown or streamed, never carry its key. */
+function scrubbing(model: LanguageModelV4, secret: string): LanguageModelV4 {
+  const secrets = [secret];
+  return {
+    specificationVersion: "v4",
+    provider: model.provider,
+    modelId: model.modelId,
+    get supportedUrls() {
+      return model.supportedUrls;
+    },
+    async doGenerate(options) {
+      try {
+        return await model.doGenerate(options);
+      } catch (error) {
+        throw scrubCredential(error, secrets);
+      }
+    },
+    async doStream(options) {
+      try {
+        const result = await model.doStream(options);
+        const stream = result.stream.pipeThrough(
+          new TransformStream({
+            transform(part, sink) {
+              sink.enqueue(part.type === "error" ? { ...part, error: scrubCredential(part.error, secrets) } : part);
+            },
+          }),
+        );
+        return { ...result, stream };
+      } catch (error) {
+        throw scrubCredential(error, secrets);
+      }
+    },
+  };
 }
 
 /** fetch for direct provider calls that logs why a request never reached the provider: the
@@ -52,61 +266,9 @@ const loggedFetch: typeof fetch = async (input, init) => {
   }
 };
 
-function anthropicKey(env: Environment) {
-  return env.ANTHROPIC_API_KEY?.trim() || env.CLAUDE_API_KEY?.trim() || "";
-}
-
-/** An `anthropic/…` model with an instance Anthropic key skips the Gateway. */
-function directAnthropic(modelId: string, env: Environment) {
-  return modelId.startsWith("anthropic/") && anthropicKey(env) !== "";
-}
-
 /** The Gateway names `claude-haiku-5.5`; Anthropic's own API names `claude-haiku-5-5`. */
-function anthropicModelName(modelId: string): string {
-  return modelId.slice("anthropic/".length).replaceAll(".", "-");
-}
-
-function nimKey(env: Environment) {
-  return env.NVIDIA_API_KEY?.trim() || "";
-}
-
-/**
- * A `nim/…` model runs on NVIDIA's hosted endpoints (build.nvidia.com), free with rate limits,
- * so evals can run without paid credit (docs/agents/evals/free-model.md). Development only:
- * production never admits a model the person didn't get from the catalog.
- */
-function directNim(modelId: string, env: Environment) {
-  return modelId.startsWith("nim/") && nimKey(env) !== "";
-}
-
-function nim(modelId: string, env: Environment) {
-  return createOpenAICompatible({
-    name: "nim",
-    apiKey: nimKey(env),
-    baseURL: env.NVIDIA_BASE_URL?.trim() || "https://integrate.api.nvidia.com/v1",
-    fetch: loggedFetch,
-  }).chatModel(modelId.slice("nim/".length));
-}
-
-function geminiKey(env: Environment) {
-  return env.GEMINI_API_KEY?.trim() || "";
-}
-
-/**
- * A `gemini/…` model runs on Google's Gemini API through its OpenAI-compatible endpoint. It is
- * the Odysseys benchmark's own judge family (gemini-3.1-flash-lite). Development only, like `nim/`.
- */
-function directGemini(modelId: string, env: Environment) {
-  return modelId.startsWith("gemini/") && geminiKey(env) !== "";
-}
-
-function gemini(modelId: string, env: Environment) {
-  return createOpenAICompatible({
-    name: "gemini",
-    apiKey: geminiKey(env),
-    baseURL: env.GEMINI_BASE_URL?.trim() || "https://generativelanguage.googleapis.com/v1beta/openai",
-    fetch: loggedFetch,
-  }).chatModel(modelId.slice("gemini/".length));
+function anthropicModelName(model: string): string {
+  return model.replaceAll(".", "-");
 }
 
 type Prompt = LanguageModelV4CallOptions["prompt"];
@@ -138,58 +300,126 @@ export function imagesOutOfToolResults(prompt: Prompt): Prompt {
   return moved;
 }
 
-function openAI(env: Environment) {
-  return createOpenAI({ apiKey: openAIKey(env) });
-}
+/** Chat-completions endpoints: where each one lives by default. */
+const compatibleBase: Partial<Record<ProviderId, string>> = {
+  openrouter: "https://openrouter.ai/api/v1",
+  nvidia: "https://integrate.api.nvidia.com/v1",
+  ollama: "http://host.docker.internal:11434/v1",
+};
 
-function instanceGateway(env: Environment = process.env) {
-  return createGateway({
-    apiKey: env.AI_GATEWAY_API_KEY?.trim() || env.VERCEL_OIDC_TOKEN?.trim() || undefined,
-    baseURL: env.AI_GATEWAY_BASE_URL?.trim() || undefined,
+function compatible({ provider, credential }: Target) {
+  return createOpenAICompatible({
+    name: provider,
+    apiKey: credential.apiKey || undefined,
+    baseURL: credential.baseURL || compatibleBase[provider] || "",
+    fetch: loggedFetch,
   });
 }
 
-export function resolveInstanceModel(
-  modelId: string,
-  options: LanguageModelV4CallOptions,
-  env: Environment = process.env,
-): { model: LanguageModelV4; options: LanguageModelV4CallOptions } {
-  if (directAnthropic(modelId, env)) {
-    // Gateway routing options mean nothing to Anthropic itself.
-    const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};
-    return {
-      model: createAnthropic({ apiKey: anthropicKey(env), fetch: loggedFetch })(anthropicModelName(modelId)),
-      options: { ...options, providerOptions },
-    };
-  }
-  if (directNim(modelId, env)) {
-    const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};
-    // NVIDIA's models switch thinking their own way and may refuse reasoning_effort.
-    return { model: nim(modelId, env), options: { ...options, prompt: imagesOutOfToolResults(options.prompt), reasoning: undefined, providerOptions } };
-  }
-  if (directGemini(modelId, env)) {
-    const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};
-    return { model: gemini(modelId, env), options: { ...options, prompt: imagesOutOfToolResults(options.prompt), reasoning: undefined, providerOptions } };
-  }
-  if (!directOpenAI(modelId, env)) return { model: instanceGateway(env)(modelId), options };
-  // Gateway routing options mean nothing to OpenAI itself.
-  const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};
-  return {
-    model: openAI(env).responses(modelId.slice("openai/".length)),
-    options: {
-      ...options,
-      // Responses normalizes an omitted strict flag, which can turn optional
-      // capability arguments into required fields. Preserve the admitted schema
-      // unless the caller explicitly requested strict function calling.
-      tools: options.tools?.map((tool) =>
-        tool.type === "function" && tool.strict == null ? { ...tool, strict: false } : tool,
-      ),
-      providerOptions,
-    },
-  };
+function openAI({ credential }: Target) {
+  return createOpenAI({ apiKey: credential.apiKey, baseURL: credential.baseURL, fetch: loggedFetch });
 }
 
-/** Resolve the run's reasoning in the Node model step, never in the workflow bundle. */
+function gateway({ credential }: Target) {
+  return createGateway({ apiKey: credential.apiKey, baseURL: credential.baseURL });
+}
+
+function google({ credential }: Target) {
+  return createGoogleGenerativeAI({ apiKey: credential.apiKey, baseURL: credential.baseURL, fetch: loggedFetch });
+}
+
+const unsupported = (kind: string) => new ModelSetupError("model_unsupported", `This provider has no ${kind} models.`);
+
+/** Gateway routing options mean nothing to any other provider. */
+function withoutGatewayOptions(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
+  const { gateway: _gateway, ...providerOptions } = options.providerOptions ?? {};
+  return { ...options, providerOptions };
+}
+
+/** Gateway model lists name models as the Gateway does, without a `gateway/` prefix. */
+function gatewayOptions(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
+  const routing = options.providerOptions?.gateway as { models?: unknown } | undefined;
+  if (!Array.isArray(routing?.models)) return options;
+  const models = routing.models.map((model) => (typeof model === "string" ? model.replace(/^gateway\//, "") : model));
+  return { ...options, providerOptions: { ...options.providerOptions, gateway: { ...routing, models } } };
+}
+
+function languageModel(target: Target, options: LanguageModelV4CallOptions): { model: LanguageModelV4; options: LanguageModelV4CallOptions } {
+  const { provider, model } = target;
+  switch (provider) {
+    case "gateway":
+      return { model: gateway(target)(model), options: gatewayOptions(options) };
+    case "openai":
+      return {
+        model: openAI(target).responses(model),
+        options: {
+          ...withoutGatewayOptions(options),
+          // Responses normalizes an omitted strict flag, which can turn optional
+          // capability arguments into required fields. Preserve the admitted schema
+          // unless the caller explicitly requested strict function calling.
+          tools: options.tools?.map((tool) => (tool.type === "function" && tool.strict == null ? { ...tool, strict: false } : tool)),
+        },
+      };
+    case "anthropic":
+      return {
+        model: createAnthropic({ apiKey: target.credential.apiKey, baseURL: target.credential.baseURL, fetch: loggedFetch })(anthropicModelName(model)),
+        options: withoutGatewayOptions(options),
+      };
+    case "google":
+      return { model: google(target)(model), options: withoutGatewayOptions(options) };
+    case "openrouter": {
+      const stripped = withoutGatewayOptions(options);
+      return { model: compatible(target).chatModel(model), options: { ...stripped, prompt: imagesOutOfToolResults(stripped.prompt) } };
+    }
+    case "nvidia":
+    case "ollama":
+    case "openai-compatible": {
+      const stripped = withoutGatewayOptions(options);
+      // These servers switch thinking their own way and may refuse reasoning_effort.
+      return { model: compatible(target).chatModel(model), options: { ...stripped, prompt: imagesOutOfToolResults(stripped.prompt), reasoning: undefined } };
+    }
+    case "elevenlabs":
+    case "soniox":
+      throw unsupported("language");
+  }
+}
+
+/** One language-model call on the route's key. */
+export function resolveModel(
+  modelId: string,
+  options: LanguageModelV4CallOptions,
+  route: ModelRoute = instanceRoute,
+  env: Environment = process.env,
+): { model: LanguageModelV4; options: LanguageModelV4CallOptions } {
+  const target = resolveTarget(modelId, route, env);
+  const resolved = languageModel(target, options);
+  return { model: scrubbing(resolved.model, target.credential.apiKey), options: resolved.options };
+}
+
+/** One call on the instance's own environment keys. */
+export function resolveInstanceModel(modelId: string, options: LanguageModelV4CallOptions, env: Environment = process.env) {
+  return resolveModel(modelId, options, instanceRoute, env);
+}
+
+/** Applies the route's reasoning, then resolves the model on the route's key. */
+export async function resolveConfiguredModel(
+  modelId: string,
+  options: LanguageModelV4CallOptions,
+  route: ModelRoute,
+  env: Environment = process.env,
+): Promise<{ model: LanguageModelV4; options: LanguageModelV4CallOptions }> {
+  return resolveModel(
+    modelId,
+    { ...options, reasoning: (route.reasoning || options.reasoning) as LanguageModelV4CallOptions["reasoning"] },
+    route,
+    env,
+  );
+}
+
+/**
+ * A run's route, read in the Node model step and never returned from it: the key exists only
+ * for this call, so it never reaches workflow history.
+ */
 export async function resolveRuntimeModel(
   modelId: string,
   options: LanguageModelV4CallOptions,
@@ -198,54 +428,72 @@ export async function resolveRuntimeModel(
 ): Promise<{ model: LanguageModelV4; options: LanguageModelV4CallOptions }> {
   if (!identity) return resolveInstanceModel(modelId, options);
   const { controlPlaneRequest } = await import("./control-plane.js");
-  const route = await controlPlaneRequest<ModelRoute>(
-    identity,
-    "model-provider",
-    { role, model: modelId },
-    `${role}:provider`,
-  );
-  return resolveConfiguredModel(modelId, options, route);
-}
-
-export async function resolveConfiguredModel(
-  modelId: string,
-  options: LanguageModelV4CallOptions,
-  route: ModelRoute,
-): Promise<{ model: LanguageModelV4; options: LanguageModelV4CallOptions }> {
-  return resolveInstanceModel(modelId, {
-    ...options,
-    reasoning: (route.reasoning || options.reasoning) as LanguageModelV4CallOptions["reasoning"],
-  });
+  const response = await controlPlaneRequest<unknown>(identity, "model-provider", { role, model: modelId }, `${role}:provider`);
+  const route = modelRouteSchema.safeParse(response);
+  // The response may hold a key, so neither it nor the parse error is repeated.
+  if (!route.success) throw new Error("invalid_model_route: Misty sent a model route the runtime can't read.");
+  return resolveConfiguredModel(modelId, options, route.data);
 }
 
 export async function resolveEmbeddingModel(
   modelId: string,
+  route: ModelRoute = instanceRoute,
   env: Environment = process.env,
 ): Promise<EmbeddingModelV4> {
-  if (directOpenAI(modelId, env)) return openAI(env).embedding(modelId.slice("openai/".length));
-  return instanceGateway(env).embeddingModel(modelId);
+  const target = resolveTarget(modelId, route, env);
+  switch (target.provider) {
+    case "openai":
+      return openAI(target).embedding(target.model);
+    case "google":
+      return google(target).embedding(target.model);
+    case "gateway":
+      return gateway(target).embeddingModel(target.model);
+    case "openrouter":
+    case "nvidia":
+    case "ollama":
+    case "openai-compatible":
+      return compatible(target).embeddingModel(target.model);
+    default:
+      throw unsupported("embedding");
+  }
 }
 
 export async function resolveSpeechModel(
   modelId: string,
+  route: ModelRoute = instanceRoute,
   env: Environment = process.env,
 ): Promise<SpeechModelV4> {
-  // ElevenLabs speaks the voice pipeline on Misty's own key.
-  if (modelId.startsWith("elevenlabs/")) {
-    const apiKey = env.ELEVENLABS_API_KEY?.trim();
-    if (!apiKey) throw new Error("ELEVENLABS_API_KEY is not configured");
-    const { createElevenLabs } = await import("@ai-sdk/elevenlabs");
-    return createElevenLabs({ apiKey }).speech(modelId.slice("elevenlabs/".length));
+  const target = resolveTarget(modelId, route, env);
+  switch (target.provider) {
+    case "elevenlabs": {
+      const { createElevenLabs } = await import("@ai-sdk/elevenlabs");
+      return createElevenLabs({ apiKey: target.credential.apiKey }).speech(target.model);
+    }
+    case "openai":
+      return openAI(target).speech(target.model);
+    case "gateway":
+      return gateway(target).speechModel(target.model);
+    default:
+      throw unsupported("speech");
   }
-  if (directOpenAI(modelId, env)) return openAI(env).speech(modelId.slice("openai/".length));
-  return instanceGateway(env).speechModel(modelId);
 }
 
 export async function resolveTranscriptionModel(
   modelId: string,
+  route: ModelRoute = instanceRoute,
   env: Environment = process.env,
-): Promise<TranscriptionModelV4> {
-  if (directOpenAI(modelId, env))
-    return openAI(env).transcription(modelId.slice("openai/".length));
-  return instanceGateway(env).transcriptionModel(modelId);
+): Promise<TranscriptionModelV4 | TranscriptionModelV3> {
+  const target = resolveTarget(modelId, route, env);
+  switch (target.provider) {
+    case "soniox": {
+      const { createSoniox } = await import("@soniox/vercel-ai-sdk-provider");
+      return createSoniox({ apiKey: target.credential.apiKey, apiBaseUrl: target.credential.baseURL }).transcription(target.model);
+    }
+    case "openai":
+      return openAI(target).transcription(target.model);
+    case "gateway":
+      return gateway(target).transcriptionModel(target.model);
+    default:
+      throw unsupported("transcription");
+  }
 }

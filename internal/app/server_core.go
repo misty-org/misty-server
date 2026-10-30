@@ -77,10 +77,6 @@ func CreateServer() (*Server, error) {
 		WebsiteURL:               websiteURL,
 		Telemetry:                telemetry.NewFromEnv(),
 	}
-	if err := configureBilling(s.Database); err != nil {
-		return nil, err
-	}
-	usageMeter := agent.BillingMeter{Service: s.Database.BillingService()}
 	// Every model call goes through the agent runtime and the AI SDK.
 	models, err := modelruntime.FromEnv()
 	if err != nil {
@@ -92,13 +88,12 @@ func CreateServer() (*Server, error) {
 		// durable task-thread store. Keeping the runtime wired to the database is
 		// also required before an invocation can bind its surface metadata.
 		agent.NewSessionStoreWithPersistence(0, s.Database),
-		// Every paid model call in the process passes through this ceiling, so
-		// no path can run up an unbounded provider bill.
+		// Every model call in the process passes through this ceiling, so no
+		// path can flood the providers.
 		agent.NewBudgetedProvider(
 			agent.NewAgentProvider(models),
 			agent.ProviderBudgetFromEnv(),
 		),
-		agent.WithUsageMeter(usageMeter),
 		agent.WithModelRuntime(models),
 	)
 	s.AIAnalyzer = &agent.SmartLibraryAnalyzer{
@@ -154,7 +149,6 @@ func CreateServer() (*Server, error) {
 	s.AIAnalyzer.ModelResolver = s.Spaces.ResolveAIModel
 	s.AIAgent.SetModelResolver(s.Spaces.ResolveAIModel)
 	s.AgentRuntime = agentRuntime
-	s.Spaces.SetUsageMeter(usageMeter)
 	s.Spaces.SetLibraryProvider(s.Library)
 	s.Spaces.SetAvatarStore(s.LibraryStore)
 	s.Realtime = api.NewRealtimeService(s.Database, s.Database.GetDSN())
@@ -164,9 +158,12 @@ func CreateServer() (*Server, error) {
 		return nil, err
 	}
 	s.EmailSender = emailSender
+	// Invitation emails link to the operator's own invite page. Without
+	// MISTY_INVITATION_URL_BASE or MISTY_WEBSITE_URL, invitations still reach
+	// the invitee inside Misty but no email is sent.
 	invitationBaseURL := strings.TrimSpace(config.Getenv("MISTY_INVITATION_URL_BASE"))
-	if invitationBaseURL == "" {
-		invitationBaseURL = "https://mistysys.com/invite"
+	if website := strings.TrimRight(strings.TrimSpace(config.Getenv("MISTY_WEBSITE_URL")), "/"); invitationBaseURL == "" && website != "" {
+		invitationBaseURL = website + "/invite"
 	}
 	s.Spaces.SetInvitationSender(emailSender, invitationBaseURL)
 	s.HealthMonitor = NewHealthMonitor(s)

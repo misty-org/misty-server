@@ -80,9 +80,12 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 			}
 			modelID := agent.FrontierDefaultModelID()
 			reasoning := agent.ManagedReasoning("", body.ReasoningEffort)
-			// Everyone runs on the house model and effort; only a development stack with
-			// MISTY_ALLOW_MODEL_OVERRIDE lets a request or an agent pick (evals).
-			if agent.ClientModelChoice() {
+			// A conversation runs on the agent model the account brought, else the
+			// operator's; only a development stack with MISTY_ALLOW_MODEL_OVERRIDE
+			// lets a request or an agent pick (evals).
+			if c := accountCredentials(r.Context(), userID); c != nil {
+				modelID, reasoning = c.Models.Agent, accountReasoning(c)
+			} else if agent.ClientModelChoice() {
 				requestedModel := strings.TrimSpace(body.ModelID)
 				if identity.ModelMode == "pinned" && !identity.SystemManaged {
 					requestedModel = identity.ModelID
@@ -231,7 +234,7 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 			if body.ModelID != nil && agent.ClientModelChoice() {
 				// A conversation's own model; empty returns it to the account's choice.
 				model := strings.TrimSpace(*body.ModelID)
-				if model != "" && !agent.SenseModelAvailable(r.Context(), "thinking", model) {
+				if model != "" && !agent.FrontierModelAvailable(r.Context(), model) {
 					writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_model", "message": "Choose an available model."})
 					return
 				}

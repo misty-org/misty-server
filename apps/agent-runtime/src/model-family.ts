@@ -1,4 +1,4 @@
-// A short note for the house model's family (docs/agents/harness.md, Tool surface).
+// A short note for one model family (docs/agents/harness.md, Tool surface).
 // Every model gets the same harness; this line only corrects a habit the family
 // showed in the evals. It names the run it came from, so it can be dropped once
 // the evals no longer need it.
@@ -9,5 +9,6 @@ const anthropicNote =
   "When the person asks about something you can identify but need facts you don't have, look them up with your tools before saying you can't answer.";
 
 export function modelFamilyNote(modelId: string): string {
-  return modelId.split("/")[0]?.toLowerCase() === "anthropic" ? anthropicNote : "";
+  // Claude models under any provider: `anthropic/…`, `openrouter/anthropic/…`, `gateway/anthropic/…`.
+  return /(^|\/)anthropic\/|(^|\/)claude-/i.test(modelId) ? anthropicNote : "";
 }

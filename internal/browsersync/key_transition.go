@@ -10,7 +10,6 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 )
 
 // The legacy wrapper seals the root under a sync password plus a separate sync
@@ -89,7 +88,7 @@ func (db *Store) RotateBrowserSyncVaultKey(ctx context.Context, userID string, e
 	if _, err = tx.ExecContext(ctx, `UPDATE browser_sync_vaults SET key_envelope=$1,key_generation=$2,key_transition_signature=$3 WHERE vault_id=$4`, string(wrapped), t.Generation, t.Signature, vaultID); err != nil {
 		return nil, err
 	}
-	if err = cloudusage.Commit(ctx, tx); err != nil {
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 	return db.BrowserSyncVault(ctx, userID)

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 )
 
 type SyncEvent struct {
@@ -78,7 +77,7 @@ func (db *Store) ReplayBrowserSync(ctx context.Context, userID, vaultID, deviceI
 	if len(out.Events) == 0 && after < out.HeadSequence {
 		out.CheckpointRequired = true
 	}
-	if err = cloudusage.Commit(ctx, tx); err != nil {
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 	return out, nil

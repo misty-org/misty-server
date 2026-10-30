@@ -45,8 +45,7 @@ func voiceTestDB(t *testing.T) *Database {
 		admin.Exec(`DROP SCHEMA ` + pq.QuoteIdentifier(schema) + ` CASCADE`)
 		admin.Close()
 	})
-	if _, err = conn.Exec(`CREATE TABLE account_cloud_mutations(transaction_id bigint,user_id text,added_bytes bigint,removed_bytes bigint);
- CREATE TABLE users(id text PRIMARY KEY); INSERT INTO users VALUES('owner'),('other');
+	if _, err = conn.Exec(`CREATE TABLE users(id text PRIMARY KEY); INSERT INTO users VALUES('owner'),('other');
  CREATE FUNCTION misty_rls_user_id() RETURNS text LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('app.current_user_id',true),'') $$;
  CREATE TABLE ai_retrieval_documents(id text PRIMARY KEY, source_kind text NOT NULL, source_id text NOT NULL, owner_user_id text, privacy_class text NOT NULL,
    lifecycle_state text NOT NULL DEFAULT 'active', source_revision text NOT NULL, title text NOT NULL, href text NOT NULL, metadata jsonb NOT NULL DEFAULT '{}', updated_at timestamptz DEFAULT now(), UNIQUE(source_kind, source_id));
@@ -65,6 +64,10 @@ func voiceTestDB(t *testing.T) *Database {
 			t.Fatal(name, err)
 		}
 	}
+	// 20271106000000_open_source_no_billing.sql drops the ticket's billing columns.
+	if _, err = conn.Exec(`ALTER TABLE voice_live_sessions DROP COLUMN used_ms, DROP COLUMN reservation, DROP COLUMN status, DROP COLUMN settled_at`); err != nil {
+		t.Fatal(err)
+	}
 	// The memory triggers pin search_path to public; tests use their own schema.
 	for _, function := range []string{"misty_memory_index_event", "misty_memory_embedded"} {
 		if _, err = conn.Exec(`ALTER FUNCTION ` + function + `() SET search_path = ` + pq.QuoteIdentifier(schema) + `, pg_temp`); err != nil {
@@ -74,46 +77,28 @@ func voiceTestDB(t *testing.T) *Database {
 	return &Database{Conn: conn}
 }
 
-func TestVoiceLiveSessionsMeterOnceAndStayWithTheirOwner(t *testing.T) {
+func TestVoiceLiveSessionsStayWithTheirOwner(t *testing.T) {
 	database := voiceTestDB(t)
 	ctx := context.Background()
-	open := func(user string, maxMS int64) string {
+	open := func(user string, expires time.Time) string {
 		id := uuid.NewString()
-		if err := database.CreateVoiceLiveSession(ctx, VoiceLiveSession{ID: id, User: user, Device: "device", Channels: []string{"mic"}, MaxMS: maxMS,
-			Reservation: []byte(`{"id":"r"}`), ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+		if err := database.CreateVoiceLiveSession(ctx, VoiceLiveSession{ID: id, User: user, Device: "device", Channels: []string{"mic"}, MaxMS: 600_000, ExpiresAt: expires}); err != nil {
 			t.Fatal(err)
 		}
 		return id
 	}
-	since := time.Now().Add(-time.Hour)
-	first := open("owner", 600_000)
-	// An open session counts at its full limit.
-	if used, err := database.VoiceLiveUsedSince(ctx, "owner", since); err != nil || used != 600_000 {
-		t.Fatalf("open usage = %d, %v", used, err)
+	live := open("owner", time.Now().Add(time.Hour))
+	if session, err := database.OpenVoiceLiveSession(ctx, "owner", live); err != nil || session.MaxMS != 600_000 {
+		t.Fatalf("open = %+v, %v", session, err)
 	}
-	// Settling caps at the ticket's limit and counts what was used.
-	if session, err := database.CloseVoiceLiveSession(ctx, "owner", first, 900_000, "settled"); err != nil || session.UsedMS != 600_000 {
-		t.Fatalf("close = %+v, %v", session, err)
+	// Another account never sees it, and an expired session is gone.
+	if _, err := database.OpenVoiceLiveSession(ctx, "other", live); !errors.Is(err, ErrSpaceNotFound) {
+		t.Fatalf("other account read the owner's session: %v", err)
 	}
-	second := open("owner", 600_000)
-	if _, err := database.CloseVoiceLiveSession(ctx, "owner", second, 45_000, "settled"); err != nil {
-		t.Fatal(err)
+	if _, err := database.OpenVoiceLiveSession(ctx, "owner", open("owner", time.Now().Add(-time.Minute))); !errors.Is(err, ErrSpaceNotFound) {
+		t.Fatalf("expired session opened: %v", err)
 	}
-	if used, _ := database.VoiceLiveUsedSince(ctx, "owner", since); used != 645_000 {
-		t.Fatalf("settled usage = %d", used)
-	}
-	// A repeated settle is refused, so billing is never asked twice.
-	if session, err := database.CloseVoiceLiveSession(ctx, "owner", second, 45_000, "settled"); !errors.Is(err, ErrVoiceSessionClosed) || session.UsedMS != 45_000 {
-		t.Fatalf("second close = %+v, %v", session, err)
-	}
-	// Another account sees neither the session nor its usage.
-	if _, err := database.CloseVoiceLiveSession(ctx, "other", open("owner", 1000), 1, "settled"); !errors.Is(err, ErrSpaceNotFound) {
-		t.Fatalf("other account closed the owner's session: %v", err)
-	}
-	if used, _ := database.VoiceLiveUsedSince(ctx, "other", since); used != 0 {
-		t.Fatalf("other account usage = %d", used)
-	}
-	if err := database.CreateVoiceLiveSession(ctx, VoiceLiveSession{ID: uuid.NewString(), User: "owner", Device: "d", Channels: []string{"speaker"}, MaxMS: 1, Reservation: []byte(`{}`), ExpiresAt: time.Now()}); err == nil {
+	if err := database.CreateVoiceLiveSession(ctx, VoiceLiveSession{ID: uuid.NewString(), User: "owner", Device: "d", Channels: []string{"speaker"}, MaxMS: 1, ExpiresAt: time.Now()}); err == nil {
 		t.Fatal("unknown channel accepted")
 	}
 }

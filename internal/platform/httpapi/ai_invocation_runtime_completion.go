@@ -31,21 +31,6 @@ func (s *SpacesService) agentRuntimeCompleteAIInvocation(w http.ResponseWriter, 
 		// Durable completion requests are idempotent after the invocation reaches a
 		// terminal state.
 		if existing, lookupErr := s.database.AIInvocationRuntimeRecord(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID); lookupErr == nil && aiInvocationTerminal(existing.State) {
-			// Stop may persist cancellation before the runtime reports its final
-			// measured usage. Settle the original holds even though the task can no
-			// longer publish a result; the stable group key makes callback replay safe.
-			if settleErr := s.settleAIInvocationRuntimeUsage(existing, body.Status, body.Usage); settleErr != nil {
-				// A permanent quota denial already made this task fail. Keep
-				// retrying its accounting path, but acknowledge that same terminal
-				// result instead of turning completion replay into another error.
-				// Transient failures and canceled work still require reconciliation.
-				if existing.State == "failed" && isHostedAILimitReached(settleErr) {
-					writeJSON(w, http.StatusOK, map[string]any{"run_id": existing.ID, "state": existing.State, "code": "hosted_ai_limit_reached"})
-					return
-				}
-				writeAgentError(w, settleErr)
-				return
-			}
 			if body.Status == "failed" {
 				_ = s.completeAIInvocationRecap(r.Context(), existing, nil, "", errors.New(publicAgentRuntimeFailure(body.ErrorCode, body.ErrorMessage)))
 			} else if prepared, prepareErr := s.prepareAIInvocationRuntime(r.Context(), existing); prepareErr == nil {
@@ -85,26 +70,6 @@ func (s *SpacesService) agentRuntimeCompleteAIInvocation(w http.ResponseWriter, 
 	// Count the run against its conversation's goal and continue it when due.
 	// This waits for the invocation to settle on its own, after this callback.
 	s.afterAIInvocationGoalRun(record, body.Status, body.Usage)
-	if err := s.settleAIInvocationRuntimeUsage(record, body.Status, body.Usage); err != nil {
-		if !isHostedAILimitReached(err) {
-			writeAgentError(w, err)
-			return
-		}
-		// A permanent accounting limit must terminate the invocation stream.
-		// Otherwise the worker exits while the desktop keeps its page locked.
-		message := publicAIInvocationError(err)
-		if _, restoreErr := s.aiInvocations.restoreDurable(r.Context(), *record); restoreErr != nil {
-			writeAgentError(w, restoreErr)
-			return
-		}
-		if failErr := s.aiInvocations.fail(record.ID, message); failErr != nil {
-			writeAgentError(w, failErr)
-			return
-		}
-		_ = s.completeAIInvocationRecap(r.Context(), record, nil, "", err)
-		writeJSON(w, http.StatusOK, map[string]any{"run_id": record.ID, "state": "failed", "code": "hosted_ai_limit_reached"})
-		return
-	}
 	if body.Status == "incomplete" {
 		message := incompleteAgentRuntimeText(body.Text)
 		if _, err := s.aiInvocations.restoreDurable(r.Context(), *record); err != nil {

@@ -25,16 +25,7 @@ func (a *SmartLibraryAnalyzer) embedGateway(ctx context.Context, values []string
 	if err != nil {
 		return nil, ModelUsage{}, err
 	}
-	textBytes := 0
-	for _, value := range values {
-		textBytes += len(value)
-	}
-	var result modelruntime.EmbedResult
-	err = a.meteredCall(ctx, "library.embedding", model, map[string]int64{"input_bytes": int64(textBytes), "input_images": 0}, func() (modelruntime.Usage, error) {
-		var callErr error
-		result, callErr = a.Models.Embed(ctx, modelruntime.EmbedRequest{Route: route, Model: model, Values: values, Dimensions: SmartLibraryEmbeddingDims})
-		return result.Usage, callErr
-	})
+	result, err := a.Models.Embed(ctx, modelruntime.EmbedRequest{Route: route, Model: model, Values: values, Dimensions: SmartLibraryEmbeddingDims})
 	if err != nil {
 		return nil, ModelUsage{}, err
 	}

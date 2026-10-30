@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai";
-import { finishFindings, mayVerify, verificationNote } from "../src/finish-verification.js";
+import { finishFindings, mayVerify, reportOnlyIssue, verificationNote } from "../src/finish-verification.js";
 import { persistAgain } from "../src/persistence-check.js";
 import { openPages, reviewAnswer, reviewRefusal, worthLedger, worthReviewing } from "../src/requirements-review.js";
 import type { TaskCompletion } from "../src/task-completion.js";
@@ -14,7 +14,13 @@ export async function verifyFinish(run: AgentRun, report: TaskCompletion, messag
   const { context, identity, limit, modelTurn } = run;
   const { catalog, researchTools } = run.tools;
   // Done rows nothing in the run backs go back to pending, whether or not this finish is checked.
-  const unbacked = run.ledger.reconcile(messages);
+  const unbacked = run.ledger.reconcile(messages, report.summary);
+  // Checked on every finish, twice at most: a report of the work is never the answer.
+  const reportedOnly = run.reportedOnly < 2 && modelTurn < limit - 2 ? reportOnlyIssue(report.summary) : undefined;
+  if (reportedOnly) {
+    run.reportedOnly++;
+    return verificationNote([reportedOnly]);
+  }
   const long = worthLedger(context.prompt);
   if (!mayVerify(run.verified, modelTurn, limit)) {
     // A long request that quits again with turns left goes back while it is still finding
@@ -30,7 +36,7 @@ export async function verifyFinish(run: AgentRun, report: TaskCompletion, messag
   }
   run.verified = true;
   const { issues, gaveUp } = finishFindings({
-    unbackedRows: unbacked,
+    unbackedRows: unbacked, openRows: run.ledger.remaining(),
     request: context.prompt, report, messages, turn: modelTurn, limit, long,
     research: researchTools, tabList: catalog.modelName("browser.tab.list"), program: catalog.modelName("browser.run"), readOnly: catalog.readOnly,
   });

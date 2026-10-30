@@ -9,15 +9,20 @@ import (
 	"testing"
 )
 
+// Space counts the tests create. No account has a Space cap.
+const (
+	spaceCountSample      = 3
+	largeSpaceCountSample = 10
+)
+
 func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	member, err := database.CreateUser("basic-space-limit@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index := 0; index < BasicSpaceLimit; index++ {
+	for index := 0; index < spaceCountSample; index++ {
 		if _, err := database.TestingCreateSpace(ctx, member.ID, fmt.Sprintf("Owned %d", index+1)); err != nil {
 			t.Fatal(err)
 		}
@@ -30,10 +35,7 @@ func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := setAdapterFixtureCohort(database, owner.LicenseID, TierMax, LicenseStatusActive, nil); err != nil {
-		t.Fatal(err)
-	}
-	for index := 0; index < BasicSpaceLimit+2; index++ {
+	for index := 0; index < spaceCountSample+2; index++ {
 		space, err := database.TestingCreateSpace(ctx, owner.ID, fmt.Sprintf("Joined %d", index+1))
 		if err != nil {
 			t.Fatal(err)
@@ -50,23 +52,19 @@ func TestOwnedSpaceLimitDoesNotLimitJoining(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := len(standardSpaces(spaces)); got != BasicSpaceLimit+1+(BasicSpaceLimit+2) {
+	if got := len(standardSpaces(spaces)); got != spaceCountSample+1+(spaceCountSample+2) {
 		t.Fatalf("standard memberships = %d", got)
 	}
 }
 
 func TestOwnedSpacesHaveNoPlanCountCap(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	user, err := database.CreateUser("max-owned-limit@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := setAdapterFixtureCohort(database, user.LicenseID, TierMax, LicenseStatusActive, nil); err != nil {
-		t.Fatal(err)
-	}
-	for index := 0; index < MaxSpaceLimit; index++ {
+	for index := 0; index < largeSpaceCountSample; index++ {
 		if _, err := database.TestingCreateSpace(ctx, user.ID, fmt.Sprintf("Max Space %d", index+1)); err != nil {
 			t.Fatal(err)
 		}
@@ -78,13 +76,12 @@ func TestOwnedSpacesHaveNoPlanCountCap(t *testing.T) {
 
 func TestOwnershipTransferHasNoPlanCountCap(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	recipient, err := database.CreateUser("full-transfer-recipient@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index := 0; index < BasicSpaceLimit; index++ {
+	for index := 0; index < spaceCountSample; index++ {
 		if _, err := database.TestingCreateSpace(ctx, recipient.ID, fmt.Sprintf("Recipient %d", index+1)); err != nil {
 			t.Fatal(err)
 		}
@@ -112,25 +109,18 @@ func TestOwnershipTransferHasNoPlanCountCap(t *testing.T) {
 
 func TestOwnershipDowngradeDoesNotRestrictSpaces(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	user, err := database.CreateUser("space-downgrade@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := setAdapterFixtureCohort(database, user.LicenseID, TierMax, LicenseStatusActive, nil); err != nil {
-		t.Fatal(err)
-	}
-	for index := 0; index < BasicSpaceLimit+1; index++ {
+	for index := 0; index < spaceCountSample+1; index++ {
 		if _, err := database.TestingCreateSpace(ctx, user.ID, fmt.Sprintf("Existing %d", index+1)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := setAdapterFixtureCohort(database, user.LicenseID, TierBasic, LicenseStatusActive, nil); err != nil {
-		t.Fatal(err)
-	}
 	spaces, err := database.ListSpaces(ctx, user.ID)
-	if err != nil || len(standardSpaces(spaces)) != BasicSpaceLimit+1 {
+	if err != nil || len(standardSpaces(spaces)) != spaceCountSample+1 {
 		t.Fatalf("Spaces after downgrade = %d, %v", len(standardSpaces(spaces)), err)
 	}
 	if _, err := database.TestingCreateSpace(ctx, user.ID, "Blocked after downgrade"); err != nil {
@@ -140,13 +130,12 @@ func TestOwnershipDowngradeDoesNotRestrictSpaces(t *testing.T) {
 
 func TestConcurrentOwnedSpaceCreationHasNoCommercialCap(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	user, err := database.CreateUser("space-concurrent@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index := 0; index < BasicSpaceLimit-1; index++ {
+	for index := 0; index < spaceCountSample-1; index++ {
 		if _, err := database.TestingCreateSpace(ctx, user.ID, fmt.Sprintf("Existing %d", index+1)); err != nil {
 			t.Fatal(err)
 		}

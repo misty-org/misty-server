@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 
 	"github.com/kannachi323/misty/server/internal/agent"
@@ -171,6 +172,29 @@ func (s *SpacesService) approveBrowserPageSteps(
 		return waiting, nil
 	}
 	return nil, s.useAgentActionApproval(ctx, invocation.UserID, approval)
+}
+
+// consequentialGoal names what a screen goal may only do with the person's approval.
+var consequentialGoal = regexp.MustCompile(`(?i)\b(buy|purchas|pay (for|the|now|with|it)|payment|checkout|check out|order|book(ing)?|reserve|send|e-?mail|message|post|publish|tweet|share|invite|delete|remove|cancel|unsubscribe|subscribe|sign ?up|register|apply for|transfer|donate|submit (an? )?(application|order|payment|form))`)
+
+// withoutNeedlessConsequence clears allowConsequential on a screen goal that names nothing
+// consequential: a model set it on "enter 55500 and click Calculate" and on a date filter,
+// and each time the run stopped on an approval card. With it cleared the screen agent still
+// stops before anything consequential it meets, so nothing the person must approve is done.
+func withoutNeedlessConsequence(tool agent.ToolRequest) agent.ToolRequest {
+	var args map[string]any
+	if json.Unmarshal(tool.Arguments, &args) != nil || args["allowConsequential"] != true {
+		return tool
+	}
+	goal, _ := args["goal"].(string)
+	if consequentialGoal.MatchString(goal) {
+		return tool
+	}
+	args["allowConsequential"] = false
+	if raw, err := json.Marshal(args); err == nil {
+		tool.Arguments = raw
+	}
+	return tool
 }
 
 // approveScreenAct pauses on-screen actions: every one in Ask, and in both

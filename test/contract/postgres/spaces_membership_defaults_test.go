@@ -10,7 +10,6 @@ import (
 
 func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 
 	owner, err := database.CreateUser("space-owner@example.com", "password123")
@@ -140,7 +139,6 @@ func TestAccountsCreateTheirOwnDefaultAndSpacesBecomeSharedOnlyByInvite(t *testi
 
 func TestOwnershipTransferDoesNotTransferContributorUsage(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, err := database.CreateUser("transfer-owner@example.com", "password123")
 	if err != nil {
@@ -176,19 +174,16 @@ func TestOwnershipTransferDoesNotTransferContributorUsage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := setAdapterFixtureCohort(database, owner.LicenseID, TierMax, LicenseStatusActive, nil); err != nil {
-		t.Fatal(err)
-	}
-	setUsage(project.ID, owner.ID, BasicStorageBytes+1)
+	setUsage(project.ID, owner.ID, 2_000_000_001)
 	if err := database.TransferSpaceOwnership(ctx, owner.ID, project.ID, recipient.ID); err != nil {
-		t.Fatalf("over-capacity transfer = %v", err)
+		t.Fatalf("transfer = %v", err)
 	}
 	transferred, err := database.SpaceByID(ctx, recipient.ID, project.ID)
 	if err != nil || transferred.OwnerUserID != recipient.ID {
 		t.Fatalf("transferred Space = %#v, %v", transferred, err)
 	}
 	usage, err := database.SpaceStorageUsage(ctx, recipient.ID, project.ID)
-	if err != nil || usage.SpaceOverQuota || usage.SpaceLimitBytes != 0 || usage.PersonalUsedBytes != 0 {
+	if err != nil || usage.PersonalUsedBytes != 0 {
 		t.Fatalf("transferred storage usage = %#v, %v", usage, err)
 	}
 }

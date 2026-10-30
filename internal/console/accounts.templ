@@ -48,9 +48,6 @@ templ accountDetail(v accountDetailView) {
 			<div class="detail-title">{ v.Account.Email }</div>
 			<p class="muted">
 				{ "@" + v.Account.Username + " · joined " + date(v.Account.CreatedAt) }
-				if v.Account.Tier != "" {
-					{ " · " + humanize(v.Account.Tier) + " plan" }
-				}
 				{ " · " + bytesLabel(v.Account.StorageBytes) + " library" }
 			</p>
 			@flash(v.Flash)

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
@@ -41,28 +40,19 @@ func (s *Service) SummarizeConversation(ctx context.Context, userID, previous, t
 	if transcript == "" {
 		return "", "", ErrInvalidRequest("nothing to summarize")
 	}
-	route, model, provider := modelruntime.Instance(), ConversationSummaryModel(), ProviderVercelAI
+	route, model := modelruntime.Instance(), ConversationSummaryModel()
 	if s.modelResolver != nil {
 		config, err := s.modelResolver(ctx, userID, "agent")
 		if err != nil {
 			return "", "", err
 		}
 		if config != nil {
-			route, model, provider = modelruntime.For(config), config.Model, modelProviderName(config.Model)
+			route, model = modelruntime.For(config), config.Model
 		}
 	}
 	prompt := "New turns to add (oldest first):\n" + transcript + "\n\nWrite the updated notes now."
 	if previous = strings.TrimSpace(previous); previous != "" {
 		prompt = "Existing notes:\n" + previous + "\n\n" + prompt
-	}
-	key := conversationSummaryKeyPrefix + uuid.NewString()
-	var reservation *UsageReservation
-	if s.meter != nil {
-		var err error
-		reservation, err = ReserveMeasuredUsage(s.meter, userID, key, provider, model, map[string]int64{"input_bytes": int64(len(conversationSummarySystem) + len(prompt)), "output_tokens": conversationSummaryMaxOutput}, "")
-		if err != nil {
-			return "", "", err
-		}
 	}
 	result, err := s.models.Text(ctx, modelruntime.TextRequest{
 		Route: route, Model: model, System: conversationSummarySystem,
@@ -72,10 +62,6 @@ func (s *Service) SummarizeConversation(ctx context.Context, userID, previous, t
 	summary := strings.TrimSpace(result.Text)
 	if err == nil && summary == "" {
 		err = errors.New("the model returned empty conversation notes")
-	}
-	// An empty summary still used the model; it is charged like any call.
-	if settleErr := FinishMeteredCall(s.meter, reservation, key+":settle", "conversation_summary", provider, model, result.Usage, err); settleErr != nil && err == nil {
-		return "", "", settleErr
 	}
 	if err != nil {
 		return "", "", err

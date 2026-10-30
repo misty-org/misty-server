@@ -11,8 +11,8 @@ import (
 )
 
 // startAgentMentionRequests turns @mentions of agent members in a Space chat
-// message into requests to those agents. Each starts at once and is billed to
-// the sender.
+// message into requests to those agents. Each starts at once and runs on the
+// sender's models.
 // The agent's reply, or why there is none, posts under the message. A request
 // that can't start never fails the message itself.
 func (s *SpacesService) startAgentMentionRequests(ctx context.Context, userID string, message *db.SpaceMessage, agentIDs []string) {
@@ -115,7 +115,7 @@ func (s *SpacesService) publishMentionReply(ctx context.Context, run *db.SpaceRu
 
 // startAgentReplyMentions lets agents talk to each other in the chat: when a
 // reply @mentions another agent in the Space, that agent picks the thread up,
-// visibly and billed to the person who asked first. It goes one hop deep.
+// visibly and on the models of the person who asked first. It goes one hop deep.
 func (s *SpacesService) startAgentReplyMentions(ctx context.Context, request *db.AgentMemberRequest, message *db.SpaceMessage, reply string) {
 	agents, err := s.database.SpaceAgents(ctx, request.RequesterUserID, request.SpaceID)
 	if err != nil {

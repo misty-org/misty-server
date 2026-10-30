@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Encrypted logical backup of the production databases, uploaded to R2: Misty's,
-# the agent runtime's workflow database, and billing's when its stack runs here.
+# and the agent runtime's workflow database.
 # Run through `misty server prod backup`, which loads the production
 # environment. Plaintext dumps never touch the disk: pg_dump streams straight
 # into age, and only ciphertext is kept locally and uploaded.
@@ -26,20 +26,11 @@ for database in "$DB_NAME" workflow; do
   compose exec -T postgres pg_dump --username="$DB_MIGRATION_USER" --dbname="$database" --format=custom \
     | age --encrypt --recipient "$MISTY_BACKUP_AGE_RECIPIENT" --output "$dir/$database.dump.age"
 done
-billing=$(billing_postgres)
-if [ -n "$billing" ]; then
-  echo "Dumping misty_billing"
-  docker exec "$billing" pg_dump --username=billing_owner --dbname=misty_billing --format=custom \
-    | age --encrypt --recipient "$MISTY_BACKUP_AGE_RECIPIENT" --output "$dir/misty_billing.dump.age"
-else
-  echo "Billing stack is not running on this host; skipping misty_billing." >&2
-fi
 {
   echo "created_at=$stamp"
   echo "misty_database=$DB_NAME"
   echo "api_image=${MISTY_API_IMAGE:-}"
   echo "agent_runtime_image=${MISTY_AGENT_RUNTIME_IMAGE:-}"
-  echo "billing_included=$([ -n "$billing" ] && echo yes || echo no)"
 } > "$dir/manifest.txt"
 (cd "$dir" && sha256sum ./*.age manifest.txt > SHA256SUMS)
 

@@ -18,6 +18,9 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 	aclVersion int64,
 	lifetime time.Duration,
 ) (JournalTicket, error) {
+	if !c.Enabled {
+		return JournalTicket{}, ErrCollaborationOff
+	}
 	if userID == "" || spaceID == "" || resource.ID == "" ||
 		resource.Type == "" || resource.Party == "" || role == "" || aclVersion < 1 {
 		return JournalTicket{}, errors.New("incomplete ticket claims")

@@ -126,9 +126,9 @@ func (s *AIService) resolveInvocationAgent(w http.ResponseWriter, r *http.Reques
 // device contexts are valid and that the agent holds grants for them, and
 // that an attached project is allowed to code.
 func (s *AIService) admitInvocationExecution(w http.ResponseWriter, r *http.Request, userID string, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
-	// Attaching a project starts coding: Pro and above, from the Misty app.
+	// Attaching a project starts coding, which runs only from the Misty app.
 	for _, deviceContext := range body.DeviceContexts {
-		if strings.TrimSpace(deviceContext.Kind) == "project_folder" && !requireCoding(w, r, s.database, userID, "invocation.project") {
+		if strings.TrimSpace(deviceContext.Kind) == "project_folder" && !requireCoding(w, r, userID, "invocation.project") {
 			return false
 		}
 	}
@@ -222,11 +222,11 @@ func (s *AIService) storeInvocationRecord(w http.ResponseWriter, r *http.Request
 	now := time.Now().UTC()
 	recordTrigger := body.Trigger
 	if scheduled != nil {
-		// Stored like the server's own scheduled runs, and billed the same way.
+		// Stored like the server's own scheduled runs, and run the same way.
 		recordTrigger = "schedule"
 	}
 	stored, created, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-		DispatchRuntime: true, ModelTurnLimit: evalTurnLimit(body.EvalTurnLimit, planTurnLimit(r.Context(), s.database, userID)), ExecutionLimitMS: evalExecutionLimitMS(body.EvalTurnLimit),
+		DispatchRuntime: true, ModelTurnLimit: evalTurnLimit(body.EvalTurnLimit, defaultTurnLimit), ExecutionLimitMS: evalExecutionLimitMS(body.EvalTurnLimit),
 		ID: "invocation_" + uuid.NewString(), UserID: userID, SpaceID: st.spaceID, ConversationID: st.conversationID,
 		SurfaceID: body.SurfaceID, Mode: body.Mode, Trigger: recordTrigger, State: "queued",
 		IdempotencyKey: body.IdempotencyKey, RequestPayload: requestPayload, ExpiresAt: now.Add(aiInvocationTTL),

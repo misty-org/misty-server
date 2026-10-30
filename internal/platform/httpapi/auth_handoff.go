@@ -36,7 +36,6 @@ var handoffPathAllowlist = map[string]bool{
 	"/settings":         true,
 	"/settings/account": true,
 	"/settings/usage":   true,
-	"/settings/billing": true,
 	"/settings/privacy": true,
 }
 

@@ -11,15 +11,11 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 )
 
 type conversationHooks struct {
 	Operation, History string
 	Access             func(context.Context) error
-	Input              func(context.Context, int) error
-	Reserve, Settle    func(context.Context, agent.RealtimeVoiceUsage) error
-	Checkpoint         func(context.Context, string, agent.RealtimeVoiceUsage) error
 	Save               func(context.Context, string, string, string, bool, time.Time) error
 	Fail               func(context.Context, string, string, string, time.Time) error
 	Tool               func(context.Context, string) (string, error)
@@ -76,7 +72,7 @@ func parseConversationTool(e agent.VoiceRealtimeEvent) (conversationTool, error)
 }
 
 // conversationSession is one spoken conversation. Its run loop is the only
-// writer to the client, the provider and billing.
+// writer to the client and the provider.
 type conversationSession struct {
 	ctx      context.Context
 	client   *websocket.Conn
@@ -84,7 +80,6 @@ type conversationSession struct {
 	h        conversationHooks
 	up       chan agent.VoiceRealtimeEvent
 
-	usage                                                   agent.RealtimeVoiceUsage
 	ready, busy, responding, transcribed, interrupted       bool
 	playbackDone, responseDone, resultOnly, closed          bool
 	input                                                   voiceSessionState
@@ -96,7 +91,7 @@ type conversationSession struct {
 	seen                                                    map[string]bool
 }
 
-// One actor owns all provider/client writes and billing. No microphone is open
+// One actor owns all provider/client writes. No microphone is open
 // while idle. A socket is deliberately not reconnectable: uncertain actions
 // remain in the canonical invocation journal and must never be replayed.
 func runConversationSession(parent context.Context, client *websocket.Conn, provider voiceProvider, h conversationHooks) {
@@ -106,7 +101,7 @@ func runConversationSession(parent context.Context, client *websocket.Conn, prov
 	in := make(chan conversationClientEvent, 16)
 	s := &conversationSession{
 		ctx: ctx, client: client, provider: provider, h: h, up: make(chan agent.VoiceRealtimeEvent, 32),
-		usage: agent.RealtimeVoiceUsage{}, seen: map[string]bool{}, lastHistory: h.History,
+		seen: map[string]bool{}, lastHistory: h.History,
 		contextBytes: len(h.History) + 7000, // includes instructions, tools and protocol overhead
 		deadline:     time.Now().Add(20 * time.Second),
 	}
@@ -199,22 +194,13 @@ func (s *conversationSession) write(v any) error {
 func (s *conversationSession) fail(err error) {
 	log.Printf("voice_conversation_failed operation_id=%q error=%q", s.h.Operation, err)
 	s.failureMessage = "The voice session stopped. Your tasks and saved conversation are still available. Try voice again."
-	if errors.Is(err, billingadapter.ErrDenied) {
-		s.failureMessage = "Voice could not start because billing did not authorize this response. Check Billing before retrying. Existing tasks remain available."
-	}
 	_ = s.write(map[string]string{"type": "error", "message": s.failureMessage})
 }
 
-// settleOnExit keeps unmeasured provider work's durable reservation for
-// recovery and saves an interrupted turn.
+// settleOnExit saves an interrupted turn.
 func (s *conversationSession) settleOnExit() {
 	c, done := context.WithTimeout(context.Background(), 15*time.Second)
 	defer done()
-	if s.responding || (s.input.Committed && !s.transcribed) {
-		_ = s.h.Checkpoint(c, "reconcile", s.usage)
-	} else {
-		_ = s.h.Settle(c, s.usage)
-	}
 	if s.busy && s.prompt != "" {
 		if s.failureMessage != "" && s.h.Fail != nil {
 			if err := s.h.Fail(c, s.turnID, s.prompt, s.failureMessage, s.started); err != nil {
@@ -226,8 +212,8 @@ func (s *conversationSession) settleOnExit() {
 	}
 }
 
-// drainAfterDisconnect measures usage briefly after the client leaves rather
-// than releasing money for generation already in flight. It never executes
+// drainAfterDisconnect waits briefly after the client leaves for generation
+// already in flight, so its transcript can be saved. It never executes
 // pending tools.
 func (s *conversationSession) drainAfterDisconnect(providerGone <-chan struct{}) {
 	s.closed = true
@@ -240,14 +226,12 @@ func (s *conversationSession) drainAfterDisconnect(providerGone <-chan struct{})
 		select {
 		case event := <-s.up:
 			if event.Type == "response-done" {
-				if u, err := agent.RealtimeResponseUsage(event.Raw); err == nil {
-					s.usage.Add(u)
+				if _, err := agent.RealtimeResponseUsage(event.Raw); err == nil {
 					s.responding = false
 				}
 			}
 			if event.Type == "input-transcription-completed" {
-				if u, err := agent.RealtimeTranscriptionUsage(event.Raw); err == nil {
-					s.usage.Add(u)
+				if _, err := agent.RealtimeTranscriptionUsage(event.Raw); err == nil {
 					s.transcribed = true
 					s.prompt = event.Transcript
 				}

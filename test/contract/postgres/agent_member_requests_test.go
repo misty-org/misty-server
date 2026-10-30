@@ -99,8 +99,8 @@ func TestAgentMemberRequestRunsAsTargetOwnerAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The work acts as Bob's agent and is billed to Alice, who asked.
-	if child.OwnerUserID != f.bob.ID || child.RequestingMemberID != f.bob.ID || child.BillingUserID != f.alice.ID || child.InitiatedByUserID != f.alice.ID {
-		t.Fatalf("child ownership = owner %s requesting %s billing %s initiated %s", child.OwnerUserID, child.RequestingMemberID, child.BillingUserID, child.InitiatedByUserID)
+	if child.OwnerUserID != f.bob.ID || child.RequestingMemberID != f.bob.ID || child.ModelUserID != f.alice.ID || child.InitiatedByUserID != f.alice.ID {
+		t.Fatalf("child ownership = owner %s requesting %s models %s initiated %s", child.OwnerUserID, child.RequestingMemberID, child.ModelUserID, child.InitiatedByUserID)
 	}
 	if child.SpaceID != f.space.ID || child.TriggerKind != "delegated" || child.ParentRunID != f.aliceRun.ID || child.DelegationDepth != 1 || child.AgentID != f.bobAgent.ID || child.InitialRunMode == "full" {
 		t.Fatalf("child run = %#v", child)
@@ -112,11 +112,6 @@ func TestAgentMemberRequestRunsAsTargetOwnerAtOnce(t *testing.T) {
 	replay, err := f.request("call-1")
 	if err != nil || replay.ID != request.ID || !replay.Replay {
 		t.Fatalf("replayed request = %#v, %v", replay, err)
-	}
-	// The delegated work is its own billing command, separate from Alice's run.
-	command, err := f.database.BillingCommandForRun(ctx, f.bob.ID, child.ID)
-	if err != nil || command != "agent-runtime:"+child.ID {
-		t.Fatalf("delegated work billing command = %q, %v", command, err)
 	}
 	found, err := f.database.AgentMemberRequestForRun(ctx, child.ID)
 	if err != nil || found.ID != request.ID || found.RequesterName != f.alice.Username {

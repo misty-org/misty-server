@@ -129,7 +129,6 @@ GET /api/auth/handoff/start
 GET /api/auth/reset/start
 GET /api/auth/reset/validate
 GET /api/auth/verify/start
-GET /api/billing/usage
 GET /api/devices
 GET /api/devices/admission-requests
 GET /api/devices/channel
@@ -145,13 +144,11 @@ GET /api/me/agent-grants
 GET /api/me/agent-interventions
 GET /api/me/app-requests/{requestID}
 GET /api/me/avatar
-GET /api/me/coding/allowance
 GET /api/me/conversations/{conversationID}/collaboration
 GET /api/me/memory/events
 GET /api/me/memory/export
 GET /api/me/memory/status
 GET /api/me/memory/tree
-GET /api/me/referral
 GET /api/me/settings
 GET /api/me/space-agents
 GET /api/me/space-people
@@ -206,7 +203,6 @@ GET /auth/handoff/start
 GET /auth/reset/start
 GET /auth/reset/validate
 GET /auth/verify/start
-GET /billing/usage
 GET /devices
 GET /devices/admission-requests
 GET /devices/channel
@@ -222,13 +218,11 @@ GET /me/agent-grants
 GET /me/agent-interventions
 GET /me/app-requests/{requestID}
 GET /me/avatar
-GET /me/coding/allowance
 GET /me/conversations/{conversationID}/collaboration
 GET /me/memory/events
 GET /me/memory/export
 GET /me/memory/status
 GET /me/memory/tree
-GET /me/referral
 GET /me/settings
 GET /me/space-agents
 GET /me/space-people
@@ -303,7 +297,6 @@ GET /v1/auth/handoff/start
 GET /v1/auth/reset/start
 GET /v1/auth/reset/validate
 GET /v1/auth/verify/start
-GET /v1/billing/usage
 GET /v1/devices
 GET /v1/devices/admission-requests
 GET /v1/devices/channel
@@ -319,13 +312,11 @@ GET /v1/me/agent-grants
 GET /v1/me/agent-interventions
 GET /v1/me/app-requests/{requestID}
 GET /v1/me/avatar
-GET /v1/me/coding/allowance
 GET /v1/me/conversations/{conversationID}/collaboration
 GET /v1/me/memory/events
 GET /v1/me/memory/export
 GET /v1/me/memory/status
 GET /v1/me/memory/tree
-GET /v1/me/referral
 GET /v1/me/settings
 GET /v1/me/space-agents
 GET /v1/me/space-people
@@ -442,9 +433,6 @@ POST /api/auth/google/complete
 POST /api/auth/handoff
 POST /api/auth/refresh
 POST /api/auth/reset
-POST /api/billing/checkout-session
-POST /api/billing/estimate
-POST /api/billing/portal-session
 POST /api/devices
 POST /api/devices/{deviceID}/admission-requests
 POST /api/devices/{deviceID}/admission-requests/{requestID}/approve
@@ -479,7 +467,6 @@ POST /api/me/memory/day-summary
 POST /api/me/memory/events
 POST /api/me/memory/forget
 POST /api/me/memory/nodes
-POST /api/me/referral/claim
 POST /api/me/screen-model/{jobID}
 POST /api/me/voice/live/ticket
 POST /api/me/voice/transcribe
@@ -537,9 +524,6 @@ POST /auth/google/complete
 POST /auth/handoff
 POST /auth/refresh
 POST /auth/reset
-POST /billing/checkout-session
-POST /billing/estimate
-POST /billing/portal-session
 POST /devices
 POST /devices/{deviceID}/admission-requests
 POST /devices/{deviceID}/admission-requests/{requestID}/approve
@@ -562,7 +546,7 @@ POST /internal/agent-runtime/runs/{runID}/model-provider
 POST /internal/agent-runtime/runs/{runID}/start-receipt
 POST /internal/agent-runtime/runs/{runID}/steering
 POST /internal/journal/note-projections
-POST /internal/voice/live/settle
+POST /internal/voice/live/credential
 POST /login
 POST /logout
 POST /mcp
@@ -585,7 +569,6 @@ POST /me/memory/day-summary
 POST /me/memory/events
 POST /me/memory/forget
 POST /me/memory/nodes
-POST /me/referral/claim
 POST /me/screen-model/{jobID}
 POST /me/voice/live/ticket
 POST /me/voice/transcribe
@@ -658,9 +641,6 @@ POST /v1/auth/google/complete
 POST /v1/auth/handoff
 POST /v1/auth/refresh
 POST /v1/auth/reset
-POST /v1/billing/checkout-session
-POST /v1/billing/estimate
-POST /v1/billing/portal-session
 POST /v1/devices
 POST /v1/devices/{deviceID}/admission-requests
 POST /v1/devices/{deviceID}/admission-requests/{requestID}/approve
@@ -695,7 +675,6 @@ POST /v1/me/memory/day-summary
 POST /v1/me/memory/events
 POST /v1/me/memory/forget
 POST /v1/me/memory/nodes
-POST /v1/me/referral/claim
 POST /v1/me/screen-model/{jobID}
 POST /v1/me/voice/live/ticket
 POST /v1/me/voice/transcribe
@@ -775,6 +754,7 @@ PUT /api/me/avatar
 PUT /api/me/coding/engines
 PUT /api/me/conversations/{conversationID}/mode
 PUT /api/me/device
+PUT /api/me/password
 PUT /api/me/settings
 PUT /api/me/telemetry
 PUT /api/misty/agents/{agentID}
@@ -787,12 +767,14 @@ PUT /api/spaces/{spaceID}/library/uploads/{uploadID}/content
 PUT /api/spaces/{spaceID}/messages/{messageID}
 PUT /api/spaces/{spaceID}/messages/{messageID}/reactions/{emoji}
 PUT /api/spaces/{spaceID}/nodes/{nodeID}
+PUT /api/sync/vault/key
 PUT /devices/{deviceID}/devices/{targetID}/name
 PUT /devices/{deviceID}/policy
 PUT /me/avatar
 PUT /me/coding/engines
 PUT /me/conversations/{conversationID}/mode
 PUT /me/device
+PUT /me/password
 PUT /me/settings
 PUT /me/telemetry
 PUT /misty/agents/{agentID}
@@ -805,6 +787,7 @@ PUT /spaces/{spaceID}/library/uploads/{uploadID}/content
 PUT /spaces/{spaceID}/messages/{messageID}
 PUT /spaces/{spaceID}/messages/{messageID}/reactions/{emoji}
 PUT /spaces/{spaceID}/nodes/{nodeID}
+PUT /sync/vault/key
 PUT /v1/ai/agent-methods/{methodID}
 PUT /v1/ai/agent-methods/{methodID}/schedule
 PUT /v1/ai/inbound-channels/{channel}
@@ -822,6 +805,7 @@ PUT /v1/me/avatar
 PUT /v1/me/coding/engines
 PUT /v1/me/conversations/{conversationID}/mode
 PUT /v1/me/device
+PUT /v1/me/password
 PUT /v1/me/settings
 PUT /v1/me/telemetry
 PUT /v1/misty/agents/{agentID}
@@ -834,3 +818,4 @@ PUT /v1/spaces/{spaceID}/library/uploads/{uploadID}/content
 PUT /v1/spaces/{spaceID}/messages/{messageID}
 PUT /v1/spaces/{spaceID}/messages/{messageID}/reactions/{emoji}
 PUT /v1/spaces/{spaceID}/nodes/{nodeID}
+PUT /v1/sync/vault/key

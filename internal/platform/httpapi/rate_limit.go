@@ -97,8 +97,6 @@ func NewAPIRateLimiter() *APIRateLimiter {
 			"GET /auth/handoff/start":        {Limit: 20, Window: time.Minute},
 			"POST /me/export":                {Limit: 3, Window: time.Hour},
 			"POST /me/deletion":              {Limit: 3, Window: time.Hour},
-			"POST /billing/checkout-session": {Limit: 10, Window: time.Minute},
-			"POST /billing/portal-session":   {Limit: 20, Window: time.Minute},
 			"POST /ai/complete":              {Limit: 12, Window: time.Minute},
 			"POST /spaces/{spaceID}/notes/{id}/collaboration-ticket":    {Limit: 30, Window: time.Minute},
 			"POST /spaces/{spaceID}/drawings/{id}/collaboration-ticket": {Limit: 30, Window: time.Minute},

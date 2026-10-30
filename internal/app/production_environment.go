@@ -18,15 +18,28 @@ func ValidateProductionEnvironment() error {
 		return nil
 	}
 	required := []string{
-		"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY",
 		"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "MISTY_PUBLIC_API_URL",
-		"MISTY_BILLING_ADAPTER", "MISTY_BILLING_URL", "MISTY_BILLING_SECRET",
 		"SPACE_LINK_ENCRYPTION_KEY",
 	}
 	for _, name := range required {
 		if strings.TrimSpace(config.Getenv(name)) == "" {
 			return fmt.Errorf("%s is required in production", name)
 		}
+	}
+	// Object storage is S3/R2 or a server directory. S3 needs all its keys;
+	// a directory needs only its path (checked when the store opens).
+	if libraryBackend() == "s3" {
+		storage := libraryS3ConfigFromEnv()
+		for name, value := range map[string]string{
+			"MISTY_S3_ENDPOINT (or R2_ENDPOINT)": storage.endpoint, "MISTY_S3_BUCKET (or R2_BUCKET)": storage.bucket,
+			"MISTY_S3_ACCESS_KEY_ID (or R2_ACCESS_KEY)": storage.accessKey, "MISTY_S3_SECRET_ACCESS_KEY (or R2_SECRET_KEY)": storage.secretKey,
+		} {
+			if value == "" {
+				return fmt.Errorf("%s is required in production when Library storage is S3", name)
+			}
+		}
+	} else if libraryBackend() != "filesystem" {
+		return fmt.Errorf("production needs Library storage: set MISTY_LIBRARY_FILESYSTEM_DIR or the MISTY_S3_* (R2_*) keys")
 	}
 
 	publicURL, err := url.Parse(strings.TrimSpace(config.Getenv("MISTY_PUBLIC_API_URL")))

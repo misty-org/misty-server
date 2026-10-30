@@ -2,33 +2,9 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"strconv"
 	"strings"
-	"time"
 )
-
-type ConsoleBilling struct {
-	OutboxPending      int
-	OutboxRetrying     int
-	OutboxOldest       *time.Time
-	Reservations       int
-	ReservationsOldest *time.Time
-}
-
-func (db *Database) ConsoleBilling(ctx context.Context) (ConsoleBilling, error) {
-	var b ConsoleBilling
-	err := db.consoleTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
-			SELECT (SELECT count(*) FROM billing_adapter_outbox WHERE delivered_at IS NULL),
-			       (SELECT count(*) FROM billing_adapter_outbox WHERE delivered_at IS NULL AND attempts > 0),
-			       (SELECT min(created_at) FROM billing_adapter_outbox WHERE delivered_at IS NULL),
-			       (SELECT count(*) FROM billing_adapter_reservations),
-			       (SELECT min(created_at) FROM billing_adapter_reservations)`,
-		).Scan(&b.OutboxPending, &b.OutboxRetrying, &b.OutboxOldest, &b.Reservations, &b.ReservationsOldest)
-	})
-	return b, err
-}
 
 type ConsoleTableSize struct {
 	Name  string

@@ -50,11 +50,6 @@ func (db *Database) TestingAwaitAIUserIntervention(ctx context.Context, user, ru
 	return db.AwaitAgentUserIntervention(ctx, user, run, runtime, call, hook, scope, action, reason, digest)
 }
 
-func (db *Database) TestingRecoverVoiceUsage(ctx context.Context) error {
-	_, err := db.RecoverVoiceUsageBatch(ctx)
-	return err
-}
-
 func TestingDefaultLibraryEditDefinition() LibraryEditDefinition {
 	return LibraryEditDefinition{Brightness: 1, Contrast: 1, Saturation: 1, PlaybackSpeed: 1}
 }

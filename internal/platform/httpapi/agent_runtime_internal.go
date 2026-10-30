@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/kannachi323/misty/server/internal/aimodels"
+	"github.com/kannachi323/misty/server/internal/byok"
 	"net/http"
 	"strings"
 	"time"
@@ -177,7 +178,15 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 		system += "\n\n" + agentExecutionGuidance + agentCapabilityGuidance(allowedTools, false) + "\n\nCurrent time: " + now.Format(time.RFC3339) + "; timezone: " + timezone + "."
 
 		_ = s.database.TouchPersonalAgentTaskRuntime(r.Context(), run.ID, body.RuntimeRunID, "reading_context", 5)
-		planned, forced := planRoutes(r.Context(), s.database, run.OwnerUserID, defaultAIRoutes(membership.ModelID, membership.ReasoningEffort))
+		// The run thinks on the models of the member who asked (runModelUser).
+		modelID, reasoning := membership.ModelID, membership.ReasoningEffort
+		if c := accountCredentials(r.Context(), runModelUser(run)); c != nil && !agent.ClientModelChoice() {
+			modelID, reasoning = c.Models.Agent, accountReasoning(c)
+		} else if c == nil && !aimodels.OperatorModels() {
+			writeAgentError(w, byok.ErrModelKeyNeeded)
+			return
+		}
+		planned, forced := runRoutes(r.Context(), s.database, runModelUser(run), defaultAIRoutes(modelID, reasoning))
 		routes, routeErr := s.database.FreezeAIModelRoutes(r.Context(), run.OwnerUserID, run.ID, planned, nil, forced)
 		if routeErr != nil {
 			writeAIProviderError(w, routeErr)

@@ -21,7 +21,7 @@ func (s *SpacesService) CodingApproval() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if !requireCoding(w, r, s.database, user, "coding.approval") {
+		if !requireCoding(w, r, user, "coding.approval") {
 			return
 		}
 		var body struct {
@@ -107,7 +107,7 @@ func (s *SpacesService) CodingEnginesReport() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if !requireCoding(w, r, s.database, user, "coding.engines") {
+		if !requireCoding(w, r, user, "coding.engines") {
 			return
 		}
 		var body struct {
@@ -130,31 +130,5 @@ func (s *SpacesService) CodingEnginesReport() http.HandlerFunc {
 			}
 		}
 		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
-// CodingAllowance is the account's weekly coding allowance:
-// GET /me/coding/allowance.
-func (s *SpacesService) CodingAllowance() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := s.appsUser(w, r)
-		if !ok {
-			return
-		}
-		w.Header().Set("Cache-Control", "no-store")
-		entitlements, err := s.database.EntitlementsForUser(r.Context(), user)
-		if err != nil {
-			writeBillingError(w, err)
-			return
-		}
-		used, err := s.database.WeeklyCodingUsed(r.Context(), user)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"available": entitlements.Coding && entitlements.WeeklyExternalCodingAllowance > 0, "coding": entitlements.Coding, "plan": entitlements.Plan,
-			"allowanceTokens": entitlements.WeeklyExternalCodingAllowance, "usedTokens": used, "resetsAt": codingWeekResets(),
-		})
 	}
 }

@@ -12,7 +12,7 @@ import (
 
 // Page-state restore: after a device switch, a client whose deterministic
 // restore left form fields unplaced asks for one bounded action at a time.
-// The server makes one billed, budgeted model call per step and returns a
+// The server makes one bounded model call per step and returns a
 // single validated action from a fixed menu. It persists no payload: only a
 // run ID and step count, to enforce the per-run and per-day caps.
 const (
@@ -23,7 +23,7 @@ const (
 	restoreMaxControls    = 200
 )
 
-// RestoreCompleter makes one plain model completion billed to the user.
+// RestoreCompleter makes one plain model completion on the user's models.
 type RestoreCompleter func(ctx context.Context, userID, prompt string) (string, error)
 
 var ErrRestoreLimit = errors.New("restore limit reached")

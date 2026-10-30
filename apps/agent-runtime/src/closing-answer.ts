@@ -30,7 +30,7 @@ export async function closingAnswer(identity: RuntimeIdentity, modelId: string, 
       maxRetries: 1,
       providerOptions: { gateway: { models: [modelId] } },
     });
-    await report(identity, { node_id: node, state: "completed", phase: "answered", progress: 95, output: { usage: result.usage } });
+    await report(identity, { node_id: node, state: "completed", phase: "answered", progress: 95 });
     return result.text.trim();
   } catch {
     return "";

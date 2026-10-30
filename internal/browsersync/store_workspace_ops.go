@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 
 	"github.com/kannachi323/misty/server/internal/platform/transport"
 	"github.com/lib/pq"
@@ -122,7 +121,7 @@ func (w *syncWriteTx) discard(ctx context.Context, s syncSigned, reason string) 
 	if err := w.consume(ctx, s, w.head, true); err != nil {
 		return nil, err
 	}
-	if err := cloudusage.Commit(ctx, w.tx); err != nil {
+	if err := w.tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &SyncReceipt{OperationID: s.operation, Sequence: w.head, Discarded: true, Reason: reason}, nil
@@ -225,7 +224,7 @@ func (db *Store) PublishBrowserSyncWorkspace(ctx context.Context, userID string,
 	if err = notifySync(ctx, w.tx, userID, op.VaultID, "browser-sync"); err != nil {
 		return nil, err
 	}
-	if err = cloudusage.Commit(ctx, w.tx); err != nil {
+	if err = w.tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &SyncReceipt{OperationID: op.OperationID, Sequence: sequence, WorkspaceVersion: op.WorkspaceVersion()}, nil

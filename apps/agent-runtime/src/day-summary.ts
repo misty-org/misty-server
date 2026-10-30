@@ -1,7 +1,8 @@
 import type { LanguageModelV4 } from "@ai-sdk/provider";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { ModelCallError, RoutedModel, usageOf } from "./model-calls.js";
+import { ModelCallError, RoutedModel } from "./model-calls.js";
+import { modelRouteSchema } from "./model-provider.js";
 
 /** One day of the person's Memory, summarized for their Journal. */
 const item = z.object({
@@ -12,7 +13,7 @@ const item = z.object({
   excerpt: z.string().max(2_000).optional(),
 });
 const daySummaryRequest = z.object({
-  route: z.object({ provider: z.literal("instance"), reasoning: z.string().optional() }),
+  route: modelRouteSchema,
   model: z.string().regex(/^[^\s/]+\/\S+$/),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   items: z.array(item).min(1).max(400),
@@ -58,5 +59,5 @@ export async function daySummaryCall(body: unknown, signal?: AbortSignal, model?
     maxRetries: 1,
     abortSignal: signal,
   });
-  return { ...output.output, usage: usageOf(output.usage) };
+  return output.output;
 }

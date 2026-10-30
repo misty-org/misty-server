@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 
 	"github.com/kannachi323/misty/server/internal/aimodels"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
@@ -55,12 +56,27 @@ func accountCompletionProvider(models *modelruntime.Client, c *aimodels.Resolved
 	return NewBudgetedProvider(NewRuntimeProvider(models, modelruntime.For(c), c.Model, modelProviderName(c.Model), c.Reasoning), ProviderBudgetFromEnv()), nil
 }
 
-// modelProviderName labels who serves a model: OpenAI directly, or the Gateway.
+// modelProviderName labels a model by its provider prefix.
 func modelProviderName(model string) string {
-	if aimodels.DirectOpenAI(model) {
-		return "openai"
+	if provider, _, ok := strings.Cut(model, "/"); ok && provider != "" {
+		return provider
 	}
 	return ProviderVercelAI
+}
+
+// oneShotRoute is how one of the service's own small calls for role runs for
+// user: on the account's model and key, else fallback on the operator's keys.
+func (s *Service) oneShotRoute(ctx context.Context, user, role, fallback string) (modelruntime.Route, string, error) {
+	if s.modelResolver != nil {
+		c, err := s.modelResolver(ctx, user, role)
+		if err != nil {
+			return modelruntime.Route{}, "", err
+		}
+		if c != nil {
+			return modelruntime.For(c), c.Model, nil
+		}
+	}
+	return modelruntime.Instance(), fallback, nil
 }
 
 // ConfiguredRealtime applies the account's Speaking choice to the voice socket.

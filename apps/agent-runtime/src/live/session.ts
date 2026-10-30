@@ -42,22 +42,19 @@ function boundedContext(context: StartMessage["context"]): SonioxContext | undef
 
 /**
  * One live session: a Soniox stream per channel, diarized within each, with
- * segments relayed to the desktop as they revise. Audio is metered as it
- * arrives and the session stops at its ticket's limit. Usage is reported once,
- * when the session ends for any reason.
+ * segments relayed to the desktop as they revise. Audio is counted as it
+ * arrives and the session stops at its ticket's limit.
  */
 export class LiveSession {
   private streams = new Map<LiveChannel, { stream: SttStream; captions: SonioxCaptions }>();
   private usedBytes = 0;
   private started = false;
   private ending?: Promise<void>;
-  private settled = false;
 
   constructor(
     private readonly ticket: LiveTicket,
     private readonly send: (message: RelayMessage) => void,
     private readonly open: SttFactory,
-    private readonly settle: (usedMs: number) => Promise<unknown>,
   ) {}
 
   get usedMs() {
@@ -107,7 +104,7 @@ export class LiveSession {
     }
   }
 
-  /** Graceful end: let Soniox finalize, flush every lane, then report usage. */
+  /** Graceful end: let Soniox finalize, then flush every lane. */
   finish(): Promise<void> {
     this.ending ??= (async () => {
       await Promise.all([...this.streams.values()].map(async ({ stream, captions }) => {
@@ -119,27 +116,19 @@ export class LiveSession {
         captions.flush();
       }));
       this.send({ type: "finished", usedMs: this.usedMs });
-      await this.report();
     })();
     return this.ending;
   }
 
-  /** The desktop disconnected: stop streams without waiting, then report. */
+  /** The desktop disconnected: stop streams without waiting. */
   close() {
     for (const { stream } of this.streams.values()) stream.close();
-    void this.report();
   }
 
   private fail(message: string) {
     if (this.ending) return;
     this.send({ type: "error", message });
     for (const { stream } of this.streams.values()) stream.close();
-    this.ending = this.report();
-  }
-
-  private async report() {
-    if (this.settled) return;
-    this.settled = true;
-    await this.settle(this.usedMs);
+    this.ending = Promise.resolve();
   }
 }

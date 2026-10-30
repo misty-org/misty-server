@@ -102,9 +102,6 @@ func (s *conversationSession) appendAudio(e conversationClientEvent) error {
 	if s.totalInput > 24000*2*180 {
 		return errors.New("voice session input limit")
 	}
-	if err := s.h.Input(s.ctx, s.input.AudioBytes); err != nil {
-		return err
-	}
 	return s.provider.Send(map[string]string{"type": "input-audio-append", "audio": e.Audio})
 }
 
@@ -229,9 +226,6 @@ func (s *conversationSession) quietToolOutput(t conversationTool, result string)
 func (s *conversationSession) finish() error {
 	if !s.busy || !s.responseDone || !s.transcribed || !s.playbackDone || s.pending != nil {
 		return nil
-	}
-	if err := s.h.Settle(s.ctx, s.usage); err != nil {
-		return err
 	}
 	saved := s.reply
 	if s.interrupted {

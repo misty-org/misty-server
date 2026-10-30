@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
 
@@ -60,14 +59,14 @@ func voiceTicketHash(token string) string { return security.HashToken("companion
 
 func (s *AgentsService) voiceAccess(ctx context.Context, user, device string) error {
 	if s.voiceAnalyzer == nil {
-		return billingadapter.ErrUnavailable
+		return errVoiceUnavailable
 	}
 	settings, _, err := s.database.AISettings(ctx, user)
 	if err != nil {
 		return err
 	}
 	if !settings.Enabled {
-		return billingadapter.ErrDenied
+		return errAIDisabled
 	}
 	_, err = s.database.TrustedDevicePublicKey(user, device)
 	return err

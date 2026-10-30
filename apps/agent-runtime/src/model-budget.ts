@@ -8,7 +8,7 @@ export interface ExecutionBudget {
 }
 
 /** The most execution Misty grants a run: four hours for a development eval, 30 minutes otherwise
- * (plan_models.go, evalExecutionLimitMS). */
+ * (Go's evalExecutionLimitMS). */
 const MAX_EXECUTION_MS = 4 * 60 * 60_000;
 
 export function modelTimeout(budget: ExecutionBudget, now: number): number {
@@ -45,7 +45,7 @@ export function accumulateModelUsage(previous: LanguageModelUsage | undefined, n
 // Misty sends each run's turn limit (agent_runtime_internal.go); a context without one gets 20 turns.
 export function modelTurnLimit(value: number | undefined): number {
   if (value === undefined) return 20;
-  // 200 is a development eval's most (docs/agents/harness.md, Errors and budget); plans stay below.
+  // 200 is a development eval's most (docs/agents/harness.md, Errors and budget); other runs stay below.
   if (!Number.isSafeInteger(value) || value < 1 || value > 200) throw new Error("invalid_model_turn_limit");
   return value;
 }

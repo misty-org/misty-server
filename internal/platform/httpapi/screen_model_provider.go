@@ -13,7 +13,7 @@ import (
 )
 
 // screenModelRoute is the run's frozen vision route, which follows the
-// account's Seeing choice; billing meters screen calls against the same route.
+// account's Seeing choice.
 func (s *SpacesService) screenModelRoute(ctx context.Context, record *db.AIInvocationRecord) (modelruntime.Route, string, error) {
 	route, err := s.database.AIModelRunRoute(ctx, record.UserID, record.ID, "vision")
 	if err != nil {
@@ -24,18 +24,13 @@ func (s *SpacesService) screenModelRoute(ctx context.Context, record *db.AIInvoc
 	}
 	model := route.Model
 	if model == "" {
-		model = aiInvocationMeteredModel(record)
+		model = invocationRecordModel(record)
 	}
 	if model == "" {
 		return modelruntime.Route{}, "", errScreenModelUnconfigured
 	}
-	resolved := modelruntime.Instance()
-	if aimodels.DirectOpenAI(model) {
-		// OpenAI reasoning models spend output on reasoning first; keep it short
-		// like the server's own agent provider does.
-		resolved.Reasoning = "low"
-	}
-	return resolved, model, nil
+	resolved, err := modelruntime.RouteFor(ctx, record.UserID, model, shortReasoning(model))
+	return resolved, model, err
 }
 
 // screenModelMessages turns the planner's OpenAI-style chat messages into a

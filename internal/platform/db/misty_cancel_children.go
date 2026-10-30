@@ -53,13 +53,8 @@ func cancelMistyRunTx(ctx context.Context, tx *sql.Tx, userID, runID, runtimeID 
 	if _, err := tx.ExecContext(ctx, `UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW() WHERE run_id=$1 AND state IN ('queued','leased','dispatched')`, runID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW() WHERE run_id=$1 AND state='attached'`, runID); err != nil {
-		return err
-	}
-	if err := releasePersonalAgentRuntimeReservationsTx(ctx, tx, runID); err != nil {
-		return err
-	}
-	return nil
+	_, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW() WHERE run_id=$1 AND state='attached'`, runID)
+	return err
 }
 
 // CancelMistyInvocationChildren commits parent cancellation, its stream event,

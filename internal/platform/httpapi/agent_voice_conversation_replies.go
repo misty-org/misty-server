@@ -50,11 +50,9 @@ func (s *conversationSession) transcriptionCompleted(e agent.VoiceRealtimeEvent)
 	if !s.busy || s.transcribed || !s.input.Committed {
 		return errors.New("unexpected voice transcription")
 	}
-	u, err := agent.RealtimeTranscriptionUsage(e.Raw)
-	if err != nil {
+	if _, err := agent.RealtimeTranscriptionUsage(e.Raw); err != nil {
 		return err
 	}
-	s.usage.Add(u)
 	s.transcribed = true
 	s.prompt = voiceBoundText(e.Transcript, 16000)
 	if err := s.h.Save(s.ctx, s.turnID, s.prompt, "", false, s.started); err != nil {
@@ -117,11 +115,9 @@ func (s *conversationSession) responseCompleted(e agent.VoiceRealtimeEvent) erro
 	if !s.responding {
 		return errors.New("unexpected voice completion")
 	}
-	u, err := agent.RealtimeResponseUsage(e.Raw)
-	if err != nil {
+	if _, err := agent.RealtimeResponseUsage(e.Raw); err != nil {
 		return err
 	}
-	s.usage.Add(u)
 	s.responding = false
 	if s.interrupted {
 		if err := s.cancelPending(); err != nil {
@@ -144,18 +140,13 @@ func (s *conversationSession) responseCompleted(e agent.VoiceRealtimeEvent) erro
 	return s.finish()
 }
 
-// generate admits the full upper bound of one more spoken response. Audio
-// context is retained by the provider across turns, including earlier replies
-// and uncached input.
+// generate asks for one more spoken response. Audio context is retained by
+// the provider across turns, so a long session stops at the context limit.
 func (s *conversationSession) generate() error {
 	if s.contextBytes > 60000 {
 		return errors.New("voice context limit reached")
 	}
 	if err := s.h.Access(s.ctx); err != nil {
-		return err
-	}
-	estimate := agent.RealtimeVoiceUsage{"context_bytes": int64(s.contextBytes), "audio_pcm_bytes": int64(s.totalInput), "retained_audio_tokens": s.usage["output_audio_tokens"], "output_token_limit": agent.VoiceConversationOutputTokens}
-	if err := s.h.Reserve(s.ctx, estimate); err != nil {
 		return err
 	}
 	if s.reply != "" {
@@ -181,12 +172,6 @@ func (s *conversationSession) dispatchTool() error {
 		return nil
 	}
 	if err := s.h.Access(s.ctx); err != nil {
-		return err
-	}
-	// Both provider response and input transcription are now measured. Close
-	// those holds before admitting business work or another voice response.
-	// Otherwise a tool turn unnecessarily competes with its own unused hold.
-	if err := s.h.Settle(s.ctx, s.usage); err != nil {
 		return err
 	}
 	if s.pending.Name == "get_context" || s.pending.Name == "get_task_status" {

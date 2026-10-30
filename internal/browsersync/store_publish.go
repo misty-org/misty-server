@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 	"github.com/kannachi323/misty/server/internal/platform/transport"
 )
 
@@ -64,7 +63,7 @@ func (db *Store) PublishBrowserSync(ctx context.Context, userID string, m SyncMu
 		if string(oldHash) != string(digest[:]) {
 			return nil, ErrSyncOperationConflict
 		}
-		if err = cloudusage.Commit(ctx, tx); err != nil {
+		if err = tx.Commit(); err != nil {
 			return nil, err
 		}
 		return &SyncReceipt{OperationID: m.OperationID, Sequence: oldSequence, Discarded: discarded}, nil
@@ -105,7 +104,7 @@ func (db *Store) PublishBrowserSync(ctx context.Context, userID string, m SyncMu
 		if err != nil {
 			return nil, err
 		}
-		if err = cloudusage.Commit(ctx, tx); err != nil {
+		if err = tx.Commit(); err != nil {
 			return nil, err
 		}
 		return &SyncReceipt{OperationID: m.OperationID, Sequence: head, Discarded: true}, nil
@@ -142,7 +141,7 @@ func (db *Store) PublishBrowserSync(ctx context.Context, userID string, m SyncMu
 	if err != nil {
 		return nil, err
 	}
-	if err = cloudusage.Commit(ctx, tx); err != nil {
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &SyncReceipt{OperationID: m.OperationID, Sequence: sequence}, nil

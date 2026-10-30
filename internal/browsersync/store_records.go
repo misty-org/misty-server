@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 	"regexp"
 )
 
@@ -163,5 +162,5 @@ func (db *Store) PullBrowserSyncRecords(ctx context.Context, userID, vault, devi
 	} else if !out.More {
 		out.Cursor = head
 	}
-	return out, cloudusage.Commit(ctx, tx)
+	return out, tx.Commit()
 }

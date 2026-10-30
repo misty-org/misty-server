@@ -170,7 +170,7 @@ func (s *SpacesService) GitHubRepos() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if !requireCoding(w, r, s.database, user, "projects.github") {
+		if !requireCoding(w, r, user, "projects.github") {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")

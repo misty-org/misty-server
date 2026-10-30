@@ -206,6 +206,7 @@ func agentCapabilityGuidanceWith(tools []string, desktopControl bool, ownTab boo
 			{"working.click-results", " Open items by clicking them in the results, not by guessing their address."},
 			{"working.retry-search", " When a site's search finds nothing, search again with fewer words (the brand and model, no sizes or codes), then browse its category, before saying the site does not have it."},
 			{"working.match-name", " A name you were asked to match (a category, a style) must match the item you pick: a prom dress is not a cocktail dress."},
+			{"working.renamed", " A page section or feature the request names may go by another name now (a store's \"Q&A\" may now read \"Community answers\"): when the name isn't on the page, use the section that does the same job, say which, and report from it rather than calling it missing."},
 			{"working.popups", " Close a popup or banner that covers what you need before anything else."},
 			{"working.no-extra-conditions", " Do not add conditions the request did not state (a \"written\" guide, an official page, a recent date): the best result that meets the request's own words counts, so take it, open it and report it instead of searching on for a better kind."},
 			{"working.video", " A video page is not unreadable: its text holds the title, channel and description (expand \"more\"), and clicking \"Show transcript\" or the captions control adds the spoken steps; read those, and summarize what the video shows."},

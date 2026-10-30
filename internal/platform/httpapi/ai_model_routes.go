@@ -9,11 +9,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/aimodels"
+	"github.com/kannachi323/misty/server/internal/modelruntime"
 	"github.com/kannachi323/misty/server/internal/platform/config"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 func writeAIProviderError(w http.ResponseWriter, err error) {
+	if writeModelError(w, err) {
+		return
+	}
 	status, message := http.StatusInternalServerError, "Could not save the model choice. Try again."
 	switch {
 	case errors.Is(err, db.ErrSpaceInvalid):
@@ -60,25 +64,17 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// ResolveAIModel returns the account's chosen model for a role, or nil for
-// Misty's default.
+// ResolveAIModel returns the account's model for a role (resolveRoleModel),
+// or nil for the operator's default.
 func (s *SpacesService) ResolveAIModel(ctx context.Context, user, role string) (*aimodels.Resolved, error) {
-	routes, err := s.database.AIModelRoutes(ctx, user)
-	if err != nil {
-		return nil, err
-	}
-	r := modelRoute(routes, role)
-	if !r.Enabled {
-		return nil, aimodels.ErrDisabled
-	}
-	if r.Model == "" {
-		return nil, nil
-	}
-	return &aimodels.Resolved{Model: r.Model, Reasoning: r.Reasoning}, nil
+	return resolveRoleModel(ctx, s.database, user, role)
 }
 
 // AgentRuntimeModelProvider confirms the runtime asks for the admitted model and
-// hands back the run's reasoning. Keys never leave the runtime's environment.
+// hands back how it runs: {"provider":"account","reasoning",...,"credential":
+// {provider,apiKey,baseURL}} on the key the run's account brought, or
+// {"provider":"instance","reasoning":...} on the operator's keys. With neither
+// it answers 409 model_key_needed. The response is never logged or cached.
 func (s *SpacesService) AgentRuntimeModelProvider() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -90,7 +86,7 @@ func (s *SpacesService) AgentRuntimeModelProvider() http.HandlerFunc {
 			return
 		}
 		runID := chi.URLParam(r, "runID")
-		user := ""
+		user, modelUser := "", ""
 		if body.Role != "agent" && body.Role != "vision" {
 			writeJSON(w, http.StatusForbidden, map[string]string{"code": "forbidden"})
 			return
@@ -101,7 +97,7 @@ func (s *SpacesService) AgentRuntimeModelProvider() http.HandlerFunc {
 				writeAgentError(w, err)
 				return
 			}
-			user = record.UserID
+			user, modelUser = record.UserID, record.UserID
 			runID = record.ID
 		} else {
 			run, err := s.database.ValidatePersonalAgentTaskRuntime(r.Context(), runID, body.RuntimeRunID)
@@ -109,7 +105,7 @@ func (s *SpacesService) AgentRuntimeModelProvider() http.HandlerFunc {
 				writeAgentError(w, err)
 				return
 			}
-			user = run.OwnerUserID
+			user, modelUser = run.OwnerUserID, runModelUser(run)
 			runID = run.ID
 		}
 		route, err := s.database.AIModelRunRoute(r.Context(), user, runID, body.Role)
@@ -122,7 +118,12 @@ func (s *SpacesService) AgentRuntimeModelProvider() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		writeJSON(w, 200, map[string]any{"provider": "instance", "reasoning": route.Reasoning})
+		resolved, err := modelruntime.RouteFor(r.Context(), modelUser, route.Model, route.Reasoning)
+		if err != nil {
+			writeAgentError(w, err)
+			return
+		}
+		writeJSON(w, 200, resolved)
 	}
 }
 
@@ -155,30 +156,6 @@ func (s *AIService) accountAgentModel(ctx context.Context, user string) (string,
 		}
 	}
 	return "", "", false, nil
-}
-
-func (s *SpacesService) runtimeModelBilling(ctx context.Context, user, run, node, fallback string) (string, string, error) {
-	role := "agent"
-	if db.ScreenPlanningNode(node) {
-		role = "vision"
-	}
-	var r aimodels.Route
-	var err error
-	if db.BrowsingNode(node) {
-		r, err = s.database.AIModelBrowsingRoute(ctx, user, run)
-	} else {
-		r, err = s.database.AIModelRunRoute(ctx, user, run, role)
-	}
-	if err != nil {
-		return "", "", err
-	}
-	if !r.Enabled {
-		return "", "", aimodels.ErrDisabled
-	}
-	if r.Model == "" {
-		r.Model = fallback
-	}
-	return aimodels.UsageProvider(r.Model), r.Model, nil
 }
 
 func configuredEmbeddingModel(ctx context.Context, analyzer *agent.SmartLibraryAnalyzer, user string) string {

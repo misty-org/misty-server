@@ -10,7 +10,7 @@ import { z } from "zod";
 import { RoutedModel } from "../../src/model-calls.js";
 
 const modelId = process.env.MISTY_FREE_MODEL?.trim() || "nim/z-ai/glm-5.3-flash";
-const ready = Boolean(process.env.NVIDIA_API_KEY?.trim()) && modelId.startsWith("nim/");
+const ready = Boolean(process.env.NVIDIA_API_KEY?.trim()) && /^(nim|nvidia)\//.test(modelId);
 const model = () => new RoutedModel(modelId, { provider: "instance" });
 
 /** A solid-color PNG, so the model has one unambiguous thing to see. */

@@ -32,8 +32,7 @@ func transcribeAgentVoiceModels(ctx context.Context, audio []byte, durationMS in
 		return "", "", AgentVoiceUsage{}, errors.New("invalid voice recording")
 	}
 	segments, _, language, actualDurationMS, err := call(model)
-	var billingFailure *voiceBillingError
-	if err != nil && !errors.As(err, &billingFailure) && ctx.Err() == nil && fallback != "" && model != fallback {
+	if err != nil && ctx.Err() == nil && fallback != "" && model != fallback {
 		model = fallback
 		segments, _, language, actualDurationMS, err = call(model)
 	}
@@ -63,13 +62,8 @@ func (e *SpeechProviderError) Error() string {
 	return fmt.Sprintf("speech provider status %d", e.Status)
 }
 
-// transcribeWithRoute transcribes one chunk through the agent runtime and
-// meters it by audio duration: transcription models report no tokens.
+// transcribeWithRoute transcribes one chunk through the agent runtime.
 func (a *SmartLibraryAnalyzer) transcribeWithRoute(ctx context.Context, route modelruntime.Route, audio []byte, mimeType string, chunkDurationMS int64, model string) ([]MediaTranscriptSegment, ModelUsage, string, int64, error) {
-	attempt, err := a.billing.Begin(ctx, "library.transcription", model, map[string]int64{"audio_ms": chunkDurationMS})
-	if err != nil {
-		return nil, ModelUsage{}, "", 0, err
-	}
 	result, callErr := a.Models.Transcribe(ctx, route, model, mimeType, audio)
 	actualDurationMS := int64(0)
 	if callErr == nil && result.DurationInSeconds != nil {
@@ -79,9 +73,6 @@ func (a *SmartLibraryAnalyzer) transcribeWithRoute(ctx context.Context, route mo
 		} else {
 			actualDurationMS = int64(math.Ceil(seconds * 1000))
 		}
-	}
-	if err := attempt.Finish(ctx, callErr == nil, map[string]int64{"audio_ms": actualDurationMS}, actualDurationMS <= 0); err != nil {
-		return nil, ModelUsage{}, "", 0, err
 	}
 	if callErr != nil {
 		var failure *modelruntime.Error

@@ -35,7 +35,8 @@ func (s *SpacesService) ProcessNoteControlCommands(ctx context.Context, limit in
 	delivered := 0
 	var processingErrors []error
 	for _, command := range commands {
-		if err := s.DeliverNoteControlCommand(ctx, command.NoteID, command.Command, command.Payload); err != nil {
+		// Without a collaboration service there is no room to tell.
+		if err := s.DeliverNoteControlCommand(ctx, command.NoteID, command.Command, command.Payload); err != nil && !errors.Is(err, ErrCollaborationOff) {
 			if markErr := s.database.MarkNoteControlFailed(ctx, command.ID, err.Error()); markErr != nil {
 				processingErrors = append(processingErrors, fmt.Errorf("record failed note command %s: %w", command.ID, markErr))
 			}
@@ -79,6 +80,9 @@ func (s *SpacesService) requestCollaborationControlCommand(
 	party, room, resourceID, command string,
 	payload []byte,
 ) (json.RawMessage, error) {
+	if !s.JournalCollab.Enabled {
+		return nil, ErrCollaborationOff
+	}
 	if !json.Valid(payload) {
 		return nil, errors.New("collaboration control payload is invalid JSON")
 	}

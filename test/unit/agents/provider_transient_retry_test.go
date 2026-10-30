@@ -26,7 +26,7 @@ func (provider *timeoutOnceProvider) NextContext(_ context.Context, _ ModelReque
 func TestAgentCompletionRetriesOneTransientProviderTimeout(t *testing.T) {
 	provider := &timeoutOnceProvider{}
 	service := NewService(nil, provider)
-	text, _, err := service.CompleteContext(context.Background(), "user", "hello", "assistant_ai")
+	text, err := service.CompleteContext(context.Background(), "user", "hello")
 	if err != nil {
 		t.Fatal(err)
 	}

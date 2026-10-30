@@ -12,7 +12,7 @@ func TestDiarizedTranscriptionSendsContextAndReadsTurns(t *testing.T) {
 			{"speaker": "2", "start": 1.4, "end": 2.0, "text": "Hello."},
 		}}
 	})
-	result, err := fake.Client.TranscribeDiarized(t.Context(), "soniox/stt-async-v4", "audio/wav", []byte("RIFF"), []string{"en"}, &DiarizedContext{Terms: []string{"Misty"}})
+	result, err := fake.Client.TranscribeDiarized(t.Context(), Instance(), "soniox/stt-async-v4", "audio/wav", []byte("RIFF"), []string{"en"}, &DiarizedContext{Terms: []string{"Misty"}})
 	if err != nil || len(result.Turns) != 2 || result.Turns[1].Speaker != "2" || result.Turns[1].Start != 1.4 {
 		t.Fatalf("TranscribeDiarized() = %+v, %v", result, err)
 	}

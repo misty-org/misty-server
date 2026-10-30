@@ -141,9 +141,6 @@ SQL
   } | "${DEV_COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$ADMIN_DB_USER" -d "$TEST_DB_NAME" >/dev/null
 fi
 
-# Billing contracts configure their own endpoints; ordinary database fixtures
-# must not send usage from the test database to the development billing service.
-export MISTY_BILLING_ADAPTER=none
 # Database-backed packages share this one disposable database. Keep package
 # execution serial so one package cannot truncate or reseed beneath another.
 go test -p 1 ./... -count=1 "$@"

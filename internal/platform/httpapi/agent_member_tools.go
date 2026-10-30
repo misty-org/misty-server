@@ -16,7 +16,7 @@ import (
 // Agents talk to other members' agents through these tools. Every agent is a
 // member of the one Space it lives in; any other member's agent can send it a
 // request there. The work runs as the target owner's agent, limited to that
-// Space, and is billed to the member who asked. Unless the owner lets requests
+// Space, on the models of the member who asked. Unless the owner lets requests
 // start at once, each one waits for the owner's approval.
 const (
 	agentsDirectoryTool     = "agent.directory"

@@ -13,7 +13,6 @@ func (s *Server) mountPublicRoutes(prefix string, deps *mountDeps) {
 	s.mountPublicAccountRoutes(prefix, deps)
 	s.mountPublicSyncRoutes(prefix, deps)
 	s.mountPublicProfileRoutes(prefix, deps)
-	s.mountPublicBillingRoutes(prefix, deps)
 	s.mountPublicFeatureRoutes(prefix, deps)
 }
 
@@ -46,8 +45,6 @@ func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/me", api.GetMe(s.Database))
 	s.Router.Put(prefix+"/me/password", api.ChangePassword(s.Database))
 	s.Router.Post(prefix+"/me/email/verify", deps.verification.Resend())
-	s.Router.Get(prefix+"/me/referral", deps.verification.Referral())
-	s.Router.Post(prefix+"/me/referral/claim", deps.verification.ClaimReferral())
 }
 
 // mountPublicSyncRoutes registers the browser sync vault, device, and restore routes.
@@ -83,14 +80,6 @@ func (s *Server) mountPublicProfileRoutes(prefix string, deps *mountDeps) {
 	s.Router.Put(prefix+"/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
 }
 
-// mountPublicBillingRoutes registers checkout, portal, usage, and estimate routes.
-func (s *Server) mountPublicBillingRoutes(prefix string, deps *mountDeps) {
-	s.Router.Post(prefix+"/billing/checkout-session", api.CreateCheckoutSession(s.Database))
-	s.Router.Post(prefix+"/billing/portal-session", api.CreatePortalSession(s.Database))
-	s.Router.Get(prefix+"/billing/usage", api.GetBillingUsage(s.Database))
-	s.Router.Post(prefix+"/billing/estimate", api.EstimateAIUsage(s.Database))
-}
-
 // mountPublicFeatureRoutes mounts the AI, library, agents, and spaces route trees.
 func (s *Server) mountPublicFeatureRoutes(prefix string, deps *mountDeps) {
 	s.mountAIRoutes(prefix+"/ai", deps.ai)
@@ -111,7 +100,7 @@ func (s *Server) mountOperationalRoutes(deps *mountDeps) {
 		s.Router.Get("/metrics", s.Metrics.Handler(token))
 	}
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/activate", s.Spaces.AgentRuntimeActivate())
-	s.Router.Post("/internal/voice/live/settle", deps.agents.VoiceLiveSettle())
+	s.Router.Post("/internal/voice/live/credential", deps.agents.VoiceLiveCredential())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/start-receipt", s.Spaces.AgentRuntimeStartReceipt())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/budget", s.Spaces.AgentRuntimeExecutionBudget())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/steering", s.Spaces.AgentRuntimeSteering())

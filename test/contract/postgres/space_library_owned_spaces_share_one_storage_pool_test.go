@@ -2,16 +2,12 @@ package db
 
 import (
 	"context"
-	"errors"
-	. "github.com/kannachi323/misty/server/internal/platform/db"
-	"strings"
 	"testing"
-	"time"
+
 )
 
-func TestOwnedSpacesShareOneStoragePool(t *testing.T) {
+func TestOwnedSpacesStorageUsageAddsUp(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, err := database.CreateUser("pooled-owner@example.com", "password123")
 	if err != nil {
@@ -22,17 +18,12 @@ func TestOwnedSpacesShareOneStoragePool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest := strings.Repeat("c", 64)
-	// Half the pool is consumed from each Space, so overflow can only be
-	// explained by the two Spaces sharing one owner-level pool.
-	first := reserveQuotaBytes(t, database, ctx, owner.ID, firstSpace.ID, "pool-first", FreeStorageBytes/2)
-	second := reserveQuotaBytes(t, database, ctx, owner.ID, project.ID, "pool-second", FreeStorageBytes/2)
-	if _, err := database.CreateLibraryUpload(ctx, owner.ID, project.ID, "library", "overflow.bin", "application/octet-stream", 1, digest, "library/pool-overflow", "pool-overflow-token", time.Now().Add(time.Hour)); !errors.Is(err, ErrLibraryQuota) {
-		t.Fatalf("cross-Space overflow = %v, want ErrLibraryQuota", err)
-	}
+	const half = int64(1_000_000)
+	first := reserveQuotaBytes(t, database, ctx, owner.ID, firstSpace.ID, "pool-first", half)
+	second := reserveQuotaBytes(t, database, ctx, owner.ID, project.ID, "pool-second", half)
 	ownerUsage, err := database.OwnerStorageUsage(ctx, owner.ID)
-	if err != nil || ownerUsage.ReservedBytes != FreeStorageBytes || len(ownerUsage.Spaces) != 2 {
-		t.Fatalf("owner pool = %#v, %v", ownerUsage, err)
+	if err != nil || ownerUsage.ReservedBytes != 2*half || len(ownerUsage.Spaces) != 2 {
+		t.Fatalf("owner usage = %#v, %v", ownerUsage, err)
 	}
 	releaseQuota(t, database, ctx, first)
 	releaseQuota(t, database, ctx, second)

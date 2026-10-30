@@ -39,16 +39,6 @@ func TestLiveTicketsAreSignedBoundAndExpire(t *testing.T) {
 	}
 }
 
-func TestVoiceWeeklyMinutesAreConfigurable(t *testing.T) {
-	minutes := voiceWeeklyMinutes("basic=30, pro=900,unknown=5,max=oops")
-	if minutes["basic"] != 30 || minutes["pro"] != 900 || minutes["max"] != 1200 || minutes["ultra_plus"] != 12000 {
-		t.Fatalf("minutes = %v", minutes)
-	}
-	if _, ok := minutes["unknown"]; ok {
-		t.Fatal("unknown plan added")
-	}
-}
-
 func TestLiveChannelsAreMicAndSystemOnce(t *testing.T) {
 	if got, ok := liveChannels([]string{"mic", "system"}); !ok || len(got) != 2 {
 		t.Fatal("mic and system refused")

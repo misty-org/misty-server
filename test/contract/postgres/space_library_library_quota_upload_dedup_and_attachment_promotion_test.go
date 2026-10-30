@@ -12,7 +12,6 @@ import (
 
 func TestLibraryQuotaUploadDedupAndAttachmentPromotion(t *testing.T) {
 	database := openTestDatabase(t)
-	useResourceAdapterFixture(t, database)
 	ctx := context.Background()
 	owner, err := database.CreateUser("library-owner@example.com", "password123")
 	if err != nil {

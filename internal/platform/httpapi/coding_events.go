@@ -45,7 +45,7 @@ func (s *SpacesService) CodingEvents() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if !requireCoding(w, r, s.database, user, "coding.events") {
+		if !requireCoding(w, r, user, "coding.events") {
 			return
 		}
 		var body struct {
@@ -66,10 +66,6 @@ func (s *SpacesService) CodingEvents() http.HandlerFunc {
 			// Without a lease the device can only report that the run stopped.
 			if len(body.Events) != 1 || body.Events[0].Type != "error" {
 				writeSpaceError(w, db.ErrSpaceForbidden)
-				return
-			}
-			if err := s.settleCodingLeases(r.Context(), run, ""); err != nil {
-				writeBillingError(w, err)
 				return
 			}
 			_ = s.aiInvocations.fail(run.record.ID, strings.TrimSpace(firstAIText(body.Events[0].Message, "The coding tool couldn't start.")))
@@ -113,54 +109,14 @@ func (s *SpacesService) recordCodingEvent(ctx context.Context, run *codingRun, l
 			return err
 		}
 		return nil
-	case "usage":
-		usage := codingUsage{Input: event.Input, Output: event.Output, CacheWrite: event.CacheWrite, CacheRead: event.CacheRead}
-		return s.database.AddCodingLeaseUsage(ctx, run.record.UserID, lease.ID, db.CodingLeaseUsage{
-			Input: usage.Input, Output: usage.Output, CacheWrite: usage.CacheWrite, CacheRead: usage.CacheRead, Weighted: usage.weighted(codingExternalFactor()),
-		})
 	case "rate_limit":
 		limit, _ := json.Marshal(map[string]any{"used_percent": event.UsedPct, "window": event.Window})
 		return s.database.SaveCodingEngines(ctx, run.record.UserID, lease.DeviceID, []db.CodingEngine{{Engine: lease.Engine, Installed: true, SignedIn: true, RateLimit: limit}})
 	case "error":
-		if err := s.settleCodingLeases(ctx, run, ""); err != nil {
-			return err
-		}
 		return s.aiInvocations.fail(run.record.ID, strings.TrimSpace(firstAIText(event.Message, "The coding tool stopped with an error.")))
 	case "done":
-		if err := s.settleCodingLeases(ctx, run, ""); err != nil {
-			return err
-		}
 		return s.aiInvocations.complete(run.record.ID)
 	}
 	// Sessions, thinking and permission requests are handled on the device.
-	return nil
-}
-
-// settleCodingLeases tells billing what each of the run's finished leases
-// used, once per lease; keep names a lease still in use. Settling releases
-// whatever the lease reserved and didn't use.
-func (s *SpacesService) settleCodingLeases(ctx context.Context, run *codingRun, keep string) error {
-	leases, err := s.database.UnsettledCodingLeases(ctx, run.record.UserID, run.record.ID)
-	if err != nil {
-		return err
-	}
-	meter, _ := s.usageMeter.(interface {
-		CompleteRuntimeTurn(context.Context, string, string, string, agent.ModelUsage) error
-	})
-	factor := codingExternalFactor()
-	for _, lease := range leases {
-		if lease.ID == keep {
-			continue
-		}
-		if meter != nil {
-			usage := codingUsage{Input: lease.Usage.Input, Output: lease.Usage.Output, CacheWrite: lease.Usage.CacheWrite, CacheRead: lease.Usage.CacheRead}
-			if err := meter.CompleteRuntimeTurn(ctx, run.record.UserID, run.record.ID, lease.ID, usage.billed(factor)); err != nil {
-				return err
-			}
-		}
-		if err := s.database.MarkCodingLeaseSettled(ctx, run.record.UserID, lease.ID); err != nil {
-			return err
-		}
-	}
 	return nil
 }

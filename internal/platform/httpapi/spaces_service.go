@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 
 	"github.com/go-chi/chi/v5"
@@ -36,7 +35,6 @@ type SpacesService struct {
 	agentRuntime      AgentRuntimeConfig
 	aiInvocations     *aiInvocationHub
 	searchAnalyzer    *serveragent.SmartLibraryAnalyzer
-	usageMeter        serveragent.UsageMeter
 	models            *modelruntime.Client
 }
 
@@ -46,10 +44,6 @@ func (s *SpacesService) SetModels(models *modelruntime.Client) { s.models = mode
 func (s *SpacesService) SetAgentRuntime(config AgentRuntimeConfig) {
 	config.database = s.database
 	s.agentRuntime = config
-}
-
-func (s *SpacesService) SetUsageMeter(meter serveragent.UsageMeter) {
-	s.usageMeter = meter
 }
 
 func (s *SpacesService) SetSearchAnalyzer(analyzer *serveragent.SmartLibraryAnalyzer) {
@@ -167,9 +161,10 @@ func (s *SpacesService) MemberAvatar() http.HandlerFunc {
 }
 
 func writeSpaceError(w http.ResponseWriter, err error) {
+	if writeModelError(w, err) {
+		return
+	}
 	switch {
-	case errors.Is(err, billingadapter.ErrDenied), errors.Is(err, billingadapter.ErrUnavailable):
-		writeBillingError(w, err)
 	case errors.Is(err, db.ErrSpaceNotFound), errors.Is(err, db.ErrSpaceInviteNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
 	case errors.Is(err, db.ErrPersonalAgentNotFound):
@@ -188,15 +183,8 @@ func writeSpaceError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_people_limit_reached"})
 	case errors.Is(err, db.ErrSpaceNodeLimit):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_node_limit_reached"})
-	case errors.Is(err, db.ErrPersonalStorageQuota):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "owner_storage_quota_exceeded", "reason": "personal_storage_limit_reached"})
-	case errors.Is(err, db.ErrSpaceStorageQuota):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "owner_storage_quota_exceeded", "reason": "personal_storage_limit_reached"})
 	case errors.Is(err, db.ErrLibraryQuota):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "owner_storage_quota_exceeded"})
-	case isHostedAILimitReached(err):
-		scope, _ := hostedAILimitScope(err)
-		writeJSON(w, http.StatusPaymentRequired, map[string]string{"code": "hosted_ai_limit_reached", "reason": hostedAILimitReason(scope), "message": hostedAILimitMessage(scope)})
 	case errors.Is(err, db.ErrSpaceConflict):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict"})
 	case errors.Is(err, db.ErrSpaceInviteExpired):

@@ -3,26 +3,16 @@ package agent
 import (
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/kannachi323/misty/server/internal/aimodels"
 )
 
 // HouseReasoning is the one reasoning effort every run uses. People never choose
 // a model or an effort: everyone gets the same agent.
 const HouseReasoning = "low"
 
-// ClientModelChoice reports whether a request may pick its own model or effort.
-// Production never allows it. A development stack allows it only when
-// MISTY_ALLOW_MODEL_OVERRIDE is set, so evals can compare models.
-func ClientModelChoice() bool {
-	if !strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_ENVIRONMENT")), "development") {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(config.Getenv("MISTY_ALLOW_MODEL_OVERRIDE"))) {
-	case "1", "true", "yes":
-		return true
-	}
-	return false
-}
+// ClientModelChoice reports whether a request may pick its own model or effort
+// (aimodels.ClientModelChoice).
+func ClientModelChoice() bool { return aimodels.ClientModelChoice() }
 
 // FreeEvalModel reports whether id is a model on NVIDIA's free hosted endpoints (`nim/…`),
 // which a development stack with ClientModelChoice runs for evals without paid credit

@@ -71,10 +71,8 @@ func (db *Database) RecordAgentRuntimeStatus(ctx context.Context, runID, runtime
 			if err != nil || n == 0 {
 				return err
 			}
-			if _, err = tx.ExecContext(ctx, `UPDATE agent_run_jobs SET state='failed',completed_at=NOW(),updated_at=NOW() WHERE run_id=$1 AND state='dispatched'`, runID); err != nil {
-				return err
-			}
-			return releasePersonalAgentRuntimeReservationsTx(ctx, tx, runID)
+			_, err = tx.ExecContext(ctx, `UPDATE agent_run_jobs SET state='failed',completed_at=NOW(),updated_at=NOW() WHERE run_id=$1 AND state='dispatched'`, runID)
+			return err
 		default:
 			return ErrSpaceInvalid
 		}

@@ -41,7 +41,7 @@ describe("voice-notes", () => {
     expect(headings(notes.markdown)).toEqual(["Decisions", "Follow up"]);
     expect(notes.markdown).toContain("- Ask Sam");
     expect(notes.actionItems[0]).toEqual({ text: "Book the review", owner: "Dana" });
-    expect(notes.usage).toMatchObject({ inputTokens: 120, outputTokens: 40 });
+    expect(notes).not.toHaveProperty("usage");
   });
 
   it("leaves output alone when headings survived or there were no notes", () => {

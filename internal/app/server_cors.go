@@ -13,8 +13,8 @@ func AllowedCORSOrigins() []string {
 		"tauri://localhost",
 		"http://tauri.localhost",
 		"https://tauri.localhost",
-		"https://apps.mistysys.com",
 	}
+	// Web origins (a hosted web app, for one) come only from the operator.
 	// Local development servers are credentialed origins only outside
 	// production; anything on the user's machine could otherwise serve them.
 	if !productionEnvironment() {

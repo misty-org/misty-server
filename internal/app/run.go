@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,8 +25,11 @@ func Run() {
 		defer cancel()
 		server.Telemetry.Close(ctx)
 	}()
-	aiProvider, aiModel := server.AIAgent.ProviderStatus()
-	log.Printf("MistyAI provider: %s (%s)", aiProvider, aiModel)
+	if model := strings.TrimSpace(config.Getenv("MISTY_AGENT_MODEL")); model != "" {
+		log.Printf("Models: each account's own keys, else the operator's %s", model)
+	} else {
+		log.Printf("Models: each account's own keys; no operator model")
+	}
 
 	if err := server.Database.Start(); err != nil {
 		panic(err)
@@ -42,7 +46,6 @@ func Run() {
 	defer stopWorkers()
 	startWorkers(
 		workerContext,
-		WorkerFunc(func(ctx context.Context) { runBillingCompletions(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) {
 			if server.AbuseGuard != nil {
 				server.AbuseGuard.Run(ctx, func(reason string) { server.Metrics.RecordWorkerWake("abuse-blocks", reason) })

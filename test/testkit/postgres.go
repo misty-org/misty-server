@@ -139,9 +139,9 @@ func DatabaseDSN(t testing.TB, user, password string) string {
 // to name six tables explicitly, which stopped covering the schema as
 // migrations added tables: rows in tables reachable from users only through
 // TRUNCATE ... CASCADE were cleared, and everything else survived. Tables with
-// no foreign key into users — stripe_webhook_events above all — accumulated
-// across runs, so a test replaying a fixed Stripe event ID passed on a freshly
-// bootstrapped database and failed on every rerun.
+// no foreign key into users accumulated across runs, so a test replaying a
+// fixed event ID passed on a freshly bootstrapped database and failed on every
+// rerun.
 //
 // Migrations seed no static reference data (their INSERTs all backfill from
 // spaces/users), so nothing here needs preserving except goose_db_version,

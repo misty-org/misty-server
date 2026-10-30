@@ -1,4 +1,3 @@
-import { admissionInput } from "../src/admission-input.js";
 import { type ModelMessage } from "ai";
 import { FatalError } from "workflow";
 import { browserReinspectionInstruction } from "../src/browser-reinspection.js";
@@ -6,7 +5,7 @@ import { summarizeOlderSteps } from "../src/context/compaction-step.js";
 import { closingAnswer } from "../src/closing-answer.js";
 import { contextWindow, messageBytes } from "../src/context/context-compaction.js";
 import { condense, oldToolResults, periodicSummary, staleSnapshots, SUMMARY_EVERY_TURNS, summarizedSteps, workingSet } from "../src/context/condenser.js";
-import { admitModelTurn, fetchExecutionBudget, takeSteering } from "../src/control-plane-steps.js";
+import { checkpoint, fetchExecutionBudget, takeSteering } from "../src/control-plane-steps.js";
 import type { HarnessCompletion } from "../src/harness.js";
 import { discoverRemoteMCPTools } from "../src/mcp-runtime.js";
 import { accumulateModelUsage, modelTurnLimit } from "../src/model-budget.js";
@@ -35,7 +34,6 @@ import { logContextBreakdown, logToolChange, paceTurn, waitOutTakeover, type Pac
  * its real name; Misty's gateway authorizes, journals and executes each call.
  * The model reports the outcome with agent_finish.
  */
-const usageWrapUpInstruction = "Usage note from Misty: this account just reached an AI usage limit, so this task has only a little room left. Finish now in as few steps as possible. If the task cannot be completed, call agent_finish and report exactly what is done and what remains.";
 
 export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
   "use workflow";
@@ -49,12 +47,11 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     ledger: new Ledger(ledgerFromPrompt(context.prompt)),
     order: serialToolLifecycle(),
     limit: 0, modelTurn: 0, visibleTools: [], hookFailure: undefined,
-    verified: false, persisted: 0,
+    verified: false, persisted: 0, reportedOnly: 0,
   } as Omit<AgentRun, "tools"> as AgentRun;
   const { order } = run;
   let finishAsked = false;
   let progressNudges = 0;
-  let wrappingUp = false;
   run.tools = assembleTools(run, mcpCatalog);
   run.visibleTools = run.tools.toolNames;
   await execution.checkpoint({
@@ -148,21 +145,12 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
       lastToolKey = logToolChange(run, lastToolKey);
       const budget = await fetchExecutionBudget(identity, modelTurn + 1);
       lastSentBytes = messageBytes(messages);
-      // Admission (billing's hold for this turn) happens before the model call and
-      // outside the agent's hooks, so a refusal stops the call instead of being
-      // swallowed while the model runs unmetered.
+      // Go counts the turn (the run's turn limit) before the model call and outside
+      // the agent's hooks, so a refusal stops the call instead of being swallowed.
       if (modelTurn === 0) logContextBreakdown(run, messages);
-      const admission = await admitModelTurn(identity, {
+      await checkpoint(identity, {
         node_id: `model:${modelTurn + 1}`, state: "running", phase: "thinking", progress: Math.min(85, 10 + modelTurn * 6),
-        // Native payload size only, with images counted apart from text. Billing estimates tokens/rates.
-        output: admissionInput({ system: run.tools.instructions, messages, tools: run.tools.catalog.tools }),
       });
-      // Past a usage limit the run may finish on a small grace; ask the model,
-      // once, to wrap up rather than start new work.
-      if (admission.over_limit && !wrappingUp) {
-        wrappingUp = true;
-        messages.push({ role: "user", content: usageWrapUpInstruction });
-      }
       const current = await streamTurn(run, messages, shared, budget, pacing, modelTurn);
       if (run.hookFailure) throw run.hookFailure;
       lastInputTokens = current.steps.at(-1)?.usage?.inputTokens ?? 0;
@@ -227,7 +215,7 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
     if (order.stoppedReason) return await finishStopped();
     const failure = classifyRuntimeError(error);
     if (failure.code === "usage_limit_reached") {
-      // Out of usage mid-task is a pause, not a failure: keep what was done.
+      // Held back by a rate limit mid-task is a pause, not a failure: keep what was done.
       const sofar = result ? finalText(result.steps) : "";
       return await finish({ status: "incomplete", text: [sofar, failure.message].filter(Boolean).join("\n\n"), error_code: failure.code, error_message: failure.message });
     }

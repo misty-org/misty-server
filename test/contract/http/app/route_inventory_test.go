@@ -15,8 +15,6 @@ import (
 func TestRouteInventory(t *testing.T) {
 	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_ENVIRONMENT", "")
-	t.Setenv("STRIPE_WEBHOOK_PATH", "")
-	t.Setenv("STRIPE_WEBHOOK_SECRET", "")
 	t.Setenv("MISTY_DEVICE_JOBS_ENABLED", "false")
 	t.Setenv("MISTY_METRICS_TOKEN", "")
 	t.Setenv("R2_ENDPOINT", "")

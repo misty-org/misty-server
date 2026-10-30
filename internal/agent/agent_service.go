@@ -16,7 +16,6 @@ type Service struct {
 	store         *SessionStore
 	provider      ModelProvider
 	policy        PermissionPolicy
-	meter         UsageMeter
 	modelResolver aimodels.Resolver
 	models        *modelruntime.Client
 }
@@ -30,27 +29,26 @@ type ToolCompletion struct {
 }
 
 // MaxToolRounds bounds how many tool round trips one automated run may make.
-// Generous for real work, finite so a runaway loop cannot bill forever.
+// Generous for real work, finite so a runaway loop cannot run forever.
 const MaxToolRounds = 12
 
 // ErrToolRoundLimit is returned when a run exceeds MaxToolRounds.
 var ErrToolRoundLimit = errors.New("agent run exceeded its tool round limit")
 
-func (s *Service) CompleteWithToolsForSpaceContext(ctx context.Context, userID, billingUserID, spaceID, systemPrompt, prompt string, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
+func (s *Service) CompleteWithToolsForSpaceContext(ctx context.Context, userID, modelUserID, spaceID, systemPrompt, prompt string, manifest ToolManifest, execute ToolExecutor) (ToolCompletion, error) {
 	spaceID = strings.TrimSpace(spaceID)
-	if spaceID != "" {
-		// Space work always consumes the initiating member's personal allowance;
-		// the meter separately applies the owner-plan allowance to the Space.
-		billingUserID = userID
+	if spaceID != "" || modelUserID == "" {
+		// Space work always runs on the initiating member's own models.
+		modelUserID = userID
 	}
 	if execute == nil || len(manifest.Tools) == 0 {
 		// A read-only completion still needs its instructions in the provider's
 		// authoritative field. Folding them into the user message loses them to
 		// the persona/injection rules in buildAgentPrompt.
-		text, _, err := s.completeWithProviderContext(ctx, billingUserID, spaceID, systemPrompt, prompt, "automation_ai")
+		text, err := s.completeWithProviderContext(ctx, modelUserID, systemPrompt, prompt)
 		return ToolCompletion{Text: text}, err
 	}
-	session := s.CreateSessionWithBillingAndSpace(userID, billingUserID, spaceID)
+	session := s.CreateSessionWithSpace(userID, spaceID)
 	defer func() { _ = s.Forget(session.ID, userID) }()
 	if err := s.SetSessionSystemPrompt(session.ID, userID, systemPrompt); err != nil {
 		return ToolCompletion{}, err
@@ -60,9 +58,8 @@ func (s *Service) CompleteWithToolsForSpaceContext(ctx context.Context, userID, 
 	}
 	after := int64(0)
 	completion := ToolCompletion{}
-	// Each round trip is another paid model call. Without a cap, a model that
-	// keeps asking for tools loops until the caller disconnects, so one request
-	// can bill indefinitely.
+	// Each round trip is another model call. Without a cap, a model that
+	// keeps asking for tools loops until the caller disconnects.
 	for round := 0; ; round++ {
 		if round >= MaxToolRounds {
 			return ToolCompletion{}, ErrToolRoundLimit
@@ -113,70 +110,45 @@ func (s *Service) CompleteWithToolsForSpaceContext(ctx context.Context, userID, 
 	}
 }
 
-func (s *Service) CompleteContext(ctx context.Context, userID, prompt, meterName string) (string, UsageSettlement, error) {
-	return s.completeWithProviderContext(ctx, userID, "", "", prompt, meterName)
+func (s *Service) CompleteContext(ctx context.Context, userID, prompt string) (string, error) {
+	return s.completeWithProviderContext(ctx, userID, "", prompt)
 }
 
-func (s *Service) completeWithProviderContext(ctx context.Context, userID, spaceID, systemPrompt, prompt, meterName string) (string, UsageSettlement, error) {
+func (s *Service) completeWithProviderContext(ctx context.Context, userID, systemPrompt, prompt string) (string, error) {
 	selectedProvider := s.provider
 	if s.modelResolver != nil {
 		config, configErr := s.modelResolver(ctx, userID, "routing")
 		if configErr != nil {
-			return "", UsageSettlement{}, configErr
+			return "", configErr
 		}
 		if config != nil {
 			var providerErr error
 			selectedProvider, providerErr = accountCompletionProvider(s.models, config)
 			if providerErr != nil {
-				return "", UsageSettlement{}, providerErr
+				return "", providerErr
 			}
 		}
 	}
 	prompt = strings.TrimSpace(prompt)
 	systemPrompt = strings.TrimSpace(systemPrompt)
 	if prompt == "" {
-		return "", UsageSettlement{}, ErrInvalidRequest("prompt is required")
+		return "", ErrInvalidRequest("prompt is required")
 	}
 	if len(prompt)+len(systemPrompt) > MaxUserMessageBytes {
-		return "", UsageSettlement{}, ErrInvalidRequest("prompt is too large")
+		return "", ErrInvalidRequest("prompt is too large")
 	}
 	request := ModelRequest{SessionID: uuid.NewString(), UserID: userID, SystemPrompt: systemPrompt, Mode: ModeAsk, Messages: []Message{{Role: RoleUser, Content: prompt}}}
-	provider, model := ProviderStatus(selectedProvider)
-	idempotencyKey := "completion:" + request.SessionID
-	var reservation *UsageReservation
-	var err error
-	if s.meter != nil && provider != ProviderMock {
-		reservation, err = ReserveMeasuredUsage(s.meter, userID, idempotencyKey, provider, model, map[string]int64{"input_bytes": int64(RequestSizeBytes(request)), "output_tokens": MaxModelOutputTokens}, "")
-		if err != nil {
-			return "", UsageSettlement{}, err
-		}
-	}
 	response, err := nextProvider(ctx, selectedProvider, request)
 	if err != nil {
-		if reservation != nil && releasableProviderFailure(err) {
-			_ = s.meter.Release(reservation)
-		}
 		if !errors.Is(err, context.Canceled) {
 			log.Printf("agent completion provider request failed: %v", err)
 		}
-		return "", UsageSettlement{}, err
+		return "", err
 	}
-	settlement := UsageSettlement{}
-	if reservation != nil {
-		settlement, err = s.meter.Settle(reservation, idempotencyKey+":settle", meterName, provider, model, response.Usage)
-		if err != nil {
-			// The settlement is durable in the outbox; never release used work.
-			return "", UsageSettlement{}, err
-		}
-	}
-	return response.Text, settlement, nil
+	return response.Text, nil
 }
 
 type ServiceOption func(*Service)
-
-func WithUsageMeter(meter UsageMeter) ServiceOption {
-	return func(service *Service) { service.meter = meter }
-}
 
 // WithModelRuntime sends per-request model choices (an account's own
 // connection or a picked Gateway model) through the agent runtime.
@@ -213,12 +185,9 @@ func ProviderStatus(provider ModelProvider) (string, string) {
 	return ProviderMock, "mock"
 }
 
-func (s *Service) CreateSessionWithBillingAndSpace(userID, billingUserID, spaceID string) *Session {
+func (s *Service) CreateSessionWithSpace(userID, spaceID string) *Session {
 	spaceID = strings.TrimSpace(spaceID)
-	if spaceID != "" {
-		billingUserID = userID
-	}
-	session := s.store.CreateWithBilling(userID, billingUserID)
+	session := s.store.Create(userID)
 	if spaceID == "" {
 		return session
 	}

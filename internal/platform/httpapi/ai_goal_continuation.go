@@ -31,13 +31,6 @@ func (s *SpacesService) afterAIInvocationGoalRun(record *db.AIInvocationRecord, 
 		if err != nil || goal == nil || goal.Status != "pursuing" || status == "failed" || voiceInvocation(body) {
 			return
 		}
-		// Goals stop at a phase boundary once any usage limit is used up: the
-		// phase that just ran was allowed to finish, the next one waits for the
-		// limit to refill and then resumes by itself.
-		if reached, resumeAt := usageLimitReached(ctx, s.database, record.UserID); reached {
-			_, _ = s.database.PauseAgentGoalUntil(ctx, record.UserID, goal.ID, "Paused at your AI usage limit. Misty picks this goal up again when it refills.", resumeAt)
-			return
-		}
 		if body.Trigger == goalContinuationTrigger && !goalReportedBy(goal, record.ID) {
 			// A continuation that stopped without reporting progress would loop
 			// without evidence of it; stop and let the user decide.
@@ -136,65 +129,3 @@ func (s *SpacesService) startGoalContinuation(ctx context.Context, finished *db.
 	return err
 }
 
-// usageLimitReached reports whether any AI limit is used up, and when every
-// used-up limit has refilled.
-func usageLimitReached(ctx context.Context, database *db.Database, user string) (bool, time.Time) {
-	if !database.BillingService().Adapter.Enabled() {
-		return false, time.Time{}
-	}
-	summary, err := accountBillingSummary(ctx, database, user)
-	if err != nil {
-		return false, time.Time{}
-	}
-	ai, _ := summary["ai"].(map[string]any)
-	limits, _ := ai["limits"].(map[string]any)
-	reached, resumeAt := false, time.Time{}
-	for _, raw := range limits {
-		limit, _ := raw.(map[string]any)
-		remaining, _ := limit["remaining"].(float64)
-		resets, _ := limit["resets_at"].(string)
-		at, err := time.Parse(time.RFC3339Nano, resets)
-		if remaining > 0 || err != nil {
-			continue
-		}
-		reached = true
-		if at.After(resumeAt) {
-			resumeAt = at
-		}
-	}
-	return reached, resumeAt
-}
-
-// ResumeDueGoals starts the next phase of goals whose usage limit refilled.
-func (s *SpacesService) ResumeDueGoals(ctx context.Context, limit int) (int, error) {
-	due, err := s.database.ClaimDueGoalResumes(ctx, limit)
-	if err != nil {
-		return 0, err
-	}
-	for _, d := range due {
-		goal, err := s.database.AgentGoalByID(ctx, d.User, d.GoalID)
-		if err != nil {
-			continue
-		}
-		if reached, resumeAt := usageLimitReached(ctx, s.database, d.User); reached {
-			_, _ = s.database.PauseAgentGoalUntil(ctx, d.User, d.GoalID, "Paused at your AI usage limit. Misty picks this goal up again when it refills.", resumeAt)
-			continue
-		}
-		finished, err := s.database.AIInvocationByID(ctx, d.User, d.LastInvocationID)
-		if err != nil || finished == nil {
-			_, _ = s.database.PauseAgentGoal(ctx, d.User, d.GoalID, "Misty couldn't pick this goal up again. Resume to try again.")
-			continue
-		}
-		var body aiInvocationInput
-		if json.Unmarshal(finished.RequestPayload, &body) != nil {
-			continue
-		}
-		if claimed, err := s.database.ClaimAgentGoalContinuation(ctx, d.User, goal.ID, finished.ID); err != nil || !claimed {
-			continue
-		}
-		if err := s.startGoalContinuation(ctx, finished, body, goal); err != nil {
-			_, _ = s.database.PauseAgentGoal(ctx, d.User, goal.ID, "Misty couldn't start the next step toward the goal. Resume to try again.")
-		}
-	}
-	return len(due), nil
-}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 )
 
 // PushBrowserSyncRecords applies each write whose base version matches the
@@ -107,7 +106,7 @@ func (db *Store) PushBrowserSyncRecords(ctx context.Context, userID, vault, devi
 	if err = notifyRecords(ctx, tx, userID, collection); err != nil {
 		return nil, 0, err
 	}
-	return results, head, cloudusage.Commit(ctx, tx)
+	return results, head, tx.Commit()
 }
 
 // MarkBrowserSyncRecordsCapable records that a device keeps bookmarks in the
@@ -130,7 +129,7 @@ func (db *Store) MarkBrowserSyncRecordsCapable(ctx context.Context, userID, vaul
 	if err = notifySync(ctx, tx, userID, vault, "browser-presence"); err != nil {
 		return err
 	}
-	return cloudusage.Commit(ctx, tx)
+	return tx.Commit()
 }
 
 // sharedWorkspaceRetired: every active device keeps bookmarks in the cold store,

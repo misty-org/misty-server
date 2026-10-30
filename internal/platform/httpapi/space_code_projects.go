@@ -27,7 +27,7 @@ func (s *SpacesService) SpaceCodeProjects() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"projects": projects})
 		case http.MethodPost:
 			// Seeing a Space's projects is open to every member; linking one is coding.
-			if !requireCoding(w, r, s.database, userID, "space.code_projects") {
+			if !requireCoding(w, r, userID, "space.code_projects") {
 				return
 			}
 			var input db.SpaceCodeProjectInput

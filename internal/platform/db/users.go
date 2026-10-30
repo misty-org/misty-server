@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
@@ -10,8 +11,7 @@ import (
 // live in accounts; this adapter only supplies the shared RLS transaction.
 func (db *Database) accountStore() accounts.Store {
 	return accounts.Store{Transaction: db.WithRLSContext, CreateIdentity: func(tx *sql.Tx, id, user string) error {
-		_, err := createLicenseTx(tx, id, user, TierBasic, LicenseStatusActive, nil)
-		return err
+		return createLicenseTx(tx, id, user)
 	}}
 }
 
@@ -68,4 +68,14 @@ func (db *Database) UpdateTelemetryPreferences(id string, a, e bool) error {
 func normalizeEmail(email string) string { return accounts.NormalizeEmail(email) }
 func TestingNormalizeUsername(username string) (string, error) {
 	return accounts.NormalizeUsername(username)
+}
+
+// AnyAccount reports whether any account exists, deleted ones included, so a
+// "first account only" server stays closed after its first sign-up.
+func (db *Database) AnyAccount(ctx context.Context) (bool, error) {
+	var exists bool
+	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users)`).Scan(&exists)
+	})
+	return exists, err
 }

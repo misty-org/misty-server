@@ -89,14 +89,14 @@ export async function requirementsLedger(identity: RuntimeIdentity, modelId: str
       maxRetries: 1,
       providerOptions: { gateway: { models: [modelId] } },
     });
-    await progress(identity, { node_id: node, state: "completed", phase: "planned", progress: 9, output: { usage: result.usage } });
+    await progress(identity, { node_id: node, state: "completed", phase: "planned", progress: 9 });
     return result.text.split("\n").filter((line) => /^\s*\d+[.)]\s+\S/.test(line)).slice(0, 30).join("\n");
   } catch {
     return "";
   }
 }
 
-/** One durable review call, metered like any model call; it does not spend a model turn. */
+/** One durable review call; it does not spend a model turn. */
 export async function reviewAnswer(
   identity: RuntimeIdentity,
   modelId: string,
@@ -121,7 +121,7 @@ export async function reviewAnswer(
       maxRetries: 1,
       providerOptions: { gateway: { models: [modelId] } },
     });
-    await progress(identity, { node_id: node, state: "completed", phase: "reviewed", progress: 95, output: { usage: result.usage } });
+    await progress(identity, { node_id: node, state: "completed", phase: "reviewed", progress: 95 });
     return parseGaps(result.text);
   } catch {
     return [];

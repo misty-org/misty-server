@@ -13,7 +13,7 @@ type noteControlTransport func(*http.Request) (*http.Response, error)
 func (f noteControlTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestNoteControlSignsResourceBinding(t *testing.T) {
-	config := JournalCollabConfig{Host: "collab.invalid", controlSecret: []byte("test-control-secret"), roomSalt: []byte("test-room-salt")}
+	config := JournalCollabConfig{Enabled: true, Host: "collab.invalid", controlSecret: []byte("test-control-secret"), roomSalt: []byte("test-room-salt")}
 	service := &SpacesService{JournalCollab: config}
 	previous := NoteControlHTTPClient
 	t.Cleanup(func() { NoteControlHTTPClient = previous })

@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -15,9 +16,9 @@ import (
 
 func testCollabConfig(t *testing.T) JournalCollabConfig {
 	t.Helper()
-	// The default-host contract must not depend on whichever development
-	// environment invoked the test process.
-	t.Setenv("PARTYKIT_HOST", "")
+	// The host contract must not depend on whichever development environment
+	// invoked the test process.
+	t.Setenv("PARTYKIT_HOST", "journal-collab-test.example")
 	t.Setenv("MISTY_COLLAB_PUBLIC_URL", "")
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -219,10 +220,29 @@ func TestRoomIDIsOpaqueButStable(t *testing.T) {
 	}
 }
 
-func TestJournalCollabConfigUsesMistyWorkerHost(t *testing.T) {
+func TestJournalCollabConfigUsesTheOperatorsHost(t *testing.T) {
 	config := testCollabConfig(t)
 
-	if config.Host != "misty-journal-collab.mistysys.workers.dev" {
-		t.Fatalf("host = %q, want Misty worker host", config.Host)
+	if !config.Enabled || config.Host != "journal-collab-test.example" {
+		t.Fatalf("host = %q enabled = %v, want the configured host", config.Host, config.Enabled)
+	}
+}
+
+func TestJournalCollabIsOffWithoutAHost(t *testing.T) {
+	testCollabConfig(t)
+	// Keys alone (misty env init writes them) never turn collaboration on.
+	t.Setenv("PARTYKIT_HOST", "")
+	config, err := JournalCollabConfigFromEnv()
+	if err != nil || config.Enabled {
+		t.Fatalf("no host = %+v, %v; want collaboration off", config.Enabled, err)
+	}
+	if _, err := config.MintNoteTicket("user", "space", "note", "editor", 1); !errors.Is(err, ErrCollaborationOff) {
+		t.Fatalf("ticket with collaboration off = %v", err)
+	}
+	// A host without its keys still fails startup.
+	t.Setenv("PARTYKIT_HOST", "journal-collab-test.example")
+	t.Setenv("JOURNAL_COLLAB_ROOM_SALT", "")
+	if _, err := JournalCollabConfigFromEnv(); err == nil {
+		t.Fatal("a host without its keys was accepted")
 	}
 }

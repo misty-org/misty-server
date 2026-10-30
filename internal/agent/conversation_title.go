@@ -5,7 +5,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
@@ -30,7 +29,7 @@ func ConversationTitleModel() string {
 
 // TitleConversation names a conversation from its opening message and, when
 // given, Misty's first reply. It returns "" when the model finds nothing to
-// name. The call counts toward the person's usage like any model call.
+// name. It runs on the account's fast model.
 func (s *Service) TitleConversation(ctx context.Context, userID, message, reply string) (string, error) {
 	if !s.models.Enabled() {
 		return "", modelruntime.ErrUnavailable
@@ -40,24 +39,15 @@ func (s *Service) TitleConversation(ctx context.Context, userID, message, reply 
 		prompt += "\n\nMisty: " + clipRunes(reply, conversationTitleMaxInput)
 	}
 	prompt += "\n\nWrite the title now."
-	model, provider := ConversationTitleModel(), ProviderVercelAI
-	key := conversationTitleKeyPrefix + uuid.NewString()
-	var reservation *UsageReservation
-	if s.meter != nil {
-		var err error
-		reservation, err = ReserveMeasuredUsage(s.meter, userID, key, provider, model, map[string]int64{"input_bytes": int64(len(conversationTitleSystem) + len(prompt)), "output_tokens": conversationTitleMaxOutput}, "")
-		if err != nil {
-			return "", err
-		}
+	route, model, err := s.oneShotRoute(ctx, userID, "routing", ConversationTitleModel())
+	if err != nil {
+		return "", err
 	}
 	result, err := s.models.Text(ctx, modelruntime.TextRequest{
-		Route: modelruntime.Instance(), Model: model, System: conversationTitleSystem,
+		Route: route, Model: model, System: conversationTitleSystem,
 		Messages:        []modelruntime.Message{{Role: "user", Content: []modelruntime.Part{modelruntime.Text(prompt)}}},
 		MaxOutputTokens: conversationTitleMaxOutput,
 	})
-	if settleErr := FinishMeteredCall(s.meter, reservation, key+":settle", "conversation_title", provider, model, result.Usage, err); settleErr != nil && err == nil {
-		return "", settleErr
-	}
 	if err != nil {
 		return "", err
 	}

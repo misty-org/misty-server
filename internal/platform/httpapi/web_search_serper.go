@@ -18,7 +18,7 @@ import (
 var webSearchBase = "https://google.serper.dev"
 
 // credits is what Serper charges for one request of the kind (measured
-// 2026-10-16); billing uses the count each response reports when it has one.
+// 2026-10-16); the count each response reports wins when it has one.
 var webSearchKinds = map[string]struct {
 	path, list string
 	credits    int64

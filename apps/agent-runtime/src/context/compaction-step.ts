@@ -21,8 +21,7 @@ const COMPACTION_SYSTEM = [
 const SUMMARY_OUTPUT_TOKENS = 3_000;
 
 /**
- * One durable summarizing call. Misty meters it like any model call, but it
- * does not spend one of the run's model turns.
+ * One durable summarizing call. It does not spend one of the run's model turns.
  */
 export async function summarizeOlderSteps(
   identity: RuntimeIdentity,
@@ -50,7 +49,7 @@ export async function summarizeOlderSteps(
   });
   await report(identity, {
     node_id: node, state: "completed", phase: "compacted", progress: 50,
-    output: { usage: result.usage, summarized_messages: older.length },
+    output: { summarized_messages: older.length },
   });
   const summary = result.text.trim();
   if (!summary) throw new Error("compaction_empty_summary");

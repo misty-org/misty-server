@@ -24,7 +24,6 @@ func (s *Server) mountAccountRoutes(prefix string, spaces *api.SpacesService) {
 	// Coding through the person's own tools: the device reports its tools, takes
 	// a budget lease per turn, mirrors the tool's events and asks for approvals.
 	s.Router.Put(prefix+"/me/coding/engines", spaces.CodingEnginesReport())
-	s.Router.Get(prefix+"/me/coding/allowance", spaces.CodingAllowance())
 	s.Router.Post(prefix+"/me/coding/{invocationID}/lease", spaces.CodingLease())
 	s.Router.Post(prefix+"/me/coding/{invocationID}/events", spaces.CodingEvents())
 	s.Router.Post(prefix+"/me/coding/{invocationID}/approvals", spaces.CodingApproval())

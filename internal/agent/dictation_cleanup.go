@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/modelruntime"
 )
 
@@ -30,7 +29,7 @@ type DictationCleanup struct {
 }
 
 // CleanDictation returns the tidied text, or the original when the model has
-// nothing to return. The call counts toward the person's usage.
+// nothing to return. It runs on the account's fast model.
 func (s *Service) CleanDictation(ctx context.Context, userID, model string, input DictationCleanup) (string, error) {
 	if !s.models.Enabled() {
 		return "", modelruntime.ErrUnavailable
@@ -52,24 +51,15 @@ func (s *Service) CleanDictation(ctx context.Context, userID, model string, inpu
 	}
 	prompt += "\n\n<dictation>\n" + text + "\n</dictation>"
 	maxOutput := int64(len([]rune(text)))/2 + dictationCleanupMinOutput
-	provider := ProviderVercelAI
-	key := "dictation-cleanup:" + uuid.NewString()
-	var reservation *UsageReservation
-	if s.meter != nil {
-		var err error
-		reservation, err = ReserveMeasuredUsage(s.meter, userID, key, provider, model, map[string]int64{"input_bytes": int64(len(dictationCleanupSystem) + len(prompt)), "output_tokens": maxOutput}, "")
-		if err != nil {
-			return "", err
-		}
+	route, model, err := s.oneShotRoute(ctx, userID, "dictation-cleanup", model)
+	if err != nil {
+		return "", err
 	}
 	result, err := s.models.Text(ctx, modelruntime.TextRequest{
-		Route: modelruntime.Instance(), Model: model, System: dictationCleanupSystem,
+		Route: route, Model: model, System: dictationCleanupSystem,
 		Messages:        []modelruntime.Message{{Role: "user", Content: []modelruntime.Part{modelruntime.Text(prompt)}}},
 		MaxOutputTokens: maxOutput,
 	})
-	if settleErr := FinishMeteredCall(s.meter, reservation, key+":settle", "dictation_cleanup", provider, model, result.Usage, err); settleErr != nil && err == nil {
-		return "", settleErr
-	}
 	if err != nil {
 		return "", err
 	}

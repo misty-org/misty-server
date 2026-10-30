@@ -10,10 +10,10 @@ import { classifyRuntimeError, providerOutage, recoverableToolError, visibleErro
 import { classifyToolOutcome, incompleteToolResultText, stoppedAtModelTurnLimit, toolFailureSignature } from "../src/tool-outcomes.js";
 
 describe("runtime error classification", () => {
-  it("names usage refusals so a run pauses instead of failing generically", () => {
+  it("names rate-limit refusals so a run pauses instead of failing generically", () => {
     expect(classifyRuntimeError(new Error("usage_limit_reached")).code).toBe("usage_limit_reached");
     expect(classifyRuntimeError(new Error("email_unverified")).message).toMatch(/Confirm your email/);
-    // A refusal is not transient: retrying the step cannot succeed until a limit refills.
+    // A refusal is not transient: retrying the step at once cannot succeed.
     expect(new ControlPlaneError(402, "limit", "usage_limit_reached").transient).toBe(false);
     expect(new ControlPlaneError(503, "down", "usage_limit_reached").transient).toBe(false);
   });
@@ -55,13 +55,7 @@ describe("runtime error classification", () => {
   it("retries only transient control-plane responses", () => {
     expect(new ControlPlaneError(503, "unavailable").transient).toBe(true);
     expect(new ControlPlaneError(429, "limited").transient).toBe(true);
-    expect(
-      new ControlPlaneError(
-        429,
-        "hosted_ai_limit_reached",
-        "hosted_ai_limit_reached",
-      ).transient,
-    ).toBe(false);
+    expect(new ControlPlaneError(429, "usage_limit_reached", "usage_limit_reached").transient).toBe(false);
     expect(new ControlPlaneError(403, "revoked").transient).toBe(false);
   });
 
@@ -75,11 +69,12 @@ describe("runtime error classification", () => {
     expect(classifyRuntimeError(new Error("provider failed")).code).toBe(
       "agent_runtime_failed",
     );
-    expect(classifyRuntimeError(new Error("hosted_ai_limit_reached"))).toEqual({
-      code: "hosted_ai_limit_reached",
-      message:
-        "Your weekly AI agent allowance is fully used. Try again after it resets.",
+    expect(classifyRuntimeError(new Error("model_key_needed: Add a model key in Settings → Models."))).toEqual({
+      code: "model_key_needed",
+      message: "Add a model key in Settings → Models.",
     });
+    // Go refusing the run's route keeps its code through the step.
+    expect(classifyRuntimeError(new ControlPlaneError(409, "model_key_needed: no key", "model_key_needed")).code).toBe("model_key_needed");
     expect(
       classifyRuntimeError(
         Object.assign(
@@ -93,8 +88,7 @@ describe("runtime error classification", () => {
       ),
     ).toEqual({
       code: "model_gateway_unavailable",
-      message:
-        "Misty's model providers are temporarily unavailable. Please try again shortly.",
+      message: "The model provider is temporarily unavailable. Please try again shortly.",
     });
   });
 
@@ -106,7 +100,7 @@ describe("runtime error classification", () => {
   ])("preserves provider credit exhaustion through workflow errors", (error) => {
     expect(classifyRuntimeError(error)).toEqual({
       code: "model_provider_credit_exhausted",
-      message: "Misty's AI provider has no available credit. The server administrator needs to add credit or configure another provider.",
+      message: "The model provider says this key has no credit left. Add credit with the provider or use another key in Settings → Models.",
     });
   });
 
@@ -117,7 +111,7 @@ describe("runtime error classification", () => {
   ])("names a rejected provider key without echoing it", (error) => {
     expect(classifyRuntimeError(error)).toEqual({
       code: "model_provider_key_invalid",
-      message: "Misty's AI provider rejected its API key. The server administrator needs to replace the key.",
+      message: "The model provider rejected the API key. Check the key in Settings → Models.",
     });
   });
 
@@ -131,7 +125,7 @@ describe("runtime error classification", () => {
   it("recognizes serialized gateway outages without returning private provider data", () => {
     expect(classifyRuntimeError({ name: "GatewayInternalServerError", message: "Service temporarily unavailable", response: "private provider payload" })).toEqual({
       code: "model_gateway_unavailable",
-      message: "Misty's model providers are temporarily unavailable. Please try again shortly.",
+      message: "The model provider is temporarily unavailable. Please try again shortly.",
     });
     const circular = { message: "unexpected failure", cause: undefined as unknown };
     circular.cause = circular;

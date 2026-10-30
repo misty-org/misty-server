@@ -60,7 +60,7 @@ func (p *VoicePipeline) reply(ctx context.Context) {
 		p.emit(VoiceRealtimeEvent{Type: "response-done", ResponseID: responseID, Status: status, Raw: raw})
 	}
 	result, err := p.models.Text(ctx, modelruntime.TextRequest{
-		Route: modelruntime.Instance(), Model: p.textModel, System: system, Messages: history, MaxOutputTokens: int64(limit),
+		Route: p.textRoute, Model: p.textModel, System: system, Messages: history, MaxOutputTokens: int64(limit),
 		Schema: &modelruntime.Schema{Name: "voice_turn", Schema: map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"say", "tool", "instruction"},
 			"properties": map[string]any{"say": map[string]string{"type": "string"}, "tool": map[string]any{"type": "string", "enum": tools}, "instruction": map[string]string{"type": "string"}},
@@ -117,7 +117,7 @@ func (p *VoicePipeline) reply(ctx context.Context) {
 	speak := func(i int) chan spoken {
 		out := make(chan spoken, 1)
 		usage["tts_characters"] += int64(utf8.RuneCountInString(sentences[i]))
-		request := modelruntime.SpeechRequest{Route: modelruntime.Instance(), Model: p.ttsModel, Text: sentences[i], Voice: p.voice}
+		request := modelruntime.SpeechRequest{Route: p.speechRoute, Model: p.ttsModel, Text: sentences[i], Voice: p.voice}
 		if i > 0 {
 			request.PreviousText = strings.Join(sentences[:i], " ")
 		}

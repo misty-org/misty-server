@@ -49,6 +49,7 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 		}
 	}
 	if tool.Name == screenActTool {
+		tool = withoutNeedlessConsequence(tool)
 		if waiting, err := s.approveScreenAct(ctx, invocation, tool, scopeID); err != nil || waiting != nil {
 			return waiting, err
 		}

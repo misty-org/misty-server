@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Replaces the production databases with an encrypted backup from R2, including
-# billing when the backup holds it.
+# Replaces the production databases with an encrypted backup from R2.
 # Usage (through the CLI): misty server prod restore <stamp|latest> --identity <age key file> --yes
 # On a fresh server run `misty server prod up` first so the roles exist; the
 # stack is restarted afterwards, which applies any newer migrations.
@@ -47,22 +46,6 @@ echo "Restoring $DB_NAME"
 restore "$DB_NAME" "$DB_MIGRATION_USER"
 echo "Restoring workflow"
 restore workflow workflow
-
-if [ -f "$dir/misty_billing.dump.age" ]; then
-  billing=$(billing_postgres)
-  if [ -z "$billing" ]; then
-    echo "The backup includes billing, but the billing stack is not running. Start it with misty-billing's deploy/prod.sh up, then restore again." >&2
-    exit 1
-  fi
-  echo "Restoring misty_billing"
-  service=$(billing_service)
-  [ -z "$service" ] || docker stop "$service" >/dev/null
-  docker exec -i "$billing" psql --username=billing_owner --dbname=postgres --set=ON_ERROR_STOP=1 \
-    --command="DROP DATABASE IF EXISTS misty_billing WITH (FORCE)" --command="CREATE DATABASE misty_billing OWNER billing_owner"
-  age --decrypt --identity "$identity" "$dir/misty_billing.dump.age" |
-    docker exec -i "$billing" pg_restore --username=billing_owner --dbname=misty_billing --exit-on-error
-  [ -z "$service" ] || docker start "$service" >/dev/null
-fi
 
 echo "Restarting the stack (migrations and grants run again)"
 compose up --detach

@@ -84,3 +84,56 @@ function safeParse(text: string): unknown {
     return undefined;
   }
 }
+
+/** Search engines a request starts on ("start on Google") without asking to keep them. */
+const searchEngines = new Set(["google", "bing", "duckduckgo", "yahoo", "brave"]);
+
+/** A site's name as a request says it: amazon.com and smile.amazon.com are "amazon". */
+function brand(url: string): string {
+  try {
+    const parts = new URL(url).hostname.replace(/^www\./, "").split(".");
+    return parts.length >= 2 ? parts[parts.length - 2]! : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Sites the request names and the run visited, with no tab of the agent's open there at the end:
+ * a run read Amazon's search page, took a price from a shopping snippet and closed the tab, though
+ * the person asked for the product page left open. Only when the request asks for open pages.
+ */
+export function missingSiteTabs(request: string, messages: ModelMessage[]): string[] {
+  if (!asksForOpenPages(request)) return [];
+  const visited = new Set<string>();
+  let open: string[] = [];
+  const urls = new Map<string, string>();
+  for (const message of messages) {
+    if (message.role !== "tool" || !Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (part.type !== "tool-result") continue;
+      const output = part.output as { type?: string; value?: unknown };
+      const text = typeof output.value === "string" ? output.value : JSON.stringify(output.value ?? "");
+      if (part.toolName === "browser_run") {
+        const value = (output.type === "json" ? output.value : safeParse(text)) as { tabs?: unknown } | undefined;
+        if (!Array.isArray(value?.tabs)) continue;
+        open = [];
+        for (const tab of value.tabs) {
+          const { id, url } = (tab ?? {}) as { id?: unknown; url?: unknown };
+          if (typeof id !== "string" || typeof url !== "string") continue;
+          urls.set(id, url);
+          open.push(id);
+          visited.add(brand(url));
+        }
+      } else {
+        // screen_open and screen_close end with the tabs still open: "Your open tabs: a, b."
+        const listed = /Your open tabs: ([^.]+)\./.exec(text)?.[1];
+        if (listed) open = listed.split(",").map((id) => id.trim()).filter(Boolean);
+      }
+    }
+  }
+  const openBrands = new Set(open.map((id) => brand(urls.get(id) ?? "")));
+  const named = request.toLowerCase();
+  return [...visited].filter((site) =>
+    site.length > 2 && !searchEngines.has(site) && !openBrands.has(site) && new RegExp(`\\b${site}\\b`).test(named));
+}

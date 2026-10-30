@@ -159,7 +159,7 @@ type SpaceRun struct {
 	ResourceKind          string          `json:"resource_kind"`
 	ResourceID            string          `json:"resource_id"`
 	InitiatedByUserID     string          `json:"initiated_by_user_id"`
-	BillingUserID         string          `json:"billing_user_id"`
+	ModelUserID           string          `json:"model_user_id"`
 	TriggerKind           string          `json:"trigger_kind"`
 	State                 string          `json:"state"`
 	Input                 json.RawMessage `json:"input"`

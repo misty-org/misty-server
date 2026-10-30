@@ -51,6 +51,6 @@ func purgeAccountAgentsTx(ctx context.Context, tx *sql.Tx, userID string) error 
 	}
 	_, err := tx.ExecContext(ctx, `UPDATE space_runs SET input='{}'::jsonb,result='{"redacted":true}'::jsonb,
 		outputs='{}'::jsonb,artifacts='[]'::jsonb,error_message=NULL,updated_at=NOW()
-		WHERE requesting_member_id=$1 OR billing_user_id=$1 OR initiated_by_user_id=$1`, userID)
+		WHERE requesting_member_id=$1 OR model_user_id=$1 OR initiated_by_user_id=$1`, userID)
 	return err
 }

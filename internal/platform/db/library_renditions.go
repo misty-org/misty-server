@@ -52,8 +52,8 @@ type LibraryRenditionPurge struct {
 	LeaseToken   string
 }
 
-// QueueLibraryEditRendition asks billing for account storage admission before
-// media processing. Billing chooses the reservation when maximumBytes is zero.
+// QueueLibraryEditRendition reserves account storage before media
+// processing: maximumBytes, or the source size when maximumBytes is zero.
 func (db *Database) QueueLibraryEditRendition(ctx context.Context, userID, spaceID, itemID, editID string, maximumBytes int64) (*LibraryRenditionRequest, error) {
 	if editID == "" || maximumBytes < 0 || maximumBytes > MaxSpaceStorageBytes {
 		return nil, ErrLibraryInvalid
@@ -91,7 +91,7 @@ func (db *Database) QueueLibraryEditRendition(ctx context.Context, userID, space
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		requested, err := approveCloudStorageTx(ctx, tx, userID, "storage.rendition", map[string]int64{"requested_bytes": maximumBytes, "source_bytes": sourceBytes, "minimum_bytes": minimumLibraryRenditionReserve})
+		requested, err := renditionReserveBytes(ctx, tx, userID, maximumBytes, max(sourceBytes, minimumLibraryRenditionReserve))
 		if err != nil {
 			return err
 		}

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"log"
 	"net"
 	"strconv"
@@ -21,8 +20,7 @@ import (
 var migrationFiles embed.FS
 
 type Database struct {
-	Billing *billingadapter.Service
-	Conn    *sql.DB
+	Conn *sql.DB
 	// DSN, when set, is the database Conn was opened against. LISTEN
 	// connections use it so notifications come from the same database.
 	DSN       string

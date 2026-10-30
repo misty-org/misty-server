@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
 )
@@ -44,7 +43,7 @@ func (db *Database) WithRLSContext(ctx context.Context, settings map[string]stri
 		return err
 	}
 
-	if err := cloudusage.Commit(ctx, tx); err != nil {
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	committed = true

@@ -3,7 +3,8 @@
 Misty's agents reach Gmail, Google Drive, Google Calendar, Slack, Notion, GitHub
 and every other Composio toolkit through one Composio Cloud session per Misty
 account. Composio stores and refreshes provider credentials and runs the tools;
-Misty owns connection prompts, approvals, the effect journal and billing.
+Misty owns connection prompts, approvals and the effect journal. Self-hosters use
+their own Composio project and API key (`MISTY_COMPOSIO_API_KEY`).
 
 Status (October 4, 2026): the session gateway replaced the calendar-only
 adapter. The API, desktop and agent runtime compile and start locally; runtime

@@ -15,7 +15,7 @@ import (
 
 func TestHealthIsSanitizedAndFailsWhenCriticalDependenciesAreUnavailable(t *testing.T) {
 	secret := "must-not-appear-in-health-response"
-	t.Setenv("STRIPE_SECRET_KEY", secret)
+	t.Setenv("MISTY_AUTH_SIGNING_KEY", secret)
 	server := &Server{Database: &db.Database{}, LibraryStore: api.NewMemoryLibraryObjectStore()}
 	request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	recorder := httptest.NewRecorder()
@@ -65,15 +65,5 @@ func TestPublicAPIHealthRequiresHTTPSInProduction(t *testing.T) {
 	t.Setenv("MISTY_PUBLIC_API_URL", "https://mistysys.com/api")
 	if got := PublicAPIConfigurationCheck(); got.Status != "ready" {
 		t.Fatalf("HTTPS production API health = %+v, want ready", got)
-	}
-}
-
-func TestDisabledOptionalBillingIsHealthy(t *testing.T) {
-	status, code := SummarizeHealth(map[string]HealthCheck{
-		"database": {Status: "ok", Critical: true},
-		"billing":  {Status: "disabled", Mode: "configuration", Critical: false},
-	})
-	if status != "ok" || code != http.StatusOK {
-		t.Fatalf("disabled billing health: %s %d", status, code)
 	}
 }

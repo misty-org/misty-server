@@ -2,25 +2,19 @@ package api
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
+	"github.com/kannachi323/misty/server/internal/aimodels"
+	"github.com/kannachi323/misty/server/internal/byok"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-const (
-	liveTicketTTL = time.Minute
-	// Live voice settles through the transcription operation billing already
-	// prices by audio_ms.
-	liveVoiceOperation = "agent.voice.transcription"
-)
+const liveTicketTTL = time.Minute
 
 // VoiceLiveConfig is live transcription through the agent runtime's relay.
 // It is off unless MISTY_VOICE_LIVE=true and both the runtime and the relay's
@@ -31,7 +25,6 @@ type VoiceLiveConfig struct {
 	// wss://runtime.example.com/v1/live/transcribe.
 	URL           string
 	TicketMinutes int64
-	WeeklyMinutes map[string]int64
 	runtime       AgentRuntimeConfig
 }
 
@@ -45,15 +38,14 @@ func VoiceLiveConfigFromEnv(runtime AgentRuntimeConfig) VoiceLiveConfig {
 		Enabled:       strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_VOICE_LIVE")), "true") && runtime.Enabled() && (strings.HasPrefix(url, "wss://") || strings.HasPrefix(url, "ws://localhost") || strings.HasPrefix(url, "ws://127.0.0.1")),
 		URL:           url,
 		TicketMinutes: minutes,
-		WeeklyMinutes: voiceWeeklyMinutes(envconfig.Getenv("MISTY_VOICE_WEEKLY_MINUTES")),
 		runtime:       runtime,
 	}
 }
 
 func (s *AgentsService) SetVoiceLive(config VoiceLiveConfig) { s.voiceLive = config }
 
-// VoiceLiveTicket issues a short-lived signed ticket for one live session and
-// reserves its audio. The microphone is opened by the person, never by an
+// VoiceLiveTicket issues a short-lived signed ticket for one live session.
+// The microphone is opened by the person, never by an
 // agent; this only admits the stream.
 func (s *AgentsService) VoiceLiveTicket() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -90,21 +82,9 @@ func (s *AgentsService) VoiceLiveTicket() http.HandlerFunc {
 				return
 			}
 		}
-		maxMS, err := s.liveVoiceAllowance(r.Context(), user, int64(len(channels)))
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		if maxMS < 30_000 {
-			writeJSON(w, http.StatusPaymentRequired, map[string]string{"code": "voice_allowance_used", "message": "Voice isn't available: this week's voice minutes are used. They reset over the coming days."})
-			return
-		}
+		maxMS := s.voiceLive.TicketMinutes * 60_000 * int64(len(channels))
 		ticket, expires, err := s.issueLiveTicket(r.Context(), user, body.DeviceID, channels, body.Language, maxMS)
 		if err != nil {
-			if errors.Is(err, billingadapter.ErrDenied) {
-				writeJSON(w, http.StatusPaymentRequired, map[string]string{"code": "voice_allowance_used", "message": "Voice isn't available: this week's AI allowance is used."})
-				return
-			}
 			writeAgentError(w, err)
 			return
 		}
@@ -119,47 +99,40 @@ func (s *AgentsService) liveVoiceAccess(ctx context.Context, user, device string
 		return err
 	}
 	if !settings.Enabled {
-		return billingadapter.ErrDenied
+		return errAIDisabled
 	}
 	_, err = s.database.TrustedDevicePublicKey(user, device)
 	return err
 }
 
-// liveVoiceAllowance is the audio this ticket may stream: the per-ticket cap,
-// bounded by what remains of the plan's rolling weekly voice minutes.
-func (s *AgentsService) liveVoiceAllowance(ctx context.Context, user string, channels int64) (int64, error) {
-	weekly := s.voiceLive.WeeklyMinutes[accountPlan(ctx, s.database, user)] * 60_000
-	used, err := s.database.VoiceLiveUsedSince(ctx, user, time.Now().Add(-7*24*time.Hour))
-	if err != nil {
-		return 0, err
+// liveTranscriptionModel is the Soniox model a live session streams to: the
+// account's transcription model when it is a Soniox one, else the default.
+// The account needs its own Soniox key unless the operator has models.
+func liveTranscriptionModel(ctx context.Context, user string) (string, error) {
+	model := defaultRoleModel("live-transcription")
+	c := accountCredentials(ctx, user)
+	if c != nil {
+		if chosen := c.RoleModel("live-transcription"); byok.ProviderOf(chosen) == "soniox" {
+			model = chosen
+		}
 	}
-	remaining := weekly - used
-	if cap := s.voiceLive.TicketMinutes * 60_000 * channels; remaining > cap {
-		remaining = cap
+	if _, ok := c.CredentialFor(model); !ok && !aimodels.OperatorModels() {
+		return "", byok.ErrModelKeyNeeded
 	}
-	if remaining < 0 {
-		remaining = 0
-	}
-	return remaining, nil
+	return model, nil
 }
 
 func (s *AgentsService) issueLiveTicket(ctx context.Context, user, device string, channels []string, language string, maxMS int64) (string, time.Time, error) {
 	session := uuid.NewString()
-	model := defaultRoleModel("live-transcription")
-	billing := s.database.BillingService()
-	key := "voice-live:" + session
-	reservation, err := billing.Reserve(ctx, billingadapter.Request{Version: 1, AccountID: user, Operation: liveVoiceOperation, OperationID: key, Key: key + ":reserve",
-		Usage: billingadapter.Usage{Provider: "soniox", Model: model, Units: map[string]int64{"audio_ms": maxMS}, Estimated: true}})
+	model, err := liveTranscriptionModel(ctx, user)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	encoded, _ := json.Marshal(reservation)
 	now := time.Now()
-	// The session may stream for its whole allowance after connecting, so it
-	// stays open (and counted at its limit) until then plus a settle margin.
-	if err = s.database.CreateVoiceLiveSession(ctx, db.VoiceLiveSession{ID: session, User: user, Device: device, Channels: channels, MaxMS: maxMS,
-		Reservation: encoded, ExpiresAt: now.Add(liveTicketTTL + time.Duration(maxMS)*time.Millisecond + 10*time.Minute)}); err != nil {
-		_ = billing.Complete(ctx, "release", reservation, key+":release", billingadapter.Usage{}, "session_not_recorded")
+	// The session may stream for its whole length after connecting, so it
+	// stays open until then plus a margin.
+	if err := s.database.CreateVoiceLiveSession(ctx, db.VoiceLiveSession{ID: session, User: user, Device: device, Channels: channels, MaxMS: maxMS,
+		ExpiresAt: now.Add(liveTicketTTL + time.Duration(maxMS)*time.Millisecond + 10*time.Minute)}); err != nil {
 		return "", time.Time{}, err
 	}
 	expires := now.Add(liveTicketTTL)

@@ -1,6 +1,7 @@
 // Package modelruntime is the Go API's only way to call AI models. The agent
-// runtime makes every call with the Vercel AI SDK on Misty's own keys; Go
-// chooses the model, meters the call, and sends it here signed with the shared
+// runtime makes every call with the Vercel AI SDK, on the account's own key
+// (an "account" route) or the operator's keys (an "instance" route); Go
+// chooses the model and route and sends the call here signed with the shared
 // runtime control secret. Go holds no model HTTP clients of its own.
 package modelruntime
 
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/aimodels"
+	"github.com/kannachi323/misty/server/internal/byok"
 	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
@@ -84,23 +86,43 @@ func Sign(secret []byte, method, path, timestamp string, body []byte) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// Route is how a call runs. It is always Misty's own: the runtime sends OpenAI
-// models to OpenAI when the instance has a key, and everything else through
-// the AI Gateway. Only the reasoning an account chose travels with it.
+// Route is how a call runs. "instance" runs on the operator's own keys in the
+// runtime's environment. "account" runs on exactly the credential given, the
+// key the account brought for the model's provider; the runtime never falls
+// back to its own keys for it and never records the credential.
 type Route struct {
-	Provider  string `json:"provider"`
-	Reasoning string `json:"reasoning,omitempty"`
+	Provider   string           `json:"provider"`
+	Reasoning  string           `json:"reasoning,omitempty"`
+	Credential *byok.Credential `json:"credential,omitempty"`
 }
 
-// Instance runs on Misty's own keys with the model's default reasoning.
+// Instance runs on the operator's keys with the model's default reasoning.
 func Instance() Route { return Route{Provider: "instance"} }
 
-// For carries an account's chosen reasoning, if it has one.
+// For is the route for an account's resolved model: its own key when it
+// brought one, else the operator's keys with the account's reasoning.
 func For(resolved *aimodels.Resolved) Route {
 	if resolved == nil {
 		return Instance()
 	}
+	if resolved.Credential != nil {
+		credential := *resolved.Credential
+		return Route{Provider: "account", Reasoning: resolved.Reasoning, Credential: &credential}
+	}
 	return Route{Provider: "instance", Reasoning: resolved.Reasoning}
+}
+
+// RouteFor is how account's call to model runs: on the account's own key for
+// the model's provider when it brought one, else on the operator's keys. With
+// neither it is byok.ErrModelKeyNeeded.
+func RouteFor(ctx context.Context, account, model, reasoning string) (Route, error) {
+	if credential, ok := byok.Default.For(ctx, account).CredentialFor(model); ok {
+		return Route{Provider: "account", Reasoning: reasoning, Credential: &credential}, nil
+	}
+	if aimodels.OperatorModels() {
+		return Route{Provider: "instance", Reasoning: reasoning}, nil
+	}
+	return Route{}, byok.ErrModelKeyNeeded
 }
 
 type Part struct {

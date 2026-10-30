@@ -134,7 +134,7 @@ func TestUnknownPagesRedirectToOverview(t *testing.T) {
 func TestEveryPageRendersWithoutDatabase(t *testing.T) {
 	handler := newConsoleWith(t, Config{APIURL: "http://127.0.0.1:1", Environment: "development"})
 	cookie := signIn(t, handler)
-	for _, page := range []string{"overview", "services", "accounts", "sync", "jobs", "ai", "billing", "configuration", "database"} {
+	for _, page := range []string{"overview", "services", "accounts", "sync", "jobs", "ai", "configuration", "database"} {
 		rec := request(t, handler, "/"+page, cookie)
 		if rec.Code != http.StatusOK {
 			t.Errorf("/%s: got %d", page, rec.Code)
@@ -148,8 +148,8 @@ func TestEnvironmentGating(t *testing.T) {
 	if rec := request(t, production, "/services/panel", cookie); rec.Code != http.StatusNotFound {
 		t.Errorf("services outside development: expected 404, got %d", rec.Code)
 	}
-	if rec := request(t, production, "/billing", cookie); rec.Code != http.StatusOK {
-		t.Errorf("billing in production: expected 200, got %d", rec.Code)
+	if rec := request(t, production, "/ai", cookie); rec.Code != http.StatusOK {
+		t.Errorf("ai in production: expected 200, got %d", rec.Code)
 	}
 }
 

@@ -56,10 +56,10 @@ func codeDelegationDescriptors() []agenttools.Descriptor {
 	}
 }
 
-// codeDelegationToolRegistrations offers coding when a project is attached and
-// the account's plan includes coding. Delegated runs never delegate again.
+// codeDelegationToolRegistrations offers coding when a project is attached.
+// Delegated runs never delegate again.
 func (s *SpacesService) codeDelegationToolRegistrations(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput, projects []deviceGrant, state collaborationState) []agenttools.Registration {
-	if record == nil || body.DelegatedFrom != "" || len(projects) == 0 || codingIncluded(ctx, s.database, record.UserID) != nil {
+	if record == nil || body.DelegatedFrom != "" || len(projects) == 0 {
 		return nil
 	}
 	descriptors := codeDelegationDescriptors()
@@ -95,15 +95,6 @@ func (s *SpacesService) delegateCoding(ctx context.Context, parent *db.AIInvocat
 	}
 	if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.Task) == "" {
 		return nil, agenttools.ErrArgumentsInvalid
-	}
-	// The catalog leaves coding out for plans without it; a call that names
-	// the tool anyway is refused here.
-	if err := codingIncluded(ctx, s.database, parent.UserID); err != nil {
-		return MustAPIRawJSON(map[string]any{
-			"status": codePlanUpgradeRequired, "code": codePlanUpgradeRequired,
-			"message":      "This account's plan doesn't include coding, so the coding didn't start. Tell the person coding is part of Misty Pro and above, and don't try again.",
-			"user_message": planUpgradeMessage,
-		}), nil
 	}
 	project, err := pickProject(projects, input.Project)
 	if err != nil {

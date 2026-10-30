@@ -18,7 +18,7 @@ func (p *readOnlyInstructionProvider) Next(request ModelRequest) (ModelResponse,
 func TestPlainCompletionKeepsInstructionsEmpty(t *testing.T) {
 	provider := &readOnlyInstructionProvider{}
 	service := NewService(nil, provider)
-	if _, _, err := service.CompleteContext(context.Background(), "member", "hello", "automation_ai"); err != nil {
+	if _, err := service.CompleteContext(context.Background(), "member", "hello"); err != nil {
 		t.Fatal(err)
 	}
 	if provider.request.SystemPrompt != "" || provider.request.Messages[0].Content != "hello" {

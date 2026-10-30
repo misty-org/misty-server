@@ -18,7 +18,7 @@ func (s *SpacesService) AgentProjectGrants() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if !requireCoding(w, r, s.database, user, "projects.grants") {
+		if !requireCoding(w, r, user, "projects.grants") {
 			return
 		}
 		var body struct {

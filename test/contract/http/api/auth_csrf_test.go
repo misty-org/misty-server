@@ -22,7 +22,7 @@ func TestCookieCSRFProtection(t *testing.T) {
 		{"cookie missing header", "/v1/spaces", "https://misty.test", "", true, 403},
 		{"cookie trusted origin", "/v1/spaces", "https://misty.test", "1", true, 204},
 		{"native explicit header", "/v1/login", "", "1", false, 204},
-		{"webhook without cookies", "/stripe/webhook", "", "", false, 204},
+		{"webhook without cookies", "/inbound/webhook", "", "", false, 204},
 	} {
 		t.Run(item.name, func(t *testing.T) {
 			r := httptest.NewRequest("POST", item.path, nil)

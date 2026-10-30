@@ -2,7 +2,7 @@
   "name": "@misty/agent-runtime",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "dev": "nitro dev",
@@ -20,6 +20,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.40",
     "@ai-sdk/elevenlabs": "3.0.30",
+    "@ai-sdk/google": "4.0.50",
     "@ai-sdk/openai": "4.0.46",
     "@ai-sdk/openai-compatible": "3.0.36",
     "@ai-sdk/provider": "4.0.7",

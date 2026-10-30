@@ -74,7 +74,7 @@ Normal startup shows progress and service status. Failures show the relevant dia
 misty server up --gui
 ```
 
-With `--gui`, `up` also opens the operator console in your browser. It covers health and traffic, development services and their logs, accounts and their sessions, sync vaults, background jobs, AI usage, billing delivery, configuration and database migrations. Every change made there is recorded in the audit log shown on the Overview. It listens only on `127.0.0.1:7070` and never goes through the tunnel. A one-time link authenticates the browser. Running the command again reuses the console that is already running, and `misty server down` stops it. Traffic metrics require `MISTY_METRICS_TOKEN`. Its views are templ files in `internal/console`; run `make generate` after editing them.
+With `--gui`, `up` also opens the operator console in your browser. It covers health and traffic, development services and their logs, accounts and their sessions, sync vaults, background jobs, AI usage, configuration and database migrations. Every change made there is recorded in the audit log shown on the Overview. It listens only on `127.0.0.1:7070` and never goes through the tunnel. A one-time link authenticates the browser. Running the command again reuses the console that is already running, and `misty server down` stops it. Traffic metrics require `MISTY_METRICS_TOKEN`. Its views are templ files in `internal/console`; run `make generate` after editing them.
 
 Check `/health` on the configured public API origin before using another computer. Service health is not a substitute for testing account, sync, or agent workflows.
 

@@ -34,10 +34,8 @@ func TestVoiceConversationLivePCM(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer provider.Close()
-	reserved := agent.RealtimeVoiceUsage{}
-	measured := agent.RealtimeVoiceUsage{}
 	finished := make(chan struct{})
-	hooks := conversationHooks{Operation: "realtime-voice:synthetic-live", History: "[]", Access: func(context.Context) error { return nil }, Input: func(context.Context, int) error { return nil }, Reserve: func(_ context.Context, u agent.RealtimeVoiceUsage) error { reserved.Add(u); return nil }, Settle: func(_ context.Context, u agent.RealtimeVoiceUsage) error { measured = u; return nil }, Checkpoint: func(context.Context, string, agent.RealtimeVoiceUsage) error { return nil }, Save: func(context.Context, string, string, string, bool, time.Time) error { return nil }, Tool: func(_ context.Context, name string) (string, error) {
+	hooks := conversationHooks{Operation: "realtime-voice:synthetic-live", History: "[]", Access: func(context.Context) error { return nil }, Save: func(context.Context, string, string, string, bool, time.Time) error { return nil }, Tool: func(_ context.Context, name string) (string, error) {
 		if name == "get_context" {
 			return "[]", nil
 		}
@@ -126,14 +124,7 @@ func TestVoiceConversationLivePCM(t *testing.T) {
 	}
 	client.Close()
 	<-finished
-	for k, n := range measured {
-		if strings.HasPrefix(k, "input_") || strings.HasPrefix(k, "output_") {
-			if n > reserved[k] {
-				t.Fatalf("unreserved %s: %d > %d", k, n, reserved[k])
-			}
-		}
-	}
-	report := map[string]any{"scope": "real Gateway + server actor; synthetic PCM; no native microphone/speakers", "first_audio_ms": latencies, "projected_250ms_buffer_underruns": totalUnderruns, "persistent_turns": 2, "measured_usage_within_reservation": true}
+	report := map[string]any{"scope": "real Gateway + server actor; synthetic PCM; no native microphone/speakers", "first_audio_ms": latencies, "projected_250ms_buffer_underruns": totalUnderruns, "persistent_turns": 2}
 	raw, _ := json.Marshal(report)
 	t.Log(string(raw))
 	if out := os.Getenv("MISTY_REALTIME_CONVERSATION_REPORT"); out != "" {
@@ -158,7 +149,7 @@ func TestVoiceConversationLiveRoutesScreenQuestions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer provider.Close()
-	hooks := conversationHooks{Operation: "realtime-voice:routing-live", History: "[]", Access: func(context.Context) error { return nil }, Input: func(context.Context, int) error { return nil }, Reserve: func(context.Context, agent.RealtimeVoiceUsage) error { return nil }, Settle: func(context.Context, agent.RealtimeVoiceUsage) error { return nil }, Checkpoint: func(context.Context, string, agent.RealtimeVoiceUsage) error { return nil }, Save: func(context.Context, string, string, string, bool, time.Time) error { return nil }, Tool: func(_ context.Context, name string) (string, error) {
+	hooks := conversationHooks{Operation: "realtime-voice:routing-live", History: "[]", Access: func(context.Context) error { return nil }, Save: func(context.Context, string, string, string, bool, time.Time) error { return nil }, Tool: func(_ context.Context, name string) (string, error) {
 		if name == "get_context" {
 			return "[]", nil
 		}

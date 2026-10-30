@@ -2,16 +2,16 @@ import { FatalError, RetryableError } from "workflow";
 import { ControlPlaneError } from "./control-plane-error.js";
 import { classifyMCPTransportError } from "./mcp-errors.js";
 
-/** Billing refusals: the run stops with the reason the person can act on. */
-const usageRefusals = new Set(["billing_admission_denied", "hosted_ai_limit_reached", "usage_limit_reached", "email_unverified"]);
+/** Refusals the run stops on with the reason the person can act on. */
+const refusals = new Set(["usage_limit_reached", "email_unverified", "model_key_needed", "model_unsupported", "model_base_url_invalid"]);
 
 /** Step failures retry only for transient control-plane or transport errors. */
 export function rethrowStepError(error: unknown): never {
   if (error instanceof ControlPlaneError) {
     if (error.code === "agent_model_turn_limit" || error.code === "agent_execution_time_limit") throw new FatalError(error.code);
-    // Usage refusals keep their code, so the run fails with the reason the person
+    // Refusals keep their code, so the run fails with the reason the person
     // can act on rather than a generic authorization error.
-    if (usageRefusals.has(error.code)) throw new FatalError(error.code);
+    if (refusals.has(error.code)) throw new FatalError(error.code);
     if (error.transient) {
       throw new RetryableError("Misty's control plane is temporarily unavailable.", {
         retryAfter: error.status === 429 ? 5_000 : 1_000,
@@ -59,6 +59,15 @@ export function classifyRuntimeError(error: unknown): { code: string; message: s
   if (normalized.includes("agent_execution_time_limit")) {
     return { code: "agent_execution_time_limit", message: "This run used its execution-time allowance. Review its completed work before starting another request." };
   }
+  if (normalized.includes("model_key_needed")) {
+    return { code: "model_key_needed", message: "Add a model key in Settings → Models." };
+  }
+  if (normalized.includes("model_unsupported")) {
+    return { code: "model_unsupported", message: "The chosen model can't do this. Pick another in Settings → Models." };
+  }
+  if (normalized.includes("model_base_url_invalid")) {
+    return { code: "model_base_url_invalid", message: "The model's base URL can't be used. Check it in Settings → Models." };
+  }
   if (normalized.includes("timeout") || normalized.includes("timed out") || normalized.includes("aborted")) {
     return { code: "agent_runtime_timeout", message: "Misty timed out before completing this request." };
   }
@@ -69,16 +78,10 @@ export function classifyRuntimeError(error: unknown): { code: string; message: s
     return { code: "usage_limit_reached", message: "You're starting agent tasks faster than they can run. Wait a minute, then try again." };
   }
   if (normalized.includes("usage_limit_reached")) {
-    return { code: "usage_limit_reached", message: "Misty paused here because an AI usage limit was reached. It can pick up from this point once your limit refills." };
+    return { code: "usage_limit_reached", message: "Misty paused here because a rate limit was reached. Try again in a moment." };
   }
   if (normalized.includes("email_unverified")) {
     return { code: "email_unverified", message: "Confirm your email to start using AI. Check your inbox for the link." };
-  }
-  if (normalized.includes("billing_admission_denied")) {
-    return { code: "billing_admission_denied", message: "Your account's AI usage is paused, so Misty couldn't run this. Check Account usage." };
-  }
-  if (normalized.includes("hosted_ai_limit_reached")) {
-    return { code: "hosted_ai_limit_reached", message: "Your weekly AI agent allowance is fully used. Try again after it resets." };
   }
   if ((error instanceof ControlPlaneError && !error.transient) || normalized.includes("authorization_or_state_changed")) {
     return { code: "authorization_or_state_changed", message: "Misty's authorization or run state changed." };
@@ -86,7 +89,7 @@ export function classifyRuntimeError(error: unknown): { code: string; message: s
   if (normalized.includes("positive credit balance is required") || normalized.includes("insufficient_quota")) {
     return {
       code: "model_provider_credit_exhausted",
-      message: "Misty's AI provider has no available credit. The server administrator needs to add credit or configure another provider.",
+      message: "The model provider says this key has no credit left. Add credit with the provider or use another key in Settings → Models.",
     };
   }
   if (
@@ -97,12 +100,12 @@ export function classifyRuntimeError(error: unknown): { code: string; message: s
   ) {
     return {
       code: "model_provider_key_invalid",
-      message: "Misty's AI provider rejected its API key. The server administrator needs to replace the key.",
+      message: "The model provider rejected the API key. Check the key in Settings → Models.",
     };
   }
   // A provider's own 5xx after the step's retries (a free endpoint's "Internal Server Error").
   if (providerOutage(error)) {
-    return { code: "model_gateway_unavailable", message: "Misty's model providers are temporarily unavailable. Please try again shortly." };
+    return { code: "model_gateway_unavailable", message: "The model provider is temporarily unavailable. Please try again shortly." };
   }
   // The person sees a generic failure; the reason belongs in the runtime's log, or the failure
   // can never be found (a whole Odysseys run ended this way with nothing logged).

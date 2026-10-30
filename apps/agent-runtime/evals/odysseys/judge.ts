@@ -3,12 +3,13 @@
 // the trajectory's action history and every screenshot in order, and the same
 // success/failure parse. A rubric scores 1 when the trajectory satisfies it; a task is
 // perfect when every rubric does. Differences from the official runs are only the judge
-// model (MISTY_ODYSSEYS_JUDGE: a Claude model on Misty's own key, or a free `nim/` model, see
+// model (MISTY_ODYSSEYS_JUDGE: a Claude model on the instance's Anthropic key, or a free `nim/` model, see
 // docs/agents/evals/free-model.md) and a cap of 60 pictures
 // (the recorder skips unchanged ones, so long runs rarely reach it).
 import { readFileSync } from "node:fs";
 import { streamText } from "ai";
 import { RoutedModel } from "../../src/model-calls.js";
+import { judgeBu } from "./bu-bench.js";
 import type { Step } from "./recorder.js";
 import type { OdysseysTask } from "./tasks.js";
 
@@ -55,7 +56,8 @@ interface TaskVerdict {
 const judgeLanes = Math.max(1, Math.min(8, Number(process.env.MISTY_ODYSSEYS_JUDGE_LANES || 5)));
 
 /** Grades every rubric of one task; the last `maxImages` screenshots go to each call. */
-export async function judgeTask(model: string, task: OdysseysTask, steps: Step[], screenshots: string[], maxImages = 60): Promise<TaskVerdict> {
+export async function judgeTask(model: string, task: OdysseysTask, steps: Step[], screenshots: string[], maxImages = Number(process.env.MISTY_ODYSSEYS_JUDGE_IMAGES || 60)): Promise<TaskVerdict> {
+  if (task.judge === "bu-v1") return judgeBu(model, task, steps, screenshots);
   const history = steps.map((step, index) => {
     const parts = [step.response.trim() ? `Response: ${step.response.trim()}` : "", step.action ? `Action: ${step.action}` : ""].filter(Boolean);
     return parts.length ? `${index + 1}. ${parts.join("\n")}` : "";
@@ -68,7 +70,7 @@ export async function judgeTask(model: string, task: OdysseysTask, steps: Step[]
   // Each rubric item is judged on its own, as the original does; the calls run together,
   // except on a free model's rate limit (docs/agents/evals/free-model.md), where a few at a time
   // (judgeLanes) keep a 429 from being graded as a failed rubric.
-  const free = model.startsWith("nim/") || model.startsWith("gemini/");
+  const free = /^(nim|nvidia|gemini)\//.test(model);
   const fallbackModel = process.env.MISTY_ODYSSEYS_JUDGE_FALLBACK?.trim() ?? "";
   const judgeOne = async (rubric: OdysseysTask["rubrics"][number]): Promise<RubricResult> => {
     // The judge's model, until it fails for its own reasons (a free tier's 503s last for hours): then
@@ -111,7 +113,7 @@ export async function judgeTask(model: string, task: OdysseysTask, steps: Step[]
           // longer each time and ask again, rather than grading the agent on the judge's outage.
           if (attempt < 5 && /judge_quiet|429|rate.?limit|quota|exhaust|overload|unavailable|50\d|fetch failed/i.test(String(error))) {
             if (fallbackModel && judge !== fallbackModel) {
-              process.stderr.write(`JUDGE_FALLBACK ${rubric.id}: ${judge} -> ${fallbackModel}\n`);
+              process.stderr.write(`JUDGE_FALLBACK ${rubric.id}: ${judge} -> ${fallbackModel} (${String(error).slice(0, 160)})\n`);
               judge = fallbackModel;
               return undefined;
             }

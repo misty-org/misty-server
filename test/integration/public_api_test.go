@@ -64,8 +64,10 @@ func TestPublicAccountResponsesHideLicenseID(t *testing.T) {
 	if got, ok := meBody["allows_use"].(bool); !ok || !got {
 		t.Fatalf("/me allows_use = %#v, want true", meBody["allows_use"])
 	}
-	if got, ok := meBody["tier"].(string); !ok || got != "basic" {
-		t.Fatalf("/me tier = %#v, want basic", meBody["tier"])
+	for _, retired := range []string{"tier", "status", "billing", "trial_eligible"} {
+		if _, ok := meBody[retired]; ok {
+			t.Fatalf("/me still reports %s: %#v", retired, meBody)
+		}
 	}
 }
 

@@ -1,5 +1,4 @@
 import type { ModelMessage } from "ai";
-import { admissionInput } from "./admission-input.js";
 import type { RuntimeIdentity } from "./control-plane.js";
 import type { HarnessCompletion } from "./harness.js";
 import { initialMessages } from "./model-input.js";
@@ -35,7 +34,6 @@ interface TeachStepResult {
   response: ModelMessage[];
   /** The next teach:N part number. */
   part: number;
-  usage: unknown;
 }
 
 /** Which calls run and which are refused, in order, given what is left of the budget. */
@@ -90,11 +88,8 @@ async function teachModelStep(
         }),
       }
     : undefined;
-  // The model turn's billing hold, sized like any other turn's (admission_input.go).
-  await report(identity, {
-    node_id: node, state: "running", phase: "thinking", progress: 10,
-    output: admissionInput({ system: context.system, messages, tools: tools ?? {} }),
-  });
+  // Go counts the model turn like any other turn's.
+  await report(identity, { node_id: node, state: "running", phase: "thinking", progress: 10 });
   const result = streamText({
     model: new RunModel(context.model_id, identity),
     system: context.system,
@@ -125,15 +120,12 @@ async function teachModelStep(
   }
   // Text before a lookup ends with a line break, so it never runs into the answer after it.
   await flush(pending);
-  const [usage, finishReason, toolCalls, response] = await Promise.all([
-    result.usage, result.finishReason, result.toolCalls, result.response,
-  ]);
-  // Settles the hold. Its text went out as teach:N parts, so none is sent again here.
-  await report(identity, { node_id: node, state: "completed", phase: "answered", progress: 95, output: { finish_reason: finishReason, usage, text_delta: "" } });
+  const [finishReason, toolCalls, response] = await Promise.all([result.finishReason, result.toolCalls, result.response]);
+  // Ends the turn. Its text went out as teach:N parts, so none is sent again here.
+  await report(identity, { node_id: node, state: "completed", phase: "answered", progress: 95, output: { finish_reason: finishReason, text_delta: "" } });
   return {
     text,
     part,
-    usage,
     toolCalls: toolCalls.map((c) => ({ toolCallId: c.toolCallId, toolName: c.toolName, input: c.input })),
     response: response.messages as ModelMessage[],
   };

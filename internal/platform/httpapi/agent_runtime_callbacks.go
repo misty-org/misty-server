@@ -39,10 +39,6 @@ func (s *SpacesService) AgentRuntimeEvent() http.HandlerFunc {
 		if err != nil {
 			if strings.HasPrefix(body.NodeID, "model:") && body.State == "completed" {
 				if stopped, lookupErr := s.database.PersonalAgentRuntimeRecord(r.Context(), chi.URLParam(r, "runID"), body.RuntimeRunID); lookupErr == nil && (stopped.State == "canceled" || stopped.State == "completed" || stopped.State == "completed_with_errors" || stopped.State == "failed") {
-					if _, settleErr := s.meterPersonalAgentRuntimeModel(r.Context(), stopped, body.NodeID, workflow.StepCompleted, body.Output); settleErr != nil {
-						writeAgentError(w, settleErr)
-						return
-					}
 					writeJSON(w, http.StatusOK, map[string]bool{"accepted": true})
 					return
 				}
@@ -64,7 +60,6 @@ func (s *SpacesService) AgentRuntimeEvent() http.HandlerFunc {
 			body.Input = json.RawMessage(`{}`)
 		}
 		body.Input = sanitizeAgentLifecycleJSON(body.Input)
-		rawModelOutput := body.Output
 		body.Output = sanitizeAgentLifecycleJSON(body.Output)
 		var stepErr error
 		if state == workflow.StepFailed {
@@ -73,10 +68,8 @@ func (s *SpacesService) AgentRuntimeEvent() http.HandlerFunc {
 		if body.Attempt < 1 {
 			body.Attempt = 1
 		}
-		overLimit := false
 		if strings.HasPrefix(body.NodeID, "model:") {
-			var err error
-			if overLimit, err = s.meterPersonalAgentRuntimeModel(r.Context(), run, body.NodeID, state, rawModelOutput); err != nil {
+			if err := s.admitPersonalAgentRuntimeTurn(r.Context(), run, body.NodeID, state); err != nil {
 				writeAgentError(w, err)
 				return
 			}
@@ -90,6 +83,6 @@ func (s *SpacesService) AgentRuntimeEvent() http.HandlerFunc {
 			return
 		}
 		s.projectLinkedAIInvocationEvent(r.Context(), run, body.NodeID, body.State, body.Phase, body.Output)
-		writeJSON(w, http.StatusOK, map[string]bool{"accepted": true, "over_limit": overLimit})
+		writeJSON(w, http.StatusOK, map[string]bool{"accepted": true})
 	}
 }

@@ -118,7 +118,7 @@ type MemoryChunk struct {
 const memoryChunkAttempts = 5
 
 // PendingMemoryChunks leases due chunks of one owner, so one embedding call
-// carries a batch billed to one account. It is the background backfill too:
+// carries a batch of one account. It is the background backfill too:
 // rows that existed before the index wait here like new ones.
 func (db *Database) PendingMemoryChunks(ctx context.Context, limit int) ([]MemoryChunk, error) {
 	if limit < 1 || limit > 100 {

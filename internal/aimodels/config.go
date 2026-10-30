@@ -1,5 +1,7 @@
-// Package aimodels defines the internal model roles. Every model runs on
-// Misty's own keys.
+// Package aimodels defines the internal model roles and how an account's
+// model choices resolve. A model runs on the key the account brought from its
+// device (byok) or, when the operator configured models, on the server's own
+// keys.
 package aimodels
 
 import (
@@ -7,6 +9,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/kannachi323/misty/server/internal/byok"
 	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
@@ -50,24 +53,39 @@ type Route struct {
 	Enabled   bool   `json:"enabled"`
 }
 
-// Resolved is an account's chosen model for a role.
+// Resolved is an account's chosen model for a role. Credential is the
+// account's own key for it; nil means the operator's keys run it.
 type Resolved struct {
-	Model     string
-	Reasoning string
+	Model      string
+	Reasoning  string
+	Credential *byok.Credential
 }
 type Resolver func(context.Context, string, string) (*Resolved, error)
 
-// DirectOpenAI reports whether a model skips the Gateway: OpenAI models use
-// the instance OpenAI key when one is set. The agent runtime applies the same
-// rule; keep them in step.
+// DirectOpenAI reports whether the operator's runtime sends a model straight
+// to OpenAI: OpenAI models do when the operator set OPENAI_API_KEY. The agent
+// runtime applies the same rule; keep them in step.
 func DirectOpenAI(model string) bool {
 	return strings.HasPrefix(model, "openai/") && config.OpenAIKey() != ""
 }
 
-// UsageProvider names who bills a model call.
-func UsageProvider(model string) string {
-	if DirectOpenAI(model) {
-		return "openai"
+// ClientModelChoice reports whether a request may pick its own model or effort.
+// Production never allows it. A development stack allows it only when
+// MISTY_ALLOW_MODEL_OVERRIDE is set, so evals can compare models.
+func ClientModelChoice() bool {
+	if !strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_ENVIRONMENT")), "development") {
+		return false
 	}
-	return "ai-gateway"
+	switch strings.ToLower(strings.TrimSpace(config.Getenv("MISTY_ALLOW_MODEL_OVERRIDE"))) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
+}
+
+// OperatorModels reports whether the server has models of its own: the
+// operator set MISTY_AGENT_MODEL (and the runtime's provider keys), or a
+// development eval stack picks models per request.
+func OperatorModels() bool {
+	return strings.TrimSpace(config.Getenv("MISTY_AGENT_MODEL")) != "" || ClientModelChoice()
 }

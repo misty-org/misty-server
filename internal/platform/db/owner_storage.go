@@ -3,40 +3,24 @@ package db
 import (
 	"context"
 	"database/sql"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
-	"github.com/kannachi323/misty/server/internal/platform/config"
-	"time"
 )
 
-// StorageQuotaDimension is the additive, explicit representation used by new
-// clients. The older flat fields remain populated on the containing response.
-type StorageQuotaDimension struct {
-	PercentageUsed float64 `json:"percentage_used"`
-	UsedBytes      int64   `json:"used_bytes"`
-	ReservedBytes  int64   `json:"reserved_bytes"`
-	LimitBytes     int64   `json:"limit_bytes"`
-	RemainingBytes int64   `json:"remaining_bytes"`
-	OverQuota      bool    `json:"over_quota"`
+// StorageUsageDimension is what an account or a Space holds in cloud storage.
+type StorageUsageDimension struct {
+	UsedBytes     int64 `json:"used_bytes"`
+	ReservedBytes int64 `json:"reserved_bytes"`
 }
 
-// OwnerStorageUsage is retained as the public compatibility type and method
-// name. Its flat values now describe the authenticated user's global personal
-// contribution across owned and joined Spaces, rather than storage in Spaces
-// that user owns.
+// OwnerStorageUsage describes the authenticated user's personal contribution
+// across owned and joined Spaces.
 type OwnerStorageUsage struct {
-	BillingAvailable   bool                     `json:"-"`
-	OwnerUserID        string                   `json:"owner_user_id,omitempty"`
-	UserID             string                   `json:"user_id,omitempty"`
-	UsedBytes          int64                    `json:"used_bytes"`
-	ReservedBytes      int64                    `json:"reserved_bytes"`
-	LimitBytes         int64                    `json:"limit_bytes"`
-	RemainingBytes     int64                    `json:"remaining_bytes"`
-	OverQuota          bool                     `json:"over_quota"`
-	OverQuotaSince     *time.Time               `json:"over_quota_since,omitempty"`
-	CleanupNoticeUntil *time.Time               `json:"cleanup_notice_until,omitempty"`
-	Version            int64                    `json:"version"`
-	Spaces             []OwnerSpaceStorageUsage `json:"spaces"`
-	Personal           StorageQuotaDimension    `json:"personal"`
+	OwnerUserID   string                   `json:"owner_user_id,omitempty"`
+	UserID        string                   `json:"user_id,omitempty"`
+	UsedBytes     int64                    `json:"used_bytes"`
+	ReservedBytes int64                    `json:"reserved_bytes"`
+	Version       int64                    `json:"version"`
+	Spaces        []OwnerSpaceStorageUsage `json:"spaces"`
+	Personal      StorageUsageDimension    `json:"personal"`
 }
 
 type OwnerSpaceStorageUsage struct {
@@ -47,18 +31,12 @@ type OwnerSpaceStorageUsage struct {
 }
 
 func personalStorageUsageTx(ctx context.Context, tx *sql.Tx, userID string) (OwnerStorageUsage, error) {
-	adapter, err := config.BillingAdapter()
+	measured, err := accountStorageTx(ctx, tx, userID)
 	if err != nil {
 		return OwnerStorageUsage{}, err
 	}
-	measured, err := cloudusage.Check(ctx, tx, adapter, userID, "storage.check", nil)
-	if err != nil {
-		return OwnerStorageUsage{}, err
-	}
-	out := OwnerStorageUsage{OwnerUserID: userID, UserID: userID, Version: 1, Spaces: []OwnerSpaceStorageUsage{}, BillingAvailable: true,
-		UsedBytes: measured.UsedBytes, ReservedBytes: measured.ReservedBytes, LimitBytes: measured.LimitBytes, RemainingBytes: measured.RemainingBytes, OverQuota: measured.OverQuota}
-	out.Personal = StorageQuotaDimension{UsedBytes: measured.UsedBytes, ReservedBytes: measured.ReservedBytes, LimitBytes: measured.LimitBytes, RemainingBytes: measured.RemainingBytes, OverQuota: measured.OverQuota, PercentageUsed: measured.PercentageUsed}
-	return out, nil
+	return OwnerStorageUsage{OwnerUserID: userID, UserID: userID, Version: 1, Spaces: []OwnerSpaceStorageUsage{},
+		UsedBytes: measured.UsedBytes, ReservedBytes: measured.ReservedBytes, Personal: measured}, nil
 }
 
 func (db *Database) OwnerStorageUsage(ctx context.Context, userID string) (*OwnerStorageUsage, error) {

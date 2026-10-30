@@ -1,12 +1,13 @@
 import type { LanguageModelV4 } from "@ai-sdk/provider";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { ModelCallError, RoutedModel, usageOf } from "./model-calls.js";
+import { ModelCallError, RoutedModel } from "./model-calls.js";
+import { modelRouteSchema } from "./model-provider.js";
 
 /** Turning a transcript (and the person's own notes) into notes, a summary, action items or chapters. */
 const turn = z.object({ speaker: z.string().max(80), start: z.number().min(0), end: z.number().min(0), text: z.string().max(20_000) });
 const voiceNotesRequest = z.object({
-  route: z.object({ provider: z.literal("instance"), reasoning: z.string().optional() }),
+  route: modelRouteSchema,
   model: z.string().regex(/^[^\s/]+\/\S+$/),
   mode: z.enum(["notes", "summary", "actions", "chapters"]),
   title: z.string().max(200).optional(),
@@ -90,6 +91,5 @@ export async function voiceNotesCall(body: unknown, signal?: AbortSignal, model?
   return {
     ...notes,
     markdown: request.mode === "notes" ? keepUserHeadings(request.userNotes, notes.markdown) : notes.markdown,
-    usage: usageOf(output.usage),
   };
 }

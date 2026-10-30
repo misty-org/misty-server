@@ -1,7 +1,8 @@
 # Server ownership
 
-The public server supports Accounts, Spaces, Agents and browser/device Sync.
-Commercial implementation lives in the separate private Go billing repository.
+The server supports Accounts, Spaces, Agents and browser/device Sync. It has
+no billing: every feature is open to every account, and models run on keys
+the person brings from their device (`byok`) or on the operator's own keys.
 
 | Location | Responsibility |
 | --- | --- |
@@ -9,13 +10,11 @@ Commercial implementation lives in the separate private Go billing repository.
 | `spaces` | Membership permissions, feature access and upload policy. |
 | `agent` | Model and tool execution, companion voice, embeddings, transcription and provider calls. |
 | `agenttools` | The Agent Toolbox registry: tool descriptors, schemas, aliases and execution checks. |
-| `aimodels` | Internal model roles and which provider bills a model call. |
+| `aimodels` | Internal model roles and how an account's choices resolve. |
 | `modelruntime` | The client for the agent runtime, which makes every model call. |
-| `cloudusage` | Admission checks when an account's cloud storage grows. |
 | `console` | The localhost operator console (templ + htmx). |
 | `browsersync` | Browser/device HTTP and WebSocket transport, session storage and synchronization. |
-| `library` | Per-attempt admission and raw-usage completion for Library providers. |
-| `billingadapter` | Optional authenticated protocol, reservations, durable outbox and recovery; no charging policy. |
+| `byok` | The `X-Misty-Models` header: decoding, the in-memory per-account store and role lookup. |
 | `workflow` | Shared tool-execution types and errors for durable Agent runs. The Studio workflow engine was removed. |
 | `integrations` | Composio connected-app sessions. |
 | `app` | Composition, route mounting and retained background workers. |

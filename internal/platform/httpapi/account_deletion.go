@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 )
@@ -94,11 +93,6 @@ func (s *SpacesService) ProcessAccountDeletions(
 	}
 	completed := 0
 	for _, request := range requests {
-		billing := s.database.BillingService()
-		if err := (billingadapter.Reliable{Adapter: billing.Adapter, Store: billing.Store}).Submit(ctx, "close", billingadapter.Request{Version: 1, AccountID: request.UserID, Operation: "customer.close", OperationID: request.ID, Key: "account-close:" + request.ID}); err != nil {
-			_ = s.database.RecordAccountDeletionFailure(ctx, request.ID, "billing_closure_persistence_failed")
-			return completed, err
-		}
 		status, processErr := s.revokeAccountProviders(ctx, request.UserID)
 		if processErr == nil && s.avatarStore != nil {
 			processErr = s.avatarStore.Delete(ctx, avatarObjectKey(request.UserID))

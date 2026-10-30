@@ -33,7 +33,7 @@ func MentionRequester(messageID string) string { return MentionRequesterPrefix +
 
 // ReplyRequesterPrefix marks requests an agent made by @mentioning another
 // agent in its chat reply. The reply stands in for the requesting run, the
-// work is billed to the person who asked first, and it goes one hop deep.
+// work runs on the models of the person who asked first, and it goes one hop deep.
 const ReplyRequesterPrefix = "reply:"
 
 func ReplyRequester(messageID string) string { return ReplyRequesterPrefix + messageID }
@@ -93,7 +93,7 @@ func scanAgentMemberRequest(row interface{ Scan(...any) error }, out *AgentMembe
 
 // CreateAgentMemberRequest sends work to an agent in a Space, from another
 // agent's run or from a person @mentioning it in Space chat. The delegated run
-// acts as the target agent, only in that Space, and is billed to the person
+// acts as the target agent, only in that Space, and runs on the models of the person
 // who asked. It starts at once. A repeated idempotency key from the same run
 // (or message) returns the original request.
 func (db *Database) CreateAgentMemberRequest(ctx context.Context, input AgentMemberRequestInput) (*AgentMemberRequest, error) {
@@ -164,7 +164,7 @@ func (db *Database) CreateAgentMemberRequest(ctx context.Context, input AgentMem
 		})
 		runID := "run_" + uuid.NewString()
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_runs(
-			id,space_id,resource_kind,resource_id,initiated_by_user_id,billing_user_id,trigger_kind,state,input,result,
+			id,space_id,resource_kind,resource_id,initiated_by_user_id,model_user_id,trigger_kind,state,input,result,
 			requesting_member_id,source_type,agent_id,outputs,artifacts,attempt,conversation_scope_kind,owner_user_id,
 			initial_run_mode,effective_run_mode,agent_version_snapshot,parent_run_id,delegation_depth,context_bindings,
 			model_turn_limit,execution_limit_ms)

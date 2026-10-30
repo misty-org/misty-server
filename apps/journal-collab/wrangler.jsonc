@@ -26,7 +26,8 @@
   "vars": {
     // Non-secret configuration. Every secret is set with `wrangler secret put`
     // and never appears in this file.
-    "MISTY_INTERNAL_API_BASE": "https://api.mistysys.com/v1",
+    // Your API base; `misty server worker deploy` sets it from MISTY_PUBLIC_API_URL.
+    "MISTY_INTERNAL_API_BASE": "https://api.example.com/v1",
     "JOURNAL_COLLAB_ISSUER": "misty-api",
     "JOURNAL_COLLAB_AUDIENCE": "misty-journal-collab",
   },

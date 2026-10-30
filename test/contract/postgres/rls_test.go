@@ -4,11 +4,11 @@ import (
 	"testing"
 )
 
-func TestArchivedBillingIsNotAccessibleToApplicationRole(t *testing.T) {
+func TestArchivedRecordsAreNotAccessibleToApplicationRole(t *testing.T) {
 	database := openTestDatabase(t)
 	var hidden, archived bool
 	if err := database.Conn.QueryRow(`SELECT CASE WHEN to_regnamespace('misty_archive') IS NULL THEN true ELSE NOT has_schema_privilege('misty_app','misty_archive','USAGE') END,to_regclass('public.hosted_ai_wallets') IS NULL AND to_regclass('public.payment_purchase_reversals') IS NULL`).Scan(&hidden, &archived); err != nil || !hidden || !archived {
-		t.Fatalf("billing archive exposed: hidden=%v archived=%v err=%v", hidden, archived, err)
+		t.Fatalf("archive exposed: hidden=%v archived=%v err=%v", hidden, archived, err)
 	}
 }
 

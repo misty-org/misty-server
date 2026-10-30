@@ -1,70 +1,22 @@
 package api
 
 import (
-	"context"
-	"errors"
 	"log"
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
-	"time"
-
-	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-// Coding (projects, coding runs, project grants and GitHub for projects) is a
-// Pro-and-above feature. Every coding entry point asks codingAccess, whatever
-// calls it: the app, an agent run, the MCP server, an A2A caller or a script.
-// The plan is the real control; the outside-agent check is defense in depth.
+// Every coding entry point (projects, coding runs, project grants and GitHub
+// for projects) asks requireCoding, whatever calls it: the app, an agent run,
+// the MCP server, an A2A caller or a script. Coding works only from the Misty
+// app.
 
 const (
-	codePlanUpgradeRequired = "plan_upgrade_required"
 	codeOutsideAgentBlocked = "outside_agent_blocked"
 
-	planUpgradeMessage  = "Coding is part of Misty Pro and above. Upgrade your plan to use projects and coding tools."
 	outsideAgentMessage = "Coding works only from the Misty app. This request came from another program, so Misty stopped it."
 )
-
-var errPlanUpgradeRequired = errors.New(codePlanUpgradeRequired)
-
-// codingPlans caches each account's answer briefly: the toolbox asks on every
-// tool call, and billing should not be asked each time.
-var codingPlans = struct {
-	sync.Mutex
-	entries map[string]codingPlanEntry
-}{entries: map[string]codingPlanEntry{}}
-
-type codingPlanEntry struct {
-	included bool
-	expires  time.Time
-}
-
-// codingIncluded is nil when the account's plan includes coding,
-// errPlanUpgradeRequired when it does not, and the billing error when billing
-// can't answer: coding stays closed then.
-func codingIncluded(ctx context.Context, database *db.Database, user string) error {
-	codingPlans.Lock()
-	entry, ok := codingPlans.entries[user]
-	codingPlans.Unlock()
-	if !ok || time.Now().After(entry.expires) {
-		entitlements, err := database.EntitlementsForUser(ctx, user)
-		if err != nil {
-			return err
-		}
-		entry = codingPlanEntry{included: entitlements.Coding, expires: time.Now().Add(30 * time.Second)}
-		codingPlans.Lock()
-		if len(codingPlans.entries) > 10_000 {
-			codingPlans.entries = map[string]codingPlanEntry{}
-		}
-		codingPlans.entries[user] = entry
-		codingPlans.Unlock()
-	}
-	if !entry.included {
-		return errPlanUpgradeRequired
-	}
-	return nil
-}
 
 // desktopUserAgentPrefix is how the Misty app's account client names itself.
 const desktopUserAgentPrefix = "MistyDesktop/"
@@ -81,8 +33,7 @@ var automationReason = regexp.MustCompile(`^[a-z_]{1,32}$`)
 // The app's account client always sends its own user agent and X-Misty-CSRF,
 // never an Origin, and tells the server when its window is
 // driven by WebDriver. A determined caller can copy every one of these, so
-// this catches agents and scripts that don't try to hide; the plan gate holds
-// either way.
+// this catches agents and scripts that don't try to hide.
 func outsideAgentReason(r *http.Request) string {
 	if reason := strings.TrimSpace(r.Header.Get("X-Misty-Automation")); reason != "" {
 		if !automationReason.MatchString(reason) {
@@ -112,29 +63,13 @@ func logOutsideAgent(r *http.Request, user, entry, reason string) {
 	log.Printf("coding.outside_agent_blocked entry=%s reason=%s user=%s user_agent=%q", entry, reason, user, truncateAgentRuntimeText(r.UserAgent(), 160))
 }
 
-// requireCoding admits a coding request: the account's plan must include
-// coding, and the request must come from the Misty app. It writes the refusal
-// and returns false otherwise.
-func requireCoding(w http.ResponseWriter, r *http.Request, database *db.Database, user, entry string) bool {
+// requireCoding admits a coding request that comes from the Misty app. It
+// writes the refusal and returns false otherwise.
+func requireCoding(w http.ResponseWriter, r *http.Request, user, entry string) bool {
 	if reason := outsideAgentReason(r); reason != "" {
 		logOutsideAgent(r, user, entry, reason)
 		writeJSON(w, http.StatusForbidden, map[string]string{"code": codeOutsideAgentBlocked, "message": outsideAgentMessage})
 		return false
 	}
-	switch err := codingIncluded(r.Context(), database, user); {
-	case errors.Is(err, errPlanUpgradeRequired):
-		writeJSON(w, http.StatusPaymentRequired, map[string]string{"code": codePlanUpgradeRequired, "message": planUpgradeMessage})
-		return false
-	case err != nil:
-		writeBillingError(w, err)
-		return false
-	}
 	return true
-}
-
-// TestingResetCodingPlans forgets cached plan answers between tests.
-func TestingResetCodingPlans() {
-	codingPlans.Lock()
-	codingPlans.entries = map[string]codingPlanEntry{}
-	codingPlans.Unlock()
 }

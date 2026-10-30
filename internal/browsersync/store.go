@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 
 	"github.com/google/uuid"
 )
@@ -159,5 +158,5 @@ func (db *Store) EnrollBrowserSyncDevice(ctx context.Context, userID string, g S
 	if err = notifySync(ctx, tx, userID, g.VaultID, "browser-presence"); err != nil {
 		return err
 	}
-	return cloudusage.Commit(ctx, tx)
+	return tx.Commit()
 }

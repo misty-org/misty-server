@@ -88,7 +88,7 @@ func (db *Database) CreateDrawingAssetUpload(
 		).Scan(&out.SpaceID, &out.SecurityDomainID); err != nil {
 			return err
 		}
-		if _, err := reserveStorageQuotaTx(ctx, tx, userID, out.SpaceID, byteSize); err != nil {
+		if err := prepareStorageReservationTx(ctx, tx, userID, out.SpaceID); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(

@@ -68,10 +68,6 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_completion_status"})
 			return
 		}
-		if err := s.settlePersonalAgentRuntimeUsage(r.Context(), run, body.Status, body.Usage); err != nil {
-			writeAgentError(w, err)
-			return
-		}
 		message := body.Text
 		if message == "" {
 			message = strings.TrimSpace(body.ErrorMessage)
@@ -90,10 +86,6 @@ func (s *SpacesService) AgentRuntimeComplete() http.HandlerFunc {
 			jobState = "failed"
 		}
 		if err := s.database.FinishDispatchedPersonalAgentTaskRunJob(r.Context(), run.ID, body.RuntimeRunID, jobState); err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		if err := s.database.ReleasePersonalAgentRuntimeReservations(r.Context(), run.ID); err != nil {
 			writeAgentError(w, err)
 			return
 		}

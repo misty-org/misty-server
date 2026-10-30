@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
@@ -261,17 +260,6 @@ func publicAIInvocationError(err error) string {
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "Misty timed out before completing this request."
-	}
-	var exhausted agent.HostedAILimitReachedError
-	if errors.As(err, &exhausted) {
-		prefix := "Your weekly hosted AI pool is used up."
-		if exhausted.Scope == "space" {
-			prefix = "This Space's weekly hosted AI pool is used up."
-		}
-		if !exhausted.ResetAt.IsZero() {
-			return prefix + " It resets " + exhausted.ResetAt.UTC().Format("Jan 2 at 3:04 PM UTC") + "."
-		}
-		return prefix
 	}
 	return "Misty could not complete this request."
 }

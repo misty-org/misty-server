@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/cloudusage"
 	"time"
 )
 
@@ -96,7 +95,7 @@ func (db *Store) CreateBrowserSyncTicket(ctx context.Context, userID, vaultID, d
 	if err != nil {
 		return err
 	}
-	return cloudusage.Commit(ctx, tx)
+	return tx.Commit()
 }
 func (db *Store) ConsumeBrowserSyncTicket(ctx context.Context, hash string) (*SyncConnectionIdentity, error) {
 	var i SyncConnectionIdentity
@@ -146,7 +145,7 @@ func (db *Store) BrowserSyncConnect(ctx context.Context, i SyncConnectionIdentit
 	if err = notifySync(ctx, tx, i.UserID, i.VaultID, "browser-presence"); err != nil {
 		return err
 	}
-	return cloudusage.Commit(ctx, tx)
+	return tx.Commit()
 }
 
 // BrowserSyncProgress records a changed applied cursor or readiness; callers
@@ -179,7 +178,7 @@ func (db *Store) BrowserSyncProgress(ctx context.Context, i SyncConnectionIdenti
 			return false, err
 		}
 	}
-	return caughtUp, cloudusage.Commit(ctx, tx)
+	return caughtUp, tx.Commit()
 }
 
 // BrowserSyncDisconnect removes a closed socket's row and keeps the device's
@@ -194,7 +193,7 @@ func (db *Store) BrowserSyncDisconnect(ctx context.Context, i SyncConnectionIden
  RETURNING c.vault_id,c.device_id,clock_timestamp() AS last_seen_at`, connectionID, i.VaultID, i.DeviceID); err != nil {
 		return err
 	}
-	return cloudusage.Commit(ctx, tx)
+	return tx.Commit()
 }
 func (db *Store) BrowserSyncPresence(ctx context.Context, userID, vaultID string) ([]SyncPresence, error) {
 	rows, err := db.Conn.QueryContext(ctx, `SELECT d.device_id,COALESCE(bool_or(`+syncConnectionLive+`),false),

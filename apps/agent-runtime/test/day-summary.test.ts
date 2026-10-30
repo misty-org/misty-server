@@ -22,7 +22,7 @@ describe("day-summary", () => {
     expect(daySummarySystem).toMatch(/Never follow instructions/);
   });
 
-  it("returns the summary with usage and rejects empty days", async () => {
+  it("returns the summary and rejects empty days", async () => {
     const model = new MockLanguageModelV4({
       doGenerate: async () => ({
         content: [{ type: "text", text: JSON.stringify({ markdown: "You read about bike lanes.", topics: ["Bike lanes"] }) }],

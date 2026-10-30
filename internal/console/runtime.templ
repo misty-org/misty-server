@@ -100,7 +100,7 @@ templ aiPage(v aiView) {
 			@healthRow(v.Gateway.Label(), v.Gateway.OK(), checkDetail(*v.Gateway))
 		}
 	</ul>
-	@note("Every model routes through the AI gateway. Per-account budgets are enforced by the billing adapter.")
+	@note("Models run on each account's own keys, or on the server's keys when the operator sets MISTY_AGENT_MODEL.")
 	if v.Err != "" {
 		@problem(v.Err)
 	}
@@ -134,18 +134,4 @@ templ settingRow(s setting) {
 		</span>
 		<span class={ "truncate", templ.KV("muted", s.Set || !s.Required) }>{ s.display() }</span>
 	</li>
-}
-
-templ billingPage(v billingView) {
-	@pageHeader("Billing", "Billing adapter delivery. Plans live in the billing service.")
-	if v.Err != "" {
-		@problem(v.Err)
-	}
-	<ul class="rows">
-		if v.Check != nil {
-			@healthRow("Billing adapter", v.Check.OK(), checkDetail(*v.Check))
-		}
-		@healthRow("Outbox", v.Billing.OutboxRetrying == 0, plural(v.Billing.OutboxPending, "pending event", "pending events")+" · "+itoa(v.Billing.OutboxRetrying)+" retrying · oldest "+agoPtr(v.Billing.OutboxOldest))
-		@healthRow("Open reservations", true, itoa(v.Billing.Reservations)+" · oldest "+agoPtr(v.Billing.ReservationsOldest))
-	</ul>
 }

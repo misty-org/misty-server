@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"sort"
 	"strings"
 
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
@@ -13,8 +12,7 @@ const (
 	DefaultFrontierModelID      = "openai/gpt-6-astra"
 )
 
-// FrontierGatewayModel is the deliberately small, paid model catalog exposed
-// by Misty. The full Gateway catalog remains an implementation detail.
+// FrontierGatewayModel is a model the server offers by default.
 type FrontierGatewayModel struct {
 	ID              string   `json:"id"`
 	Name            string   `json:"name"`
@@ -40,57 +38,30 @@ func ManagedReasoning(mode, legacyEffort string) string {
 	return HouseEffort(legacyEffort)
 }
 
-func FrontierGatewayModels(ctx context.Context) ([]FrontierGatewayModel, error) {
-	models, err := GatewayModels(ctx)
-	if err != nil {
-		return nil, err
-	}
-	byID := make(map[string]GatewayModel, len(models))
-	for _, model := range models {
-		byID[model.ID] = model
-	}
-	seen := map[string]bool{}
+// FrontierGatewayModels lists the server's default model. It reads no
+// catalog: accounts bring their own models, and any provider/model ID runs.
+func FrontierGatewayModels(_ context.Context) ([]FrontierGatewayModel, error) {
 	frontier := []FrontierGatewayModel{}
 	for _, id := range configuredFrontierModelIDs() {
-		id = strings.TrimSpace(id)
-		model, ok := byID[id]
-		if !ok || seen[id] || !frontierCapabilities(model.Capabilities) {
-			continue
+		name := modelDisplayName(id)
+		for _, model := range configuredGatewayModels() {
+			if model.ID == id && model.Name != "" {
+				name = model.Name
+			}
 		}
-		seen[id] = true
 		providerID, providerName := frontierProvider(id)
-		levels := []string{"high", "xhigh"}
 		frontier = append(frontier, FrontierGatewayModel{
-			ID: id, Name: model.Name, ProviderID: providerID, ProviderName: providerName,
-			Capabilities: append([]string(nil), model.Capabilities...), ReasoningLevels: levels,
+			ID: id, Name: name, ProviderID: providerID, ProviderName: providerName,
+			Capabilities: []string{"chat", "tools", "vision"}, ReasoningLevels: []string{"high", "xhigh"},
 		})
 	}
-	sort.SliceStable(frontier, func(i, j int) bool {
-		if frontier[i].ProviderName == frontier[j].ProviderName {
-			return frontier[i].Name < frontier[j].Name
-		}
-		return frontier[i].ProviderName < frontier[j].ProviderName
-	})
 	return frontier, nil
 }
 
-func FrontierModelAvailable(ctx context.Context, modelID string) bool {
-	// A free development model (nim/…) is not in the Gateway's catalog, so it is available by its own
-	// rule (FreeEvalModel, which only a development stack honors): without this, a request that names
-	// no model was refused as "model unavailable" when the house model was a free one.
-	if FreeEvalModel(modelID) {
-		return true
-	}
-	models, err := FrontierGatewayModels(ctx)
-	if err != nil {
-		return false
-	}
-	for _, model := range models {
-		if model.ID == strings.TrimSpace(modelID) {
-			return true
-		}
-	}
-	return false
+// FrontierModelAvailable reports whether a model ID may run: any well-formed
+// provider/model ID. No catalog is asked.
+func FrontierModelAvailable(_ context.Context, modelID string) bool {
+	return FreeEvalModel(modelID) || WellFormedModelID(modelID)
 }
 
 func frontierCapabilities(capabilities []string) bool {

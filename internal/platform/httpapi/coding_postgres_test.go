@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/test/testkit"
 )
@@ -28,8 +26,7 @@ func TestCodingDelegationPostgres(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	meter := &settleRecorder{}
-	service := &SpacesService{database: database, aiInvocations: newAIInvocationHub(database), usageMeter: meter}
+	service := &SpacesService{database: database, aiInvocations: newAIInvocationHub(database)}
 	body := aiInvocationInput{Mode: "drawer", SurfaceID: "global", Trigger: "message", Prompt: "Fix the bug", Timezone: "UTC", PermissionMode: "ask"}
 	payload, _ := json.Marshal(body)
 	parent, _, err := database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{
@@ -67,7 +64,7 @@ func TestCodingDelegationPostgres(t *testing.T) {
 	}
 
 	// A run that reaches its device mirrors the tool's work: text, its todo
-	// list as the child's checklist, usage against the lease, and the end.
+	// list as the child's checklist, and the end. Usage reports are ignored.
 	parent.ConversationID = ""
 	liveID, err := service.startCodingChild(ctx, &parent, body, "call-2", "Fix the parser", "edit", "scope_app")
 	if err != nil {
@@ -97,25 +94,12 @@ func TestCodingDelegationPostgres(t *testing.T) {
 	if len(finished) != 1 || finished[0].State != "completed" || finished[0].Answer != "Fixed the parser." {
 		t.Fatalf("delegated run = %+v", finished)
 	}
-	// Usage counts at a quarter, cached reads at a tenth of that: ceil(151/4) + ceil(540/4).
-	if used, _ := database.WeeklyCodingUsed(ctx, owner.ID); used != 38+135 {
-		t.Fatalf("used after the run = %d", used)
-	}
-	// Two usage reports, one settlement, with the summed classes at a quarter.
-	want := agent.ModelUsage{InputTokens: 110, CachedInputTokens: 253, OutputTokens: 38}
-	if len(meter.settled) != 1 || meter.settled[0].node != liveLease.ID || meter.settled[0].usage != want {
-		t.Fatalf("settlements = %+v", meter.settled)
-	}
-	if left, _ := database.UnsettledCodingLeases(ctx, owner.ID, liveID); len(left) != 0 {
-		t.Fatalf("unsettled after done = %+v", left)
-	}
-
 	// A project grant needs the project attached from the person's own device.
 	if err := service.validateCodingScope(ctx, owner.ID, agent.ScopeProject, "scope_app"); err == nil {
 		t.Fatal("a project never attached to a chat can't be remembered")
 	}
 
-	// Leases: a wrong token is refused; usage counts toward the weekly allowance.
+	// Leases: a wrong token is refused.
 	lease, token, err := database.IssueCodingLease(ctx, owner.ID, db.CodingLease{InvocationID: child.ID, DeviceID: device, Engine: "claude", TokenBudget: 1000, ExpiresAt: time.Now().Add(time.Hour)})
 	if err != nil {
 		t.Fatal(err)
@@ -126,24 +110,6 @@ func TestCodingDelegationPostgres(t *testing.T) {
 	if found, err := database.CodingLeaseByToken(ctx, owner.ID, child.ID, lease.ID, token); err != nil || found.TokenBudget != 1000 {
 		t.Fatalf("lease = %+v, %v", found, err)
 	}
-	if err := database.AddCodingLeaseUsage(ctx, owner.ID, lease.ID, db.CodingLeaseUsage{Input: 2800, Weighted: 700}); err != nil {
-		t.Fatal(err)
-	}
-	if used, err := database.WeeklyCodingUsed(ctx, owner.ID); err != nil || used != 873 {
-		t.Fatalf("used = %d, %v", used, err)
-	}
-	budget, err := service.codingBudget(ctx, owner.ID)
-	if err != nil || budget != codingLeaseChunk {
-		t.Fatalf("budget = %d, %v", budget, err)
-	}
-	if err := database.AddCodingLeaseUsage(ctx, owner.ID, lease.ID, db.CodingLeaseUsage{Weighted: db.DevelopmentExternalCodingAllowance}); err != nil {
-		t.Fatal(err)
-	}
-	var denial *billingadapter.Denial
-	if _, err := service.codingBudget(ctx, owner.ID); !errors.As(err, &denial) || denial.Limit != "weekly" || denial.ResetsAt == nil {
-		t.Fatalf("spent allowance = %v", err)
-	}
-
 	// Engine reports: installed tools get their own hidden managed agent.
 	if err := database.SaveCodingEngines(ctx, owner.ID, device, []db.CodingEngine{{Engine: "codex", Installed: true, SignedIn: true, Version: "1.0"}}); err != nil {
 		t.Fatal(err)
@@ -186,52 +152,5 @@ func TestCodingEngineRules(t *testing.T) {
 	}
 	if codingEngineRefusal("agy", run("ask", "act"), nil) == "" || codingEngineRefusal("agy", run("ask", "plan"), nil) != "" {
 		t.Fatal("launch-time tools only plan in Ask")
-	}
-}
-
-// settleRecorder is a usage meter that records each lease settlement.
-type settleRecorder struct {
-	settled []struct {
-		node  string
-		usage agent.ModelUsage
-	}
-}
-
-func (m *settleRecorder) Reserve(string, string, string, string, string, int64, int64) (*agent.UsageReservation, error) {
-	return &agent.UsageReservation{}, nil
-}
-func (m *settleRecorder) Settle(*agent.UsageReservation, string, string, string, string, agent.ModelUsage) (agent.UsageSettlement, error) {
-	return agent.UsageSettlement{}, nil
-}
-func (m *settleRecorder) Release(*agent.UsageReservation) error { return nil }
-func (m *settleRecorder) Refund(*agent.UsageReservation, string, string) (agent.UsageSettlement, error) {
-	return agent.UsageSettlement{}, nil
-}
-func (m *settleRecorder) CompleteRuntimeTurn(_ context.Context, _, _, node string, usage agent.ModelUsage) error {
-	m.settled = append(m.settled, struct {
-		node  string
-		usage agent.ModelUsage
-	}{node, usage})
-	return nil
-}
-
-func TestCodingUsageWeights(t *testing.T) {
-	usage := codingUsage{Input: 1000, Output: 200, CacheWrite: 0, CacheRead: 10000}
-	if got := usage.weighted(0.25); got != 550 {
-		t.Fatalf("weighted = %d", got)
-	}
-	if got := usage.weighted(1); got != 2200 {
-		t.Fatalf("weighted at full price = %d", got)
-	}
-	t.Setenv("MISTY_CODING_EXTERNAL_FACTOR", "2")
-	if codingExternalFactor() != defaultCodingExternalFactor {
-		t.Fatal("a factor above 1 falls back to the default")
-	}
-	t.Setenv("MISTY_CODING_EXTERNAL_FACTOR", "0.5")
-	if codingExternalFactor() != 0.5 {
-		t.Fatal("the factor is configurable")
-	}
-	if codingBillingProvider("claude") != "anthropic" || codingBillingProvider("codex") != "openai" {
-		t.Fatal("engines bill against their provider")
 	}
 }

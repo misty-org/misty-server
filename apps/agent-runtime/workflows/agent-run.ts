@@ -22,7 +22,7 @@ export interface AgentRun {
   modelTurn: number;
   // Recomputed from the transcript before every model call.
   visibleTools: string[];
-  // The agent swallows errors thrown from its step hooks, so a failed settlement
+  // The agent swallows errors thrown from its step hooks, so a failed
   // checkpoint is held here and rethrown once the call returns.
   hookFailure: unknown;
   // A finish is verified once (src/finish-verification.ts); the next one stands.
@@ -30,6 +30,8 @@ export interface AgentRun {
   // Give-ups sent back after that turn, and what the run had found at the last one.
   persisted: number;
   persistedAt?: Set<string>;
+  // Answers sent back for reporting the work instead of giving it (src/finish-verification.ts).
+  reportedOnly: number;
   /** The run's current tools and agent; a screen that joins mid-run rebuilds them. */
   tools: RunTools;
 }

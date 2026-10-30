@@ -71,13 +71,18 @@ export class Ledger {
     return this.snapshot();
   }
 
-  /** Marks every row with evidence the run's own calls do not show as pending again. Returns them. */
-  reconcile(messages: ModelMessage[]): LedgerRow[] {
+  /**
+   * Marks every row with evidence the run's own calls do not show as pending again. Returns them.
+   * `answer` is the finish's summary: a row whose evidence is the answer itself (the comparison,
+   * the recommendation) is backed by a written answer.
+   */
+  reconcile(messages: ModelMessage[], answer = ""): LedgerRow[] {
     const shown = toolText(messages);
     const unbacked: LedgerRow[] = [];
     for (const row of this.rows) {
       if (row.state !== "done" || row.carried) continue;
       if (backed(row.evidence, shown)) continue;
+      if (row.evidence?.kind === "note" && answerEvidence.test(row.evidence.ref) && answer.trim().length >= 200) continue;
       row.state = "pending";
       row.reason = "Marked done without evidence this run shows.";
       unbacked.push({ ...row });
@@ -93,10 +98,48 @@ export class Ledger {
   }
 }
 
-/** Whether an evidence ref appears in what this run's tools were called with or returned. */
+/**
+ * Records sent rows, except a part marked done without evidence: a known row keeps its state
+ * (and a done row its evidence), a new one starts pending, and the caller is told which, so the
+ * run supplies evidence now rather than learning at the finish that its run reads as partial.
+ */
+export function recordRows(ledger: Ledger, sent: z.infer<typeof ledgerInputSchema>) {
+  const known = ledger.snapshot();
+  const missing = sent.rows.filter((row) => row.state === "done" && !row.evidence);
+  const rows = ledger.update({
+    rows: sent.rows.flatMap((row) => {
+      if (row.state !== "done" || row.evidence) return [row];
+      const existing = known.some((item) => (row.id ? item.id === row.id : false) || item.requirement === row.requirement);
+      return existing ? [] : [{ ...row, state: "pending" as const }];
+    }),
+  });
+  return { rows, missing };
+}
+
+/** Evidence that points at the run's own answer ("the final answer below"). */
+const answerEvidence = /\b(final )?(answer|summary|response|reply|comparison)\b/i;
+
+/**
+ * Whether an evidence ref appears in what this run's tools were called with or returned. A ref
+ * that names addresses among other words ("<url> scrolled to Gold Package; <url> kept") is backed
+ * when one of its addresses is: models write their evidence as a sentence, not one bare string.
+ */
 export function backed(evidence: LedgerEvidence | undefined, shown: string): boolean {
   if (!evidence) return false;
-  return shown.includes(evidence.ref.toLowerCase());
+  const ref = evidence.ref.toLowerCase();
+  // Tool results arrive as JSON text, where & in an address reads \u0026.
+  shown = shown.replaceAll("\\u0026", "&");
+  if (shown.includes(ref)) return true;
+  const addresses = ref.match(/https?:\/\/[^\s;,)"']+/g) ?? [];
+  if (addresses.length)
+    return addresses.some((address) => {
+      const bare = address.replace(/[/.]+$/, "").replace(/^https?:\/\/(www\.)?/, "");
+      return bare.length > 8 && shown.includes(bare);
+    });
+  // A described source ("Apple Support Communities threads; Reddit r/HomeKit") is backed when
+  // most of its words came back from this run's tools, as search results or page text.
+  const words = [...new Set(ref.match(/[a-z0-9][a-z0-9'-]{3,}/g) ?? [])];
+  return words.length >= 2 && words.filter((word) => shown.includes(word)).length >= Math.ceil(words.length * 0.6);
 }
 
 /** Tool calls and results as lower-case text, leaving out the ledger's own calls. */
@@ -149,6 +192,14 @@ export function ledgerIssue(unbacked: LedgerRow[]): string | undefined {
   return `These parts are marked done but nothing this run did shows it (${unbacked.map((row) => `"${row.requirement.slice(0, 80)}"`).join("; ")}). ` +
     `Do each, or give it evidence with ${ledgerTool}: the address of a page you kept, a note or file you wrote, or a receipt a tool returned. ` +
     "If a part could not be done, mark it failed or blocked with the reason.";
+}
+
+/** A finish that says completed while its ledger still lists open parts: the report would read as
+ * unfinished (withLedger), so the run closes each row first, done with evidence or why not. */
+export function openRowsIssue(report: TaskCompletion, open: TaskCompletion["remaining"]): string | undefined {
+  if (report.outcome !== "completed" || !open.length) return undefined;
+  return `Your ${ledgerTool} list still shows ${open.length} part${open.length === 1 ? "" : "s"} as not done (${open.map((row) => `"${row.requirement.slice(0, 80)}"`).join("; ")}). ` +
+    `Update it in one ${ledgerTool} call: each part you did is done with its evidence (a kept page's address, a note you wrote, or a tool's receipt), and each you could not do is failed or skipped with the reason. Then finish.`;
 }
 
 /** The text with its ledger comment taken off, as a chat's history carries it. */

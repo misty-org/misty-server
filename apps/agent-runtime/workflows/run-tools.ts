@@ -4,7 +4,7 @@ import { FatalError } from "workflow";
 import { citationInstructions } from "../src/citation-check.js";
 import { afterRefusal, unbackedCompletion } from "../src/finish-check.js";
 import { InstanceModel } from "../src/instance-model.js";
-import { ledgerInputSchema, ledgerInstructions, ledgerTool, withLedger } from "../src/ledger.js";
+import { ledgerInputSchema, ledgerInstructions, ledgerTool, recordRows, withLedger } from "../src/ledger.js";
 import { modelFamilyNote } from "../src/model-family.js";
 import { catalogTools, modelCatalog } from "../src/model-tools.js";
 import { withRuntimeInstructions } from "../src/context/prompt-cache.js";
@@ -42,8 +42,12 @@ export function assembleTools(run: AgentRun, descriptors: MCPRemoteTool[]) {
       inputSchema: ledgerInputSchema,
       execute: async (sent, options) => {
         guard(run, options.toolCallId);
-        const rows = ledger.update(sent);
-        return { status: "recorded", done: rows.filter((row) => row.state === "done").length, open: rows.filter((row) => row.state !== "done" && row.state !== "skipped").length };
+        // A part is done only with evidence (src/ledger.ts, recordRows).
+        const { rows, missing } = recordRows(ledger, sent);
+        return {
+          status: "recorded", done: rows.filter((row) => row.state === "done").length, open: rows.filter((row) => row.state !== "done" && row.state !== "skipped").length,
+          ...(missing.length && { not_done_without_evidence: missing.map((row) => row.requirement.slice(0, 80)), note: "Send these again as done with evidence: the address of a page you kept or read, a note you wrote, or a tool's receipt. For a part that is the answer itself, evidence { kind: \"note\", ref: \"final answer\" }." }),
+        };
       },
     }),
     [taskCompletionTool]: tool({
@@ -80,21 +84,21 @@ export function assembleTools(run: AgentRun, descriptors: MCPRemoteTool[]) {
     // Backoff of 2, 4, 8 and 16 seconds rides out a short network blip to the provider,
     // which failed whole runs at their first call when three quick retries did not.
     maxRetries: 4,
-    // Match the Go admission ceiling (agents.MaxAgentTurnOutputTokens).
+    // The most one turn may write (agents.MaxAgentTurnOutputTokens).
     maxOutputTokens: 32_000,
     reasoning: context.reasoning_effort === "max" ? undefined : context.reasoning_effort || undefined,
     telemetry: { isEnabled: true, recordInputs: false, recordOutputs: false, functionId: "misty.space-task-agent" },
     experimental_onStepStart: async ({ stepNumber }) => {
       if (stepNumber !== 0) throw new FatalError("unexpected_model_step: the pinned adapter exceeded one model call");
     },
-    onStepEnd: async ({ finishReason, usage, text }) => {
+    onStepEnd: async ({ finishReason, text }) => {
       try {
         await execution.checkpoint({
           node_id: `model:${run.modelTurn + 1}`, state: "completed", phase: "working", progress: Math.min(90, 15 + run.modelTurn * 6),
           // The control plane projects this model-owned text into the public SSE
           // stream for interactive invocations. Tool-only steps normally have no
           // text, while the final step supplies Markdown as it becomes durable.
-          output: { finish_reason: finishReason, usage, text_delta: text },
+          output: { finish_reason: finishReason, text_delta: text },
         });
       } catch (error) {
         run.hookFailure ??= error;

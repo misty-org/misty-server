@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"github.com/kannachi323/misty/server/internal/accounts"
 	"github.com/kannachi323/misty/server/internal/browsersync"
+	"github.com/kannachi323/misty/server/internal/byok"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"net/http"
 
@@ -85,6 +87,13 @@ func (s *Server) mountRequestMiddleware() {
 	s.Metrics = metrics.New()
 	s.registerDomainGauges(s.Metrics)
 	s.Router.Use(s.Metrics.Middleware)
+	// The account's model keys and choices (X-Misty-Models) go into the
+	// request and an in-memory store; the header is removed before any
+	// handler or log can see it.
+	s.Router.Use(byok.Default.Middleware(func(r *http.Request) string {
+		user, _ := accounts.SessionUserID(r)
+		return user
+	}))
 }
 
 // buildMountDeps constructs the services and handlers in the order the route
@@ -140,7 +149,6 @@ func (s *Server) wireAIServices(deps *mountDeps) error {
 // handoff handlers, plus the health and instance handlers.
 func (s *Server) wireAccountHandlers(deps *mountDeps, passwordResetService *api.PasswordResetService, authHandoffService *api.AuthHandoffService) error {
 	verification := api.NewAccountVerification(s.Database, s.EmailSender)
-	s.Database.BillingService().Gate = verification.Gate
 	registerHandler := api.RegisterWithVerification(s.Database, s.Telemetry, verification)
 	loginHandler := api.Login(s.Database)
 	googleSignIn, err := api.NewGoogleSignInService(s.Database)
@@ -156,7 +164,7 @@ func (s *Server) wireAccountHandlers(deps *mountDeps, passwordResetService *api.
 	mintHandoffHandler := authHandoffService.Mint()
 	startHandoffHandler := authHandoffService.Start()
 	healthHandler := s.HealthMonitor.Handler()
-	instanceHandler := api.Instance(s.Database)
+	instanceHandler := api.Instance(s.Database, libraryStorageName(s.LibraryStore))
 
 	deps.verification = verification
 	deps.googleSignIn = googleSignIn
@@ -182,8 +190,7 @@ func (s *Server) wireBrowserSync(deps *mountDeps) {
 	deps.browserSync = browserSync
 	if s.AIAgent != nil {
 		browserSync.SetRestoreCompleter(func(ctx context.Context, userID, prompt string) (string, error) {
-			text, _, err := s.AIAgent.CompleteContext(ctx, userID, prompt, "assistant_ai")
-			return text, err
+			return s.AIAgent.CompleteContext(ctx, userID, prompt)
 		})
 	}
 }

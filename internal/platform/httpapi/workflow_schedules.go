@@ -139,7 +139,7 @@ func createScheduleConversation(ctx context.Context, database *db.Database, user
 }
 
 // ProcessDueWorkflowSchedules starts every workflow whose time has come. Each run
-// is an ordinary metered invocation in the schedule's conversation.
+// is an ordinary invocation in the schedule's conversation.
 func (s *AIService) ProcessDueWorkflowSchedules(ctx context.Context, now time.Time, limit int) (int, error) {
 	items, err := s.database.ClaimDueWorkflowSchedules(ctx, now, limit)
 	if err != nil {

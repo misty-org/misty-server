@@ -194,6 +194,8 @@ func (s *GoogleSignInService) Callback() http.HandlerFunc {
 						errorCode = ""
 					} else if errors.Is(accountErr, db.ErrProviderConflict) {
 						errorCode = "provider_conflict"
+					} else if errors.Is(accountErr, ErrRegistrationClosed) {
+						errorCode = "registration_closed"
 					}
 				}
 			}

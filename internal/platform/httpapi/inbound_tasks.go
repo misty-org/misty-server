@@ -16,7 +16,7 @@ import (
 // Give the agent a task by email or Slack (roadmap C8). With a channel on,
 // email the person forwards to their +misty address, or a Slack message they
 // write that mentions @misty, starts a task with Misty. It runs like any
-// other task, billed to them, and the answer goes back to the same thread.
+// other task, on their models, and the answer goes back to the same thread.
 
 // inboundTaskTrigger marks invocations an email or Slack message started.
 const inboundTaskTrigger = "inbound_task"

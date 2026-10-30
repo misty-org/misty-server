@@ -100,6 +100,13 @@ services:
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-}
       MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
+      # Server-side model keys, used only for accounts whose devices send none (docs/byok.md).
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      OPENAI_COMPATIBLE_BASE_URL: ${OPENAI_COMPATIBLE_BASE_URL:-}
+      OPENAI_COMPATIBLE_API_KEY: ${OPENAI_COMPATIBLE_API_KEY:-}
       # Speaks the voice pipeline (ElevenLabs Flash).
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
       # Transcribes recordings (Soniox); live transcription also needs the switch on.
@@ -112,6 +119,9 @@ services:
     depends_on:
       setup:
         condition: service_completed_successfully
+    # Lets a local Ollama or other model server on this host be reached as
+    # host.docker.internal on Linux too (Docker Desktop provides it already).
+    extra_hosts: ["host.docker.internal:host-gateway"]
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/health >/dev/null"]
       interval: 3s
@@ -148,8 +158,6 @@ services:
       - path: .env/dev/integrations/google.env
         required: false
       - path: .env/dev/integrations/microsoft.env
-        required: false
-      - path: .env/dev/integrations/billing.env
         required: false
       - path: .env/dev/crypto/documents.env
         required: false

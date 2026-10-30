@@ -28,6 +28,12 @@ func TestSpaceAgentCreatesReadsAndUpdatesNativeNote(t *testing.T) {
 	if err := json.Unmarshal(createdRaw, &created); err != nil || created.ID == "" {
 		t.Fatalf("created note = %s, %v", createdRaw, err)
 	}
+	// Without a collaboration service the update is refused, not queued.
+	t.Setenv("PARTYKIT_HOST", "")
+	if _, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Update the launch note", "note.update", json.RawMessage(`{"id":"`+created.ID+`","append":"x"}`)); err == nil || !strings.Contains(err.Error(), "collaboration_off") {
+		t.Fatalf("note.update with collaboration off = %v", err)
+	}
+	t.Setenv("PARTYKIT_HOST", "journal-collab-test.example")
 	updatedRaw, err := api.TestingExecuteSpaceConversationTool(ctx, database, owner.ID, space.ID, "", "Update the launch note", "note.update", json.RawMessage(`{"id":"`+created.ID+`","title":"Launch plan","markdown":"# Launch\nReady for beta"}`))
 	if err != nil {
 		t.Fatal(err)

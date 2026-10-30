@@ -16,7 +16,6 @@ type ConsoleAccount struct {
 	Email     string
 	Username  string
 	State     string
-	Tier      string
 	CreatedAt time.Time
 	Devices   int
 	Sessions  int
@@ -31,7 +30,6 @@ type ConsoleDevice struct {
 
 type ConsoleAccountDetail struct {
 	ConsoleAccount
-	LicenseStatus  string
 	StorageBytes   int64
 	SyncWorkspaces int // per-device-sign-in workspaces, excluding the shared one
 	DeviceList     []ConsoleDevice
@@ -43,15 +41,13 @@ func (db *Database) consoleTx(ctx context.Context, fn func(*sql.Tx) error) error
 
 const consoleAccountColumns = `
 	u.id, u.email, u.username, u.lifecycle_state, u.created_at,
-	COALESCE(l.tier, ''),
 	(SELECT count(*) FROM trusted_devices d WHERE d.user_id = u.id AND d.revoked_at IS NULL),
 	(SELECT count(*) FROM sessions s WHERE s.user_id = u.id AND s.expires_at > now())
-	FROM users u
-	LEFT JOIN licenses l ON l.id = u.license_id`
+	FROM users u`
 
 func scanConsoleAccount(row interface{ Scan(...any) error }, a *ConsoleAccount) error {
 	return row.Scan(&a.ID, &a.Email, &a.Username, &a.State, &a.CreatedAt,
-		&a.Tier, &a.Devices, &a.Sessions)
+		&a.Devices, &a.Sessions)
 }
 
 // ConsoleListAccounts returns the newest accounts matching an email or
@@ -88,12 +84,11 @@ func (db *Database) ConsoleAccountDetail(ctx context.Context, userID string) (Co
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `
-			SELECT COALESCE((SELECT l.status FROM licenses l JOIN users u ON u.license_id = l.id WHERE u.id = $1), ''),
-			       COALESCE((SELECT used_bytes FROM owner_storage_usage WHERE owner_user_id = $1), 0),
+			SELECT COALESCE((SELECT used_bytes FROM owner_storage_usage WHERE owner_user_id = $1), 0),
 			       (SELECT count(*) FROM browser_sync_workspaces w
 			        JOIN browser_sync_vaults v ON v.vault_id = w.vault_id
 			        WHERE v.user_id = $1 AND w.workspace_id <> w.vault_id)`, userID,
-		).Scan(&d.LicenseStatus, &d.StorageBytes, &d.SyncWorkspaces); err != nil {
+		).Scan(&d.StorageBytes, &d.SyncWorkspaces); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `

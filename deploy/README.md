@@ -26,30 +26,20 @@ Do not recreate a service with only a subset of those files loaded for Compose i
 
 ### AI models
 
-All AI (the agent worker, visual planner, routing, Library and companion
-voice) runs on Misty's own keys through the agent runtime's AI SDK. OpenAI
-models (`openai/…`) call OpenAI directly when `OPENAI_API_KEY` is set; every
-other model, and OpenAI models without that key, go through the AI Gateway and
-draw on its balance. Set the keys in the private
-`server/.env/dev/integrations/ai.env`:
+Models run on each person's own keys, sent by their device ([docs/byok.md](../../docs/byok.md)).
+A development stack can also have server-side models for evals and for accounts whose devices
+send no keys. Set them in the private `server/.env/dev/integrations/ai.env`:
 
 ```dotenv
-AI_GATEWAY_API_KEY=<your AI Gateway API key>
-# Optional: OpenAI models use this key instead of the Gateway.
-OPENAI_API_KEY=<your OpenAI API key>
-# Web search for agents (serper.dev, about $1 per 1,000 searches); without it
-# agents have no web.search.
+# Any provider/model ID (docs/byok.md), and the key for its provider.
+MISTY_AGENT_MODEL=anthropic/claude-haiku-5-5
+ANTHROPIC_API_KEY=<your Anthropic API key>
+# Web search for agents (serper.dev); without it agents have no web.search.
 MISTY_SERPER_API_KEY=<your Serper API key>
-# Optional: pin the default agent model (any Gateway provider/model ID).
-MISTY_AGENT_MODEL=openai/gpt-6-luna
 ```
 
-Then run `misty server up` to rebuild and apply the configuration. Accounts
-cannot add their own keys. In Settings → Agents → Models they choose a model
-for each of four senses (Thinking, Seeing, Listening, Speaking) from the
-Gateway catalog, and the Agents composer can pin a different Thinking model to
-one conversation. Production uses the same settings in `server/.env/prod/`;
-changing development does not deploy production.
+Then run `misty server up` to apply the configuration. A device's own keys always take
+precedence over the server's.
 
 ```sh
 misty env check dev
@@ -128,7 +118,8 @@ deletes its database and Library data. The staging project name is fixed to
 
 ## Production
 
-Misty is hosted only: one VPS runs the whole stack from `compose.prod.yml`.
+Production is your own server running `compose.prod.yml`; [docs/self-hosting.md](../../docs/self-hosting.md)
+is the walkthrough.
 
 | Service | Role |
 | --- | --- |
@@ -137,87 +128,51 @@ Misty is hosted only: one VPS runs the whole stack from `compose.prod.yml`.
 | `agent-runtime-setup`, `agent-runtime` | Workflow world migrations, then the durable agent loop |
 | `api` | The Go API, published only on `127.0.0.1:8081` |
 
-The collaboration Worker stays on Cloudflare and deploys separately.
-
-### Billing
-
-The private billing service (`misty-org/misty-billing`) runs on the same VPS as
-its own Compose project with its own PostgreSQL, listening on `127.0.0.1:8091`.
-Publish it as `billing.mistysys.com` through the same production tunnel: in the
-Cloudflare dashboard open the tunnel's public hostnames and add
-`billing.mistysys.com` → `http://127.0.0.1:8091`. Later
-`misty setup cloudflare --target prod` runs keep that extra route. Stripe sends
-webhooks to `https://billing.mistysys.com/stripe/webhook`; the API calls
-`MISTY_BILLING_URL=https://billing.mistysys.com/adapter`, signed with the
-`MISTY_BILLING_SECRET` both services share. See that repository's README for
-its variables and first-time setup.
-
-Work done in a person's own coding tool (Claude Code, Codex and the others)
-counts toward their weekly coding allowance at a reduced rate,
-`MISTY_CODING_EXTERNAL_FACTOR` (0.25 unless set, at most 1). The API applies it
-before reporting that usage, so the billing service must not apply a factor of
-its own; each plan's `external_coding_allowance` comes from the billing
-service's customer summary.
+The optional Cloudflare Workers deploy separately to your own account ([docs/cloudflare.md](../../docs/cloudflare.md)).
 
 ### Releases
 
-Images build on this computer; nothing builds on GitHub. From a clean,
-pushed commit:
+Without `MISTY_API_IMAGE` and `MISTY_AGENT_RUNTIME_IMAGE`, `misty server prod up` builds both
+images from the checkout. To build once and run the same images on several hosts, publish them
+to a registry you control from a clean, pushed commit:
 
 ```sh
 misty server release 0.1.0
 ```
 
-It runs the secret scan and the server suites, builds the API and agent
-runtime images for `linux/amd64` (Go cross-compiles natively; the agent runtime
-builds under emulation), pushes them to GHCR, tags the commit `server-v0.1.0`,
-and saves both digests in `.env/prod/runtime.env`. This computer needs
-`docker login ghcr.io` with a token that can write packages.
-
-The packages are private. Log the VPS in once with a classic personal access
-token that has only `read:packages`: `docker login ghcr.io`. Roll back by
-pasting a previous release's digests and running `up` again.
+It runs the secret scan and the server suites, builds the API and agent runtime images for
+`linux/amd64`, pushes them to the registry, tags the commit `server-v0.1.0`, and saves both
+digests in `.env/prod/runtime.env`. Roll back by pasting a previous release's digests and running
+`up` again.
 
 ### Production environment
 
-This computer is the source of truth for production configuration. Generate it
+The computer you run the CLI on is the source of truth for production configuration. Generate it
 once; existing values are never overwritten:
 
 ```sh
-misty env init prod      # server/.env/prod and misty-billing/.env/prod/billing.env
+misty env init prod      # server/.env/prod
 misty env status prod    # names still missing, values never shown
 ```
 
-That generates database passwords, signing keys, the agent runtime secret, the
-billing adapter secret (written to both repos so they match), device keys and
-Journal keys. Fill in the rest with `misty env set prod NAME` (value from
-stdin). Run `misty setup cloudflare --target prod` here too, so the tunnel
-token lands in this copy. Keep an encrypted copy of both `.env/prod` folders
-off this computer: losing the signing keys signs everyone out and breaks
-Journal tickets.
+That generates database passwords, signing keys, the agent runtime secret, device keys and
+Journal keys. Fill in the rest with `misty env set prod NAME` (value from stdin). Keep an
+encrypted copy of `.env/prod` somewhere else: losing the signing keys signs everyone out and
+breaks Journal tickets.
 
-Set `MISTY_DEPLOY_HOST=misty@your-vps` in `misty/cli/.env/common.env`, then:
+To run the stack on another machine, set `MISTY_DEPLOY_HOST=you@your-server` in
+`misty/cli/.env/common.env`, then:
 
 ```sh
-misty server prod push     # copy both .env/prod folders to the VPS
-misty server prod deploy   # push, then git pull and start billing and the server there
+misty server prod push     # copy .env/prod to the server
+misty server prod deploy   # push, then git pull and start the stack there
 ```
 
-`push` validates the environment first, streams it over SSH, and backs up the
-VPS's previous copy under `.env-backups/`; files that exist only on the VPS are
-kept. `deploy` expects the public `misty` repository cloned in the SSH user's
-home (override with `--dir`) and `misty` on the VPS's PATH. Billing's private
-source never lives on the VPS: `deploy` sends only its committed deploy files
-(`compose.prod.yml` and `deploy/`) to `~/misty-billing` (`--billing-dir`), and
-the service runs from its GHCR image.
+`push` validates the environment first, streams it over SSH, and backs up the server's previous
+copy under `.env-backups/`; files that exist only on the server are kept. `deploy` expects this
+repository cloned in the SSH user's home (override with `--dir`) and `misty` on the server's PATH.
 
 ### Deploy
-
-Populate the real private files under `.env/prod/` (see above). Besides the image digests,
-production requires `AGENT_RUNTIME_DB_PASSWORD`,
-`MISTY_AGENT_RUNTIME_CONTROL_SECRET` (`openssl rand -base64 32`), and the HTTP
-billing adapter. The CLI validates file ownership, permissions, duplicate
-names, placeholders, and required values.
 
 ```sh
 misty env status prod
@@ -225,23 +180,23 @@ misty server prod check
 misty server prod up
 ```
 
-Production does not run a temporary tunnel or development Worker deployment.
-The named Cloudflare Tunnel or reverse proxy publishes the API as
-`https://api.mistysys.com/v1`. Check the API log for `SECURITY:` lines after
-the first boot; a missing security setting logs a warning instead of failing.
+Production does not run a temporary tunnel or development Worker deployment. A reverse proxy or
+a named Cloudflare Tunnel publishes the API at your `MISTY_PUBLIC_API_URL`. Check the API log for
+`SECURITY:` lines after the first boot; a missing security setting logs a warning instead of
+failing.
 
 ### Backups
 
 `misty server prod backup` dumps Misty's and the workflow database with
-`pg_dump` (and billing's, when the misty-billing stack runs on the same host), streams each
+`pg_dump`, streams each
 dump straight into `age` (plaintext never touches the disk), and uploads the
 ciphertext to the R2 bucket named by `MISTY_BACKUP_BUCKET`. Set
 `MISTY_BACKUP_AGE_RECIPIENT` to an age public key and keep the matching private
-key **off** the VPS. The VPS needs Docker and `age` (`apt install age`); `rclone`
+key **off** the server. The server needs Docker and `age` (`apt install age`); `rclone`
 runs in a container. The three newest encrypted copies also stay under
 `server/.misty/backups/`.
 
-Backups must stay recoverable if the VPS itself is compromised, so keep them out
+Backups must stay recoverable if the server itself is compromised, so keep them out
 of reach of anything running there:
 
 - Use a bucket of their own, not `R2_BUCKET`.
@@ -256,7 +211,7 @@ of reach of anything running there:
 Run it nightly with the units in [`systemd/`](systemd/) (edit `User` and
 `WorkingDirectory` first).
 
-Restore onto a running stack, or onto a fresh VPS after one `misty server prod up`:
+Restore onto a running stack, or onto a fresh server after one `misty server prod up`:
 
 ```sh
 misty server prod restore latest --identity ~/misty-backup.agekey --yes
@@ -267,31 +222,15 @@ the stack again, which applies any newer migrations. Practise it on a spare
 server: a backup that has never been restored is not yet a backup. Named Docker
 volumes are persistent, but they are not backups.
 
-## Desktop application and account website
+## Desktop application
 
 Misty ships only as a native desktop application. Build its renderer with
 `npm run build:desktop` and package it through the desktop release workflow.
 The `dist/` directory is an input to Tauri packaging, not a hosted application.
+Set `MISTY_PUBLIC_API_URL` for the API and `MISTY_ALLOWED_ORIGINS` for the native
+app origins (and any website you run for password resets).
 
-The separately maintained public/account website continues to handle downloads,
-account administration, password resets, and authenticated desktop handoff.
-Configure `MISTY_WEBSITE_URL` for that website, `MISTY_PUBLIC_API_URL` for the API,
-and `MISTY_ALLOWED_ORIGINS` for the deployed website and native app origins.
-Do not route website handoffs to a hosted copy of the desktop renderer.
-
-Billing webhooks belong to the separately deployed billing service. The API
-server exposes no payment-provider webhook. Production must explicitly configure
-the authenticated HTTP adapter; development may leave it disabled. See
-[the public contract](https://github.com/misty-org/misty/wiki/Server-billing-adapter).
-
-The production Journal Worker is deployed separately and points directly to:
-
-```text
-https://api.mistysys.com/v1
-```
-
-Run `misty server prod backup` before migrations. Library objects live in R2.
-Preserve retired automation volumes separately until their data has been archived.
+Run `misty server prod backup` before migrations.
 
 ## Agent runtime rollout
 
@@ -312,7 +251,7 @@ becomes healthy. For a rollout:
 misty server prod check
 misty server prod up
 
-curl --fail https://api.mistysys.com/v1/health
+curl --fail https://misty.example.com/v1/health
 ```
 
 The runtime only falls back to the legacy signed tool route when MCP discovery

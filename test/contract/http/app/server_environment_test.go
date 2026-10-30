@@ -12,7 +12,6 @@ import (
 func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	values := map[string]string{
-		"MISTY_BILLING_ADAPTER": "http", "MISTY_BILLING_URL": "https://billing.example.com/adapter", "MISTY_BILLING_SECRET": "01234567890123456789012345678901",
 		"R2_ENDPOINT":               "https://account.r2.cloudflarestorage.com",
 		"R2_BUCKET":                 "misty-production",
 		"R2_ACCESS_KEY":             "access",
@@ -70,24 +69,6 @@ func TestCreateServerConfiguresIndependentDevelopmentLibrary(t *testing.T) {
 	}
 }
 
-func TestValidateProductionEnvironmentRequiresBilling(t *testing.T) {
-	t.Setenv("MISTY_ENVIRONMENT", "production")
-	values := map[string]string{
-		"R2_ENDPOINT": "https://account.r2.cloudflarestorage.com", "R2_BUCKET": "misty-production",
-		"R2_ACCESS_KEY": "access", "R2_SECRET_KEY": "secret",
-		"DB_HOST": "postgres", "DB_USER": "misty_app", "DB_PASSWORD": "password", "DB_NAME": "misty",
-		"MISTY_PUBLIC_API_URL":      "https://misty.example.com/api",
-		"SPACE_LINK_ENCRYPTION_KEY": "01234567890123456789012345678901",
-		"MISTY_BILLING_ADAPTER":     "", "MISTY_BILLING_URL": "", "MISTY_BILLING_SECRET": "",
-	}
-	for key, value := range values {
-		t.Setenv(key, value)
-	}
-	if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), "MISTY_BILLING_ADAPTER") {
-		t.Fatalf("production without billing error = %v, want MISTY_BILLING_ADAPTER rejection", err)
-	}
-}
-
 func TestAllowedCORSOriginsRejectsWildcards(t *testing.T) {
 	t.Setenv("MISTY_ALLOWED_ORIGINS", "https://app.misty.example, https://*, http://evil.example/*")
 	origins := AllowedCORSOrigins()
@@ -128,6 +109,7 @@ func TestProductionCORSRejectsLoopbackOrigins(t *testing.T) {
 
 func TestCORSAllowsAppOrigins(t *testing.T) {
 	configureJournalCollabForTest(t)
+	t.Setenv("MISTY_ALLOWED_ORIGINS", "https://web.misty.example")
 	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
 	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
 	t.Setenv("MAILJET_API_KEY", "")
@@ -145,7 +127,7 @@ func TestCORSAllowsAppOrigins(t *testing.T) {
 	for _, origin := range []string{
 		"tauri://localhost",
 		"http://127.0.0.1:5174",
-		"https://apps.mistysys.com",
+		"https://web.misty.example",
 	} {
 		req := httptest.NewRequest(http.MethodOptions, "/api/login", nil)
 		req.Header.Set("Origin", origin)

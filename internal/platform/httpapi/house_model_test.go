@@ -30,7 +30,7 @@ func TestInvocationModelHonorsEvalSwitchInDevelopment(t *testing.T) {
 
 func TestPlansShareOneRoute(t *testing.T) {
 	defaults := []aimodels.Route{{Role: "agent", Model: agent.FrontierDefaultModelID(), Enabled: true}}
-	planned, forced := planRoutes(context.Background(), nil, "user", defaults)
+	planned, forced := runRoutes(context.Background(), nil, "user", defaults)
 	if len(forced) != 0 || planned[0].Model != agent.FrontierDefaultModelID() {
 		t.Fatalf("a plan changed the model: %+v %+v", planned, forced)
 	}

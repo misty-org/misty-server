@@ -119,6 +119,11 @@ func executeAgentNoteTool(ctx context.Context, database *db.Database, actor spac
 		note, err := database.CreateSpaceNoteWithAudience(ctx, actor.userID, actor.spaceID, input.Title, db.SpaceResourceAudience{Kind: db.SpaceAudienceSpace}, input.Markdown)
 		return agentNoteWriteResult(note, input.Title, input.Markdown, "create"), true, err
 	case toolboxNotesUpdate:
+		// A Note's body lives in its collaboration room; without one the
+		// update would be queued for a room that never applies it.
+		if !collaborationEnabled() {
+			return nil, true, agent.ErrInvalidRequest(ErrCollaborationOff.Error())
+		}
 		var input struct {
 			ID       string `json:"id"`
 			Title    string `json:"title"`

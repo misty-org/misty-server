@@ -53,10 +53,6 @@ func TestManagedMistyIsSingleFixedAndSupportsBoundedHiddenWorkers(t *testing.T) 
 		if childErr != nil {
 			t.Fatal(childErr)
 		}
-		command, commandErr := database.BillingCommandForRun(ctx, owner.ID, child.ID)
-		if commandErr != nil || command != "agent-runtime:"+parent.ID {
-			t.Fatalf("child escaped root command: %s %v", command, commandErr)
-		}
 		if child.ParentRunID != parent.ID || child.DelegationDepth != 1 || child.AgentID != misty.ID {
 			t.Fatalf("hidden child = %#v", child)
 		}

@@ -279,7 +279,7 @@ func (s *SpacesService) startDelegatedInvocation(ctx context.Context, parent *db
 	if created {
 		// Freeze before the runtime would freeze the defaults, so the child's
 		// agent role runs on the Browsing model.
-		planned, forced := planRoutes(ctx, s.database, parent.UserID, defaultAIRoutes(model, body.ReasoningEffort))
+		planned, forced := runRoutes(ctx, s.database, parent.UserID, defaultAIRoutes(model, body.ReasoningEffort))
 		overrides := map[string]string{}
 		if model != "" {
 			overrides["agent"] = model

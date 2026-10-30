@@ -15,11 +15,6 @@ func (s *SpacesService) Spaces() http.HandlerFunc {
 		}
 		switch r.Method {
 		case http.MethodGet:
-			entitlements, err := s.database.EntitlementsForUser(r.Context(), userID)
-			if err != nil {
-				writeSpaceError(w, fmt.Errorf("load entitlements: %w", err))
-				return
-			}
 			spaces, err := s.database.ListSpaces(r.Context(), userID)
 			if err != nil {
 				writeSpaceError(w, fmt.Errorf("list spaces: %w", err))
@@ -35,9 +30,7 @@ func (s *SpacesService) Spaces() http.HandlerFunc {
 				writeSpaceError(w, fmt.Errorf("load owner storage usage: %w", err))
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"spaces": spaces, "invitations": invites,
-				"entitlements":  entitlements,
-				"owner_storage": storage})
+			writeJSON(w, http.StatusOK, map[string]any{"spaces": spaces, "invitations": invites, "owner_storage": storage})
 		case http.MethodPost:
 			var body struct {
 				Name string `json:"name"`

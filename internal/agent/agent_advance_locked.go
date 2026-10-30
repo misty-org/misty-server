@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 )
@@ -32,6 +31,18 @@ func (s *Service) advanceLocked(ctx context.Context, session *Session) error {
 		return ErrInvalidRequest("Agent request context is too large; start a new conversation")
 	}
 	selectedProvider := s.provider
+	if session.ModelID == "" && s.modelResolver != nil {
+		// The account's fast model and key, else the operator's.
+		config, err := s.modelResolver(ctx, session.UserID, "routing")
+		if err != nil {
+			return err
+		}
+		if config != nil {
+			if selectedProvider, err = accountCompletionProvider(s.models, config); err != nil {
+				return err
+			}
+		}
+	}
 	if session.ModelID != "" {
 		if !GatewayModelAvailable(ctx, session.ModelID) {
 			return ErrModelUnavailable
@@ -46,28 +57,8 @@ func (s *Service) advanceLocked(ctx context.Context, session *Session) error {
 			return providerErr
 		}
 	}
-	provider, model := ProviderStatus(selectedProvider)
-	idempotencyKey := fmt.Sprintf("%s:turn:%d:step:%d", session.ID, session.BillingTurnSequence, session.ProviderCallsThisTurn)
-	if session.BillingScope != "" {
-		idempotencyKey = fmt.Sprintf("%s:step:%d", session.BillingScope, session.ProviderCallsThisTurn)
-	}
-	var reservation *UsageReservation
-	var err error
-	if s.meter != nil && provider != ProviderMock {
-		billingUserID := session.BillingUserID
-		if billingUserID == "" {
-			billingUserID = session.UserID
-		}
-		reservation, err = ReserveMeasuredUsage(s.meter, billingUserID, idempotencyKey, provider, model, map[string]int64{"input_bytes": int64(RequestSizeBytes(request)), "output_tokens": MaxModelOutputTokens}, "")
-		if err != nil {
-			return err
-		}
-	}
 	response, err := nextProvider(ctx, selectedProvider, request)
 	if err != nil {
-		if reservation != nil && releasableProviderFailure(err) {
-			_ = s.meter.Release(reservation)
-		}
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
@@ -76,18 +67,9 @@ func (s *Service) advanceLocked(ctx context.Context, session *Session) error {
 		return nil
 	}
 	response.Citations = GroundedAgentCitations(request, response.Citations)
-	settlement := UsageSettlement{}
-	if reservation != nil {
-		settlement, err = s.meter.Settle(reservation, idempotencyKey+":settle", hostedAIMeterAgent, provider, model, response.Usage)
-		if err != nil {
-			// The settlement is durable in the outbox; never release used work.
-			return err
-		}
-	}
 	if strings.TrimSpace(response.Text) != "" {
 		session.Messages = append(session.Messages, Message{Role: RoleAgent, Content: response.Text})
-		resetAt := settlement.ResetAt
-		session.appendEvent(AgentEvent{Type: EventAgentMessage, Text: response.Text, Citations: response.Citations, HostedAIUsedRatio: settlement.UsedRatio, HostedAIResetAt: &resetAt})
+		session.appendEvent(AgentEvent{Type: EventAgentMessage, Text: response.Text, Citations: response.Citations})
 	}
 	if len(response.ToolRequests) > 0 {
 		if session.ProviderCallsThisTurn >= providerCallLimit(session) {
@@ -112,11 +94,6 @@ func (s *Service) advanceLocked(ctx context.Context, session *Session) error {
 			requests = filtered
 		}
 		if rejected > 0 {
-			if reservation != nil && (settlement.Settled || settlement.ChargedMicrousd > 0) {
-				if _, refundErr := s.meter.Refund(reservation, idempotencyKey+":capability-refund", "capability_envelope_rejected"); refundErr != nil {
-					log.Printf("could not refund rejected agent capability call: %v", refundErr)
-				}
-			}
 			session.appendEvent(AgentEvent{Type: EventError, Message: "The agent requested a tool outside the allowed capability envelope."})
 		}
 		requests = s.policy.Apply(session.Mode, requests)
@@ -188,14 +165,7 @@ func containsPreviewFileResult(results []ToolResult) bool {
 	return false
 }
 
-func providerCallLimit(session *Session) int {
-	if strings.HasPrefix(session.BillingScope, "agent-job:") {
-		for _, tool := range session.Capabilities.Tools {
-			if tool.Name == ToolPreviewFile {
-				return MaxDocumentCallsPerTurn
-			}
-		}
-	}
+func providerCallLimit(*Session) int {
 	return MaxProviderCallsPerTurn
 }
 

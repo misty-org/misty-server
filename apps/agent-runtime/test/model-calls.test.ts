@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe("model calls", () => {
-  it("returns a structured object and usage from OpenAI with the instance key", async () => {
+  it("returns a structured object from OpenAI with the instance key", async () => {
     providerFetch.mockResolvedValue(
       json({
         id: "resp-1",
@@ -69,7 +69,7 @@ describe("model calls", () => {
       },
     });
     expect(result.object).toEqual({ assets: [{ id: "a" }] });
-    expect(result.usage).toEqual({ inputTokens: 120, cachedInputTokens: 20, outputTokens: 30, reasoningTokens: 5 });
+    expect(result).not.toHaveProperty("usage");
     const [url, request] = providerFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://api.openai.com/v1/responses");
     expect(new Headers(request.headers).get("authorization")).toBe("Bearer openai-fixture");
@@ -81,7 +81,7 @@ describe("model calls", () => {
     expect(JSON.stringify(body.input)).toContain("input_image");
   });
 
-  it("embeds with the requested dimensions and reports tokens", async () => {
+  it("embeds with the requested dimensions", async () => {
     providerFetch.mockResolvedValue(
       json({ data: [{ embedding: [0.1, 0.2] }, { embedding: [0.3, 0.4] }], usage: { prompt_tokens: 9 } }),
     );
@@ -91,7 +91,7 @@ describe("model calls", () => {
       values: ["first", "second"],
       dimensions: 768,
     });
-    expect(result).toEqual({ embeddings: [[0.1, 0.2], [0.3, 0.4]], usage: { inputTokens: 9 } });
+    expect(result).toEqual({ embeddings: [[0.1, 0.2], [0.3, 0.4]] });
     const [url, request] = providerFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://api.openai.com/v1/embeddings");
     const body = JSON.parse(request.body as string);
@@ -141,6 +141,58 @@ describe("model calls", () => {
       { route: { provider: "openai", apiKey: "account-key" }, model: "openai/x", values: ["a"] },
     ]) {
       await expect(embedCall(body)).rejects.toMatchObject({ status: 400 });
+    }
+    expect(providerFetch).not.toHaveBeenCalled();
+  });
+
+  it("runs an account route on exactly its own key", async () => {
+    providerFetch.mockResolvedValue(json({ data: [{ embedding: [0.5] }], usage: { prompt_tokens: 1 } }));
+    const account = { provider: "account" as const, credential: { provider: "openai" as const, apiKey: "sk-account-fixture" } };
+    await embedCall({ route: account, model: "openai/text-embedding-3-small", values: ["a"] });
+    const [, request] = providerFetch.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(request.headers).get("authorization")).toBe("Bearer sk-account-fixture");
+  });
+
+  it("asks for a key instead of falling back to the instance's", async () => {
+    // The instance has an OpenAI key (beforeEach), but the account's key is for Anthropic.
+    const account = { provider: "account" as const, credential: { provider: "anthropic" as const, apiKey: "sk-ant-fixture" } };
+    const error = await embedCall({ route: account, model: "openai/text-embedding-3-small", values: ["a"] }).catch((e) => e);
+    expect(modelCallFailure(error)).toEqual({ status: 409, body: { code: "model_key_needed", message: "Add a model key in Settings → Models." } });
+    vi.stubEnv("OPENAI_API_KEY", "");
+    const missing = await embedCall({ route, model: "openai/text-embedding-3-small", values: ["a"] }).catch((e) => e);
+    expect(modelCallFailure(missing).body.code).toBe("model_key_needed");
+    expect(providerFetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps an account's key out of failures", async () => {
+    const key = "sk-account-secret-fixture";
+    providerFetch.mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: `Incorrect API key provided: ${key}` } }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const error = await generateTextCall({
+      route: { provider: "account", credential: { provider: "openai", apiKey: key } },
+      model: "openai/gpt-6-luna",
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      maxOutputTokens: 10,
+    }).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    const seen = new WeakSet();
+    const dump = JSON.stringify(error, (_k, v) => (typeof v === "object" && v ? (seen.has(v) ? undefined : (seen.add(v), v)) : v)) + String(error.message) + String(error.stack);
+    expect(dump).not.toContain(key);
+    expect(JSON.stringify(modelCallFailure(error))).not.toContain(key);
+  });
+
+  it("refuses account base URLs that point inside the server", async () => {
+    for (const baseURL of ["http://api:8080/v1", "http://localhost:11434/v1", "http://169.254.169.254/", "file:///etc/passwd"]) {
+      const error = await embedCall({
+        route: { provider: "account", credential: { provider: "openai-compatible", apiKey: "", baseURL } },
+        model: "openai-compatible/embed",
+        values: ["a"],
+      }).catch((e) => e);
+      expect(modelCallFailure(error).body.code).toBe("model_base_url_invalid");
     }
     expect(providerFetch).not.toHaveBeenCalled();
   });

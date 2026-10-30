@@ -7,7 +7,6 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,7 +17,7 @@ import (
 func conversationFixture(t *testing.T, customize func(*conversationHooks)) *voiceFixture {
 	t.Helper()
 	f := &voiceFixture{provider: &fixtureVoiceProvider{events: make(chan agent.VoiceRealtimeEvent, 32), sent: make(chan map[string]any, 32), done: make(chan struct{})}, finished: make(chan struct{})}
-	h := conversationHooks{Operation: "realtime-voice:fixture", History: "[]", Access: func(context.Context) error { return nil }, Input: func(context.Context, int) error { return nil }, Reserve: func(context.Context, agent.RealtimeVoiceUsage) error { return nil }, Settle: func(context.Context, agent.RealtimeVoiceUsage) error { return nil }, Checkpoint: func(context.Context, string, agent.RealtimeVoiceUsage) error { return nil }, Save: func(context.Context, string, string, string, bool, time.Time) error { return nil }, Tool: func(_ context.Context, name string) (string, error) {
+	h := conversationHooks{Operation: "realtime-voice:fixture", History: "[]", Access: func(context.Context) error { return nil }, Save: func(context.Context, string, string, string, bool, time.Time) error { return nil }, Tool: func(_ context.Context, name string) (string, error) {
 		if name == "get_context" {
 			return "[]", nil
 		}
@@ -121,48 +120,8 @@ func TestVoiceConversationRespondsBeforeTranscriptionAndReusesConnection(t *test
 	conversationText(t, f)
 	conversationComplete(t, f)
 }
-func TestVoiceConversationDenialNeverStartsResponse(t *testing.T) {
-	failed := make(chan string, 1)
-	f := conversationFixture(t, func(h *conversationHooks) {
-		h.Reserve = func(context.Context, agent.RealtimeVoiceUsage) error { return billingadapter.ErrDenied }
-		h.Fail = func(_ context.Context, _, prompt, message string, _ time.Time) error {
-			failed <- prompt + ": " + message
-			return nil
-		}
-		h.Save = func(_ context.Context, _, _, reply string, _ bool, _ time.Time) error {
-			if reply != "" {
-				t.Error("failure saved as successful speech")
-			}
-			return nil
-		}
-	})
-	conversationBegin(t, f)
-	conversationSend(t, f, map[string]string{"type": "text.commit", "text": "Hi"})
-	if e := f.read(t); e["type"] != "transcript" {
-		t.Fatal(e)
-	}
-	voiceSent(t, f, "conversation-item-create")
-	if e := f.read(t); e["type"] != "error" || !strings.Contains(e["message"].(string), "billing did not authorize") {
-		t.Fatal(e)
-	}
-	voiceFinished(t, f)
-	select {
-	case message := <-failed:
-		if !strings.Contains(message, "Hi: Voice could not start because billing") {
-			t.Fatal(message)
-		}
-	default:
-		t.Fatal("missing durable failure")
-	}
-	if len(f.provider.sent) != 0 {
-		t.Fatal("unfunded generation")
-	}
-}
 func TestVoiceConversationToolsWaitForDurableInputAndVerifyBinding(t *testing.T) {
-	settled := make(chan struct{}, 8)
-	f := conversationFixture(t, func(h *conversationHooks) {
-		h.Settle = func(context.Context, agent.RealtimeVoiceUsage) error { settled <- struct{}{}; return nil }
-	})
+	f := conversationFixture(t, nil)
 	conversationBegin(t, f)
 	conversationSend(t, f, map[string]any{"type": "audio.append", "audio": base64.StdEncoding.EncodeToString(make([]byte, 7200))})
 	conversationSend(t, f, map[string]string{"type": "audio.commit"})
@@ -178,11 +137,6 @@ func TestVoiceConversationToolsWaitForDurableInputAndVerifyBinding(t *testing.T)
 	e := f.read(t)
 	if e["type"] != "tool.call" || e["key"] != "voice-fixture-1:call-1" || e["instruction"] != "Describe my screen without changes" {
 		t.Fatal(e)
-	}
-	select {
-	case <-settled:
-	default:
-		t.Fatal("tool dispatched before releasing the measured voice hold")
 	}
 	conversationSend(t, f, map[string]string{"type": "tool.result", "callId": "call-1", "invocationId": "foreign"})
 	if e := f.read(t); e["type"] != "error" {

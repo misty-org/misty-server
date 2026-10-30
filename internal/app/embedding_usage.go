@@ -2,22 +2,22 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/billingadapter"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
+
+var errInvalidEmbeddingChunk = errors.New("invalid embedding chunk")
 
 func embedRetrievalChunk(ctx context.Context, server *Server, chunk db.AIEmbeddingChunk) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if chunk.AccountID == "" || chunk.AttemptID == "" {
-		return billingadapter.ErrInvalid
+		return errInvalidEmbeddingChunk
 	}
-	service := server.Database.BillingService()
-	key := "retrieval-embedding:" + chunk.AttemptID
-	analyzer := server.AIAnalyzer.WithBilling(service, chunk.AccountID, key)
+	analyzer := server.AIAnalyzer.WithAIAccount(chunk.AccountID)
 	model, err := analyzer.AccountEmbeddingModel(ctx)
 	if err != nil {
 		return err
@@ -33,7 +33,7 @@ func embedRetrievalChunk(ctx context.Context, server *Server, chunk db.AIEmbeddi
 }
 
 // embedMemoryChunks embeds one owner's batch of memory chunks in one call on
-// Misty's keys, billed to that owner as background work.
+// that owner's embedding model.
 func embedMemoryChunks(ctx context.Context, server *Server, chunks []db.MemoryChunk) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
@@ -41,11 +41,11 @@ func embedMemoryChunks(ctx context.Context, server *Server, chunks []db.MemoryCh
 	texts := make([]string, len(chunks))
 	for i, chunk := range chunks {
 		if chunk.OwnerUserID != owner || chunk.AttemptID == "" {
-			return billingadapter.ErrInvalid
+			return errInvalidEmbeddingChunk
 		}
 		texts[i] = chunk.Text
 	}
-	analyzer := server.AIAnalyzer.WithBilling(server.Database.BillingService(), owner, "memory-embedding:"+chunks[0].AttemptID)
+	analyzer := server.AIAnalyzer.WithAIAccount(owner)
 	model, err := analyzer.AccountEmbeddingModel(ctx)
 	if err != nil {
 		return err

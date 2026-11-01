@@ -33,8 +33,10 @@ type preparedAIInvocationRuntime struct {
 }
 
 // prepareAIInvocationRuntime builds a chat run's context. Its tool list is the
-// run's resolved catalog; nothing about the request narrows it beforehand.
-func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *db.AIInvocationRecord) (*preparedAIInvocationRuntime, error) {
+// run's resolved catalog plus deviceTools, the read-only tools its desktop runs
+// itself (web.search); nothing about the request narrows it beforehand. Only the
+// runtime's context request names device tools; the MCP server never offers them.
+func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *db.AIInvocationRecord, deviceTools ...string) (*preparedAIInvocationRuntime, error) {
 	if record == nil {
 		return nil, db.ErrSpaceInvalid
 	}
@@ -78,6 +80,7 @@ func (s *SpacesService) prepareAIInvocationRuntime(ctx context.Context, record *
 		// Plan mode is read-only: write tools are neither listed nor executable.
 		allowedTools = planModeTools(toolbox, allowedTools)
 	}
+	allowedTools = uniqueAgentToolNames(append(allowedTools, deviceTools...))
 	methodGuidance, err := invocationMethodGuidance(ctx, s.database, record.UserID, &body, allowedTools)
 	if err != nil {
 		return nil, err
@@ -120,8 +123,8 @@ func (s *SpacesService) aiInvocationContext(ctx context.Context, record *db.AIIn
 	if body.AgentID != "" || (body.SurfaceID != "activity" && body.SurfaceID != "global") || !shouldRetrieveAccountContext(body.Prompt) {
 		return resolved, nil
 	}
-	embedding, _ := s.agentQueryEmbedding(ctx, record.UserID, body.Prompt)
-	retrieved, err := broker.retrieveAccount(ctx, record.UserID, body.Prompt, embedding, 4, "", configuredEmbeddingModel(ctx, s.searchAnalyzer, record.UserID))
+	embedding, _ := agentQueryEmbedding(ctx, body.Prompt)
+	retrieved, err := broker.retrieveAccount(ctx, record.UserID, body.Prompt, embedding, 4, "", queryEmbeddingModel(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -171,14 +174,10 @@ func (s *SpacesService) aiInvocationPrompt(ctx context.Context, record *db.AIInv
 	return prompt, nil
 }
 
-// aiInvocationModel freezes the run's model at admission; changing a
-// conversation must not change an in-flight turn.
+// aiInvocationModel is the model a run is recorded under until its desktop
+// reports the device's own.
 func aiInvocationModel(body aiInvocationInput) (string, string) {
-	modelID := serveragent.HouseModel(body.ModelID)
-	if body.Mode == "companion" {
-		modelID = serveragent.HouseModel(body.CompanionModel)
-	}
-	return modelID, serveragent.HouseEffort(body.ReasoningEffort)
+	return serveragent.FrontierDefaultModelID(), serveragent.HouseReasoning
 }
 
 func aiInvocationModelID(body aiInvocationInput) string {

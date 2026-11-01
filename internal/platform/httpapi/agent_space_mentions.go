@@ -47,6 +47,8 @@ func (s *SpacesService) explainUnstartedMention(ctx context.Context, userID stri
 		reason = "I have too many requests open. Try again when some finish."
 	case errors.Is(cause, db.ErrAgentRequestLimit):
 		reason = "You've sent a lot of requests in the last hour. Try again later."
+	case errors.Is(cause, db.ErrAccountClosing):
+		reason = "My owner's account is closing, so I can't take on work."
 	default:
 		log.Printf("agent mention: request to %s failed: %v", agentID, cause)
 		return

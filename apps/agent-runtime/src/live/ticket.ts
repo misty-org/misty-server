@@ -1,11 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-/** Must match liveTicketDomain in the Go API (voice_live_tokens.go). */
+/** Must match DOMAIN in the app (src-tauri/src/infra/agent_runtime/live.rs). */
 const domain = "misty-live-ticket\n";
 
 export type LiveChannel = "mic" | "system";
 
-/** Claims the Go API signs for one live transcription session. */
+/** Claims the app signs for one live transcription session. */
 export type LiveTicket = {
   sid: string;
   sub: string;

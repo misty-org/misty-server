@@ -45,8 +45,7 @@
       "targets": [
         {"expr": "misty_upload_reservations_active", "legendFormat": "upload reservations"},
         {"expr": "misty_library_jobs_pending_ai", "legendFormat": "AI"},
-        {"expr": "misty_library_jobs_pending_rendition", "legendFormat": "renditions"},
-        {"expr": "misty_library_jobs_pending_people", "legendFormat": "people"}
+        {"expr": "misty_library_jobs_pending_rendition", "legendFormat": "renditions"}
       ],
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
     }

@@ -5,11 +5,12 @@ credentials in the environment of the computer running k6; do not commit them.
 
 ## First smoke run
 
-Start staging on the computer that hosts it with `misty server staging up`.
-From the computer that runs k6, keep an SSH tunnel open:
+Run a test server from `server/compose.yml` on a spare host
+([docs/self-hosting.md](../../docs/self-hosting.md)) with `MISTY_HOST_PORT=8082`, and never load
+test a server people use. From the computer that runs k6, keep an SSH tunnel open:
 
 ```sh
-ssh -L 8082:127.0.0.1:8082 user@staging-host
+ssh -L 8082:127.0.0.1:8082 user@test-host
 ```
 
 Create a staging-only account through Misty's sign-up screen pointed at this

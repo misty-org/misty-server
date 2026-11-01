@@ -100,7 +100,7 @@ templ aiPage(v aiView) {
 			@healthRow(v.Gateway.Label(), v.Gateway.OK(), checkDetail(*v.Gateway))
 		}
 	</ul>
-	@note("Models run on each account's own keys, or on the server's keys when the operator sets MISTY_AGENT_MODEL.")
+	@note("Models run on each person's desktop, on that device's own keys. The server holds none.")
 	if v.Err != "" {
 		@problem(v.Err)
 	}

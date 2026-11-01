@@ -91,6 +91,9 @@ func (db *Database) CreateDrawingAssetUpload(
 		if err := prepareStorageReservationTx(ctx, tx, userID, out.SpaceID); err != nil {
 			return err
 		}
+		if err := RequireAccountStorageRoomTx(ctx, tx, userID, byteSize); err != nil {
+			return err
+		}
 		if err := tx.QueryRowContext(
 			ctx,
 			`INSERT INTO space_library_uploads(

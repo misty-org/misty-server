@@ -60,8 +60,6 @@ func TestAIInvocationMCPAdvertisesWeatherThroughOfficialGoSDK(t *testing.T) {
 	}
 
 	secret := []byte(strings.Repeat("s", 32))
-	t.Setenv("MISTY_AGENT_RUNTIME_URL", "https://runtime.test")
-	t.Setenv("MISTY_AGENT_RUNTIME_INTERNAL_API_URL", "https://api.test")
 	t.Setenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", base64.StdEncoding.EncodeToString(secret))
 	runtimeConfig, err := AgentRuntimeConfigFromEnv()
 	if err != nil {

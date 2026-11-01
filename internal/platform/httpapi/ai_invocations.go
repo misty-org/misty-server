@@ -13,14 +13,10 @@ const (
 )
 
 type aiInvocationInput struct {
-	MethodVersionID string         `json:"method_version_id,omitempty"`
-	MethodInputs    map[string]any `json:"method_inputs,omitempty"`
-	SkillVersionIDs []string       `json:"skill_version_ids,omitempty"`
-	CompanionMode   string         `json:"companion_mode,omitempty"`
-	CompanionModel  string         `json:"companion_model,omitempty"`
-	// ModelOverride pins a new conversation's Thinking model with its first
-	// message; an existing conversation sets it with PATCH instead.
-	ModelOverride   string             `json:"model_override,omitempty"`
+	MethodVersionID string             `json:"method_version_id,omitempty"`
+	MethodInputs    map[string]any     `json:"method_inputs,omitempty"`
+	SkillVersionIDs []string           `json:"skill_version_ids,omitempty"`
+	CompanionMode   string             `json:"companion_mode,omitempty"`
 	DisplayCaptures []aiDisplayCapture `json:"display_captures,omitempty"`
 	ThinkingMode    string             `json:"thinking_mode,omitempty"`
 	TaskID          string             `json:"task_id,omitempty"`
@@ -34,30 +30,23 @@ type aiInvocationInput struct {
 	// CodingProject is the attached project a delegated coding run works in.
 	CodingProject string `json:"coding_project,omitempty"`
 	// CodingTool is the coding tool the person picked for this chat; empty uses the Settings default.
-	CodingTool      string                      `json:"coding_tool,omitempty"`
-	WindowLabel     string                      `json:"window_label,omitempty"`
-	Mode            string                      `json:"mode"`
-	SurfaceID       string                      `json:"surface_id"`
-	Trigger         string                      `json:"trigger"`
-	Prompt          string                      `json:"prompt"`
-	Context         []aiContextReference        `json:"context"`
-	Selection       *aiSelectionSnapshot        `json:"selection,omitempty"`
-	Capture         *aiCaptureAttachment        `json:"capture,omitempty"`
-	AttachmentIDs   []string                    `json:"attachment_ids,omitempty"`
-	DeviceContexts  []aiInvocationDeviceContext `json:"device_contexts,omitempty"`
-	ModelID         string                      `json:"model_id,omitempty"`
-	ReasoningEffort string                      `json:"reasoning_effort,omitempty"`
-	// EvalTurnLimit lets a development eval give a run the turns of a higher plan
-	// (see evalTurnLimit); production never reads it.
-	EvalTurnLimit int `json:"eval_turn_limit,omitempty"`
-	// PromptOff names how-to prompt rules to leave out (docs/plans/agent-browser-actions.md, phase 0).
-	// Only a development stack that lets a request choose its model honors it, so an eval can measure
-	// what each rule is worth.
-	PromptOff             []string `json:"prompt_off,omitempty"`
-	RequestedArtifactKind string   `json:"requested_artifact_kind,omitempty"`
-	ConversationID        string   `json:"conversation_id,omitempty"`
-	IdempotencyKey        string   `json:"idempotency_key"`
-	Timezone              string   `json:"timezone,omitempty"`
+	CodingTool            string                      `json:"coding_tool,omitempty"`
+	WindowLabel           string                      `json:"window_label,omitempty"`
+	Mode                  string                      `json:"mode"`
+	SurfaceID             string                      `json:"surface_id"`
+	Trigger               string                      `json:"trigger"`
+	Prompt                string                      `json:"prompt"`
+	Context               []aiContextReference        `json:"context"`
+	Selection             *aiSelectionSnapshot        `json:"selection,omitempty"`
+	Capture               *aiCaptureAttachment        `json:"capture,omitempty"`
+	AttachmentIDs         []string                    `json:"attachment_ids,omitempty"`
+	DeviceContexts        []aiInvocationDeviceContext `json:"device_contexts,omitempty"`
+	ModelID               string                      `json:"model_id,omitempty"`
+	ReasoningEffort       string                      `json:"reasoning_effort,omitempty"`
+	RequestedArtifactKind string                      `json:"requested_artifact_kind,omitempty"`
+	ConversationID        string                      `json:"conversation_id,omitempty"`
+	IdempotencyKey        string                      `json:"idempotency_key"`
+	Timezone              string                      `json:"timezone,omitempty"`
 	// NotebookKey and DelegatedFrom are set by the server for sub-agents
 	// (agent_delegate); requests from clients never carry them.
 	NotebookKey   string `json:"notebook_key,omitempty"`
@@ -114,11 +103,9 @@ type aiInvocationEvent struct {
 	// Activity and DurationMS describe a tool call for the reply's timeline.
 	Activity   *aiToolActivity `json:"activity,omitempty"`
 	DurationMS int64           `json:"durationMs,omitempty"`
-	// Result is the raw tool result, sent only to local workflow evals.
-	Result     string      `json:"result,omitempty"`
-	Citation   *aiCitation `json:"citation,omitempty"`
-	Artifact   *aiArtifact `json:"artifact,omitempty"`
-	AppRequest *appRequest `json:"appRequest,omitempty"`
+	Citation   *aiCitation     `json:"citation,omitempty"`
+	Artifact   *aiArtifact     `json:"artifact,omitempty"`
+	AppRequest *appRequest     `json:"appRequest,omitempty"`
 	// ScreenRequest asks the desktop to open a screen and continue the task.
 	ScreenRequest *screenRequest `json:"screenRequest,omitempty"`
 	// Notebook is the run's plan and findings after a notebook write.

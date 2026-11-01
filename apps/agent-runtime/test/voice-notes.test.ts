@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { headings, keepUserHeadings, voiceNotesCall, voiceNotesPrompt, voiceNotesSystem } from "../src/voice-notes.js";
 
 const request = {
-  route: { provider: "instance" as const },
+  route: { provider: "device" as const, credential: { provider: "openai" as const, apiKey: "openai-fixture" } },
   model: "openai/test",
   mode: "notes" as const,
   turns: [

@@ -117,10 +117,6 @@ func (s *Server) CleanupExpiredJournalAssets(
 }
 
 func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
-	s.Router.MethodFunc(http.MethodPost, prefix+"/agent-voice/transcriptions", service.AgentVoiceTranscription())
-	s.Router.Post(prefix+"/agent-voice/realtime/ticket", service.AgentVoiceRealtimeTicket())
-	s.Router.Get(prefix+"/agent-voice/realtime", service.AgentVoiceRealtimeConnect())
-	s.Router.Post(prefix+"/me/voice/live/ticket", service.VoiceLiveTicket())
 	deviceJobsEnabled := serverFeatureEnabled("MISTY_DEVICE_JOBS_ENABLED")
 	connectedDevicesEnabled := serverConnectedDevicesConfigured()
 	// Devices are always available: adding one is how sync, agents and the
@@ -148,6 +144,11 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 		// Space peer sessions between accounts still verify server tickets.
 		s.Router.Get(prefix+"/devices/peer-ticket-keys", service.ConnectedDeviceTicketKeys())
 	}
+	// Agent runs work on the desktop that keeps them (docs/agents/runtime.md).
+	s.Router.Post(prefix+"/devices/{deviceID}/agent-runtime/deliveries/claim", service.DeviceAuthenticated(s.Spaces.ClaimDeviceAgentRuntimeDeliveries()))
+	s.Router.Post(prefix+"/devices/{deviceID}/agent-runtime/deliveries/{deliveryID}/finish", service.DeviceAuthenticated(s.Spaces.FinishDeviceAgentRuntimeDelivery()))
+	s.Router.Post(prefix+"/devices/{deviceID}/embeddings/claim", service.DeviceAuthenticated(s.Spaces.ClaimDeviceEmbeddings()))
+	s.Router.Post(prefix+"/devices/{deviceID}/embeddings/complete", service.DeviceAuthenticated(s.Spaces.CompleteDeviceEmbeddings()))
 	if !deviceJobsEnabled {
 		return
 	}

@@ -2,10 +2,8 @@ package unit
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/agent"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
@@ -75,15 +73,6 @@ func TestMistyAccountBrowserContextRequiresMatchingDeviceAttachment(t *testing.T
 				t.Fatal("invalid account-scoped browser attachment was accepted")
 			}
 		})
-	}
-}
-
-func TestAgentRuntimeRulesHaveNoBuiltInPersonaOrCrossConversationContext(t *testing.T) {
-	persona := agent.TestingAgentPersona()
-	for _, want := range []string{"explicitly selected agent identity", "There is no built-in assistant", "approved version", "current conversation", "Never reuse content from another direct or limited-group conversation"} {
-		if !strings.Contains(persona, want) {
-			t.Fatalf("Agent runtime rules are missing %q:\n%s", want, persona)
-		}
 	}
 }
 

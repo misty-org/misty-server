@@ -64,7 +64,11 @@ func (s *SpacesService) appsExecute(ctx context.Context, invocation agenttools.I
 	}
 	defer cancel()
 	if kind == composio.KindRead {
+		if err := s.consumeAppAction(bounded, invocation.UserID); err != nil {
+			return nil, err
+		}
 		result, err := s.runAppTool(bounded, invocation.UserID, call)
+		s.releaseRejectedAppAction(bounded, invocation.UserID, err)
 		return result, appsError(err)
 	}
 	var approval *db.AgentAppRequest
@@ -84,12 +88,18 @@ func (s *SpacesService) appsExecute(ctx context.Context, invocation agenttools.I
 		ProtectResult: func(value json.RawMessage) ([]byte, error) { return s.protectAgentEffectResult(effect, value) },
 		RestoreResult: func(value []byte) (json.RawMessage, error) { return s.restoreAgentEffectResult(effect, value) },
 	}, func() (json.RawMessage, error) {
+		// Counted inside the journal, so a replayed call is not counted twice.
+		if err := s.consumeAppAction(bounded, invocation.UserID); err != nil {
+			return nil, err
+		}
 		if approval != nil {
 			if used, err := s.database.ResolveAgentAppRequest(bounded, invocation.UserID, approval.ID, "approved", "used"); err != nil || !used {
+				s.releaseAppAction(bounded, invocation.UserID)
 				return nil, errors.Join(db.ErrAgentToolboxNotAttempted, agent.ErrInvalidRequest("That approval was already used. Call integration_execute again to ask the user again."))
 			}
 		}
 		result, err := s.runAppTool(bounded, invocation.UserID, call)
+		s.releaseRejectedAppAction(bounded, invocation.UserID, err)
 		if err != nil && composio.Rejected(err) {
 			// Composio refused the request before running it.
 			return nil, errors.Join(db.ErrAgentToolboxNotAttempted, appsError(err))

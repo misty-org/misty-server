@@ -1,8 +1,6 @@
 package unit
 
 import (
-	"encoding/base64"
-	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -92,19 +90,6 @@ func TestAccountToolboxAdvertisesWeatherWithTypedSchema(t *testing.T) {
 	}
 	if !strings.Contains(weatherSchema, `"location"`) || !strings.Contains(weatherSchema, `"required"`) {
 		t.Fatalf("weather.current lost its typed MCP input contract: %s", weatherSchema)
-	}
-}
-
-func TestAgentVoiceJSONTransport(t *testing.T) {
-	encoded := base64.StdEncoding.EncodeToString([]byte("voice bytes"))
-	body := fmt.Sprintf(`{"audio_base64":%q,"mime_type":"audio/webm;codecs=opus","duration_ms":1400}`, encoded)
-	audio, mimeType, durationMS, code := api.TestingReadAgentVoiceJSON(body)
-	if code != "" || string(audio) != "voice bytes" || mimeType != "audio/webm;codecs=opus" || durationMS != 1400 {
-		t.Fatalf("unexpected decoded recording: code=%q mime=%q duration=%d audio=%q", code, mimeType, durationMS, audio)
-	}
-	_, _, _, code = api.TestingReadAgentVoiceJSON(`{"audio_base64":"%%%","duration_ms":100}`)
-	if code != "voice_recording_required" {
-		t.Fatalf("invalid audio returned %q", code)
 	}
 }
 

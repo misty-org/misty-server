@@ -18,27 +18,32 @@ func TestAgentRuntimeSignatureCoversRequestAndRotates(t *testing.T) {
 	body := []byte(`{"runtime_run_id":"workflow_1"}`)
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	path := "/internal/agent-runtime/runs/run_1/context"
-	signature := api.TestingAgentRuntimeSignature(previous, http.MethodPost, path, timestamp, body)
-	if !api.TestingAgentRuntimeSignatureVerifies(current, previous, http.MethodPost, path, timestamp, signature, body) {
-		t.Fatal("previous rotation secret should verify")
+	signature := api.TestingAgentRuntimeSignature(api.TestingAgentRunKey(previous, "run_1"), http.MethodPost, path, timestamp, body)
+	if !api.TestingAgentRuntimeSignatureVerifies(current, previous, "run_1", http.MethodPost, path, timestamp, signature, body) {
+		t.Fatal("a run key from the previous rotation secret should verify")
 	}
-	if api.TestingAgentRuntimeSignatureVerifies(current, previous, http.MethodPut, path, timestamp, signature, body) {
+	if api.TestingAgentRuntimeSignatureVerifies(current, previous, "run_2", http.MethodPost, path, timestamp, signature, body) {
+		t.Fatal("one run's key opened another run")
+	}
+	if api.TestingAgentRuntimeSignatureVerifies(current, previous, "run_1", http.MethodPut, path, timestamp, signature, body) {
 		t.Fatal("changed method should invalidate the signature")
 	}
-	if api.TestingAgentRuntimeSignatureVerifies(current, previous, http.MethodPost, path, timestamp, signature, []byte(`{}`)) {
+	if api.TestingAgentRuntimeSignatureVerifies(current, previous, "run_1", http.MethodPost, path, timestamp, signature, []byte(`{}`)) {
 		t.Fatal("changed body should invalidate the signature")
 	}
+	shared := api.TestingAgentRuntimeSignature(current, http.MethodPost, path, timestamp, body)
+	if api.TestingAgentRuntimeSignatureVerifies(current, previous, "run_1", http.MethodPost, path, timestamp, shared, body) {
+		t.Fatal("the server secret itself signed a run's call")
+	}
 	stale := strconv.FormatInt(time.Now().Add(-6*time.Minute).Unix(), 10)
-	staleSignature := api.TestingAgentRuntimeSignature(current, http.MethodPost, path, stale, body)
-	if api.TestingAgentRuntimeSignatureVerifies(current, nil, http.MethodPost, path, stale, staleSignature, body) {
+	staleSignature := api.TestingAgentRuntimeSignature(api.TestingAgentRunKey(current, "run_1"), http.MethodPost, path, stale, body)
+	if api.TestingAgentRuntimeSignatureVerifies(current, nil, "run_1", http.MethodPost, path, stale, staleSignature, body) {
 		t.Fatal("stale signature should be rejected")
 	}
 }
 
 func TestAgentRuntimeIsAlwaysWorkflowWhenConfigured(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "")
-	t.Setenv("MISTY_AGENT_RUNTIME_URL", "https://runtime.test")
-	t.Setenv("MISTY_AGENT_RUNTIME_INTERNAL_API_URL", "https://api.test")
 	t.Setenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=")
 	config, err := api.AgentRuntimeConfigFromEnv()
 	if err != nil {
@@ -49,19 +54,16 @@ func TestAgentRuntimeIsAlwaysWorkflowWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeRejectsInsecurePublicControlPlaneURL(t *testing.T) {
+func TestAgentRuntimeNeedsItsSecretInProduction(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	t.Setenv("MISTY_AGENT_RUNTIME_URL", "https://runtime.test")
-	t.Setenv("MISTY_AGENT_RUNTIME_INTERNAL_API_URL", "http://api.example.com")
-	t.Setenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=")
-	if _, err := api.AgentRuntimeConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "must use HTTPS") {
-		t.Fatalf("expected insecure control-plane URL to fail, got %v", err)
+	t.Setenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", "")
+	if _, err := api.AgentRuntimeConfigFromEnv(); err == nil {
+		t.Fatal("production started without the runtime control secret")
 	}
 }
 
 func TestAgentRuntimeMayBeUnconfiguredOutsideProduction(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "")
-	t.Setenv("MISTY_AGENT_RUNTIME_URL", "")
 	t.Setenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", "")
 	config, err := api.AgentRuntimeConfigFromEnv()
 	if err != nil {

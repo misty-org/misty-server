@@ -1,3 +1,5 @@
+import type { SearchProviderId } from "./web-search/provider.js";
+
 export interface SpaceTaskContext {
   /** A workflow's saved browser steps, replayed before any model call. */
   browser_replay?: unknown;
@@ -32,6 +34,12 @@ export interface SpaceTaskContext {
   /** The run model's context window in tokens, from the Gateway catalog. */
   context_window_tokens?: number;
   allowed_tools: string[];
+  /** The search provider this device runs web.search on; absent when it has no search key. */
+  device_search?: SearchProviderId;
+  /** On a desktop runtime, the opening message to name a new chat from when the run ends. */
+  title_prompt?: string;
+  /** On a desktop runtime, the chat's older turns to fold into its notes when the run ends. */
+  summary_request?: { previous: string; turns: string } | null;
 }
 
 export interface RuntimeToolContext {
@@ -57,6 +65,8 @@ export interface MCPRemoteTool {
   concurrent?: boolean;
   /** Misty's read-only annotation; a failed read is always safe to retry. */
   readOnly?: boolean;
+  /** Runs in this runtime on the device (web.search), never through Misty's gateway. */
+  local?: boolean;
 }
 
 /** One of Misty's own visible controls, in its capture's pixels; x and y are its center. */

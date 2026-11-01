@@ -8,7 +8,6 @@ import (
 
 func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Get(prefix+"/status", aiService.Status())
-	s.Router.Get(prefix+"/models", aiService.FrontierModels())
 	s.Router.Post(prefix+"/complete", aiService.Complete())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/settings", aiService.Settings())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/settings", aiService.Settings())
@@ -17,7 +16,6 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Put(prefix+"/settings/keep-awake", aiService.KeepAwakeSetting())
 	s.Router.Put(prefix+"/settings/screen-location", aiService.ScreenLocationSetting())
 	s.Router.Get(prefix+"/memories", aiService.Memories())
-	s.Router.Post(prefix+"/me/voice/cleanup", aiService.VoiceCleanup())
 	s.Router.Delete(prefix+"/memories/{memoryID}", aiService.Memory())
 	s.Router.Put(prefix+"/memories/{memoryID}", aiService.Memory())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/preferences/{surfaceID}", aiService.SurfacePreference())
@@ -52,7 +50,6 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 
 func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Get(prefix+"/misty/events", aiService.AccountEvents())
-	s.Router.Post(prefix+"/misty/agent-followup", aiService.AgentFollowup())
 	s.Router.Post(prefix+"/misty/agent-execution", aiService.AgentExecutionLease())
 	s.Router.Delete(prefix+"/misty/agent-execution/{taskID}", aiService.AgentExecutionLease())
 	s.Router.Get(prefix+"/misty/agents", aiService.PersonalAgents())

@@ -27,9 +27,6 @@ func DecodeAIJSONWithLimit(w http.ResponseWriter, r *http.Request, dst any, limi
 }
 
 func WriteAIError(w http.ResponseWriter, err error) {
-	if writeModelError(w, err) {
-		return
-	}
 	switch {
 	case errors.Is(err, context.Canceled):
 		writeJSON(w, 499, map[string]any{"code": "request_canceled", "message": "Agent request canceled."})

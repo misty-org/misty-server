@@ -13,16 +13,22 @@ func disableAccountAgentsTx(ctx context.Context, tx *sql.Tx, userID string) erro
 		WHERE owner_user_id=$1 AND deleted_at IS NULL`, userID); err != nil {
 		return err
 	}
+	return cancelAccountRunsTx(ctx, tx, userID, "account_disabled")
+}
+
+// cancelAccountRunsTx cancels the runs the account asked for or its agents are
+// doing, with code as the reason, and detaches their device contexts.
+func cancelAccountRunsTx(ctx context.Context, tx *sql.Tx, userID, code string) error {
 	if _, err := tx.ExecContext(ctx, `WITH canceled AS (
-		UPDATE space_runs SET state='canceled',runtime_phase='canceled',error_code='account_disabled',canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
+		UPDATE space_runs SET state='canceled',runtime_phase='canceled',error_code=$2,canceled_at=NOW(),completed_at=NOW(),updated_at=NOW()
 		WHERE state IN ('queued','running','cooldown','awaiting_approval','awaiting_device','awaiting_intervention') AND
 		(agent_id IN (SELECT id FROM misty_ask_identities WHERE owner_user_id=$1) OR requesting_member_id=$1) RETURNING id
 	) UPDATE agent_run_jobs SET state='canceled',lease_owner=NULL,lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW()
-	WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, userID); err != nil {
+	WHERE run_id IN (SELECT id FROM canceled) AND state IN ('queued','leased','dispatched')`, userID, code); err != nil {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `UPDATE agent_run_contexts SET state='detached',updated_at=NOW()
-		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND state='canceled' AND error_code='account_disabled') AND state='attached'`, userID)
+		WHERE run_id IN (SELECT id FROM space_runs WHERE owner_user_id=$1 AND state='canceled' AND error_code=$2) AND state='attached'`, userID, code)
 	return err
 }
 

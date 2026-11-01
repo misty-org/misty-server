@@ -14,12 +14,20 @@ import (
 // Config holds everything the console needs; cmd/misty-console reads it from
 // flags and the environment so this package never touches the process env.
 type Config struct {
-	// Addr must resolve to a loopback interface, e.g. 127.0.0.1:7070.
+	// Addr must resolve to a loopback interface, e.g. 127.0.0.1:7070, unless
+	// PublishedAddr is set.
 	Addr string
+	// PublishedAddr is the host loopback address Compose publishes the
+	// console's container port on. With it, Addr may listen on the
+	// container's own interfaces, which only the published loopback port
+	// reaches, and the launch URL names PublishedAddr.
+	PublishedAddr string
 	// APIURL is the base URL of the running misty-server, without a path.
 	APIURL string
 	// MetricsToken is MISTY_METRICS_TOKEN; empty disables metrics scraping.
 	MetricsToken string
+	// OperatorToken is MISTY_OPERATOR_TOKEN; empty makes customers read-only.
+	OperatorToken string
 	// Environment is MISTY_ENVIRONMENT, e.g. development or production.
 	Environment string
 	// HandoffPath is where the launch URL is written for `misty server up --gui`.

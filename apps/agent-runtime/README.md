@@ -1,14 +1,18 @@
 # Misty Agent Runtime
 
 The durable agent loop for Misty, built on the AI SDK's `WorkflowAgent` and the
-Workflow engine. It has no database access of its own: run activation, context,
-checkpoints, steering, time budgets and completion go through the Go API's signed
-internal routes (`/internal/agent-runtime/runs/{runID}/…`), and every tool call
-goes to Misty's authenticated MCP endpoint (`/mcp`).
+Workflow engine. It runs only on the person's computer: the desktop app starts it
+as a helper process (`src-tauri/src/infra/agent_runtime/`, see
+docs/agents/runtime.md), and every model call happens here on that device's own
+keys. It has no database access of its own: run activation, context, checkpoints,
+steering, time budgets and completion go through the Go API's internal routes
+(`/internal/agent-runtime/runs/{runID}/…`), signed with the run's own key, and
+every tool call goes to Misty's authenticated MCP endpoint (`/mcp`).
 
 ## How a run works
 
-1. Go starts a run with a signed `POST /v1/runs`.
+1. The app passes a delivery from the server to `POST /v1/runs`, signed with this
+   launch's secret. A start carries the run's key and its start receipt.
 2. The workflow (`workflows/space-task-agent.ts`) activates, reads its context,
    and exchanges its runtime identity for a short-lived MCP bearer
    (`mcp-token`). It lists the run's tools from `/mcp` and shows them to the
@@ -32,51 +36,51 @@ Where things live:
   the run.
 - `src/control-plane*.ts`: the signed calls to Go.
 
-## One-shot model calls
+## Model calls outside runs
 
-Go sends model calls outside agent runs here, signed like the run routes:
-`POST /v1/models/text`, `embed`, `transcribe`, `transcribe-diarized`,
-`voice-notes`, `day-summary` and `speech` (`src/model-calls.ts` and siblings).
-Go picks the model and sends its route with the call. Provider errors return a
-status, never the provider's body. Live transcription is a WebSocket at
-`/v1/live/transcribe` (`src/live/`).
+The app's own model calls go to `POST /v1/device/*` (`src/device-calls.ts`):
+dictation cleanup, voice transcription, the screen planner, companion pointing,
+extraction, embeddings, day summaries, voice notes, diarized transcription and
+the model test. Provider errors return a status, never the provider's body. Live
+transcription is a WebSocket at `/v1/live/transcribe` (`src/live/`) and the
+companion's spoken conversation one at `/v1/device/voice` (`src/voice/`).
 
 ## Models
 
-People bring their own model keys (`src/model-provider.ts`). Model IDs are
-`<provider>/<model as that provider names it>`, for example
+The app sends this device's model keys and choices to `POST /v1/local/models`
+(`src/device-models.ts`) whenever they change; they live only in this process's
+memory. Model IDs are `<provider>/<model as that provider names it>`, for example
 `anthropic/claude-sonnet-5-5`, `openrouter/anthropic/claude-sonnet-5.5` or
-`ollama/qwen3:14b`. Every call carries a route from Go:
+`ollama/qwen3:14b`. Each call runs on the device's key for the model's provider
+and never on any other (`src/model-provider.ts`). A base URL may name a server on
+the person's own computer or network, such as a local Ollama.
 
-```json
-{ "provider": "account", "reasoning": "low",
-  "credential": { "provider": "anthropic", "apiKey": "…", "baseURL": "…" } }
-```
+With no usable key a call fails with `model_key_needed` (HTTP 409 for a device
+call; an agent run fails at once rather than retrying).
 
-- `account` runs on exactly that credential, which must be for the model's
-  provider. It never falls back to the runtime's own keys. An account
-  `baseURL` must be a public http(s) address (`host.docker.internal` is
-  allowed for a local Ollama).
-- `instance` (`{ "provider": "instance" }`) runs on the runtime's environment
-  keys below, for single-user self-hosting and evals. An `openai/`,
-  `anthropic/` or `google/` model with no key of its own goes through the AI
-  Gateway when `AI_GATEWAY_API_KEY` is set.
+## Web search
 
-With no usable key a call fails with `model_key_needed` (HTTP 409 for one-shot
-calls; an agent run fails at once rather than retrying).
+`web.search` runs here, not on the server (`src/web-search/`): the model document's
+`search` carries the device's search service (`decodo` or `serper`) and key. A run
+with one adds the tool to its catalog and tells the server in its `context` request
+(`device_tools`), so the prompt describes it; a run without one doesn't offer it.
+Each provider is a small adapter behind one interface, answers are cached in memory
+for 6 hours, and results stay marked untrusted.
 
-| Provider | Language | Embedding | Speech | Transcription | Instance env |
-| --- | --- | --- | --- | --- | --- |
-| `openai` | Responses | yes | yes | yes | `OPENAI_API_KEY`, `OPENAI_BASE_URL` |
-| `anthropic` | Messages | | | | `ANTHROPIC_API_KEY` (or `CLAUDE_API_KEY`), `ANTHROPIC_BASE_URL` |
-| `google` | Gemini API | yes | | | `GEMINI_API_KEY` (or `GOOGLE_GENERATIVE_AI_API_KEY`) |
-| `openrouter` | chat completions | yes | | | `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL` |
-| `gateway` | Vercel AI Gateway | yes | yes | yes | `AI_GATEWAY_API_KEY` (or `VERCEL_OIDC_TOKEN`), `AI_GATEWAY_BASE_URL` |
-| `nvidia` | chat completions | yes | | | `NVIDIA_API_KEY`, `NVIDIA_BASE_URL` |
-| `ollama` | chat completions | yes | | | `OLLAMA_BASE_URL` (default `http://host.docker.internal:11434/v1`), `OLLAMA_API_KEY` |
-| `openai-compatible` | chat completions | yes | | | `OPENAI_COMPATIBLE_BASE_URL` (required), `OPENAI_COMPATIBLE_API_KEY` |
-| `elevenlabs` | | | yes | | `ELEVENLABS_API_KEY` |
-| `soniox` | | | | yes | `SONIOX_API_KEY` |
+| Provider | Language | Embedding | Speech | Transcription |
+| --- | --- | --- | --- | --- |
+| `openai` | Responses | yes | yes | yes |
+| `anthropic` | Messages | | | |
+| `google` | Gemini API | yes | | |
+| `openrouter` | chat completions | yes | | |
+| `gateway` | Vercel AI Gateway | yes | yes | yes |
+| `nvidia` | chat completions | yes | | |
+| `ollama` | chat completions (default `http://127.0.0.1:11434/v1`) | yes | | |
+| `ollama-cloud` | chat completions | yes | | |
+| `openai-compatible` | chat completions (needs a base URL) | yes | | |
+| `chatgpt` | ChatGPT sign-in (docs/byok.md) | | | |
+| `elevenlabs` | | | yes | |
+| `soniox` | | | | yes |
 
 `nim/` is kept as an alias of `nvidia/` and `gemini/` of `google/`.
 Chat-completions providers get screenshots moved out of tool results into a
@@ -84,29 +88,21 @@ user message; NVIDIA, Ollama and OpenAI-compatible servers get no
 `reasoning_effort`.
 
 Keys never reach workflow history, logs, errors or responses. `InstanceModel`
-keeps only the public model ID and run identity in workflow history; each model
-step reads the run's route from Go (`model-provider`), uses the key for that
-call and drops it. Errors are scrubbed of the key before they are thrown or
-logged.
+keeps only the public model ID in workflow history; each model step reads the
+device's key, uses it for that call and drops it. Errors are scrubbed of the key
+before they are thrown or logged.
 
 ## Environment
 
-- `MISTY_INTERNAL_API_BASE`: the Go API base (a proxy prefix such as `/api` is kept).
-- `MISTY_AGENT_RUNTIME_CONTROL_SECRET`: base64 secret of at least 32 bytes, shared
-  with Go; `MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS` during rotation.
-- `WORKFLOW_TARGET_WORLD=@workflow/world-postgres` and `WORKFLOW_POSTGRES_URL`;
-  without them Workflow uses its local world.
-- `MISTY_AGENT_MODEL`: the instance's default agent model (`provider/model`).
-- The instance model keys in the table above, all optional.
-- `MISTY_RUNTIME_LIVE_TRANSCRIBE=1` turns on live transcription. Its signed
-  ticket carries no key, so the relay asks Go for the session's route
-  (`POST /internal/voice/live/credential`, `{session_id, user}`) and uses the
-  account's Soniox key, or `SONIOX_API_KEY` for an `instance` route.
+The app sets all of these when it starts the runtime:
 
-`misty server up` runs this runtime, its Postgres world and the Go API in local
-containers (`server/compose.dev.yml`). Production runs the same image on the
-VPS (`server/compose.prod.yml`), whose `agent-runtime-setup` job migrates the
-world first.
+- `MISTY_RUNTIME_DESKTOP=1`: the runtime takes the device's models and serves
+  `/v1/local/models`, `/v1/device/*` and the voice socket.
+- `MISTY_AGENT_RUNTIME_CONTROL_SECRET`: a fresh base64 secret for each launch,
+  which signs every `/v1` call and live and voice tickets.
+- `WORKFLOW_LOCAL_DATA_DIR` and `WORKFLOW_LOCAL_BASE_URL`: Workflow's local
+  world, so a run continues after Misty quits and opens again.
+- `MISTY_RUNTIME_LIVE_TRANSCRIBE=1` turns on live transcription.
 
 ## Development
 
@@ -114,8 +110,7 @@ world first.
 npm install
 npm run typecheck
 npm test
+npm run build
 ```
 
-Evals live in `evals/` and run against a local stack: `eval:odysseys` (the
-Odysseys benchmark through the product path, see `evals/odysseys/README.md`),
-`eval:pointing`, `eval:voice` and `eval:free-model`.
+The app's development build runs this checkout's `.output`, so build it first.

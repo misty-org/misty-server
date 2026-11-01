@@ -27,7 +27,11 @@ type Handoff struct {
 // Run serves the console until ctx is cancelled. The launch URL is printed on
 // stdout as the only line written there.
 func Run(ctx context.Context, cfg Config, database *db.Database) error {
-	if err := ValidateLoopback(cfg.Addr); err != nil {
+	browserAddr := cfg.Addr
+	if cfg.PublishedAddr != "" {
+		browserAddr = cfg.PublishedAddr
+	}
+	if err := ValidateLoopback(browserAddr); err != nil {
 		return err
 	}
 	token, err := security.GenerateSecureToken()
@@ -38,7 +42,10 @@ func Run(ctx context.Context, cfg Config, database *db.Database) error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.Addr, err)
 	}
-	launchURL := "http://" + listener.Addr().String() + "/?token=" + token
+	if cfg.PublishedAddr == "" {
+		browserAddr = listener.Addr().String()
+	}
+	launchURL := "http://" + browserAddr + "/?token=" + token
 
 	if cfg.HandoffPath != "" {
 		if err := writeHandoff(cfg.HandoffPath, Handoff{PID: os.Getpid(), URL: launchURL, StartedAt: time.Now().UTC()}); err != nil {

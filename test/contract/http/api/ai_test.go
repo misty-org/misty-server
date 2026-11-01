@@ -16,7 +16,7 @@ import (
 )
 
 func TestAIHandlersRequireAuthentication(t *testing.T) {
-	service := NewAIService(&db.Database{}, agent.NewService(nil, nil))
+	service := NewAIService(&db.Database{}, agent.NewService(nil))
 	tests := []struct {
 		name    string
 		handler http.HandlerFunc

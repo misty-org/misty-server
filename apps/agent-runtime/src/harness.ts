@@ -4,6 +4,9 @@ export interface HarnessStart {
   mistyRunId: string;
   controlPlaneURL: string;
   adapterVersion: typeof MISTY_HARNESS_VERSION;
+  /** On the desktop: the run's own key (base64) and the receipt the server pinned. */
+  runKey?: string;
+  receiptCallback?: string;
 }
 type HarnessResume = { kind: "device"; token: string; available: boolean };
 export interface MistyHarness {

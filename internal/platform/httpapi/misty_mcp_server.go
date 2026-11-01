@@ -49,6 +49,15 @@ func (s *SpacesService) MistyMCP() http.Handler {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "invalid_mcp_token"})
 			return
 		}
+		if suspensions.Suspended(r.Context(), claims.Subject) {
+			writeAccountSuspended(w)
+			return
+		}
+		// A closing account's runs are stopped; a call still in flight has no effect.
+		if deleteAt, closing := suspensions.Closing(r.Context(), claims.Subject); closing {
+			writeAccountClosing(w, deleteAt)
+			return
+		}
 		rateKey := strings.Join([]string{
 			claims.Subject,
 			claims.RunID,
@@ -176,6 +185,7 @@ func (s *SpacesService) callPersonalAgentMCPTool(ctx context.Context, access *mc
 	if access.run.State == "awaiting_intervention" && descriptor.Name != "browser.request_user_action" {
 		return mcpToolError(db.ErrSpaceForbidden), nil
 	}
+	ctx = withDeviceQueryEmbedding(ctx, request)
 	call := mcpRuntimeToolCall(access.claims.RuntimeRunID, descriptor.Name, request)
 	call.SupportsIntervention = access.claims.InterventionWaits
 	if announcesToolStart(descriptor) {
@@ -202,6 +212,7 @@ func (s *SpacesService) callPersonalAgentMCPTool(ctx context.Context, access *mc
 }
 
 func (s *SpacesService) callAIInvocationMCPTool(ctx context.Context, access *mcpRuntimeAccess, descriptor agenttools.Descriptor, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ctx = withDeviceQueryEmbedding(ctx, request)
 	call := mcpRuntimeToolCall(access.claims.RuntimeRunID, descriptor.Name, request)
 	if announcesToolStart(descriptor) {
 		s.announceAIInvocationToolStart(ctx, access.record, call)

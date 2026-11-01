@@ -12,8 +12,10 @@ fail() {
 
 [ -f compose.dev.yml ] ||
   fail "the self-contained development Compose file is missing"
-[ -f compose.prod.yml ] ||
-  fail "the self-contained production Compose file is missing"
+[ -f compose.yml ] ||
+  fail "the server stack's Compose file is missing"
+[ ! -e compose.prod.yml ] ||
+  fail "compose.yml is the only server stack; compose.prod.yml must not return"
 [ ! -e docker-compose.yml ] ||
   fail "the legacy shared Compose file must not return"
 [ ! -e docker-compose.override.yml ] ||
@@ -69,45 +71,57 @@ grep -q 'unset CLOUDFLARE_TUNNEL_TOKEN' compose.dev.yml ||
 
 grep -q 'api: service:misty-api' compose.dev.yml ||
   fail "setup must obtain migrations from the same image as the API"
-grep -q 'agent: service:agent-runtime' compose.dev.yml ||
-  fail "setup must use the same workflow dependencies as the agent runtime"
+if grep -Eq '^  agent-runtime:|MISTY_AGENT_RUNTIME_URL|world-postgres' compose.dev.yml; then
+  fail "development runs no agent runtime or workflow database: agents run on the desktop"
+fi
+[ ! -e scripts/docker/postgres-workflow-database.sh ] ||
+  fail "the workflow database setup must not return"
 grep -q 'COPY --from=api /app/migrations' scripts/docker/setup.Dockerfile ||
   fail "setup must copy canonical API migrations"
 
-grep -q 'MISTY_API_IMAGE' compose.prod.yml ||
-  fail "production must select an immutable MISTY_API_IMAGE"
-production_image_consumers="$(grep -c '<<: .*\*api-image' compose.prod.yml)"
-[ "$production_image_consumers" -ge 2 ] ||
-  fail "production migrations and API must consume the same API image anchor"
-grep -q 'MISTY_AGENT_RUNTIME_IMAGE' compose.prod.yml ||
-  fail "production must select an immutable MISTY_AGENT_RUNTIME_IMAGE"
-if grep -Eq '^  agent-runtime-postgres:' compose.prod.yml; then
-  fail "production must keep the workflow database on the shared PostgreSQL server"
+# The server stack: nothing optional, everything from four env files and the
+# setup container's secrets volume (docs/self-hosting.md).
+if grep -Eq '^ *profiles:|COMPOSE_PROFILES' compose.yml; then
+  fail "the server stack has no optional profiles"
 fi
-[ ! -e self-host ] || fail "self-hosting is retired; production is the only deployment"
-
-for compose_file in compose.dev.yml compose.prod.yml; do
-  role_password_consumers="$(grep -c 'MISTY_APP_DB_PASSWORD:' "$compose_file")"
-  [ "$role_password_consumers" -ge 2 ] ||
-    fail "$compose_file must synchronize the application role password after migrations"
+if grep -Eq '^  (agent-runtime|agent-runtime-setup|collab|database-permissions):' compose.yml; then
+  fail "the server stack runs no agent runtime, workflow database or local collaboration Worker"
+fi
+for service in setup postgres migrate api cloudflared backups console; do
+  grep -q "^  $service:" compose.yml || fail "the server stack is missing its $service service"
+done
+for file in misty cloudflare composio google; do
+  grep -q "/$file.env" compose.yml || fail "the server stack must read server/.env/$file.env"
+done
+! grep -q '/search.env' compose.yml ||
+  fail "the server holds no search key: web search runs on each device"
+grep -q 'service_completed_successfully' compose.yml ||
+  fail "the server stack must wait for its setup jobs"
+if git ls-files -- '*.env' '*.env.*' '.env*' 2>/dev/null | grep -q .; then
+  fail "no env file is ever committed, not even an example"
+fi
+for compose_file in compose.dev.yml compose.yml; do
   if grep -qi 'activepieces' "$compose_file"; then
     fail "$compose_file must not deploy the retired automation service"
   fi
-
 done
+role_password_consumers="$(grep -c 'MISTY_APP_DB_PASSWORD:' compose.dev.yml)"
+[ "$role_password_consumers" -ge 2 ] ||
+  fail "compose.dev.yml must synchronize the application role password after migrations"
 grep -q 'ALTER ROLE' scripts/docker/postgres-grant-app-role.sh ||
   fail "database permissions must rotate the persisted application role password"
 
-grep -q '127.0.0.1:${MISTY_HOST_PORT:-8081}:8080' \
-  compose.prod.yml ||
-  fail "production API must be loopback-only on host port 8081 by default"
+grep -q '127.0.0.1:${MISTY_HOST_PORT:-8081}:8080' compose.yml ||
+  fail "the server API must be loopback-only on host port 8081 by default"
+grep -q '127.0.0.1:${MISTY_CONSOLE_PORT:-7070}:7070' compose.yml ||
+  fail "the operator console must be loopback-only"
 
-if grep -Eq '^  (stripe|tunnel|cloudflare-deploy|dev-init):' compose.prod.yml; then
-  fail "production must not run development-only Stripe, tunnel, or Worker services"
+if grep -Eq '^  (stripe|tunnel|cloudflare-deploy|dev-init):' compose.yml; then
+  fail "the server stack must not run development-only Stripe, tunnel, or Worker services"
 fi
 
 if grep -Eq 'ffmpeg|ffprobe|poppler|pdftoppm' Dockerfile; then
   fail "the API image must not contain server-side media tooling"
 fi
 
-echo "Development and production use explicit Compose files and one canonical API image."
+echo "Development and the server stack use explicit Compose files and one canonical API image."

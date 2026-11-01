@@ -28,20 +28,13 @@ const (
 	journalTicketAudience = "misty-journal-collab"
 )
 
-// ErrCollaborationOff means this server runs without the collaboration
-// service: notes and drawings sync through ordinary sync, and live editing,
-// collaboration tickets and agent edits to their bodies are unavailable.
-var ErrCollaborationOff = errors.New("collaboration_off: this server can't save notes and drawings")
-
-// collaborationEnabled reports whether this server has a collaboration
-// service: PARTYKIT_HOST is set.
-func collaborationEnabled() bool {
-	return strings.TrimSpace(envconfig.Getenv("PARTYKIT_HOST")) != ""
-}
+// ErrCollaborationUnconfigured is a JournalCollabConfig's zero value at work:
+// only tests build one. Every server has the collaboration Worker.
+var ErrCollaborationUnconfigured = errors.New("journal collaboration is not configured")
 
 // JournalCollabConfig holds everything needed to talk to the shared note and
 // drawing collaboration service. It is only usable once every field validates.
-// The zero value is collaboration off.
+// The zero value is unconfigured and refuses every ticket.
 type JournalCollabConfig struct {
 	Enabled                  bool
 	Host                     string
@@ -56,9 +49,9 @@ type JournalCollabConfig struct {
 
 // JournalCollabConfigFromEnv reads the collaboration configuration.
 //
-// Collaboration is on only when PARTYKIT_HOST names the operator's own
-// collaboration service; then every key must be present and valid, or startup
-// fails. Without PARTYKIT_HOST it is off, whatever keys exist.
+// Notes and drawings are saved through the collaboration Worker, so every
+// server needs it: PARTYKIT_HOST and every key must be present and valid, or
+// startup fails. The setup container deploys the Worker and writes them.
 func JournalCollabConfigFromEnv() (JournalCollabConfig, error) {
 	config := JournalCollabConfig{
 		Enabled:  true,
@@ -67,7 +60,7 @@ func JournalCollabConfigFromEnv() (JournalCollabConfig, error) {
 		Audience: journalTicketAudience,
 	}
 	if config.Host == "" {
-		return JournalCollabConfig{}, nil
+		return JournalCollabConfig{}, errors.New("PARTYKIT_HOST is required: notes and drawings are saved through the collaboration Worker")
 	}
 	if strings.Contains(config.Host, "/") || strings.Contains(config.Host, ":") {
 		return JournalCollabConfig{}, errors.New("PARTYKIT_HOST must be a bare hostname")
@@ -262,6 +255,6 @@ func (c JournalCollabConfig) mintResourceTicket(
 	aclVersion int64,
 ) (JournalTicket, error) {
 	return c.mintResourceTicketWithLifetime(
-		userID, spaceID, resource, role, aclVersion, journalTicketLifetime,
+		userID, spaceID, resource, collaborationRole(userID, role), aclVersion, journalTicketLifetime,
 	)
 }

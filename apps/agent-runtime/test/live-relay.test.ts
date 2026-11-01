@@ -2,30 +2,30 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { liveSonioxKey } from "../src/live/credential.js";
 import { LiveSession, type RelayMessage, type SttStream } from "../src/live/session.js";
-import { signatureHeaders } from "../src/signature.js";
+import { setDeviceModels } from "../src/device-models.js";
 import { SpentTickets, verifyLiveTicket, type LiveTicket } from "../src/live/ticket.js";
 import { speakerTurns } from "../src/transcribe-diarized.js";
 
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
 const secret = Buffer.alloc(32, "s");
-/** Signed by the Go API's signLiveTicket; voice_live_tokens_test.go checks the same string. */
-const goTicket = "v1.eyJzaWQiOiJzZXNzaW9uLTEiLCJzdWIiOiJ1c2VyLTEiLCJkZXYiOiJkZXZpY2UtMSIsImNoIjpbIm1pYyIsInN5c3RlbSJdLCJtYXgiOjkwMDAwMCwibW9kZWwiOiJzb25pb3gvc3R0LXJ0LXY0IiwiZXhwIjoxODAwMDAwMDYwfQ.117a28a26f8bf98cdd9d6a49c7037675f6e3c7f2b59d7eb7115f6162436d7417";
+/** A ticket as the app signs it (src-tauri/src/infra/agent_runtime/live.rs). */
+const appTicket = "v1.eyJzaWQiOiJzZXNzaW9uLTEiLCJzdWIiOiJ1c2VyLTEiLCJkZXYiOiJkZXZpY2UtMSIsImNoIjpbIm1pYyIsInN5c3RlbSJdLCJtYXgiOjkwMDAwMCwibW9kZWwiOiJzb25pb3gvc3R0LXJ0LXY0IiwiZXhwIjoxODAwMDAwMDYwfQ.117a28a26f8bf98cdd9d6a49c7037675f6e3c7f2b59d7eb7115f6162436d7417";
 const before = 1_800_000_000_000;
 
 describe("live tickets", () => {
-  it("accepts the Go API's tickets until they expire", () => {
-    const ticket = verifyLiveTicket(goTicket, [secret], before);
+  it("accepts the app's tickets until they expire", () => {
+    const ticket = verifyLiveTicket(appTicket, [secret], before);
     expect(ticket).toMatchObject({ sid: "session-1", sub: "user-1", ch: ["mic", "system"], max: 900_000, model: "soniox/stt-rt-v4" });
-    expect(verifyLiveTicket(goTicket, [secret], 1_800_000_060_000)).toBeNull();
-    expect(verifyLiveTicket(goTicket, [Buffer.alloc(32, "x")], before)).toBeNull();
-    expect(verifyLiveTicket(goTicket, [Buffer.alloc(32, "x"), secret], before)).not.toBeNull();
-    expect(verifyLiveTicket(goTicket.replace("v1.", "v2."), [secret], before)).toBeNull();
-    expect(verifyLiveTicket(`${goTicket}.extra`, [secret], before)).toBeNull();
+    expect(verifyLiveTicket(appTicket, [secret], 1_800_000_060_000)).toBeNull();
+    expect(verifyLiveTicket(appTicket, [Buffer.alloc(32, "x")], before)).toBeNull();
+    expect(verifyLiveTicket(appTicket, [Buffer.alloc(32, "x"), secret], before)).not.toBeNull();
+    expect(verifyLiveTicket(appTicket.replace("v1.", "v2."), [secret], before)).toBeNull();
+    expect(verifyLiveTicket(`${appTicket}.extra`, [secret], before)).toBeNull();
   });
 
   it("opens one stream per ticket", () => {
     const spent = new SpentTickets();
-    const ticket = verifyLiveTicket(goTicket, [secret], before)!;
+    const ticket = verifyLiveTicket(appTicket, [secret], before)!;
     expect(spent.spend(ticket, before)).toBe(true);
     expect(spent.spend(ticket, before + 1000)).toBe(false);
   });
@@ -132,35 +132,16 @@ describe("transcribe-diarized speaker turns", () => {
 });
 
 describe("live session keys", () => {
-  const route = (body: unknown, status = 200) =>
-    vi.fn<typeof fetch>(async () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
-
-  it("asks Go for the session's route over the signed channel", async () => {
-    vi.stubEnv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", secret.toString("base64"));
-    const fetcher = route({ provider: "account", credential: { provider: "soniox", apiKey: "soniox-account-key" } });
-    expect(await liveSonioxKey(ticket(), fetcher, { SONIOX_API_KEY: "instance-key" })).toBe("soniox-account-key");
-    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/internal\/voice\/live\/credential$/);
-    expect(JSON.parse(String(init.body))).toEqual({ session_id: "s1", user: "user-1" });
-    expect(new Headers(init.headers).get(signatureHeaders.signature)).toBeTruthy();
-    vi.unstubAllEnvs();
+  it("runs on the device's own Soniox key", () => {
+    setDeviceModels({ version: 1, providers: { soniox: { apiKey: "soniox-device-key" } }, models: {} });
+    expect(liveSonioxKey(ticket())).toBe("soniox-device-key");
+    setDeviceModels({});
   });
 
-  it("uses the instance key for an instance route, and asks for a key with neither", async () => {
-    vi.stubEnv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", secret.toString("base64"));
-    expect(await liveSonioxKey(ticket(), route({ provider: "instance" }), { SONIOX_API_KEY: "instance-key" })).toBe("instance-key");
-    await expect(liveSonioxKey(ticket(), route({ provider: "instance" }), {})).rejects.toThrow("model_key_needed");
-    // An account key for another provider is never swapped for the instance's.
-    await expect(liveSonioxKey(ticket(), route({ provider: "account", credential: { provider: "openai", apiKey: "k" } }), { SONIOX_API_KEY: "instance-key" })).rejects.toThrow("model_key_needed");
-    vi.unstubAllEnvs();
-  });
-
-  it("refuses without repeating what Go sent", async () => {
-    vi.stubEnv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", secret.toString("base64"));
-    const leaked = "sk-echoed-secret";
-    await expect(liveSonioxKey(ticket(), route({ error: leaked }, 500), {})).rejects.toThrow(/^live_route_unavailable: 500$/);
-    const malformed = await liveSonioxKey(ticket(), route({ provider: "account", credential: { apiKey: leaked } }), {}).catch((e: Error) => e);
-    expect((malformed as Error).message).toBe("invalid_model_route");
-    vi.unstubAllEnvs();
+  it("asks for a key when the device has none, and refuses other providers", () => {
+    setDeviceModels({ version: 1, providers: { openai: { apiKey: "k" } }, models: {} });
+    expect(() => liveSonioxKey(ticket())).toThrow("model_key_needed");
+    expect(() => liveSonioxKey({ ...ticket(), model: "openai/gpt-realtime" })).toThrow("model_unsupported");
+    setDeviceModels({});
   });
 });

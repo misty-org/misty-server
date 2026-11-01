@@ -22,7 +22,7 @@ export async function closingAnswer(identity: RuntimeIdentity, modelId: string, 
     await report(identity, { node_id: node, state: "running", phase: "answering", progress: 95, output: {} });
     const transcript = renderTranscript(messages, 120_000);
     const result = await generateText({
-      model: new RunModel(modelId, identity),
+      model: new RunModel(modelId),
       system: CLOSING_SYSTEM,
       messages: [{ role: "user", content: `Request:\n${request.slice(0, 12_000)}\n\nWhy the work stopped: ${reason.slice(0, 500)}\n\nTranscript:\n${transcript}\n\nWrite the final answer now.` }],
       reasoning: "low",

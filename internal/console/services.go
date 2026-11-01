@@ -43,12 +43,21 @@ type composeRunner interface {
 	Run(ctx context.Context, action, service string) error
 }
 
-// dockerCompose drives the development stack exactly as the CLI does:
-// compose.dev.yml, with Compose's own .env loading disabled.
-type dockerCompose struct{ dir string }
+// dockerCompose drives the stack exactly as the CLI does: its compose file
+// (compose.dev.yml in development, compose.yml otherwise), with
+// Compose's own .env loading disabled.
+type dockerCompose struct{ dir, file string }
+
+// composeFileFor is the compose file the stack of this environment uses.
+func composeFileFor(cfg Config) string {
+	if cfg.Development() {
+		return "compose.dev.yml"
+	}
+	return "compose.yml"
+}
 
 func (d dockerCompose) command(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "docker", append([]string{"compose", "--file", "compose.dev.yml"}, args...)...)
+	cmd := exec.CommandContext(ctx, "docker", append([]string{"compose", "--file", d.file}, args...)...)
 	cmd.Dir = d.dir
 	cmd.Env = append(slices.DeleteFunc(os.Environ(), func(kv string) bool {
 		return strings.HasPrefix(kv, "COMPOSE_ENV_FILES=")
@@ -178,6 +187,8 @@ func (s *Server) serviceAction(w http.ResponseWriter, r *http.Request) {
 }
 
 type logsView struct {
+	// Base is the page the panel belongs to: /services or /logs.
+	Base    string
 	Service string
 	Lines   []string
 	Follow  bool
@@ -190,7 +201,11 @@ func (s *Server) serviceLogs(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	view := logsView{Service: service, Follow: r.URL.Query().Get("follow") != "0"}
+	base := "/services"
+	if strings.HasPrefix(r.URL.Path, "/logs/") {
+		base = "/logs"
+	}
+	view := logsView{Base: base, Service: service, Follow: r.URL.Query().Get("follow") != "0"}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	out, err := s.compose.Logs(ctx, service, 200)

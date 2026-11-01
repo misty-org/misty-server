@@ -1,4 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { setDeviceModels } from "../src/device-models.js";
+
+// Runs think on the device's agent model.
+setDeviceModels({ version: 1, providers: {}, models: { agent: "fixture/model" } });
 
 type Message = { role: string; content: unknown };
 type FinishTool = { execute: (input: unknown, options: { toolCallId: string; messages: Message[] }) => Promise<unknown> };

@@ -27,39 +27,6 @@ func TestIsLocalhostHostname(t *testing.T) {
 	}
 }
 
-func TestPasswordResetURLsFromEnv(t *testing.T) {
-	t.Setenv("PASSWORD_RESET_URL", "https://app.example.com/reset")
-	t.Setenv("PASSWORD_RESET_START_URL", "https://api.example.com/auth/reset/start")
-
-	redirectURL, err := PasswordResetRedirectURLFromEnv()
-	if err != nil {
-		t.Fatalf("passwordResetRedirectURLFromEnv() error = %v", err)
-	}
-	if redirectURL != "https://app.example.com/reset" {
-		t.Fatalf("redirect URL = %q, want %q", redirectURL, "https://app.example.com/reset")
-	}
-
-	startURL, err := PasswordResetStartURLFromEnv()
-	if err != nil {
-		t.Fatalf("passwordResetStartURLFromEnv() error = %v", err)
-	}
-	if startURL != "https://api.example.com/auth/reset/start" {
-		t.Fatalf("start URL = %q, want %q", startURL, "https://api.example.com/auth/reset/start")
-	}
-}
-
-func TestPasswordResetURLsRejectNonLocalhostHTTP(t *testing.T) {
-	t.Setenv("PASSWORD_RESET_URL", "http://example.com/reset")
-	if _, err := PasswordResetRedirectURLFromEnv(); err == nil {
-		t.Fatal("passwordResetRedirectURLFromEnv() succeeded for non-localhost http URL")
-	}
-
-	t.Setenv("PASSWORD_RESET_START_URL", "http://example.com/auth/reset/start")
-	if _, err := PasswordResetStartURLFromEnv(); err == nil {
-		t.Fatal("passwordResetStartURLFromEnv() succeeded for non-localhost http URL")
-	}
-}
-
 func TestStripeWebhookIsNotMounted(t *testing.T) {
 	configureJournalCollabForTest(t)
 	server, err := CreateServer()
@@ -81,17 +48,12 @@ func TestStripeWebhookIsNotMounted(t *testing.T) {
 
 func TestCreateServerAndMountHandlers(t *testing.T) {
 	configureJournalCollabForTest(t)
-	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
-	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
-	t.Setenv("MAILJET_API_KEY", "")
-	t.Setenv("MAILJET_SECRET_KEY", "")
-	t.Setenv("MAILJET_FROM_EMAIL", "")
 
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
-	if server.Router == nil || server.Database == nil || server.EmailSender == nil {
+	if server.Router == nil || server.Database == nil {
 		t.Fatalf("server not fully initialized: %#v", server)
 	}
 
@@ -110,74 +72,80 @@ func TestCreateServerAndMountHandlers(t *testing.T) {
 }
 
 func TestCreateServerRequiresProductionLibraryStorage(t *testing.T) {
-	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
-	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	for key, value := range productionCoreValues() {
 		t.Setenv(key, value)
 	}
-	for _, key := range []string{"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY", "MISTY_S3_ENDPOINT", "MISTY_S3_BUCKET", "MISTY_S3_ACCESS_KEY_ID", "MISTY_S3_SECRET_ACCESS_KEY", "MISTY_LIBRARY_BACKEND", "MISTY_LIBRARY_FILESYSTEM_DIR", "MISTY_LIBRARY_LOCAL_DIR"} {
+	for _, key := range []string{"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY"} {
 		t.Setenv(key, "")
 	}
 
-	if _, err := CreateServer(); err == nil || !strings.Contains(err.Error(), "MISTY_LIBRARY_FILESYSTEM_DIR") {
+	if _, err := CreateServer(); err == nil || !strings.Contains(err.Error(), "R2_ENDPOINT") {
 		t.Fatalf("CreateServer() error = %v, want missing production Library storage rejection", err)
 	}
+	if _, err := LibraryStoreFromEnv(); err == nil {
+		t.Fatal("production opened a Library store without R2")
+	}
 }
 
+// productionCoreValues is a complete production configuration.
 func productionCoreValues() map[string]string {
-	return map[string]string{
-		"DB_HOST":                   "database.internal",
-		"DB_USER":                   "misty",
-		"DB_PASSWORD":               "password",
-		"DB_NAME":                   "misty",
-		"MISTY_PUBLIC_API_URL":      "https://api.example.com/api",
-		"SPACE_LINK_ENCRYPTION_KEY": "01234567890123456789012345678901",
-		"PORT":                      "8080",
+	values := map[string]string{
+		"DB_HOST":              "database.internal",
+		"DB_USER":              "misty",
+		"DB_PASSWORD":          "password",
+		"DB_NAME":              "misty",
+		"MISTY_PUBLIC_API_URL": "https://api.example.com/api",
+		"R2_ENDPOINT":          "https://account.r2.cloudflarestorage.com",
+		"R2_BUCKET":            "misty-production",
+		"PORT":                 "8080",
 	}
+	for _, name := range []string{
+		"SPACE_LINK_ENCRYPTION_KEY", "MISTY_AUTH_SIGNING_KEY", "MISTY_AGENT_RUNTIME_CONTROL_SECRET",
+		"MISTY_DEVICE_TICKET_PRIVATE_KEY", "MISTY_DEVICE_PAIRING_PEPPER", "R2_ACCESS_KEY", "R2_SECRET_KEY",
+		"PARTYKIT_HOST", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY", "JOURNAL_COLLAB_CONTROL_SECRET",
+		"JOURNAL_COLLAB_PROJECTION_SECRET", "JOURNAL_COLLAB_ROOM_SALT", "MISTY_WEB_FETCH_URL",
+		"MISTY_WEB_FETCH_SECRET", "MISTY_COMPOSIO_API_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+	} {
+		values[name] = "configured"
+	}
+	return values
 }
 
-func TestValidateProductionEnvironmentAcceptsFilesystemLibrary(t *testing.T) {
+func TestValidateProductionEnvironmentRequiresEveryIntegration(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	for key, value := range productionCoreValues() {
 		t.Setenv(key, value)
 	}
-	for _, key := range []string{"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY", "MISTY_S3_ENDPOINT", "MISTY_LIBRARY_BACKEND"} {
-		t.Setenv(key, "")
-	}
-	t.Setenv("MISTY_LIBRARY_FILESYSTEM_DIR", t.TempDir())
 	if err := ValidateProductionEnvironment(); err != nil {
-		t.Fatalf("self-hosted production with a Library directory = %v", err)
+		t.Fatalf("a complete production configuration = %v", err)
 	}
-	store, err := LibraryStoreFromEnv()
-	if err != nil || store == nil {
-		t.Fatalf("filesystem Library store in production = %v", err)
+	for _, name := range []string{"R2_ACCESS_KEY", "PARTYKIT_HOST", "MISTY_COMPOSIO_API_KEY", "GOOGLE_CLIENT_ID", "MISTY_WEB_FETCH_URL"} {
+		t.Setenv(name, "")
+		if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), name) {
+			t.Fatalf("production without %s = %v", name, err)
+		}
+		t.Setenv(name, productionCoreValues()[name])
 	}
 }
 
-func TestValidateProductionEnvironmentRequiresEveryS3Key(t *testing.T) {
+func TestProductionRefusesServerModelKeys(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	for key, value := range productionCoreValues() {
 		t.Setenv(key, value)
 	}
-	t.Setenv("MISTY_LIBRARY_FILESYSTEM_DIR", "")
-	t.Setenv("MISTY_LIBRARY_BACKEND", "s3")
-	t.Setenv("R2_ENDPOINT", "https://account.r2.cloudflarestorage.com")
-	t.Setenv("R2_BUCKET", "misty-production")
-	t.Setenv("R2_ACCESS_KEY", "")
-	t.Setenv("R2_SECRET_KEY", "secret")
-	if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), "R2_ACCESS_KEY") {
-		t.Fatalf("S3 storage without its access key = %v", err)
+	for _, name := range []string{"OPENAI_API_KEY", "AI_GATEWAY_API_KEY", "ELEVENLABS_API_KEY", "MISTY_AGENT_MODEL"} {
+		t.Setenv(name, "configured")
+		if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), name) {
+			t.Fatalf("production with %s = %v", name, err)
+		}
+		t.Setenv(name, "")
 	}
 }
 
 func TestValidateProductionEnvironmentRequiresCoreConfiguration(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	for _, key := range []string{
-		"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY",
-		"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME",
-		"MISTY_PUBLIC_API_URL", "SPACE_LINK_ENCRYPTION_KEY",
-	} {
+	for key := range productionCoreValues() {
 		t.Setenv(key, "")
 	}
 
@@ -186,26 +154,13 @@ func TestValidateProductionEnvironmentRequiresCoreConfiguration(t *testing.T) {
 	}
 }
 
-func TestValidateProductionEnvironmentAcceptsCoreConfiguration(t *testing.T) {
+func TestValidateProductionEnvironmentRequiresHTTPS(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	values := map[string]string{
-		"R2_ENDPOINT":               "https://account.r2.cloudflarestorage.com",
-		"R2_BUCKET":                 "misty-production",
-		"R2_ACCESS_KEY":             "access",
-		"R2_SECRET_KEY":             "secret",
-		"DB_HOST":                   "database.internal",
-		"DB_USER":                   "misty",
-		"DB_PASSWORD":               "password",
-		"DB_NAME":                   "misty",
-		"MISTY_PUBLIC_API_URL":      "https://api.example.com/api",
-		"SPACE_LINK_ENCRYPTION_KEY": "01234567890123456789012345678901",
-		"PORT": "8080",
-	}
-	for key, value := range values {
+	for key, value := range productionCoreValues() {
 		t.Setenv(key, value)
 	}
-
-	if err := ValidateProductionEnvironment(); err != nil {
-		t.Fatalf("validateProductionEnvironment() error = %v", err)
+	t.Setenv("MISTY_PUBLIC_API_URL", "http://api.example.com/v1")
+	if err := ValidateProductionEnvironment(); err == nil {
+		t.Fatal("production accepted an http public URL")
 	}
 }

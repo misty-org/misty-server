@@ -104,7 +104,7 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; 
   outline: 2px solid var(--text); outline-offset: 1px;
 }
 .button[disabled], .icon-button[disabled] { opacity: .5; cursor: progress; }
-input[type="search"], input[type="password"] {
+input[type="search"], input[type="password"], input[type="text"] {
   font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border-strong);
   border-radius: 6px; padding: 5px 10px;
 }
@@ -113,6 +113,12 @@ input[type="search"], input[type="password"] {
 .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .inline-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .inline-form input { flex: 1; min-width: 160px; }
+.limits-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+.limits-form > p, .limits-form > .actions { grid-column: 1 / -1; margin: 0; }
+.limit-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.limit-field input { width: 100%; box-sizing: border-box; }
+.sign-in-link { display: flex; gap: 8px; margin: 10px 0 4px; }
+.sign-in-link input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 
 /* Status text: icon plus weight, never color */
 .tag-problem { font-weight: 600; border-color: var(--text); }
@@ -130,7 +136,7 @@ input[type="search"], input[type="password"] {
 .table-head { font-size: 11px; color: var(--faint); padding-top: 4px; }
 .table-row:last-child { border-bottom: none; }
 .services-table .table-head, .services-table .table-row { grid-template-columns: minmax(0, 1.4fr) 120px minmax(0, 1fr) 110px; }
-.accounts-table .table-head, .accounts-table .table-row { grid-template-columns: minmax(0, 1fr) 64px 110px; }
+.customers-table .table-head, .customers-table .table-row { grid-template-columns: minmax(0, 1fr) 64px 130px; }
 .sync-table .table-head, .sync-table .table-row { grid-template-columns: minmax(0, 1.6fr) minmax(0, .9fr) 90px minmax(0, 1fr) minmax(0, 1.3fr); }
 .jobs-table .table-head, .jobs-table .table-row { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.1fr) 150px minmax(0, 1.4fr) 90px; }
 .row-actions { display: flex; justify-content: flex-end; gap: 2px; }

@@ -21,7 +21,12 @@ func (db *Database) AIActionAvailable(ctx context.Context, userID, surfaceID, ac
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT enabled FROM ai_user_settings WHERE user_id=$1),TRUE)`, userID).Scan(&userEnabled); err != nil {
 			return err
 		}
-		if !userEnabled {
+		// A closing account is read-only: no agent starts for it, whoever asks.
+		var closing bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM account_controls WHERE user_id=$1 AND delete_at IS NOT NULL)`, userID).Scan(&closing); err != nil {
+			return err
+		}
+		if !userEnabled || closing {
 			enabled = false
 			rollout = 0
 			return nil

@@ -81,7 +81,7 @@ export async function requirementsLedger(identity: RuntimeIdentity, modelId: str
   try {
     await progress(identity, { node_id: node, state: "running", phase: "planning", progress: 9, output: {} });
     const result = await generateText({
-      model: new RunModel(modelId, identity),
+      model: new RunModel(modelId),
       system: LEDGER_SYSTEM,
       messages: [{ role: "user", content: `Request:\n${request.slice(0, 12_000)}\n\nList its requirements now.` }],
       reasoning: "low",
@@ -112,7 +112,7 @@ export async function reviewAnswer(
   try {
     await progress(identity, { node_id: node, state: "running", phase: "reviewing", progress: 95, output: {} });
     const result = await generateText({
-      model: new RunModel(modelId, identity),
+      model: new RunModel(modelId),
       system: REVIEW_SYSTEM,
       messages: [{ role: "user", content: text }],
       // A short list after a short look: low effort leaves the output to the list.

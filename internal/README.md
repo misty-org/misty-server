@@ -6,7 +6,7 @@ the person brings from their device (`byok`) or on the operator's own keys.
 
 | Location | Responsibility |
 | --- | --- |
-| `accounts` | Registration, profile/settings/avatar persistence, sessions and account RLS scopes. |
+| `accounts` | Registration, profile/settings/avatar persistence, sessions and account RLS scopes. Limits, suspension and setup keys for the operator account API live in `platform/db/account_*.go` and `platform/httpapi/operator_*.go` ([docs/cloud](../../docs/cloud/README.md)). |
 | `spaces` | Membership permissions, feature access and upload policy. |
 | `agent` | Model and tool execution, companion voice, embeddings, transcription and provider calls. |
 | `agenttools` | The Agent Toolbox registry: tool descriptors, schemas, aliases and execution checks. |

@@ -52,7 +52,7 @@ func agentToolCatalogDescriptors() []agenttools.Descriptor {
 	descriptors := buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, delegation: noop, extra: extra, allLayers: true}).Descriptors()
 	descriptors = append(descriptors, spaceAgentToolbox(nil).Descriptors()...)
 	descriptors = append(descriptors, buildAgentToolbox(nil, agentToolboxOptions{memberRequest: true, allLayers: true}).Descriptors()...)
-	connected := append(service.appsToolRegistrations(), service.webSearchToolRegistrations(context.Background(), "")...)
+	connected := service.appsToolRegistrations()
 	connected = append(connected, webFetchWorkerRegistrations()...)
 	connected = append(connected, service.webFetchDeviceRegistration(grants)...)
 	connected = append(connected, service.folderToolRegistrations(grants)...)
@@ -61,7 +61,6 @@ func agentToolCatalogDescriptors() []agenttools.Descriptor {
 	connected = append(connected, service.notebookToolRegistrations(record, body)...)
 	connected = append(connected, service.delegationToolRegistrations(record, body)...)
 	connected = append(connected, service.collaborationToolRegistrations(record, collaborationState{})...)
-	connected = append(connected, service.voiceToolRegistrations()...)
 	for _, registration := range connected {
 		descriptors = append(descriptors, registration.Descriptor)
 	}

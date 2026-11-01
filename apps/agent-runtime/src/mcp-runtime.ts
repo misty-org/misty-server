@@ -17,6 +17,7 @@ export async function requestMCPToolExecution(
   name: string,
   input: unknown,
   deviceHookToken: string,
+  callMeta: Record<string, unknown> = {},
 ): Promise<{
   result?: unknown;
   device_wait?: boolean;
@@ -41,6 +42,7 @@ export async function requestMCPToolExecution(
       _meta: {
         "misty/call_id": callId,
         "misty/device_hook_token": deviceHookToken,
+        ...callMeta,
       },
     });
   } catch (error) {

@@ -28,7 +28,7 @@ const browserRunDescription = "Run a short JavaScript program in your own browse
 	"openTab(url) opens a new tab of yours and waits for it to load; listTabs() lists your tabs; getTab(idOrUrlPart) finds one. On a tab: " +
 	"read({maxChars}) gives {url, title, tree} with a ref on each control; text({maxChars}) gives the page as markdown; find(words) gives [{ref, line}]; " +
 	"goto(url); click(target); type(target, text, {submit: true}) types like a person (search boxes, suggestions); fill(target, text); select(target, value); " +
-	"check(target); hover(target); press(key, target); scroll(\"down\"); scrollTo(text) brings text into view; waitFor({text | textGone | urlIncludes, timeoutMs}); keep() marks a page the person asked to keep open; close() closes a tab you opened and no longer need. " +
+	"check(target); hover(target); press(key, target); scroll(\"down\"); scrollTo(text) brings text into view; waitFor({text | textGone | urlIncludes, timeoutMs}); keep(text) marks a page the person asked to keep open and scrolls text (what you report from it) into view so the evidence is on screen; close() closes a tab you opened and no longer need. " +
 	"openTab, getTab and listTabs are async: await them. A page left open as proof is pictured as it stands at the end, so scrollTo the text that shows what you report first. " +
 	"A target is a ref from read() such as \"e12\", a locator {role: \"button\", name: \"Search\"}, or words such as \"Search button\". " +
 	"note(object) records a finding; log(...) prints. A failed step throws with the real reason: catch it or let the program end there. " +

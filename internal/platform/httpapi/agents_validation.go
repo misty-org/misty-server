@@ -9,9 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/platform/db"
-	platformmetrics "github.com/kannachi323/misty/server/internal/platform/metrics"
 	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
@@ -27,27 +25,17 @@ const (
 	deviceSignedBodyLimit  = 2 << 20
 )
 
-// AgentsService exposes trusted-device identity, jobs and voice for global Ask.
+// AgentsService exposes trusted-device identity and jobs for global Ask.
 type AgentsService struct {
 	database         *db.Database
 	connectedDevices ConnectedDevicesConfig
-	voiceAnalyzer    *agent.SmartLibraryAnalyzer
-	voiceLimiter     *SlidingWindowLimiter
-	voiceMetrics     *platformmetrics.Registry
-	voiceLive        VoiceLiveConfig
 	deviceHub        *deviceHub
 	deviceHubOnce    sync.Once
 	claimWaits       deviceClaimWaits
 }
 
 func NewAgentsService(database *db.Database) *AgentsService {
-	return &AgentsService{database: database, voiceLimiter: NewSlidingWindowLimiter(10, time.Minute)}
-}
-
-func (s *AgentsService) SetVoiceMetrics(metrics *platformmetrics.Registry) { s.voiceMetrics = metrics }
-
-func (s *AgentsService) SetVoiceAnalyzer(analyzer *agent.SmartLibraryAnalyzer) {
-	s.voiceAnalyzer = analyzer
+	return &AgentsService{database: database}
 }
 
 func (s *AgentsService) ClaimWorkflowNodeJob() http.HandlerFunc {

@@ -78,7 +78,7 @@ func TestAgentMemberRequestToolsAndModelAccountPostgres(t *testing.T) {
 	exec(`UPDATE space_runs SET state='running',runtime_run_id='runtime-1' WHERE id=$1`, request.ChildRunID)
 	child, _ := database.SpaceRun(ctx, bob.ID, request.ChildRunID)
 	// The run context freezes Bob's own model routes when the work starts.
-	if _, err := database.FreezeAIModelRoutes(ctx, bob.ID, child.ID, defaultAIRoutes("", ""), nil); err != nil {
+	if _, err := database.FreezeAIModelRoutes(ctx, bob.ID, child.ID, runModelRoutes("", "")); err != nil {
 		t.Fatal(err)
 	}
 	childToolbox, childInvocation, authorize, err := service.resolvePersonalAgentRuntimeToolbox(ctx, child)
@@ -96,9 +96,9 @@ func TestAgentMemberRequestToolsAndModelAccountPostgres(t *testing.T) {
 	if err := service.admitPersonalAgentRuntimeTurn(ctx, child, "model:1", workflow.StepRunning); err != nil {
 		t.Fatal(err)
 	}
-	// Work asked of another member's agent runs on the models of the member who asked.
-	if runModelUser(child) != alice.ID {
-		t.Fatalf("model account = %s; want the member who asked", runModelUser(child))
+	// Work asked of another member's agent is recorded as the asking member's.
+	if asker := firstNonEmpty(child.ModelUserID, child.RequestingMemberID); asker != alice.ID {
+		t.Fatalf("model account = %s; want the member who asked", asker)
 	}
 
 	// Taking the agent out of the Space stops the work at its next tool call.

@@ -93,6 +93,11 @@ func retentionTasks(server *Server) []retentionTask {
 			return int(n), err
 		}},
 	}
+	if server.Spaces != nil {
+		tasks = append(tasks, retentionTask{"deleted-spaces", 25, func(ctx context.Context) (int, error) {
+			return server.Spaces.PurgeDeletedSpaces(ctx, 25)
+		}})
+	}
 	if server.Library != nil {
 		tasks = append(tasks,
 			retentionTask{"renditions", 20, func(ctx context.Context) (int, error) { return server.Library.PurgeExpiredRenditions(ctx, 20) }},

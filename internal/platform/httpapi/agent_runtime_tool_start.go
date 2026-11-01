@@ -9,7 +9,6 @@ import (
 
 	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/config"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/workflow"
 )
@@ -74,16 +73,6 @@ func (s *SpacesService) announcePersonalAgentToolStart(ctx context.Context, run 
 	s.projectLinkedAIInvocationEvent(ctx, run, nodeID, string(workflow.StepRunning), phase, nil)
 }
 
-// toolResultForEvals is the call's raw result, clipped, for the Odysseys eval
-// (server/apps/agent-runtime/evals/odysseys) so its judge can see what the agent
-// read. Only a non-production server with MISTY_AI_TOOL_RESULT_EVENTS=1 sends it.
-func toolResultForEvals(result json.RawMessage) string {
-	if strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_ENVIRONMENT")), "production") || strings.TrimSpace(config.Getenv("MISTY_AI_TOOL_RESULT_EVENTS")) != "1" || len(result) == 0 {
-		return ""
-	}
-	return truncateAgentRuntimeText(string(result), 64_000)
-}
-
 // recordAIInvocationToolActivity adds what a finished call targeted and got
 // back to the reply's timeline. It is best effort, like announcing the start.
 func (s *SpacesService) recordAIInvocationToolActivity(record *db.AIInvocationRecord, call agentRuntimeToolCall, result json.RawMessage) {
@@ -91,10 +80,9 @@ func (s *SpacesService) recordAIInvocationToolActivity(record *db.AIInvocationRe
 		return
 	}
 	activity := toolActivity(call.Arguments, result)
-	raw := toolResultForEvals(result)
-	if activity == nil && raw == "" {
+	if activity == nil {
 		return
 	}
-	event := aiInvocationEvent{Type: "tool.detail", ToolCallID: call.CallID, ToolName: call.Name, Activity: activity, Result: raw}
+	event := aiInvocationEvent{Type: "tool.detail", ToolCallID: call.CallID, ToolName: call.Name, Activity: activity}
 	_ = s.aiInvocations.appendReceipt(record.ID, event, call.RuntimeRunID+":tool:"+call.CallID+":detail")
 }

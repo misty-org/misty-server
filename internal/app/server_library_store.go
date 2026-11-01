@@ -9,76 +9,35 @@ import (
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
-type libraryS3Config struct {
-	endpoint, bucket, region, accessKey, secretKey string
-	forcePathStyle                                 bool
-}
+// libraryR2Names are the R2 settings, all required in production. The setup
+// container provisions the bucket and its credentials (docs/self-hosting.md).
+var libraryR2Names = []string{"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY"}
 
-func libraryS3ConfigFromEnv() libraryS3Config {
-	config := libraryS3Config{
-		endpoint:       firstConfigured("MISTY_S3_ENDPOINT", "R2_ENDPOINT"),
-		bucket:         firstConfigured("MISTY_S3_BUCKET", "R2_BUCKET"),
-		region:         firstConfigured("MISTY_S3_REGION", "R2_REGION"),
-		accessKey:      firstConfigured("MISTY_S3_ACCESS_KEY_ID", "R2_ACCESS_KEY"),
-		secretKey:      firstConfigured("MISTY_S3_SECRET_ACCESS_KEY", "R2_SECRET_KEY"),
-		forcePathStyle: true,
-	}
-	if config.region == "" {
-		config.region = "auto"
-	}
-	if value := strings.TrimSpace(envconfig.Getenv("MISTY_S3_FORCE_PATH_STYLE")); value != "" {
-		config.forcePathStyle = strings.EqualFold(value, "true") || value == "1"
-	}
-	return config
-}
-
-func (config libraryS3Config) empty() bool {
-	return config.endpoint == "" && config.bucket == "" && config.accessKey == "" && config.secretKey == ""
-}
-
-// libraryBackend is "filesystem", "s3", or "" when nothing is configured.
-// MISTY_LIBRARY_BACKEND wins; otherwise a filesystem directory, then S3 keys.
-func libraryBackend() string {
-	backend := strings.ToLower(strings.TrimSpace(envconfig.Getenv("MISTY_LIBRARY_BACKEND")))
-	if backend == "" {
-		if firstConfigured("MISTY_LIBRARY_FILESYSTEM_DIR", "MISTY_LIBRARY_LOCAL_DIR") != "" {
-			backend = "filesystem"
-		} else if !libraryS3ConfigFromEnv().empty() {
-			backend = "s3"
+func libraryR2Configured() bool {
+	for _, name := range libraryR2Names {
+		if strings.TrimSpace(envconfig.Getenv(name)) != "" {
+			return true
 		}
 	}
-	return backend
+	return false
 }
 
-// LibraryStoreFromEnv opens the object store for Library items, attachments
-// and avatars. A self-hosted server can keep them in a directory
-// (MISTY_LIBRARY_FILESYSTEM_DIR), in production too; files then flow through
-// the API instead of signed S3 URLs.
+// LibraryStoreFromEnv opens the R2 bucket for Library items, attachments and
+// avatars. A development server without R2 keeps them in memory.
 func LibraryStoreFromEnv() (api.LibraryObjectStore, error) {
-	config := libraryS3ConfigFromEnv()
-	environment := strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT"))
-	backend := libraryBackend()
-	localRoot := firstConfigured("MISTY_LIBRARY_FILESYSTEM_DIR", "MISTY_LIBRARY_LOCAL_DIR")
-	if backend == "filesystem" {
-		store, err := api.NewLocalLibraryObjectStore(localRoot)
-		if err != nil {
-			return nil, fmt.Errorf("configure local Library store: %w", err)
-		}
-		return store, nil
-	}
-	if backend == "" && !strings.EqualFold(environment, "production") {
+	if !libraryR2Configured() && !productionEnvironment() {
 		return api.NewMemoryLibraryObjectStore(), nil
 	}
-	if backend != "s3" {
-		return nil, fmt.Errorf("MISTY_LIBRARY_BACKEND must be filesystem or s3")
-	}
-	if config.endpoint == "" {
-		return nil, fmt.Errorf("MISTY_S3_ENDPOINT (or R2_ENDPOINT) is required for the Space Library")
+	for _, name := range libraryR2Names {
+		if strings.TrimSpace(envconfig.Getenv(name)) == "" {
+			return nil, fmt.Errorf("%s is required for Library storage", name)
+		}
 	}
 	store, err := api.NewS3LibraryObjectStore(api.S3LibraryObjectStoreConfig{
-		Endpoint: config.endpoint, Region: config.region, Bucket: config.bucket,
-		AccessKeyID: config.accessKey, SecretAccessKey: config.secretKey,
-		ForcePathStyle: config.forcePathStyle, BucketPrivate: true, PermanentObjects: true,
+		Endpoint: strings.TrimSpace(envconfig.Getenv("R2_ENDPOINT")), Region: "auto",
+		Bucket:      strings.TrimSpace(envconfig.Getenv("R2_BUCKET")),
+		AccessKeyID: strings.TrimSpace(envconfig.Getenv("R2_ACCESS_KEY")), SecretAccessKey: strings.TrimSpace(envconfig.Getenv("R2_SECRET_KEY")),
+		ForcePathStyle: true, BucketPrivate: true, PermanentObjects: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure R2 Library store: %w", err)
@@ -88,20 +47,8 @@ func LibraryStoreFromEnv() (api.LibraryObjectStore, error) {
 
 // libraryStorageName names a Library store for /instance.
 func libraryStorageName(store api.LibraryObjectStore) string {
-	switch store.(type) {
-	case *api.S3LibraryObjectStore:
+	if _, ok := store.(*api.S3LibraryObjectStore); ok {
 		return "s3"
-	case *api.LocalLibraryObjectStore:
-		return "filesystem"
 	}
 	return "memory"
-}
-
-func firstConfigured(names ...string) string {
-	for _, name := range names {
-		if value := strings.TrimSpace(envconfig.Getenv(name)); value != "" {
-			return value
-		}
-	}
-	return ""
 }

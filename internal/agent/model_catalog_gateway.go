@@ -6,7 +6,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/modelruntime"
 	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
@@ -40,37 +39,6 @@ func ModelContextWindow(_ context.Context, modelID string) int {
 		}
 	}
 	return DefaultContextWindow
-}
-
-// WellFormedModelID reports whether id is "<provider>/<model>". Any provider
-// is accepted: the runtime decides whether it can run it.
-func WellFormedModelID(id string) bool {
-	id = strings.TrimSpace(id)
-	provider, model, ok := strings.Cut(id, "/")
-	return ok && provider != "" && model != "" && len(id) <= 300 && !strings.ContainsAny(id, " \t\r\n")
-}
-
-// GatewayModelAvailable reports whether a model ID can be asked for. Models
-// are not checked against any catalog: a well-formed ID is accepted.
-func GatewayModelAvailable(_ context.Context, modelID string) bool {
-	return WellFormedModelID(modelID)
-}
-
-// GatewayModelSupportsReasoning reports whether a run may send a reasoning
-// effort with the model. The runtime drops efforts a provider doesn't take.
-func GatewayModelSupportsReasoning(_ context.Context, modelID string) bool {
-	return WellFormedModelID(modelID)
-}
-
-func NewGatewayProviderForModelWithReasoning(models *modelruntime.Client, modelID, reasoningEffort string) (ModelProvider, error) {
-	modelID = strings.TrimSpace(modelID)
-	if !WellFormedModelID(modelID) || len(modelID) > 200 {
-		return nil, errors.New("invalid model")
-	}
-	if !models.Enabled() {
-		return nil, modelruntime.ErrUnavailable
-	}
-	return NewRuntimeProvider(models, modelruntime.Instance(), modelID, modelProviderName(modelID), reasoningEffort), nil
 }
 
 // configuredGatewayModels is the operator's optional model list

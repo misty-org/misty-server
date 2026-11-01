@@ -102,6 +102,8 @@ func applyLaterMigrations(t *testing.T, conn *sql.DB, dir string) {
     CREATE TABLE space_rendition_reservations(user_id text,reserved_bytes bigint,state text);
     CREATE TABLE space_messages(sender_user_id text,content jsonb);
     CREATE TABLE space_notes(creator_user_id text,title_projection text,markdown_projection text,plain_text_projection text,shared_tags jsonb);
+    CREATE TABLE account_controls(user_id text PRIMARY KEY,storage_bytes bigint,devices bigint,searches_per_month bigint,
+      app_actions_per_month bigint,suspended_at timestamptz,delete_at timestamptz);
     `); err != nil {
 		t.Fatal(err)
 	}

@@ -9,6 +9,8 @@ export interface RuntimeIdentity {
   mistyRunId: string;
   runtimeRunId: string;
   controlPlaneURL: string;
+  /** A desktop runtime signs a run's calls with the run's own key (base64), not the shared secret. */
+  runKey?: string;
 }
 
 function normalizedBaseURL(value: string): string {
@@ -38,7 +40,6 @@ export async function controlPlaneRequest<T>(
     | "start-receipt"
     | "activate"
     | "context"
-    | "model-provider"
     | "budget"
     | "steering"
     | "mcp-token"
@@ -58,7 +59,7 @@ export async function controlPlaneRequest<T>(
       "content-type": "application/json",
       [signatureHeaders.timestamp]: timestamp,
       [signatureHeaders.signature]: signRequest(
-        decodeControlSecret(),
+        identity.runKey ? Buffer.from(identity.runKey, "base64") : decodeControlSecret(),
         "POST",
         path,
         timestamp,

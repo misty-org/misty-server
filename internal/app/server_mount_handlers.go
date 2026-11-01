@@ -2,9 +2,7 @@ package app
 
 import (
 	"context"
-	"github.com/kannachi323/misty/server/internal/accounts"
 	"github.com/kannachi323/misty/server/internal/browsersync"
-	"github.com/kannachi323/misty/server/internal/byok"
 	"github.com/kannachi323/misty/server/internal/platform/security"
 	"net/http"
 
@@ -22,15 +20,11 @@ type mountDeps struct {
 	instance       http.HandlerFunc
 	register       http.HandlerFunc
 	login          http.HandlerFunc
+	redeemSetupKey http.HandlerFunc
 	logout         http.HandlerFunc
-	forgotPassword http.HandlerFunc
-	startReset     http.HandlerFunc
-	validateReset  http.HandlerFunc
-	resetPassword  http.HandlerFunc
 	mintHandoff    http.HandlerFunc
 	startHandoff   http.HandlerFunc
 
-	verification *api.AccountVerification
 	googleSignIn *api.GoogleSignInService
 	browserSync  *browsersync.BrowserSyncService
 	ai           *api.AIService
@@ -84,25 +78,25 @@ func (s *Server) mountRequestMiddleware() {
 	s.AbuseGuard = abuseGuard
 	s.Router.Use(abuseGuard.Middleware)
 	s.Router.Use(api.NewAPIRateLimiter().WithAbuseGuard(abuseGuard).Middleware)
+	// A suspended account is refused before any handler runs; its data stays.
+	s.Suspensions = api.NewSuspensionGuard(s.Database)
+	s.Router.Use(s.Suspensions.Middleware)
 	s.Metrics = metrics.New()
 	s.registerDomainGauges(s.Metrics)
 	s.Router.Use(s.Metrics.Middleware)
-	// The account's model keys and choices (X-Misty-Models) go into the
-	// request and an in-memory store; the header is removed before any
-	// handler or log can see it.
-	s.Router.Use(byok.Default.Middleware(func(r *http.Request) string {
-		user, _ := accounts.SessionUserID(r)
-		return user
-	}))
+	// Model keys stay on each device (docs/agents/runtime.md). An older
+	// app's X-Misty-Models header is dropped before any handler or log sees it.
+	s.Router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Header.Del("X-Misty-Models")
+			next.ServeHTTP(w, r)
+		})
+	})
 }
 
 // buildMountDeps constructs the services and handlers in the order the route
 // table has always depended on.
 func (s *Server) buildMountDeps() (*mountDeps, error) {
-	passwordResetService, err := api.NewPasswordResetService(s.Database, s.EmailSender, s.PasswordResetStartURL, s.PasswordResetRedirectURL)
-	if err != nil {
-		return nil, err
-	}
 	authHandoffService, err := api.NewAuthHandoffService(s.Database, s.AuthHandoffStartURL, s.WebsiteURL)
 	if err != nil {
 		return nil, err
@@ -111,7 +105,7 @@ func (s *Server) buildMountDeps() (*mountDeps, error) {
 	if err := s.wireAIServices(deps); err != nil {
 		return nil, err
 	}
-	if err := s.wireAccountHandlers(deps, passwordResetService, authHandoffService); err != nil {
+	if err := s.wireAccountHandlers(deps, authHandoffService); err != nil {
 		return nil, err
 	}
 	s.wireBrowserSync(deps)
@@ -125,14 +119,8 @@ func (s *Server) wireAIServices(deps *mountDeps) error {
 	aiService.SetAgentRuntime(s.AgentRuntime)
 	aiService.AttachSpacesRuntime(s.Spaces)
 	aiService.SetMetrics(s.Metrics)
-	libraryAnalyzer := s.AIAnalyzer
-	aiService.SetEmbeddingAnalyzer(libraryAnalyzer)
 	aiService.SetAttachmentStore(s.LibraryStore)
-	s.Spaces.SetSearchAnalyzer(libraryAnalyzer)
 	agentsService := api.NewAgentsService(s.Database)
-	agentsService.SetVoiceAnalyzer(libraryAnalyzer)
-	agentsService.SetVoiceMetrics(s.Metrics)
-	agentsService.SetVoiceLive(api.VoiceLiveConfigFromEnv(s.AgentRuntime))
 	if serverConnectedDevicesConfigured() {
 		connectedDevicesConfig, configErr := api.ConnectedDevicesConfigFromEnv()
 		if configErr != nil {
@@ -145,36 +133,27 @@ func (s *Server) wireAIServices(deps *mountDeps) error {
 	return nil
 }
 
-// wireAccountHandlers builds the verification, sign-in, password reset, and
-// handoff handlers, plus the health and instance handlers.
-func (s *Server) wireAccountHandlers(deps *mountDeps, passwordResetService *api.PasswordResetService, authHandoffService *api.AuthHandoffService) error {
-	verification := api.NewAccountVerification(s.Database, s.EmailSender)
-	registerHandler := api.RegisterWithVerification(s.Database, s.Telemetry, verification)
+// wireAccountHandlers builds the sign-in and handoff handlers, plus the health
+// and instance handlers. The server sends no email, so there is no email
+// verification or reset by email: a setup key resets a password.
+func (s *Server) wireAccountHandlers(deps *mountDeps, authHandoffService *api.AuthHandoffService) error {
+	registerHandler := api.Register(s.Database)
 	loginHandler := api.Login(s.Database)
 	googleSignIn, err := api.NewGoogleSignInService(s.Database)
 	if err != nil {
 		return err
 	}
-	googleSignIn.SetVerification(verification)
 	logoutHandler := api.Logout(s.Database)
-	forgotPasswordHandler := passwordResetService.Forgot()
-	startResetHandler := passwordResetService.Start()
-	validateResetTokenHandler := passwordResetService.Validate()
-	resetPasswordHandler := passwordResetService.Reset()
 	mintHandoffHandler := authHandoffService.Mint()
 	startHandoffHandler := authHandoffService.Start()
 	healthHandler := s.HealthMonitor.Handler()
 	instanceHandler := api.Instance(s.Database, libraryStorageName(s.LibraryStore))
 
-	deps.verification = verification
 	deps.googleSignIn = googleSignIn
 	deps.register = registerHandler
 	deps.login = loginHandler
+	deps.redeemSetupKey = api.RedeemSetupKey(s.Database)
 	deps.logout = logoutHandler
-	deps.forgotPassword = forgotPasswordHandler
-	deps.startReset = startResetHandler
-	deps.validateReset = validateResetTokenHandler
-	deps.resetPassword = resetPasswordHandler
 	deps.mintHandoff = mintHandoffHandler
 	deps.startHandoff = startHandoffHandler
 	deps.health = healthHandler
@@ -188,11 +167,6 @@ func (s *Server) wireBrowserSync(deps *mountDeps) {
 	browserSync := browsersync.NewBrowserSyncService(s.Database)
 	s.BrowserSync = browserSync
 	deps.browserSync = browserSync
-	if s.AIAgent != nil {
-		browserSync.SetRestoreCompleter(func(ctx context.Context, userID, prompt string) (string, error) {
-			return s.AIAgent.CompleteContext(ctx, userID, prompt)
-		})
-	}
 }
 
 func (s *Server) mountLibraryRoutes(prefix string, library *api.SpaceLibraryService) {

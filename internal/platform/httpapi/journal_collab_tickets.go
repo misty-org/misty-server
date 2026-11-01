@@ -19,7 +19,7 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 	lifetime time.Duration,
 ) (JournalTicket, error) {
 	if !c.Enabled {
-		return JournalTicket{}, ErrCollaborationOff
+		return JournalTicket{}, ErrCollaborationUnconfigured
 	}
 	if userID == "" || spaceID == "" || resource.ID == "" ||
 		resource.Type == "" || resource.Party == "" || role == "" || aclVersion < 1 {

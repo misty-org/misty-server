@@ -148,6 +148,12 @@ func (db *Database) CreateAgentMemberRequest(ctx context.Context, input AgentMem
 		if err != nil {
 			return err
 		}
+		// Neither a closing account nor an agent it owns takes new work.
+		for _, user := range []string{input.RequesterUserID, target.ownerUserID} {
+			if err := RequireAccountWritableTx(ctx, tx, user); err != nil {
+				return err
+			}
+		}
 		if err := memberRequestLimitsTx(ctx, tx, input); err != nil {
 			return err
 		}

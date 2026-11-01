@@ -1,0 +1,26 @@
+package console
+
+templ backupsPage(v backupsView) {
+	@pageHeader("Backups", v.Dir)
+	if v.Err != "" {
+		@problem(v.Err)
+	}
+	<div class="metrics">
+		@metric("Local backups", itoa(len(v.Backups)))
+		@metric("Newest", v.newest())
+	</div>
+	@note("This lists database dumps on this machine only. Copies kept elsewhere, such as an R2 bucket, aren't visible here, and a backup counts only once it has been restored somewhere.")
+	<div class="table">
+		<div class="table-head"><span>File</span><span>Size</span><span>Made</span></div>
+		for _, b := range v.Backups {
+			<div class="table-row">
+				<span class="truncate"><code>{ b.Name }</code></span>
+				<span class="muted">{ bytesLabel(b.Size) }</span>
+				<span>{ ago(b.Modified) }</span>
+			</div>
+		}
+		if len(v.Backups) == 0 && v.Err == "" {
+			<div class="table-row"><span class="muted">No local backups.</span></div>
+		}
+	</div>
+}

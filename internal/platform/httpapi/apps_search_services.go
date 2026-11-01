@@ -8,8 +8,10 @@ import (
 )
 
 // Search apps are paid web search services the user would have to sign up
-// for. Misty has its own web search, so an agent asks to connect one only when
-// the user names it.
+// for. Misty's own web search runs on the person's device when they keep a
+// search key there (docs/agents/runtime.md), so an agent asks to connect one
+// only when the user names it. The server can't tell whether this run's device
+// has web search, so the advice below holds either way.
 var appsSearchServices = map[string]*regexp.Regexp{
 	"exa":          regexp.MustCompile(`(?i)\bexa\b`),
 	"tavily":       regexp.MustCompile(`(?i)\btavily\b`),
@@ -22,17 +24,14 @@ var appsSearchServices = map[string]*regexp.Regexp{
 type searchAppPolicy struct {
 	// offer says whether Misty may offer them unprompted (it does not).
 	offer bool
-	// webSearch reports whether this run has Misty's web search.
-	webSearch bool
 	// request is what the user asked for in this run.
 	request string
 }
 
 func (s *SpacesService) searchAppPolicy(_ context.Context, invocation agenttools.Invocation) searchAppPolicy {
 	return searchAppPolicy{
-		offer:     offerSearchAppsByDefault,
-		webSearch: webSearchKey() != "" && webSearchOnByDefault,
-		request:   invocation.OriginalInput,
+		offer:   offerSearchAppsByDefault,
+		request: invocation.OriginalInput,
 	}
 }
 
@@ -54,21 +53,17 @@ func (p searchAppPolicy) next(app string) string {
 	if _, search := appsSearchServices[app]; !search || p.named(app) {
 		return connect
 	}
-	instead := "Continue without web search, or ask the user how to proceed."
-	if p.webSearch {
-		instead = "Use web_search instead."
-	}
 	if p.offer {
-		return "This is a paid search app the user would sign up for. " + instead + " Offer it only if that cannot find what the task needs; then " + connect
+		return "This is a paid search app the user would sign up for. " + searchAppInstead + " Offer it only if that cannot find what the task needs; then " + connect
 	}
-	return "Do not connect this paid search app unless the user names it. " + instead
+	return "Do not connect this paid search app unless the user names it. " + searchAppInstead
 }
 
 // refusal explains a blocked Connect card for a search app.
 func (p searchAppPolicy) refusal(name string) string {
-	message := "The user has not asked for " + name + ", a paid search app. "
-	if p.webSearch {
-		return message + "Use web_search instead."
-	}
-	return message + "Continue without web search, or ask the user how to proceed."
+	return "The user has not asked for " + name + ", a paid search app. " + searchAppInstead
 }
+
+// searchAppInstead is what to do without a search app. It names no tool: a run's
+// prompt says to research with web_search only when its device has it.
+const searchAppInstead = "Research with the web tools you have instead, or ask the user how to proceed."

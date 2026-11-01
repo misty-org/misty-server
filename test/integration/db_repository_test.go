@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -47,8 +48,9 @@ func TestSessionCRUDAndExpiry(t *testing.T) {
 	}
 }
 
-func TestPasswordResetTokenPersistenceAndReset(t *testing.T) {
+func TestPasswordResetGrantPersistenceAndReset(t *testing.T) {
 	database := openIntegrationDatabase(t)
+	ctx := context.Background()
 
 	user, err := database.CreateUser("reset-repo@example.com", "old-password")
 	if err != nil {
@@ -56,17 +58,14 @@ func TestPasswordResetTokenPersistenceAndReset(t *testing.T) {
 	}
 
 	tokenHash := security.HashToken("reset-token")
-	if err := database.UpsertPasswordResetToken(user.ID, tokenHash, time.Now().Add(time.Hour)); err != nil {
-		t.Fatalf("UpsertPasswordResetToken() error = %v", err)
+	if err := database.GrantPasswordReset(ctx, user.ID, tokenHash, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("GrantPasswordReset() error = %v", err)
 	}
-	if err := database.ValidatePasswordResetToken(tokenHash, time.Now()); err != nil {
-		t.Fatalf("ValidatePasswordResetToken() error = %v", err)
+	if err := database.ResetPassword(ctx, user.ID, tokenHash, "new-password", "", false, time.Now()); err != nil {
+		t.Fatalf("ResetPassword() error = %v", err)
 	}
-	if err := database.ResetPasswordWithToken(tokenHash, "new-password", time.Now()); err != nil {
-		t.Fatalf("ResetPasswordWithToken() error = %v", err)
-	}
-	if err := database.ValidatePasswordResetToken(tokenHash, time.Now()); err != db.ErrPasswordResetTokenInvalid {
-		t.Fatalf("ValidatePasswordResetToken() after reset error = %v, want %v", err, db.ErrPasswordResetTokenInvalid)
+	if err := database.ResetPassword(ctx, user.ID, tokenHash, "new-password", "", false, time.Now()); err != db.ErrPasswordResetTokenInvalid {
+		t.Fatalf("ResetPassword() after reset error = %v, want %v", err, db.ErrPasswordResetTokenInvalid)
 	}
 
 	_, hash, err := database.GetUserByEmail("reset-repo@example.com")

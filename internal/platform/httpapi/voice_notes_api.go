@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/modelruntime"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
@@ -30,14 +29,12 @@ func (s *SpacesService) VoiceTranscriptNotes() http.HandlerFunc {
 			Template  string `json:"template"`
 			NoteID    string `json:"note_id"`
 			Language  string `json:"language"`
+			// A desktop writes the Note on its own model and sends it (docs/agents/runtime.md).
+			Result *voiceNotesResult `json:"result"`
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
 		if decodeAIJSON(w, r, &body) != nil || voiceNoteModes[body.Mode] == "" || len(body.UserNotes) > 40_000 || len(body.Template) > 8_000 || len(body.NoteID) > 200 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_voice_notes"})
-			return
-		}
-		if s.models == nil || !s.models.Enabled() {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "voice_notes_unavailable", "message": "Notes from speech aren't available right now."})
 			return
 		}
 		transcript, err := s.database.VoiceTranscript(r.Context(), user, chi.URLParam(r, "transcriptID"))
@@ -45,7 +42,12 @@ func (s *SpacesService) VoiceTranscriptNotes() http.HandlerFunc {
 			writeVoiceError(w, err)
 			return
 		}
-		written, err := s.writeVoiceNote(r.Context(), user, transcript, body.Mode, body.UserNotes, body.Template, body.NoteID, body.Language)
+		if body.Result == nil {
+			// First the transcript the desktop writes from, then the Note it wrote.
+			writeJSON(w, http.StatusOK, map[string]any{"on_device": true, "input": voiceNotesInput(transcript, body.Mode, body.UserNotes, body.Template, body.Language)})
+			return
+		}
+		written, err := s.writeVoiceNote(r.Context(), user, transcript, body.Mode, body.NoteID, *body.Result)
 		if err != nil {
 			writeVoiceError(w, err)
 			return
@@ -55,21 +57,18 @@ func (s *SpacesService) VoiceTranscriptNotes() http.HandlerFunc {
 }
 
 type voiceNoteWritten struct {
-	NoteID      string                    `json:"note_id"`
-	SpaceID     string                    `json:"space_id,omitempty"`
-	Title       string                    `json:"title"`
-	Markdown    string                    `json:"markdown"`
-	ActionItems []modelruntime.ActionItem `json:"action_items"`
-	Chapters    []modelruntime.Chapter    `json:"chapters"`
+	NoteID      string            `json:"note_id"`
+	SpaceID     string            `json:"space_id,omitempty"`
+	Title       string            `json:"title"`
+	Markdown    string            `json:"markdown"`
+	ActionItems []voiceActionItem `json:"action_items"`
+	Chapters    []voiceChapter    `json:"chapters"`
 }
 
-// writeVoiceNote generates the Note and saves it: over noteID when given,
+// writeVoiceNote saves the Note the desktop wrote: over noteID when given,
 // otherwise as a new Note in the person's own Space.
-func (s *SpacesService) writeVoiceNote(ctx context.Context, user string, transcript db.VoiceTranscript, mode, userNotes, template, noteID, language string) (voiceNoteWritten, error) {
-	result, err := s.voiceNotes(ctx, user, transcript, mode, userNotes, template, language)
-	if err != nil {
-		return voiceNoteWritten{}, err
-	}
+func (s *SpacesService) writeVoiceNote(ctx context.Context, user string, transcript db.VoiceTranscript, mode, noteID string, result voiceNotesResult) (voiceNoteWritten, error) {
+	var err error
 	markdown := voiceNoteMarkdown(transcript, mode, result)
 	title := firstNonEmpty(strings.TrimSpace(result.Title), transcript.Title, voiceNoteModes[mode])
 	spaceID := ""
@@ -89,31 +88,25 @@ func (s *SpacesService) writeVoiceNote(ctx context.Context, user string, transcr
 	return voiceNoteWritten{NoteID: noteID, SpaceID: spaceID, Title: title, Markdown: result.Markdown, ActionItems: result.ActionItems, Chapters: result.Chapters}, nil
 }
 
-func (s *SpacesService) voiceNotes(ctx context.Context, user string, transcript db.VoiceTranscript, mode, userNotes, template, language string) (modelruntime.VoiceNotesResult, error) {
-	turns := make([]modelruntime.Turn, 0, len(transcript.Turns))
-	size := len(userNotes) + len(template)
+// voiceNotesInput is what a Note is written from: the transcript with speaker names.
+func voiceNotesInput(transcript db.VoiceTranscript, mode, userNotes, template, language string) voiceNotesRequest {
+	turns := make([]voiceTurnResult, 0, len(transcript.Turns))
 	for _, turn := range transcript.Turns {
 		speaker := transcript.Speakers[turn.Speaker]
 		if speaker == "" {
 			speaker = turn.Speaker
 		}
-		turns = append(turns, modelruntime.Turn{Speaker: speaker, Start: turn.Start, End: turn.End, Text: turn.Text})
-		size += len(turn.Text) + len(speaker) + 16
+		turns = append(turns, voiceTurnResult{Speaker: speaker, Start: turn.Start, End: turn.End, Text: turn.Text})
 	}
-	route, model, err := roleRoute(ctx, s.database, user, "voice-notes")
-	if err != nil {
-		return modelruntime.VoiceNotesResult{}, err
+	return voiceNotesRequest{
+		Mode: mode, Title: transcript.Title, Turns: turns, UserNotes: userNotes, Template: template,
+		Language: firstNonEmpty(language, transcript.Language), MaxOutputTokens: voiceNotesMaxOutput,
 	}
-	result, err := s.models.VoiceNotes(ctx, modelruntime.VoiceNotesRequest{
-		Route: route, Model: model, Mode: mode, Title: transcript.Title, Turns: turns,
-		UserNotes: userNotes, Template: template, Language: firstNonEmpty(language, transcript.Language), MaxOutputTokens: voiceNotesMaxOutput,
-	})
-	return result, err
 }
 
 // voiceNoteMarkdown is the Note body: the generated part, then the
 // transcript with speaker names, so the source is always one scroll away.
-func voiceNoteMarkdown(transcript db.VoiceTranscript, mode string, result modelruntime.VoiceNotesResult) string {
+func voiceNoteMarkdown(transcript db.VoiceTranscript, mode string, result voiceNotesResult) string {
 	var b strings.Builder
 	b.WriteString(strings.TrimSpace(result.Markdown))
 	if mode == "actions" && len(result.ActionItems) > 0 && !strings.Contains(result.Markdown, "- [ ]") {

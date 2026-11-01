@@ -48,6 +48,9 @@ func (db *Database) CreateCreatorAgentRun(ctx context.Context, ownerUserID, spac
 	contextBindings := mustJSON(input.ContextReferences)
 	out := &SpaceRun{ID: "run_" + uuid.NewString()}
 	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := RequireAccountWritableTx(ctx, tx, ownerUserID); err != nil {
+			return err
+		}
 		if err := checkCreatorContextNote(ctx, tx, ownerUserID, input.ContextNoteID); err != nil {
 			return err
 		}

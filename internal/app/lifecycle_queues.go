@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
+
+	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
 // Scheduled runs and lifecycle steps wake on committed hints and their earliest
@@ -30,13 +33,17 @@ func runLifecycleQueues(ctx context.Context, server *Server) {
 		}
 	}
 	if server.Spaces != nil {
+		closings := api.NewAccountClosings(server.Database)
 		queues["account-deletion"] = func(ctx context.Context) (int, error) {
+			// A failing closed-account step must not hold up a person's own
+			// deletion, so every step runs.
+			closed, closeErr := closings.Process(ctx, 25)
 			processed, err := server.Spaces.ProcessAccountDeletions(ctx, 10)
 			if err != nil {
-				return processed, err
+				return closed + processed, errors.Join(closeErr, err)
 			}
 			purged, err := server.Spaces.PurgeDueAccountDeletions(ctx, 25)
-			return processed + purged, err
+			return closed + processed + purged, errors.Join(closeErr, err)
 		}
 	}
 	if server.Library != nil {

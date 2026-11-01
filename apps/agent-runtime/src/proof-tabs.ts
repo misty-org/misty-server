@@ -35,7 +35,7 @@ export function proofTabsRefusal(request: string, messages: ModelMessage[], tabL
   // A run with programs checks its own tabs with one (the person's tab list is not its to use),
   // and brings what it reports into view: each kept tab is pictured as it stands at the end.
   const how = program
-    ? `call ${program} with \`return listTabs()\` (every tab's address and title) and, for each page the request names, \`await t.scrollTo("the text that shows what you report")\` so the evidence is on screen, then \`await t.keep()\` so the tab stays awake and is pictured when you finish (a tab you do not keep() sleeps)`
+    ? `call ${program} with \`return listTabs()\` (every tab's address and title) and, for each page the request names, \`await t.keep("the text that shows what you report")\`, which brings that text on screen and keeps the tab awake so it is pictured when you finish (a tab you do not keep() sleeps)`
     : `call ${tabList}`;
   return (
     `The person asked for pages to be left open, and those tabs are part of the answer. Before finishing, ${how}, ` +

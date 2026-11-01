@@ -12,7 +12,6 @@ import { classifyToolOutcome, incompleteToolResultText, stoppedAtModelTurnLimit,
 describe("runtime error classification", () => {
   it("names rate-limit refusals so a run pauses instead of failing generically", () => {
     expect(classifyRuntimeError(new Error("usage_limit_reached")).code).toBe("usage_limit_reached");
-    expect(classifyRuntimeError(new Error("email_unverified")).message).toMatch(/Confirm your email/);
     // A refusal is not transient: retrying the step at once cannot succeed.
     expect(new ControlPlaneError(402, "limit", "usage_limit_reached").transient).toBe(false);
     expect(new ControlPlaneError(503, "down", "usage_limit_reached").transient).toBe(false);

@@ -27,8 +27,6 @@ func (s *Server) mountAccountRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.Post(prefix+"/me/coding/{invocationID}/lease", spaces.CodingLease())
 	s.Router.Post(prefix+"/me/coding/{invocationID}/events", spaces.CodingEvents())
 	s.Router.Post(prefix+"/me/coding/{invocationID}/approvals", spaces.CodingApproval())
-	s.Router.Post(prefix+"/me/screen-model/{jobID}", spaces.ScreenModel())
-	s.Router.Post(prefix+"/me/companion/refine-point/{invocationID}", spaces.CompanionRefinePoint())
 	s.Router.Post(prefix+"/me/voice/transcripts", spaces.VoiceTranscripts())
 	s.Router.Get(prefix+"/me/voice/transcripts/{transcriptID}", spaces.VoiceTranscript())
 	s.Router.Patch(prefix+"/me/voice/transcripts/{transcriptID}", spaces.VoiceTranscript())

@@ -9,8 +9,8 @@ import (
 	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
-func TestForgotPasswordRateLimiter(t *testing.T) {
-	limiter := NewForgotPasswordRateLimiter(2, time.Minute)
+func TestSlidingWindowLimiter(t *testing.T) {
+	limiter := NewSlidingWindowLimiter(2, time.Minute)
 	now := time.Now()
 
 	if allowed, _ := limiter.Allow("127.0.0.1|user@example.com", now); !allowed {
@@ -29,16 +29,15 @@ func TestForgotPasswordRateLimiter(t *testing.T) {
 	}
 }
 
-func TestForgotPasswordRateLimitKeyUsesForwardedIP(t *testing.T) {
+func TestClientIPUsesForwardedIPWhenTrusted(t *testing.T) {
 	t.Setenv("TRUST_PROXY_HEADERS", "true")
 
-	req := httptest.NewRequest("POST", "/auth/forgot", nil)
+	req := httptest.NewRequest("POST", "/login", nil)
 	req.RemoteAddr = "10.0.0.8:1234"
 	req.Header.Set("X-Forwarded-For", "203.0.113.5, 10.0.0.8")
 
-	key := ForgotPasswordRateLimitKey(req, "User@example.com")
-	if key != "203.0.113.5|user@example.com" {
-		t.Fatalf("forgotPasswordRateLimitKey() = %q", key)
+	if ip := ClientIPFromRequest(req); ip != "203.0.113.5" {
+		t.Fatalf("ClientIPFromRequest() = %q", ip)
 	}
 }
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { daySummaryCall, daySummaryPrompt, daySummarySystem } from "../src/day-summary.js";
 
 const request = {
-  route: { provider: "instance" as const },
+  route: { provider: "device" as const, credential: { provider: "openai" as const, apiKey: "openai-fixture" } },
   model: "openai/test",
   date: "2026-10-14",
   items: [

@@ -11,18 +11,8 @@ import (
 
 func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	values := map[string]string{
-		"R2_ENDPOINT":               "https://account.r2.cloudflarestorage.com",
-		"R2_BUCKET":                 "misty-production",
-		"R2_ACCESS_KEY":             "access",
-		"R2_SECRET_KEY":             "secret",
-		"DB_HOST":                   "database.internal",
-		"DB_USER":                   "misty",
-		"DB_PASSWORD":               "password",
-		"DB_NAME":                   "misty",
-		"MISTY_PUBLIC_API_URL":      "http://api.example.com/api",
-		"SPACE_LINK_ENCRYPTION_KEY": "01234567890123456789012345678901",
-	}
+	values := productionCoreValues()
+	values["MISTY_PUBLIC_API_URL"] = "http://api.example.com/api"
 	for key, value := range values {
 		t.Setenv(key, value)
 	}
@@ -45,11 +35,6 @@ func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {
 
 func TestCreateServerConfiguresIndependentDevelopmentLibrary(t *testing.T) {
 	configureJournalCollabForTest(t)
-	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
-	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
-	t.Setenv("MAILJET_API_KEY", "")
-	t.Setenv("MAILJET_SECRET_KEY", "")
-	t.Setenv("MAILJET_FROM_EMAIL", "")
 	t.Setenv("R2_ENDPOINT", "")
 	t.Setenv("R2_BUCKET", "")
 	t.Setenv("R2_ACCESS_KEY", "")
@@ -110,11 +95,6 @@ func TestProductionCORSRejectsLoopbackOrigins(t *testing.T) {
 func TestCORSAllowsAppOrigins(t *testing.T) {
 	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_ALLOWED_ORIGINS", "https://web.misty.example")
-	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
-	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
-	t.Setenv("MAILJET_API_KEY", "")
-	t.Setenv("MAILJET_SECRET_KEY", "")
-	t.Setenv("MAILJET_FROM_EMAIL", "")
 
 	server, err := CreateServer()
 	if err != nil {

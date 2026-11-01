@@ -106,7 +106,6 @@ type aiView struct {
 
 func (s *Server) aiPage(r *http.Request) templ.Component {
 	view := aiView{Config: s.cfg}
-	view.Model = []setting{s.setting("AI_GATEWAY_API_KEY", true)}
 	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
 	defer cancel()
 	if snapshot, err := s.health.Fetch(ctx); err == nil {

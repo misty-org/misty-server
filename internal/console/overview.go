@@ -23,6 +23,10 @@ type overviewView struct {
 	ActiveRuns int
 	CountsErr  bool
 	Activity   []db.ConsoleAuditEntry
+	// Alerts are the alerts service's open problems (server_alerts). The
+	// server sends no email, so this page and the owner's app show them.
+	Alerts    []db.ServerAlert
+	AlertsErr bool
 }
 
 func (s *Server) overviewPage(r *http.Request) templ.Component {
@@ -64,6 +68,9 @@ func (s *Server) loadOverview(ctx context.Context) overviewView {
 		view.CountsErr = true
 	}
 	view.Activity, _ = s.db.ConsoleRecentAudit(ctx, 5)
+	if view.Alerts, err = s.db.OpenServerAlerts(ctx); err != nil {
+		view.AlertsErr = true
+	}
 	return view
 }
 

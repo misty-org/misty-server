@@ -41,7 +41,7 @@ async function requestToolExecution(
     const access = cachedRunAccess(context.mistyRunId, context.controlPlaneURL)
       ?? await controlPlaneRequest<MCPRunAccess>(context, "mcp-token", { intervention_wait_version: 1 }, `${context.mistyRunId}:mcp-token:${callId}`);
     const authorized = Date.now();
-    const response = await requestMCPToolExecution(context, access, callId, name, input, deviceHookToken);
+    const response = await requestMCPToolExecution(context, access, callId, name, input, deviceHookToken, await queryEmbedding(name, input));
     // One line per call for timing; never arguments or results.
     console.info(`[misty-agent-runtime] tool_timing ${JSON.stringify({ run: context.mistyRunId, call: callId, tool: name, token_ms: authorized - started, mcp_ms: Date.now() - authorized })}`);
     return response;
@@ -64,3 +64,26 @@ async function requestToolExecution(
 }
 
 requestToolExecution.maxRetries = 2;
+
+// Model code is loaded only inside the step above: the workflow bundle can't take it.
+/** Tools that rank the person's memory by meaning; their query is embedded here. */
+const meaningSearches = new Set(["memory.history.search", "memory.pref.list"]);
+
+/**
+ * On a desktop runtime the server calls no model, so a memory search's query is embedded on the
+ * device's embedding model and the vector travels with the call. Without one, search finds
+ * nothing, as it does on a server with no embedding model.
+ */
+async function queryEmbedding(name: string, input: unknown): Promise<Record<string, unknown>> {
+  const query = (input as { query?: unknown } | null)?.query;
+  if (process.env.MISTY_RUNTIME_DESKTOP !== "1" || !meaningSearches.has(name) || typeof query !== "string" || query.trim().length < 3) return {};
+  try {
+    const normalized = query.toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+    const { embedDeviceCall } = await import("./device-calls.js");
+    const { model, embeddings } = await embedDeviceCall({ values: [normalized], dimensions: 768 });
+    return { "misty/query_embedding": embeddings[0], "misty/query_embedding_model": model };
+  } catch {
+    return {};
+  }
+}
+

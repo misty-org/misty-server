@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -98,8 +99,17 @@ func (s *AIService) startInboundTask(ctx context.Context, channel db.InboundChan
 		s.invocations.fail(invocation.ID, "Misty could not start the agent runtime. Please try again.")
 		return fail(err)
 	}
+	// Agents work on the person's computer: with none on, say the task waits for one.
+	if online, err := s.database.AnyDesktopOnline(ctx, task.UserID); err == nil && !online {
+		if err := sendInboundReply(ctx, s.database, task.UserID, task, inboundWaitingReply); err != nil {
+			log.Printf("inbound task %s: waiting reply not sent: %v", task.ID, err)
+		}
+	}
 	return nil
 }
+
+// inboundWaitingReply is sent when a task arrives while none of the person's computers is on.
+const inboundWaitingReply = "Got it. Misty works on your computer, so this starts as soon as it's on and signed in. You'll get the answer here."
 
 // completeInboundTask sends the answer back to the email or Slack thread,
 // once, when the task finishes.
@@ -117,19 +127,19 @@ func (s *SpacesService) completeInboundTask(ctx context.Context, record *db.AIIn
 		text = "I couldn't finish that. Open the conversation in Misty to see what happened."
 	}
 	text = truncateAgentRuntimeText(text, inboundReplyLimit)
-	replyErr := s.sendInboundReply(ctx, record.UserID, task, text)
+	replyErr := sendInboundReply(ctx, s.database, record.UserID, task, text)
 	if replyErr != nil {
 		return s.database.MarkInboundReplyFailed(ctx, task.ID, "The answer couldn't be sent back: "+replyErr.Error())
 	}
 	return nil
 }
 
-func (s *SpacesService) sendInboundReply(ctx context.Context, userID string, task *db.InboundTask, text string) error {
+func sendInboundReply(ctx context.Context, database *db.Database, userID string, task *db.InboundTask, text string) error {
 	client, err := composioClient()
 	if err != nil {
 		return err
 	}
-	channels, err := s.database.UserInboundChannels(ctx, userID)
+	channels, err := database.UserInboundChannels(ctx, userID)
 	if err != nil {
 		return err
 	}

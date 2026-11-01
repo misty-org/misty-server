@@ -1,0 +1,204 @@
+name: misty
+
+# The Misty server stack (docs/self-hosting.md). Everything you configure is in
+# four files under server/.env/; every secret is generated into the secrets
+# volume by the setup service, which also provisions Cloudflare on each start.
+# Data lives in the pgdata volume and in R2, and is removed only when the
+# whole stack is (docker compose down --volumes).
+
+x-config: &config
+  # Every service reads the same four files. The API token for Cloudflare is
+  # blanked for every service except setup, the only one that calls the API.
+  env_file:
+    - ${MISTY_ENV_DIR:-.env}/misty.env
+    - ${MISTY_ENV_DIR:-.env}/cloudflare.env
+    - ${MISTY_ENV_DIR:-.env}/composio.env
+    - ${MISTY_ENV_DIR:-.env}/google.env
+  logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
+
+# setup, migrate, backups, alerts, console and cloudflared run one small image
+# (deploy/setup/Dockerfile).
+x-tools: &tools
+  image: ${COMPOSE_PROJECT_NAME}-tools:local
+  build:
+    context: .
+    dockerfile: deploy/setup/Dockerfile
+
+# What the API and the console read besides the four files. The rest of their
+# configuration (secrets, R2, the Worker hosts) is the secrets volume's
+# server.env, loaded when each starts.
+x-server-environment: &server-environment
+  CLOUDFLARE_API_TOKEN: ""
+  MISTY_ENVIRONMENT: production
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: misty
+  DB_USER: misty_app
+
+services:
+  # One-shot: generates missing secrets, refuses to start when the database
+  # holds data its secrets no longer match, and provisions the tunnel, DNS,
+  # R2 buckets and credentials, and both Workers.
+  setup:
+    <<: [*tools, *config]
+    command: ["init"]
+    restart: "no"
+    environment:
+      MISTY_DATA_DIR: /var/lib/misty/pgdata
+    volumes:
+      - secrets:/run/misty/secrets
+      - pgdata:/var/lib/misty/pgdata:ro
+    networks: [edge]
+
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    <<: *config
+    restart: unless-stopped
+    environment:
+      CLOUDFLARE_API_TOKEN: ""
+      POSTGRES_USER: misty
+      POSTGRES_DB: misty
+      POSTGRES_PASSWORD_FILE: /run/misty/secrets/postgres/superuser-password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - secrets:/run/misty/secrets:ro
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U misty -d misty"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    networks: [database]
+
+  # One-shot: keeps the API's restricted role in step with its password,
+  # applies migrations and grants the role its tables.
+  migrate:
+    <<: [*tools, *config]
+    command: ["migrate"]
+    restart: "no"
+    environment:
+      CLOUDFLARE_API_TOKEN: ""
+    volumes:
+      - secrets:/run/misty/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [database]
+
+  api:
+    image: ${COMPOSE_PROJECT_NAME}-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    <<: *config
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-ec", "set -a; . /run/misty/secrets/server.env; set +a; exec /usr/local/bin/misty-server"]
+    environment:
+      <<: *server-environment
+      PORT: "8080"
+    volumes:
+      - secrets:/run/misty/secrets:ro
+    ports:
+      - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+        restart: true
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    networks: [edge, database]
+
+  # Publishes the API at https://MISTY_HOSTNAME through the tunnel setup made.
+  cloudflared:
+    <<: [*tools, *config]
+    restart: unless-stopped
+    environment:
+      CLOUDFLARE_API_TOKEN: ""
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        TUNNEL_TOKEN="$$(cat /run/misty/secrets/cloudflared/token)"
+        export TUNNEL_TOKEN
+        exec cloudflared tunnel --no-autoupdate --metrics 0.0.0.0:20241 run
+    volumes:
+      - secrets:/run/misty/secrets:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:20241/ready >/dev/null"]
+      interval: 15s
+      timeout: 7s
+      retries: 3
+      start_period: 15s
+    networks: [edge]
+
+  # Nightly encrypted database backups to the locked R2 backup bucket.
+  backups:
+    <<: [*tools, *config]
+    command: ["backup"]
+    restart: unless-stopped
+    environment:
+      CLOUDFLARE_API_TOKEN: ""
+    volumes:
+      - secrets:/run/misty/secrets:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [edge, database]
+
+  # Records an open alert in the database when the API fails its health
+  # check, fails 5% of its requests, runs low on disk or misses a nightly
+  # backup, each seen twice in a row, and removes it when it clears. The
+  # console and the server owner's app show open alerts; nothing is emailed.
+  alerts:
+    <<: [*tools, *config]
+    command: ["watch"]
+    restart: unless-stopped
+    environment:
+      CLOUDFLARE_API_TOKEN: ""
+      MISTY_DATA_DIR: /var/lib/misty/pgdata
+    volumes:
+      - secrets:/run/misty/secrets:ro
+      - pgdata:/var/lib/misty/pgdata:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [edge, database]
+
+  # The operator console, on this computer only: http://127.0.0.1:7070.
+  # `docker compose logs console` prints its sign-in link.
+  console:
+    <<: [*tools, *config]
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        set -a; . /run/misty/secrets/server.env; set +a
+        exec misty-console -addr 0.0.0.0:7070 -published 127.0.0.1:${MISTY_CONSOLE_PORT:-7070} -api http://api:8080
+    environment:
+      <<: *server-environment
+    volumes:
+      - secrets:/run/misty/secrets:ro
+    ports:
+      - "127.0.0.1:${MISTY_CONSOLE_PORT:-7070}:7070"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [edge, database]
+
+volumes:
+  pgdata:
+  secrets:
+
+networks:
+  edge:
+  database:
+    internal: true

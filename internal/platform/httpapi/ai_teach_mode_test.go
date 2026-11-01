@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -86,34 +85,13 @@ func TestTeachTurnsTakeAFocusCloseUp(t *testing.T) {
 	}
 }
 
-func TestLessonTagsAreNeverSpoken(t *testing.T) {
-	reply := "[ROUTE:new:two sum]\nfirst, make an empty dictionary.\n[FOCUS:120,180,860,520:screen1]\n" +
-		`[LESSON:{"objectives":[{"id":"o1","title":"dict","status":"in_progress"}],"current":"o1"}]`
-	payload, _ := json.Marshal(map[string]string{"text": reply})
-	text, err := agentSpeechText("completed", []db.AIInvocationEventRecord{{EventType: "assistant.message", Payload: payload}})
-	if err != nil || text != "first, make an empty dictionary." {
-		t.Fatalf("spoken = %q, err = %v", text, err)
-	}
-}
-
-func TestCompanionRepliesMayDrawButNeverSpeakTheDrawing(t *testing.T) {
+func TestCompanionPromptsCarryTheDrawingRules(t *testing.T) {
 	for _, system := range []string{
 		companionSystemPrompt(aiInvocationInput{Mode: "companion"}, nil),
 		teachSystemPrompt(aiInvocationInput{CollaborationMode: db.ConversationModeTeach}, nil, time.Now()),
 	} {
 		if !strings.Contains(system, "misty-sketch") || !strings.Contains(system, "only when the person asks") {
 			t.Fatal("a companion prompt lacks the drawing rules")
-		}
-	}
-	fence := "```"
-	for reply, want := range map[string]string{
-		"here's the idea.\n" + fence + "misty-sketch\n{\"surface\":\"board\"}\n{\"id\":\"a\"}\n" + fence + "\nthat's it.": "here's the idea.\n\nthat's it.",
-		"here's the idea.\n" + fence + "misty-sketch\n{\"surface\":\"board\"}\n{\"id\":":                                  "here's the idea.",
-	} {
-		payload, _ := json.Marshal(map[string]string{"text": reply})
-		text, err := agentSpeechText("completed", []db.AIInvocationEventRecord{{EventType: "assistant.message", Payload: payload}})
-		if err != nil || text != want {
-			t.Fatalf("spoken = %q, err = %v", text, err)
 		}
 	}
 }

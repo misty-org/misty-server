@@ -20,6 +20,9 @@ var (
 	ErrSyncOperationConflict = errors.New("sync operation conflict")
 	ErrSyncCompacted         = errors.New("sync operation already compacted")
 	ErrSyncCursor            = errors.New("invalid sync cursor")
+	// ErrSyncStorageLimit refuses a write that adds content once the account
+	// is at its storage limit. Deletions and reads still work.
+	ErrSyncStorageLimit = errors.New("sync storage limit reached")
 )
 
 const SyncMaxCounter int64 = 9007199254740991

@@ -3,8 +3,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/aimodels"
-	"github.com/kannachi323/misty/server/internal/byok"
 	"net/http"
 	"strings"
 	"time"
@@ -48,7 +46,7 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 			s.agentRuntimeContextAIInvocation(w, r)
 			return
 		}
-		var body agentRuntimeIdentity
+		var body agentRuntimeContextRequest
 		if !readAgentRuntimeRequest(s.agentRuntime, w, r, &body) {
 			return
 		}
@@ -103,7 +101,7 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 				writeAgentError(w, invocationErr)
 				return
 			}
-			prepared, prepareErr := s.prepareAIInvocationRuntime(r.Context(), invocationRecord)
+			prepared, prepareErr := s.prepareAIInvocationRuntime(r.Context(), invocationRecord, body.deviceTools()...)
 			if prepareErr != nil {
 				writeAgentError(w, prepareErr)
 				return
@@ -173,30 +171,24 @@ func (s *SpacesService) AgentRuntimeContext() http.HandlerFunc {
 			writeAgentError(w, manifestErr)
 			return
 		}
-		allowedTools := manifestToolNames(manifest)
+		// Tools the desktop runs itself (web.search) join the list the prompt describes.
+		allowedTools := uniqueAgentToolNames(append(manifestToolNames(manifest), body.deviceTools()...))
 		// The time changes every run, so it goes last: a provider caches a prompt only up to its first difference.
 		system += "\n\n" + agentExecutionGuidance + agentCapabilityGuidance(allowedTools, false) + "\n\nCurrent time: " + now.Format(time.RFC3339) + "; timezone: " + timezone + "."
 
 		_ = s.database.TouchPersonalAgentTaskRuntime(r.Context(), run.ID, body.RuntimeRunID, "reading_context", 5)
-		// The run thinks on the models of the member who asked (runModelUser).
+		// The run is recorded under the device's models once its desktop reports them.
 		modelID, reasoning := membership.ModelID, membership.ReasoningEffort
-		if c := accountCredentials(r.Context(), runModelUser(run)); c != nil && !agent.ClientModelChoice() {
-			modelID, reasoning = c.Models.Agent, accountReasoning(c)
-		} else if c == nil && !aimodels.OperatorModels() {
-			writeAgentError(w, byok.ErrModelKeyNeeded)
-			return
+		if device, effort, ok := body.deviceModel(); ok {
+			// A desktop runtime thinks on the device's own models.
+			modelID, reasoning = device, effort
 		}
-		planned, forced := runRoutes(r.Context(), s.database, runModelUser(run), defaultAIRoutes(modelID, reasoning))
-		routes, routeErr := s.database.FreezeAIModelRoutes(r.Context(), run.OwnerUserID, run.ID, planned, nil, forced)
+		routes, routeErr := s.database.FreezeAIModelRoutes(r.Context(), run.OwnerUserID, run.ID, runModelRoutes(modelID, reasoning))
 		if routeErr != nil {
 			writeAIProviderError(w, routeErr)
 			return
 		}
 		agentRoute, visionRoute := modelRoute(routes, "agent"), modelRoute(routes, "vision")
-		if !agentRoute.Enabled {
-			writeAIProviderError(w, aimodels.ErrDisabled)
-			return
-		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"run_id": run.ID, "agent_id": run.AgentID, "space_id": spaceID, "run_mode": run.EffectiveRunMode,
 			"space_name": spaceName, "is_default": false, "timezone": timezone, "current_time": now.Format(time.RFC3339), "members": []any{},

@@ -9,19 +9,12 @@ import (
 	"time"
 
 	"github.com/kannachi323/misty/server/internal/accounts"
-	"github.com/kannachi323/misty/server/internal/byok"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/kannachi323/misty/server/internal/platform/security"
-	"github.com/kannachi323/misty/server/internal/platform/telemetry"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func RegisterWithTelemetry(database *db.Database, analytics telemetry.Client) http.HandlerFunc {
-	return RegisterWithVerification(database, analytics, nil)
-}
-
-// RegisterWithVerification also sends the new account's email verification.
-func RegisterWithVerification(database *db.Database, analytics telemetry.Client, verification *AccountVerification) http.HandlerFunc {
+func Register(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			// Older apps still send a display name; people are known by username alone.
@@ -58,7 +51,7 @@ func RegisterWithVerification(database *db.Database, analytics telemetry.Client,
 			http.Error(w, "email already registered", http.StatusConflict)
 			return
 		}
-		if allowed, err := registrationAllowed(r.Context(), database); err != nil {
+		if allowed, err := registrationAllowed(r.Context(), database, body.Email); err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		} else if !allowed {
@@ -83,11 +76,6 @@ func RegisterWithVerification(database *db.Database, analytics telemetry.Client,
 			http.Error(w, "failed to create user", http.StatusInternalServerError)
 			return
 		}
-		if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Misty-Analytics-Enabled")), "true") {
-			if err := database.UpdateTelemetryPreferences(user.ID, true, false); err == nil {
-				analytics.UserRegistered(user.ID, r.Header.Get("X-Misty-Platform"), r.Header.Get("X-Misty-Release-Channel"))
-			}
-		}
 
 		if body.Credential {
 			if err := database.SetCredentialPassword(user.ID, true); err != nil {
@@ -96,7 +84,6 @@ func RegisterWithVerification(database *db.Database, analytics telemetry.Client,
 			}
 			user.CredentialPassword = true
 		}
-		verification.AfterSignup(r, user, false)
 		writeAuthSession(w, r, database, user, http.StatusCreated)
 	}
 }
@@ -163,18 +150,42 @@ func writeAuthSession(
 	user *db.User,
 	status int,
 ) {
+	writeAuthSessionWith(w, r, database, user, status, nil)
+}
+
+// writeAuthSessionWith is writeAuthSession with extra fields in the body.
+func writeAuthSessionWith(
+	w http.ResponseWriter,
+	r *http.Request,
+	database *db.Database,
+	user *db.User,
+	status int,
+	extra map[string]any,
+) {
+	// Every way of signing in ends here, so a suspended account gets no session.
+	if suspended, err := database.AccountSuspended(r.Context(), user.ID); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	} else if suspended {
+		writeAccountSuspended(w)
+		return
+	}
 	if err := issueSessionCookies(w, r, database, user.ID, db.SessionTTL); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	writeJSON(w, status, map[string]any{
+	body := map[string]any{
 		"user_id":            user.ID,
 		"username":           user.Username,
 		"email":              user.Email,
 		"provider":           user.Provider,
 		"credential_account": user.CredentialPassword,
-	})
+	}
+	for key, value := range extra {
+		body[key] = value
+	}
+	writeJSON(w, status, body)
 }
 
 // writeSessionCookie is the single definition of the session cookie shape. The
@@ -205,8 +216,6 @@ func Logout(database *db.Database) http.HandlerFunc {
 				http.Error(w, "could not revoke session", http.StatusServiceUnavailable)
 				return
 			}
-			// Signed-in devices send their keys again on their next request.
-			byok.Default.Forget(claims.Subject)
 		}
 		clearAuthCookies(w, r)
 

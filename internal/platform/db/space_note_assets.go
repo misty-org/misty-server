@@ -61,6 +61,9 @@ func (db *Database) CreateNoteAssetUpload(ctx context.Context, userID, noteID, f
 		if err := prepareStorageReservationTx(ctx, tx, userID, out.SpaceID); err != nil {
 			return err
 		}
+		if err := RequireAccountStorageRoomTx(ctx, tx, userID, byteSize); err != nil {
+			return err
+		}
 		if err := tx.QueryRowContext(ctx,
 			`INSERT INTO space_library_uploads(id,space_id,security_domain_id,user_id,object_key,original_filename,purpose,client_declared_mime_type,requested_byte_size,client_sha256,state,upload_token_hash,expires_at,note_id)
 			 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'initiated',$11,$12,$13) RETURNING created_at,updated_at`,

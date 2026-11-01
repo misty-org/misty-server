@@ -13,7 +13,7 @@ export async function startWithReceipt(
   submit: () => Promise<{ runtimeRunId: string }>,
 ): Promise<{ runtimeRunId: string }> {
   const identity = { ...input, runtimeRunId: "" };
-  const payload = { adapter_version: input.adapterVersion, callback_url: input.controlPlaneURL };
+  const payload = { adapter_version: input.adapterVersion, callback_url: input.receiptCallback || input.controlPlaneURL };
   const receipt = await controlPlaneRequest<StartReceipt>(identity, "start-receipt", payload, `${input.mistyRunId}:start-claim`);
   if (receipt.runtime_run_id) return { runtimeRunId: receipt.runtime_run_id };
   if (!receipt.claimed || !receipt.claim_token) throw new Error("workflow_start_unconfirmed: awaiting the original runtime identity");

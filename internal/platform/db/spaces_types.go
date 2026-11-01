@@ -57,17 +57,19 @@ type SpaceMember struct {
 }
 
 type SpaceInvitation struct {
-	ID              string    `json:"id"`
-	SpaceID         string    `json:"space_id"`
-	SpaceName       string    `json:"space_name"`
-	InvitedUserID   *string   `json:"invited_user_id"`
-	InvitedUserName *string   `json:"invited_user_name"`
-	InvitedEmail    string    `json:"invited_email"`
-	InvitedByUserID string    `json:"invited_by_user_id"`
-	InviterName     string    `json:"inviter_name,omitempty"`
-	DeliveryStatus  string    `json:"delivery_status"`
-	ExpiresAt       time.Time `json:"expires_at"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID              string  `json:"id"`
+	SpaceID         string  `json:"space_id"`
+	SpaceName       string  `json:"space_name"`
+	InvitedUserID   *string `json:"invited_user_id"`
+	InvitedUserName *string `json:"invited_user_name"`
+	InvitedEmail    string  `json:"invited_email"`
+	InvitedByUserID string  `json:"invited_by_user_id"`
+	InviterName     string  `json:"inviter_name,omitempty"`
+	// Link is the invitation's link, only in the answer that made it: the
+	// server sends no email, so the owner passes it on. Only its hash is kept.
+	Link      string    `json:"link,omitempty"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type SpaceInvitationPreview struct {

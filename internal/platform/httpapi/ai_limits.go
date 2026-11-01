@@ -18,7 +18,6 @@ type AIService struct {
 	invocations           *aiInvocationHub
 	streams               *invocationStreams
 	metrics               *platformmetrics.Registry
-	analyzer              *agent.SmartLibraryAnalyzer
 	agentRuntime          AgentRuntimeConfig
 	attachmentStore       LibraryObjectStore
 	attachmentPresigner   LibraryObjectPresigner
@@ -31,9 +30,6 @@ func (s *AIService) SetMetrics(registry *platformmetrics.Registry) {
 	if s.streams != nil {
 		s.streams.setMetrics(registry)
 	}
-}
-func (s *AIService) SetEmbeddingAnalyzer(analyzer *agent.SmartLibraryAnalyzer) {
-	s.analyzer = analyzer
 }
 func (s *AIService) SetAgentRuntime(config AgentRuntimeConfig) {
 	config.database = s.database
@@ -67,17 +63,14 @@ func NewAIService(database *db.Database, runtime *agent.Service) *AIService {
 
 func (s *AIService) Status() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := s.requireUser(w, r)
-		if !ok {
+		if _, ok := s.requireUser(w, r); !ok {
 			return
 		}
+		// The run's model is the desktop's own; this is the model it is recorded
+		// under until the desktop reports it.
 		model := agent.FrontierDefaultModelID()
-		selected, _, accountModel, modelErr := s.accountAgentModel(r.Context(), user)
-		if accountModel {
-			model = selected
-		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"configured": s.agentRuntime.Enabled() && modelErr == nil,
+			"configured": s.agentRuntime.Enabled(),
 			"provider":   "misty",
 			"model":      model,
 			"model_name": model,

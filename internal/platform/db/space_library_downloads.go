@@ -219,7 +219,6 @@ func libraryAuditRequiresRealtime(action string) bool {
 		"library.album_folder.",
 		"library.asset_stack.",
 		"library.edit.",
-		"library.people.",
 		"library.intelligence.",
 		"library.memory.",
 		"library.duplicates.",

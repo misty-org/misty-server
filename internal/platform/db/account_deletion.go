@@ -80,6 +80,26 @@ func (db *Database) BeginAccountDeletion(
 		if state != "active" {
 			return ErrAccountDeletionBlocked
 		}
+		if err := beginAccountDeletionTx(ctx, tx, userID, requestID, statusTokenHash, purgeAfter, true); err != nil {
+			return err
+		}
+		return scanAccountDeletionRequest(tx.QueryRowContext(ctx, `
+			SELECT id,user_id,status,purge_after,provider_revocation_status,
+			       last_error_code,created_at,updated_at,completed_at
+			FROM account_deletion_requests WHERE id=$1`, requestID), out)
+	})
+	return out, err
+}
+
+// beginAccountDeletionTx records the deletion request, marks the locked,
+// active account pending deletion, ends its sessions and stops its agents.
+// A person deleting their own account must first hand off shared Spaces they
+// own (requireNoSharedSpaces); a closed account's are handed over for it.
+func beginAccountDeletionTx(
+	ctx context.Context, tx *sql.Tx, userID, requestID, statusTokenHash string,
+	purgeAfter time.Time, requireNoSharedSpaces bool,
+) error {
+	if requireNoSharedSpaces {
 		var sharedOwned int
 		if err := tx.QueryRowContext(ctx, `
 			SELECT COUNT(*) FROM spaces s
@@ -91,33 +111,25 @@ func (db *Database) BeginAccountDeletion(
 		if sharedOwned > 0 {
 			return ErrAccountDeletionBlocked
 		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO account_deletion_requests(
-			    id,user_id,status_token_hash,purge_after
-			) VALUES($1,$2,$3,$4)`,
-			requestID, userID, statusTokenHash, purgeAfter,
-		); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE users SET lifecycle_state='pending_deletion',
-			    deletion_requested_at=NOW()
-			WHERE id=$1`, userID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-
-		if err := disableAccountAgentsTx(ctx, tx, userID); err != nil {
-			return err
-		}
-		return scanAccountDeletionRequest(tx.QueryRowContext(ctx, `
-			SELECT id,user_id,status,purge_after,provider_revocation_status,
-			       last_error_code,created_at,updated_at,completed_at
-			FROM account_deletion_requests WHERE id=$1`, requestID), out)
-	})
-	return out, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO account_deletion_requests(
+		    id,user_id,status_token_hash,purge_after
+		) VALUES($1,$2,$3,$4)`,
+		requestID, userID, statusTokenHash, purgeAfter,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE users SET lifecycle_state='pending_deletion',
+		    deletion_requested_at=NOW()
+		WHERE id=$1`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID); err != nil {
+		return err
+	}
+	return disableAccountAgentsTx(ctx, tx, userID)
 }
 
 func (db *Database) AccountDeletionConnections(

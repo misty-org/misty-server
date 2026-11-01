@@ -1,14 +1,12 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/modelruntime"
+	"github.com/go-chi/chi/v5"
 	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
@@ -28,43 +26,23 @@ const (
 
 var errAgentRuntimeStartUnconfirmed = errors.New("workflow_start_unconfirmed")
 
+// AgentRuntimeConfig holds the server secret that signs run keys and MCP
+// bearers. Runs always work on the person's desktop, which claims them as
+// deliveries (agent_runtime_device.go, docs/agents/runtime.md).
 type AgentRuntimeConfig struct {
 	database       *db.Database
 	Kind           string
-	URL            string
-	InternalAPIURL string
 	secret         []byte
 	previousSecret []byte
-	client         *http.Client
 }
 
 func AgentRuntimeConfigFromEnv() (AgentRuntimeConfig, error) {
-	config := AgentRuntimeConfig{Kind: "vercel-workflow", client: &http.Client{Timeout: 20 * time.Second}}
-	rawURL := strings.TrimRight(strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_RUNTIME_URL")), "/")
+	config := AgentRuntimeConfig{Kind: "vercel-workflow"}
 	rawSecret := strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET"))
-	if rawURL == "" && rawSecret == "" && !strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production") {
+	if rawSecret == "" && !strings.EqualFold(strings.TrimSpace(envconfig.Getenv("MISTY_ENVIRONMENT")), "production") {
 		return config, nil
 	}
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil {
-		return AgentRuntimeConfig{}, errors.New("MISTY_AGENT_RUNTIME_URL must be an absolute URL")
-	}
-	if parsed.Scheme != "https" && parsed.Hostname() != "localhost" && parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "agent-runtime" {
-		return AgentRuntimeConfig{}, errors.New("MISTY_AGENT_RUNTIME_URL must use HTTPS except for the local runtime")
-	}
-	config.URL = strings.TrimRight(parsed.String(), "/")
-	rawInternalAPIURL := strings.TrimSpace(envconfig.Getenv("MISTY_AGENT_RUNTIME_INTERNAL_API_URL"))
-	if rawInternalAPIURL == "" {
-		rawInternalAPIURL = "http://api:8080"
-	}
-	internalAPIURL, internalErr := url.Parse(rawInternalAPIURL)
-	if internalErr != nil || internalAPIURL.Scheme == "" || internalAPIURL.Host == "" || internalAPIURL.User != nil {
-		return AgentRuntimeConfig{}, errors.New("MISTY_AGENT_RUNTIME_INTERNAL_API_URL must be an absolute URL")
-	}
-	if internalAPIURL.Scheme != "https" && internalAPIURL.Hostname() != "localhost" && internalAPIURL.Hostname() != "127.0.0.1" && internalAPIURL.Hostname() != "api" && internalAPIURL.Hostname() != "misty-api" {
-		return AgentRuntimeConfig{}, errors.New("MISTY_AGENT_RUNTIME_INTERNAL_API_URL must use HTTPS except for the local API")
-	}
-	config.InternalAPIURL = strings.TrimRight(internalAPIURL.String(), "/")
+	var err error
 	if config.secret, err = decodeServiceSecret("MISTY_AGENT_RUNTIME_CONTROL_SECRET"); err != nil {
 		return AgentRuntimeConfig{}, err
 	}
@@ -74,136 +52,40 @@ func AgentRuntimeConfigFromEnv() (AgentRuntimeConfig, error) {
 	return config, nil
 }
 
+// Enabled reports whether agents can run: the server holds the secret that signs
+// run keys and MCP bearers.
 func (c AgentRuntimeConfig) Enabled() bool {
-	return c.URL != "" && len(c.secret) > 0
+	return len(c.secret) > 0
 }
 
-type agentRuntimeStartRequest struct {
-	RunID          string `json:"run_id"`
-	CallbackURL    string `json:"callback_url"`
-	AdapterVersion string `json:"adapter_version"`
-}
-
-type agentRuntimeStartResponse struct {
-	RuntimeRunID string `json:"runtime_run_id"`
-}
-
+// Start queues a run for the desktop that keeps it; its runtime records the
+// run ID when it starts the run.
 func (c AgentRuntimeConfig) Start(ctx context.Context, runID string) (string, error) {
-	var err error
-	c, err = c.forRun(ctx, runID)
-	if err != nil {
-		return "", err
+	if c.database == nil {
+		return "", errAgentRuntimeOnDevice
 	}
-	body, _ := json.Marshal(agentRuntimeStartRequest{RunID: runID, CallbackURL: c.InternalAPIURL, AdapterVersion: db.BetaAgentRuntimeAdapter})
-	var response agentRuntimeStartResponse
-	if err := c.request(ctx, http.MethodPost, "/v1/runs", runID, body, &response); err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(response.RuntimeRunID) == "" {
-		return "", errors.New("agent runtime returned no run id")
-	}
-	return response.RuntimeRunID, nil
+	return "", c.database.QueueAgentRuntimeStart(ctx, runID)
 }
 
+// Cancel queues a cancel for the desktop running the run.
 func (c AgentRuntimeConfig) Cancel(ctx context.Context, runtimeRunID, mistyRunID string) error {
 	if runtimeRunID == "" {
 		return nil
 	}
-	var err error
-	c, err = c.forRun(ctx, mistyRunID)
-	if err != nil {
-		return err
-	}
-	path := "/v1/runs/" + url.PathEscape(runtimeRunID) + "/cancel"
-	return c.request(ctx, http.MethodPost, path, mistyRunID+":cancel", []byte(`{}`), nil)
-}
-
-func (c AgentRuntimeConfig) Status(ctx context.Context, runtimeID, mistyRunID string) (string, error) {
-	var bindErr error
-	c, bindErr = c.forRun(ctx, mistyRunID)
-	if bindErr != nil {
-		return "", bindErr
-	}
-	var result struct {
-		Status string `json:"status"`
-	}
-	err := c.request(ctx, http.MethodPost, "/v1/runs/"+url.PathEscape(runtimeID)+"/status", mistyRunID+":status", []byte(`{}`), &result)
-	if err != nil {
-		return "", err
-	}
-	switch result.Status {
-	case "pending", "running", "completed", "failed", "cancelled", "missing":
-		return result.Status, nil
-	}
-	return "", errors.New("runtime returned an invalid status")
-}
-
-func (c AgentRuntimeConfig) ResumeDevice(ctx context.Context, hookToken, runID string, available bool) error {
-	var err error
-	c, err = c.forRun(ctx, runID)
-	if err != nil {
-		return err
-	}
-	body, _ := json.Marshal(map[string]any{"available": available})
-	path := "/v1/devices/" + url.PathEscape(hookToken)
-	waitIdentity := sha256.Sum256([]byte(hookToken))
-	return c.request(ctx, http.MethodPost, path, runID+":device:"+hex.EncodeToString(waitIdentity[:])+":"+strconv.FormatBool(available), body, nil)
-}
-
-func (c AgentRuntimeConfig) forRun(ctx context.Context, runID string) (AgentRuntimeConfig, error) {
 	if c.database == nil {
-		return c, nil
+		return errAgentRuntimeOnDevice
 	}
-	pin, err := c.database.BindAgentRuntime(ctx, runID, c.URL, c.InternalAPIURL)
-	if err != nil {
-		return c, err
-	}
-	if pin.AdapterVersion != db.BetaAgentRuntimeAdapter {
-		return c, errors.New("harness_version_unavailable")
-	}
-	c.URL, c.InternalAPIURL = pin.Endpoint, pin.CallbackEndpoint
-	return c, nil
+	return c.database.QueueAgentRuntimeCancel(ctx, mistyRunID, runtimeRunID)
 }
 
-func (c AgentRuntimeConfig) request(ctx context.Context, method, path, idempotencyKey string, body []byte, output any) error {
-	req, err := http.NewRequestWithContext(ctx, method, c.URL+path, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Misty-Agent-Timestamp", timestamp)
-	req.Header.Set("X-Misty-Agent-Signature", signAgentRuntimeRequest(c.secret, method, path, timestamp, body))
-	req.Header.Set("Idempotency-Key", idempotencyKey)
-	response, err := c.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, agentRuntimeBodyLimit+1))
-	if err != nil {
-		return err
-	}
-	if len(responseBody) > agentRuntimeBodyLimit {
-		return errors.New("agent runtime response too large")
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		var failure struct {
-			Code string `json:"code"`
-		}
-		if path == "/v1/runs" && json.Unmarshal(responseBody, &failure) == nil && failure.Code == "workflow_start_unconfirmed" {
-			return errAgentRuntimeStartUnconfirmed
-		}
-		return fmt.Errorf("agent runtime returned %d: %s", response.StatusCode, strings.TrimSpace(string(responseBody)))
-	}
-	if output != nil && len(responseBody) > 0 {
-		return json.Unmarshal(responseBody, output)
-	}
-	return nil
-}
-
+// signAgentRuntimeRequest is the runtime control signature: method, path,
+// timestamp and body digest under a run's key.
 func signAgentRuntimeRequest(secret []byte, method, path, timestamp string, body []byte) string {
-	return modelruntime.Sign(secret, method, path, timestamp, body)
+	digest := sha256.Sum256(body)
+	message := strings.Join([]string{strings.ToUpper(method), path, timestamp, hex.EncodeToString(digest[:])}, "\n")
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte(message))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func (c AgentRuntimeConfig) verifyRequest(r *http.Request, body []byte) bool {
@@ -214,7 +96,13 @@ func (c AgentRuntimeConfig) verifyRequest(r *http.Request, body []byte) bool {
 		return false
 	}
 	path := r.URL.EscapedPath()
-	for _, secret := range [][]byte{c.secret, c.previousSecret} {
+	// A desktop runtime signs with the run's own key (agent_runtime_device.go).
+	// The server secret itself never leaves the server, so nothing signs with it.
+	runID := chi.URLParam(r, "runID")
+	if runID == "" {
+		return false
+	}
+	for _, secret := range [][]byte{agentRunKey(c.secret, runID), agentRunKey(c.previousSecret, runID)} {
 		if len(secret) == 0 {
 			continue
 		}
@@ -254,9 +142,15 @@ func TestingAgentRuntimeSignature(secret []byte, method, path, timestamp string,
 	return signAgentRuntimeRequest(secret, method, path, timestamp, body)
 }
 
-func TestingAgentRuntimeSignatureVerifies(current, previous []byte, method, path, timestamp, signature string, body []byte) bool {
+// TestingAgentRunKey is the key a desktop runtime signs runID's calls with.
+func TestingAgentRunKey(secret []byte, runID string) []byte { return agentRunKey(secret, runID) }
+
+func TestingAgentRuntimeSignatureVerifies(current, previous []byte, runID, method, path, timestamp, signature string, body []byte) bool {
 	request := &http.Request{Method: method, URL: &url.URL{Path: path}, Header: http.Header{}}
 	request.Header.Set("X-Misty-Agent-Timestamp", timestamp)
 	request.Header.Set("X-Misty-Agent-Signature", signature)
+	routeContext := chi.NewRouteContext()
+	routeContext.URLParams.Add("runID", runID)
+	request = request.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, routeContext))
 	return (AgentRuntimeConfig{secret: current, previousSecret: previous}).verifyRequest(request, body)
 }

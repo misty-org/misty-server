@@ -21,7 +21,7 @@ func respond(status int, raw string) *http.Response {
 
 func testClient(t *testing.T, handler func(*http.Request) *http.Response) *Client {
 	t.Helper()
-	client, err := New(Config{Deployment: "cloud", APIKey: "test-key"})
+	client, err := New(Config{APIKey: "test-key"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,14 +34,14 @@ func testClient(t *testing.T, handler func(*http.Request) *http.Response) *Clien
 	return client
 }
 
-func TestConfigRequiresCloudOptIn(t *testing.T) {
-	for _, config := range []Config{{APIKey: "key"}, {Deployment: "self_hosted", APIKey: "key"}, {Deployment: "cloud"}, {Deployment: "cloud", APIKey: "bad key"}} {
+func TestConfigRequiresAKey(t *testing.T) {
+	for _, config := range []Config{{}, {APIKey: "bad key"}} {
 		if config.Validate() == nil {
 			t.Errorf("accepted %+v", config)
 		}
 	}
-	if (Config{Deployment: "cloud", APIKey: "key"}).Validate() != nil {
-		t.Fatal("cloud rejected")
+	if (Config{APIKey: "key"}).Validate() != nil {
+		t.Fatal("a key was rejected")
 	}
 	if UserID("owner") != UserID("owner") || UserID("owner") == UserID("other") || !strings.HasPrefix(UserID("owner"), "misty_") {
 		t.Fatal("user ID is not a stable pseudonym")
@@ -120,7 +120,7 @@ func TestExecuteSeparatesRejectionsFromUnknownOutcomes(t *testing.T) {
 }
 
 func TestTransportFailureIsUnknown(t *testing.T) {
-	client, _ := New(Config{Deployment: "cloud", APIKey: "test-key"})
+	client, _ := New(Config{APIKey: "test-key"})
 	client.http.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("connection reset") })
 	if _, err := client.Execute(context.Background(), "trs_1", "GMAIL_SEND_EMAIL", json.RawMessage(`{}`), ""); !errors.Is(err, ErrTransport) || Rejected(err) {
 		t.Fatalf("transport error = %v", err)

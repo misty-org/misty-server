@@ -94,9 +94,6 @@ func executeAgentDrawingTool(ctx context.Context, database *db.Database, actor s
 		}
 		return MustAPIRawJSON(map[string]any{"drawings": matches, "count": len(matches)}), true, nil
 	case toolboxDrawingsCreate:
-		if !collaborationEnabled() {
-			return nil, true, agent.ErrInvalidRequest(ErrCollaborationOff.Error())
-		}
 		var input struct {
 			Title string `json:"title"`
 		}
@@ -134,7 +131,7 @@ func executeAgentDrawingTool(ctx context.Context, database *db.Database, actor s
 			return nil, true, configErr
 		}
 		if !config.Enabled {
-			return nil, true, agent.ErrInvalidRequest(ErrCollaborationOff.Error())
+			return nil, true, ErrCollaborationUnconfigured
 		}
 		service := &SpacesService{database: database, JournalCollab: config}
 		payload := tool.Arguments

@@ -8,11 +8,15 @@ import { runTeachTurn } from "../src/teach-turn.js";
 import { executeTool } from "../src/tool-calls.js";
 import { rejectedWithoutEffect } from "../src/tool-execution.js";
 import type { SpaceTaskContext } from "../src/types.js";
+import { runDeviceWebSearch } from "../src/web-search/search-step.js";
+import { webSearchTool } from "../src/web-search/tool.js";
 
 export interface SpaceTaskWorkflowInput {
   adapterVersion?: typeof MISTY_HARNESS_VERSION;
   mistyRunId: string;
   controlPlaneURL: string;
+  /** On the desktop, the run's own key; it stays in the device's local run store. */
+  runKey?: string;
 }
 
 /** What a started run works with, or a lesson step's finished result. */
@@ -23,12 +27,18 @@ export type RunStart =
 /** Activates the run, reads its context, and answers a lesson step without the agent loop. */
 export async function startRun(input: SpaceTaskWorkflowInput): Promise<RunStart> {
   if (input.adapterVersion && input.adapterVersion !== MISTY_HARNESS_VERSION) throw new FatalError("harness_version_unavailable");
-  const identity: RuntimeIdentity = { mistyRunId: input.mistyRunId, runtimeRunId: getWorkflowMetadata().workflowRunId, controlPlaneURL: input.controlPlaneURL };
+  const identity: RuntimeIdentity = { mistyRunId: input.mistyRunId, runtimeRunId: getWorkflowMetadata().workflowRunId, controlPlaneURL: input.controlPlaneURL, runKey: input.runKey };
   const rejected = new Set<string>();
+  // Set once the context is read: a new chat is named as its run ends.
+  let titlePrompt: string | undefined;
+  let summaryRequest: { previous: string; turns: string } | undefined;
   const documents = new DocumentIds();
+  // Set once the context is read: web.search runs here when the device has a search key.
+  let deviceSearch = false;
   const execution: HarnessExecution = {
     executeCapability: async (callId, name, value) => {
       try {
+        if (name === webSearchTool && deviceSearch) return await runDeviceWebSearch(value);
         const input = documents.repair(name, value);
         const output = await executeTool(identity, callId, name, input);
         documents.note(input, output);
@@ -39,12 +49,15 @@ export async function startRun(input: SpaceTaskWorkflowInput): Promise<RunStart>
       }
     },
     checkpoint: (event) => checkpoint(identity, event),
-    complete: (result) => complete(identity, result),
+    complete: (result) => complete(identity, result, titlePrompt, summaryRequest),
   };
   await activateRuntime(identity);
   let context: SpaceTaskContext;
   try {
     context = await fetchContext(identity);
+    titlePrompt = context.title_prompt || undefined;
+    deviceSearch = Boolean(context.device_search);
+    summaryRequest = context.summary_request?.turns ? context.summary_request : undefined;
   } catch (error) {
     const failure = classifyRuntimeError(error);
     await execution.complete({ status: "failed", text: "", error_code: failure.code, error_message: failure.message });

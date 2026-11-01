@@ -50,23 +50,6 @@ func (db *Database) UpdateMistyConversationModel(ctx context.Context, userID, co
 	})
 }
 
-// SetMistyConversationModelOverride pins a conversation to a model, or with an
-// empty model returns it to the account's Thinking choice.
-func (db *Database) SetMistyConversationModelOverride(ctx context.Context, userID, conversationID, model string) error {
-	return db.WithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE misty_ask_conversations SET model_override=$1,updated_at=NOW() WHERE id=$2 AND user_id=$3 AND deleted_at IS NULL`, model, conversationID, userID)
-		if err != nil {
-			return err
-		}
-		if rows, err := result.RowsAffected(); err != nil {
-			return err
-		} else if rows == 0 {
-			return agent.ErrPersistedSessionNotFound
-		}
-		return nil
-	})
-}
-
 // BindMistyConversationSpace establishes the immutable collaborative boundary
 // for a built-in Misty conversation. An unbound account conversation may be
 // attached once; subsequent calls are idempotent only for the same Space.

@@ -37,12 +37,7 @@ type GoogleSignInService struct {
 	startURL string
 	validate func(context.Context, string, string) (*idtoken.Payload, error)
 	session  func(http.ResponseWriter, *http.Request, *db.User)
-	// verification marks Google accounts verified and records signup signals.
-	verification *AccountVerification
 }
-
-// SetVerification lets Google sign-ins mark their (Google-verified) email.
-func (s *GoogleSignInService) SetVerification(v *AccountVerification) { s.verification = v }
 
 func NewGoogleSignInService(database *db.Database) (*GoogleSignInService, error) {
 	s := &GoogleSignInService{store: database, validate: idtoken.Validate}
@@ -63,7 +58,7 @@ func NewGoogleSignInService(database *db.Database) (*GoogleSignInService, error)
 		callback = base + "/auth/google/callback"
 	}
 	u, err := url.Parse(callback)
-	if err != nil || ValidateResetURL(callback) != nil || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || !strings.HasSuffix(u.Path, "/auth/google/callback") {
+	if err != nil || ValidatePublicURL(callback) != nil || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || !strings.HasSuffix(u.Path, "/auth/google/callback") {
 		return nil, errors.New("GOOGLE_SIGN_IN_REDIRECT_URL must be an HTTPS API URL ending in /auth/google/callback (HTTP allowed on localhost)")
 	}
 	s.oauth = oauth2.Config{ClientID: clientID, ClientSecret: secret, RedirectURL: callback, Endpoint: google.Endpoint, Scopes: []string{"openid", "email", "profile"}}

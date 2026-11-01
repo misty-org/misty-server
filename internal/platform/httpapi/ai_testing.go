@@ -1,9 +1,7 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
-	"net/http/httptest"
 
 	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/platform/db"
@@ -66,12 +64,6 @@ func TestingValidateAIDeviceContext(id, opaqueScope string, metadata map[string]
 
 func TestingAISearchScore(query, content string) int      { return aiSearchScore(query, content) }
 func TestingAIRelevantChunk(content, query string) string { return aiRelevantChunk(content, query) }
-
-func TestingReadAgentVoiceJSON(value string) ([]byte, string, int64, string) {
-	request := httptest.NewRequest("POST", "/agent-voice/transcriptions", bytes.NewBufferString(value))
-	request.Header.Set("Content-Type", "application/json")
-	return readAgentVoiceRecording(httptest.NewRecorder(), request)
-}
 
 func TestingShouldRetrieveAccountContext(prompt string) bool {
 	return shouldRetrieveAccountContext(prompt)

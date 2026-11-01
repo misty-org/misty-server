@@ -2,17 +2,17 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"path"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/modelruntime"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
-// Files up to the attachment reader's limit go to the runtime inline.
+// Files up to the attachment reader's limit go to the desktop inline.
 const voiceFileMaxBytes = 25_000_000
 
 // VoiceTranscribeLibraryItem transcribes an audio or video file from a Space
@@ -28,22 +28,20 @@ func (s *SpacesService) VoiceTranscribeLibraryItem() http.HandlerFunc {
 			SpaceID       string `json:"space_id"`
 			LibraryItemID string `json:"library_item_id"`
 			Language      string `json:"language"`
+			// A desktop transcribes on its own model and sends what it heard
+			// (docs/agents/runtime.md).
+			Result *diarizedResult `json:"result"`
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
 		if decodeAIJSON(w, r, &body) != nil || body.SpaceID == "" || body.LibraryItemID == "" || len(body.Language) > 16 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_transcribe"})
 			return
 		}
-		if s.library == nil || s.models == nil || !s.models.Enabled() {
+		if s.library == nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "transcribe_unavailable", "message": "Transcribing files isn't available right now."})
 			return
 		}
-		transcript, err := s.transcribeLibraryItem(r.Context(), user, body.SpaceID, body.LibraryItemID, body.Language)
-		if err != nil {
-			writeTranscribeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, transcript)
+		s.transcribeLibraryItemOnDevice(w, r, user, body.SpaceID, body.LibraryItemID, body.Result)
 	}
 }
 
@@ -51,30 +49,42 @@ type voiceFileError string
 
 func (e voiceFileError) Error() string { return string(e) }
 
-func (s *SpacesService) transcribeLibraryItem(ctx context.Context, user, spaceID, itemID, language string) (db.VoiceTranscript, error) {
-	audio, download, err := s.library.ReadExplicitAgentAttachment(ctx, user, spaceID, "library_item", itemID, voiceFileMaxBytes)
+// transcribeLibraryItemOnDevice answers a desktop in two steps: first the file to transcribe,
+// then, with the desktop's result, the saved transcript.
+func (s *SpacesService) transcribeLibraryItemOnDevice(w http.ResponseWriter, r *http.Request, user, spaceID, itemID string, result *diarizedResult) {
+	audio, download, err := s.library.ReadExplicitAgentAttachment(r.Context(), user, spaceID, "library_item", itemID, voiceFileMaxBytes)
 	if err != nil {
-		return db.VoiceTranscript{}, err
+		writeTranscribeError(w, err)
+		return
 	}
 	mime := strings.ToLower(strings.TrimSpace(strings.Split(download.MIMEType, ";")[0]))
 	if !strings.HasPrefix(mime, "audio/") && !strings.HasPrefix(mime, "video/") {
-		return db.VoiceTranscript{}, voiceFileError("Only audio and video files can be transcribed.")
+		writeTranscribeError(w, voiceFileError("Only audio and video files can be transcribed."))
+		return
 	}
-	route, model, err := roleRoute(ctx, s.database, user, "diarized-transcription")
-	if err != nil {
-		return db.VoiceTranscript{}, err
+	if result == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"on_device": true, "mime_type": mime, "audio_base64": base64.StdEncoding.EncodeToString(audio)})
+		return
 	}
-	result, err := s.models.TranscribeDiarized(ctx, route, model, mime, audio, languageHints(language), nil)
+	transcript, err := s.saveLibraryTranscript(r.Context(), user, itemID, download.Filename, *result)
 	if err != nil {
-		return db.VoiceTranscript{}, err
+		writeTranscribeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, transcript)
+}
+
+func (s *SpacesService) saveLibraryTranscript(ctx context.Context, user, itemID, filename string, result diarizedResult) (db.VoiceTranscript, error) {
+	if len(result.Turns) > 20_000 {
+		return db.VoiceTranscript{}, voiceFileError("That transcript is too long.")
 	}
 	heard := int64(0)
 	if result.DurationInSeconds != nil {
 		heard = int64(*result.DurationInSeconds * 1000)
 	}
 	transcript := db.VoiceTranscript{
-		ID: uuid.NewString(), Title: strings.TrimSuffix(download.Filename, path.Ext(download.Filename)),
-		Source:   db.VoiceSource{Kind: "library_item", LibraryItemID: itemID, Title: download.Filename},
+		ID: uuid.NewString(), Title: strings.TrimSuffix(filename, path.Ext(filename)),
+		Source:   db.VoiceSource{Kind: "library_item", LibraryItemID: itemID, Title: filename},
 		Language: result.Language, Turns: voiceTurns(result.Turns), DurationMS: heard,
 	}
 	if len(transcript.Turns) == 0 {
@@ -83,15 +93,8 @@ func (s *SpacesService) transcribeLibraryItem(ctx context.Context, user, spaceID
 	return transcript, s.database.SaveVoiceTranscript(ctx, user, transcript)
 }
 
-func languageHints(language string) []string {
-	if language == "" || language == "auto" {
-		return nil
-	}
-	return []string{language}
-}
-
 // voiceTurns names diarized speakers the way live captures do.
-func voiceTurns(turns []modelruntime.Turn) []db.VoiceTurn {
+func voiceTurns(turns []voiceTurnResult) []db.VoiceTurn {
 	out := make([]db.VoiceTurn, 0, len(turns))
 	for _, turn := range turns {
 		if strings.TrimSpace(turn.Text) == "" {

@@ -9,39 +9,48 @@ import (
 	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
-// validateProductionEnvironment rejects configurations that could let the
-// process start successfully while core production features are unusable or
-// insecure. Feature-specific constructors perform the deeper key and secret
-// validation after this baseline check.
+// productionRequired is every value a production server needs. Nothing is
+// optional: the integrations (Cloudflare, Composio, Google) are parts of every
+// server, and the setup container generates the secrets. The server sends no
+// email, and holds no search key: web search runs on each device (docs/byok.md).
+var productionRequired = []string{
+	"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "MISTY_PUBLIC_API_URL",
+	"SPACE_LINK_ENCRYPTION_KEY", "MISTY_AUTH_SIGNING_KEY", "MISTY_AGENT_RUNTIME_CONTROL_SECRET",
+	"MISTY_DEVICE_TICKET_PRIVATE_KEY", "MISTY_DEVICE_PAIRING_PEPPER",
+	"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY",
+	"PARTYKIT_HOST", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY", "JOURNAL_COLLAB_CONTROL_SECRET",
+	"JOURNAL_COLLAB_PROJECTION_SECRET", "JOURNAL_COLLAB_ROOM_SALT",
+	"MISTY_WEB_FETCH_URL", "MISTY_WEB_FETCH_SECRET",
+	"MISTY_COMPOSIO_API_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+}
+
+// productionForbidden are model keys and retired operator model settings. A
+// server never calls a model: agents and every model call run on the person's
+// desktop, on that device's own keys (docs/byok.md). A server that still sets
+// one stops at startup, so a stale configuration is noticed.
+var productionForbidden = []string{
+	"AI_GATEWAY_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY",
+	"NVIDIA_API_KEY", "ELEVENLABS_API_KEY", "SONIOX_API_KEY", "OLLAMA_API_KEY", "OPENAI_COMPATIBLE_API_KEY",
+	"VERCEL_OIDC_TOKEN", "MISTY_AGENT_MODEL", "MISTY_AGENT_RUNTIME_URL",
+}
+
+// ValidateProductionEnvironment rejects a production configuration that is
+// missing any part of the server. Feature constructors validate each value's
+// format after this check.
 func ValidateProductionEnvironment() error {
-	if !strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_ENVIRONMENT")), "production") {
+	if !productionEnvironment() {
 		return nil
 	}
-	required := []string{
-		"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "MISTY_PUBLIC_API_URL",
-		"SPACE_LINK_ENCRYPTION_KEY",
-	}
-	for _, name := range required {
+	for _, name := range productionRequired {
 		if strings.TrimSpace(config.Getenv(name)) == "" {
 			return fmt.Errorf("%s is required in production", name)
 		}
 	}
-	// Object storage is S3/R2 or a server directory. S3 needs all its keys;
-	// a directory needs only its path (checked when the store opens).
-	if libraryBackend() == "s3" {
-		storage := libraryS3ConfigFromEnv()
-		for name, value := range map[string]string{
-			"MISTY_S3_ENDPOINT (or R2_ENDPOINT)": storage.endpoint, "MISTY_S3_BUCKET (or R2_BUCKET)": storage.bucket,
-			"MISTY_S3_ACCESS_KEY_ID (or R2_ACCESS_KEY)": storage.accessKey, "MISTY_S3_SECRET_ACCESS_KEY (or R2_SECRET_KEY)": storage.secretKey,
-		} {
-			if value == "" {
-				return fmt.Errorf("%s is required in production when Library storage is S3", name)
-			}
+	for _, name := range productionForbidden {
+		if strings.TrimSpace(config.Getenv(name)) != "" {
+			return fmt.Errorf("%s is set, but a Misty server holds no model keys or models; remove it (models run on each device)", name)
 		}
-	} else if libraryBackend() != "filesystem" {
-		return fmt.Errorf("production needs Library storage: set MISTY_LIBRARY_FILESYSTEM_DIR or the MISTY_S3_* (R2_*) keys")
 	}
-
 	publicURL, err := url.Parse(strings.TrimSpace(config.Getenv("MISTY_PUBLIC_API_URL")))
 	if err != nil || publicURL.Scheme != "https" || publicURL.Host == "" {
 		return fmt.Errorf("MISTY_PUBLIC_API_URL must be an absolute https URL in production")
@@ -52,6 +61,5 @@ func ValidateProductionEnvironment() error {
 			return fmt.Errorf("PORT must be an integer between 1 and 65535")
 		}
 	}
-
 	return nil
 }

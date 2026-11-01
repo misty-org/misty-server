@@ -3,9 +3,6 @@ package app
 import (
 	"fmt"
 	"os/exec"
-	"strings"
-
-	"github.com/kannachi323/misty/server/internal/platform/config"
 
 	"github.com/kannachi323/misty/server/internal/platform/db"
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
@@ -13,52 +10,33 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kannachi323/misty/server/internal/agent"
 	"github.com/kannachi323/misty/server/internal/browsersync"
-	"github.com/kannachi323/misty/server/internal/modelruntime"
-	"github.com/kannachi323/misty/server/internal/platform/email"
 	"github.com/kannachi323/misty/server/internal/platform/metrics"
-	"github.com/kannachi323/misty/server/internal/platform/telemetry"
 )
 
 type Server struct {
-	AbuseGuard               *api.AbuseGuard
-	Router                   *chi.Mux
-	Database                 *db.Database
-	EmailSender              email.Sender
-	AIAgent                  *agent.Service
-	LibraryStore             api.LibraryObjectStore
-	Library                  *api.SpaceLibraryService
-	Spaces                   *api.SpacesService
-	Realtime                 *api.RealtimeService
-	PasswordResetStartURL    string
-	PasswordResetRedirectURL string
-	AuthHandoffStartURL      string
-	WebsiteURL               string
-	Telemetry                telemetry.Client
-	HealthMonitor            *healthMonitor
-	Metrics                  *metrics.Registry
-	AIAnalyzer               *agent.SmartLibraryAnalyzer
-	Models                   *modelruntime.Client
-	AI                       *api.AIService
-	AgentRuntime             api.AgentRuntimeConfig
-	BrowserSync              *browsersync.BrowserSyncService
+	AbuseGuard          *api.AbuseGuard
+	Router              *chi.Mux
+	Database            *db.Database
+	AIAgent             *agent.Service
+	LibraryStore        api.LibraryObjectStore
+	Library             *api.SpaceLibraryService
+	Spaces              *api.SpacesService
+	Realtime            *api.RealtimeService
+	AuthHandoffStartURL string
+	WebsiteURL          string
+	HealthMonitor       *healthMonitor
+	Metrics             *metrics.Registry
+	AI                  *api.AIService
+	AgentRuntime        api.AgentRuntimeConfig
+	BrowserSync         *browsersync.BrowserSyncService
+	Suspensions         *api.SuspensionGuard
 }
 
 func CreateServer() (*Server, error) {
-	if _, err := config.AgentModel(); err != nil {
-		return nil, fmt.Errorf("validate agent model configuration: %w", err)
-	}
 	if err := ValidateProductionEnvironment(); err != nil {
 		return nil, fmt.Errorf("validate production environment: %w", err)
 	}
 	warnOnProxyConfiguration()
-	passwordResetRedirectURL, err := PasswordResetRedirectURLFromEnv()
-	if err != nil {
-		return nil, err
-	}
-	passwordResetStartURL, err := PasswordResetStartURLFromEnv()
-	if err != nil {
-		return nil, err
-	}
 	authHandoffStartURL, err := AuthHandoffStartURLFromEnv()
 	if err != nil {
 		return nil, err
@@ -69,39 +47,15 @@ func CreateServer() (*Server, error) {
 	}
 
 	s := &Server{
-		Router:                   chi.NewRouter(),
-		Database:                 &db.Database{},
-		PasswordResetStartURL:    passwordResetStartURL,
-		PasswordResetRedirectURL: passwordResetRedirectURL,
-		AuthHandoffStartURL:      authHandoffStartURL,
-		WebsiteURL:               websiteURL,
-		Telemetry:                telemetry.NewFromEnv(),
+		Router:              chi.NewRouter(),
+		Database:            &db.Database{},
+		AuthHandoffStartURL: authHandoffStartURL,
+		WebsiteURL:          websiteURL,
 	}
-	// Every model call goes through the agent runtime and the AI SDK.
-	models, err := modelruntime.FromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("configure AI model runtime: %w", err)
-	}
-	s.Models = models
-	s.AIAgent = agent.NewService(
-		// The embodied companion and Agents both use misty_ask_conversations as their
-		// durable task-thread store. Keeping the runtime wired to the database is
-		// also required before an invocation can bind its surface metadata.
-		agent.NewSessionStoreWithPersistence(0, s.Database),
-		// Every model call in the process passes through this ceiling, so no
-		// path can flood the providers.
-		agent.NewBudgetedProvider(
-			agent.NewAgentProvider(models),
-			agent.ProviderBudgetFromEnv(),
-		),
-		agent.WithModelRuntime(models),
-	)
-	s.AIAnalyzer = &agent.SmartLibraryAnalyzer{
-		Models: models,
-		// The Gateway key here only opens realtime voice sockets.
-		APIKey:  strings.TrimSpace(config.Getenv("AI_GATEWAY_API_KEY")),
-		BaseURL: strings.TrimSpace(config.Getenv("AI_GATEWAY_BASE_URL")),
-	}
+	// The server never calls a model: agents and every model call run on the
+	// person's desktop (docs/agents/runtime.md). Older conversations' transcripts
+	// are still read from misty_ask_conversations.
+	s.AIAgent = agent.NewService(s.Database)
 	s.LibraryStore, err = LibraryStoreFromEnv()
 	if err != nil {
 		return nil, err
@@ -145,27 +99,11 @@ func CreateServer() (*Server, error) {
 		return nil, fmt.Errorf("configure Agent runtime: %w", err)
 	}
 	s.Spaces.SetAgentRuntime(agentRuntime)
-	s.Spaces.SetModels(models)
-	s.AIAnalyzer.ModelResolver = s.Spaces.ResolveAIModel
-	s.AIAgent.SetModelResolver(s.Spaces.ResolveAIModel)
 	s.AgentRuntime = agentRuntime
 	s.Spaces.SetLibraryProvider(s.Library)
 	s.Spaces.SetAvatarStore(s.LibraryStore)
 	s.Realtime = api.NewRealtimeService(s.Database, s.Database.GetDSN())
 
-	emailSender, err := email.NewSenderFromEnv()
-	if err != nil {
-		return nil, err
-	}
-	s.EmailSender = emailSender
-	// Invitation emails link to the operator's own invite page. Without
-	// MISTY_INVITATION_URL_BASE or MISTY_WEBSITE_URL, invitations still reach
-	// the invitee inside Misty but no email is sent.
-	invitationBaseURL := strings.TrimSpace(config.Getenv("MISTY_INVITATION_URL_BASE"))
-	if website := strings.TrimRight(strings.TrimSpace(config.Getenv("MISTY_WEBSITE_URL")), "/"); invitationBaseURL == "" && website != "" {
-		invitationBaseURL = website + "/invite"
-	}
-	s.Spaces.SetInvitationSender(emailSender, invitationBaseURL)
 	s.HealthMonitor = NewHealthMonitor(s)
 
 	return s, nil

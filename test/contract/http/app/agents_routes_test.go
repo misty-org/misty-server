@@ -10,11 +10,6 @@ import (
 
 func TestAgentRoutesRequireAuthentication(t *testing.T) {
 	configureJournalCollabForTest(t)
-	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
-	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
-	t.Setenv("MAILJET_API_KEY", "")
-	t.Setenv("MAILJET_SECRET_KEY", "")
-	t.Setenv("MAILJET_FROM_EMAIL", "")
 	t.Setenv("MISTY_DEVICE_JOBS_ENABLED", "true")
 	server, err := CreateServer()
 	if err != nil {
@@ -26,7 +21,6 @@ func TestAgentRoutesRequireAuthentication(t *testing.T) {
 	for _, path := range []string{
 		"/api/devices",
 		"/api/spaces/space-1/notes",
-		"/api/ai/models",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
@@ -76,8 +70,6 @@ func TestCustomAgentMutationAndInvocationRoutesAreAbsent(t *testing.T) {
 
 func TestRetiredAgentChatRoutesAreAbsent(t *testing.T) {
 	configureJournalCollabForTest(t)
-	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
-	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatal(err)

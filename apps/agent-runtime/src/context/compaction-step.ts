@@ -40,7 +40,7 @@ export async function summarizeOlderSteps(
     output: { input_bytes: new TextEncoder().encode(COMPACTION_SYSTEM + transcript).byteLength },
   });
   const result = await generateText({
-    model: new RunModel(modelId, identity),
+    model: new RunModel(modelId),
     system: COMPACTION_SYSTEM,
     messages: [{ role: "user", content: `Transcript of the earlier steps:\n\n${transcript}\n\nWrite the notes now.` }],
     maxOutputTokens: SUMMARY_OUTPUT_TOKENS,

@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/aimodels"
 )
 
 func isAIInvocationRuntimeID(value string) bool {
@@ -39,7 +38,7 @@ func (s *SpacesService) agentRuntimeActivateAIInvocation(w http.ResponseWriter, 
 }
 
 func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r *http.Request) {
-	var body agentRuntimeIdentity
+	var body agentRuntimeContextRequest
 	if !readAgentRuntimeRequest(s.agentRuntime, w, r, &body) {
 		return
 	}
@@ -48,7 +47,7 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 		writeAgentError(w, err)
 		return
 	}
-	prepared, err := s.prepareAIInvocationRuntime(r.Context(), record)
+	prepared, err := s.prepareAIInvocationRuntime(r.Context(), record, body.deviceTools()...)
 	if err != nil {
 		writeAgentError(w, err)
 		return
@@ -68,17 +67,17 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 		writeAgentError(w, err)
 		return
 	}
-	planned, forced := runRoutes(r.Context(), s.database, record.UserID, defaultAIRoutes(prepared.modelID, prepared.reasoning))
-	routes, err := s.database.FreezeAIModelRoutes(r.Context(), record.UserID, record.ID, planned, nil, forced)
+	modelID, reasoning := prepared.modelID, prepared.reasoning
+	if device, effort, ok := body.deviceModel(); ok {
+		// A desktop runtime thinks on the device's own models.
+		modelID, reasoning = device, effort
+	}
+	routes, err := s.database.FreezeAIModelRoutes(r.Context(), record.UserID, record.ID, runModelRoutes(modelID, reasoning))
 	if err != nil {
 		writeAIProviderError(w, err)
 		return
 	}
 	agentRoute, visionRoute := modelRoute(routes, "agent"), modelRoute(routes, "vision")
-	if !agentRoute.Enabled {
-		writeAIProviderError(w, aimodels.ErrDisabled)
-		return
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"run_id": record.ID, "agent_id": prepared.body.AgentID, "space_id": prepared.spaceID,
 		"space_name": prepared.spaceName, "space_kind": prepared.spaceKind,
@@ -95,6 +94,10 @@ func (s *SpacesService) agentRuntimeContextAIInvocation(w http.ResponseWriter, r
 		"teach_tool_budget":     teachToolBudget(prepared.body),
 		"attachments":           attachments,
 		"browser_replay":        s.browserWorkflowReplayContext(r.Context(), record, prepared.body),
+		// A desktop runtime names a new chat from its opening message as the run ends.
+		"title_prompt": deviceTitlePrompt(r.Context(), s.database, record.UserID, record.ConversationID, prepared.body),
+		// The older turns that aged out, for the desktop to write notes on as the run ends.
+		"summary_request": s.deviceSummaryRequest(r.Context(), record, prepared.body, modelID),
 	})
 }
 

@@ -18,6 +18,11 @@ func (s *SpacesService) agentRuntimeCompleteAIInvocation(w http.ResponseWriter, 
 		Usage        json.RawMessage `json:"usage"`
 		ErrorCode    string          `json:"error_code"`
 		ErrorMessage string          `json:"error_message"`
+		// A desktop runtime names the chat as the run ends (saveDeviceTitle).
+		Title string `json:"title"`
+		// And the notes on the chat's older turns (device_summaries.go).
+		Summary string `json:"summary"`
+		Model   string `json:"model"`
 	}
 	if !readAgentRuntimeRequest(s.agentRuntime, w, r, &body) {
 		return
@@ -65,6 +70,13 @@ func (s *SpacesService) agentRuntimeCompleteAIInvocation(w http.ResponseWriter, 
 			} else {
 				body.Text = strings.TrimSpace(body.Text) + "\n\n" + body.ErrorMessage
 			}
+		}
+	}
+	if body.Status == "success" && record.ConversationID != "" {
+		var input aiInvocationInput
+		if json.Unmarshal(record.RequestPayload, &input) == nil {
+			saveDeviceTitle(r.Context(), s.database, record.UserID, record.ConversationID, input, body.Title)
+			s.saveDeviceSummary(r.Context(), record, input, body.Model, body.Summary)
 		}
 	}
 	// Count the run against its conversation's goal and continue it when due.
@@ -178,6 +190,5 @@ func (s *SpacesService) finishAIInvocationRuntimeAnswer(userID, invocationID str
 			return err
 		}
 	}
-	retitleAfterFirstReply(s.database, s.agent, userID, body, answer)
 	return s.aiInvocations.complete(invocationID)
 }

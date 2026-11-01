@@ -250,10 +250,6 @@ func (s *SpacesService) spawnChildTabs(ctx context.Context, record *db.AIInvocat
 
 func (s *SpacesService) startDelegatedInvocation(ctx context.Context, parent *db.AIInvocationRecord, body aiInvocationInput, callID string, index int, task delegatedTask, tab *aiInvocationDeviceContext) (string, error) {
 	model := strings.TrimSpace(body.ModelID)
-	if route, err := s.database.AIModelBrowsingRoute(ctx, parent.UserID, parent.ID); err == nil && route.Model != "" && agent.ClientModelChoice() {
-		// Children navigate on the account's Browsing model.
-		model = route.Model
-	}
 	child := aiInvocationInput{
 		Mode: "drawer", SurfaceID: "global", Trigger: "delegated", Prompt: delegatedPrompt(task), Timezone: body.Timezone,
 		AgentID: body.AgentID, SpaceID: body.SpaceID, ExecutionMode: body.ExecutionMode, TaskID: body.TaskID, WindowLabel: body.WindowLabel,
@@ -277,14 +273,8 @@ func (s *SpacesService) startDelegatedInvocation(ctx context.Context, parent *db
 		return "", err
 	}
 	if created {
-		// Freeze before the runtime would freeze the defaults, so the child's
-		// agent role runs on the Browsing model.
-		planned, forced := runRoutes(ctx, s.database, parent.UserID, defaultAIRoutes(model, body.ReasoningEffort))
-		overrides := map[string]string{}
-		if model != "" {
-			overrides["agent"] = model
-		}
-		if _, err := s.database.FreezeAIModelRoutes(ctx, parent.UserID, stored.ID, planned, overrides, forced); err != nil {
+		// The child is recorded under its parent's model until its desktop reports one.
+		if _, err := s.database.FreezeAIModelRoutes(ctx, parent.UserID, stored.ID, runModelRoutes(model, body.ReasoningEffort)); err != nil {
 			return "", err
 		}
 	}

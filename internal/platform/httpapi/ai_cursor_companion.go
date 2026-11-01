@@ -11,12 +11,11 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"regexp"
 	"strings"
 )
 
-// The cursor's voice and pointing rules (agent.entry.cursor). The pointing
-// eval (server/apps/agent-runtime/evals/pointing) reads the same file, so it
-// scores the words production sends.
+// The cursor's voice and pointing rules (agent.entry.cursor).
 var (
 	//go:embed companion_teach_prompt.txt
 	companionTeachPrompt string
@@ -42,7 +41,7 @@ func mistyGuideSection(body aiInvocationInput) string {
 
 func validateCompanionInput(body *aiInvocationInput) error {
 	if body.Mode != "companion" {
-		if body.CompanionMode != "" || body.CompanionModel != "" || len(body.DisplayCaptures) > 0 {
+		if body.CompanionMode != "" || len(body.DisplayCaptures) > 0 {
 			return errors.New("companion options require companion mode")
 		}
 		return nil
@@ -139,6 +138,10 @@ The screenshots show what the person is looking at; judge whether they matter. F
 When the user asks you to do something, use the tools listed for this run; you do not need per-action approval. The capability notes below say which browser or screen is attached. Use the attached control surface for requested screen actions. Open reference links only from user-provided URLs or actual search/tool source URLs. Never invent citations. Never claim an action succeeded without confirmed tool results. Capture the attached control surface again after every action before reporting completion; if the display screenshot is no longer current or you only have a page crop, use [POINT:none], not stale display coordinates. Pause and explain when sign-in or other user participation is needed. Completed actions remain in history.
 There are no Team/Auto interaction modes. Decide from the request whether to teach, answer, use tools, or take desktop control. Desktop control begins through the visual tool; if Ask is enabled the native app obtains human confirmation first. Never dismiss, accept, or work around that confirmation or the user’s Stop controls.
 `
+	if !agentToolNameAllowed(tools, webSearchTool) {
+		// Web search runs on the device's own search key; without one, pages are read with web_fetch alone.
+		prompt = strings.Replace(prompt, "use web_search and web_fetch to answer", "use web_fetch to answer", 1)
+	}
 	switch {
 	case len(body.DisplayCaptures) > 0:
 		for _, capture := range body.DisplayCaptures {
@@ -156,6 +159,14 @@ There are no Team/Auto interaction modes. Decide from the request whether to tea
 	}
 	return prompt + "When the user asks for work, carry it through multiple steps, keep the user informed, verify results, and report completion or the precise blocker. Do not start unrelated work.\n"
 }
+
+// Pointer and lesson tags are for the companion's pointer and the device's
+// lesson state; earlier turns are replayed without them.
+var (
+	agentSpeechPoint      = regexp.MustCompile(`\[POINT:[^\]\r\n]*\]`)
+	agentSpeechLessonTags = regexp.MustCompile(`\[(?:ROUTE|FOCUS):[^\]\r\n]*\]|\[(?:LESSON|COURSE):[^\r\n]*\]`)
+)
+
 func companionConversationHistory(turns []db.AIConversationTurnRecord, current string) string {
 	retained := make([]db.AIConversationTurnRecord, 0, len(turns))
 	for _, turn := range turns {

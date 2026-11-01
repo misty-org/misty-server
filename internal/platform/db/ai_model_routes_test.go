@@ -3,9 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/aimodels"
 	"github.com/lib/pq"
 	"os"
 	"strings"
@@ -65,126 +63,35 @@ func aiProviderTestDB(t *testing.T) *Database {
 	return &Database{Conn: conn}
 }
 
-// chooseModel stores an account's model for roles, as the retired model
-// picker once did.
-func chooseModel(t *testing.T, database *Database, user, model string, roles ...string) {
-	t.Helper()
-	err := database.WithRLSContext(context.Background(), userRLSSettings(user), func(tx *sql.Tx) error {
-		for _, role := range roles {
-			if _, err := tx.Exec(`INSERT INTO ai_model_routes(owner_user_id,role,model,reasoning,enabled) VALUES($1,$2,$3,'',true) ON CONFLICT(owner_user_id,role) DO UPDATE SET model=EXCLUDED.model`, user, role, model); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestAIModelSensesAreIsolatedAndFrozenPerRun(t *testing.T) {
+func TestAIModelRoutesAreIsolatedAndFrozenPerRun(t *testing.T) {
 	database := aiProviderTestDB(t)
 	ctx := context.Background()
-	chooseModel(t, database, "owner", "anthropic/claude-x", "agent")
-	chooseModel(t, database, "owner", "google/gemini-x", "vision")
-	if routes, err := database.AIModelRoutes(ctx, "other"); err != nil || len(routes) != 0 {
-		t.Fatal("model choices leaked across accounts", routes, err)
-	}
-	owned, err := database.AIModelRoutes(ctx, "owner")
-	if err != nil || len(owned) != 2 {
-		t.Fatal("account choices were not stored", owned, err)
-	}
-	defaults := []aimodels.Route{}
-	for _, role := range aimodels.Roles {
-		defaults = append(defaults, aimodels.Route{Role: role.ID, Model: "openai/default", Reasoning: "high", Enabled: true})
-	}
-	frozen, err := database.FreezeAIModelRoutes(ctx, "owner", "run-1", defaults, nil)
-	if err != nil {
-		t.Fatal(err)
+	routes := []AIModelRoute{{Role: "agent", Model: "anthropic/claude-x", Reasoning: "high"}, {Role: "vision", Model: "google/gemini-x", Reasoning: "high"}}
+	frozen, err := database.FreezeAIModelRoutes(ctx, "owner", "run-1", routes)
+	if err != nil || len(frozen) != 2 {
+		t.Fatal(frozen, err)
 	}
 	for _, r := range frozen {
 		want := map[string]string{"agent": "anthropic/claude-x", "vision": "google/gemini-x"}[r.Role]
-		if want == "" {
-			want = "openai/default"
-		}
-		if r.Model != want || r.Reasoning != "high" {
-			t.Fatal("frozen route ignored the account's choice or the admitted reasoning", r)
+		if r.Model != want || r.Reasoning != "high" || !r.Enabled {
+			t.Fatal("frozen route lost the reported model or reasoning", r)
 		}
 	}
-	if _, err := database.Conn.Exec(`DELETE FROM ai_model_routes WHERE owner_user_id='owner' AND role='agent'`); err != nil {
-		t.Fatal(err)
+	// A later report never changes a running task's models.
+	again, err := database.FreezeAIModelRoutes(ctx, "owner", "run-1", []AIModelRoute{{Role: "agent", Model: "openai/other", Reasoning: "low"}})
+	if err != nil || len(again) != 2 || modelOf(again, "agent") != "anthropic/claude-x" {
+		t.Fatal("running task changed models", again, err)
 	}
-	if agent, _ := database.AIModelRunRoute(ctx, "owner", "run-1", "agent"); agent.Model != "anthropic/claude-x" {
-		t.Fatal("running task changed with account preferences", agent)
-	}
-	if _, err = database.AIModelRunRoute(ctx, "other", "run-1", "agent"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatal("another account read a run route", err)
-	}
-	if _, err := database.FreezeAIModelRoutes(ctx, "owner", "run-2", defaults, map[string]string{"agent": "spacexai/grok-x"}); err != nil {
-		t.Fatal(err)
-	}
-	if agent, _ := database.AIModelRunRoute(ctx, "owner", "run-2", "agent"); agent.Model != "spacexai/grok-x" {
-		t.Fatal("a conversation's own model did not win", agent)
-	}
-	if vision, _ := database.AIModelRunRoute(ctx, "owner", "run-2", "vision"); vision.Model != "google/gemini-x" {
-		t.Fatal("a conversation override leaked into another role", vision)
+	if other, err := database.FreezeAIModelRoutes(ctx, "other", "run-1", nil); err != nil || len(other) != 0 {
+		t.Fatal("another account read a run route", other, err)
 	}
 }
 
-func TestPlanForcedModelBeatsEveryChoice(t *testing.T) {
-	database := aiProviderTestDB(t)
-	ctx := context.Background()
-	chooseModel(t, database, "owner", "openai/flagship", "agent")
-	defaults := []aimodels.Route{}
-	for _, role := range aimodels.Roles {
-		defaults = append(defaults, aimodels.Route{Role: role.ID, Model: "openai/default", Reasoning: "high", Enabled: true})
-	}
-	// Basic runs Thinking on the fast model, whatever the account or the
-	// conversation picked; other roles keep their choices.
-	if _, err := database.FreezeAIModelRoutes(ctx, "owner", "basic-run", defaults, map[string]string{"agent": "openai/conversation-pick"}, map[string]string{"agent": "openai/fast"}); err != nil {
-		t.Fatal(err)
-	}
-	if agent, _ := database.AIModelRunRoute(ctx, "owner", "basic-run", "agent"); agent.Model != "openai/fast" || agent.Reasoning != "high" {
-		t.Fatal("the plan's model did not win", agent)
-	}
-	if vision, _ := database.AIModelRunRoute(ctx, "owner", "basic-run", "vision"); vision.Model != "openai/default" {
-		t.Fatal("a role the plan does not force changed", vision)
-	}
-}
-
-func TestBrowsingFollowsSeeingUntilChosen(t *testing.T) {
-	database := aiProviderTestDB(t)
-	ctx := context.Background()
-	chooseModel(t, database, "owner", "google/gemini-x", "vision")
-	defaults := []aimodels.Route{}
-	for _, role := range aimodels.Roles {
-		model := "openai/default"
-		if role.ID == "browsing" {
-			model = ""
+func modelOf(routes []AIModelRoute, role string) string {
+	for _, r := range routes {
+		if r.Role == role {
+			return r.Model
 		}
-		defaults = append(defaults, aimodels.Route{Role: role.ID, Model: model, Reasoning: "low", Enabled: true})
 	}
-	if _, err := database.FreezeAIModelRoutes(ctx, "owner", "run-follow", defaults, nil); err != nil {
-		t.Fatal(err)
-	}
-	if route, err := database.AIModelBrowsingRoute(ctx, "owner", "run-follow"); err != nil || route.Model != "google/gemini-x" || route.Role != "browsing" {
-		t.Fatal("browsing did not follow the run's Seeing model", route, err)
-	}
-	chooseModel(t, database, "owner", "openai/fast-x", "browsing")
-	if _, err := database.FreezeAIModelRoutes(ctx, "owner", "run-chosen", defaults, nil); err != nil {
-		t.Fatal(err)
-	}
-	if route, _ := database.AIModelBrowsingRoute(ctx, "owner", "run-chosen"); route.Model != "openai/fast-x" {
-		t.Fatal("the account's Browsing choice did not win", route)
-	}
-	// The earlier run stays frozen, and a run frozen before browsing existed falls back.
-	if route, _ := database.AIModelBrowsingRoute(ctx, "owner", "run-follow"); route.Model != "google/gemini-x" {
-		t.Fatal("a running task changed with account preferences", route)
-	}
-	if _, err := database.Conn.Exec(`DELETE FROM ai_model_run_routes WHERE run_id='run-follow' AND role='browsing'`); err != nil {
-		t.Fatal(err)
-	}
-	if route, err := database.AIModelBrowsingRoute(ctx, "owner", "run-follow"); err != nil || route.Model != "google/gemini-x" {
-		t.Fatal("a run without a browsing route did not use its vision route", route, err)
-	}
+	return ""
 }

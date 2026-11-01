@@ -116,18 +116,6 @@ func (db *Database) RevokeTrustedDevice(userID, deviceID string) error {
 	})
 }
 
-func (db *Database) TrustedDevicePublicKey(userID, deviceID string) (string, error) {
-	var publicKey string
-	err := db.agentTx(userID, func(tx *sql.Tx) error {
-		err := tx.QueryRow(`SELECT public_key FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`, deviceID, userID).Scan(&publicKey)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrDeviceNotFound
-		}
-		return err
-	})
-	return publicKey, err
-}
-
 func (db *Database) ConsumeTrustedDeviceNonce(userID, deviceID, nonce string, expiresAt time.Time) (string, error) {
 	var publicKey string
 	err := db.agentTx(userID, func(tx *sql.Tx) error {

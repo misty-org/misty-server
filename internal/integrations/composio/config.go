@@ -17,21 +17,22 @@ var ErrUnavailable = errors.New("Composio is not configured")
 
 const CloudEndpoint = "https://backend.composio.dev"
 
-type Config struct{ Deployment, APIKey string }
+type Config struct{ APIKey string }
 
-// ConfigFromEnv reads the Cloud opt-in and project key. MISTY_COMPOSIO_API_KEY
-// takes precedence over the dashboard's standard COMPOSIO_API_KEY.
+// ConfigFromEnv reads the project key. MISTY_COMPOSIO_API_KEY takes precedence
+// over the dashboard's standard COMPOSIO_API_KEY. Every server has one
+// (server/.env/composio.env).
 func ConfigFromEnv() Config {
 	key := strings.TrimSpace(config.Getenv("MISTY_COMPOSIO_API_KEY"))
 	if key == "" {
 		key = strings.TrimSpace(config.Getenv("COMPOSIO_API_KEY"))
 	}
-	return Config{Deployment: strings.TrimSpace(config.Getenv("MISTY_COMPOSIO_DEPLOYMENT")), APIKey: key}
+	return Config{APIKey: key}
 }
 
-// Validate requires the explicit Cloud opt-in, so a stray key never enables it.
+// Validate requires a well-formed key.
 func (c Config) Validate() error {
-	if c.Deployment != "cloud" || c.APIKey == "" || strings.ContainsAny(c.APIKey, " \t\r\n") {
+	if c.APIKey == "" || strings.ContainsAny(c.APIKey, " \t\r\n") {
 		return ErrUnavailable
 	}
 	return nil

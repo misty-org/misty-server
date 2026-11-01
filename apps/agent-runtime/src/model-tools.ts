@@ -19,6 +19,8 @@ export interface ModelCatalog {
   readOnly(modelName: string): boolean;
   /** Read-only server or provider tools that may run alongside each other. */
   concurrent(modelName: string): boolean;
+  /** Tools this runtime runs itself, which Misty's gateway never sees. */
+  local(modelName: string): boolean;
 }
 
 /** Names every catalog tool once, avoiding the runtime's own tool names. */
@@ -41,10 +43,11 @@ export function modelCatalog(descriptors: MCPRemoteTool[], reserved: string[]): 
     modelName: (name) => byMistyName.get(name),
     readOnly: (name) => byModelName.get(name)?.readOnly === true,
     concurrent: (name) => byModelName.get(name)?.concurrent === true,
+    local: (name) => byModelName.get(name)?.local === true,
   };
 }
 
-/** One AI SDK tool per catalog entry; every call runs through Misty's gateway. */
+/** One AI SDK tool per catalog entry; every call but a local tool's runs through Misty's gateway. */
 export function catalogTools(catalog: ModelCatalog, run: (callId: string, name: string, input: unknown) => Promise<unknown>): ToolSet {
   return Object.fromEntries(catalog.tools.map((descriptor) => [descriptor.modelName, tool({
     description: descriptor.description,

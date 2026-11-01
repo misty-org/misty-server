@@ -43,10 +43,10 @@ func NewAuthHandoffService(database *db.Database, startURL, websiteURL string) (
 	if database == nil {
 		return nil, errors.New("auth handoff database is required")
 	}
-	if err := ValidateResetURL(startURL); err != nil {
+	if err := ValidatePublicURL(startURL); err != nil {
 		return nil, err
 	}
-	if err := ValidateResetURL(websiteURL); err != nil {
+	if err := ValidatePublicURL(websiteURL); err != nil {
 		return nil, err
 	}
 

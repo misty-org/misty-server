@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { modelCatalog } from "../src/model-tools.js";
 import { serialToolLifecycle } from "../src/serial-tool-lifecycle.js";
 import { toolMonitor } from "../src/tool-monitor.js";
+import { webSearchDescriptor } from "../src/web-search/tool.js";
 
 const schema = { type: "object", properties: {} };
 const catalog = modelCatalog([
@@ -41,6 +42,17 @@ describe("tool monitor", () => {
       await monitor.onEnd({ toolCall, durationMs: 1, success: true, output: { ok: true } });
     }
     expect(saved).toEqual(["tool:read:completed", "tool:write:running", "tool:write:completed"]);
+  });
+
+  it("announces a search the device runs itself, and gives the timeline its query and links", async () => {
+    const local = modelCatalog([webSearchDescriptor("serper")], ["agent_finish"]);
+    const saved: Array<{ node: string; output?: Record<string, unknown> }> = [];
+    const monitor = toolMonitor({ catalog: local, order: serialToolLifecycle(), rejected: new Set(), checkpoint: async (event) => { saved.push({ node: `${event.node_id}:${event.state}`, output: event.output }); } });
+    const toolCall = { toolCallId: "s", toolName: "web_search", input: { query: "tea" } };
+    await monitor.onStart({ toolCall });
+    await monitor.onEnd({ toolCall, durationMs: 1, success: true, output: { results: [{ title: "Tea", url: "https://tea.example" }] } });
+    expect(saved.map((event) => event.node)).toEqual(["tool:s:running", "tool:s:completed"]);
+    expect(saved[1]?.output).toMatchObject({ tool: "web.search", device_arguments: { query: "tea" }, device_result: { results: [{ title: "Tea" }] } });
   });
 
   it("lets the model correct a rejected write, then stops when it repeats it unchanged", async () => {
@@ -91,6 +103,21 @@ describe("tool monitor", () => {
       await monitor.onEnd({ toolCall, durationMs: 1, success: true, output: { status: "uncertain" } });
       expect(order.stoppedReason !== "").toBe(stops);
       if (!stops) expect(monitor.requiredInspection).toBe("browser.snapshot");
+    }
+  });
+
+  it("looks again after an uncertain page goal flagged consequential that names nothing consequential", async () => {
+    const pages = modelCatalog([
+      { name: "browser.snapshot", description: "", inputSchema: schema, readOnly: true },
+      { name: "browser.act", description: "", inputSchema: schema },
+    ], ["agent_finish"]);
+    for (const [goal, stops] of [["Create a new CryptPad document titled \"Best LA Maternity Hospitals\" and write content into it", false], ["Send the drafted reply to the landlord", true]] as const) {
+      const order = serialToolLifecycle();
+      const monitor = toolMonitor({ catalog: pages, order, rejected: new Set(), checkpoint: async () => {} });
+      const toolCall = { toolCallId: "act", toolName: "browser_act", input: { goal, allowConsequential: true } };
+      await monitor.onStart({ toolCall });
+      await monitor.onEnd({ toolCall, durationMs: 1, success: true, output: { status: "uncertain" } });
+      expect(order.stoppedReason !== "").toBe(stops);
     }
   });
 

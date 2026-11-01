@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,10 +26,6 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 	}
 	database := testkit.OpenDatabase(t)
 	ctx := t.Context()
-	t.Setenv("MISTY_AGENT_MODEL", "openai/gpt-6-astra")
-	t.Setenv("AI_GATEWAY_API_KEY", "fixture-not-a-real-key")
-	t.Setenv("AI_GATEWAY_BASE_URL", "http://127.0.0.1:1")
-	t.Setenv("MISTY_AI_MODEL_CATALOG_JSON", `[{"id":"openai/gpt-6-astra","name":"GPT-6 Astra","capabilities":["chat","tools","vision","reasoning"]}]`)
 	owner, err := database.CreateUser("workflow-execution@example.test", "password123")
 	if err != nil {
 		t.Fatal(err)
@@ -73,30 +67,9 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 	if _, err = database.SaveAgentMethod(ctx, owner.ID, method, method.Version); err != nil {
 		t.Fatal(err)
 	}
-	var starts atomic.Int32
 	secret := []byte(strings.Repeat("s", 32))
-	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, _ := io.ReadAll(r.Body)
-		if r.Method != "POST" || r.URL.Path != "/v1/runs" || r.Header.Get("X-Misty-Agent-Signature") != signAgentRuntimeRequest(secret, r.Method, r.URL.Path, r.Header.Get("X-Misty-Agent-Timestamp"), raw) {
-			http.Error(w, "unexpected or unsigned runtime dispatch", 400)
-			return
-		}
-		var request agentRuntimeStartRequest
-		if json.Unmarshal(raw, &request) != nil || r.Header.Get("Idempotency-Key") != request.RunID {
-			http.Error(w, "invalid stable dispatch identity", 400)
-			return
-		}
-		starts.Add(1)
-		runtimeID := "fixture-" + request.RunID
-		if _, err := database.ActivateAIInvocationRuntime(r.Context(), request.RunID, "vercel-workflow", runtimeID); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		writeJSON(w, 200, map[string]string{"runtime_run_id": runtimeID})
-	}))
-	defer runtime.Close()
 	service := NewAIService(database, nil)
-	service.SetAgentRuntime(AgentRuntimeConfig{Kind: "vercel-workflow", URL: runtime.URL, InternalAPIURL: "https://api.example.test", secret: secret, client: runtime.Client()})
+	service.SetAgentRuntime(AgentRuntimeConfig{Kind: "vercel-workflow", secret: secret})
 	spaces := &SpacesService{database: database, aiInvocations: service.invocations}
 	router := chi.NewRouter()
 	router.Post("/invocations", service.CreateInvocation())
@@ -216,7 +189,8 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 	}); err != nil || deliveries != 1 {
 		t.Fatal("manual dispatch not durable once", deliveries, err)
 	}
-	if _, err = service.agentRuntime.Start(ctx, admitted.ID); err != nil {
+	// The desktop claims the delivery and its runtime starts the run.
+	if _, err = database.ActivateAIInvocationRuntime(ctx, admitted.ID, "vercel-workflow", "fixture-"+admitted.ID); err != nil {
 		t.Fatal(err)
 	}
 	finish := func(id string) {
@@ -360,8 +334,14 @@ func TestAgentMethodHTTPManualAndScheduledExecution(t *testing.T) {
 		t.Fatal("occurrence retry", err)
 	}
 	repeated, err := database.WorkflowScheduleByMethod(ctx, owner.ID, method.ID)
-	if err != nil || repeated.LastInvocationID != running.LastInvocationID || starts.Load() != 2 {
-		t.Fatal("same occurrence dispatched twice", starts.Load(), err)
+	var scheduledStarts int
+	if countErr := database.WithRLSContext(ctx, db.ServiceRLSSettings(), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT count(*) FROM agent_runtime_deliveries WHERE run_id=$1 AND operation='invocation.start'`, running.LastInvocationID).Scan(&scheduledStarts)
+	}); err != nil || countErr != nil || repeated.LastInvocationID != running.LastInvocationID || scheduledStarts != 1 {
+		t.Fatal("same occurrence dispatched twice", scheduledStarts, err, countErr)
+	}
+	if _, err = database.ActivateAIInvocationRuntime(ctx, scheduledRecord.ID, "vercel-workflow", "fixture-"+scheduledRecord.ID); err != nil {
+		t.Fatal(err)
 	}
 	if _, e := service.invocations.restoreDurable(ctx, *scheduledRecord); e != nil {
 		t.Fatal(e)

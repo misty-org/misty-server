@@ -1,5 +1,5 @@
 import type { LanguageModelV4, LanguageModelV4CallOptions } from "@ai-sdk/provider";
-import { embedMany, generateSpeech, generateText, jsonSchema, Output, transcribe, type ModelMessage } from "ai";
+import { embedMany, generateSpeech } from "ai";
 import { z } from "zod";
 import {
   modelRouteSchema as route,
@@ -7,46 +7,15 @@ import {
   resolveConfiguredModel,
   resolveEmbeddingModel,
   resolveSpeechModel,
-  resolveTranscriptionModel,
   type ModelRoute,
 } from "./model-provider.js";
 
-// One-shot model calls the Go API makes outside agent runs: Library analysis,
-// embeddings, transcription, the screen planner and short completions. Go
-// chooses the model and sends its route: the account's own key, or the
-// instance's environment keys. The runtime only talks to models, always
-// through the AI SDK.
+// The model-call building blocks the desktop's calls (src/device-calls.ts) and its voice share.
+// Each runs on the device's key for the model's provider, always through the AI SDK.
 
 const modelId = z.string().min(3).max(200).regex(/^[^\s/]+\/\S+$/);
 
-const reasoning = z.enum(["provider-default", "none", "minimal", "low", "medium", "high", "xhigh"]);
-
 const base64 = z.string().max(24 << 20).regex(/^[A-Za-z0-9+/]*={0,2}$/);
-
-const textPart = z.object({ type: z.literal("text"), text: z.string().max(512 << 10) });
-const imagePart = z.object({
-  type: z.literal("image"),
-  mediaType: z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]),
-  data: base64,
-});
-
-const textRequest = z.object({
-  route,
-  model: modelId,
-  system: z.string().max(64 << 10).optional(),
-  messages: z
-    .array(
-      z.object({
-        role: z.enum(["user", "assistant"]),
-        content: z.array(z.union([textPart, imagePart])).min(1).max(64),
-      }),
-    )
-    .min(1)
-    .max(64),
-  maxOutputTokens: z.number().int().min(1).max(32_000),
-  reasoning: reasoning.optional(),
-  schema: z.object({ name: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/), schema: z.record(z.string(), z.unknown()) }).optional(),
-});
 
 const embedRequest = z.object({
   route,
@@ -54,13 +23,6 @@ const embedRequest = z.object({
   values: z.array(z.string().max(256 << 10)).min(1).max(100),
   dimensions: z.number().int().min(1).max(4096).optional(),
   images: z.array(z.object({ mediaType: z.enum(["image/jpeg", "image/png", "image/webp"]), data: base64 }).nullable()).optional(),
-});
-
-const transcribeRequest = z.object({
-  route,
-  model: modelId,
-  mediaType: z.string().max(100).regex(/^audio\/[A-Za-z0-9.+-]+(?:;.*)?$/),
-  audio: base64,
 });
 
 // Spoken replies for the voice pipeline: raw 24 kHz 16-bit mono PCM, the
@@ -121,43 +83,6 @@ export class RoutedModel implements LanguageModelV4 {
   }
 }
 
-export async function generateTextCall(body: unknown, signal?: AbortSignal) {
-  const request = parse(textRequest, body);
-  const messages: ModelMessage[] = request.messages.map((message) =>
-    message.role === "assistant"
-      ? {
-          role: "assistant",
-          content: message.content.flatMap((part) => (part.type === "text" ? [{ type: "text" as const, text: part.text }] : [])),
-        }
-      : {
-          role: "user",
-          content: message.content.map((part) =>
-            part.type === "text"
-              ? { type: "text" as const, text: part.text }
-              : { type: "file" as const, data: Buffer.from(part.data, "base64"), mediaType: part.mediaType },
-          ),
-        },
-  );
-  const common = {
-    model: new RoutedModel(request.model, request.route),
-    system: request.system,
-    messages,
-    maxOutputTokens: request.maxOutputTokens,
-    reasoning: request.reasoning,
-    maxRetries: 1,
-    abortSignal: signal,
-  };
-  if (request.schema) {
-    const result = await generateText({
-      ...common,
-      output: Output.object({ schema: jsonSchema(request.schema.schema), name: request.schema.name }),
-    });
-    return { text: result.text, object: result.output, finishReason: result.finishReason };
-  }
-  const result = await generateText(common);
-  return { text: result.text, finishReason: result.finishReason };
-}
-
 export async function embedCall(body: unknown, signal?: AbortSignal) {
   const request = parse(embedRequest, body);
   if (request.images && request.images.length !== request.values.length)
@@ -183,26 +108,6 @@ export async function embedCall(body: unknown, signal?: AbortSignal) {
     },
   });
   return { embeddings: result.embeddings };
-}
-
-export async function transcribeCall(body: unknown, signal?: AbortSignal) {
-  const request = parse(transcribeRequest, body);
-  const result = await transcribe({
-    model: await resolveTranscriptionModel(request.model, request.route),
-    audio: Buffer.from(request.audio, "base64"),
-    maxRetries: 1,
-    abortSignal: signal,
-  });
-  return {
-    text: result.text,
-    language: result.language ?? "",
-    durationInSeconds: result.durationInSeconds ?? null,
-    segments: result.segments.map((segment) => ({
-      start: segment.startSecond,
-      end: segment.endSecond,
-      text: segment.text,
-    })),
-  };
 }
 
 export async function speechCall(body: unknown, signal?: AbortSignal) {

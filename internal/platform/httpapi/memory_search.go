@@ -9,16 +9,16 @@ import (
 // memorySearchFunc ranks one person's records in one Space by meaning.
 type memorySearchFunc func(ctx context.Context, user, space string, branches []string, query string, limit int) ([]db.MemoryHit, error)
 
-// searchMemory embeds the query once, on the person's embedding model, and
-// ranks one Space's records by meaning. Records still waiting for
+// searchMemory ranks one Space's records by meaning, on the vector the desktop
+// made for the query on the device's embedding model. Records still waiting for
 // their vector are not found yet; there is no word search to fall back on,
 // so without an embedding model memory search finds nothing.
 func (s *SpacesService) searchMemory(ctx context.Context, user, space string, branches []string, query string, limit int) ([]db.MemoryHit, error) {
-	embedding, ok := s.agentQueryEmbedding(ctx, user, query)
+	embedding, ok := agentQueryEmbedding(ctx, query)
 	if !ok {
 		return []db.MemoryHit{}, nil
 	}
-	return s.database.SearchMemory(ctx, user, space, branches, embedding, configuredEmbeddingModel(ctx, s.searchAnalyzer, user), limit)
+	return s.database.SearchMemory(ctx, user, space, branches, embedding, queryEmbeddingModel(ctx), limit)
 }
 
 func memoryHitIDs(hits []db.MemoryHit) []string {

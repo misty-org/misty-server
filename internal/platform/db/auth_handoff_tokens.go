@@ -38,8 +38,7 @@ func (db *Database) CreateAuthHandoffToken(userID, hashedToken, redirectPath str
 }
 
 // ConsumeAuthHandoffToken deletes the token and returns its owner in a single
-// transaction, so a replayed URL cannot mint a second session. Compare
-// ValidatePasswordResetToken, which deliberately leaves its token in place.
+// transaction, so a replayed URL cannot mint a second session.
 func (db *Database) ConsumeAuthHandoffToken(hashedToken string, now time.Time) (userID string, redirectPath string, err error) {
 	var invalidTokenErr error
 	err = db.WithRLSContext(context.Background(), ServiceRLSSettings(), func(tx *sql.Tx) error {

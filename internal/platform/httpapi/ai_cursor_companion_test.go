@@ -103,6 +103,10 @@ func TestCursorAnswersFromTheScreenAndLooksUpWhatItDoesNotShow(t *testing.T) {
 			t.Fatalf("cursor prompt lacks %q", text)
 		}
 	}
+	// Without a search key on the device, the prompt names no web_search.
+	if without := companionSystemPrompt(body, []string{"web.fetch"}); strings.Contains(without, "web_search") || !strings.Contains(without, "use web_fetch to answer") {
+		t.Fatal("a run without web search still names it")
+	}
 }
 
 func TestCompanionLooksBeforeAnsweringAScreenQuestion(t *testing.T) {

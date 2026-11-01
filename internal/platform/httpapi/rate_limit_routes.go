@@ -1,7 +1,6 @@
 package api
 
 import (
-	"net/http"
 	"strings"
 	"time"
 )
@@ -70,6 +69,11 @@ func NormalizeRateLimitPath(path string) string {
 		}
 		return "/" + strings.Join(parts, "/")
 	}
+	// Operator account routes name an account; one budget covers them all.
+	if parts[0] == "operator" && len(parts) >= 4 && parts[2] == "accounts" {
+		parts[3] = "{id}"
+		return "/" + strings.Join(parts, "/")
+	}
 	return trimmed
 }
 
@@ -116,8 +120,4 @@ func retryAfterSeconds(duration time.Duration) int {
 		return 1
 	}
 	return seconds
-}
-
-func ForgotPasswordRateLimitKey(r *http.Request, email string) string {
-	return ClientIPFromRequest(r) + "|" + strings.ToLower(strings.TrimSpace(email))
 }

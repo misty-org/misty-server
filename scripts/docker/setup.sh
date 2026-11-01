@@ -20,14 +20,6 @@ step="application permissions"
 echo "Setup: $step"
 /usr/local/bin/misty-grant-app-role
 
-step="workflow database"
-echo "Setup: $step"
-/usr/local/bin/misty-workflow-database
-
-step="workflow migrations"
-echo "Setup: $step"
-node /opt/agent-runtime/node_modules/@workflow/world-postgres/bin/setup.js
-
 step="collaboration configuration"
 echo "Setup: $step"
 /usr/local/bin/misty-cloudflare-init

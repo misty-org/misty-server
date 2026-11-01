@@ -9,9 +9,6 @@ x-api-image: &api-image
 services:
   postgres:
     image: pgvector/pgvector:pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
-    # The API pool (up to 50) and the agent runtime's workflow pool (60) together
-    # exceed the default 100 connections.
-    command: ["postgres", "-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-200}"]
     logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
     restart: unless-stopped
     environment:
@@ -39,7 +36,6 @@ services:
       dockerfile: scripts/docker/setup.Dockerfile
       additional_contexts:
         api: service:misty-api
-        agent: service:agent-runtime
     logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
     restart: "no"
     env_file:
@@ -63,9 +59,6 @@ services:
         dbname=${DB_NAME:-misty_server}
         sslmode=disable
       GOOSE_MIGRATION_DIR: /app/migrations
-      AGENT_RUNTIME_DB_PASSWORD: ${AGENT_RUNTIME_DB_PASSWORD:-workflow}
-      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
-      WORKFLOW_POSTGRES_URL: postgres://workflow:${AGENT_RUNTIME_DB_PASSWORD:-workflow}@postgres:5432/workflow
       MISTY_CLOUDFLARE_WORKER_NAME: ${MISTY_CLOUDFLARE_WORKER_NAME:-misty-journal-collab-dev}
       MISTY_DEV_API_ORIGIN: ${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}
     volumes:
@@ -75,59 +68,6 @@ services:
       postgres:
         condition: service_healthy
     networks: [database, edge]
-
-  agent-runtime:
-    image: misty-agent-runtime-dev:local
-    build:
-      context: .
-      dockerfile: apps/agent-runtime/Dockerfile
-      target: runtime
-    logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
-    restart: unless-stopped
-    environment:
-      PORT: "3000"
-      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres"
-      WORKFLOW_POSTGRES_URL: postgres://workflow:${AGENT_RUNTIME_DB_PASSWORD:-workflow}@postgres:5432/workflow
-      MISTY_INTERNAL_API_BASE: http://misty-api:8080
-      MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}
-      MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
-      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-${CLAUDE_API_KEY:-}}
-      VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
-      AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
-      # NVIDIA's free hosted models (nim/...), for evals without paid credit.
-      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
-      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-}
-      MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
-      # Server-side model keys, used only for accounts whose devices send none (docs/byok.md).
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
-      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
-      OPENAI_COMPATIBLE_BASE_URL: ${OPENAI_COMPATIBLE_BASE_URL:-}
-      OPENAI_COMPATIBLE_API_KEY: ${OPENAI_COMPATIBLE_API_KEY:-}
-      # Speaks the voice pipeline (ElevenLabs Flash).
-      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
-      # Transcribes recordings (Soniox); live transcription also needs the switch on.
-      SONIOX_API_KEY: ${SONIOX_API_KEY:-}
-      MISTY_RUNTIME_LIVE_TRANSCRIBE: ${MISTY_RUNTIME_LIVE_TRANSCRIBE:-}
-      # Agent steps run at once (the engine's default is 10, which queues the
-      # eleventh user); the pool holds one connection per step plus headroom.
-      WORKFLOW_POSTGRES_WORKER_CONCURRENCY: ${WORKFLOW_POSTGRES_WORKER_CONCURRENCY:-50}
-      WORKFLOW_POSTGRES_MAX_POOL_SIZE: ${WORKFLOW_POSTGRES_MAX_POOL_SIZE:-60}
-    depends_on:
-      setup:
-        condition: service_completed_successfully
-    # Lets a local Ollama or other model server on this host be reached as
-    # host.docker.internal on Linux too (Docker Desktop provides it already).
-    extra_hosts: ["host.docker.internal:host-gateway"]
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/health >/dev/null"]
-      interval: 3s
-      timeout: 5s
-      retries: 30
-    networks: [edge, database]
 
   misty-api:
     <<: *api-image
@@ -172,13 +112,6 @@ services:
     environment:
       PORT: "8080"
       MISTY_ENVIRONMENT: development
-      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      VERCEL_OIDC_TOKEN: ${VERCEL_OIDC_TOKEN:-}
-      AI_GATEWAY_BASE_URL: ${AI_GATEWAY_BASE_URL:-}
-      MISTY_AGENT_MODEL: ${MISTY_AGENT_MODEL:-}
-      # Evals only: lets a request pick its model and effort (production never does).
-      MISTY_ALLOW_MODEL_OVERRIDE: ${MISTY_ALLOW_MODEL_OVERRIDE:-}
       # The API stays publicly reachable for callbacks, while the development
       # website runs only on localhost through Vite.
       MISTY_PUBLIC_API_URL: "${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}/v1"
@@ -193,10 +126,8 @@ services:
       CLOUDFLARE_API_TOKEN: ""
       PARTYKIT_HOST: ${MISTY_CLOUDFLARE_WORKER_HOST:?run misty setup cloudflare}
       MISTY_JOURNAL_SERVER_ENV_FILE: /run/misty/journal-server.env
-      MISTY_AGENT_RUNTIME_URL: http://agent-runtime:3000
       # browser_act and every other screen task run as device jobs.
       MISTY_DEVICE_JOBS_ENABLED: ${MISTY_DEVICE_JOBS_ENABLED:-true}
-      MISTY_AGENT_RUNTIME_INTERNAL_API_URL: http://misty-api:8080
       MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}
       MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
     volumes:
@@ -205,8 +136,6 @@ services:
       setup:
         condition: service_completed_successfully
         restart: true
-      agent-runtime:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
       interval: 3s

@@ -5,48 +5,22 @@ import (
 	"strings"
 
 	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/aimodels"
-	"github.com/kannachi323/misty/server/internal/byok"
 )
 
-// chooseInvocationModel picks the run's model and reasoning: the agent model
-// the account brought (X-Misty-Models), else the operator's model. With
-// neither the request is refused with 409 model_key_needed. A development
-// stack with MISTY_ALLOW_MODEL_OVERRIDE also lets a request choose, for evals.
+// chooseInvocationModel records the run under the model the app named, else
+// the default. The desktop's runtime thinks on the device's own models and
+// reports them when it starts the run (docs/agents/runtime.md).
 func (s *AIService) chooseInvocationModel(w http.ResponseWriter, r *http.Request, userID string, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
 	st.modelID = agent.FrontierDefaultModelID()
+	if model := strings.TrimSpace(body.ModelID); model != "" {
+		st.modelID = model
+	}
 	st.reasoning = agent.ManagedReasoning(body.ThinkingMode, body.ReasoningEffort)
-	st.modelOverrides = map[string]string{}
-	if c := accountCredentials(r.Context(), userID); c != nil {
-		st.modelID, st.reasoning, st.accountModel = c.Models.Agent, accountReasoning(c), true
-	} else if !aimodels.OperatorModels() {
-		writeModelError(w, byok.ErrModelKeyNeeded)
-		return false
-	}
-	if !agent.ClientModelChoice() || st.accountModel {
-		return true
-	}
-	selectedModel, _, accountModel, selectErr := s.accountAgentModel(r.Context(), userID)
-	if selectErr != nil {
-		writeAIProviderError(w, selectErr)
-		return false
-	}
-	st.accountModel = accountModel
-	if accountModel {
-		st.modelID = selectedModel
-	}
-	if !accountModel && body.Mode == "companion" && body.CompanionModel != "" {
-		if !agent.FrontierModelAvailable(r.Context(), body.CompanionModel) {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_model", "message": "Choose an available model."})
-			return false
-		}
-		st.modelID = body.CompanionModel
-	}
 	return true
 }
 
-// bindConversationModel applies an existing conversation's binding, its
-// model override and its reasoning setting to the run.
+// bindConversationModel binds an existing conversation to the run's agent and
+// records the run's model on it.
 func (s *AIService) bindConversationModel(w http.ResponseWriter, r *http.Request, userID string, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
 	if st.conversationID == "" {
 		return true
@@ -60,20 +34,6 @@ func (s *AIService) bindConversationModel(w http.ResponseWriter, r *http.Request
 		writePersonalAgentError(w, bindErr)
 		return false
 	}
-	if body.ThinkingMode == "" && body.ReasoningEffort == "" && !st.accountModel {
-		st.reasoning = agent.ManagedReasoning("", bound.ReasoningEffort)
-	}
-	// The conversation's own pick beats the account's Thinking choice.
-	// A model the Gateway retired falls back with a notice.
-	if override := bound.ModelOverride; override != "" && agent.ClientModelChoice() {
-		if !agent.FrontierModelAvailable(r.Context(), override) {
-			_ = s.database.SetMistyConversationModelOverride(r.Context(), userID, st.conversationID, "")
-			st.modelFallbackNotice = true
-		} else {
-			st.modelID = override
-			st.modelOverrides["agent"] = override
-		}
-	}
 	if bound.ModelID != st.modelID || bound.ReasoningEffort != st.reasoning {
 		if err := s.database.UpdateMistyConversationModel(r.Context(), userID, st.conversationID, st.modelID, st.reasoning, agent.FrontierModelCatalogVersion); err != nil {
 			WriteAIError(w, err)
@@ -83,46 +43,9 @@ func (s *AIService) bindConversationModel(w http.ResponseWriter, r *http.Request
 	return true
 }
 
-// applyRequestedModelOverride pins the model the request asked for, if any.
-func (s *AIService) applyRequestedModelOverride(w http.ResponseWriter, r *http.Request, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
-	if requested := strings.TrimSpace(body.ModelOverride); requested != "" && agent.ClientModelChoice() {
-		if !agent.FrontierModelAvailable(r.Context(), requested) {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"code": "invalid_model", "message": "Choose an available model."})
-			return false
-		}
-		body.ModelOverride = requested
-		st.modelID = requested
-		st.modelOverrides["agent"] = requested
-	}
-	return true
-}
-
-// saveConversationModelOverride stores the request's model override on its conversation.
-func (s *AIService) saveConversationModelOverride(w http.ResponseWriter, r *http.Request, userID string, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
-	if body.ModelOverride != "" && st.conversationID != "" && agent.ClientModelChoice() {
-		if err := s.database.SetMistyConversationModelOverride(r.Context(), userID, st.conversationID, body.ModelOverride); err != nil {
-			WriteAIError(w, err)
-			return false
-		}
-	}
-	return true
-}
-
-// checkInvocationModelAvailable confirms the chosen model and reasoning are
-// offered, then applies the companion's admission reasoning rule.
-func checkInvocationModelAvailable(w http.ResponseWriter, r *http.Request, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
-	if !st.accountModel && len(st.modelOverrides) == 0 && !agent.FrontierModelAvailable(r.Context(), st.modelID) {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"code": "model_unavailable", "message": "Misty’s model is temporarily unavailable. Please try again."})
-		return false
-	}
-	return true
-}
-
-// freezeInvocationRoutes plans the model routes for a newly created run and
-// freezes them on the record.
+// freezeInvocationRoutes records the run's models on its new record.
 func (s *AIService) freezeInvocationRoutes(w http.ResponseWriter, r *http.Request, userID, invocationID string, st *aiInvocationAdmitState) bool {
-	planned, forced := runRoutes(r.Context(), s.database, userID, defaultAIRoutes(st.modelID, st.reasoning))
-	if _, routeErr := s.database.FreezeAIModelRoutes(r.Context(), userID, invocationID, planned, st.modelOverrides, forced); routeErr != nil {
+	if _, routeErr := s.database.FreezeAIModelRoutes(r.Context(), userID, invocationID, runModelRoutes(st.modelID, st.reasoning)); routeErr != nil {
 		writeAIProviderError(w, routeErr)
 		return false
 	}

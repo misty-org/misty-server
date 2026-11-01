@@ -533,7 +533,7 @@ func aiPage(v aiView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = note("Models run on each account's own keys, or on the server's keys when the operator sets MISTY_AGENT_MODEL.").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = note("Models run on each person's desktop, on that device's own keys. The server holds none.").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

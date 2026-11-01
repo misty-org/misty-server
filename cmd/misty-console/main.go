@@ -1,5 +1,6 @@
-// Command misty-console serves the loopback-only operator console. Start it
-// with `misty server up --gui`, which supplies the environment and opens the browser.
+// Command misty-console serves the loopback-only operator console. In
+// development `misty server up --gui` starts it; in a server stack it is the
+// console service of compose.yml, published on 127.0.0.1:7070 only.
 package main
 
 import (
@@ -17,6 +18,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:7070", "loopback address to listen on")
+	published := flag.String("published", "", "loopback address Compose publishes the console on; lets -addr listen inside a container")
 	apiURL := flag.String("api", "http://127.0.0.1:8081", "base URL of the running misty-server")
 	handoff := flag.String("handoff", "", "file to write the launch URL to for `misty server up --gui`")
 	envSchema := flag.String("env-schema", "", "JSON settings schema written by the CLI for the Configuration page")
@@ -41,8 +43,10 @@ func main() {
 	defer stop()
 	cfg := console.Config{
 		Addr:          *addr,
+		PublishedAddr: *published,
 		APIURL:        *apiURL,
 		MetricsToken:  config.Getenv("MISTY_METRICS_TOKEN"),
+		OperatorToken: config.Getenv("MISTY_OPERATOR_TOKEN"),
 		Environment:   config.Getenv("MISTY_ENVIRONMENT"),
 		HandoffPath:   *handoff,
 		ServerDir:     serverDir,

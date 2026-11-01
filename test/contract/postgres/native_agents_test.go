@@ -12,9 +12,6 @@ import (
 
 func TestNativeAgentsPrivacyMemoryAndLeases(t *testing.T) {
 	database := openTestDatabase(t)
-	t.Setenv("MISTY_AGENT_MODEL", serveragent.InitialSelectedModelID)
-	t.Setenv("MISTY_AGENT_MODEL_API_KEY", "")
-	t.Setenv("MISTY_AGENT_MODEL_BASE_URL", "")
 	ctx := context.Background()
 	owner, err := database.CreateUser("native-owner@example.com", "password123")
 	if err != nil {

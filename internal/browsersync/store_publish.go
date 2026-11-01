@@ -28,6 +28,9 @@ func (db *Store) PublishBrowserSync(ctx context.Context, userID string, m SyncMu
 		return nil, err
 	}
 	defer tx.Rollback()
+	if err := requireSyncWritable(ctx, tx, userID); err != nil {
+		return nil, err
+	}
 	var head, epoch int64
 	var activeDevice, activeEpoch sql.NullString
 	var workspaceMode bool

@@ -56,6 +56,18 @@ func (db *Store) PushBrowserSyncRecords(ctx context.Context, userID, vault, devi
 			return nil, 0, err
 		}
 	}
+	// Writes that add content are refused at the account's storage limit;
+	// deletions always apply, so a full account can free space.
+	var adding int64
+	for _, w := range writes {
+		adding += int64(len(w.Ciphertext))
+	}
+	if err = requireSyncWritable(ctx, tx, userID); err != nil {
+		return nil, 0, err
+	}
+	if err = requireSyncStorageRoom(ctx, tx, userID, adding); err != nil {
+		return nil, 0, err
+	}
 	var live int64
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM browser_sync_records WHERE vault_id=$1 AND collection=$2 AND ciphertext IS NOT NULL`, vault, collection).Scan(&live); err != nil {
 		return nil, 0, err

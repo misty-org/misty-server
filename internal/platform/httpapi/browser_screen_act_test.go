@@ -14,6 +14,7 @@ func TestScreenGoalsThatNameNothingConsequentialRunWithoutTheFlag(t *testing.T) 
 		`Add the cheapest charger to the cart and check out`:                                                                     true,
 		`Send the drafted reply to the landlord`:                                                                                 true,
 		`Delete the old playlist`:                                                                                                true,
+		`Create a new CryptPad document titled "Best LA Maternity Hospitals" and write content into it`:                          false,
 	} {
 		raw, _ := json.Marshal(map[string]any{"goal": goal, "allowConsequential": true})
 		out := withoutNeedlessConsequence(agent.ToolRequest{Name: screenActTool, Arguments: raw})

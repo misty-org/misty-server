@@ -55,7 +55,6 @@ groups:
           (
             misty_library_jobs_pending_ai
             + misty_library_jobs_pending_rendition
-            + misty_library_jobs_pending_people
           ) > 100
         for: 20m
         labels:

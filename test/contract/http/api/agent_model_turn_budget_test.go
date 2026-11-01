@@ -25,8 +25,6 @@ func TestAgentModelTurnBudgetRuntimeEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	secret := []byte(strings.Repeat("s", 32))
-	t.Setenv("MISTY_AGENT_RUNTIME_URL", "https://runtime.test")
-	t.Setenv("MISTY_AGENT_RUNTIME_INTERNAL_API_URL", "https://api.test")
 	t.Setenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", base64.StdEncoding.EncodeToString(secret))
 	config, err := AgentRuntimeConfigFromEnv()
 	if err != nil {
@@ -57,7 +55,7 @@ func TestAgentModelTurnBudgetRuntimeEndpoint(t *testing.T) {
 		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("Idempotency-Key", "budget-read")
 		r.Header.Set("X-Misty-Agent-Timestamp", stamp)
-		r.Header.Set("X-Misty-Agent-Signature", TestingAgentRuntimeSignature(secret, http.MethodPost, path, stamp, body))
+		r.Header.Set("X-Misty-Agent-Signature", TestingAgentRuntimeSignature(TestingAgentRunKey(secret, run.ID), http.MethodPost, path, stamp, body))
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, r)
 		return w
@@ -74,7 +72,7 @@ func TestAgentModelTurnBudgetRuntimeEndpoint(t *testing.T) {
 		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("Idempotency-Key", node+":running")
 		r.Header.Set("X-Misty-Agent-Timestamp", stamp)
-		r.Header.Set("X-Misty-Agent-Signature", TestingAgentRuntimeSignature(secret, http.MethodPost, path, stamp, body))
+		r.Header.Set("X-Misty-Agent-Signature", TestingAgentRuntimeSignature(TestingAgentRunKey(secret, run.ID), http.MethodPost, path, stamp, body))
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, r)
 		return w

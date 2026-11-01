@@ -27,12 +27,14 @@ func developmentOnly(c Config) bool { return c.Development() }
 var pages = []Page{
 	{Slug: "overview", Title: "Overview", Icon: iconDashboard, Available: always, Render: (*Server).overviewPage},
 	{Slug: "services", Title: "Services", Icon: iconBox, Available: developmentOnly, Render: (*Server).servicesPage},
-	{Slug: "accounts", Title: "Accounts", Group: "People", Icon: iconUsers, Available: always, Render: (*Server).accountsPage},
+	{Slug: "customers", Title: "Customers", Group: "People", Icon: iconUsers, Available: always, Render: (*Server).customersPage},
 	{Slug: "sync", Title: "Sync", Group: "People", Icon: iconRefresh, Available: always, Render: (*Server).syncPage},
 	{Slug: "jobs", Title: "Jobs", Group: "Runtime", Icon: iconClock, Available: always, Render: (*Server).jobsPage},
 	{Slug: "ai", Title: "AI", Group: "Runtime", Icon: iconSparkles, Available: always, Render: (*Server).aiPage},
 	{Slug: "configuration", Title: "Configuration", Group: "System", Icon: iconSliders, Available: always, Render: (*Server).configurationPage},
 	{Slug: "database", Title: "Database", Group: "System", Icon: iconDatabase, Available: always, Render: (*Server).databasePage},
+	{Slug: "backups", Title: "Backups", Group: "System", Icon: iconArchive, Available: always, Render: (*Server).backupsPage},
+	{Slug: "logs", Title: "Logs", Group: "System", Icon: iconFileText, Available: always, Render: (*Server).logsPage},
 }
 
 // NavGroup is a run of pages sharing a group header.

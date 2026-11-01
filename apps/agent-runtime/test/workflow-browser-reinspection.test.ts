@@ -1,4 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { setDeviceModels } from "../src/device-models.js";
+
+// Runs think on the device's agent model.
+setDeviceModels({ version: 1, providers: {}, models: { agent: "fixture/model" } });
 const fixture = vi.hoisted(() => ({ completions: [] as any[], actions: [] as string[], active: [] as string[][], turn: 0 }));
 vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "test-runtime" }), FatalError: class extends Error {}, RetryableError: class extends Error {}, defineHook: () => ({}) }));
 vi.mock("../src/control-plane.js", () => ({ controlPlaneRequest: async (_: unknown, operation: string, body: unknown) => {

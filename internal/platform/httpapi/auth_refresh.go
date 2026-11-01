@@ -91,6 +91,14 @@ func RefreshSession(database *db.Database) http.HandlerFunc {
 			http.Error(w, "not authenticated", http.StatusUnauthorized)
 			return
 		}
+		if suspended, err := database.AccountSuspended(r.Context(), claims.Subject); err != nil {
+			http.Error(w, "authentication unavailable", http.StatusServiceUnavailable)
+			return
+		} else if suspended {
+			clearAuthCookies(w, r)
+			writeAccountSuspended(w)
+			return
+		}
 		access, refresh, err := mintSessionPair(signer, claims.Subject, claims.SessionID, claims.ExpiresAt.Time)
 		if err != nil {
 			http.Error(w, "authentication unavailable", http.StatusServiceUnavailable)
@@ -131,7 +139,7 @@ func CookieCSRFProtection(allowedOrigin func(string) bool) func(http.Handler) ht
 				}
 			}
 			login := path == "/login" || path == "/api/login" || path == "/register" || path == "/api/register" ||
-				path == "/auth/google" || path == "/auth/google/complete"
+				path == "/auth/google" || path == "/auth/google/complete" || path == "/setup-keys/redeem"
 			if accessErr == nil || refreshErr == nil || login {
 				origin := r.Header.Get("Origin")
 				if r.Header.Get("X-Misty-CSRF") != "1" || (origin != "" && !allowedOrigin(origin)) {

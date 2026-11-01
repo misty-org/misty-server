@@ -18,44 +18,24 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	serveragent "github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/modelruntime"
-	mistyemail "github.com/kannachi323/misty/server/internal/platform/email"
 )
 
 type SpacesService struct {
-	JournalCollab     JournalCollabConfig
-	database          *db.Database
-	agent             *serveragent.Service
-	library           *SpaceLibraryService
-	avatarStore       LibraryObjectStore
-	aead              cipher.AEAD
-	keyVer            int16
-	invitationSender  mistyemail.SpaceInvitationSender
-	invitationBaseURL string
-	agentRuntime      AgentRuntimeConfig
-	aiInvocations     *aiInvocationHub
-	searchAnalyzer    *serveragent.SmartLibraryAnalyzer
-	models            *modelruntime.Client
+	JournalCollab  JournalCollabConfig
+	database       *db.Database
+	agent          *serveragent.Service
+	library        *SpaceLibraryService
+	avatarStore    LibraryObjectStore
+	aead           cipher.AEAD
+	keyVer         int16
+	agentRuntime   AgentRuntimeConfig
+	aiInvocations  *aiInvocationHub
+	appConnections AppConnectionRemover
 }
-
-// SetModels sets where screen-planner model calls go.
-func (s *SpacesService) SetModels(models *modelruntime.Client) { s.models = models }
 
 func (s *SpacesService) SetAgentRuntime(config AgentRuntimeConfig) {
 	config.database = s.database
 	s.agentRuntime = config
-}
-
-func (s *SpacesService) SetSearchAnalyzer(analyzer *serveragent.SmartLibraryAnalyzer) {
-	s.searchAnalyzer = analyzer
-}
-
-func (s *SpacesService) SetInvitationSender(
-	sender mistyemail.SpaceInvitationSender,
-	baseURL string,
-) {
-	s.invitationSender = sender
-	s.invitationBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }
 
 func NewSpacesService(database *db.Database, agent *serveragent.Service, encryptionKey string) (*SpacesService, error) {
@@ -161,10 +141,10 @@ func (s *SpacesService) MemberAvatar() http.HandlerFunc {
 }
 
 func writeSpaceError(w http.ResponseWriter, err error) {
-	if writeModelError(w, err) {
-		return
-	}
+	var closing db.AccountClosingError
 	switch {
+	case errors.As(err, &closing):
+		writeAccountClosing(w, closing.DeleteAt)
 	case errors.Is(err, db.ErrSpaceNotFound), errors.Is(err, db.ErrSpaceInviteNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
 	case errors.Is(err, db.ErrPersonalAgentNotFound):

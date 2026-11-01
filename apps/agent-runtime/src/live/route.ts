@@ -26,22 +26,17 @@ function refusal(error: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-function secrets(): Buffer[] {
-  const previous = process.env.MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS?.trim();
-  return [decodeControlSecret(), ...(previous ? [Buffer.from(previous, "base64")] : [])];
-}
 
 type Context = { ticket: LiveTicket; apiKey: string; session?: LiveSession };
 
 /**
  * /v1/live/transcribe?ticket=… — the desktop streams PCM16 per channel and
- * receives diarized segments. Needs a long-lived server (the Docker
- * node-server deployment); serverless functions cannot hold the socket.
+ * receives diarized segments. The app mints the ticket with this launch's secret.
  */
 export default defineWebSocketHandler({
   async upgrade(request) {
     if (!liveTranscriptionEnabled()) throw new Response("Live transcription is not available.", { status: 404 });
-    const ticket = verifyLiveTicket(new URL(request.url).searchParams.get("ticket") ?? "", secrets());
+    const ticket = verifyLiveTicket(new URL(request.url).searchParams.get("ticket") ?? "", [decodeControlSecret()]);
     if (!ticket || !spent.spend(ticket)) throw new Response("Unauthorized", { status: 401 });
     let apiKey: string;
     try {

@@ -32,3 +32,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+// Copy buttons: data-copy names the input whose value is copied. Clicks are
+// delegated, so buttons htmx swaps in work too.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-copy]");
+  if (!button) return;
+  const input = document.getElementById(button.dataset.copy);
+  if (!input) return;
+  input.select();
+  const done = () => {
+    button.textContent = "Copied";
+    setTimeout(() => (button.textContent = "Copy"), 2000);
+  };
+  if (navigator.clipboard) navigator.clipboard.writeText(input.value).then(done, () => document.execCommand("copy") && done());
+  else if (document.execCommand("copy")) done();
+});

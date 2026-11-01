@@ -92,20 +92,6 @@ func (db *Database) RespondToSpaceInviteToken(
 	return db.RespondToSpaceInvite(ctx, userID, inviteID, accept)
 }
 
-func (db *Database) SetSpaceInvitationDelivery(
-	ctx context.Context,
-	inviteID, status string,
-) error {
-	if status != "sent" && status != "failed" {
-		return ErrSpaceInvalid
-	}
-	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE space_invitations
-			SET delivery_status=$1,last_sent_at=NOW() WHERE id=$2`, status, inviteID)
-		return err
-	})
-}
-
 func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, memberID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {

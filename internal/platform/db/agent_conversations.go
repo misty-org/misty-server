@@ -14,8 +14,8 @@ import (
 
 var _ agent.SessionPersistence = (*Database)(nil)
 
-// CreateAgentSession implements agent.SessionPersistence. Conversation state
-// is sanitized by the agent package before it crosses this boundary.
+// CreateAgentSession stores a conversation's state as the server's old agent
+// loop did. Tests seed older conversations with it.
 func (db *Database) CreateAgentSession(ctx context.Context, conversationID, userID string, state json.RawMessage, activeUntil, retentionExpiresAt time.Time) error {
 	return db.WithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
@@ -48,37 +48,6 @@ func (db *Database) LoadAgentSession(ctx context.Context, conversationID, userID
 		return nil, agent.ErrPersistedSessionNotFound
 	}
 	return state, err
-}
-
-// SaveAgentSession atomically updates the resumable state and appends its
-// durable event records. A failed transaction leaves neither half committed.
-func (db *Database) SaveAgentSession(ctx context.Context, conversationID, userID string, state json.RawMessage, events []agent.PersistedConversationEvent, activeUntil, retentionExpiresAt time.Time) error {
-	return db.WithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `
-			UPDATE misty_ask_conversations
-			SET state = $1, active_until = $2, retention_expires_at = $3, updated_at = NOW()
-			WHERE id = $4 AND user_id = $5 AND deleted_at IS NULL
-		`, state, activeUntil, retentionExpiresAt, conversationID, userID)
-		if err != nil {
-			return err
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if rows == 0 {
-			return agent.ErrPersistedSessionNotFound
-		}
-		for _, event := range events {
-			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO misty_ask_conversation_events(conversation_id, user_id, event_type, data)
-				VALUES($1, $2, $3, $4)
-			`, conversationID, userID, event.Type, event.Data); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
 }
 
 // AgentSessionSummary is the listing shape: enough to render a session rail
@@ -169,36 +138,6 @@ func (db *Database) AgentConversationIdentity(ctx context.Context, userID, conve
 	})
 	bound.SpaceID = ""
 	return bound, err
-}
-
-// ValidateAgentSessionAccess revalidates a persisted session's Space access and
-// returns the context the session is bound to. This must run before every
-// operation that can read context or continue a run, because Space membership,
-// permissions, and Agent grants can change after the session was created.
-//
-// Callers must use the returned SpaceID rather than any space identifier from
-// the request body. The client sends one, but trusting it would let a member
-// with access to one Space read another Space's context through a session bound
-// elsewhere.
-func (db *Database) ValidateAgentSessionAccess(ctx context.Context, userID, conversationID string) (AgentSessionContext, error) {
-	var bound AgentSessionContext
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		bound = AgentSessionContext{}
-		err := tx.QueryRowContext(ctx, `
-			SELECT COALESCE(space_id, ''), model_id, reasoning_effort,COALESCE(agent_id,''),model_override
-			FROM misty_ask_conversations
-			WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL
-		`, conversationID, userID).Scan(&bound.SpaceID, &bound.ModelID, &bound.ReasoningEffort, &bound.AgentID, &bound.ModelOverride)
-		if errors.Is(err, sql.ErrNoRows) {
-			return agent.ErrPersistedSessionNotFound
-		}
-		bound.SpaceID = ""
-		return err
-	})
-	if err != nil {
-		return AgentSessionContext{}, err
-	}
-	return bound, nil
 }
 
 // RenameAgentSession sets the human-facing label. Clients derive a first title

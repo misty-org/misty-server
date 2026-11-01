@@ -9,54 +9,8 @@ import (
 	"github.com/kannachi323/misty/server/internal/platform/config"
 )
 
-func PasswordResetRedirectURLFromEnv() (string, error) {
-	rawURL := config.Getenv("PASSWORD_RESET_URL")
-	if rawURL == "" {
-		rawURL = "http://localhost:5173/#/reset"
-	}
-
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid PASSWORD_RESET_URL: %w", err)
-	}
-	if parsedURL.Host == "" {
-		return "", fmt.Errorf("PASSWORD_RESET_URL must include a host")
-	}
-	if parsedURL.Scheme == "https" {
-		return parsedURL.String(), nil
-	}
-	if parsedURL.Scheme == "http" && IsLocalhostHostname(parsedURL.Hostname()) {
-		return parsedURL.String(), nil
-	}
-
-	return "", fmt.Errorf("PASSWORD_RESET_URL must use https unless it targets localhost")
-}
-
-func PasswordResetStartURLFromEnv() (string, error) {
-	rawURL := config.Getenv("PASSWORD_RESET_START_URL")
-	if rawURL == "" {
-		rawURL = "http://localhost:8080/auth/reset/start"
-	}
-
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid PASSWORD_RESET_START_URL: %w", err)
-	}
-	if parsedURL.Host == "" {
-		return "", fmt.Errorf("PASSWORD_RESET_START_URL must include a host")
-	}
-	if parsedURL.Scheme == "https" {
-		return parsedURL.String(), nil
-	}
-	if parsedURL.Scheme == "http" && IsLocalhostHostname(parsedURL.Hostname()) {
-		return parsedURL.String(), nil
-	}
-
-	return "", fmt.Errorf("PASSWORD_RESET_START_URL must use https unless it targets localhost")
-}
-
 // WebsiteURLFromEnv is the base the desktop-to-browser handoff redirects
-// into. Same https-or-localhost rule as the password-reset URLs.
+// into. Must be https unless it targets localhost.
 func WebsiteURLFromEnv() (string, error) {
 	return validatedURLFromEnv("MISTY_WEBSITE_URL", "http://localhost:5174")
 }

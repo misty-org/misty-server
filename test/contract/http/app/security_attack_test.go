@@ -86,11 +86,16 @@ func attackEmail(name string) string { return name + "_" + attackRun + "@attack.
 func registerAttackUser(t *testing.T, server *Server, name, address string) *attackClient {
 	t.Helper()
 	client := &attackClient{t: t, server: server, address: address}
-	response := client.do(http.MethodPost, "/v1/register", map[string]string{
-		"name": name, "username": name + "_" + attackRun, "email": attackEmail(name), "password": "correct horse battery staple",
+	// Only a server's first account registers itself; later ones come by
+	// invitation or the operator API. Make the account directly and sign in.
+	if _, err := server.Database.CreateUserWithUsername(name+"_"+attackRun, attackEmail(name), "correct horse battery staple"); err != nil {
+		t.Fatalf("create %s: %v", name, err)
+	}
+	response := client.do(http.MethodPost, "/v1/login", map[string]string{
+		"email": attackEmail(name), "password": "correct horse battery staple",
 	}, nil)
-	if response.Code != http.StatusCreated {
-		t.Fatalf("register %s = %d %s", name, response.Code, response.Body.String())
+	if response.Code != http.StatusOK {
+		t.Fatalf("sign in %s = %d %s", name, response.Code, response.Body.String())
 	}
 	client.cookies = response.Result().Cookies()
 	return client

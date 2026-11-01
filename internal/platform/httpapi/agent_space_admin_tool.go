@@ -27,7 +27,8 @@ func (s *SpacesService) spaceAdminToolRegistration() agenttools.Registration {
 			Description: "Administer Spaces. Actions: create (name), rename (space, name), invite (space, email), list_invitations (space), " +
 				"cancel_invitation (space, invitation_id), resend_invitation (space, invitation_id), remove_member (space, member_id from space_member_list), leave (space). " +
 				"Only the Space owner can rename, invite, see or cancel invitations and remove members. " +
-				"invite, remove_member and leave change access and may show the user an approval card first. Act only when the user asked.",
+				"invite, remove_member and leave change access and may show the user an approval card first. Act only when the user asked. " +
+				"invite and resend_invitation return the invitation's link (resending replaces the old one); Misty sends no email, so give the link to the user to pass on.",
 			InputSchema: agentToolSchema(map[string]any{
 				"action":        map[string]any{"type": "string", "enum": []string{"create", "rename", "invite", "list_invitations", "cancel_invitation", "resend_invitation", "remove_member", "leave"}},
 				"space":         text(200),
@@ -46,7 +47,6 @@ func (s *SpacesService) spaceAdminToolRegistration() agenttools.Registration {
 // workflow schedules, Space administration and deletes.
 func (s *SpacesService) accountAdminToolRegistrations() []agenttools.Registration {
 	registrations := append(s.scheduleToolRegistrations(), s.spaceAdminToolRegistration(), s.deleteToolRegistration(), s.renameToolRegistration())
-	registrations = append(registrations, s.voiceToolRegistrations()...)
 	return append(registrations, s.recallToolRegistrations()...)
 }
 
@@ -90,7 +90,8 @@ func (s *SpacesService) executeSpaceAdmin(ctx context.Context, invocation agentt
 		invitations, listErr := s.database.PendingSpaceInvitations(ctx, invocation.UserID, space.ID)
 		result, err = map[string]any{"invitations": invitations}, listErr
 	case "resend_invitation":
-		// The person already approved this invitation; resending only refreshes its link.
+		// The person already approved this invitation; this only gives it a new
+		// link (the old one stops working), which the person passes on.
 		token, tokenErr := security.GenerateSecureToken()
 		if tokenErr != nil {
 			return nil, tokenErr
@@ -99,9 +100,7 @@ func (s *SpacesService) executeSpaceAdmin(ctx context.Context, invocation agentt
 		if refreshErr != nil {
 			return nil, spaceAdminError(refreshErr)
 		}
-		status := s.deliverSpaceInvitation(ctx, invite, token)
-		_ = s.database.SetSpaceInvitationDelivery(ctx, invite.ID, status)
-		result = map[string]any{"resent": invite.ID, "delivery": status}
+		result = map[string]any{"resent": invite.ID, "link": SpaceInvitationLink(token)}
 	case "cancel_invitation":
 		err = s.database.RevokeSpaceInvitation(ctx, invocation.UserID, space.ID, strings.TrimSpace(input.InvitationID))
 		result = map[string]any{"canceled": input.InvitationID}
@@ -147,9 +146,7 @@ func (s *SpacesService) executeSpaceAccessChange(ctx context.Context, invocation
 		if err != nil {
 			return nil, spaceAdminError(err)
 		}
-		status := s.deliverSpaceInvitation(ctx, invite, token)
-		_ = s.database.SetSpaceInvitationDelivery(ctx, invite.ID, status)
-		return json.Marshal(map[string]any{"invited": input.Email, "invitation_id": invite.ID, "delivery": status})
+		return json.Marshal(map[string]any{"invited": input.Email, "invitation_id": invite.ID, "link": SpaceInvitationLink(token)})
 	case "remove_member":
 		if err := s.database.RemoveSpaceMember(ctx, invocation.UserID, space.ID, strings.TrimSpace(input.MemberID)); err != nil {
 			return nil, spaceAdminError(err)

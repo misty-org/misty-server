@@ -54,6 +54,9 @@ func TestTablesHaveRowLevelSecurityEnabled(t *testing.T) {
 		"agent_question_sets",
 		"agent_plans",
 		"agent_goals",
+		"account_controls",
+		"account_setup_keys",
+		"account_usage",
 	}
 
 	for _, table := range tables {

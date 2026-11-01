@@ -228,16 +228,15 @@ func TestJournalCollabConfigUsesTheOperatorsHost(t *testing.T) {
 	}
 }
 
-func TestJournalCollabIsOffWithoutAHost(t *testing.T) {
+func TestJournalCollabIsRequired(t *testing.T) {
 	testCollabConfig(t)
-	// Keys alone (misty env init writes them) never turn collaboration on.
+	// Every server saves notes and drawings through the Worker.
 	t.Setenv("PARTYKIT_HOST", "")
-	config, err := JournalCollabConfigFromEnv()
-	if err != nil || config.Enabled {
-		t.Fatalf("no host = %+v, %v; want collaboration off", config.Enabled, err)
+	if _, err := JournalCollabConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "PARTYKIT_HOST") {
+		t.Fatalf("no host = %v; want a startup error", err)
 	}
-	if _, err := config.MintNoteTicket("user", "space", "note", "editor", 1); !errors.Is(err, ErrCollaborationOff) {
-		t.Fatalf("ticket with collaboration off = %v", err)
+	if _, err := (JournalCollabConfig{}).MintNoteTicket("user", "space", "note", "editor", 1); !errors.Is(err, ErrCollaborationUnconfigured) {
+		t.Fatalf("ticket from an unconfigured config = %v", err)
 	}
 	// A host without its keys still fails startup.
 	t.Setenv("PARTYKIT_HOST", "journal-collab-test.example")

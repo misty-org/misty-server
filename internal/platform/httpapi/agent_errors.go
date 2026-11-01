@@ -18,11 +18,10 @@ func writeAgentResult(w http.ResponseWriter, value any, err error, status int) {
 }
 
 func writeAgentError(w http.ResponseWriter, err error) {
-	if writeModelError(w, err) {
-		return
-	}
 	var invalidRequest agent.ErrInvalidRequest
 	switch {
+	case errors.Is(err, db.ErrDeviceLimit):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "device_limit_reached", "message": "This account has all the devices its plan allows. Remove one in Settings › Devices, then add this one."})
 	case errors.Is(err, db.ErrDeviceIdentityConflict):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "device_identity_conflict", "message": "This device endpoint is already registered with a different signing key. Restore the original device identity or set up a new device identity before trying again."})
 	case errors.Is(err, db.ErrAgentModelTurnLimit):

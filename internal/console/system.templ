@@ -45,7 +45,6 @@ templ databasePage(v databaseView) {
 		@metric("Size", bytesLabel(v.Stats.SizeBytes))
 		@metric("Connections", itoa(v.Stats.Connections))
 		@metric("Schema version", strconv.FormatInt(v.Stats.Applied, 10))
-		@metric("Backups", itoa(len(v.Backups)))
 	</div>
 	if v.Pending > 0 {
 		@note("Pending migrations apply on the next misty server up.")
@@ -82,13 +81,4 @@ templ databasePage(v databaseView) {
 			</div>
 		}
 	</div>
-	@sectionLabel("Backups in server/.misty/backups")
-	<ul class="rows">
-		for _, b := range v.Backups {
-			<li class="row"><span><code>{ b.Name }</code></span><span class="muted">{ ago(b.Modified) }</span></li>
-		}
-		if len(v.Backups) == 0 {
-			@emptyRow("No local backups.")
-		}
-	</ul>
 }

@@ -1,11 +1,14 @@
 import "./network.js";
 import express, { type Request } from "express";
 import { rateLimit } from "express-rate-limit";
-import { instanceModelConfig, routeSecrets, scrubCredential } from "./model-provider.js";
-import { embedCall, generateTextCall, modelCallFailure, speechCall, transcribeCall } from "./model-calls.js";
-import { transcribeDiarizedCall } from "./transcribe-diarized.js";
-import { voiceNotesCall } from "./voice-notes.js";
-import { daySummaryCall } from "./day-summary.js";
+import { scrubCredential } from "./model-provider.js";
+import { desktopRuntime, deviceSecrets, setDeviceModels } from "./device-models.js";
+import {
+  cleanupCall, daySummaryDeviceCall, diarizedDeviceCall, embedDeviceCall, extractCall, refinePointCall, screenModelCall,
+  modelTestCall, voiceNotesDeviceCall, voiceTranscriptionCall,
+} from "./device-calls.js";
+import { followUpCall, restoreStepCall } from "./device-routing.js";
+import { modelCallFailure } from "./model-calls.js";
 import { workflowHarness as harness } from "./workflow-harness.js";
 import { MISTY_HARNESS_VERSION } from "./harness.js";
 import { controlPlaneURL } from "./control-plane.js";
@@ -19,14 +22,10 @@ interface RawRequest extends Request {
   rawBody?: Buffer;
 }
 
-instanceModelConfig();
 const app = express();
-// Throttle before body parsing and signature verification. Do not trust caller-
-// supplied forwarding headers to choose a different rate-limit bucket. Every
-// legitimate call comes from the Misty API, one address shared by all users,
-// so only failed requests (bad signatures, invalid input) count: floods without
-// the secret are stopped while real traffic is never throttled here. Each user
-// is rate limited by the API before their work reaches the runtime.
+// Throttle before body parsing and signature verification. Only failed requests (bad
+// signatures, invalid input) count: floods without the launch secret are stopped while the
+// app's own calls are never throttled here.
 app.use("/v1", rateLimit({
   windowMs: 60_000,
   limit: 600,
@@ -34,26 +33,13 @@ app.use("/v1", rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { code: "rate_limited" },
-  // Library indexing makes many short model calls; they have their own budget.
-  skip: (request) => request.path.startsWith("/models/"),
 }));
 const keepRawBody = (request: unknown, _response: unknown, buffer: Buffer) => {
   (request as RawRequest).rawBody = Buffer.from(buffer);
 };
-// Model calls carry images and audio, so they get a larger body than control
-// calls. They parse first; the general parser skips an already parsed body.
-app.use(
-  "/v1/models",
-  rateLimit({
-    windowMs: 60_000,
-    limit: 6_000,
-    skipSuccessfulRequests: true,
-    standardHeaders: "draft-8",
-    legacyHeaders: false,
-    message: { code: "rate_limited" },
-  }),
-  express.json({ limit: "24mb", verify: keepRawBody }),
-);
+// The desktop's model calls carry screenshots and recordings, so they get a larger body than
+// control calls. They parse first; the general parser skips an already parsed body.
+app.use("/v1/device", express.json({ limit: "40mb", verify: keepRawBody }));
 app.use(express.json({ limit: "2mb", verify: keepRawBody }));
 
 function reportRuntimeRouteError(operation: string, error: unknown): void {
@@ -61,14 +47,8 @@ function reportRuntimeRouteError(operation: string, error: unknown): void {
 }
 
 function authorized(request: RawRequest): boolean {
-  const previousValue =
-    process.env.MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS?.trim();
-  const previousSecret = previousValue
-    ? Buffer.from(previousValue, "base64")
-    : undefined;
   return verifyRequest({
     secret: decodeControlSecret(),
-    previousSecret,
     method: request.method,
     path: request.path,
     timestamp: request.header(signatureHeaders.timestamp) ?? "",
@@ -81,18 +61,33 @@ app.get("/health", (_request, response) =>
   response.json({ ok: true, runtime: "misty-agent-runtime", adapter_version: harness.version }),
 );
 
+// The desktop app's model keys and choices, signed with this launch's secret
+// (src/device-models.ts). Only a runtime started by the app takes them.
+app.post("/v1/local/models", (request: RawRequest, response) => {
+  if (!desktopRuntime()) return response.status(404).json({ code: "not_found" });
+  if (!authorized(request)) return response.status(401).json({ code: "unauthorized" });
+  if (!setDeviceModels(request.body)) return response.status(400).json({ code: "invalid_models" });
+  return response.json({ ok: true });
+});
+
+// Model calls the desktop makes outside runs, on its own models (src/device-calls.ts).
 for (const [path, call] of [
-  ["/v1/models/text", generateTextCall],
-  ["/v1/models/embed", embedCall],
-  ["/v1/models/transcribe", transcribeCall],
-  ["/v1/models/transcribe-diarized", transcribeDiarizedCall],
-  ["/v1/models/voice-notes", voiceNotesCall],
-  ["/v1/models/day-summary", daySummaryCall],
-  ["/v1/models/speech", speechCall],
+  ["/v1/device/cleanup", cleanupCall],
+  ["/v1/device/voice-transcription", voiceTranscriptionCall],
+  ["/v1/device/screen-model", screenModelCall],
+  ["/v1/device/refine-point", refinePointCall],
+  ["/v1/device/extract", extractCall],
+  ["/v1/device/embed", embedDeviceCall],
+  ["/v1/device/day-summary", daySummaryDeviceCall],
+  ["/v1/device/voice-notes", voiceNotesDeviceCall],
+  ["/v1/device/transcribe-diarized", diarizedDeviceCall],
+  ["/v1/device/model-test", modelTestCall],
+  ["/v1/device/follow-up", followUpCall],
+  ["/v1/device/restore-step", restoreStepCall],
 ] as const) {
   app.post(path, async (request: RawRequest, response) => {
-    if (!authorized(request))
-      return response.status(401).json({ code: "unauthorized" });
+    if (!desktopRuntime()) return response.status(404).json({ code: "not_found" });
+    if (!authorized(request)) return response.status(401).json({ code: "unauthorized" });
     const controller = new AbortController();
     response.on("close", () => {
       if (!response.writableFinished) controller.abort();
@@ -101,8 +96,7 @@ for (const [path, call] of [
       return response.json(await call(request.body, controller.signal));
     } catch (error) {
       const failure = modelCallFailure(error);
-      // A provider may echo the key it was sent; the log never repeats it.
-      if (failure.status >= 500) reportRuntimeRouteError(`model call ${path}`, scrubCredential(error, routeSecrets(request.body?.route)));
+      if (failure.status >= 500) reportRuntimeRouteError(`device call ${path}`, scrubCredential(error, deviceSecrets()));
       return response.status(failure.status).json(failure.body);
     }
   });
@@ -126,8 +120,16 @@ app.post("/v1/runs", async (request: RawRequest, response) => {
     return response.status(400).json({ code: "invalid_run_id" });
   const adapterVersion = request.body?.adapter_version ?? MISTY_HARNESS_VERSION;
   if (adapterVersion !== harness.version) return response.status(409).json({ code: "harness_version_unavailable" });
+  // A start carries the run's own key and the receipt the server pinned for it.
+  const runKey = typeof request.body?.run_key === "string" ? request.body.run_key.trim() : "";
+  const receiptCallback = typeof request.body?.receipt_callback === "string" ? request.body.receipt_callback.trim() : "";
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(runKey) || !receiptCallback || receiptCallback.length > 512)
+    return response.status(400).json({ code: "invalid_run_key" });
   try {
-    const run = await harness.start({ mistyRunId: runId, controlPlaneURL: controlPlaneURL(callbackURL), adapterVersion });
+    const run = await harness.start({
+      mistyRunId: runId, controlPlaneURL: controlPlaneURL(callbackURL), adapterVersion,
+      runKey, receiptCallback,
+    });
     return response.status(202).json({ runtime_run_id: run.runtimeRunId, adapter_version: harness.version });
   } catch (error) {
     reportRuntimeRouteError("workflow start", error);

@@ -15,19 +15,18 @@ see **Verify** below.
 
 ## Configure
 
-1. Keep the dashboard project key as `COMPOSIO_API_KEY` in the ignored
-   `server/.env/dev/composio.env` (prod: `server/.env/prod/composio.env`).
-   Docker Compose loads it for the API only. Do not run project provisioning,
-   rotate the key or put it in `VITE_*` variables.
-2. Copy `runtime.env.example` to `server/.env/dev/integrations/composio.env`.
-   `MISTY_COMPOSIO_DEPLOYMENT=cloud` is the explicit opt-in; a key alone does
-   not enable connected apps.
-3. Recreate the API. Composio-managed auth covers most toolkits without any
-   auth config; a toolkit without a managed scheme needs an auth config in the
-   Composio dashboard before users can connect it. Every app uses
-   Composio-managed auth; Misty runs no OAuth apps of its own for them
-   (decided October 16, 2026, after a custom Calendar config limited
-   connections to read-only).
+Put the Composio project's API key in `server/.env/composio.env` as
+`MISTY_COMPOSIO_API_KEY` ([docs/self-hosting.md](../../../docs/self-hosting.md)
+lists the file). Every server has connected apps: the key is required and there
+is no separate opt-in. A development stack reads `COMPOSIO_API_KEY` from
+`server/.env/dev/composio.env`. Never expose the key through `VITE_*` variables
+or a browser bundle.
+
+Composio-managed auth covers most toolkits without any auth config; a toolkit
+without a managed scheme needs an auth config in the Composio dashboard before
+users can connect it. Every app uses Composio-managed auth; Misty runs no OAuth
+apps of its own for them (decided October 16, 2026, after a custom Calendar
+config limited connections to read-only).
 
 ## How it works
 

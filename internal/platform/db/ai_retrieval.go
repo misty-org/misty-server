@@ -31,39 +31,6 @@ type AIEmbeddingChunk struct {
 	ContentHash string
 }
 
-func (db *Database) PendingAIEmbeddingChunks(ctx context.Context, limit int) ([]AIEmbeddingChunk, error) {
-	if limit < 1 || limit > 100 {
-		limit = 32
-	}
-	items := []AIEmbeddingChunk{}
-	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `
- WITH candidates AS (
- SELECT c.document_id,c.ordinal,d.owner_user_id
- FROM ai_retrieval_chunks c JOIN ai_retrieval_documents d ON d.id=c.document_id
- WHERE d.lifecycle_state='active' AND d.owner_user_id IS NOT NULL AND c.embedding IS NULL
- AND (c.embedding_lease_until IS NULL OR c.embedding_lease_until<=now())
- ORDER BY c.updated_at,c.document_id,c.ordinal LIMIT $1 FOR UPDATE OF c SKIP LOCKED
- ) UPDATE ai_retrieval_chunks c SET embedding_attempt_id=gen_random_uuid(),embedding_lease_until=now()+interval '5 minutes'
- FROM candidates p WHERE c.document_id=p.document_id AND c.ordinal=p.ordinal
- RETURNING c.document_id,c.ordinal,c.content,c.content_hash,p.owner_user_id,c.embedding_attempt_id
- `, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var item AIEmbeddingChunk
-			if err := rows.Scan(&item.DocumentID, &item.Ordinal, &item.Content, &item.ContentHash, &item.AccountID, &item.AttemptID); err != nil {
-				return err
-			}
-			items = append(items, item)
-		}
-		return rows.Err()
-	})
-	return items, err
-}
-
 func (db *Database) CompleteAIEmbeddingChunk(ctx context.Context, chunk AIEmbeddingChunk, embedding []float64, model string) error {
 	if len(embedding) != 768 || strings.TrimSpace(model) == "" {
 		return ErrSpaceInvalid

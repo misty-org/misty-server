@@ -34,6 +34,12 @@ func (db *Store) PutBrowserSyncBlob(ctx context.Context, userID, vault, device s
 	if count >= 20000 {
 		return ErrSyncInvalid
 	}
+	if err = requireSyncWritable(ctx, tx, userID); err != nil {
+		return err
+	}
+	if err = requireSyncStorageRoom(ctx, tx, userID, int64(len(blob.Ciphertext))); err != nil {
+		return err
+	}
 	// First writer wins; the same keyed hash always names the same content.
 	if _, err = tx.ExecContext(ctx, `INSERT INTO browser_sync_blobs(vault_id,blob_hash,ciphertext) VALUES($1,$2,$3) ON CONFLICT(vault_id,blob_hash) DO UPDATE SET last_ref_at=now()`, vault, blob.Hash, blob.Ciphertext); err != nil {
 		return err

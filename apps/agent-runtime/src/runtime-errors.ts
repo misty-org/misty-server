@@ -3,7 +3,7 @@ import { ControlPlaneError } from "./control-plane-error.js";
 import { classifyMCPTransportError } from "./mcp-errors.js";
 
 /** Refusals the run stops on with the reason the person can act on. */
-const refusals = new Set(["usage_limit_reached", "email_unverified", "model_key_needed", "model_unsupported", "model_base_url_invalid"]);
+const refusals = new Set(["usage_limit_reached", "model_key_needed", "model_unsupported", "model_base_url_invalid"]);
 
 /** Step failures retry only for transient control-plane or transport errors. */
 export function rethrowStepError(error: unknown): never {
@@ -80,9 +80,6 @@ export function classifyRuntimeError(error: unknown): { code: string; message: s
   if (normalized.includes("usage_limit_reached")) {
     return { code: "usage_limit_reached", message: "Misty paused here because a rate limit was reached. Try again in a moment." };
   }
-  if (normalized.includes("email_unverified")) {
-    return { code: "email_unverified", message: "Confirm your email to start using AI. Check your inbox for the link." };
-  }
   if ((error instanceof ControlPlaneError && !error.transient) || normalized.includes("authorization_or_state_changed")) {
     return { code: "authorization_or_state_changed", message: "Misty's authorization or run state changed." };
   }
@@ -137,6 +134,9 @@ export function errorText(error: unknown): string {
 
 /** Public timeline text for a failed call; raw diagnostics stay private. */
 export function visibleErrorMessage(error: unknown): string {
+  // A plan's monthly app-action limit keeps its code, so the app can tell the person.
+  const limit = /\bapp_action_limit_reached:[^\n]*/i.exec(errorText(error));
+  if (limit) return limit[0].slice(0, 500);
   const message = errorText(error).toLowerCase();
   if (message.includes("browser_webview_unavailable")) {
     return "The local browser view is unavailable. Reopen the browser view and retry the task.";

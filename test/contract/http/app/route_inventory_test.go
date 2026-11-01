@@ -17,6 +17,8 @@ func TestRouteInventory(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "")
 	t.Setenv("MISTY_DEVICE_JOBS_ENABLED", "false")
 	t.Setenv("MISTY_METRICS_TOKEN", "")
+	// The inventory includes the operator account API, which mounts only with a token.
+	t.Setenv("MISTY_OPERATOR_TOKEN", "route-inventory")
 	t.Setenv("R2_ENDPOINT", "")
 	t.Setenv("R2_BUCKET", "")
 	t.Setenv("R2_ACCESS_KEY", "")
@@ -53,4 +55,23 @@ func TestRouteInventory(t *testing.T) {
 	if actual != string(expected) {
 		t.Fatalf("route inventory changed; review the HTTP compatibility impact and run UPDATE_ROUTE_GOLDEN=1 go test ./test/contract/http/app -run TestRouteInventory")
 	}
+}
+
+func TestOperatorAccountAPIIsUnmountedWithoutAToken(t *testing.T) {
+	configureJournalCollabForTest(t)
+	t.Setenv("MISTY_ENVIRONMENT", "")
+	t.Setenv("MISTY_OPERATOR_TOKEN", "")
+	server, err := CreateServer()
+	if err != nil {
+		t.Fatalf("CreateServer() error = %v", err)
+	}
+	if err := server.MountHandlers(); err != nil {
+		t.Fatalf("MountHandlers() error = %v", err)
+	}
+	_ = chi.Walk(server.Router, func(method, path string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		if strings.HasPrefix(path, "/operator/") {
+			t.Errorf("%s %s is mounted without MISTY_OPERATOR_TOKEN", method, path)
+		}
+		return nil
+	})
 }

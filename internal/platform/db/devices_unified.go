@@ -156,6 +156,9 @@ func (db *Database) RegisterUnifiedDevice(ctx context.Context, userID, name, pub
 			ORDER BY (public_key=$2) DESC LIMIT 1 FOR UPDATE`, userID, publicKey, endpointID).Scan(&id, &state)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
+			if err := requireDeviceRoomTx(ctx, tx, userID); err != nil {
+				return err
+			}
 			id = "device_" + uuid.NewString()
 			_, err = tx.ExecContext(ctx, `INSERT INTO trusted_devices(id,user_id,name,public_key,platform,p2p_endpoint_id,device_protocol_versions,capabilities,
 				admission_state,identity_version,os_version,app_version,session_hash)

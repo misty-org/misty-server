@@ -69,7 +69,7 @@ func (s *SpacesService) MemoryEvents() http.HandlerFunc {
 			}
 			query.SpaceID = space
 			if text != "" {
-				hits, err := s.searchMemory(r.Context(), user, space, []string{db.MemoryMoments}, text, query.Limit)
+				hits, err := s.searchMemory(withHeaderQueryEmbedding(r), user, space, []string{db.MemoryMoments}, text, query.Limit)
 				if err != nil {
 					writeAgentError(w, err)
 					return

@@ -10,12 +10,12 @@ import (
 )
 
 func TestAppsToolsRegisterOnlyWhenConfigured(t *testing.T) {
-	t.Setenv("MISTY_COMPOSIO_DEPLOYMENT", "")
-	t.Setenv("COMPOSIO_API_KEY", "test-key")
+	t.Setenv("MISTY_COMPOSIO_API_KEY", "")
+	t.Setenv("COMPOSIO_API_KEY", "")
 	if registrations := (&SpacesService{}).appsToolRegistrations(); len(registrations) != 0 {
-		t.Fatalf("apps registered without the Cloud opt-in: %d", len(registrations))
+		t.Fatalf("apps registered without a key: %d", len(registrations))
 	}
-	t.Setenv("MISTY_COMPOSIO_DEPLOYMENT", "cloud")
+	t.Setenv("COMPOSIO_API_KEY", "test-key")
 	registrations := (&SpacesService{}).appsToolRegistrations()
 	if _, err := agenttools.New(registrations...); err != nil || len(registrations) != 5 {
 		t.Fatalf("app tools = %d, %v", len(registrations), err)
@@ -82,14 +82,14 @@ func TestAppsBoundedKeepsResultsSmall(t *testing.T) {
 }
 
 func TestSearchAppsNeedTheUserToNameThem(t *testing.T) {
-	quiet := searchAppPolicy{webSearch: true, request: "Research a vegetarian weight-loss guide for an exam"}
+	quiet := searchAppPolicy{request: "Research a vegetarian weight-loss guide for an exam"}
 	if quiet.mayConnect("exa") || !quiet.mayConnect("googledrive") {
 		t.Fatal("an unnamed search app may connect, or an ordinary app may not")
 	}
-	if next := quiet.next("exa"); !strings.Contains(next, "web_search") || strings.Contains(next, "integration_connect") {
+	if next := quiet.next("exa"); !strings.Contains(next, "web tools you have") || strings.Contains(next, "integration_connect") {
 		t.Fatalf("unnamed search app next = %q", next)
 	}
-	named := searchAppPolicy{webSearch: true, request: "Use Exa to find recent papers"}
+	named := searchAppPolicy{request: "Use Exa to find recent papers"}
 	if !named.mayConnect("exa") || !strings.Contains(named.next("exa"), "integration_connect") {
 		t.Fatal("a search app the user named cannot connect")
 	}

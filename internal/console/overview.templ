@@ -21,6 +21,23 @@ templ overviewPanel(v overviewView) {
 		if v.MetricsErr != "" {
 			@note(v.MetricsErr)
 		}
+		@sectionLabel("Open alerts")
+		<ul class="rows">
+			for _, alert := range v.Alerts {
+				<li class="row row-problem">
+					<span class="row-label">
+						@iconAlert()
+						<span>{ alert.Title }<span class="muted">{ " · " + alert.Detail }</span></span>
+					</span>
+					<span class="muted">{ "since " + ago(alert.OpenedAt) }</span>
+				</li>
+			}
+			if v.AlertsErr {
+				@emptyRow("Open alerts couldn't be read.")
+			} else if len(v.Alerts) == 0 {
+				@emptyRow("None. The alerts service records a problem here once it is seen on two checks in a row, and removes it when it clears.")
+			}
+		</ul>
 		@sectionLabel("Health checks")
 		<ul class="rows">
 			@healthRow("Database (console connection)", v.DBErr == "", v.dbDetail())

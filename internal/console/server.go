@@ -18,23 +18,27 @@ var assetFiles embed.FS
 // Server wires the console's routes. db is nil when Postgres was unreachable
 // at startup; database-backed pages then say so instead of failing.
 type Server struct {
-	cfg     Config
-	db      *db.Database
-	auth    *authenticator
-	health  *healthClient
-	metrics *metricsSampler
-	compose composeRunner
+	cfg         Config
+	db          *db.Database
+	auth        *authenticator
+	health      *healthClient
+	metrics     *metricsSampler
+	compose     composeRunner
+	composeFile string
+	operator    *operatorClient
 }
 
 func NewServer(cfg Config, database *db.Database, launchToken string) *Server {
 	client := &http.Client{Timeout: 5 * time.Second}
 	return &Server{
-		cfg:     cfg,
-		db:      database,
-		auth:    newAuthenticator(launchToken),
-		health:  newHealthClient(cfg.APIURL, client),
-		metrics: newMetricsSampler(cfg.APIURL, cfg.MetricsToken, client),
-		compose: dockerCompose{dir: cfg.ServerDir},
+		cfg:         cfg,
+		db:          database,
+		auth:        newAuthenticator(launchToken),
+		health:      newHealthClient(cfg.APIURL, client),
+		metrics:     newMetricsSampler(cfg.APIURL, cfg.MetricsToken, client),
+		compose:     dockerCompose{dir: cfg.ServerDir, file: composeFileFor(cfg)},
+		composeFile: composeFileFor(cfg),
+		operator:    newOperatorClient(cfg.APIURL, cfg.OperatorToken, client),
 	}
 }
 
@@ -57,7 +61,13 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/services/panel", s.requirePage("services", s.servicesPanel))
 		r.Get("/services/{service}/logs", s.requirePage("services", s.serviceLogs))
 		r.Post("/services/{service}/{action}", s.requirePage("services", s.serviceAction))
-		r.Post("/accounts/{id}/revoke-sessions", s.revokeSessions)
+		r.Get("/logs/{service}/logs", s.serviceLogs)
+		r.Post("/customers/{id}/revoke-sessions", s.revokeSessions)
+		r.Post("/customers/{id}/limits", s.setCustomerLimits)
+		r.Post("/customers/{id}/suspend", s.customerAction("Suspended", "Suspended; signed out everywhere", s.operator.suspend))
+		r.Post("/customers/{id}/resume", s.customerAction("Resumed", "Resumed", s.operator.resume))
+		r.Post("/customers/{id}/close", s.customerAction("Closed", "Closed; deleted in 30 days unless resumed", s.operator.close))
+		r.Post("/customers/{id}/sign-in-link", s.signInLink)
 		r.Get("/{page}", s.page)
 	})
 	return r

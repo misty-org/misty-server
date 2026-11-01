@@ -174,7 +174,10 @@ export async function runSpaceTaskAgent(input: SpaceTaskWorkflowInput) {
         continue;
       }
       // Narration counts only in a row: a turn that made calls resets it (see the progress line below).
-      if (current.finishReason === "tool-calls") progressNudges = 0;
+      // Any call counts, whatever finish reason the provider gave the turn: keyed to "tool-calls"
+      // alone, three narrations spread over a whole run used up the nudges and the fourth ended
+      // it as "stopped without confirming" (Odysseys b21a86441d, October 29).
+      if (current.finishReason === "tool-calls" || current.steps.some((step) => step.content.some((part) => part.type === "tool-call"))) progressNudges = 0;
       const plainAnswer = finalText(current.steps);
       const actedSoFar = (result?.steps ?? []).some((step) => step.content.some((part) => part.type.startsWith("tool-")));
       // A plain-text answer after work goes through the same one verification as agent_finish

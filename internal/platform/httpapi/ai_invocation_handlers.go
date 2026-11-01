@@ -55,19 +55,10 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		if !s.bindConversationModel(w, r, userID, &body, &st) {
 			return
 		}
-		if !s.applyRequestedModelOverride(w, r, &body, &st) {
-			return
-		}
 		if !s.admitInvocationExecution(w, r, userID, &body, &st) {
 			return
 		}
 		if !s.createInvocationConversation(w, r, userID, &body, &st) {
-			return
-		}
-		if !s.saveConversationModelOverride(w, r, userID, &body, &st) {
-			return
-		}
-		if !checkInvocationModelAvailable(w, r, &body, &st) {
 			return
 		}
 		if !s.checkInvocationSurface(w, r, userID, &body, actionID, &st) {
@@ -104,11 +95,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			writeAIInvocationCreated(w, record)
 			return
 		}
-		titleNewConversation(s.database, s.runtime, userID, st.conversationID, body)
 		s.recordInvocationOnboarding(r.Context(), userID, body)
-		if st.modelFallbackNotice {
-			s.invocations.append(stored.ID, aiInvocationEvent{Type: "assistant.status", Text: "The previous model retired, so Misty switched this conversation to the frontier default.", Phase: "model_fallback"})
-		}
 		writeAIInvocationCreated(w, record)
 	}
 }

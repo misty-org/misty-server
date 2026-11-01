@@ -31,7 +31,6 @@ func TestAgentRuntimeStartReceiptRequiresSignedPinnedAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	secret := []byte(strings.Repeat("s", 32))
-	t.Setenv("MISTY_AGENT_RUNTIME_URL", "https://worker.test")
 	t.Setenv("MISTY_AGENT_RUNTIME_CONTROL_SECRET", base64.StdEncoding.EncodeToString(secret))
 	config, err := AgentRuntimeConfigFromEnv()
 	if err != nil {
@@ -53,7 +52,7 @@ func TestAgentRuntimeStartReceiptRequiresSignedPinnedAdmission(t *testing.T) {
 		if signed {
 			timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 			request.Header.Set("X-Misty-Agent-Timestamp", timestamp)
-			request.Header.Set("X-Misty-Agent-Signature", TestingAgentRuntimeSignature(secret, http.MethodPost, path, timestamp, body))
+			request.Header.Set("X-Misty-Agent-Signature", TestingAgentRuntimeSignature(TestingAgentRunKey(secret, id), http.MethodPost, path, timestamp, body))
 		}
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, request)

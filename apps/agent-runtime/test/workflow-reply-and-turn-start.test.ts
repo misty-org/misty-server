@@ -1,4 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { setDeviceModels } from "../src/device-models.js";
+
+// Runs think on the device's agent model.
+setDeviceModels({ version: 1, providers: {}, models: { agent: "fixture/model" } });
 
 const fixture = vi.hoisted(() => ({
   refuseTurn: false,

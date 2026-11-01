@@ -17,11 +17,7 @@ import (
 // collaboration validates its signing key at startup, so it must be a real one.
 func corsTestServer(t *testing.T) *Server {
 	t.Helper()
-	t.Setenv("PASSWORD_RESET_URL", "http://localhost:5173/reset")
-	t.Setenv("PASSWORD_RESET_START_URL", "http://localhost:8080/auth/reset/start")
-	t.Setenv("MAILJET_API_KEY", "")
-	t.Setenv("MAILJET_SECRET_KEY", "")
-	t.Setenv("MAILJET_FROM_EMAIL", "")
+	configureJournalCollabForTest(t)
 
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

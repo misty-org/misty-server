@@ -39,7 +39,7 @@ func (db *Database) InviteToSpaceWithToken(
 	}
 	out := &SpaceInvitation{
 		ID: "invite_" + uuid.NewString(), SpaceID: spaceID, InvitedByUserID: ownerID,
-		InvitedEmail: email, DeliveryStatus: "pending",
+		InvitedEmail: email,
 		ExpiresAt: time.Now().UTC().Add(7 * 24 * time.Hour),
 	}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -108,7 +108,7 @@ func (db *Database) IncomingSpaceInvites(ctx context.Context, userID string) ([]
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.space_id,s.name,i.invited_user_id,
 			invited.username,i.invited_email,i.invited_by_user_id,inviter.username,
-			i.delivery_status,i.expires_at,i.created_at
+			i.expires_at,i.created_at
 			FROM space_invitations i
 			JOIN spaces s ON s.id=i.space_id
 			JOIN users current_invitee ON current_invitee.id=$1
@@ -125,7 +125,7 @@ func (db *Database) IncomingSpaceInvites(ctx context.Context, userID string) ([]
 			var item SpaceInvitation
 			if err := rows.Scan(&item.ID, &item.SpaceID, &item.SpaceName, &item.InvitedUserID,
 				&item.InvitedUserName, &item.InvitedEmail, &item.InvitedByUserID, &item.InviterName,
-				&item.DeliveryStatus, &item.ExpiresAt, &item.CreatedAt); err != nil {
+				&item.ExpiresAt, &item.CreatedAt); err != nil {
 				return err
 			}
 			items = append(items, item)
@@ -146,7 +146,7 @@ func (db *Database) PendingSpaceInvitations(
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.space_id,s.name,
 			i.invited_user_id,invited.username,i.invited_email,
-			i.invited_by_user_id,inviter.username,i.delivery_status,i.expires_at,i.created_at
+			i.invited_by_user_id,inviter.username,i.expires_at,i.created_at
 			FROM space_invitations i
 			JOIN spaces s ON s.id=i.space_id
 			JOIN users inviter ON inviter.id=i.invited_by_user_id
@@ -162,7 +162,7 @@ func (db *Database) PendingSpaceInvitations(
 			var item SpaceInvitation
 			if err := rows.Scan(&item.ID, &item.SpaceID, &item.SpaceName, &item.InvitedUserID,
 				&item.InvitedUserName, &item.InvitedEmail, &item.InvitedByUserID, &item.InviterName,
-				&item.DeliveryStatus, &item.ExpiresAt, &item.CreatedAt); err != nil {
+				&item.ExpiresAt, &item.CreatedAt); err != nil {
 				return err
 			}
 			items = append(items, item)
@@ -183,16 +183,16 @@ func (db *Database) RefreshSpaceInvitation(
 			return err
 		}
 		err := tx.QueryRowContext(ctx, `UPDATE space_invitations i
-			SET token_hash=$1,delivery_status='pending',expires_at=$2,last_sent_at=NULL
+			SET token_hash=$1,expires_at=$2,last_sent_at=NULL
 			FROM spaces s,users inviter
 			WHERE i.id=$3 AND i.space_id=$4 AND i.space_id=s.id
 			  AND inviter.id=i.invited_by_user_id
 			  AND i.revoked_at IS NULL AND i.consumed_at IS NULL
 			RETURNING i.id,i.space_id,s.name,i.invited_user_id,
-			  i.invited_email,i.invited_by_user_id,inviter.username,i.delivery_status,
+			  i.invited_email,i.invited_by_user_id,inviter.username,
 			  i.expires_at,i.created_at`, tokenHash, expiresAt, inviteID, spaceID).
 			Scan(&out.ID, &out.SpaceID, &out.SpaceName, &out.InvitedUserID, &out.InvitedEmail,
-				&out.InvitedByUserID, &out.InviterName, &out.DeliveryStatus, &out.ExpiresAt,
+				&out.InvitedByUserID, &out.InviterName, &out.ExpiresAt,
 				&out.CreatedAt)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrSpaceInviteNotFound

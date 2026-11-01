@@ -1,4 +1,5 @@
 import { browserReinspectionTool, requiresBrowserReinspection } from "./browser-reinspection.js";
+import { deviceToolActivity } from "./web-search/tool.js";
 import type { HarnessCheckpoint } from "./harness.js";
 import type { ModelCatalog } from "./model-tools.js";
 import { visibleErrorMessage } from "./runtime-errors.js";
@@ -103,8 +104,9 @@ export function toolMonitor({ catalog, order, checkpoint, rejected }: ToolMonito
     },
     onStart: ({ toolCall }: { toolCall: ToolCall }) => order.start(toolCall.toolCallId, async () => {
       // Misty announces a read-only call itself when the call arrives, so a
-      // read costs one checkpoint, on finish (agent_runtime_tool_start.go).
-      if (catalog.readOnly(toolCall.toolName)) return;
+      // read costs one checkpoint, on finish (agent_runtime_tool_start.go). A
+      // tool this runtime runs itself never arrives there, so it announces here.
+      if (catalog.readOnly(toolCall.toolName) && !catalog.local(toolCall.toolName)) return;
       const name = catalog.mistyName(toolCall.toolName);
       await checkpoint({
         node_id: `tool:${toolCall.toolCallId}`, state: "running", phase: `using_${name.replaceAll(".", "_")}`, progress: 40,
@@ -128,7 +130,12 @@ export function toolMonitor({ catalog, order, checkpoint, rejected }: ToolMonito
       else settle(name, toolCall, outcome, visible);
       await checkpoint({
         node_id: `tool:${toolCall.toolCallId}`, state: confirmed ? "completed" : "failed", phase: confirmed ? "working" : "tool_failed",
-        progress: confirmed ? 60 : 40, output: { tool: name, duration_ms: event.durationMs, success: confirmed },
+        progress: confirmed ? 60 : 40,
+        output: {
+          tool: name, duration_ms: event.durationMs, success: confirmed,
+          // The timeline's query and links for a call Misty never saw.
+          ...(confirmed && catalog.local(toolCall.toolName) ? deviceToolActivity(toolCall.input, event.output) : {}),
+        },
         error_message: confirmed ? undefined : visible,
       });
     }),
@@ -141,11 +148,17 @@ function ownTab(input: unknown): boolean {
   return target === "" || target === "new_tab" || target === "window";
 }
 
-/** A browser page action, not marked consequential, whose outcome was uncertain. */
+/** What a page or screen goal may only do with the person's approval: the API's consequentialGoal
+ * (browser_agent_tool_steps.go), which clears the flag on a goal that names none of it. */
+const consequentialGoal = /\b(buy|purchas|pay (for|the|now|with|it)|payment|checkout|check out|order|book(ing)?|reserve|send|e-?mail|message|post|publish|tweet|share|invite|delete|remove|cancel|unsubscribe|subscribe|sign ?up|register|apply for|transfer|donate|submit (an? )?(application|order|payment|form))/i;
+
+/** A browser page action, not marked consequential, whose outcome was uncertain. A goal flagged
+ * consequential that names nothing consequential counts as ordinary, as the API runs it. */
 function uncertainPageAction(name: string, input: unknown): boolean {
   if (!name.startsWith("browser.") || name.startsWith("browser.workspace.")) return false;
   const fields = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  if (fields.allowConsequential === true) return false;
+  const needless = typeof fields.goal === "string" && !consequentialGoal.test(fields.goal);
+  if (fields.allowConsequential === true && !needless) return false;
   const steps = Array.isArray(fields.steps) ? fields.steps : [];
   return !steps.some((step) => step && typeof step === "object" && (step as Record<string, unknown>).allowConsequential === true);
 }

@@ -180,6 +180,9 @@ func (db *Database) CompleteAccountDeletion(
 		if err := purgeAccountAgentsTx(ctx, tx, userID); err != nil {
 			return err
 		}
+		if err := purgeAccountDataTx(ctx, tx, userID); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE users
 			SET username=$1,email=$2,

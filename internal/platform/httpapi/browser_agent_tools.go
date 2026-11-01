@@ -13,6 +13,9 @@ import (
 	"github.com/kannachi323/misty/server/internal/workflow"
 )
 
+// screenActTool is the screen agent the desktop runs (Midscene) on the device's agent model.
+const screenActTool = "browser.act"
+
 func (s *SpacesService) executeBrowserAgentToolInvocation(
 	ctx context.Context,
 	invocation agenttools.Invocation,
@@ -42,6 +45,11 @@ func (s *SpacesService) executeBrowserAgentToolInvocation(
 	}
 	if err := navigationAddressWithoutHost(ctx, tool); err != nil {
 		return nil, err
+	}
+	// A page goal ("Create a new CryptPad document … and write content into it") is cleared the
+	// same way: flagged, its uncertain outcome ended a run that had only typed into a notepad.
+	if tool.Name == "browser.act" {
+		tool = withoutNeedlessConsequence(tool)
 	}
 	if browserPageActTools[tool.Name] {
 		if waiting, err := s.approveBrowserPageSteps(ctx, invocation, tool, scopeID); err != nil || waiting != nil {

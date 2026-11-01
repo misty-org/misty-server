@@ -14,13 +14,10 @@ import (
 // aiInvocationAdmitState carries what admission decides about the run's
 // conversation, model and reasoning as CreateInvocation works through it.
 type aiInvocationAdmitState struct {
-	conversationID      string
-	spaceID             string
-	modelID             string
-	reasoning           string
-	accountModel        bool
-	modelOverrides      map[string]string
-	modelFallbackNotice bool
+	conversationID string
+	spaceID        string
+	modelID        string
+	reasoning      string
 }
 
 func decodeAIInvocationBody(w http.ResponseWriter, r *http.Request, body *aiInvocationInput) bool {
@@ -226,8 +223,8 @@ func (s *AIService) storeInvocationRecord(w http.ResponseWriter, r *http.Request
 		recordTrigger = "schedule"
 	}
 	stored, created, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-		DispatchRuntime: true, ModelTurnLimit: evalTurnLimit(body.EvalTurnLimit, defaultTurnLimit), ExecutionLimitMS: evalExecutionLimitMS(body.EvalTurnLimit),
-		ID: "invocation_" + uuid.NewString(), UserID: userID, SpaceID: st.spaceID, ConversationID: st.conversationID,
+		DispatchRuntime: true,
+		ID:              "invocation_" + uuid.NewString(), UserID: userID, SpaceID: st.spaceID, ConversationID: st.conversationID,
 		SurfaceID: body.SurfaceID, Mode: body.Mode, Trigger: recordTrigger, State: "queued",
 		IdempotencyKey: body.IdempotencyKey, RequestPayload: requestPayload, ExpiresAt: now.Add(aiInvocationTTL),
 	})

@@ -22,7 +22,6 @@ type BrowserSyncService struct {
 	database   *db.Database
 	store      *Store
 	workspaces workspaceCaches
-	restore    RestoreCompleter
 	// instanceID owns this process's connection rows; they stay live while
 	// RunLiveness renews its lease.
 	instanceID string
@@ -77,6 +76,10 @@ func syncErrorCode(err error) (string, int) {
 		return "sync_operation_compacted", 409
 	case errors.Is(err, ErrSyncCursor):
 		return "sync_cursor_invalid", 409
+	case errors.Is(err, ErrSyncStorageLimit):
+		return "storage_limit_reached", 409
+	case errors.Is(err, db.ErrAccountClosing):
+		return "account_closing", 403
 	case errors.Is(err, ErrSyncWorkspaceMode):
 		return "sync_workspace_mode", 426
 	case errors.Is(err, ErrSyncWorkspaceSnapshot):
@@ -97,6 +100,7 @@ func decodeSync(r io.Reader, target any) error {
 	}
 	return nil
 }
+
 // confirmPassword checks the password given to confirm deleting the vault.
 func (s *BrowserSyncService) confirmPassword(userID, password string) error {
 	account, err := s.database.GetUserByID(userID)

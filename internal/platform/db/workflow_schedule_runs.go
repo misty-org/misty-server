@@ -24,6 +24,8 @@ func (db *Database) ClaimDueWorkflowSchedules(ctx context.Context, now time.Time
 				SELECT t2.id FROM workflow_schedules t2 JOIN agent_methods m ON m.id=t2.method_id AND m.user_id=t2.user_id
 				WHERE t2.enabled AND m.enabled AND t2.next_run_at<=$1
 				  AND COALESCE((SELECT s.enabled FROM ai_user_settings s WHERE s.user_id=t2.user_id),TRUE)
+				  -- A closing account's schedules wait; resuming it brings them back.
+				  AND NOT EXISTS(SELECT 1 FROM account_controls c WHERE c.user_id=t2.user_id AND c.delete_at IS NOT NULL)
 				  AND (t2.state<>'running' OR t2.lease_until<=$1)
 				  AND t2.state<>'device_claimed'
 				ORDER BY t2.next_run_at FOR UPDATE OF t2 SKIP LOCKED LIMIT $2

@@ -87,7 +87,12 @@ func (db *Store) beginSignedWrite(ctx context.Context, userID string, s syncSign
 		tx.Rollback()
 		return nil, nil, err
 	}
-	err = nil
+	// A retried op already applied is acknowledged above; a new one waits
+	// while the account is closing.
+	if err = requireSyncWritable(ctx, tx, userID); err != nil {
+		tx.Rollback()
+		return nil, nil, err
+	}
 	switch {
 	case epoch != s.keyEpoch:
 		err = ErrSyncEpoch

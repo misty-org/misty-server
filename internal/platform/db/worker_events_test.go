@@ -35,11 +35,11 @@ func TestWorkerNotificationsCommitRollbackIsolationAndReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stopAI()
-	faces, stopFaces, err := database.SubscribeWorkerEvents(ctx, "library-faces")
+	edit, stopEdit, err := database.SubscribeWorkerEvents(ctx, "library-edit")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer stopFaces()
+	defer stopEdit()
 	peerDB := &Database{}
 	defer peerDB.Stop()
 	peer, stopPeer, err := peerDB.SubscribeWorkerEvents(ctx, "library-ai")
@@ -64,7 +64,7 @@ func TestWorkerNotificationsCommitRollbackIsolationAndReconnect(t *testing.T) {
 	}
 	workerWake(t, ai)
 	workerWake(t, peer)
-	workerQuiet(t, faces)
+	workerQuiet(t, edit)
 	if _, err = database.Conn.Exec(`UPDATE library_processing_jobs SET updated_at=now() WHERE id='job'`); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestWorkerNotificationsCommitRollbackIsolationAndReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	workerWake(t, ai)
-	workerWake(t, faces)
+	workerWake(t, edit)
 	workerWake(t, peer)
 }
 

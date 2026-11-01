@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,8 +12,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func TestPasswordResetTokenLifecycle(t *testing.T) {
+// A setup key's sign-in may set a new password without the old one, once.
+func TestPasswordResetGrantLifecycle(t *testing.T) {
 	database := openTestDatabase(t)
+	ctx := context.Background()
 
 	user, err := database.CreateUser("reset-repo@example.com", "old-password")
 	if err != nil {
@@ -20,36 +23,40 @@ func TestPasswordResetTokenLifecycle(t *testing.T) {
 	}
 
 	tokenHash := security.HashToken("reset-token")
-	if err := database.UpsertPasswordResetToken(user.ID, tokenHash, time.Now().Add(time.Hour)); err != nil {
-		t.Fatalf("UpsertPasswordResetToken() error = %v", err)
+	if err := database.GrantPasswordReset(ctx, user.ID, tokenHash, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("GrantPasswordReset() error = %v", err)
 	}
-	if err := database.ValidatePasswordResetToken(tokenHash, time.Now()); err != nil {
-		t.Fatalf("ValidatePasswordResetToken() error = %v", err)
-	}
-	if err := database.CreateRefreshSession(context.Background(), "family", "refresh", user.ID, time.Now().Add(time.Hour)); err != nil {
+	if err := database.CreateRefreshSession(ctx, "family", "refresh", user.ID, time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.ResetPasswordWithToken(tokenHash, "new-password", time.Now()); err != nil {
-		t.Fatalf("ResetPasswordWithToken() error = %v", err)
+	if err := database.ResetPassword(ctx, "someone-else", tokenHash, "new-password", "", true, time.Now()); !errors.Is(err, ErrPasswordResetTokenInvalid) {
+		t.Fatalf("ResetPassword() for another account error = %v", err)
 	}
-	if err := database.ValidatePasswordResetToken(tokenHash, time.Now()); err != ErrPasswordResetTokenInvalid {
-		t.Fatalf("ValidatePasswordResetToken() after reset error = %v, want %v", err, ErrPasswordResetTokenInvalid)
+	if err := database.ResetPassword(ctx, user.ID, tokenHash, "new-password", "", true, time.Now()); err != nil {
+		t.Fatalf("ResetPassword() error = %v", err)
+	}
+	if err := database.ResetPassword(ctx, user.ID, tokenHash, "newer-password", "", true, time.Now()); !errors.Is(err, ErrPasswordResetTokenInvalid) {
+		t.Fatalf("ResetPassword() reused the grant: %v", err)
 	}
 
-	if ok, err := database.RotateRefreshSession(context.Background(), "family", "refresh", "next", user.ID); err != nil || ok {
+	if ok, err := database.RotateRefreshSession(ctx, "family", "refresh", "next", user.ID); err != nil || ok {
 		t.Fatalf("password reset did not revoke refresh session: %v %v", ok, err)
 	}
-	_, hash, err := database.GetUserByEmail("reset-repo@example.com")
+	reset, hash, err := database.GetUserByEmail("reset-repo@example.com")
 	if err != nil {
 		t.Fatalf("GetUserByEmail() error = %v", err)
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte("new-password")); err != nil {
 		t.Fatalf("new password hash comparison failed: %v", err)
 	}
+	if !reset.CredentialPassword {
+		t.Fatal("a reset with a derived credential is not marked as one")
+	}
 }
 
-func TestValidatePasswordResetTokenDeletesExpiredToken(t *testing.T) {
+func TestExpiredPasswordResetGrantIsRefused(t *testing.T) {
 	database := openTestDatabase(t)
+	ctx := context.Background()
 
 	user, err := database.CreateUser("expired-reset@example.com", "old-password")
 	if err != nil {
@@ -57,18 +64,17 @@ func TestValidatePasswordResetTokenDeletesExpiredToken(t *testing.T) {
 	}
 
 	tokenHash := security.HashToken("expired-reset-token")
-	if err := database.UpsertPasswordResetToken(user.ID, tokenHash, time.Now().Add(-time.Hour)); err != nil {
-		t.Fatalf("UpsertPasswordResetToken() error = %v", err)
+	if err := database.GrantPasswordReset(ctx, user.ID, tokenHash, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("GrantPasswordReset() error = %v", err)
 	}
-	if err := database.ValidatePasswordResetToken(tokenHash, time.Now()); err != ErrPasswordResetTokenInvalid {
-		t.Fatalf("ValidatePasswordResetToken() error = %v, want %v", err, ErrPasswordResetTokenInvalid)
+	if err := database.ResetPassword(ctx, user.ID, tokenHash, "new-password", "", true, time.Now()); !errors.Is(err, ErrPasswordResetTokenInvalid) {
+		t.Fatalf("ResetPassword() error = %v, want %v", err, ErrPasswordResetTokenInvalid)
 	}
-
-	var count int
-	if err := database.Conn.QueryRow(`SELECT COUNT(*) FROM password_reset_tokens WHERE user_id = $1`, user.ID).Scan(&count); err != nil {
-		t.Fatalf("count query error = %v", err)
+	_, hash, err := database.GetUserByEmail("expired-reset@example.com")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if count != 0 {
-		t.Fatalf("expired password reset token rows = %d, want 0", count)
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte("old-password")); err != nil {
+		t.Fatalf("an expired grant changed the password: %v", err)
 	}
 }

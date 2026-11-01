@@ -1,3 +1,0 @@
-report-*.json
-fixtures/*
-!fixtures/.gitkeep

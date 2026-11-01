@@ -144,7 +144,6 @@ func (s *GoogleSignInService) Complete() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]string{"reauthentication_token": token})
 			return
 		}
-		s.verification.AfterSignup(r, user, true)
 		s.session(w, r, user)
 	}
 }
@@ -159,7 +158,7 @@ func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *i
 			if existing, _, err := gate.GetUserByEmail(email); err != nil {
 				return nil, err
 			} else if existing == nil {
-				allowed, err := registrationAllowed(context.Background(), gate)
+				allowed, err := registrationAllowed(context.Background(), gate, email)
 				if err != nil {
 					return nil, err
 				}

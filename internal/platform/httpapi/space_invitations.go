@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"net/url"
 
@@ -50,9 +49,7 @@ func (s *SpacesService) Invite() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		status := s.deliverSpaceInvitation(r.Context(), invite, token)
-		_ = s.database.SetSpaceInvitationDelivery(r.Context(), invite.ID, status)
-		invite.DeliveryStatus = status
+		invite.Link = SpaceInvitationLink(token)
 		writeJSON(w, http.StatusCreated, invite)
 	}
 }
@@ -88,28 +85,16 @@ func (s *SpacesService) SpaceInvitationItem() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		status := s.deliverSpaceInvitation(r.Context(), invite, token)
-		_ = s.database.SetSpaceInvitationDelivery(r.Context(), invite.ID, status)
-		invite.DeliveryStatus = status
+		invite.Link = SpaceInvitationLink(token)
 		writeJSON(w, http.StatusOK, invite)
 	}
 }
 
-func (s *SpacesService) deliverSpaceInvitation(
-	ctx context.Context,
-	invite *db.SpaceInvitation,
-	token string,
-) string {
-	if s.invitationSender == nil || s.invitationBaseURL == "" {
-		return "failed"
-	}
-	link := s.invitationBaseURL + "/" + url.PathEscape(token)
-	if err := s.invitationSender.SendSpaceInvitationEmail(
-		ctx, invite.InvitedEmail, invite.InviterName, invite.SpaceName, link,
-	); err != nil {
-		return "failed"
-	}
-	return "sent"
+// SpaceInvitationLink opens the invitation in Misty (misty://open/invite/...).
+// The server sends no email: creating an invitation, or a new link for one
+// (which replaces the old link), answers with it and the owner passes it on.
+func SpaceInvitationLink(token string) string {
+	return "misty://open/invite/" + url.PathEscape(token)
 }
 
 func (s *SpacesService) SpaceInvitationToken() http.HandlerFunc {

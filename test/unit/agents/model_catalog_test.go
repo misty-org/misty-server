@@ -27,18 +27,8 @@ func TestGatewayCapabilitiesAcceptsObjectMetadata(t *testing.T) {
 	}
 }
 
-func TestModelsAreAcceptedWithoutACatalog(t *testing.T) {
+func TestContextWindowsComeFromTheOperatorsCatalog(t *testing.T) {
 	t.Setenv("MISTY_AI_MODEL_CATALOG_JSON", `[{"id":"provider/chat","name":"Chat","capabilities":["tool-use"],"context_window":400000}]`)
-	for _, id := range []string{"anthropic/claude-sonnet-5-5", "openrouter/anthropic/claude-sonnet-5.5", "ollama/qwen3:14b"} {
-		if !FrontierModelAvailable(context.Background(), id) {
-			t.Fatalf("%s was refused", id)
-		}
-	}
-	for _, id := range []string{"", "no-slash", "provider/", "/model", "has space/model"} {
-		if FrontierModelAvailable(context.Background(), id) {
-			t.Fatalf("%q was accepted", id)
-		}
-	}
 	if ModelContextWindow(context.Background(), "provider/chat") != 400_000 || ModelContextWindow(context.Background(), "provider/other") != DefaultContextWindow {
 		t.Fatal("context windows come from the operator's catalog, else the default")
 	}

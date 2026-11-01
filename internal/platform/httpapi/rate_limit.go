@@ -19,10 +19,6 @@ type SlidingWindowLimiter struct {
 	MaxKeys int
 }
 
-type ForgotPasswordRateLimiter struct {
-	*SlidingWindowLimiter
-}
-
 type RateLimitPolicy struct {
 	Limit  int
 	Window time.Duration
@@ -67,12 +63,6 @@ const defaultLimiterMaxKeys = 20000
 
 // Keys are client addresses, so this tracks distinct callers per route.
 
-func NewForgotPasswordRateLimiter(limit int, window time.Duration) *ForgotPasswordRateLimiter {
-	return &ForgotPasswordRateLimiter{
-		SlidingWindowLimiter: NewSlidingWindowLimiter(limit, window),
-	}
-}
-
 func NewAPIRateLimiter() *APIRateLimiter {
 	return &APIRateLimiter{
 		Now:          time.Now,
@@ -82,22 +72,28 @@ func NewAPIRateLimiter() *APIRateLimiter {
 			// Valid MCP calls are limited again by verified runtime identity. This
 			// edge policy only protects the unauthenticated boundary and must leave
 			// headroom for many Vercel runs sharing a single egress address.
-			"POST /mcp":                      {Limit: 6000, Window: time.Minute},
-			"POST /register":                 {Limit: 10, Window: time.Minute},
-			"POST /login":                    {Limit: 20, Window: time.Minute},
-			"POST /auth/google":              {Limit: 10, Window: time.Minute},
-			"GET /auth/google/start":         {Limit: 20, Window: time.Minute},
-			"GET /auth/google/callback":      {Limit: 20, Window: time.Minute},
-			"POST /auth/google/complete":     {Limit: 60, Window: time.Minute},
-			"POST /auth/forgot":              {Limit: 8, Window: time.Minute},
-			"GET /auth/reset/start":          {Limit: 20, Window: time.Minute},
-			"GET /auth/reset/validate":       {Limit: 20, Window: time.Minute},
-			"POST /auth/reset":               {Limit: 10, Window: time.Minute},
-			"POST /auth/handoff":             {Limit: 20, Window: time.Minute},
-			"GET /auth/handoff/start":        {Limit: 20, Window: time.Minute},
-			"POST /me/export":                {Limit: 3, Window: time.Hour},
-			"POST /me/deletion":              {Limit: 3, Window: time.Hour},
-			"POST /ai/complete":              {Limit: 12, Window: time.Minute},
+			"POST /mcp":               {Limit: 6000, Window: time.Minute},
+			"POST /register":          {Limit: 10, Window: time.Minute},
+			"POST /login":             {Limit: 20, Window: time.Minute},
+			"POST /setup-keys/redeem": {Limit: 20, Window: time.Minute},
+			// The operator token holder (billing's webhook worker) may catch up
+			// on a backlog; the token is the protection here, not the budget.
+			"GET /operator/v1/accounts":                                 {Limit: 600, Window: time.Minute},
+			"POST /operator/v1/accounts":                                {Limit: 600, Window: time.Minute},
+			"GET /operator/v1/accounts/{id}":                            {Limit: 600, Window: time.Minute},
+			"PATCH /operator/v1/accounts/{id}":                          {Limit: 600, Window: time.Minute},
+			"POST /operator/v1/accounts/{id}/suspend":                   {Limit: 600, Window: time.Minute},
+			"POST /operator/v1/accounts/{id}/resume":                    {Limit: 600, Window: time.Minute},
+			"POST /operator/v1/accounts/{id}/setup-key":                 {Limit: 60, Window: time.Minute},
+			"POST /auth/google":                                         {Limit: 10, Window: time.Minute},
+			"GET /auth/google/start":                                    {Limit: 20, Window: time.Minute},
+			"GET /auth/google/callback":                                 {Limit: 20, Window: time.Minute},
+			"POST /auth/google/complete":                                {Limit: 60, Window: time.Minute},
+			"POST /auth/handoff":                                        {Limit: 20, Window: time.Minute},
+			"GET /auth/handoff/start":                                   {Limit: 20, Window: time.Minute},
+			"POST /me/export":                                           {Limit: 3, Window: time.Hour},
+			"POST /me/deletion":                                         {Limit: 3, Window: time.Hour},
+			"POST /ai/complete":                                         {Limit: 12, Window: time.Minute},
 			"POST /spaces/{spaceID}/notes/{id}/collaboration-ticket":    {Limit: 30, Window: time.Minute},
 			"POST /spaces/{spaceID}/drawings/{id}/collaboration-ticket": {Limit: 30, Window: time.Minute},
 			"POST /spaces/{spaceID}/notes/{id}/assets/uploads":          {Limit: 20, Window: time.Minute},

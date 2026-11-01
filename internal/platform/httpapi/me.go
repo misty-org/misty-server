@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/kannachi323/misty/server/internal/accounts"
 	"net/http"
+	"time"
 
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
@@ -33,7 +34,14 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			return
 		}
 
-		verifiedAt, verifyErr := database.EmailVerifiedAt(r.Context(), userID)
+		// A closing account is read-only until it is deleted on this date.
+		var deleteAt any
+		if at, closing := suspensions.Closing(r.Context(), userID); closing {
+			deleteAt = at.UTC().Format(time.RFC3339)
+		}
+
+		// The server owner's app shows the alerts service's open problems.
+		owner, _ := database.IsServerOwner(r.Context(), userID)
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id":                 user.ID,
@@ -45,7 +53,11 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			"created_at":         user.CreatedAt,
 			"allows_use":         true,
 			"license_device":     "",
-			"email_verified":     verifyErr == nil && verifiedAt != nil,
+			// The server sends no email, so there is nothing to confirm. Kept
+			// for apps that still read it.
+			"email_verified": true,
+			"delete_at":      deleteAt,
+			"server_owner":   owner,
 		})
 	}
 }

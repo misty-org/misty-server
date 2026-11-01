@@ -3,6 +3,8 @@ package app
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
 )
 
@@ -23,6 +25,7 @@ func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/instance", deps.instance)
 	s.Router.Post(prefix+"/register", deps.register)
 	s.Router.Post(prefix+"/login", deps.login)
+	s.Router.Post(prefix+"/setup-keys/redeem", deps.redeemSetupKey)
 	s.Router.Get(prefix+"/auth/google", deps.googleSignIn.Available())
 	s.Router.Post(prefix+"/auth/google", deps.googleSignIn.Begin())
 	s.Router.Get(prefix+"/auth/google/start", deps.googleSignIn.Start())
@@ -30,21 +33,16 @@ func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 	s.Router.Post(prefix+"/auth/google/complete", deps.googleSignIn.Complete())
 	s.Router.Post(prefix+"/logout", deps.logout)
 	s.Router.Post(prefix+"/auth/refresh", api.RefreshSession(s.Database))
-	s.Router.Post(prefix+"/auth/forgot", deps.forgotPassword)
-	s.Router.Get(prefix+"/auth/reset/start", deps.startReset)
-	s.Router.Get(prefix+"/auth/reset/validate", deps.validateReset)
-	s.Router.Post(prefix+"/auth/reset", deps.resetPassword)
-	s.Router.Get(prefix+"/auth/verify/start", deps.verification.Verify())
 	s.Router.Post(prefix+"/auth/handoff", deps.mintHandoff)
 	s.Router.Get(prefix+"/auth/handoff/start", deps.startHandoff)
 }
 
-// mountPublicAccountRoutes registers the current-user, email verification, and
-// referral routes.
+// mountPublicAccountRoutes registers the current-user routes and the server
+// owner's open alerts.
 func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/me", api.GetMe(s.Database))
 	s.Router.Put(prefix+"/me/password", api.ChangePassword(s.Database))
-	s.Router.Post(prefix+"/me/email/verify", deps.verification.Resend())
+	s.Router.Get(prefix+"/server/alerts", api.ServerAlerts(s.Database))
 }
 
 // mountPublicSyncRoutes registers the browser sync vault, device, and restore routes.
@@ -60,7 +58,6 @@ func (s *Server) mountPublicSyncRoutes(prefix string, deps *mountDeps) {
 	s.Router.Post(prefix+"/sync/control", deps.browserSync.ControlDevice())
 	s.Router.Post(prefix+"/sync/ticket", deps.browserSync.Ticket())
 	s.Router.Get(prefix+"/sync/ws", deps.browserSync.Connect())
-	s.Router.Post(prefix+"/sync/restore/step", deps.browserSync.RestoreStep())
 }
 
 // mountPublicProfileRoutes registers profile, avatar, device, settings, space,
@@ -100,14 +97,28 @@ func (s *Server) mountOperationalRoutes(deps *mountDeps) {
 		s.Router.Get("/metrics", s.Metrics.Handler(token))
 	}
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/activate", s.Spaces.AgentRuntimeActivate())
-	s.Router.Post("/internal/voice/live/credential", deps.agents.VoiceLiveCredential())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/start-receipt", s.Spaces.AgentRuntimeStartReceipt())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/budget", s.Spaces.AgentRuntimeExecutionBudget())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/steering", s.Spaces.AgentRuntimeSteering())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/context", s.Spaces.AgentRuntimeContext())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/model-provider", s.Spaces.AgentRuntimeModelProvider())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/mcp-token", s.Spaces.AgentRuntimeMCPAccess())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/events", s.Spaces.AgentRuntimeEvent())
 	s.Router.Post("/internal/agent-runtime/runs/{runID}/complete", s.Spaces.AgentRuntimeComplete())
 	s.Router.Post("/mcp", s.Spaces.MistyMCP().ServeHTTP)
+	s.mountOperatorRoutes()
+}
+
+// mountOperatorRoutes registers the operator account API, only when
+// MISTY_OPERATOR_TOKEN is set. Setup key emails link to the website's static
+// setup page, never to a page on this server, which serves API routes only.
+func (s *Server) mountOperatorRoutes() {
+	token := api.OperatorToken()
+	if token == "" {
+		return
+	}
+	operator := api.NewOperatorAccounts(s.Database, s.Suspensions)
+	s.Router.Route("/operator/v1", func(r chi.Router) {
+		r.Use(api.RequireOperator(token))
+		operator.Mount(r)
+	})
 }

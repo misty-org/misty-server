@@ -2,9 +2,7 @@ package app
 
 import (
 	"context"
-	"errors"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -19,16 +17,6 @@ func Run() {
 	server, err := CreateServer()
 	if err != nil {
 		panic(err)
-	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		server.Telemetry.Close(ctx)
-	}()
-	if model := strings.TrimSpace(config.Getenv("MISTY_AGENT_MODEL")); model != "" {
-		log.Printf("Models: each account's own keys, else the operator's %s", model)
-	} else {
-		log.Printf("Models: each account's own keys; no operator model")
 	}
 
 	if err := server.Database.Start(); err != nil {
@@ -64,7 +52,6 @@ func Run() {
 		WorkerFunc(func(ctx context.Context) { runPersonalAgentTaskProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runLibraryRenditionProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
-		WorkerFunc(func(ctx context.Context) { runAIEmbeddingProcessing(ctx, server) }),
 	)
 	// Domain gauges refresh on their own schedule so a scrape never holds a
 	// database connection.
@@ -77,54 +64,6 @@ func Run() {
 		panic(err)
 	}
 	log.Println("Misty server stopped")
-}
-
-func runAIEmbeddingProcessing(ctx context.Context, server *Server) {
-	if !server.AIAnalyzer.Available() {
-		return
-	}
-	runDatabaseQueue(ctx, server, "embedding", func(ctx context.Context) (int, error) {
-		processed := 0
-		// Claim immediately before each provider call; queued chunks cannot outlive
-		// their leases while an earlier chunk is processed.
-		for processed < 32 && ctx.Err() == nil {
-			chunks, err := server.Database.PendingAIEmbeddingChunks(ctx, 1)
-			if err != nil {
-				return processed, err
-			}
-			if len(chunks) == 0 {
-				return processed, nil
-			}
-			chunk := chunks[0]
-			processed++
-			if err := embedRetrievalChunk(ctx, server, chunk); err != nil {
-				cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-				retryErr := server.Database.RetryAIEmbeddingChunk(cleanup, chunk)
-				cancel()
-				return processed, errors.Join(err, retryErr)
-			}
-		}
-		// The memory tree: one batch of one owner's chunks per call.
-		if processed < 32 && ctx.Err() == nil {
-			chunks, err := server.Database.PendingMemoryChunks(ctx, 32)
-			if err != nil {
-				return processed, err
-			}
-			if len(chunks) > 0 {
-				processed += len(chunks)
-				if err := embedMemoryChunks(ctx, server, chunks); err != nil {
-					cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-					var retryErr error
-					for _, chunk := range chunks {
-						retryErr = errors.Join(retryErr, server.Database.RetryMemoryChunk(cleanup, chunk))
-					}
-					cancel()
-					return processed, errors.Join(err, retryErr)
-				}
-			}
-		}
-		return processed, ctx.Err()
-	})
 }
 
 // The agent dispatcher runs as two durable queues woken by committed hints and

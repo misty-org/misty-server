@@ -97,7 +97,7 @@ templ logsPanel(v logsView) {
 	<section
 		id="logs"
 		if v.Follow {
-			hx-get={ "/services/" + v.Service + "/logs" }
+			hx-get={ v.Base + "/" + v.Service + "/logs" }
 			hx-trigger="every 3s"
 			hx-swap="outerHTML"
 		}
@@ -112,12 +112,12 @@ templ logsPanel(v logsView) {
 				}
 			</span>
 			if v.Follow {
-				<button class="link-button" hx-get={ "/services/" + v.Service + "/logs?follow=0" } hx-target="#logs" hx-swap="outerHTML">
+				<button class="link-button" hx-get={ v.Base + "/" + v.Service + "/logs?follow=0" } hx-target="#logs" hx-swap="outerHTML">
 					@iconPause()
 					<span>Pause</span>
 				</button>
 			} else {
-				<button class="link-button" hx-get={ "/services/" + v.Service + "/logs" } hx-target="#logs" hx-swap="outerHTML">
+				<button class="link-button" hx-get={ v.Base + "/" + v.Service + "/logs" } hx-target="#logs" hx-swap="outerHTML">
 					@iconPlay()
 					<span>Follow</span>
 				</button>

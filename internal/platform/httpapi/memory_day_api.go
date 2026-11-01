@@ -1,15 +1,11 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/modelruntime"
 	"github.com/kannachi323/misty/server/internal/platform/db"
 )
-
-const daySummaryMaxOutput = 1200
 
 // MemoryDaySummary summarizes one day of the person's Memory in one Space for
 // their Journal, from that Space's moments only.
@@ -52,33 +48,26 @@ func (s *SpacesService) MemoryDaySummary() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"markdown": "", "topics": []string{}, "count": 0})
 			return
 		}
-		if s.models == nil || !s.models.Enabled() {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "day_summary_unavailable", "message": "Day summaries aren't available right now."})
-			return
-		}
-		result, err := s.daySummary(r.Context(), user, body.Date, body.Language, zone, events)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"markdown": result.Markdown, "topics": result.Topics, "count": len(events)})
+		// The desktop writes the summary on its own model (docs/agents/runtime.md).
+		writeJSON(w, http.StatusOK, map[string]any{"on_device": true, "date": body.Date, "language": body.Language, "items": dayItems(events, zone), "count": len(events)})
 	}
 }
 
-func (s *SpacesService) daySummary(ctx context.Context, user, date, language string, zone *time.Location, events []db.MemoryEvent) (modelruntime.DaySummaryResult, error) {
-	items := make([]modelruntime.DayItem, 0, len(events))
-	size := 0
-	// Oldest first reads as the day went.
+// dayItem is one moment of the day, as the desktop's day summary reads it.
+type dayItem struct {
+	At      string `json:"at"`
+	Kind    string `json:"kind"`
+	Title   string `json:"title"`
+	Site    string `json:"site,omitempty"`
+	Excerpt string `json:"excerpt,omitempty"`
+}
+
+// dayItems is one day's moments, oldest first so they read as the day went.
+func dayItems(events []db.MemoryEvent, zone *time.Location) []dayItem {
+	items := make([]dayItem, 0, len(events))
 	for i := len(events) - 1; i >= 0; i-- {
 		event := events[i]
-		excerpt := truncateAgentRuntimeText(event.Body, 400)
-		items = append(items, modelruntime.DayItem{At: event.OccurredAt.In(zone).Format("15:04"), Kind: event.Kind, Title: truncateAgentRuntimeText(firstNonEmpty(event.Title, event.URL), 300), Site: event.Site, Excerpt: excerpt})
-		size += len(excerpt) + len(event.Title) + 32
+		items = append(items, dayItem{At: event.OccurredAt.In(zone).Format("15:04"), Kind: event.Kind, Title: truncateAgentRuntimeText(firstNonEmpty(event.Title, event.URL), 300), Site: event.Site, Excerpt: truncateAgentRuntimeText(event.Body, 400)})
 	}
-	route, model, err := roleRoute(ctx, s.database, user, "day-summary")
-	if err != nil {
-		return modelruntime.DaySummaryResult{}, err
-	}
-	result, err := s.models.DaySummary(ctx, modelruntime.DaySummaryRequest{Route: route, Model: model, Date: date, Items: items, Language: language, MaxOutputTokens: daySummaryMaxOutput})
-	return result, err
+	return items
 }

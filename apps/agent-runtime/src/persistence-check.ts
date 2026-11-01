@@ -37,7 +37,7 @@ export function earlyGiveUp(report: TaskCompletion, turn: number, limit: number)
   if (!open.length) return undefined;
   const list = open.map((item) => `- ${item.requirement}`).join("\n");
   return `Not finished yet, and this run still has time. These parts remain:\n${list}\n` +
-    "Work each one another way before reporting: find the right page with web_search (add site: and the domain), open it in a tab of your own and read it (one browser_run program can open and read several pages), and use the site's own search, filters and links. A page or tool that failed is a reason to try another route, not to stop. " +
+    "Work each one another way before reporting: find the right page with a web search (add site: and the domain), open it in a tab of your own and read it (one browser_run program can open and read several pages), and use the site's own search, filters and links. A page or tool that failed is a reason to try another route, not to stop. " +
     "If a part stays open only because you asked for more than the request did (a written guide, an official page), drop that extra condition: open the best result you have, even a video, read its page text and report it. " +
     "Report partial only for parts that need the person (a sign-in, a payment, a CAPTCHA) or that the sites truly do not have, and say what you tried.";
 }

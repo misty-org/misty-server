@@ -1,14 +1,13 @@
 import type { LanguageModelV4, LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { WORKFLOW_DESERIALIZE, WORKFLOW_SERIALIZE } from "@workflow/serde";
 import { FatalError } from "workflow";
-import { ControlPlaneError } from "./control-plane-error.js";
-import { rethrowStepError } from "./runtime-errors.js";
 
 import type { RuntimeIdentity } from "./control-plane.js";
 
 /**
- * Persist public routing identity only. Each model step reads the run's route (and with it any
- * key) from Go and drops it when the step returns, so no key enters workflow history.
+ * The run's model. Only its ID persists: each model step reads the device's key for it
+ * (src/device-models.ts) and drops it when the step returns, so no key enters workflow history.
+ * The identity and role stay in its serialized form so runs saved before keep loading.
  */
 export class InstanceModel implements LanguageModelV4 {
   readonly specificationVersion = "v4" as const;
@@ -35,26 +34,24 @@ export class InstanceModel implements LanguageModelV4 {
 
   async doGenerate(options: LanguageModelV4CallOptions) {
     "use step";
-    const resolved = await resolveStep(this.modelId, options, this.identity, this.role);
+    const resolved = await resolveStep(this.modelId, options);
     return resolved.model.doGenerate(resolved.options);
   }
 
   async doStream(options: LanguageModelV4CallOptions) {
     "use step";
-    const resolved = await resolveStep(this.modelId, options, this.identity, this.role);
+    const resolved = await resolveStep(this.modelId, options);
     return watchStream((signal) => resolved.model.doStream({ ...resolved.options, abortSignal: signal }), resolved.options.abortSignal);
   }
 }
 
 /** A model with no key (or one it can't use) fails the run now: retrying can't add a key. */
-async function resolveStep(modelId: string, options: LanguageModelV4CallOptions, identity: RuntimeIdentity | undefined, role: "agent" | "vision") {
+async function resolveStep(modelId: string, options: LanguageModelV4CallOptions) {
   const { ModelSetupError, resolveRuntimeModel } = await import("./model-provider.js");
   try {
-    return await resolveRuntimeModel(modelId, options, identity, role);
+    return await resolveRuntimeModel(modelId, options);
   } catch (error) {
     if (error instanceof ModelSetupError) throw new FatalError(error.message);
-    // Go's own refusal of the route, such as model_key_needed, keeps its code.
-    if (error instanceof ControlPlaneError) rethrowStepError(error);
     throw error;
   }
 }

@@ -247,7 +247,9 @@ func (db Store) ChangePassword(id, current, next, keepSessionHash string, creden
 		if provider != "misty" {
 			return ErrNoPasswordAccount
 		}
-		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(current)) != nil {
+		// An account made by the operator account API has no password until its
+		// first one is set here, after a setup key signed it in.
+		if hash != "" && bcrypt.CompareHashAndPassword([]byte(hash), []byte(current)) != nil {
 			return ErrWrongCurrentPassword
 		}
 		updated, err := bcrypt.GenerateFromPassword([]byte(next), bcrypt.DefaultCost)

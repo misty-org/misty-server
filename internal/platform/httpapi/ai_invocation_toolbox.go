@@ -31,11 +31,11 @@ func (s *SpacesService) aiInvocationToolbox(ctx context.Context, record *db.AIIn
 	return toolbox, invocation, manifest, err
 }
 
-// aiInvocationConnectedTools are web search, the user's connected apps, the
-// screen tools on the desktop, and account administration: workflow schedules
-// and Spaces.
+// aiInvocationConnectedTools are the user's connected apps, the screen tools on
+// the desktop, and account administration: workflow schedules and Spaces. Web
+// search runs in the desktop runtime itself.
 func (s *SpacesService) aiInvocationConnectedTools(ctx context.Context, record *db.AIInvocationRecord) []agenttools.Registration {
-	tools := append(s.webSearchToolRegistrations(ctx, record.UserID), s.appsToolRegistrations()...)
+	tools := s.appsToolRegistrations()
 	tools = append(tools, s.screenToolRegistrations(record)...)
 	return append(tools, s.accountAdminToolRegistrations()...)
 }

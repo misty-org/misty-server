@@ -78,6 +78,9 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 				}
 			}
 			appendEvent(event)
+			if activity := deviceToolActivity(body.State, body.Output); activity != nil {
+				appendEvent(aiInvocationEvent{Type: "tool.detail", ToolCallID: event.ToolCallID, ToolName: toolName, Activity: activity})
+			}
 		}
 		if strings.HasPrefix(body.NodeID, "model:") && body.State == "completed" {
 			var output struct {
@@ -109,4 +112,22 @@ func runtimeCheckpointToolName(phase string, output json.RawMessage) string {
 		return metadata.Tool
 	}
 	return strings.ReplaceAll(strings.TrimPrefix(phase, "using_"), "_", ".")
+}
+
+// deviceToolActivity is the timeline detail of a tool the desktop ran itself
+// (web.search): the server never sees that call, so the finished checkpoint
+// carries its query and the links it found, and the same known-field rules as a
+// server tool's activity apply.
+func deviceToolActivity(state string, output json.RawMessage) *aiToolActivity {
+	if state != "completed" {
+		return nil
+	}
+	var device struct {
+		Arguments json.RawMessage `json:"device_arguments"`
+		Result    json.RawMessage `json:"device_result"`
+	}
+	if json.Unmarshal(output, &device) != nil || len(device.Arguments) == 0 {
+		return nil
+	}
+	return toolActivity(device.Arguments, device.Result)
 }

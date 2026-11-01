@@ -107,9 +107,6 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 			markCompactedAfter(messages, notes.ThroughInvocationID)
 		}
 		modelID := agent.FrontierDefaultModelID()
-		if summary.ModelOverride != "" && agent.ClientModelChoice() {
-			modelID = summary.ModelOverride
-		}
 		return mistyConversation{
 			ID: summary.ID, AgentID: summary.AgentID, FolderID: summary.FolderID, Title: cleanMistyTitle(summary.Title),
 			SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
@@ -141,9 +138,6 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 		})
 	}
 	modelID := agent.FrontierDefaultModelID()
-	if summary.ModelOverride != "" && agent.ClientModelChoice() {
-		modelID = summary.ModelOverride
-	}
 	return mistyConversation{
 		ID: summary.ID, AgentID: summary.AgentID, FolderID: summary.FolderID, Title: cleanMistyTitle(summary.Title),
 		SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,

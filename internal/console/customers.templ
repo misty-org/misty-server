@@ -1,0 +1,178 @@
+package console
+
+import "net/url"
+
+templ customersPage(v customersView) {
+	@pageHeader("Customers", plural(len(v.Customers), "account", "accounts")+" shown") {
+		<form class="search" method="get" action="/customers" role="search">
+			@iconSearch()
+			<input type="search" name="q" value={ v.Search } placeholder="name@example.com" aria-label="Search customers"/>
+		</form>
+	}
+	if v.Err != "" {
+		@problem(v.Err)
+	}
+	<div class="split">
+		<div class="table customers-table">
+			<div class="table-head"><span>Email</span><span>Devices</span><span>Status</span></div>
+			for _, account := range v.Customers {
+				<a
+					class={ "table-row", "row-link", templ.KV("selected", account.ID == v.Selected) }
+					href={ templ.SafeURL("/customers?" + url.Values{"q": {v.Search}, "id": {account.ID}}.Encode()) }
+					if account.ID == v.Selected {
+						aria-current="true"
+					}
+				>
+					<span class="truncate">{ account.Email }</span>
+					<span>{ deviceColumn(account) }</span>
+					<span>
+						@stateTag(customerStatus(account))
+					</span>
+				</a>
+			}
+			if len(v.Customers) == 0 && v.Err == "" {
+				<div class="table-row"><span class="muted">No accounts match.</span></div>
+			}
+		</div>
+		if v.Detail != nil {
+			@customerDetail(*v.Detail)
+		}
+	</div>
+}
+
+templ customerDetail(v customerDetailView) {
+	<aside id="customer-detail" class="detail">
+		if v.Account.ID == "" {
+			@problem(v.Err)
+		} else {
+			<div class="detail-title">{ v.Account.Email }</div>
+			<p class="muted">{ "@" + v.Account.Username + " · joined " + date(v.Account.CreatedAt) + " · " + setupLabel(v.Account) }</p>
+			@flash(v.Flash)
+			if v.SignInLink != "" {
+				<div class="sign-in-link">
+					<input id="sign-in-link" type="text" readonly value={ v.SignInLink } aria-label="Sign-in link"/>
+					<button class="button" type="button" data-copy="sign-in-link">Copy</button>
+				</div>
+				<p class="muted">It signs { v.Account.Email } in once within 7 days, on the computer where Misty is installed, and lets them choose a new password. Misty sends no email, so pass it on yourself.</p>
+			}
+			if v.Err != "" {
+				@problem(v.Err)
+			}
+			if !v.CanChange {
+				@note("Set MISTY_OPERATOR_TOKEN for the console to change limits, suspend, close, or make sign-in links here.")
+			}
+			if v.Account.DeleteAt != nil {
+				@note(closingLabel(v.Account))
+			}
+			@sectionLabel(periodLabel(v.Account))
+			<ul class="rows compact">
+				@usageRow("Storage", storageAgainst(v.Account.Usage.StorageBytes, v.Account.Limits.StorageBytes), v.Account.Usage.StorageBytes != nil && atLimit(*v.Account.Usage.StorageBytes, v.Account.Limits.StorageBytes))
+				@usageRow("Devices", usageAgainst(v.Account.Usage.Devices, v.Account.Limits.Devices), atLimit(v.Account.Usage.Devices, v.Account.Limits.Devices))
+				@usageRow("App actions", usageAgainst(v.Account.Usage.AppActionsThisMonth, v.Account.Limits.AppActionsPerMonth), atLimit(v.Account.Usage.AppActionsThisMonth, v.Account.Limits.AppActionsPerMonth))
+			</ul>
+			if v.CanChange {
+				@sectionLabel("Limits")
+				<form class="limits-form" hx-post={ v.actionPath("limits") } hx-target="#customer-detail" hx-swap="outerHTML">
+					@limitField("Storage (GB)", "storage_gb", storageInput(v.Account.Limits.StorageBytes))
+					@limitField("Devices", "devices", limitInput(v.Account.Limits.Devices))
+					@limitField("App actions per period", "app_actions_per_month", limitInput(v.Account.Limits.AppActionsPerMonth))
+					<p class="muted">Leave a field blank for no limit.</p>
+					<div class="actions"><button class="button" type="submit" hx-disabled-elt="this">Save limits</button></div>
+				</form>
+			}
+			@sectionLabel("Devices")
+			<ul class="rows compact">
+				for _, device := range v.Console.DeviceList {
+					<li class="row">
+						<span class="row-label">
+							@deviceIcon(device.Platform)
+							{ device.Name }
+						</span>
+						<span class="muted">
+							if device.Revoked {
+								removed
+							} else {
+								{ "seen " + ago(device.LastSeen) }
+							}
+						</span>
+					</li>
+				}
+				if len(v.Console.DeviceList) == 0 {
+					@emptyRow("No devices")
+				}
+			</ul>
+			@sectionLabel("Account")
+			<p class="muted">{ plural(v.Console.Sessions, "active session", "active sessions") + " · " + plural(v.Console.SyncWorkspaces, "synced workspace", "synced workspaces") }</p>
+			<div class="actions">
+				if v.CanChange {
+					if v.Account.Suspended {
+						<button class="button" hx-post={ v.actionPath("resume") } hx-target="#customer-detail" hx-swap="outerHTML" hx-disabled-elt="this">Resume</button>
+					} else {
+						<button
+							class="button"
+							hx-post={ v.actionPath("suspend") }
+							hx-target="#customer-detail"
+							hx-swap="outerHTML"
+							hx-confirm={ "Suspend " + v.Account.Email + "? They are signed out and can't sign in until resumed. Their data is kept." }
+							hx-disabled-elt="this"
+						>Suspend</button>
+					}
+					if v.Account.DeleteAt == nil {
+						<button
+							class="button"
+							hx-post={ v.actionPath("close") }
+							hx-target="#customer-detail"
+							hx-swap="outerHTML"
+							hx-confirm={ "Close " + v.Account.Email + "? It becomes read-only now, and everything in it is deleted in 30 days unless you resume it first. Misty sends no email, so tell them yourself." }
+							hx-disabled-elt="this"
+						>Close account</button>
+					}
+					<button
+						class="button"
+						hx-post={ v.actionPath("sign-in-link") }
+						hx-target="#customer-detail"
+						hx-swap="outerHTML"
+						hx-confirm={ "Make a new sign-in link for " + v.Account.Email + "? Earlier unused links stop working." }
+						hx-disabled-elt="this"
+					>Sign-in link</button>
+				}
+				<button
+					class="button"
+					hx-post={ v.actionPath("revoke-sessions") }
+					hx-target="#customer-detail"
+					hx-swap="outerHTML"
+					hx-confirm={ "Sign " + v.Account.Email + " out on every device?" }
+					hx-disabled-elt="this"
+				>Revoke sessions</button>
+			</div>
+		}
+	</aside>
+}
+
+templ usageRow(label, value string, full bool) {
+	<li class={ "row", templ.KV("row-problem", full) }>
+		<span class="row-label">
+			if full {
+				@iconAlert()
+			}
+			{ label }
+		</span>
+		<span class="muted">{ value }</span>
+	</li>
+}
+
+templ limitField(label, name, value string) {
+	<label class="limit-field">
+		<span class="muted">{ label }</span>
+		<input type="text" inputmode="decimal" name={ name } value={ value } placeholder="No limit" autocomplete="off"/>
+	</label>
+}
+
+templ deviceIcon(platform string) {
+	switch platform {
+		case "macos":
+			@iconLaptop()
+		default:
+			@iconMonitor()
+	}
+}

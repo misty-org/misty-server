@@ -13,6 +13,7 @@ import { toolMonitor } from "../src/tool-monitor.js";
 import { executionInstructions } from "../src/tool-outcomes.js";
 import { agentTools, toolLoadTool, toolUseTool } from "../src/toolsets.js";
 import type { MCPRemoteTool } from "../src/types.js";
+import { withDeviceTools } from "../src/web-search/tool.js";
 import { guard, type AgentRun } from "./agent-run.js";
 import { verifyFinish } from "./finish-review.js";
 
@@ -23,8 +24,10 @@ export type RunTools = ReturnType<typeof assembleTools>;
  * run mid-run (screen_open opening the agent's own tab) rebuilds them, so browser
  * tools reach the model in this run instead of a hand-off to a new one.
  */
-export function assembleTools(run: AgentRun, descriptors: MCPRemoteTool[]) {
+export function assembleTools(run: AgentRun, remote: MCPRemoteTool[]) {
   const { context, execution, ledger, order, rejected } = run;
+  // Misty's catalog plus the tools this device runs itself (web.search on its own search key).
+  const descriptors = withDeviceTools(remote, context);
   const catalog = modelCatalog(descriptors, [taskCompletionTool, ledgerTool, toolUseTool, toolLoadTool]);
   const advertised = new Set(descriptors.map((descriptor) => descriptor.name));
   const monitor = toolMonitor({ catalog, order, checkpoint: execution.checkpoint, rejected });

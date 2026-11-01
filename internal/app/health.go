@@ -96,14 +96,8 @@ func (monitor *healthMonitor) evaluate(ctx context.Context) (HealthSnapshot, int
 	})
 
 	checks["public_api"] = PublicAPIConfigurationCheck()
-	// Models run on each account's own keys, so the server only needs the runtime.
-	// An operator model (MISTY_AGENT_MODEL) is optional; a malformed one is reported.
-	agentRuntimeCheck := environmentConfigurationCheck("MISTY_AGENT_RUNTIME_URL", "MISTY_AGENT_RUNTIME_CONTROL_SECRET")
-	if _, err := config.AgentModel(); err != nil {
-		agentRuntimeCheck = HealthCheck{Status: "unavailable", Mode: "configuration", Critical: false, Message: "MISTY_AGENT_MODEL is malformed"}
-	}
-	checks["agent_runtime"] = agentRuntimeCheck
-	checks["email"] = environmentConfigurationCheck("MAILJET_API_KEY", "MAILJET_SECRET_KEY", "MAILJET_FROM_EMAIL")
+	// Agents run on desktops; the server needs only the secret that signs run keys.
+	checks["agent_runtime"] = environmentConfigurationCheck("MISTY_AGENT_RUNTIME_CONTROL_SECRET")
 
 	overall, status := SummarizeHealth(checks)
 	version := strings.TrimSpace(config.Getenv("MISTY_SERVER_VERSION"))

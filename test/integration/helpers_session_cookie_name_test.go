@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/kannachi323/misty/server/internal/platform/security"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -86,4 +87,17 @@ func requireCookie(t *testing.T, rec *httptest.ResponseRecorder, name string) *h
 
 	t.Fatalf("cookie %q not found", name)
 	return nil
+}
+
+// inviteToRegister opens registration for email the only way a server with an
+// account allows it: a Space invitation from an existing account.
+func inviteToRegister(t *testing.T, database *db.Database, ownerID, email string) {
+	t.Helper()
+	space, err := database.TestingCreateSpace(t.Context(), ownerID, "Invitations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.InviteToSpaceWithToken(t.Context(), ownerID, space.ID, email, security.HashToken("invite-"+email)); err != nil {
+		t.Fatal(err)
+	}
 }

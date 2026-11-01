@@ -80,32 +80,7 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 			}
 			modelID := agent.FrontierDefaultModelID()
 			reasoning := agent.ManagedReasoning("", body.ReasoningEffort)
-			// A conversation runs on the agent model the account brought, else the
-			// operator's; only a development stack with MISTY_ALLOW_MODEL_OVERRIDE
-			// lets a request or an agent pick (evals).
-			if c := accountCredentials(r.Context(), userID); c != nil {
-				modelID, reasoning = c.Models.Agent, accountReasoning(c)
-			} else if agent.ClientModelChoice() {
-				requestedModel := strings.TrimSpace(body.ModelID)
-				if identity.ModelMode == "pinned" && !identity.SystemManaged {
-					requestedModel = identity.ModelID
-					reasoning = agent.ManagedReasoning("", identity.ReasoningEffort)
-				}
-				if requestedModel != "" {
-					if !agent.FrontierModelAvailable(r.Context(), requestedModel) {
-						writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_model", "message": "Choose an available default model in Settings."})
-						return
-					}
-					modelID = requestedModel
-				} else if routes, err := s.database.AIModelRoutes(r.Context(), userID); err == nil {
-					// No explicit pick: new chats follow the account's Thinking sense.
-					for _, route := range routes {
-						if route.Role == "agent" && route.Enabled && route.Model != "" && agent.FrontierModelAvailable(r.Context(), route.Model) {
-							modelID = route.Model
-						}
-					}
-				}
-			}
+			// A conversation runs on the device's models; its runtime picks them.
 			var conversationID string
 			var err error
 			conversationID, err = s.database.CreatePersonalAgentConversation(r.Context(), userID, "", identity.ID)
@@ -230,19 +205,6 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 					return
 				}
 				response["title"] = title
-			}
-			if body.ModelID != nil && agent.ClientModelChoice() {
-				// A conversation's own model; empty returns it to the account's choice.
-				model := strings.TrimSpace(*body.ModelID)
-				if model != "" && !agent.FrontierModelAvailable(r.Context(), model) {
-					writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_model", "message": "Choose an available model."})
-					return
-				}
-				if err := s.database.SetMistyConversationModelOverride(r.Context(), userID, conversationID, model); err != nil {
-					WriteAIError(w, err)
-					return
-				}
-				response["model_override"] = model
 			}
 			if body.ThinkingMode != nil || body.ReasoningEffort != nil {
 				bound, err := s.database.AgentConversationIdentity(r.Context(), userID, conversationID)

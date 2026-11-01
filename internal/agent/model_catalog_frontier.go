@@ -1,11 +1,6 @@
 package agent
 
-import (
-	"context"
-	"strings"
-
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
-)
+import "strings"
 
 const (
 	FrontierModelCatalogVersion = "misty-gpt-v2"
@@ -22,46 +17,18 @@ type FrontierGatewayModel struct {
 	ReasoningLevels []string `json:"reasoning_levels"`
 }
 
-// Model selection is release policy unless the operator pins a model.
-func FrontierDefaultModelID() string {
-	if config, err := envconfig.AgentModel(); err == nil && config.Model != "" {
-		return config.Model
-	}
-	return DefaultFrontierModelID
-}
+// HouseReasoning is the one reasoning effort the server records for a run. The
+// desktop runs on the device's own models and reports their effort.
+const HouseReasoning = "low"
 
-func configuredFrontierModelIDs() []string { return []string{FrontierDefaultModelID()} }
+// FrontierDefaultModelID is the model a run is recorded under until its desktop
+// reports the device's model.
+func FrontierDefaultModelID() string { return DefaultFrontierModelID }
 
 // ManagedReasoning is the run's effort. Thinking modes and stored efforts are ignored:
-// everyone gets HouseReasoning (see house_route.go).
+// everyone gets HouseReasoning.
 func ManagedReasoning(mode, legacyEffort string) string {
-	return HouseEffort(legacyEffort)
-}
-
-// FrontierGatewayModels lists the server's default model. It reads no
-// catalog: accounts bring their own models, and any provider/model ID runs.
-func FrontierGatewayModels(_ context.Context) ([]FrontierGatewayModel, error) {
-	frontier := []FrontierGatewayModel{}
-	for _, id := range configuredFrontierModelIDs() {
-		name := modelDisplayName(id)
-		for _, model := range configuredGatewayModels() {
-			if model.ID == id && model.Name != "" {
-				name = model.Name
-			}
-		}
-		providerID, providerName := frontierProvider(id)
-		frontier = append(frontier, FrontierGatewayModel{
-			ID: id, Name: name, ProviderID: providerID, ProviderName: providerName,
-			Capabilities: []string{"chat", "tools", "vision"}, ReasoningLevels: []string{"high", "xhigh"},
-		})
-	}
-	return frontier, nil
-}
-
-// FrontierModelAvailable reports whether a model ID may run: any well-formed
-// provider/model ID. No catalog is asked.
-func FrontierModelAvailable(_ context.Context, modelID string) bool {
-	return FreeEvalModel(modelID) || WellFormedModelID(modelID)
+	return HouseReasoning
 }
 
 func frontierCapabilities(capabilities []string) bool {
@@ -84,34 +51,4 @@ func gatewayCapabilitiesInclude(capabilities []string, values ...string) bool {
 		}
 	}
 	return false
-}
-
-func frontierProvider(modelID string) (string, string) {
-	provider, _, _ := strings.Cut(modelID, "/")
-	if name := providerNames[provider]; name != "" {
-		return provider, name
-	}
-	// Unlisted makers read as a name, never an all-caps slug.
-	words := strings.Fields(strings.ReplaceAll(provider, "-", " "))
-	for i, word := range words {
-		words[i] = strings.ToUpper(word[:1]) + word[1:]
-	}
-	return provider, strings.Join(words, " ")
-}
-
-// providerNames spells each Gateway maker the way the company writes it,
-// never in all caps.
-var providerNames = map[string]string{
-	"alibaba": "Qwen", "amazon": "Amazon", "anthropic": "Anthropic",
-	"arcee-ai": "Arcee", "bytedance": "ByteDance", "callstack": "Callstack",
-	"cohere": "Cohere", "deepseek": "DeepSeek", "fireworks": "Fireworks",
-	"fish-audio": "Fish Audio", "google": "Google", "inception": "Inception",
-	"inclusionai": "InclusionAI", "interfaze": "Interfaze", "meituan": "Meituan",
-	"meta": "Meta", "microsoft": "Microsoft", "minimax": "MiniMax",
-	"mistral": "Mistral", "mixedbread": "Mixedbread", "moonshotai": "Moonshot AI",
-	"nvidia": "Nvidia", "openai": "OpenAI", "openai-compatible": "OpenAI-compatible",
-	"perplexity": "Perplexity", "poolside": "Poolside", "quiverai": "QuiverAI",
-	"sakana": "Sakana AI", "spacexai": "xAI", "stealth": "Stealth",
-	"stepfun": "StepFun", "tencent": "Tencent", "thinkingmachines": "Thinking Machines",
-	"xiaomi": "Xiaomi", "zai": "Z.ai",
 }

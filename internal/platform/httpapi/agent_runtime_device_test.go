@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"testing"
@@ -38,5 +39,20 @@ func TestARunKeyOpensOnlyItsOwnRun(t *testing.T) {
 	}
 	if agentRunKey(nil, "invocation_a") != nil {
 		t.Fatal("a server with no secret derived a run key")
+	}
+}
+
+func TestAnEncodedDeliveryIDReachesTheHandlerDecoded(t *testing.T) {
+	router := chi.NewRouter()
+	var got string
+	router.Post("/deliveries/{deliveryID}/finish", func(_ http.ResponseWriter, r *http.Request) {
+		got = deliveryIDParam(r)
+	})
+	for _, path := range []string{"start%3Ainvocation_1", "start:invocation_1"} {
+		got = ""
+		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/deliveries/"+path+"/finish", nil))
+		if got != "start:invocation_1" {
+			t.Fatalf("%s arrived as %q", path, got)
+		}
 	}
 }

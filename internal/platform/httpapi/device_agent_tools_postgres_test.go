@@ -49,7 +49,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	if err := attach("local_folder", "scope_reports", "Reports", `["folder.list","folder.read","folder.send"]`); err != nil {
 		t.Fatal(err)
 	}
-	if err := attach("workspace", "workspace:misty-browser", "Misty browser", `["browser.tab.list","browser.tab.open","bookmark.list","bookmark.add"]`); err != nil {
+	if err := attach("workspace", "workspace:misty-browser", "Misty browser", `["browser.tab.list","browser.tab.open","bookmark.list","bookmark.add","shell.run"]`); err != nil {
 		t.Fatal(err)
 	}
 	if err := attach("local_folder", "scope_bad", "Bad", `["browser.navigate"]`); !errors.Is(err, db.ErrSpaceInvalid) {
@@ -140,6 +140,34 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	}
 	cancelSend()
 	<-sent
+
+	// A command works in its chat's workspace, whichever of the chat's runs sends it.
+	chat := record
+	chat.ConversationID = "conversation_keeps_one_workspace"
+	shellCtx, cancelShell := context.WithCancel(ctx)
+	defer cancelShell()
+	shellDone := make(chan error, 1)
+	for _, registration := range service.deviceToolRegistrations(ctx, &chat) {
+		if registration.Descriptor.Name != shellRunTool {
+			continue
+		}
+		go func() {
+			_, err := registration.Handler(shellCtx, invocation, agent.ToolRequest{ID: "c3", Name: shellRunTool, Arguments: json.RawMessage(`{"command":"ls"}`)})
+			shellDone <- err
+		}()
+	}
+	var shellInput string
+	for deadline := time.Now().Add(10 * time.Second); shellInput == "" && time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		_ = database.SpaceTx(ctx, func(tx *sql.Tx) error {
+			return tx.QueryRowContext(ctx, `SELECT input::text FROM workflow_device_node_jobs WHERE invocation_id=$1 AND operation=$2`, record.ID, shellRunTool).Scan(&shellInput)
+		})
+	}
+	var shellArguments map[string]any
+	if json.Unmarshal([]byte(shellInput), &shellArguments) != nil || shellArguments["workspaceKey"] != chat.ConversationID {
+		t.Fatalf("shell.run job input = %q", shellInput)
+	}
+	cancelShell()
+	<-shellDone
 
 	// A chat without grants gets no device tools.
 	plain, _, _ := database.CreateAIInvocationRecord(context.Background(), db.AIInvocationRecord{

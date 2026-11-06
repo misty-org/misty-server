@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -228,6 +229,16 @@ func (s *SpacesService) deviceAgentDelivery(ctx context.Context, delivery db.Age
 	return item, true
 }
 
+// deliveryIDParam is the delivery in the path. A delivery's ID holds a colon, which the desktop
+// percent-encodes, and chi hands a path value back as it arrived.
+func deliveryIDParam(r *http.Request) string {
+	raw := chi.URLParam(r, "deliveryID")
+	if id, err := url.PathUnescape(raw); err == nil {
+		return id
+	}
+	return raw
+}
+
 // FinishDeviceAgentRuntimeDelivery records what the desktop's runtime did with a
 // delivery it claimed.
 func (s *SpacesService) FinishDeviceAgentRuntimeDelivery() http.HandlerFunc {
@@ -251,7 +262,7 @@ func (s *SpacesService) FinishDeviceAgentRuntimeDelivery() http.HandlerFunc {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		delivery, err := s.database.LeasedAgentRuntimeDelivery(r.Context(), userID, chi.URLParam(r, "deliveryID"), body.LeaseID)
+		delivery, err := s.database.LeasedAgentRuntimeDelivery(r.Context(), userID, deliveryIDParam(r), body.LeaseID)
 		if err != nil {
 			writeAgentError(w, err)
 			return

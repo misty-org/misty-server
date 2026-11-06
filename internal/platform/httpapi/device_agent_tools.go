@@ -24,6 +24,7 @@ const (
 	tabsOpenTool      = "browser.tab.open"
 	bookmarksListTool = "bookmark.list"
 	bookmarksAddTool  = "bookmark.add"
+	shellRunTool      = "shell.run"
 )
 
 // deviceGrant is one attached device context the tools can reach.
@@ -61,6 +62,7 @@ func (s *SpacesService) deviceToolRegistrations(ctx context.Context, record *db.
 	}
 	if len(workspaces) > 0 {
 		registrations = append(registrations, s.workspaceToolRegistrations(workspaces)...)
+		registrations = append(registrations, s.shellToolRegistration(workspaces, folders))
 	}
 	return registrations
 }
@@ -203,6 +205,67 @@ func (s *SpacesService) workspaceToolRegistrations(workspaces []deviceGrant) []a
 		}})
 	}
 	return registrations
+}
+
+const shellRunDescription = "Run a shell command on the user's computer, in this chat's private workspace folder, which keeps its files between commands. " +
+	"Use it for scripts, data and file work, and to do many things in one call instead of one call each. " +
+	"There's no network, so nothing can be installed or downloaded: get what you need with your web tools and write it to a file here. " +
+	"The chat's shared folder, if it has one, is at ./shared-folder. If it allows changes you can add and edit files there, but deleting, renaming and moving are refused, " +
+	"so tools that save by renaming, such as sed -i, fail: write the new content to the file instead. Commands can't reach browser tabs: use browser_run for those."
+
+// shellToolRegistration runs commands as a device job. The computer checks the run's grant again
+// and starts each command under its own OS profile (docs/plans/app-permissions.md).
+func (s *SpacesService) shellToolRegistration(workspaces, folders []deviceGrant) agenttools.Registration {
+	properties := map[string]any{
+		"command":         map[string]any{"type": "string", "minLength": 1, "maxLength": 60000, "description": "The command, run by /bin/sh in the workspace."},
+		"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": 600, "description": "How long it may run. Defaults to 120."},
+	}
+	deviceNames := make([]string, 0, len(workspaces))
+	for _, workspace := range workspaces {
+		deviceNames = append(deviceNames, workspace.deviceName)
+	}
+	if len(workspaces) > 1 {
+		properties["device"] = map[string]any{"type": "string", "maxLength": 100, "description": "Which computer: " + strings.Join(deviceNames, ", ")}
+	}
+	descriptor := deviceToolDescriptor(shellRunTool, shellRunDescription, agent.RiskWrite, "shell.command.ran", agentToolSchema(properties, []string{"command"}))
+	return agenttools.Registration{Descriptor: descriptor, Handler: func(ctx context.Context, invocation agenttools.Invocation, request agent.ToolRequest) (json.RawMessage, error) {
+		var input struct {
+			Command        string `json:"command"`
+			TimeoutSeconds int    `json:"timeout_seconds"`
+			Device         string `json:"device"`
+		}
+		if json.Unmarshal(request.Arguments, &input) != nil || strings.TrimSpace(input.Command) == "" {
+			return nil, agenttools.ErrArgumentsInvalid
+		}
+		target := workspaces[0]
+		if len(workspaces) > 1 {
+			found := false
+			for _, workspace := range workspaces {
+				if strings.EqualFold(workspace.deviceName, strings.TrimSpace(input.Device)) || workspace.deviceID == strings.TrimSpace(input.Device) {
+					target, found = workspace, true
+				}
+			}
+			if !found {
+				return nil, agent.ErrInvalidRequest("name the computer: " + strings.Join(deviceNames, ", "))
+			}
+		}
+		// Each chat keeps one workspace across its runs. A run with no chat gets its own.
+		key := invocation.ConversationID
+		if key == "" {
+			key = invocation.RunID
+		}
+		arguments := map[string]any{"command": input.Command, "workspaceKey": key}
+		if input.TimeoutSeconds > 0 {
+			arguments["timeoutSeconds"] = input.TimeoutSeconds
+		}
+		for _, folder := range folders {
+			if folder.deviceID == target.deviceID {
+				arguments["folderScopeId"] = folder.scopeID
+				break
+			}
+		}
+		return s.runDeviceTool(ctx, invocation, request.ID, target.scopeID, shellRunTool, MustAPIRawJSON(arguments))
+	}}
 }
 
 // runDeviceTool queues one device job for the granted scope and waits for the

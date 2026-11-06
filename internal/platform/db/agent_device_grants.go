@@ -37,12 +37,14 @@ var deviceAgentCapabilities = map[string]bool{
 	"browser.session": true,
 	// Runs the agent's program against its own tabs there (docs/agents/harness.md, browser_run).
 	"browser.run": true,
+	// Commands in the chat's private workspace, each under its own OS profile (docs/plans/app-permissions.md).
+	"shell.run": true,
 }
 
 // deviceContextCapabilities are what each kind of desktop grant may allow.
 var deviceContextCapabilities = map[string]map[string]bool{
-	"local_folder": {"folder.list": true, "folder.read": true, "folder.send": true},
-	"workspace":    {"browser.tab.list": true, "browser.tab.open": true, "bookmark.list": true, "bookmark.add": true, "browser.session": true, "browser.run": true, "web.fetch": true},
+	"local_folder": {"folder.list": true, "folder.read": true, "folder.send": true, "folder.write": true},
+	"workspace":    {"browser.tab.list": true, "browser.tab.open": true, "bookmark.list": true, "bookmark.add": true, "browser.session": true, "browser.run": true, "web.fetch": true, "shell.run": true},
 }
 
 // DeviceContextCapabilitiesAllowed reports whether a desktop grant asks only

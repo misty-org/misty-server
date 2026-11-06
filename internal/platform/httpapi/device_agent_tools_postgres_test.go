@@ -74,7 +74,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 	for _, registration := range service.deviceToolRegistrations(ctx, &record) {
 		tools[registration.Descriptor.Name] = registration.Handler
 	}
-	for _, name := range []string{filesListTool, filesReadTool, filesSendTool, tabsListTool, tabsOpenTool, bookmarksListTool, bookmarksAddTool} {
+	for _, name := range []string{shellRunTool, filesListTool, filesReadTool, filesSendTool, tabsListTool, tabsOpenTool, bookmarksListTool, bookmarksAddTool} {
 		if tools[name] == nil {
 			t.Fatalf("chat with folder and workspace grants lacks %s", name)
 		}

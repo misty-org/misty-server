@@ -9,9 +9,6 @@ func (s *Server) mountAccountRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.Get(prefix+"/integrations/apps/catalog", spaces.AppCatalog())
 	s.Router.Post(prefix+"/integrations/apps/connect", spaces.ConnectApp())
 	s.Router.Delete(prefix+"/integrations/apps/connections/{accountID}", spaces.DisconnectApp())
-	// Projects from and to GitHub: the code itself moves with the device's git.
-	s.Router.Get(prefix+"/integrations/github/repos", spaces.GitHubRepos())
-	s.Router.Post(prefix+"/integrations/github/repos", spaces.GitHubRepos())
 	s.Router.Get(prefix+"/me/app-requests/{requestID}", spaces.AppRequestControl())
 	s.Router.Post(prefix+"/me/app-requests/{requestID}", spaces.AppRequestControl())
 	s.Router.Post(prefix+"/me/app-requests/{requestID}/link", spaces.AppRequestLink())
@@ -20,13 +17,6 @@ func (s *Server) mountAccountRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.Delete(prefix+"/me/agent-grants", spaces.AgentGrants())
 	s.Router.Delete(prefix+"/me/agent-grants/{grantID}", spaces.AgentGrant())
 	s.Router.Post(prefix+"/me/agent-grants/site", spaces.AgentSiteGrant())
-	s.Router.Post(prefix+"/me/agent-grants/project", spaces.AgentProjectGrants())
-	// Coding through the person's own tools: the device reports its tools, takes
-	// a budget lease per turn, mirrors the tool's events and asks for approvals.
-	s.Router.Put(prefix+"/me/coding/engines", spaces.CodingEnginesReport())
-	s.Router.Post(prefix+"/me/coding/{invocationID}/lease", spaces.CodingLease())
-	s.Router.Post(prefix+"/me/coding/{invocationID}/events", spaces.CodingEvents())
-	s.Router.Post(prefix+"/me/coding/{invocationID}/approvals", spaces.CodingApproval())
 	s.Router.Post(prefix+"/me/voice/transcripts", spaces.VoiceTranscripts())
 	s.Router.Get(prefix+"/me/voice/transcripts/{transcriptID}", spaces.VoiceTranscript())
 	s.Router.Patch(prefix+"/me/voice/transcripts/{transcriptID}", spaces.VoiceTranscript())

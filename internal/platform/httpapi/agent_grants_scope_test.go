@@ -28,12 +28,4 @@ func TestSiteGrantOriginsAreExact(t *testing.T) {
 	if service.validateGrantScope(context.Background(), "user", payment) == nil {
 		t.Fatal("a payment grant without a cap must be refused")
 	}
-	repo := &db.AgentAppRequest{GrantAction: "git.push", GrantScopeKind: "repo", GrantScopeID: "misty-org/misty", GrantConstraints: json.RawMessage(`{}`)}
-	if err := service.validateGrantScope(context.Background(), "user", repo); err != nil {
-		t.Fatalf("a repository named owner/name is a valid push scope: %v", err)
-	}
-	repo.GrantScopeID = "https://github.com/misty-org/misty"
-	if service.validateGrantScope(context.Background(), "user", repo) == nil {
-		t.Fatal("a push scope is owner/name, not a URL")
-	}
 }

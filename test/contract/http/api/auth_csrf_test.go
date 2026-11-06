@@ -22,7 +22,7 @@ func TestCookieCSRFProtection(t *testing.T) {
 		{"cookie missing header", "/v1/spaces", "https://misty.test", "", true, false, 403},
 		{"cookie trusted origin", "/v1/spaces", "https://misty.test", "1", true, false, 204},
 		{"native explicit header", "/v1/login", "", "1", false, false, 204},
-		{"webhook without cookies", "/inbound/webhook", "", "", false, false, 204},
+		{"webhook without cookies", "/webhook", "", "", false, false, 204},
 		{"bearer without cookies", "/v1/auth/refresh", "", "", false, true, 204},
 		{"bearer does not excuse a cookie", "/v1/spaces", "https://misty.test", "", true, true, 403},
 		{"bearer does not excuse a sign-in", "/v1/login", "https://misty.test", "", false, true, 403},

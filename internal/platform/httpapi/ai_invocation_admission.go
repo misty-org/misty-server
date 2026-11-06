@@ -160,15 +160,8 @@ func (s *AIService) resolveInvocationAgent(w http.ResponseWriter, r *http.Reques
 }
 
 // admitInvocationExecution checks that local execution is allowed, that the
-// device contexts are valid and that the agent holds grants for them, and
-// that an attached project is allowed to code.
+// device contexts are valid and that the agent holds grants for them.
 func (s *AIService) admitInvocationExecution(w http.ResponseWriter, r *http.Request, userID string, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
-	// Attaching a project starts coding, which runs only from the Misty app.
-	for _, deviceContext := range body.DeviceContexts {
-		if strings.TrimSpace(deviceContext.Kind) == "project_folder" && !requireCoding(w, r, userID, "invocation.project") {
-			return false
-		}
-	}
 	payload, _ := json.Marshal(*body)
 	if err := s.database.ValidateNativeAgentExecution(r.Context(), &db.AIInvocationRecord{UserID: userID, SpaceID: st.spaceID, RequestPayload: payload}); err != nil {
 		http.Error(w, "Local execution is paused or unavailable", http.StatusConflict)

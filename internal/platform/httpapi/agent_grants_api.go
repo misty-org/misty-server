@@ -98,12 +98,6 @@ func grantLabel(grant db.AgentGrant) string {
 		return "Delete items in a Space"
 	case agent.GrantScheduleRemove:
 		return "Remove a workflow schedule"
-	case agent.GrantProjectEdit:
-		return "Edit files in " + scope
-	case agent.GrantProjectInstall:
-		return "Install packages in " + scope
-	case agent.GrantGitPush:
-		return "Push to " + scope
 	case agent.GrantRecallRead:
 		return "Search your Memory"
 	}
@@ -112,8 +106,7 @@ func grantLabel(grant db.AgentGrant) string {
 
 // validateGrantScope checks, when the person remembers an approval, that the
 // scope is one of their own resources: a Space they may administer, their own
-// schedule, a site origin, an app account or merchant. Project and repository
-// grants are created by the coding flow, which checks the device and remote.
+// schedule, a site origin, an app account or merchant.
 func (s *SpacesService) validateGrantScope(ctx context.Context, user string, request *db.AgentAppRequest) error {
 	action := agent.GrantAction(request.GrantAction)
 	kind := agent.ScopeKind(request.GrantScopeKind)
@@ -145,8 +138,6 @@ func (s *SpacesService) validateGrantScope(ctx context.Context, user string, req
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" {
 			return db.ErrSpaceInvalid
 		}
-	case agent.ScopeProject, agent.ScopeRepo:
-		return s.validateCodingScope(ctx, user, kind, request.GrantScopeID)
 	case agent.ScopeRecall:
 		if request.GrantScopeID != agent.RecallScopeID {
 			return db.ErrSpaceInvalid

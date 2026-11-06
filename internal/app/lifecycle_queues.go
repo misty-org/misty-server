@@ -27,11 +27,6 @@ func runLifecycleQueues(ctx context.Context, server *Server) {
 			return recaps + workflows, err
 		}
 	}
-	if server.AI != nil {
-		queues["inbound-tasks"] = func(ctx context.Context) (int, error) {
-			return server.AI.ProcessInboundTasks(ctx, time.Now().UTC(), 25)
-		}
-	}
 	if server.Spaces != nil {
 		closings := api.NewAccountClosings(server.Database)
 		queues["account-deletion"] = func(ctx context.Context) (int, error) {

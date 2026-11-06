@@ -157,7 +157,7 @@ func (db *Database) ManagedMistyAgentID(ctx context.Context, user string) (strin
 	id := ""
 	err := db.WithRLSContext(ctx, userRLSSettings(user), func(tx *sql.Tx) error {
 		err := tx.QueryRowContext(ctx, `SELECT id FROM misty_ask_identities
-			WHERE owner_user_id=$1 AND system_managed AND runner='misty' AND deleted_at IS NULL`, user).Scan(&id)
+			WHERE owner_user_id=$1 AND system_managed AND deleted_at IS NULL`, user).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}

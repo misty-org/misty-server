@@ -45,15 +45,11 @@ func (s *SpacesService) deviceToolRegistrations(ctx context.Context, record *db.
 			names[device.ID] = device.Name
 		}
 	}
-	folders, projects, workspaces := []deviceGrant{}, []deviceGrant{}, []deviceGrant{}
+	folders, workspaces := []deviceGrant{}, []deviceGrant{}
 	for _, item := range contexts {
 		grant := deviceGrant{scopeID: item.OpaqueRef, name: item.DisplayName, deviceID: item.DeviceID, deviceName: names[item.DeviceID]}
 		switch item.Kind {
 		case "local_folder":
-			folders = append(folders, grant)
-		case "project_folder":
-			// A project also reads documents (PDFs, sheets) through the folder tools.
-			projects = append(projects, grant)
 			folders = append(folders, grant)
 		case "workspace":
 			workspaces = append(workspaces, grant)
@@ -63,9 +59,6 @@ func (s *SpacesService) deviceToolRegistrations(ctx context.Context, record *db.
 	if len(folders) > 0 {
 		registrations = append(registrations, s.folderToolRegistrations(folders)...)
 	}
-	// Projects are coded through the person's own coding tools (code.delegate),
-	// not through tools of Misty's own.
-	_ = projects
 	if len(workspaces) > 0 {
 		registrations = append(registrations, s.workspaceToolRegistrations(workspaces)...)
 	}
@@ -256,7 +249,6 @@ func deviceToolFailure(code string) error {
 		"invalid_url":              "use an http or https address",
 		"workspace_unavailable":    "the Misty browser is not open on the user's computer",
 		"device_grant_invalid":     "the user's computer could not confirm this request",
-		"code_sandbox_unavailable": "the user's computer can't run commands safely (code projects need macOS)",
 	}[code]
 	if message == "" {
 		message = "the user's computer could not do that (" + code + ")"

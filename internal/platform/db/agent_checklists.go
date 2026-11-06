@@ -20,8 +20,8 @@ const (
 
 var checklistStatuses = map[string]bool{"pending": true, "in_progress": true, "done": true, "skipped": true, "blocked": true}
 
-// ChecklistItem is one step. Delegated steps are handed to another agent or a
-// coding tool; that run's own checklist nests under this step.
+// ChecklistItem is one step. Delegated steps are handed to another agent; that
+// run's own checklist nests under this step.
 type ChecklistItem struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`

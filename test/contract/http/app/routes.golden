@@ -1,8 +1,6 @@
 DELETE /ai/agent-methods/{methodID}/schedule
-DELETE /ai/inbound-channels/{channel}
 DELETE /ai/memories/{memoryID}
 DELETE /api/ai/agent-methods/{methodID}/schedule
-DELETE /api/ai/inbound-channels/{channel}
 DELETE /api/ai/memories/{memoryID}
 DELETE /api/integrations/apps/connections/{accountID}
 DELETE /api/me/agent-grants
@@ -15,7 +13,6 @@ DELETE /api/misty/conversation-folders/{folderID}
 DELETE /api/misty/conversations/{conversationID}
 DELETE /api/misty/lessons/{kind}/{id}
 DELETE /api/spaces/{spaceID}
-DELETE /api/spaces/{spaceID}/code-projects/{projectID}
 DELETE /api/spaces/{spaceID}/conversations/{conversationID}
 DELETE /api/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}
 DELETE /api/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}
@@ -41,7 +38,6 @@ DELETE /misty/conversation-folders/{folderID}
 DELETE /misty/conversations/{conversationID}
 DELETE /misty/lessons/{kind}/{id}
 DELETE /spaces/{spaceID}
-DELETE /spaces/{spaceID}/code-projects/{projectID}
 DELETE /spaces/{spaceID}/conversations/{conversationID}
 DELETE /spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}
 DELETE /spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}
@@ -57,7 +53,6 @@ DELETE /spaces/{spaceID}/notes/{noteID}
 DELETE /spaces/{spaceID}/notes/{noteID}/assets/{assetID}
 DELETE /sync/vault
 DELETE /v1/ai/agent-methods/{methodID}/schedule
-DELETE /v1/ai/inbound-channels/{channel}
 DELETE /v1/ai/memories/{memoryID}
 DELETE /v1/integrations/apps/connections/{accountID}
 DELETE /v1/me/agent-grants
@@ -70,7 +65,6 @@ DELETE /v1/misty/conversation-folders/{folderID}
 DELETE /v1/misty/conversations/{conversationID}
 DELETE /v1/misty/lessons/{kind}/{id}
 DELETE /v1/spaces/{spaceID}
-DELETE /v1/spaces/{spaceID}/code-projects/{projectID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}
@@ -93,7 +87,6 @@ GET /ai/activity
 GET /ai/agent-methods
 GET /ai/conversations
 GET /ai/conversations/{conversationID}
-GET /ai/inbound-channels
 GET /ai/invocations/{invocationID}/events
 GET /ai/invocations/{invocationID}/progress
 GET /ai/invocations/{invocationID}/state
@@ -112,7 +105,6 @@ GET /api/ai/activity
 GET /api/ai/agent-methods
 GET /api/ai/conversations
 GET /api/ai/conversations/{conversationID}
-GET /api/ai/inbound-channels
 GET /api/ai/invocations/{invocationID}/events
 GET /api/ai/invocations/{invocationID}/progress
 GET /api/ai/invocations/{invocationID}/state
@@ -133,7 +125,6 @@ GET /api/health
 GET /api/instance
 GET /api/integrations/apps
 GET /api/integrations/apps/catalog
-GET /api/integrations/github/repos
 GET /api/invites/{code}
 GET /api/me
 GET /api/me/agent-grants
@@ -166,7 +157,6 @@ GET /api/spaces/{spaceID}
 GET /api/spaces/{spaceID}/agent-artifacts
 GET /api/spaces/{spaceID}/agents
 GET /api/spaces/{spaceID}/attachments/{attachmentID}/download
-GET /api/spaces/{spaceID}/code-projects
 GET /api/spaces/{spaceID}/conversations
 GET /api/spaces/{spaceID}/conversations/{conversationID}/messages
 GET /api/spaces/{spaceID}/drawings
@@ -205,7 +195,6 @@ GET /health
 GET /instance
 GET /integrations/apps
 GET /integrations/apps/catalog
-GET /integrations/github/repos
 GET /invites/{code}
 GET /me
 GET /me/agent-grants
@@ -240,7 +229,6 @@ GET /spaces/{spaceID}
 GET /spaces/{spaceID}/agent-artifacts
 GET /spaces/{spaceID}/agents
 GET /spaces/{spaceID}/attachments/{attachmentID}/download
-GET /spaces/{spaceID}/code-projects
 GET /spaces/{spaceID}/conversations
 GET /spaces/{spaceID}/conversations/{conversationID}/messages
 GET /spaces/{spaceID}/drawings
@@ -277,7 +265,6 @@ GET /v1/ai/activity
 GET /v1/ai/agent-methods
 GET /v1/ai/conversations
 GET /v1/ai/conversations/{conversationID}
-GET /v1/ai/inbound-channels
 GET /v1/ai/invocations/{invocationID}/events
 GET /v1/ai/invocations/{invocationID}/progress
 GET /v1/ai/invocations/{invocationID}/state
@@ -298,7 +285,6 @@ GET /v1/health
 GET /v1/instance
 GET /v1/integrations/apps
 GET /v1/integrations/apps/catalog
-GET /v1/integrations/github/repos
 GET /v1/invites/{code}
 GET /v1/me
 GET /v1/me/agent-grants
@@ -331,7 +317,6 @@ GET /v1/spaces/{spaceID}
 GET /v1/spaces/{spaceID}/agent-artifacts
 GET /v1/spaces/{spaceID}/agents
 GET /v1/spaces/{spaceID}/attachments/{attachmentID}/download
-GET /v1/spaces/{spaceID}/code-projects
 GET /v1/spaces/{spaceID}/conversations
 GET /v1/spaces/{spaceID}/conversations/{conversationID}/messages
 GET /v1/spaces/{spaceID}/drawings
@@ -433,21 +418,16 @@ POST /api/devices/{deviceID}/embeddings/complete
 POST /api/devices/{deviceID}/heartbeat
 POST /api/devices/{deviceID}/remove-device
 POST /api/integrations/apps/connect
-POST /api/integrations/github/repos
 POST /api/internal/journal/note-projections
 POST /api/login
 POST /api/logout
 POST /api/me/account-proof
-POST /api/me/agent-grants/project
 POST /api/me/agent-grants/site
 POST /api/me/agent-interventions/{waitID}
 POST /api/me/agent-plans/{planID}/{action}
 POST /api/me/agent-questions/{questionID}/answer
 POST /api/me/app-requests/{requestID}
 POST /api/me/app-requests/{requestID}/link
-POST /api/me/coding/{invocationID}/approvals
-POST /api/me/coding/{invocationID}/events
-POST /api/me/coding/{invocationID}/lease
 POST /api/me/conversations/{conversationID}/goal
 POST /api/me/deletion
 POST /api/me/export
@@ -472,7 +452,6 @@ POST /api/setup-keys/redeem
 POST /api/space-invitations/{token}
 POST /api/spaces
 POST /api/spaces/{spaceID}/attachments/{attachmentID}/promote
-POST /api/spaces/{spaceID}/code-projects
 POST /api/spaces/{spaceID}/conversations
 POST /api/spaces/{spaceID}/conversations/dm
 POST /api/spaces/{spaceID}/conversations/{conversationID}/messages
@@ -520,7 +499,6 @@ POST /devices/{deviceID}/embeddings/complete
 POST /devices/{deviceID}/heartbeat
 POST /devices/{deviceID}/remove-device
 POST /integrations/apps/connect
-POST /integrations/github/repos
 POST /internal/agent-runtime/runs/{runID}/activate
 POST /internal/agent-runtime/runs/{runID}/budget
 POST /internal/agent-runtime/runs/{runID}/complete
@@ -534,16 +512,12 @@ POST /login
 POST /logout
 POST /mcp
 POST /me/account-proof
-POST /me/agent-grants/project
 POST /me/agent-grants/site
 POST /me/agent-interventions/{waitID}
 POST /me/agent-plans/{planID}/{action}
 POST /me/agent-questions/{questionID}/answer
 POST /me/app-requests/{requestID}
 POST /me/app-requests/{requestID}/link
-POST /me/coding/{invocationID}/approvals
-POST /me/coding/{invocationID}/events
-POST /me/coding/{invocationID}/lease
 POST /me/conversations/{conversationID}/goal
 POST /me/deletion
 POST /me/export
@@ -575,7 +549,6 @@ POST /setup-keys/redeem
 POST /space-invitations/{token}
 POST /spaces
 POST /spaces/{spaceID}/attachments/{attachmentID}/promote
-POST /spaces/{spaceID}/code-projects
 POST /spaces/{spaceID}/conversations
 POST /spaces/{spaceID}/conversations/dm
 POST /spaces/{spaceID}/conversations/{conversationID}/messages
@@ -635,21 +608,16 @@ POST /v1/devices/{deviceID}/embeddings/complete
 POST /v1/devices/{deviceID}/heartbeat
 POST /v1/devices/{deviceID}/remove-device
 POST /v1/integrations/apps/connect
-POST /v1/integrations/github/repos
 POST /v1/internal/journal/note-projections
 POST /v1/login
 POST /v1/logout
 POST /v1/me/account-proof
-POST /v1/me/agent-grants/project
 POST /v1/me/agent-grants/site
 POST /v1/me/agent-interventions/{waitID}
 POST /v1/me/agent-plans/{planID}/{action}
 POST /v1/me/agent-questions/{questionID}/answer
 POST /v1/me/app-requests/{requestID}
 POST /v1/me/app-requests/{requestID}/link
-POST /v1/me/coding/{invocationID}/approvals
-POST /v1/me/coding/{invocationID}/events
-POST /v1/me/coding/{invocationID}/lease
 POST /v1/me/conversations/{conversationID}/goal
 POST /v1/me/deletion
 POST /v1/me/export
@@ -674,7 +642,6 @@ POST /v1/setup-keys/redeem
 POST /v1/space-invitations/{token}
 POST /v1/spaces
 POST /v1/spaces/{spaceID}/attachments/{attachmentID}/promote
-POST /v1/spaces/{spaceID}/code-projects
 POST /v1/spaces/{spaceID}/conversations
 POST /v1/spaces/{spaceID}/conversations/dm
 POST /v1/spaces/{spaceID}/conversations/{conversationID}/messages
@@ -709,7 +676,6 @@ POST /v1/sync/ticket
 POST /v1/sync/vault
 PUT /ai/agent-methods/{methodID}
 PUT /ai/agent-methods/{methodID}/schedule
-PUT /ai/inbound-channels/{channel}
 PUT /ai/memories/{memoryID}
 PUT /ai/preferences/{surfaceID}
 PUT /ai/recaps/{surfaceID}
@@ -720,7 +686,6 @@ PUT /ai/settings/keep-awake
 PUT /ai/settings/screen-location
 PUT /api/ai/agent-methods/{methodID}
 PUT /api/ai/agent-methods/{methodID}/schedule
-PUT /api/ai/inbound-channels/{channel}
 PUT /api/ai/memories/{memoryID}
 PUT /api/ai/preferences/{surfaceID}
 PUT /api/ai/recaps/{surfaceID}
@@ -732,7 +697,6 @@ PUT /api/ai/settings/screen-location
 PUT /api/devices/{deviceID}/devices/{targetID}/name
 PUT /api/devices/{deviceID}/policy
 PUT /api/me/avatar
-PUT /api/me/coding/engines
 PUT /api/me/conversations/{conversationID}/mode
 PUT /api/me/device
 PUT /api/me/password
@@ -755,7 +719,6 @@ PUT /api/sync/vault/key
 PUT /devices/{deviceID}/devices/{targetID}/name
 PUT /devices/{deviceID}/policy
 PUT /me/avatar
-PUT /me/coding/engines
 PUT /me/conversations/{conversationID}/mode
 PUT /me/device
 PUT /me/password
@@ -777,7 +740,6 @@ PUT /sync/sessions/{sessionID}/name
 PUT /sync/vault/key
 PUT /v1/ai/agent-methods/{methodID}
 PUT /v1/ai/agent-methods/{methodID}/schedule
-PUT /v1/ai/inbound-channels/{channel}
 PUT /v1/ai/memories/{memoryID}
 PUT /v1/ai/preferences/{surfaceID}
 PUT /v1/ai/recaps/{surfaceID}
@@ -789,7 +751,6 @@ PUT /v1/ai/settings/screen-location
 PUT /v1/devices/{deviceID}/devices/{targetID}/name
 PUT /v1/devices/{deviceID}/policy
 PUT /v1/me/avatar
-PUT /v1/me/coding/engines
 PUT /v1/me/conversations/{conversationID}/mode
 PUT /v1/me/device
 PUT /v1/me/password

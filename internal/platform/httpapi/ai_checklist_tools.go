@@ -26,7 +26,7 @@ func (s *SpacesService) checklistToolRegistrations(record *db.AIInvocationRecord
 		return nil
 	}
 	return []agenttools.Registration{{Descriptor: collaborationDescriptor(collaborationChecklist,
-		"Publish your live checklist for multi-step work: 3-8 concrete steps before you start, then update it as you go. Exactly one step is in_progress at a time; mark it done before starting the next, and skipped or blocked with a short note. Mark steps you hand to another agent or a coding tool as delegated. Send only changed steps; replace restates the whole list.",
+		"Publish your live checklist for multi-step work: 3-8 concrete steps before you start, then update it as you go. Exactly one step is in_progress at a time; mark it done before starting the next, and skipped or blocked with a short note. Mark steps you hand to another agent as delegated. Send only changed steps; replace restates the whole list.",
 		map[string]any{
 			"items": map[string]any{"type": "array", "minItems": 1, "maxItems": db.MaxChecklistItems, "items": map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"id", "status"},

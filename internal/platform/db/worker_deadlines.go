@@ -53,8 +53,6 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 		deadline = agentTaskWorkerDeadline
 	case "scheduled":
 		deadline = scheduledWorkerDeadline
-	case "inbound-tasks":
-		deadline = inboundWorkerDeadline
 	case "ai-cleanup":
 		deadline = aiCleanupWorkerDeadline
 	case "account-deletion":

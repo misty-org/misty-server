@@ -25,7 +25,7 @@ const scheduledRunTrigger = "scheduled_task"
 const continuationTrigger = "continuation"
 
 func mistyTurnSource(trigger string) string {
-	if trigger == scheduledRunTrigger || trigger == goalContinuationTrigger || trigger == continuationTrigger || trigger == inboundTaskTrigger {
+	if trigger == scheduledRunTrigger || trigger == goalContinuationTrigger || trigger == continuationTrigger {
 		return trigger
 	}
 	return ""

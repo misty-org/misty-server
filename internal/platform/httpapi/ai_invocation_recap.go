@@ -37,9 +37,6 @@ func (s *SpacesService) completeAIInvocationRecap(ctx context.Context, record *d
 	if body.Trigger == scheduledRunTrigger {
 		return s.completeWorkflowScheduleInvocation(ctx, record, runErr)
 	}
-	if body.Trigger == inboundTaskTrigger {
-		return s.completeInboundTask(ctx, record, answer, runErr)
-	}
 	if body.Trigger != "schedule" {
 		return nil
 	}

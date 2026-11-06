@@ -92,8 +92,7 @@ func planModeTools(toolbox *agenttools.Registry, names []string) []string {
 	}
 	allowed := make([]string, 0, len(names))
 	for _, name := range names {
-		// Delegated coding inherits Plan: the tool gets a read-only launch.
-		if (risk[name] == agent.RiskRead || name == codeDelegateTool) && planModeToolPermitted(name) {
+		if risk[name] == agent.RiskRead && planModeToolPermitted(name) {
 			allowed = append(allowed, name)
 		}
 	}
@@ -133,7 +132,7 @@ func collaborationInstructions(state collaborationState) string {
 	if state.canAsk {
 		out.WriteString("\n\nWhen a detail is missing but a sensible default exists (dates, a quantity, a place, a budget), choose one, say in your answer what you assumed, and keep working. Ask with conversation_ask_user only when no reasonable default exists, or when the choice would spend money, send something or be hard to undo; explore with read tools first and never ask whether to proceed. When the request asks you to pick, rank or recommend, commit to a choice from the best evidence you found and say what you could not confirm; an answer that leaves the choice open does not do what was asked.")
 	}
-	out.WriteString("\n\nBefore multi-step work, publish a live checklist with log_work_checklist: 3-8 concrete steps the user can follow. Keep exactly one step in_progress, mark each done as you finish it, and mark steps you hand to another agent or a coding tool as delegated. Each turn publishes its own checklist; skip it for a single quick answer.")
+	out.WriteString("\n\nBefore multi-step work, publish a live checklist with log_work_checklist: 3-8 concrete steps the user can follow. Keep exactly one step in_progress, mark each done as you finish it, and mark steps you hand to another agent as delegated. Each turn publishes its own checklist; skip it for a single quick answer.")
 	if plan := state.approvedPlan(); plan != nil {
 		out.WriteString("\n\nThe user approved this plan: \"" + plan.Payload.Title + "\" (version " + fmt.Sprint(plan.Version) + "). Follow it and report each step with log_work_checklist using the plan's step ids (it starts as the plan's steps): in_progress before you start it, done after it, skipped or blocked with a note. " +
 			"If a step proves wrong or the work needs steps that are not in the plan, do not widen it silently: ask, or finish explaining the change.\nSteps:")

@@ -30,7 +30,7 @@ func validateAgentToolLayers() (err error) {
 
 // agentToolCatalogDescriptors is every tool a run can be offered, built from
 // stand-in runs: the Space and account toolboxes, member requests, connected
-// apps, devices, screens, the run notebook, sub-agents and coding.
+// apps, devices, screens, the run notebook and sub-agents.
 func agentToolCatalogDescriptors() []agenttools.Descriptor {
 	service := &SpacesService{}
 	noop := func(context.Context, agenttools.Invocation, agent.ToolRequest) (json.RawMessage, error) {
@@ -58,8 +58,7 @@ func agentToolCatalogDescriptors() []agenttools.Descriptor {
 	for _, registration := range connected {
 		descriptors = append(descriptors, registration.Descriptor)
 	}
-	descriptors = append(descriptors, browserToolDescriptors()...)
-	return append(descriptors, codeDelegationDescriptors()...)
+	return append(descriptors, browserToolDescriptors()...)
 }
 
 // TestingAgentToolCatalog exposes the startup catalog to the layer tests.

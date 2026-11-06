@@ -33,10 +33,6 @@ type aiInvocationInput struct {
 	ExecutionMode     string `json:"execution_mode,omitempty"`
 	CollaborationMode string `json:"collaboration_mode,omitempty"` // "plan", "act" or "teach"; frozen at admission
 	PermissionMode    string `json:"permission_mode,omitempty"`    // "ask" or "auto"; frozen at admission
-	// CodingProject is the attached project a delegated coding run works in.
-	CodingProject string `json:"coding_project,omitempty"`
-	// CodingTool is the coding tool the person picked for this chat; empty uses the Settings default.
-	CodingTool            string                      `json:"coding_tool,omitempty"`
 	WindowLabel           string                      `json:"window_label,omitempty"`
 	Mode                  string                      `json:"mode"`
 	SurfaceID             string                      `json:"surface_id"`

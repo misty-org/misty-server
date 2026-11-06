@@ -85,8 +85,8 @@ func (db *Database) ClosingAccounts(ctx context.Context) (map[string]time.Time, 
 }
 
 // stopClosingAccountWorkTx cancels the agent work a closing account has under
-// way: its personal and inbound invocations, and the runs it asked for or its
-// agents were doing. Schedules stay as they are and wait (ClaimDueWorkflowSchedules
+// way: its personal invocations, and the runs it asked for or its agents were
+// doing. Schedules stay as they are and wait (ClaimDueWorkflowSchedules
 // skips closing accounts), so resuming the account brings them back.
 func stopClosingAccountWorkTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET state='canceled',error_code='account_closing',

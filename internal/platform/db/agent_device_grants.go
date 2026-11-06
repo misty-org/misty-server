@@ -28,7 +28,6 @@ type AgentDeviceGrant struct {
 var deviceAgentCapabilities = map[string]bool{
 	"browser.workspace.visual": true, "browser.workspace.interact": true,
 	"folder.read": true, "folder.write": true, "folder.list": true, "folder.search": true, "folder.copy": true, "folder.move": true, "folder.delete": true, "folder.send": true,
-	"project.patch": true, "project.diff": true, "project.status": true, "project.checks": true, "git.commit": true, "git.push": true, "terminal.execute": true,
 	"browser.interact": true, "browser.inspect": true, "browser.visual": true, "browser.navigate": true, "browser.click": true, "browser.type": true, "browser.select": true, "browser.scroll": true,
 	"browser.downloads.list": true, "browser.upload": true, "browser.act": true, "browser.confirm_high_risk": true,
 	"browser.snapshot": true, "browser.find": true, "browser.extract": true, "browser.wait_for": true, "browser.steps": true, "browser.fill_form": true, "browser.skill": true, "browser.spawn_tabs": true,
@@ -38,18 +37,12 @@ var deviceAgentCapabilities = map[string]bool{
 	"browser.session": true,
 	// Runs the agent's program against its own tabs there (docs/agents/harness.md, browser_run).
 	"browser.run": true,
-	// Coding in a project on the chat's own computer, through the person's own
-	// coding tool (docs/agents/coding-tools.md).
-	"code.delegate": true,
 }
 
 // deviceContextCapabilities are what each kind of desktop grant may allow.
 var deviceContextCapabilities = map[string]map[string]bool{
 	"local_folder": {"folder.list": true, "folder.read": true, "folder.send": true},
 	"workspace":    {"browser.tab.list": true, "browser.tab.open": true, "bookmark.list": true, "bookmark.add": true, "browser.session": true, "browser.run": true, "web.fetch": true},
-	// A project: delegated coding, plus reading documents and saving files to
-	// the Space Library the way read-only folders do.
-	"project_folder": {"folder.list": true, "folder.read": true, "folder.send": true, "code.delegate": true},
 }
 
 // DeviceContextCapabilitiesAllowed reports whether a desktop grant asks only

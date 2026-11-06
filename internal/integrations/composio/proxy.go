@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -25,19 +24,6 @@ func (c *Client) Proxy(ctx context.Context, account, method, endpoint string, bo
 		return ProxyResult{}, &APIError{Status: http.StatusBadRequest, Message: "invalid proxied request"}
 	}
 	return c.proxy(ctx, account, method, endpoint, body)
-}
-
-// proxyHosts are the app APIs Misty calls by absolute URL, for apps whose
-// Composio base path isn't the API root.
-var proxyHosts = map[string]bool{"gmail.googleapis.com": true, "slack.com": true}
-
-// ProxyURL is Proxy for a full https URL on one of the allowed app APIs.
-func (c *Client) ProxyURL(ctx context.Context, account, method, address string, body any) (ProxyResult, error) {
-	parsed, err := url.Parse(address)
-	if err != nil || !accountPattern.MatchString(account) || parsed.Scheme != "https" || parsed.User != nil || !proxyHosts[parsed.Host] {
-		return ProxyResult{}, &APIError{Status: http.StatusBadRequest, Message: "invalid proxied request"}
-	}
-	return c.proxy(ctx, account, method, address, body)
 }
 
 func (c *Client) proxy(ctx context.Context, account, method, endpoint string, body any) (ProxyResult, error) {

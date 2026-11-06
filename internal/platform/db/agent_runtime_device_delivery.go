@@ -11,8 +11,8 @@ import (
 
 // Agent runs work on the person's computer (docs/agents/runtime.md). A run is
 // pinned to the computer it was sent from (runtime_endpoint 'device:<id>'), from
-// its admission. A run nobody sent from a computer (+misty email, @misty Slack, a
-// schedule with no computer) goes to the first of the person's computers to claim it.
+// its admission. A run nobody sent from a computer (a schedule with no computer)
+// goes to the first of the person's computers to claim it.
 
 // DeviceRuntimeEndpoint is the runtime pin of a run that works on deviceID.
 func DeviceRuntimeEndpoint(deviceID string) string { return "device:" + deviceID }
@@ -120,14 +120,4 @@ func (db *Database) DeviceBelongsToUser(ctx context.Context, userID, deviceID st
 		return tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL)`, deviceID, userID).Scan(&owned)
 	})
 	return owned, err
-}
-
-// AnyDesktopOnline reports whether one of the person's devices was seen in the
-// last 90 seconds, so a queued run will start soon.
-func (db *Database) AnyDesktopOnline(ctx context.Context, userID string) (bool, error) {
-	var online bool
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices WHERE user_id=$1 AND revoked_at IS NULL AND last_seen_at>NOW()-INTERVAL '90 seconds')`, userID).Scan(&online)
-	})
-	return online, err
 }

@@ -24,7 +24,7 @@ func (db *Database) CreateAgentMemberRequestMessage(ctx context.Context, request
 }
 
 // AgentArtifactKinds are what an agent can save to a Space.
-var AgentArtifactKinds = map[string]bool{"download": true, "file": true, "image": true, "code": true, "document": true}
+var AgentArtifactKinds = map[string]bool{"download": true, "file": true, "image": true, "document": true}
 
 // AgentArtifactProvenance says which agent made an upload, in which of its
 // owner's conversations and runs. It travels with the upload until the

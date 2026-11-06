@@ -240,7 +240,7 @@ func TestingValidateAIInvocationAttachmentShape(prompt string, attachmentIDs []s
 var aiSurfaceIDs = map[string]bool{
 	"global": true, "activity": true, "space.chat": true,
 	"notes": true, "drawings": true, "library": true,
-	"browser": true, "files": true, "code": true, "terminal": true,
+	"browser": true, "files": true, "terminal": true,
 	"transfers": true, "extensions": true, "photo-editor": true,
 	"agents": true, "settings": true,
 }

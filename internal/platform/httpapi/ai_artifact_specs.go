@@ -30,11 +30,6 @@ var aiArtifactSpecs = map[string]aiArtifactSpec{
 		Prompt: "Draft a Space message for review. Do not post it.",
 		Shape:  `{"conversation_id":"opaque id","text":"...","reply_to_message_id":"optional opaque id"}`,
 	},
-	"code_patch": {
-		Title: "Review code patch", Risk: "draft", ApprovalPolicy: "visible_apply",
-		Prompt: "Propose a reviewable code patch anchored to supplied content hashes. Use filenames and opaque buffer identifiers, never raw local paths.",
-		Shape:  `{"files":[{"buffer_id":"opaque id","filename":"...","base_hash":"...","patch":"unified diff"}],"tests":[]}`,
-	},
 	"terminal_command": {
 		Title: "Review terminal command", Risk: "dangerous", ApprovalPolicy: "always_confirm",
 		Prompt: "Propose commands but do not execute them. Explain exact effects, targets, and rollback; use an opaque terminal scope.",

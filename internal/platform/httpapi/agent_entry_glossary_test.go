@@ -7,11 +7,9 @@ import (
 
 func TestAgentEntryFollowsWhereTheRequestCameFrom(t *testing.T) {
 	cases := map[string]aiInvocationInput{
-		"composer":          {Mode: "drawer", Trigger: "message"},
-		"cursor":            {Mode: "companion", Trigger: "message"},
-		"schedule":          {Mode: "drawer", Trigger: scheduledRunTrigger},
-		"email":             {Mode: "drawer", Trigger: inboundTaskTrigger, Prompt: "Task from email. The person forwarded an email"},
-		"integration.slack": {Mode: "drawer", Trigger: inboundTaskTrigger, Prompt: "Task from Slack."},
+		"composer": {Mode: "drawer", Trigger: "message"},
+		"cursor":   {Mode: "companion", Trigger: "message"},
+		"schedule": {Mode: "drawer", Trigger: scheduledRunTrigger},
 	}
 	for want, body := range cases {
 		if got := agentEntry(body); got != want {

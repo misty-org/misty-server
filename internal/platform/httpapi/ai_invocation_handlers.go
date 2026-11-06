@@ -20,7 +20,7 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			return
 		}
 		// Only the server links a run to a parent's notebook or delegation.
-		body.NotebookKey, body.DelegatedFrom, body.CodingProject = "", "", ""
+		body.NotebookKey, body.DelegatedFrom = "", ""
 		scheduled, ok := s.admitScheduledInvocation(w, r, userID, &body)
 		if !ok {
 			return

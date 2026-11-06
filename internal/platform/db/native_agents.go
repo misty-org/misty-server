@@ -34,7 +34,7 @@ type AgentProfileInput struct {
 func (db *Database) PersonalAgents(ctx context.Context, userID string) ([]AskIdentity, error) {
 	items := []AskIdentity{}
 	err := db.WithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT `+personalAgentColumns+` FROM misty_ask_identities WHERE owner_user_id=$1 AND runner='misty' AND deleted_at IS NULL ORDER BY system_managed DESC,created_at,id`, userID)
+		rows, err := tx.QueryContext(ctx, `SELECT `+personalAgentColumns+` FROM misty_ask_identities WHERE owner_user_id=$1 AND deleted_at IS NULL ORDER BY system_managed DESC,created_at,id`, userID)
 		if err != nil {
 			return err
 		}

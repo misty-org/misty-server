@@ -70,8 +70,6 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"agent_delegation_children", "owner_user_id"},
 	{"agent_goals", "owner_user_id"},
 	{"agent_grants", "grantor_user_id"},
-	{"agent_inbound_tasks", "user_id"},
-	{"agent_inbound_channels", "user_id"},
 	{"agent_member_requests", "requester_user_id"},
 	{"agent_member_requests", "target_owner_user_id"},
 	{"agent_model_turn_claims", "user_id"},
@@ -88,8 +86,6 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"workflow_device_node_jobs", "user_id"},
 	{"workflow_schedules", "user_id"},
 	{"agent_methods", "user_id"},
-	{"coding_leases", "user_id"},
-	{"coding_engines", "user_id"},
 	{"voice_live_sessions", "owner_user_id"},
 	{"voice_transcripts", "owner_user_id"},
 	// App connections (Composio's side is deleted before this step).
@@ -111,7 +107,6 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"space_invitations", "invited_user_id"},
 	{"space_invitations", "invited_by_user_id"},
 	{"space_creation_requests", "user_id"},
-	{"space_code_projects", "owner_user_id"},
 	{"owner_storage_usage", "owner_user_id"},
 }
 

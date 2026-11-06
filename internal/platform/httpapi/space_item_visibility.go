@@ -7,7 +7,7 @@ import (
 )
 
 // SpaceItemVisibility flips a Space item between public and private: notes,
-// drawings, Library files, folders and links, code projects and agents. Only
+// drawings, Library files, folders and links, and agents. Only
 // the item's owner can. Channels, threads and the Space itself have no
 // toggle, and DMs are always private.
 //

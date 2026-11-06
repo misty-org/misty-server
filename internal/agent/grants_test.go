@@ -34,18 +34,18 @@ func TestDecideMatrix(t *testing.T) {
 }
 
 func TestGrantScopes(t *testing.T) {
-	if !ValidGrantScope(GrantGitPush, ScopeRepo, "misty-org/misty") {
-		t.Fatal("a concrete repo is a valid push scope")
+	if !ValidGrantScope(GrantScheduleRemove, ScopeSchedule, "schedule_1") {
+		t.Fatal("a concrete schedule is a valid scope")
 	}
 	for _, id := range []string{"", "*", "misty-org/*", " ", "a?b"} {
-		if ValidGrantScope(GrantGitPush, ScopeRepo, id) {
+		if ValidGrantScope(GrantScheduleRemove, ScopeSchedule, id) {
 			t.Fatalf("scope %q must be rejected", id)
 		}
 	}
-	if ValidGrantScope(GrantGitPush, ScopeOrigin, "https://github.com") {
-		t.Fatal("push grants name a repo, not an origin")
+	if ValidGrantScope(GrantScheduleRemove, ScopeOrigin, "https://github.com") {
+		t.Fatal("schedule grants name a schedule, not an origin")
 	}
-	for _, action := range []GrantAction{ActionScreenControl, ActionAccountSetting, ActionOutsideProject, ActionToolWrite, "made.up"} {
+	for _, action := range []GrantAction{ActionScreenControl, ActionAccountSetting, ActionToolWrite, "made.up"} {
 		if Rememberable(action) {
 			t.Fatalf("%s must not be rememberable", action)
 		}

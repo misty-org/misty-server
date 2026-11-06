@@ -31,10 +31,6 @@ func inferredAIArtifactKind(body aiInvocationInput) string {
 		if has("draft", "reply", "write message") {
 			return "message_draft"
 		}
-	case "code":
-		if has("edit", "fix", "refactor", "implement", "change") {
-			return "code_patch"
-		}
 	case "terminal":
 		if has("run", "execute", "command", "install") {
 			return "terminal_command"

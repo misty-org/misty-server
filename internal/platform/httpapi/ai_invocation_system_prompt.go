@@ -95,7 +95,7 @@ func agentCapabilityGuidance(tools []string, desktopControl bool, ownTabs ...boo
 	}
 	var guidance strings.Builder
 	if has("space.list") {
-		guidance.WriteString("\n\nSpaces: the user's chats, notes, drawings, files and code projects live in Spaces. A calendar means the person's connected calendar app (integration_*), never a Space. Those tools take an optional `space` (name or id). Reads without one cover every Space the user can access; creates without one use the Space you live in (space_list marks it as yours); changes to an existing item pass the space returned with it. Use space_list to name destinations.")
+		guidance.WriteString("\n\nSpaces: the user's chats, notes, drawings and files live in Spaces. A calendar means the person's connected calendar app (integration_*), never a Space. Those tools take an optional `space` (name or id). Reads without one cover every Space the user can access; creates without one use the Space you live in (space_list marks it as yours); changes to an existing item pass the space returned with it. Use space_list to name destinations.")
 	}
 	if has("log.work.write") {
 		guidance.WriteString("\n\nNotebook: on a task with several steps, keep a short checklist with log_work_write (section plan) for yourself, and add findings with their source URLs as you learn them. The person sees the findings in the conversation, not the checklist. After earlier steps were summarized, read it again with log_work_read before continuing.")
@@ -160,11 +160,6 @@ func agentCapabilityGuidance(tools []string, desktopControl bool, ownTabs ...boo
 		} else if has("browser.act") {
 			guidance.WriteString(" For anything you would do with a mouse or keyboard (clicking, typing into forms, choosing options, dragging, drawing, playing a game), call browser_act with the whole goal and the visible result to reach. Misty's screen agent works through it on the device, waiting for the page when something else has to happen first, and reports where it stopped; check its final screenshot, and call it again with the same goal when it reports progress without finishing. Use browser_navigate to open pages and browser_inspect to read them.")
 		}
-	}
-	if has("code.delegate") {
-		// Coding goes to the person's own coding tool on the computer that
-		// holds the project. Short on purpose: it rides along on every turn.
-		guidance.WriteString("\n\nProjects: hand coding in an attached project to the person's own coding tool with code_delegate. State the task fully (files, behavior, how to check it); the tool does not see this chat. Mark that checklist step delegated, wait with code_wait while it works, then check its answer and report. It asks the person before changes that need them; never ask it to skip that.")
 	}
 	if has("browser.request_user_action") {
 		guidance.WriteString("\n\nWaiting for the user: when the screen needs the person (a sign-in, a password or code, a CAPTCHA or verification, choosing an account, a permission dialog), or browser_act stops for one, call browser_request_user_action with that screen's scopeId and say in the reason exactly what they need to do. Misty hands them control, shows a Waiting for you card in the conversation and continues this run when they are done; do not end your response or ask in text instead. Afterwards look at the screen again before acting.")

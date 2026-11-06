@@ -52,7 +52,6 @@ var visibilityTables = map[string][3]string{
 	"drawing":      {"space_drawings", "creator_user_id", "id"},
 	"library_item": {"space_library_items", "added_by_user_id", "id"},
 	"node":         {"space_nodes", "uploader_user_id", "id"},
-	"code_project": {"space_code_projects", "owner_user_id", "id"},
 	"agent":        {"space_agents", "owner_user_id", "agent_id"},
 }
 
@@ -99,7 +98,7 @@ var memoryTreeTables = [][2]string{
 // transaction that takes them out of it: their memory rows and chunks, their
 // agent conversations, their
 // private notes, drawings, files and links, and (through the membership's
-// cascades) their code projects and agents' memberships.
+// cascades) their agents' memberships.
 // Their public items stay with the Space. Their vault in the Space is the
 // sync tree's (phase 1) and goes through its own object deletion.
 func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {

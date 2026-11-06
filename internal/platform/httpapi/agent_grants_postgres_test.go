@@ -67,7 +67,7 @@ func TestAgentGrantsPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if helper.DefaultRunMode != agent.PermissionAsk || helper.Runner != "misty" {
+	if helper.DefaultRunMode != agent.PermissionAsk {
 		t.Fatalf("a new agent starts in Ask on Misty's runner: %+v", helper)
 	}
 	workflow, err := database.SaveAgentMethod(ctx, owner.ID, db.AgentMethod{AgentID: helper.ID, Kind: "workflow", Enabled: true,
@@ -146,7 +146,7 @@ func TestAgentGrantsPostgres(t *testing.T) {
 	// Wildcards, unknown kinds and never-rememberable actions offer no remember.
 	for _, need := range []grantNeed{
 		{action: agent.GrantScheduleRemove, scopeKind: agent.ScopeSchedule, scopeID: "*"},
-		{action: agent.GrantGitPush, scopeKind: agent.ScopeOrigin, scopeID: "https://github.com"},
+		{action: agent.GrantScheduleRemove, scopeKind: agent.ScopeOrigin, scopeID: "https://github.com"},
 		{action: agent.ActionScreenControl},
 	} {
 		if need.rememberable() {

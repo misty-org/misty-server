@@ -7,18 +7,13 @@ import "strings"
 // maps the agent's own names to the app's labels today, so renaming a section
 // changes one line here and nothing in the agent.
 
-// agentEntry names the run's entry point: composer, cursor, schedule, email,
-// or integration.<app>.
+// agentEntry names the run's entry point: composer, cursor or schedule.
 func agentEntry(body aiInvocationInput) string {
 	switch {
 	case body.Mode == "companion":
 		return "cursor"
 	case body.Trigger == scheduledRunTrigger:
 		return "schedule"
-	case body.Trigger == inboundTaskTrigger && strings.HasPrefix(body.Prompt, "Task from email"):
-		return "email"
-	case body.Trigger == inboundTaskTrigger:
-		return "integration.slack"
 	default:
 		return "composer"
 	}
@@ -32,10 +27,6 @@ func entryGuidance(entry string) string {
 		return "\n\nWhere this reply goes: the conversation in Misty. Format it for reading: short paragraphs, lists and tables where they help, links to sources."
 	case "schedule":
 		return "\n\nWhere this reply goes: a scheduled run the person reads later. Nobody is watching: don't ask questions, write a self-contained report of what you found and did."
-	case "email":
-		return "\n\nWhere this reply goes: an email reply to the person. Write plain, self-contained text that reads well in email; nobody is watching the run."
-	case "integration.slack":
-		return "\n\nWhere this reply goes: a Slack reply to the person. Keep it short and self-contained; Slack shows simple formatting only."
 	}
 	return ""
 }

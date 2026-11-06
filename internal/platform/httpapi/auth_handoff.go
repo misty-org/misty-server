@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 // AuthHandoffService signs a desktop user into the website. The desktop app
@@ -129,7 +129,7 @@ func (s *AuthHandoffService) Start() http.HandlerFunc {
 			return
 		}
 
-		if err := issueSessionCookies(w, r, s.database, userID, db.AuthHandoffSessionTTL); err != nil {
+		if err := issueSession(w, r, s.database, userID, db.AuthHandoffSessionTTL); err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}

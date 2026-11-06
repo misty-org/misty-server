@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/workflow"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/workflow"
 )
 
 // admitPersonalAgentRuntimeTurn counts one model turn against the run's turn

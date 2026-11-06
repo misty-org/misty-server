@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func TestAgentRuntimeSignatureCoversRequestAndRotates(t *testing.T) {
@@ -101,28 +101,11 @@ func TestAgentRunCompletionOutcomes(t *testing.T) {
 	}
 }
 
-func TestAgentTaskDueDatesUseTheCreatorsTimezone(t *testing.T) {
+func TestAgentRunsUseTheCreatorsTimezone(t *testing.T) {
 	if got := api.TestingAgentToolTimezone(`{"instruction":"create a task","timezone":"America/Los_Angeles"}`); got != "America/Los_Angeles" {
 		t.Fatalf("run timezone = %q", got)
 	}
 	if got := api.TestingAgentToolTimezone(`{"timezone":"Mars/Olympus"}`); got != "UTC" {
 		t.Fatalf("invalid run timezone fallback = %q", got)
-	}
-	local, err := api.TestingParseAgentToolTime("2026-08-19T19:00", "America/Los_Angeles")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := local.Format(time.RFC3339), "2026-08-20T02:00:00Z"; got != want {
-		t.Fatalf("local due time = %s, want %s", got, want)
-	}
-	dateOnly, err := api.TestingParseAgentToolTime("2026-08-19", "America/Los_Angeles")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := dateOnly.Format(time.RFC3339), "2026-08-20T06:59:00Z"; got != want {
-		t.Fatalf("date-only due time = %s, want %s", got, want)
-	}
-	if _, err := api.TestingParseAgentToolTime("2026-08-19T19:00", "Mars/Olympus"); err == nil {
-		t.Fatal("invalid timezone should be rejected")
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Runs the dispatcher's due-time planning against the full migrated schema.

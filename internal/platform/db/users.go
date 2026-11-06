@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/accounts"
 )
 
 // Compatibility facade for existing HTTP/tool callers. Account behavior and SQL
@@ -18,6 +18,7 @@ func (db *Database) accountStore() accounts.Store {
 var ErrInvalidUsername = accounts.ErrInvalidUsername
 var ErrInvalidPassword = accounts.ErrInvalidPassword
 var ErrUsernameTaken = accounts.ErrUsernameTaken
+var ErrPasswordAccount = accounts.ErrPasswordAccount
 var ErrEmailTaken = accounts.ErrEmailTaken
 var ErrWrongCurrentPassword = accounts.ErrWrongCurrentPassword
 var ErrNoPasswordAccount = accounts.ErrNoPasswordAccount
@@ -41,11 +42,8 @@ func (db *Database) GetUserByEmail(email string) (*User, string, error) {
 	return db.accountStore().GetUserByEmail(email)
 }
 func (db *Database) GetUserByID(id string) (*User, error) { return db.accountStore().GetUserByID(id) }
-func (db *Database) ChangePassword(id, current, next, keepSessionHash string, credential bool) error {
-	return db.accountStore().ChangePassword(id, current, next, keepSessionHash, credential)
-}
-func (db *Database) SetCredentialPassword(id string, credential bool) error {
-	return db.accountStore().SetCredentialPassword(id, credential)
+func (db *Database) ChangePassword(id, current, next, keepSessionHash string) error {
+	return db.accountStore().ChangePassword(id, current, next, keepSessionHash)
 }
 func (db *Database) BumpUserAvatarVersion(id string) (int64, error) {
 	return db.accountStore().BumpUserAvatarVersion(id)
@@ -55,6 +53,9 @@ func (db *Database) GetUserAvatarVersion(id string) (int64, error) {
 }
 func (db *Database) GetUserAvatarReference(id string) (UserAvatarReference, error) {
 	return db.accountStore().GetUserAvatarReference(id)
+}
+func (db *Database) SetUsername(id, username string) (string, error) {
+	return db.accountStore().SetUsername(id, username)
 }
 func (db *Database) GetUserSettingsByID(id string) (*UserSettings, error) {
 	return db.accountStore().GetUserSettingsByID(id)

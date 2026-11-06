@@ -12,6 +12,9 @@ import (
 var ErrEmailTaken = errors.New("email already registered")
 var ErrProviderConflict = errors.New("this email belongs to an existing account; use its original sign-in method")
 
+// ErrPasswordAccount means the email belongs to an account that signs in with a password.
+var ErrPasswordAccount = errors.New("this email signs in with a password")
+
 // GoogleUser accepts only a server-verified Google identity. Never link an
 // existing account by email: Google's stable subject owns the identity.
 func (db Store) GoogleUser(email, subject string) (*User, error) {
@@ -48,7 +51,7 @@ func (db Store) GoogleUser(email, subject string) (*User, error) {
 		return nil, err
 	}
 	if existing != nil {
-		return nil, ErrProviderConflict
+		return nil, emailTakenBy(existing)
 	}
 	username := DefaultUsernameForEmail(email)
 	for attempt := 0; attempt < 3; attempt++ {
@@ -57,7 +60,7 @@ func (db Store) GoogleUser(email, subject string) (*User, error) {
 			return user, nil
 		}
 		if errors.Is(err, ErrUsernameTaken) {
-			username = username[:min(len(username), 20)] + "_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+			username = usernameWithSuffix(username)
 			continue
 		}
 		// A concurrent callback may have created this exact identity already.
@@ -68,10 +71,26 @@ func (db Store) GoogleUser(email, subject string) (*User, error) {
 		if existing != nil && existing.Provider == "google" && existing.ProviderSubject == subject {
 			return existing, nil
 		}
-		if existing != nil || errors.Is(err, ErrEmailTaken) {
+		if existing != nil {
+			return nil, emailTakenBy(existing)
+		}
+		if errors.Is(err, ErrEmailTaken) {
 			return nil, ErrProviderConflict
 		}
 		return nil, err
 	}
 	return nil, ErrUsernameTaken
+}
+
+func usernameWithSuffix(username string) string {
+	return username[:min(len(username), 20)] + "_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+}
+
+// emailTakenBy says why Google can't have an email another account holds: it signs in
+// with a password, or with a different Google identity.
+func emailTakenBy(existing *User) error {
+	if existing.Provider == "misty" {
+		return ErrPasswordAccount
+	}
+	return ErrProviderConflict
 }

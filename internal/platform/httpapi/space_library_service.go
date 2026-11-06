@@ -3,7 +3,7 @@ package api
 import (
 	"errors"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // transferPurposeEnabled gates the routes that move or finalize bytes for an

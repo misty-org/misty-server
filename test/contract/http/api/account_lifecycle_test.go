@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func TestPostProviderRevocationUsesFormOrBearerWithoutLeakingTokens(t *testing.T) {

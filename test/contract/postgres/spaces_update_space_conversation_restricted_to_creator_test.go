@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 	"errors"
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 	"testing"
 )
 
@@ -38,41 +38,34 @@ func TestUpdateSpaceConversationRestrictedToCreator(t *testing.T) {
 		t.Fatalf("CreateSpaceConversation() error = %v", err)
 	}
 
-	// A non-creator member can read and write messages, but cannot rename the
-	// conversation or change who's in it.
-	if _, err := database.UpdateSpaceConversation(ctx, member.ID, space.ID, conversation.ID, "Hijacked name", []SpaceActorRef{{Kind: "person", UserID: owner.ID}, {Kind: "person", UserID: member.ID}}); !errors.Is(err, ErrSpaceForbidden) {
-		t.Fatalf("UpdateSpaceConversation(non-creator member) error = %v, want ErrSpaceForbidden", err)
+	// Members can read and write messages, but only the Space's owner renames.
+	if _, err := database.UpdateSpaceConversation(ctx, member.ID, space.ID, conversation.ID, "Hijacked name"); !errors.Is(err, ErrSpaceForbidden) {
+		t.Fatalf("UpdateSpaceConversation(member) error = %v, want ErrSpaceForbidden", err)
 	}
-
-	// An outsider who isn't even in the conversation is rejected too.
-	if _, err := database.UpdateSpaceConversation(ctx, outsider.ID, space.ID, conversation.ID, "Hijacked name", []SpaceActorRef{{Kind: "person", UserID: owner.ID}, {Kind: "person", UserID: outsider.ID}}); !errors.Is(err, ErrSpaceForbidden) {
-		t.Fatalf("UpdateSpaceConversation(outsider not in conversation) error = %v, want ErrSpaceForbidden", err)
-	}
-
-	// The creator can rename the conversation and add a new member.
-	updated, err := database.UpdateSpaceConversation(ctx, owner.ID, space.ID, conversation.ID, "Renamed crew", []SpaceActorRef{{Kind: "person", UserID: member.ID}, {Kind: "person", UserID: outsider.ID}})
+	updated, err := database.UpdateSpaceConversation(ctx, owner.ID, space.ID, conversation.ID, "Renamed crew")
 	if err != nil {
-		t.Fatalf("UpdateSpaceConversation(creator, add member) error = %v", err)
+		t.Fatalf("UpdateSpaceConversation(owner) error = %v", err)
 	}
 	if updated.Title != "Renamed crew" || len(updated.Participants) != 3 {
-		t.Fatalf("updated conversation = %#v, want renamed with 3 members", updated)
+		t.Fatalf("updated conversation = %#v, want renamed with everyone in the Space", updated)
 	}
-	outsiderConversations, err := database.SpaceConversations(ctx, outsider.ID, space.ID)
-	if err != nil || len(outsiderConversations) != 1 || outsiderConversations[0].ID != conversation.ID {
-		t.Fatalf("SpaceConversations(newly added member) = %#v, %v", outsiderConversations, err)
+	everyone, err := database.SpaceConversations(ctx, outsider.ID, space.ID)
+	if err != nil || len(everyone) != 1 || everyone[0].ID != conversation.ID {
+		t.Fatalf("SpaceConversations(another member) = %#v, %v", everyone, err)
 	}
 
-	// The creator can also remove a member; that member immediately loses
-	// access to the conversation and its messages.
-	if _, err := database.UpdateSpaceConversation(ctx, owner.ID, space.ID, conversation.ID, "Renamed crew", []SpaceActorRef{{Kind: "person", UserID: outsider.ID}}); err != nil {
-		t.Fatalf("UpdateSpaceConversation(creator, remove member) error = %v", err)
+	// A DM can't be changed, by anyone: not its participants and not the Space's owner.
+	dm, err := database.DirectMemberConversation(ctx, member.ID, space.ID, outsider.ID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	memberConversationsAfterRemoval, err := database.SpaceConversations(ctx, member.ID, space.ID)
-	if err != nil || len(memberConversationsAfterRemoval) != 0 {
-		t.Fatalf("SpaceConversations(removed member) = %#v, %v, want none", memberConversationsAfterRemoval, err)
+	for _, user := range []string{owner.ID, member.ID} {
+		if _, err := database.UpdateSpaceConversation(ctx, user, space.ID, dm.ID, "Hijacked name"); !errors.Is(err, ErrSpaceForbidden) {
+			t.Fatalf("UpdateSpaceConversation(DM) error = %v, want ErrSpaceForbidden", err)
+		}
 	}
-	if _, err := database.SpaceConversationMessages(ctx, member.ID, space.ID, conversation.ID, 0, 20); !errors.Is(err, ErrSpaceForbidden) {
-		t.Fatalf("SpaceConversationMessages(removed member) error = %v, want ErrSpaceForbidden", err)
+	if _, err := database.SpaceConversationMessages(ctx, owner.ID, space.ID, dm.ID, 0, 20); !errors.Is(err, ErrSpaceForbidden) {
+		t.Fatalf("SpaceConversationMessages(owner outside the DM) error = %v, want ErrSpaceForbidden", err)
 	}
 }
 

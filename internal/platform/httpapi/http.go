@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/platform/transport"
+	"github.com/misty-org/misty-server/internal/platform/transport"
 	"io"
 	"net/http"
 )

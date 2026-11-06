@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func TestRecapsAndWorkflowsStayInTheirSpace(t *testing.T) {
@@ -139,5 +139,59 @@ func TestMemoryEventsPointRevisitsCapAndForgetRanges(t *testing.T) {
 		return tx.QueryRowContext(ctx, `SELECT count(*) FROM memory_chunks WHERE branch='moments' AND owner_user_id=$1`, f.owner.ID).Scan(&chunks)
 	}); err != nil || chunks != 0 {
 		t.Fatalf("forgotten moments left %d chunks, %v", chunks, err)
+	}
+}
+
+// A day's recap keeps its outline beside its text, and forgetting it takes both.
+func TestRecapOutlineIsKeptAndForgotten(t *testing.T) {
+	f := newMemoryTestFixture(t)
+	ctx := context.Background()
+	day := time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+	outline := RecapOutline{Threads: []RecapThread{{Title: "Compared flights", From: "09:10", To: "10:25"}}, Next: []string{"Book the flight"}}
+	if _, err := f.database.SaveMemoryRecap(ctx, f.owner.ID, f.work, day, "You compared flights.", outline); err != nil {
+		t.Fatal(err)
+	}
+	for name, bad := range map[string]RecapOutline{
+		"a time that isn't one": {Threads: []RecapThread{{Title: "A", From: "9am", To: "10:25"}}},
+		"a thread with no name": {Threads: []RecapThread{{Title: " ", From: "09:10", To: "10:25"}}},
+		"an empty next step":    {Next: []string{" "}},
+	} {
+		if _, err := f.database.SaveMemoryRecap(ctx, f.owner.ID, f.work, day, "Text", bad); err == nil {
+			t.Fatalf("%s was kept", name)
+		}
+	}
+	read := func() []MemoryNode {
+		t.Helper()
+		nodes, err := f.database.MemoryTree(ctx, f.owner.ID, MemoryTreeQuery{SpaceID: f.work, Parent: MemorySummaries})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return nodes
+	}
+	nodes := read()
+	if len(nodes) != 1 || nodes[0].Outline == nil || nodes[0].Outline.Threads[0].To != "10:25" || nodes[0].Outline.Next[0] != "Book the flight" {
+		t.Fatalf("recap = %+v", nodes)
+	}
+	// Writing the day again replaces what it named.
+	if _, err := f.database.SaveMemoryRecap(ctx, f.owner.ID, f.work, day, "You read.", RecapOutline{}); err != nil {
+		t.Fatal(err)
+	}
+	if nodes = read(); len(nodes) != 1 || len(nodes[0].Outline.Threads) != 0 {
+		t.Fatalf("rewritten recap = %+v", nodes)
+	}
+	if _, err := f.database.SaveMemoryRecap(ctx, f.owner.ID, f.work, day, "You compared flights.", outline); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.database.ForgetMemoryNode(ctx, f.owner.ID, f.work, nodes[0].ID, time.Time{}, time.Time{}, false); err != nil {
+		t.Fatal(err)
+	}
+	var stored sql.NullString
+	if err := f.database.SpaceTx(ctx, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT outline::text FROM ai_recaps WHERE user_id=$1 AND space_id=$2`, f.owner.ID, f.work).Scan(&stored)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if stored.Valid {
+		t.Fatalf("forgotten recap kept %s", stored.String)
 	}
 }

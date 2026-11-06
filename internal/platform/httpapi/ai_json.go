@@ -8,9 +8,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agent"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func DecodeAIJSONWithLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) error {

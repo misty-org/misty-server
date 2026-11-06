@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // LibraryReconciliationReport contains counts only. Object keys, filenames,

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 // The device channel end to end over real WebSockets: a one-use ticket and a
@@ -88,17 +88,10 @@ func presenceEntry(t *testing.T, value any, deviceID string, online bool) {
 	}
 }
 
-func TestDeviceChannelRoutesPresenceOnlyBetweenAddedDevices(t *testing.T) {
+func TestDeviceChannelRoutesPresenceBetweenAnAccountsSessions(t *testing.T) {
 	f := newDeviceFixture(t)
 	first := f.register("First")
 	second := f.register("Second")
-	pending := f.register("Pending")
-	if response := f.admit(first, 1, []testDevice{first}, f.root); response.Code != http.StatusOK {
-		t.Fatalf("admit: %d", response.Code)
-	}
-	if response := f.admit(second, 2, []testDevice{first, second}, f.root); response.Code != http.StatusOK {
-		t.Fatalf("admit: %d", response.Code)
-	}
 	server := f.channelServer()
 
 	// A signature from any other key closes the socket.
@@ -132,16 +125,8 @@ func TestDeviceChannelRoutesPresenceOnlyBetweenAddedDevices(t *testing.T) {
 	// A learns B came online.
 	presenceEntry(t, a.next("presence.delta")["device"], second.id, true)
 
-	p, err := f.openChannel(server, pending, pending.key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ready := p.next("ready"); ready["state"] != "pending" || ready["presence"] != nil {
-		t.Fatalf("a pending device saw presence: %v", ready)
-	}
-
 	// Devices only listen: LAN addresses, connect intents and any other frame
-	// are refused, from added and pending devices alike.
+	// are refused.
 	for _, frame := range []map[string]any{
 		{"type": "address", "candidates": []string{"192.168.1.20:4040"}},
 		{"type": "connect", "deviceId": first.id},
@@ -155,24 +140,15 @@ func TestDeviceChannelRoutesPresenceOnlyBetweenAddedDevices(t *testing.T) {
 			t.Fatalf("%v answered %v", frame["type"], reply)
 		}
 	}
-	if err := p.conn.WriteJSON(map[string]any{"type": "connect", "deviceId": first.id}); err != nil {
-		t.Fatal(err)
-	}
-	if reply := p.next("error"); reply["code"] != "invalid_device_frame" {
-		t.Fatalf("pending connect = %v", reply)
-	}
-
 	// B going away is presence too.
 	_ = b.conn.Close()
 	presenceEntry(t, a.next("presence.delta")["device"], second.id, false)
 
 	// Removing a device closes its socket.
-	now := time.Now().Unix()
-	removal := signedRecord(f.root, "misty.device.list.v1", f.userID, f.vaultID, 3, 1, pairs(first), pairs(second), now)
 	b2, err := f.openChannel(server, second, second.key)
 	if err == nil {
 		b2.next("ready")
-		if response := f.signed(first, http.MethodPost, "/devices/"+first.id+"/remove-device", map[string]any{"targetDeviceId": second.id, "list": removal}); response.Code != http.StatusOK {
+		if response := f.signed(first, http.MethodPost, "/devices/"+first.id+"/remove-device", map[string]any{"targetDeviceId": second.id}); response.Code != http.StatusOK {
 			t.Fatalf("remove: %d", response.Code)
 		}
 		if frame := b2.next("revoked"); frame["type"] != "revoked" {

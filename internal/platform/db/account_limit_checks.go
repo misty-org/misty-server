@@ -41,6 +41,9 @@ func requireDeviceRoomTx(ctx context.Context, tx *sql.Tx, userID string) error {
 			WHERE user_id=$1 AND revoked_at IS NULL AND admission_state<>'revoked'`, userID).Scan(&count); err != nil {
 			return err
 		}
+		if *limits.Devices <= 0 {
+			return ErrNoDevicesAllowed
+		}
 		if count >= *limits.Devices {
 			return ErrDeviceLimit
 		}
@@ -51,12 +54,7 @@ func requireDeviceRoomTx(ctx context.Context, tx *sql.Tx, userID string) error {
 // syncStorageBytesTx is the ciphertext the account's sync vaults hold.
 func syncStorageBytesTx(ctx context.Context, tx *sql.Tx, userID string) (int64, error) {
 	var bytes int64
-	err := tx.QueryRowContext(ctx, `WITH v AS (SELECT vault_id FROM browser_sync_vaults WHERE user_id=$1) SELECT
-		COALESCE((SELECT sum(octet_length(ciphertext)) FROM browser_sync_records WHERE vault_id IN (SELECT vault_id FROM v)),0)+
-		COALESCE((SELECT sum(octet_length(ciphertext)) FROM browser_sync_nodes WHERE vault_id IN (SELECT vault_id FROM v)),0)+
-		COALESCE((SELECT sum(octet_length(ciphertext)) FROM browser_sync_slots WHERE vault_id IN (SELECT vault_id FROM v)),0)+
-		COALESCE((SELECT sum(octet_length(ciphertext)) FROM browser_sync_blobs WHERE vault_id IN (SELECT vault_id FROM v)),0)+
-		COALESCE((SELECT sum(octet_length(manifest::text)) FROM browser_sync_changes WHERE vault_id IN (SELECT vault_id FROM v)),0)`,
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(sum(octet_length(r.sealed)),0) FROM sync_records r JOIN sync_vaults v USING(vault_id) WHERE v.user_id=$1`,
 		userID).Scan(&bytes)
 	return bytes, err
 }

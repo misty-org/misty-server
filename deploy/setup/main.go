@@ -27,7 +27,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
 func secretsDir() string { return envOr("MISTY_SECRETS_DIR", "/run/misty/secrets") }

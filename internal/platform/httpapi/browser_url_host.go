@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agent"
 )
 
 // addressWithoutHost turns an address whose host has no DNS record at all into a correction the

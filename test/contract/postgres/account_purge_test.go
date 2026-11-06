@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	. "github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
-	"github.com/kannachi323/misty/server/test/testkit"
+	. "github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
+	"github.com/misty-org/misty-server/test/testkit"
 )
 
 // TestClosedAccountPurgeLeavesOnlyAttribution closes a populated account,
@@ -44,9 +44,8 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 	exec(t, database, `INSERT INTO space_notes(id,space_id,creator_user_id,visibility) VALUES('note-1',$1,$2,'private')`, personal.ID, alice.ID)
 	exec(t, database, `INSERT INTO space_drawings(id,space_id,creator_user_id,visibility) VALUES('drawing-1',$1,$2,'private')`, personal.ID, alice.ID)
 	vault := uuid.New()
-	exec(t, database, `INSERT INTO browser_sync_vaults(user_id,vault_id,root_public_key,space_id,key_envelope) VALUES($1,$2,$3,$4,'{}')`, alice.ID, vault, make([]byte, 32), personal.ID)
-	exec(t, database, `INSERT INTO browser_sync_records(vault_id,collection,record_key,version,sequence,device_id,ciphertext) VALUES($1,'bookmarks',repeat('a',64),1,1,$2,'\x02')`, vault, uuid.New())
-	exec(t, database, `INSERT INTO browser_sync_blobs(vault_id,blob_hash,ciphertext) VALUES($1,$2,$3)`, vault, make([]byte, 32), make([]byte, 28))
+	exec(t, database, `INSERT INTO sync_vaults(user_id,vault_id,root_public_key,key_envelope) VALUES($1,$2,$3,'{}')`, alice.ID, vault, make([]byte, 32))
+	exec(t, database, `INSERT INTO sync_records(vault_id,scope,record_key,version,sequence,session_id,sealed) VALUES($1,repeat('b',64),repeat('a',64),1,1,$2,$3)`, vault, uuid.New(), make([]byte, 28))
 	exec(t, database, `INSERT INTO misty_memories(id,user_id,space_id,scope_key,memory_key,content) VALUES('memory-1',$1,$2,'s',repeat('k',64),'likes tea')`, alice.ID, club.ID)
 	exec(t, database, `INSERT INTO memory_chunks(space_id,owner_user_id,branch,record_id,text,content_hash) VALUES($1,$2,'facts','r','likes tea',repeat('h',32))`, club.ID, alice.ID)
 	conversation := "conversation_" + uuid.NewString()
@@ -62,7 +61,7 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 
 	before := map[string][]any{
 		`SELECT count(*) FROM library_blobs WHERE security_domain_id=$1`:    {personal.SecurityDomainID},
-		`SELECT count(*) FROM browser_sync_blobs WHERE vault_id=$1`:         {vault},
+		`SELECT count(*) FROM sync_records WHERE vault_id=$1`:               {vault},
 		`SELECT count(*) FROM memory_chunks WHERE owner_user_id=$1`:         {alice.ID},
 		`SELECT count(*) FROM misty_memories WHERE user_id=$1`:              {alice.ID},
 		`SELECT count(*) FROM ai_conversation_attachments WHERE user_id=$1`: {alice.ID},
@@ -109,8 +108,7 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 		`SELECT count(*) FROM space_library_items WHERE id=$1`:           {photo.ID},
 		`SELECT count(*) FROM library_blobs WHERE security_domain_id=$1`: {personal.SecurityDomainID},
 		`SELECT count(*) FROM security_domains WHERE id=$1`:              {personal.SecurityDomainID},
-		`SELECT count(*) FROM browser_sync_records WHERE vault_id=$1`:    {vault},
-		`SELECT count(*) FROM browser_sync_blobs WHERE vault_id=$1`:      {vault},
+		`SELECT count(*) FROM sync_records WHERE vault_id=$1`:            {vault},
 		`SELECT count(*) FROM memory_chunks WHERE space_id=$1`:           {club.ID},
 		`SELECT count(*) FROM space_members WHERE user_id=$1`:            {alice.ID},
 		`SELECT count(*) FROM space_notes WHERE id=$1`:                   {"note-1"},

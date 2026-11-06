@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // validateAgentToolLayers runs at startup: every tool any run can be offered
@@ -40,21 +40,15 @@ func agentToolCatalogDescriptors() []agenttools.Descriptor {
 		RequestPayload: json.RawMessage(`{"window_label":"main","agent_id":"layer-check"}`)}
 	var body aiInvocationInput
 	_ = json.Unmarshal(record.RequestPayload, &body)
-	grants := []deviceGrant{{scopeID: "layer-check", name: "Folder", deviceID: "device", deviceName: "Device", fetch: true}}
+	grants := []deviceGrant{{scopeID: "layer-check", name: "Folder", deviceID: "device", deviceName: "Device"}}
 
 	// The toolboxes check their own registrations as they build; the
 	// connected tools are checked as declared, since runs mix them freely.
 	extra := append(agentMemberToolRegistrations(nil), service.accountAdminToolRegistrations()...)
-	// accountAdminToolRegistrations already offers them while Memory is on.
-	if !recallConfig().Enabled {
-		extra = append(extra, recallToolRegistrationsFor(service)...)
-	}
 	descriptors := buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, delegation: noop, extra: extra, allLayers: true}).Descriptors()
 	descriptors = append(descriptors, spaceAgentToolbox(nil).Descriptors()...)
 	descriptors = append(descriptors, buildAgentToolbox(nil, agentToolboxOptions{memberRequest: true, allLayers: true}).Descriptors()...)
 	connected := service.appsToolRegistrations()
-	connected = append(connected, webFetchWorkerRegistrations()...)
-	connected = append(connected, service.webFetchDeviceRegistration(grants)...)
 	connected = append(connected, service.folderToolRegistrations(grants)...)
 	connected = append(connected, service.workspaceToolRegistrations(grants)...)
 	connected = append(connected, service.screenToolRegistrations(record)...)
@@ -94,7 +88,7 @@ func TestingMemberRequestToolNames(askerUserID, agentOwnerUserID string) []strin
 // run's asker and agent owner are the ones given.
 func TestingRunToolLayers(askerUserID, agentOwnerUserID string) map[string]agenttools.Layer {
 	service := &SpacesService{}
-	grants := []deviceGrant{{scopeID: "layer-check", name: "Folder", deviceID: "device", deviceName: "Device", fetch: true}}
+	grants := []deviceGrant{{scopeID: "layer-check", name: "Folder", deviceID: "device", deviceName: "Device"}}
 	extra := append(service.appsToolRegistrations(), service.folderToolRegistrations(grants)...)
 	extra = append(extra, service.workspaceToolRegistrations(grants)...)
 	toolbox := buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, extra: extra,

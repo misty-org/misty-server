@@ -22,6 +22,8 @@ var (
 	ErrAccountNotFound = errors.New("account not found")
 	// ErrDeviceLimit refuses one more device than the account's limit.
 	ErrDeviceLimit = errors.New("device_limit_reached")
+	// ErrNoDevicesAllowed refuses a device on an account allowed none.
+	ErrNoDevicesAllowed = errors.New("no_devices_allowed")
 )
 
 // UsageAppActions is the metric counted per billing period (see usagePeriod).

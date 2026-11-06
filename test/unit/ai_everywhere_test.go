@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func TestAIInvocationValidationRejectsOversizedAndUnanchoredSelection(t *testing.T) {
@@ -187,7 +187,7 @@ func TestMistyCitationsOnlyIncludeReferencedSources(t *testing.T) {
 }
 
 func TestStructuredArtifactContracts(t *testing.T) {
-	for _, kind := range []string{"file_plan", "terminal_command", "browser_action", "extension_action"} {
+	for _, kind := range []string{"terminal_command", "browser_action", "extension_action"} {
 		risk, policy := api.TestingAIArtifactPolicy(kind)
 		if risk != "dangerous" || policy != "always_confirm" {
 			t.Fatalf("%s can bypass dangerous confirmation", kind)

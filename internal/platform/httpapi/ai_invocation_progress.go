@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // aiProgressItem is one entry of a reply's work, in order: something Misty
@@ -40,7 +40,9 @@ func (s *AIService) InvocationProgress() http.HandlerFunc {
 			WriteAIError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"items": aiInvocationProgress(events)})
+		response := aiInvocationHistory(events)
+		response["items"] = aiInvocationProgress(events)
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 
@@ -61,6 +63,37 @@ func (s *AIService) InvocationState() http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, map[string]string{"state": record.State})
 	}
+}
+
+// aiInvocationHistory is what else a reply gathered as it ran: its sources, its
+// notebook and its sub-agents, each as the live events carried them.
+func aiInvocationHistory(events []db.AIInvocationEventRecord) map[string]any {
+	citations := []json.RawMessage{}
+	response := map[string]any{}
+	for _, event := range events {
+		var payload struct {
+			Citation   json.RawMessage `json:"citation"`
+			Notebook   json.RawMessage `json:"notebook"`
+			Delegation struct {
+				Children json.RawMessage `json:"children"`
+			} `json:"delegation"`
+		}
+		if json.Unmarshal(event.Payload, &payload) != nil {
+			continue
+		}
+		switch event.EventType {
+		case "citation":
+			if len(payload.Citation) > 0 {
+				citations = append(citations, payload.Citation)
+			}
+		case "notebook.updated":
+			response["notebook"] = payload.Notebook
+		case "delegation.updated":
+			response["subagents"] = payload.Delegation.Children
+		}
+	}
+	response["citations"] = citations
+	return response
 }
 
 // aiInvocationProgress walks the events in order. Text the model wrote before

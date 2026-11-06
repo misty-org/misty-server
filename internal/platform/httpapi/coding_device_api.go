@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // CodingApproval asks the person before a change a coding tool wants, with the

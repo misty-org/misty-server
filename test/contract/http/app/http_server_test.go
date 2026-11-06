@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/app"
+	. "github.com/misty-org/misty-server/internal/app"
 )
 
 func TestNewHTTPServerBoundsHeadersAndIdleConnections(t *testing.T) {

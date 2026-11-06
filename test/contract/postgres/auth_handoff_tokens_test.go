@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 func TestAuthHandoffTokenIsConsumedOnFirstRead(t *testing.T) {

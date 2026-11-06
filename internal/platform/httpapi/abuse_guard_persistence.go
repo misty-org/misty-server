@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/workqueue"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/workqueue"
 )
 
 // One temporary writer per guard drains the bounded strike map. Rejections

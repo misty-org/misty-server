@@ -3,12 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
-	serveragent "github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	serveragent "github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 type preparedAIInvocationRuntime struct {
@@ -148,7 +147,7 @@ func (s *SpacesService) aiInvocationPrompt(ctx context.Context, record *db.AIInv
 	if record.ConversationID == "" {
 		return prompt, nil
 	}
-	turns, err := s.invocationHistoryTurns(ctx, record, body)
+	turns, err := s.database.AIConversationTurns(ctx, record.UserID, record.ConversationID)
 	if err != nil {
 		return "", err
 	}
@@ -183,26 +182,4 @@ func aiInvocationModel(body aiInvocationInput) (string, string) {
 func aiInvocationModelID(body aiInvocationInput) string {
 	modelID, _ := aiInvocationModel(body)
 	return modelID
-}
-
-// invocationHistoryTurns is the chat's earlier turns: the ones its device sent
-// (docs/agents/chats-local.md), or the server's own recent ones for a run
-// without them, such as a goal continuation or one Misty started by email or Slack.
-func (s *SpacesService) invocationHistoryTurns(ctx context.Context, record *db.AIInvocationRecord, body aiInvocationInput) ([]db.AIConversationTurnRecord, error) {
-	if len(body.HistoryTurns) == 0 {
-		return s.database.AIConversationTurns(ctx, record.UserID, record.ConversationID)
-	}
-	turns := make([]db.AIConversationTurnRecord, 0, len(body.HistoryTurns))
-	for index, turn := range body.HistoryTurns {
-		id := turn.InvocationID
-		if id == "" || id == record.ID {
-			// A turn without a run of its own still needs a key the notes can point at.
-			id = fmt.Sprintf("device-turn-%d", index)
-		}
-		turns = append(turns, db.AIConversationTurnRecord{
-			InvocationID: id, Prompt: turn.Prompt, Reply: turn.Reply, State: "completed",
-			CreatedAt: turn.CreatedAt, ReplyAt: turn.CreatedAt,
-		})
-	}
-	return turns, nil
 }

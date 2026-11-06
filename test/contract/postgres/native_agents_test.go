@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	serveragent "github.com/kannachi323/misty/server/internal/agent"
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	serveragent "github.com/misty-org/misty-server/internal/agent"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 	"testing"
 	"time"
 )

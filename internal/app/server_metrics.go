@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
 
-	"github.com/kannachi323/misty/server/internal/platform/metrics"
+	"github.com/misty-org/misty-server/internal/platform/metrics"
 )
 
 // registerDomainGauges wires the counters that only this application knows.

@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,12 +16,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// Unified devices (docs/sync/devices.md): admission needs a session AND
-// a vault-root signature; trust records are signed by keys the server never holds.
+// Signed-in sessions register with proof of their key and are trusted at once; policies and run
+// grants are signed by keys the server never holds.
 
 type deviceFixture struct {
 	t        *testing.T
@@ -30,17 +29,11 @@ type deviceFixture struct {
 	router   *chi.Mux
 	token    string
 	userID   string
-	vaultID  string
-	root     ed25519.PrivateKey
 }
 
 type testDevice struct {
 	id  string
 	key ed25519.PrivateKey
-}
-
-func (d testDevice) public() string {
-	return base64.StdEncoding.EncodeToString(d.key.Public().(ed25519.PublicKey))
 }
 
 func newDeviceFixture(t *testing.T) *deviceFixture {
@@ -49,26 +42,14 @@ func newDeviceFixture(t *testing.T) *deviceFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootPublic, rootPrivate, _ := ed25519.GenerateKey(rand.Reader)
-	vaultID := uuid.NewString()
-	if _, err := database.Conn.Exec(`INSERT INTO browser_sync_vaults(user_id,space_id,vault_id,root_public_key,key_envelope) VALUES($1,misty_ensure_personal_space($1),$2,$3,'{}'::jsonb)`, user.ID, vaultID, []byte(rootPublic)); err != nil {
-		t.Fatal(err)
-	}
 	service := NewAgentsService(database)
 	router := chi.NewRouter()
 	router.Post("/devices", service.RegisterDevice())
 	router.Get("/devices", service.ListDevices())
-	router.Get("/devices/trust", service.DeviceTrust())
-	router.Post("/devices/{deviceID}/admit", service.DeviceAuthenticated(service.AdmitDevice()))
 	router.Put("/devices/{deviceID}/policy", service.DeviceAuthenticated(service.StoreDevicePolicy()))
 	router.Post("/devices/{deviceID}/remove-device", service.DeviceAuthenticated(service.RemoveDevice()))
 	router.Post("/devices/{deviceID}/workflow-node-jobs/claim", service.DeviceAuthenticated(service.ClaimWorkflowNodeJob()))
-	router.Post("/devices/{deviceID}/admission-requests", service.DeviceAuthenticated(service.CreateAdmissionRequest()))
-	router.Get("/devices/{deviceID}/admission-requests/{requestID}", service.DeviceAuthenticated(service.AdmissionRequest()))
-	router.Post("/devices/{deviceID}/admission-requests/{requestID}/challenge", service.DeviceAuthenticated(service.ChallengeAdmission()))
-	router.Post("/devices/{deviceID}/admission-requests/{requestID}/reveal", service.DeviceAuthenticated(service.RevealAdmission()))
-	router.Post("/devices/{deviceID}/admission-requests/{requestID}/approve", service.DeviceAuthenticated(service.ApproveAdmission()))
-	return &deviceFixture{t: t, database: database, router: router, token: newConversationTestBearerToken(t, database, user.ID), userID: user.ID, vaultID: vaultID, root: rootPrivate}
+	return &deviceFixture{t: t, database: database, router: router, token: newConversationTestBearerToken(t, database, user.ID), userID: user.ID}
 }
 
 func signedRecord(key ed25519.PrivateKey, fields ...any) map[string]string {
@@ -88,8 +69,8 @@ func (f *deviceFixture) register(name string) testDevice {
 		AdmissionState string `json:"admissionState"`
 	}
 	_ = json.Unmarshal(response.Body.Bytes(), &body)
-	if body.AdmissionState != "pending" {
-		f.t.Fatalf("a new device must start pending, got %q", body.AdmissionState)
+	if body.AdmissionState != "admitted" {
+		f.t.Fatalf("a signed-in session is trusted at once, got %q", body.AdmissionState)
 	}
 	device.id = body.ID
 	return device
@@ -131,75 +112,24 @@ func (f *deviceFixture) signed(device testDevice, method, path string, body any)
 	return recorder
 }
 
-func pairs(devices ...testDevice) [][2]string {
-	out := [][2]string{}
-	for _, device := range devices {
-		out = append(out, [2]string{device.id, device.public()})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i][0] < out[j][0] })
-	return out
-}
-
-func (f *deviceFixture) admit(device testDevice, version int64, admitted []testDevice, root ed25519.PrivateKey) *httptest.ResponseRecorder {
-	now := time.Now().Unix()
-	grant := signedRecord(root, "misty.device.grant.v2", f.userID, f.vaultID, device.id, 1, device.public(), "", now, "")
-	list := signedRecord(root, "misty.device.list.v1", f.userID, f.vaultID, version, 1, pairs(admitted...), [][2]string{}, now)
-	return f.signed(device, http.MethodPost, "/devices/"+device.id+"/admit", map[string]any{"grant": grant, "list": list})
-}
-
-func TestUnifiedDeviceAdmissionNeedsVaultRootSignature(t *testing.T) {
+func TestASignedInSessionIsTrustedAtOnce(t *testing.T) {
 	f := newDeviceFixture(t)
 	if response := f.registerKey(func() ed25519.PrivateKey { _, k, _ := ed25519.GenerateKey(rand.Reader); return k }(), "No proof", false); response.Code != http.StatusBadRequest {
 		t.Fatalf("registration without proof of the key: %d", response.Code)
 	}
 	first := f.register("First")
-	_, wrongRoot, _ := ed25519.GenerateKey(rand.Reader)
-	if response := f.admit(first, 1, []testDevice{first}, wrongRoot); response.Code != http.StatusBadRequest {
-		t.Fatalf("a grant from another root must be refused: %d %s", response.Code, response.Body.String())
-	}
-	if response := f.admit(first, 1, []testDevice{first}, f.root); response.Code != http.StatusOK {
-		t.Fatalf("admit: %d %s", response.Code, response.Body.String())
-	}
 	second := f.register("Second")
-	// A pending device may poll for jobs; only work it asked for on itself reaches it.
-	if response := f.signed(second, http.MethodPost, "/devices/"+second.id+"/workflow-node-jobs/claim", map[string]any{"protocolVersion": 2}); response.Code == http.StatusForbidden || response.Code == http.StatusUnauthorized {
-		t.Fatalf("pending device could not poll its own jobs: %d", response.Code)
+	if response := f.signed(second, http.MethodPost, "/devices/"+second.id+"/workflow-node-jobs/claim", map[string]any{"protocolVersion": "misty-device/3"}); response.Code == http.StatusForbidden {
+		t.Fatalf("a new session could not poll its own jobs: %d", response.Code)
 	}
-	// A list that is not exactly the next version is refused.
-	if response := f.admit(second, 1, []testDevice{first, second}, f.root); response.Code != http.StatusConflict {
-		t.Fatalf("stale list version: %d %s", response.Code, response.Body.String())
-	}
-	// A list that drops a device without removing it is refused.
-	if response := f.admit(second, 2, []testDevice{second}, f.root); response.Code != http.StatusConflict {
-		t.Fatalf("list dropping a device: %d %s", response.Code, response.Body.String())
-	}
-	if response := f.admit(second, 2, []testDevice{first, second}, f.root); response.Code != http.StatusOK {
-		t.Fatalf("admit second: %d %s", response.Code, response.Body.String())
-	}
-	trust := performConversationRequest(t, f.router, http.MethodGet, "/devices/trust", f.token, nil)
-	var body struct {
-		List struct {
-			Version int64 `json:"version"`
-		} `json:"list"`
-	}
-	_ = json.Unmarshal(trust.Body.Bytes(), &body)
-	if body.List.Version != 2 {
-		t.Fatalf("trust list version = %d", body.List.Version)
-	}
-	// Removing an added device needs the root-signed list without it; its key
-	// can never register again.
-	now := time.Now().Unix()
-	removal := signedRecord(f.root, "misty.device.list.v1", f.userID, f.vaultID, 3, 1, pairs(first), pairs(second), now)
-	if response := f.signed(first, http.MethodPost, "/devices/"+first.id+"/remove-device", map[string]any{"targetDeviceId": second.id}); response.Code != http.StatusConflict {
-		t.Fatalf("removing an added device without a list: %d", response.Code)
-	}
-	if response := f.signed(first, http.MethodPost, "/devices/"+first.id+"/remove-device", map[string]any{"targetDeviceId": second.id, "list": removal}); response.Code != http.StatusOK {
+	// A removed key can never register again, and stops authenticating.
+	if response := f.signed(first, http.MethodPost, "/devices/"+first.id+"/remove-device", map[string]any{"targetDeviceId": second.id}); response.Code != http.StatusOK {
 		t.Fatalf("remove: %d %s", response.Code, response.Body.String())
 	}
 	if response := f.registerKey(second.key, "Back again", true); response.Code != http.StatusForbidden {
 		t.Fatalf("a removed key registered again: %d %s", response.Code, response.Body.String())
 	}
-	if response := f.signed(second, http.MethodPost, "/devices/"+second.id+"/workflow-node-jobs/claim", map[string]any{"protocolVersion": 2}); response.Code != http.StatusUnauthorized {
+	if response := f.signed(second, http.MethodPost, "/devices/"+second.id+"/workflow-node-jobs/claim", map[string]any{"protocolVersion": "misty-device/3"}); response.Code == http.StatusOK {
 		t.Fatalf("a removed device still authenticated: %d", response.Code)
 	}
 }
@@ -234,12 +164,6 @@ func TestRunGrantsLimitWhatAgentsMayDoOnADevice(t *testing.T) {
 	f := newDeviceFixture(t)
 	first := f.register("First")
 	second := f.register("Second")
-	if response := f.admit(first, 1, []testDevice{first}, f.root); response.Code != http.StatusOK {
-		t.Fatalf("admit: %d", response.Code)
-	}
-	if response := f.admit(second, 2, []testDevice{first, second}, f.root); response.Code != http.StatusOK {
-		t.Fatalf("admit: %d", response.Code)
-	}
 	check := func(contexts []map[string]any) error {
 		raw, _ := json.Marshal(contexts)
 		return TestingVerifyDeviceContextGrants(t.Context(), f.database, f.userID, "", raw)
@@ -269,13 +193,13 @@ func TestRunGrantsLimitWhatAgentsMayDoOnADevice(t *testing.T) {
 	if err := check([]map[string]any{cross}); err == nil {
 		t.Fatal("cross-device work was accepted")
 	}
-	// A device not added yet may let agents work on itself, and nowhere else.
+	// A new session may let agents work on itself, and nowhere else.
 	third := f.register("Third")
 	if err := check([]map[string]any{folder(third, runGrant(third.key, f.userID, third.id, third.id, []string{"folder.list", "folder.read"}, []string{"scope-1"}))}); err != nil {
-		t.Fatalf("a pending device working on itself: %v", err)
+		t.Fatalf("a new session working on itself: %v", err)
 	}
 	if err := check([]map[string]any{folder(second, runGrant(third.key, f.userID, third.id, second.id, []string{"folder.list", "folder.read"}, []string{"scope-1"}))}); err == nil {
-		t.Fatal("a pending device reached another device")
+		t.Fatal("a new session reached another device")
 	}
 	// Device inboxes are gone: files go to the Space Library, never to another device.
 	inbox := map[string]any{"device_id": second.id, "kind": "inbox", "opaque_ref": "inbox:" + second.id, "capabilities": []string{"files.receive"},

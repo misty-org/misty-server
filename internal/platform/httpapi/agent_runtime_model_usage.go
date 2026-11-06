@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 
-	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agent"
 )
 
 func agentRuntimeModelUsage(output json.RawMessage) agent.ModelUsage {

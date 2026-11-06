@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/integrations/composio"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/integrations/composio"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // appsUser authenticates the account owner. Extension and app authority can

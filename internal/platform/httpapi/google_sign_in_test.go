@@ -11,9 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 	"golang.org/x/oauth2"
-	"google.golang.org/api/idtoken"
 )
 
 type googleFlowStub struct {
@@ -80,24 +79,24 @@ func (f *googleFlowStub) GoogleUser(email, subject string) (*db.User, error) {
 }
 func (f *googleFlowStub) GetUserByID(id string) (*db.User, error) { return f.user, nil }
 
-func googlePayload(nonce string) *idtoken.Payload {
-	return &idtoken.Payload{Issuer: "https://accounts.google.com", Audience: "client-id", Subject: "google-subject", Expires: time.Now().Add(time.Hour).Unix(), Claims: map[string]any{"email": "user@example.com", "email_verified": true, "name": "Google User", "nonce": nonce}}
+func googlePayload(nonce string) *googleIdentity {
+	return &googleIdentity{Issuer: "https://accounts.google.com", Audience: "client-id", Subject: "google-subject", Expires: time.Now().Add(time.Hour).Unix(), Claims: map[string]any{"email": "user@example.com", "email_verified": true, "name": "Google User", "nonce": nonce}}
 }
 
 func TestGoogleIdentityValidation(t *testing.T) {
 	cases := []struct {
 		name   string
-		change func(*idtoken.Payload)
+		change func(*googleIdentity)
 	}{
-		{"issuer", func(p *idtoken.Payload) { p.Issuer = "https://evil.test" }},
-		{"audience", func(p *idtoken.Payload) { p.Audience = "another-client" }},
-		{"subject", func(p *idtoken.Payload) { p.Subject = "" }},
-		{"expiry", func(p *idtoken.Payload) { p.Expires = time.Now().Add(-time.Minute).Unix() }},
-		{"unverified", func(p *idtoken.Payload) { p.Claims["email_verified"] = false }},
-		{"string verified", func(p *idtoken.Payload) { p.Claims["email_verified"] = "true" }},
-		{"email", func(p *idtoken.Payload) { delete(p.Claims, "email") }},
-		{"nonce", func(p *idtoken.Payload) { p.Claims["nonce"] = "another-flow" }},
-		{"authorized party", func(p *idtoken.Payload) { p.Claims["azp"] = "another-client" }},
+		{"issuer", func(p *googleIdentity) { p.Issuer = "https://evil.test" }},
+		{"audience", func(p *googleIdentity) { p.Audience = "another-client" }},
+		{"subject", func(p *googleIdentity) { p.Subject = "" }},
+		{"expiry", func(p *googleIdentity) { p.Expires = time.Now().Add(-time.Minute).Unix() }},
+		{"unverified", func(p *googleIdentity) { p.Claims["email_verified"] = false }},
+		{"string verified", func(p *googleIdentity) { p.Claims["email_verified"] = "true" }},
+		{"email", func(p *googleIdentity) { delete(p.Claims, "email") }},
+		{"nonce", func(p *googleIdentity) { p.Claims["nonce"] = "another-flow" }},
+		{"authorized party", func(p *googleIdentity) { p.Claims["azp"] = "another-client" }},
 	}
 	if !validGoogleIdentity(googlePayload("nonce"), "nonce", "client-id") {
 		t.Fatal("valid identity rejected")
@@ -138,7 +137,7 @@ func TestGoogleSignInRoundTrip(t *testing.T) {
 				store.accountErr = db.ErrProviderConflict
 			}
 			sessions := 0
-			service := &GoogleSignInService{store: store, startURL: "https://misty.test/v1/auth/google/start", oauth: oauth2.Config{ClientID: "client-id", ClientSecret: "client-secret", RedirectURL: "https://misty.test/v1/auth/google/callback", Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: tokenServer.URL, AuthStyle: oauth2.AuthStyleInParams}, Scopes: []string{"openid", "email", "profile"}}, validate: func(_ context.Context, raw, audience string) (*idtoken.Payload, error) {
+			service := &GoogleSignInService{store: store, startURL: "https://misty.test/v1/auth/google/start", oauth: oauth2.Config{ClientID: "client-id", ClientSecret: "client-secret", RedirectURL: "https://misty.test/v1/auth/google/callback", Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: tokenServer.URL, AuthStyle: oauth2.AuthStyleInParams}, Scopes: []string{"openid", "email", "profile"}}, validate: func(_ context.Context, raw, audience string) (*googleIdentity, error) {
 				if raw != "signed-token" || audience != "client-id" {
 					t.Error("wrong ID token validation inputs")
 				}
@@ -271,6 +270,54 @@ func TestGoogleSignInRoundTrip(t *testing.T) {
 	}
 }
 
+func TestGoogleSignInCanEndOnTheWebsite(t *testing.T) {
+	t.Setenv("MISTY_WEBSITE_URL", "https://site.test/")
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"unused","token_type":"Bearer","id_token":"signed-token"}`))
+	}))
+	defer tokenServer.Close()
+	store := &googleFlowStub{}
+	sessions := 0
+	service := &GoogleSignInService{store: store, startURL: "https://misty.test/v1/auth/google/start", oauth: oauth2.Config{ClientID: "client-id", ClientSecret: "client-secret", RedirectURL: "https://misty.test/v1/auth/google/callback", Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: tokenServer.URL, AuthStyle: oauth2.AuthStyleInParams}}, validate: func(context.Context, string, string) (*googleIdentity, error) {
+		return googlePayload(store.flow.Nonce), nil
+	}, session: func(w http.ResponseWriter, _ *http.Request, _ *db.User) {
+		sessions++
+		w.WriteHeader(200)
+	}}
+	begin := httptest.NewRecorder()
+	service.Begin()(begin, httptest.NewRequest("POST", "/v1/auth/google", strings.NewReader(`{"website":true}`)))
+	var flow struct {
+		URL   string `json:"url"`
+		Token string `json:"flow_token"`
+	}
+	if err := json.Unmarshal(begin.Body.Bytes(), &flow); err != nil {
+		t.Fatal(err)
+	}
+	start := httptest.NewRecorder()
+	service.Start()(start, httptest.NewRequest("GET", flow.URL, nil))
+	launch, _ := url.Parse(flow.URL)
+	callback := httptest.NewRequest("GET", service.oauth.RedirectURL+"?state="+launch.Query().Get("state")+"&code=google-code", nil)
+	callback.AddCookie(start.Result().Cookies()[0])
+	finished := httptest.NewRecorder()
+	service.Callback()(finished, callback)
+	destination := finished.Header().Get("Location")
+	code, onSite := strings.CutPrefix(destination, "https://site.test/signin#google_code=")
+	if finished.Code != http.StatusSeeOther || !onSite || normalizeGoogleCompletionCode(code) == "" {
+		t.Fatalf("callback=%d to %q", finished.Code, destination)
+	}
+	// The address the code travels in must not reach the server hosting the website.
+	if strings.Contains(strings.Split(destination, "#")[0], code) {
+		t.Fatal("completion code outside the fragment")
+	}
+	complete := httptest.NewRecorder()
+	body, _ := json.Marshal(map[string]string{"flow_token": flow.Token, "completion_code": code})
+	service.Complete()(complete, httptest.NewRequest("POST", "/v1/auth/google/complete", strings.NewReader(string(body))))
+	if complete.Code != 200 || sessions != 1 {
+		t.Fatalf("complete=%d sessions=%d", complete.Code, sessions)
+	}
+}
+
 func TestGoogleSignInWrongCodeEndsTheFlow(t *testing.T) {
 	store := &googleFlowStub{flow: db.GoogleSignInFlow{PollHash: "poll", ExpiresAt: time.Now().Add(time.Minute)}, phase: "ready", completion: "right"}
 	if _, err := store.ConsumeGoogleSignInFlow(context.Background(), "poll", "wrong"); !errors.Is(err, db.ErrGoogleFlowInvalid) {
@@ -337,5 +384,54 @@ func TestGoogleReauthenticationRequiresSameIdentity(t *testing.T) {
 	}
 	if store.creations != 0 {
 		t.Fatal("reauthentication creates accounts")
+	}
+}
+
+func TestGoogleSaysToUseThePasswordOnAPasswordAccount(t *testing.T) {
+	if got := googleSignInError("password_account"); !strings.Contains(got, "email and password") {
+		t.Fatalf("message = %q", got)
+	}
+	t.Setenv("MISTY_WEBSITE_URL", "https://site.test/")
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"unused","token_type":"Bearer","id_token":"signed-token"}`))
+	}))
+	defer tokenServer.Close()
+	store := &googleFlowStub{accountErr: db.ErrPasswordAccount}
+	service := &GoogleSignInService{store: store, startURL: "https://misty.test/v1/auth/google/start", oauth: oauth2.Config{ClientID: "client-id", RedirectURL: "https://misty.test/v1/auth/google/callback", Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: tokenServer.URL}}, validate: func(context.Context, string, string) (*googleIdentity, error) {
+		return googlePayload(store.flow.Nonce), nil
+	}, session: func(w http.ResponseWriter, _ *http.Request, _ *db.User) { w.WriteHeader(200) }}
+	begin := httptest.NewRecorder()
+	service.Begin()(begin, httptest.NewRequest("POST", "/v1/auth/google", strings.NewReader(`{"website":true}`)))
+	var flow struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(begin.Body.Bytes(), &flow); err != nil {
+		t.Fatal(err)
+	}
+	start := httptest.NewRecorder()
+	service.Start()(start, httptest.NewRequest("GET", flow.URL, nil))
+	launch, _ := url.Parse(flow.URL)
+	callback := httptest.NewRequest("GET", service.oauth.RedirectURL+"?state="+launch.Query().Get("state")+"&code=google-code", nil)
+	callback.AddCookie(start.Result().Cookies()[0])
+	finished := httptest.NewRecorder()
+	service.Callback()(finished, callback)
+	if finished.Code != http.StatusSeeOther || finished.Header().Get("Location") != "https://site.test/signin#google_error=password_account" {
+		t.Fatalf("callback = %d %q", finished.Code, finished.Header().Get("Location"))
+	}
+}
+
+func TestConfirmationFormNeedsNoCSRFHeader(t *testing.T) {
+	reached := 0
+	handler := CookieCSRFProtection(func(string) bool { return false })(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached++ }))
+	for path, want := range map[string]int{"/v1/auth/confirm-email": 1, "/v1/auth/confirm-email/sign-in": 0, "/v1/login": 0} {
+		reached = 0
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.Header.Set("Origin", "https://mistysys.com")
+		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "session"})
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+		if reached != want {
+			t.Fatalf("%s reached the handler %d times, want %d", path, reached, want)
+		}
 	}
 }

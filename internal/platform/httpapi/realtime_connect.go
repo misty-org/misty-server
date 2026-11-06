@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 func (s *RealtimeService) Connect() http.HandlerFunc {

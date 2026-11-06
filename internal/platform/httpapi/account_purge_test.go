@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/integrations/composio"
+	"github.com/misty-org/misty-server/internal/integrations/composio"
 )
 
 type fakeAppConnections struct {

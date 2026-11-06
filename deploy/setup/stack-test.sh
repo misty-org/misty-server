@@ -1,11 +1,11 @@
 #!/bin/sh
-# Runs the whole server stack (server/compose.yml) against the fake Cloudflare
+# Runs the whole server stack (compose.yml) against the fake Cloudflare
 # API, on its own Compose project and free ports, and removes everything it
 # made afterwards. It checks that the stack becomes healthy, that a second
 # start keeps every secret and uploads nothing again, that a backup reaches the
 # bucket, and that a lost secrets volume over existing data stops the stack.
 #
-#   server/deploy/setup/stack-test.sh
+#   deploy/setup/stack-test.sh
 set -eu
 
 server=$(cd "$(dirname "$0")/../.." && pwd)

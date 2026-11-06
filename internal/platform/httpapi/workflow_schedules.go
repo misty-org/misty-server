@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // scheduledRunTrigger marks invocations a workflow schedule started. The stored
@@ -38,6 +38,9 @@ type workflowScheduleInput struct {
 	// DeviceID picks the computer whose Misty browser runs it; "" means none.
 	// Absent keeps the current choice.
 	DeviceID *string `json:"device_id"`
+	// Profile is the profile whose sign-ins runs use; absent keeps the current one,
+	// and a new schedule without one uses the first profile.
+	Profile *string `json:"profile"`
 }
 
 // WorkflowSchedule sets or removes a workflow's schedule.
@@ -99,7 +102,7 @@ func saveWorkflowSchedule(ctx context.Context, database *db.Database, userID, me
 	conversationID := ""
 	existing, err := database.WorkflowScheduleByMethod(ctx, userID, methodID)
 	if errors.Is(err, db.ErrSpaceNotFound) {
-		if conversationID, err = createScheduleConversation(ctx, database, userID, method.Definition.Title, method.AgentID); err != nil {
+		if conversationID, err = createScheduleConversation(ctx, database, userID, method.SpaceID, method.Definition.Title, method.AgentID); err != nil {
 			return nil, err
 		}
 	} else if err != nil {
@@ -115,19 +118,28 @@ func saveWorkflowSchedule(ctx context.Context, database *db.Database, userID, me
 	} else if existing != nil {
 		deviceID = existing.DeviceID
 	}
+	profile := db.FirstProfileID
+	if body.Profile != nil {
+		profile = strings.TrimSpace(*body.Profile)
+		if !invocationProfilePattern.MatchString(profile) {
+			return nil, db.ErrSpaceInvalid
+		}
+	} else if existing != nil {
+		profile = existing.Profile
+	}
 	return database.SaveWorkflowSchedule(ctx, userID, conversationID, db.WorkflowSchedule{
-		MethodID: methodID, ScheduleTiming: body.ScheduleTiming, Inputs: body.Inputs, Enabled: enabled, DeviceID: deviceID,
+		MethodID: methodID, ScheduleTiming: body.ScheduleTiming, Inputs: body.Inputs, Enabled: enabled, DeviceID: deviceID, Profile: profile,
 	}, now)
 }
 
 // createScheduleConversation gives a schedule its own conversation with the
 // workflow's agent, so every scheduled run reads as one thread.
-func createScheduleConversation(ctx context.Context, database *db.Database, userID, title, agentID string) (string, error) {
+func createScheduleConversation(ctx context.Context, database *db.Database, userID, spaceID, title, agentID string) (string, error) {
 	identity, err := database.AskIdentityByID(ctx, userID, agentID)
 	if err != nil {
 		return "", err
 	}
-	conversationID, err := database.CreatePersonalAgentConversation(ctx, userID, "", identity.ID)
+	conversationID, err := database.CreatePersonalAgentConversation(ctx, userID, spaceID, identity.ID)
 	if err != nil {
 		return "", err
 	}
@@ -179,7 +191,7 @@ func (s *AIService) startWorkflowScheduleRun(ctx context.Context, item db.Workfl
 	conversationID := item.ConversationID
 	if conversationID == "" {
 		// The conversation expired or was deleted; start a fresh thread.
-		if conversationID, err = createScheduleConversation(ctx, s.database, item.UserID, method.Definition.Title, method.AgentID); err != nil {
+		if conversationID, err = createScheduleConversation(ctx, s.database, item.UserID, method.SpaceID, method.Definition.Title, method.AgentID); err != nil {
 			return fail(err)
 		}
 	}
@@ -200,6 +212,7 @@ func (s *AIService) startWorkflowScheduleRun(ctx context.Context, item db.Workfl
 	body := aiInvocationInput{
 		Mode: "drawer", SurfaceID: "global", Trigger: scheduledRunTrigger,
 		ConversationID: conversationID, AgentID: bound.AgentID, Timezone: item.Timezone,
+		SpaceID: bound.SpaceID, Profile: item.Profile,
 		IdempotencyKey: "workflow-schedule:" + item.ID + ":" + scheduledAt.UTC().Format(time.RFC3339),
 	}
 	body.MethodVersionID = method.VersionID
@@ -214,7 +227,7 @@ func (s *AIService) startWorkflowScheduleRun(ctx context.Context, item db.Workfl
 	}
 	payload, _ := json.Marshal(body)
 	invocation, created, err := s.database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{
-		ID: "invocation_" + uuid.NewString(), UserID: item.UserID, ConversationID: conversationID,
+		ID: "invocation_" + uuid.NewString(), UserID: item.UserID, SpaceID: bound.SpaceID, Profile: item.Profile, ConversationID: conversationID,
 		SurfaceID: "global", Mode: "drawer", Trigger: "schedule", State: "queued",
 		IdempotencyKey: body.IdempotencyKey, RequestPayload: payload, ExpiresAt: now.Add(aiInvocationTTL),
 	})

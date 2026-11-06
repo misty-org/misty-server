@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
 )
 
 // Sending a file saves it to the chat's Space Library: any shared folder can

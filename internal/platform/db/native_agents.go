@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agent"
 )
 
 type AgentProfileInput struct {
@@ -159,7 +159,8 @@ func (db *Database) BindConversationAgent(ctx context.Context, userID, conversat
 }
 
 func (db *Database) CreatePersonalAgentConversation(ctx context.Context, userID, spaceID, agentID string) (string, error) {
-	spaceID = "" // Retained argument for old callers; ownership is the account.
+	// An empty Space is the owner's personal Space; the Space guard trigger fills it
+	// in and refuses a Space the owner isn't in.
 	if _, err := db.AskExecutionContext(ctx, userID, spaceID, agentID); err != nil {
 		return "", err
 	}

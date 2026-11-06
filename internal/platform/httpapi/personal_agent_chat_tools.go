@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/workflow"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/workflow"
 )
 
 const toolboxMessagesSend = "message.send"
@@ -80,39 +80,6 @@ func agentToolTimezone(originalInput string) string {
 
 func TestingAgentToolTimezone(originalInput string) string {
 	return agentToolTimezone(originalInput)
-}
-
-func parseAgentToolTime(value, field, timezone string) (*time.Time, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil, nil
-	}
-	parsed, err := time.Parse(time.RFC3339, value)
-	if err == nil {
-		parsed = parsed.UTC()
-		return &parsed, nil
-	}
-	location, locationErr := time.LoadLocation(firstNonEmpty(strings.TrimSpace(timezone), "UTC"))
-	if locationErr != nil {
-		return nil, agent.ErrInvalidRequest("timezone must be a valid IANA timezone such as America/Los_Angeles")
-	}
-	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04"} {
-		if local, localErr := time.ParseInLocation(layout, value, location); localErr == nil {
-			local = local.UTC()
-			return &local, nil
-		}
-	}
-	if local, localErr := time.ParseInLocation("2006-01-02", value, location); localErr == nil {
-		// A date-only due date means the end of that day in the creator's
-		// timezone, rather than midnight UTC (which can display a day early).
-		local = time.Date(local.Year(), local.Month(), local.Day(), 23, 59, 0, 0, location).UTC()
-		return &local, nil
-	}
-	return nil, agent.ErrInvalidRequest(field + " must be an ISO 8601 date or timestamp")
-}
-
-func TestingParseAgentToolTime(value, timezone string) (*time.Time, error) {
-	return parseAgentToolTime(value, "dueAt", timezone)
 }
 
 func firstNonEmpty(values ...string) string {

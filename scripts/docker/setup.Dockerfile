@@ -8,12 +8,12 @@ COPY --from=api /usr/local/bin/goose /usr/local/bin/goose
 COPY --from=api /app/migrations /app/migrations
 
 WORKDIR /app
-COPY apps/journal-collab/package.json apps/journal-collab/package-lock.json ./
+COPY services/journal-collab/package.json services/journal-collab/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
-COPY apps/journal-collab/tsconfig.json apps/journal-collab/wrangler.jsonc ./
-COPY apps/journal-collab/src ./src
-COPY --chmod=0555 apps/journal-collab/docker/cloudflare-init.sh /usr/local/bin/misty-cloudflare-init
-COPY --chmod=0555 apps/journal-collab/docker/cloudflare-deploy.sh /usr/local/bin/misty-cloudflare-deploy
+COPY services/journal-collab/tsconfig.json services/journal-collab/wrangler.jsonc ./
+COPY services/journal-collab/src ./src
+COPY --chmod=0555 services/journal-collab/docker/cloudflare-init.sh /usr/local/bin/misty-cloudflare-init
+COPY --chmod=0555 services/journal-collab/docker/cloudflare-deploy.sh /usr/local/bin/misty-cloudflare-deploy
 COPY --chmod=0555 scripts/docker/postgres-grant-app-role.sh /usr/local/bin/misty-grant-app-role
 COPY --chmod=0555 scripts/docker/setup.sh /usr/local/bin/misty-setup
 

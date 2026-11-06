@@ -25,8 +25,8 @@ import (
 // reading, read receipts, and a device's presence.
 var readOnlyPosts = []*regexp.Regexp{
 	regexp.MustCompile(`^/(login|register|logout|setup-keys/redeem)$`),
-	regexp.MustCompile(`^/auth/(refresh|handoff|google|google/complete)$`),
-	regexp.MustCompile(`^/me/(export|deletion)$`),
+	regexp.MustCompile(`^/auth/(refresh|handoff|google|google/complete|confirm-email|confirm-email/sign-in)$`),
+	regexp.MustCompile(`^/me/(export|deletion|account-proof)$`),
 	regexp.MustCompile(`^/(sync|realtime)/tickets?$`),
 	regexp.MustCompile(`^/spaces/[^/]+/(notes|drawings)/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/nodes/[^/]+/resolve$`),

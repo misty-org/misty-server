@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Learned steps belong to the workflow's owner, version on every save, keep the

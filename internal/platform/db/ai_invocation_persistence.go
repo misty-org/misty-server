@@ -13,6 +13,10 @@ var ErrAIConversationBusy = errors.New("conversation already has an active invoc
 
 type AIInvocationRecord struct {
 	ModelTurnLimit int
+	// Profile names the profile whose sign-ins the run uses.
+	Profile string
+	// RuntimeEndpoint pins the run to the computer it was sent from from admission on.
+	RuntimeEndpoint string
 	// ExecutionLimitMS is a development eval's own execution allowance; 0 keeps the default.
 	ExecutionLimitMS   int64
 	DispatchRuntime    bool
@@ -38,7 +42,6 @@ type AIInvocationRecord struct {
 // CreateAIInvocationRecord makes the database idempotency journal the durable
 // authority. The returned boolean is false when a retry found the existing row.
 func (db *Database) CreateAIInvocationRecord(ctx context.Context, record AIInvocationRecord) (AIInvocationRecord, bool, error) {
-	record.SpaceID = "" // All AI admission is account-scoped; sources carry their own destinations.
 	var stored AIInvocationRecord
 	var created bool
 	err := db.WithRLSContext(ctx, userRLSSettings(record.UserID), func(tx *sql.Tx) error {
@@ -51,7 +54,6 @@ func (db *Database) CreateAIInvocationRecord(ctx context.Context, record AIInvoc
 
 // The caller can commit its pinned request metadata in this same transaction.
 func createAIInvocationRecordTx(ctx context.Context, tx *sql.Tx, record AIInvocationRecord) (AIInvocationRecord, bool, error) {
-	record.SpaceID = ""
 	stored := AIInvocationRecord{}
 	created := false
 	err := func() error {
@@ -78,12 +80,19 @@ func createAIInvocationRecordTx(ctx context.Context, tx *sql.Tx, record AIInvoca
 		if record.ConversationID != "" {
 			// Serialize admission across every window/surface using the canonical
 			// conversation row. An idempotent retry still returns its original run.
-			var id string
-			if err := tx.QueryRowContext(ctx, `SELECT id FROM misty_ask_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL FOR UPDATE`, record.ConversationID, record.UserID).Scan(&id); err != nil {
+			// A run belongs to its conversation's Space, whatever the window shows.
+			if err := tx.QueryRowContext(ctx, `SELECT space_id FROM misty_ask_conversations WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL FOR UPDATE`, record.ConversationID, record.UserID).Scan(&record.SpaceID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrSpaceNotFound
 				}
 				return err
+			}
+			// A run the server starts itself, such as a goal's next step, stays on the computer
+			// the conversation last ran on.
+			if record.RuntimeEndpoint == "" {
+				if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT runtime_endpoint FROM ai_invocations WHERE user_id=$1 AND conversation_id=$2 AND runtime_endpoint IS NOT NULL ORDER BY created_at DESC LIMIT 1),'')`, record.UserID, record.ConversationID).Scan(&record.RuntimeEndpoint); err != nil {
+					return err
+				}
 			}
 			var busy, retry bool
 			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM ai_invocations WHERE user_id=$1 AND conversation_id=$2 AND idempotency_key<>$3 AND state IN ('queued','running','awaiting_approval','awaiting_device','awaiting_intervention','awaiting_timer'))`, record.UserID, record.ConversationID, record.IdempotencyKey).Scan(&busy); err != nil {
@@ -102,12 +111,12 @@ func createAIInvocationRecordTx(ctx context.Context, tx *sql.Tx, record AIInvoca
 		}
 		var inserted bool
 		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ai_invocations(id,user_id,space_id,conversation_id,surface_id,mode,trigger_kind,state,idempotency_key,request_payload,expires_at,model_turn_limit,execution_limit_ms)
-			VALUES($1,$2,NULLIF($3,''),NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,$12,COALESCE(NULLIF($13::bigint,0),1800000))
+			INSERT INTO ai_invocations(id,user_id,space_id,conversation_id,surface_id,mode,trigger_kind,state,idempotency_key,request_payload,expires_at,model_turn_limit,execution_limit_ms,profile,runtime_endpoint)
+			VALUES($1,$2,NULLIF($3,''),NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,$12,COALESCE(NULLIF($13::bigint,0),1800000),COALESCE(NULLIF($14,''),'personal'),NULLIF($15,''))
 			ON CONFLICT(user_id,idempotency_key) DO UPDATE SET updated_at=ai_invocations.updated_at
 				RETURNING id,user_id,COALESCE(space_id,''),COALESCE(conversation_id,''),surface_id,mode,trigger_kind,state,idempotency_key,request_payload,
 					runtime_kind,runtime_run_id,COALESCE(agent_run_id,''),runtime_heartbeat_at,expires_at,created_at,updated_at,model_turn_limit,(xmax=0)
-			`, record.ID, record.UserID, record.SpaceID, record.ConversationID, record.SurfaceID, record.Mode, record.Trigger, record.State, record.IdempotencyKey, record.RequestPayload, record.ExpiresAt, modelTurnLimit, record.ExecutionLimitMS).Scan(
+			`, record.ID, record.UserID, record.SpaceID, record.ConversationID, record.SurfaceID, record.Mode, record.Trigger, record.State, record.IdempotencyKey, record.RequestPayload, record.ExpiresAt, modelTurnLimit, record.ExecutionLimitMS, record.Profile, record.RuntimeEndpoint).Scan(
 			&stored.ID, &stored.UserID, &stored.SpaceID, &stored.ConversationID, &stored.SurfaceID, &stored.Mode, &stored.Trigger, &stored.State, &stored.IdempotencyKey, &stored.RequestPayload,
 			&stored.RuntimeKind, &stored.RuntimeRunID, &stored.AgentRunID, &stored.RuntimeHeartbeatAt, &stored.ExpiresAt, &stored.CreatedAt, &stored.UpdatedAt, &stored.ModelTurnLimit, &inserted,
 		)

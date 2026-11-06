@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/app"
+	. "github.com/misty-org/misty-server/internal/app"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func TestHealthIsSanitizedAndFailsWhenCriticalDependenciesAreUnavailable(t *testing.T) {

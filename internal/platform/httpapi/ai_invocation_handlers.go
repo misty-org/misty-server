@@ -55,6 +55,9 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 		if !s.bindConversationModel(w, r, userID, &body, &st) {
 			return
 		}
+		if !s.resolveInvocationSpace(w, r, userID, &body, &st) {
+			return
+		}
 		if !s.admitInvocationExecution(w, r, userID, &body, &st) {
 			return
 		}

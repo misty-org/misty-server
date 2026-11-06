@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/security"
 	"golang.org/x/crypto/bcrypt"
 )
 

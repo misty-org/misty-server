@@ -1,8 +1,8 @@
 package api
 
 import (
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
 )
 
 // appsToolRegistrations give a run the invoking user's connected apps. Every

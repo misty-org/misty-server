@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func validateAIInvocationDeviceContexts(references []aiContextReference, contexts []aiInvocationDeviceContext, spaceID string) error {

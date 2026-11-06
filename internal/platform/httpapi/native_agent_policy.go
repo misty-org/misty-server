@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // nativeAgentInvocationPolicy reports whether a native agent run may use a

@@ -1,18 +1,19 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// MistyConversations exposes the existing durable Agent transcript store as
-// account-scoped Ask/Action history. It never includes local device paths.
+// MistyConversations exposes the durable Agent transcript store to its owner, in
+// every Space. A conversation is always private to its owner: no one else in its
+// Space, the Space's owner included, can list or read it. It never includes local
+// device paths.
 func (s *AIService) MistyConversations() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
@@ -27,14 +28,9 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 				return
 			}
 			query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
-			scope := strings.TrimSpace(r.URL.Query().Get("scope"))
-			deviceID := strings.TrimSpace(r.URL.Query().Get("device_id"))
 			items := make([]mistyConversation, 0, len(summaries))
 			for _, summary := range summaries {
 				if id := r.URL.Query().Get("agent_id"); id != "" && summary.AgentID != id {
-					continue
-				}
-				if !conversationInScope(summary, scope, deviceID) {
 					continue
 				}
 				if query != "" && !strings.Contains(strings.ToLower(summary.Title), query) {
@@ -53,18 +49,16 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 				ModelID         string `json:"model_id,omitempty"`
 				ReasoningEffort string `json:"reasoning_effort,omitempty"`
 				Title           string `json:"title"`
-				SpaceID         string `json:"space_id,omitempty"`
-				// The device that starts the chat keeps it (docs/agents/chats-local.md).
-				DeviceID string `json:"device_id,omitempty"`
+				// SpaceID is the window's current Space; empty is the personal Space.
+				SpaceID string `json:"space_id,omitempty"`
 			}
 			if err := decodeAIJSON(w, r, &body); err != nil {
 				http.Error(w, "invalid request", http.StatusBadRequest)
 				return
 			}
-			body.SpaceID = "" // Compatibility input; personal conversations are account-owned.
-			body.DeviceID = strings.TrimSpace(body.DeviceID)
-			if body.DeviceID != "" && !deviceIDPattern.MatchString(body.DeviceID) {
-				http.Error(w, "invalid request", http.StatusBadRequest)
+			spaceID, err := s.database.MemorySpace(r.Context(), userID, body.SpaceID)
+			if err != nil {
+				writeSpaceError(w, err)
 				return
 			}
 			var identity *db.AskIdentity
@@ -82,8 +76,7 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 			reasoning := agent.ManagedReasoning("", body.ReasoningEffort)
 			// A conversation runs on the device's models; its runtime picks them.
 			var conversationID string
-			var err error
-			conversationID, err = s.database.CreatePersonalAgentConversation(r.Context(), userID, "", identity.ID)
+			conversationID, err = s.database.CreatePersonalAgentConversation(r.Context(), userID, spaceID, identity.ID)
 			if err != nil {
 				WriteAIError(w, err)
 				return
@@ -98,16 +91,10 @@ func (s *AIService) MistyConversations() http.HandlerFunc {
 				WriteAIError(w, err)
 				return
 			}
-			if body.DeviceID != "" {
-				if err := s.database.KeepConversationOnDevice(r.Context(), userID, conversationID, body.DeviceID); err != nil {
-					WriteAIError(w, err)
-					return
-				}
-			}
 			writeJSON(w, http.StatusCreated, mistyConversation{
 				ID: conversationID, AgentID: identity.ID, Title: title, CreatedAt: now, UpdatedAt: now,
-				SpaceID: body.SpaceID, Kind: "misty", ModelID: modelID, Reasoning: reasoning,
-				Messages: []mistyConversationMessage{}, Remote: true, KeptOnDeviceID: body.DeviceID,
+				SpaceID: spaceID, PersonalSpace: strings.TrimSpace(body.SpaceID) == "", Kind: "misty", ModelID: modelID, Reasoning: reasoning,
+				Messages: []mistyConversationMessage{}, Remote: true,
 			})
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -145,43 +132,16 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 				Title           *string `json:"title"`
 				ModelID         *string `json:"model_id"`
 				ReasoningEffort *string `json:"reasoning_effort"`
-				SpaceID         *string `json:"space_id"`
 				// One of the conversation's own agent's folders; empty returns it to Recents.
 				FolderID *string `json:"folder_id"`
 				// True records that the user has now seen the conversation.
 				Read *bool `json:"read"`
-				// The device that keeps the chat from now on: one that took it from the
-				// inbox, or continued a chat from before chats moved to devices.
-				KeepOnDevice *string `json:"keep_on_device"`
 			}
 			if err := decodeAIJSON(w, r, &body); err != nil {
 				http.Error(w, "invalid request", http.StatusBadRequest)
 				return
 			}
 			response := map[string]any{"id": conversationID}
-			if body.KeepOnDevice != nil {
-				deviceID := strings.TrimSpace(*body.KeepOnDevice)
-				if !deviceIDPattern.MatchString(deviceID) {
-					http.Error(w, "invalid request", http.StatusBadRequest)
-					return
-				}
-				if err := s.database.KeepConversationOnDevice(r.Context(), userID, conversationID, deviceID); err != nil {
-					if errors.Is(err, db.ErrConversationKeptElsewhere) {
-						writeJSON(w, http.StatusConflict, map[string]string{"code": "kept_elsewhere", "message": "Another of your devices has this conversation."})
-						return
-					}
-					WriteAIError(w, err)
-					return
-				}
-				response["keptOnDeviceId"] = deviceID
-			}
-			if body.SpaceID != nil {
-				if err := s.database.BindMistyConversationSpace(r.Context(), userID, conversationID, ""); err != nil {
-					WriteAIError(w, err)
-					return
-				}
-				response["spaceId"] = ""
-			}
 			if body.FolderID != nil {
 				folderID := strings.TrimSpace(*body.FolderID)
 				if err := s.database.FileAgentConversation(r.Context(), userID, conversationID, folderID); err != nil {
@@ -237,25 +197,5 @@ func (s *AIService) MistyConversation() http.HandlerFunc {
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
-	}
-}
-
-// conversationInScope filters the listing for local-first chats
-// (docs/agents/chats-local.md). "legacy" is the one-time copy of chats
-// from before chats moved to devices that no device has taken yet. "device" is what
-// one device needs: the chats it keeps that ran in the last two days (whose runs the
-// server still holds), and the inbox of chats no device keeps yet. No scope lists
-// everything, for older apps.
-func conversationInScope(summary db.AgentSessionSummary, scope, deviceID string) bool {
-	switch scope {
-	case "legacy":
-		return summary.Legacy && summary.KeptOnDeviceID == ""
-	case "device":
-		if summary.KeptOnDeviceID == "" {
-			return !summary.Legacy
-		}
-		return deviceID != "" && summary.KeptOnDeviceID == deviceID && summary.RecentRun
-	default:
-		return true
 	}
 }

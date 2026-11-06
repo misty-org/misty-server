@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/accounts"
 )
 
 // Login is limited per address by the API limiter, which leaves one account

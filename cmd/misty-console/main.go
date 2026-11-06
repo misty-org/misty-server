@@ -11,9 +11,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/kannachi323/misty/server/internal/console"
-	"github.com/kannachi323/misty/server/internal/platform/config"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/console"
+	"github.com/misty-org/misty-server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func main() {

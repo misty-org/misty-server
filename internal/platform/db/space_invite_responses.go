@@ -114,9 +114,6 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 		if n, _ := result.RowsAffected(); n == 0 {
 			return ErrSpaceNotFound
 		}
-		if err := deleteSpaceVaultsTx(ctx, tx, spaceID, memberID); err != nil {
-			return err
-		}
 		// Agents continue account-wide; destination tools recheck content access.
 
 		// Same transaction as the membership delete: a note must never remain
@@ -152,9 +149,6 @@ func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) erro
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`, spaceID, userID); err != nil {
-			return err
-		}
-		if err := deleteSpaceVaultsTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
 		// Agents continue account-wide; destination tools recheck content access.

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
 // productionRequired is every value a production server needs. Nothing is
@@ -20,7 +20,6 @@ var productionRequired = []string{
 	"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY",
 	"PARTYKIT_HOST", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY", "JOURNAL_COLLAB_CONTROL_SECRET",
 	"JOURNAL_COLLAB_PROJECTION_SECRET", "JOURNAL_COLLAB_ROOM_SALT",
-	"MISTY_WEB_FETCH_URL", "MISTY_WEB_FETCH_SECRET",
 	"MISTY_COMPOSIO_API_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
 }
 

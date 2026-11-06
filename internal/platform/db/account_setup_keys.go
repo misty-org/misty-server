@@ -17,9 +17,21 @@ var ErrSetupKeyInvalid = errors.New("setup_key_invalid")
 // IssueSetupKey stores a new key (by hash) for the account and replaces every
 // earlier key that was not used, so only the newest link works.
 func (db *Database) IssueSetupKey(ctx context.Context, userID, keyHash string, expiresAt time.Time) error {
+	return db.IssueSetupKeyWithEmail(ctx, userID, keyHash, expiresAt, nil)
+}
+
+// IssueSetupKeyWithEmail also stores the key's email, in the same transaction: a
+// key that exists without its email would never reach the person, since a retried
+// create issues no second key while one still works.
+func (db *Database) IssueSetupKeyWithEmail(ctx context.Context, userID, keyHash string, expiresAt time.Time, email *KeyEmail) error {
 	return db.serviceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireActiveAccountTx(ctx, tx, userID); err != nil {
 			return err
+		}
+		if email != nil {
+			if err := queueKeyEmailTx(ctx, tx, userID, *email); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE account_setup_keys SET revoked_at=now()
 			WHERE user_id=$1 AND used_at IS NULL AND revoked_at IS NULL`, userID); err != nil {

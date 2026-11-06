@@ -1,7 +1,7 @@
 package api
 
 import (
-	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/agenttools"
 )
 
 // Private and public layers (docs/spaces/as-profiles.md#private-and-public)

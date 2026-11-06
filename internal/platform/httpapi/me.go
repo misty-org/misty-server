@@ -1,11 +1,12 @@
 package api
 
 import (
-	"github.com/kannachi323/misty/server/internal/accounts"
+	"errors"
+	"github.com/misty-org/misty-server/internal/accounts"
 	"net/http"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 const SessionCookieName = "misty_session"
@@ -14,6 +15,33 @@ func sessionUserID(r *http.Request, _ *db.Database) (string, error) { return acc
 
 func BearerTokenFromRequest(r *http.Request) (string, bool) {
 	return accounts.BearerTokenFromRequest(r)
+}
+
+// UpdateUsername answers PUT /me/username.
+func UpdateUsername(database *db.Database) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := authenticatedUser(w, r, database)
+		if !ok {
+			return
+		}
+		var body struct {
+			Username string `json:"username"`
+		}
+		if decodeJSON(w, r, &body) != nil {
+			return
+		}
+		username, err := database.SetUsername(userID, body.Username)
+		switch {
+		case errors.Is(err, db.ErrInvalidUsername):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		case errors.Is(err, db.ErrUsernameTaken):
+			http.Error(w, err.Error(), http.StatusConflict)
+		case err != nil:
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		default:
+			writeJSON(w, http.StatusOK, map[string]string{"username": username})
+		}
+	}
 }
 
 func GetMe(database *db.Database) http.HandlerFunc {
@@ -43,21 +71,26 @@ func GetMe(database *db.Database) http.HandlerFunc {
 		// The server owner's app shows the alerts service's open problems.
 		owner, _ := database.IsServerOwner(r.Context(), userID)
 
+		// No device allowed is how an account made through open signup starts, until the
+		// operator sets what it may use. The app says what to do about it.
+		limits, _ := database.AccountLimitsFor(r.Context(), userID)
+		devicesAllowed := limits.Devices == nil || *limits.Devices > 0
+
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id":                 user.ID,
-			"username":           user.Username,
-			"email":              user.Email,
-			"provider":           user.Provider,
-			"credential_account": user.CredentialPassword,
-			"avatar_version":     user.AvatarVersion,
-			"created_at":         user.CreatedAt,
-			"allows_use":         true,
-			"license_device":     "",
+			"id":             user.ID,
+			"username":       user.Username,
+			"email":          user.Email,
+			"provider":       user.Provider,
+			"avatar_version": user.AvatarVersion,
+			"created_at":     user.CreatedAt,
+			"allows_use":     true,
+			"license_device": "",
 			// The server sends no email, so there is nothing to confirm. Kept
 			// for apps that still read it.
-			"email_verified": true,
-			"delete_at":      deleteAt,
-			"server_owner":   owner,
+			"email_verified":  true,
+			"delete_at":       deleteAt,
+			"server_owner":    owner,
+			"devices_allowed": devicesAllowed,
 		})
 	}
 }

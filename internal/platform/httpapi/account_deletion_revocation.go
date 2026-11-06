@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Account deletion revokes the provider credentials older Misty versions

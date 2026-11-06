@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/app"
+	. "github.com/misty-org/misty-server/internal/app"
 )
 
 // These tests attack the full router the way an outside caller would: weak
@@ -247,5 +247,53 @@ func TestAttackInjectionPayloadsAreInert(t *testing.T) {
 	response := user.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail("inject_user"), "password": "correct horse battery staple"}, nil)
 	if response.Code != http.StatusOK {
 		t.Fatalf("login after payloads = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestAllowlistDecidesWhoGetsIn(t *testing.T) {
+	server := attackServer(t)
+	registerAttackUser(t, server, "allow_first", "198.51.100.60:4000")
+	listed := registerAttackUser(t, server, "allow_listed", "198.51.100.61:4000")
+	removed := registerAttackUser(t, server, "allow_removed", "198.51.100.62:4000")
+	t.Setenv("MISTY_OPEN_SIGNUP", "")
+	t.Setenv("MISTY_ALLOWED_EMAILS", attackEmail("allow_listed")+", "+attackEmail("allow_new"))
+	const password = "correct horse battery staple"
+	signIn := func(name, address, password string) *httptest.ResponseRecorder {
+		client := &attackClient{t: t, server: server, address: address}
+		return client.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail(name), "password": password}, nil)
+	}
+
+	// A wrong password says nothing about who's on the list.
+	if response := signIn("allow_removed", "198.51.100.63:4000", "wrong password"); response.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong password off the list = %d", response.Code)
+	}
+	response := signIn("allow_removed", "198.51.100.63:4000", password)
+	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "email_not_allowed") {
+		t.Fatalf("sign-in off the list = %d %s", response.Code, response.Body.String())
+	}
+	if response := signIn("allow_listed", "198.51.100.64:4000", password); response.Code != http.StatusOK {
+		t.Fatalf("sign-in on the list = %d %s", response.Code, response.Body.String())
+	}
+
+	// Coming off the list ends a session that's already open.
+	if response := removed.do(http.MethodPost, "/v1/auth/refresh", nil, nil); response.Code != http.StatusForbidden {
+		t.Fatalf("refresh off the list = %d %s", response.Code, response.Body.String())
+	}
+	if response := listed.do(http.MethodPost, "/v1/auth/refresh", nil, nil); response.Code >= 300 {
+		t.Fatalf("refresh on the list = %d %s", response.Code, response.Body.String())
+	}
+
+	register := func(name, address string) *httptest.ResponseRecorder {
+		client := &attackClient{t: t, server: server, address: address}
+		return client.do(http.MethodPost, "/v1/register", map[string]string{
+			"name": name, "username": name + "_" + attackRun, "email": attackEmail(name), "password": password,
+		}, nil)
+	}
+	stranger := register("allow_stranger", "198.51.100.65:4000")
+	if stranger.Code != http.StatusForbidden || !strings.Contains(stranger.Body.String(), "email_not_allowed") {
+		t.Fatalf("sign-up off the list = %d %s", stranger.Code, stranger.Body.String())
+	}
+	if response := register("allow_new", "198.51.100.66:4000"); response.Code >= 300 {
+		t.Fatalf("sign-up on the list = %d %s", response.Code, response.Body.String())
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 //go:embed assets
@@ -68,6 +68,7 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/customers/{id}/resume", s.customerAction("Resumed", "Resumed", s.operator.resume))
 		r.Post("/customers/{id}/close", s.customerAction("Closed", "Closed; deleted in 30 days unless resumed", s.operator.close))
 		r.Post("/customers/{id}/sign-in-link", s.signInLink)
+		r.Get("/customers/{id}/export", s.exportCustomer)
 		r.Get("/{page}", s.page)
 	})
 	return r

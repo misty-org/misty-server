@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
 // watch is the alerts service of compose.yml. Every minute it checks that the

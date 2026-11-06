@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 func newConversationTestBearerToken(t *testing.T, database *db.Database, userID string) string {
@@ -69,17 +69,16 @@ func newConversationTestRouter(t *testing.T, spaces *SpacesService) *chi.Mux {
 	router := chi.NewRouter()
 	router.MethodFunc(http.MethodGet, "/spaces/{spaceID}/conversations", spaces.Conversations())
 	router.MethodFunc(http.MethodPost, "/spaces/{spaceID}/conversations", spaces.Conversations())
+	router.MethodFunc(http.MethodPost, "/spaces/{spaceID}/conversations/dm", spaces.DirectConversation())
 	router.MethodFunc(http.MethodPatch, "/spaces/{spaceID}/conversations/{conversationID}", spaces.Conversation())
 	router.MethodFunc(http.MethodGet, "/spaces/{spaceID}/conversations/{conversationID}/messages", spaces.ConversationMessages())
 	return router
 }
 
-// TestConversationHTTPAccessControl guards, at the HTTP handler layer, the
-// security property the user asked about explicitly: a user only ever sees
-// conversations they own or are a member of. This complements the existing
-// DB-layer coverage (TestSpaceGroupConversationsStayScopedToSelectedMembers,
-// TestUpdateSpaceConversationRestrictedToCreator) with an end-to-end check
-// that the HTTP handlers enforce the same rules through real requests.
+// TestConversationHTTPAccessControl guards, at the HTTP handler layer, who sees
+// what in a Space's chat: a DM only its participants, not even the Space's owner;
+// a group chat everyone in the Space. It complements the DB-layer coverage
+// (TestUpdateSpaceConversationRestrictedToCreator) with real requests.
 func TestConversationHTTPAccessControl(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := context.Background()
@@ -113,8 +112,8 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		t.Fatalf("CreateSpace(owner) error = %v", err)
 	}
 
-	// member and spacemate both join the Space, but only member is added to
-	// the conversation below. outsider never joins the Space at all.
+	// member and spacemate both join the Space, and only member is in the DM
+	// below. outsider never joins the Space at all.
 	for _, invited := range []*db.User{member, spacemate} {
 		invite, inviteErr := database.TestingInviteToSpace(ctx, owner.ID, space.ID, invited.Email)
 		if inviteErr != nil {
@@ -125,22 +124,33 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		}
 	}
 
-	conversation, err := database.CreateSpaceConversation(ctx, owner.ID, space.ID, "Launch crew", []db.SpaceActorRef{{Kind: "person", UserID: member.ID}})
-	if err != nil {
-		t.Fatalf("CreateSpaceConversation() error = %v", err)
-	}
-
 	ownerToken := newConversationTestBearerToken(t, database, owner.ID)
 	memberToken := newConversationTestBearerToken(t, database, member.ID)
 	spacemateToken := newConversationTestBearerToken(t, database, spacemate.ID)
 	outsiderToken := newConversationTestBearerToken(t, database, outsider.ID)
 
 	listPath := "/spaces/" + space.ID + "/conversations"
+
+	// Opening a DM makes the real kind, and opening it again finds the same one.
+	rec := performConversationRequest(t, router, http.MethodPost, listPath+"/dm", memberToken, map[string]any{"user_id": spacemate.ID})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST direct status = %d, body = %s", rec.Code, rec.Body)
+	}
+	var conversation db.SpaceConversation
+	if err := json.Unmarshal(rec.Body.Bytes(), &conversation); err != nil || conversation.Kind != "dm" || conversation.VisibleToSpace {
+		t.Fatalf("direct conversation = %#v, %v", conversation, err)
+	}
+	rec = performConversationRequest(t, router, http.MethodPost, listPath+"/dm", spacemateToken, map[string]any{"user_id": member.ID})
+	var again db.SpaceConversation
+	if err := json.Unmarshal(rec.Body.Bytes(), &again); err != nil || again.ID != conversation.ID {
+		t.Fatalf("the other person's direct conversation = %#v, %v", again, err)
+	}
+
 	messagesPath := "/spaces/" + space.ID + "/conversations/" + conversation.ID + "/messages"
 	conversationPath := "/spaces/" + space.ID + "/conversations/" + conversation.ID
 
-	// A member of the conversation sees it in their list.
-	rec := performConversationRequest(t, router, http.MethodGet, listPath, memberToken, nil)
+	// A participant sees it in their list.
+	rec = performConversationRequest(t, router, http.MethodGet, listPath, memberToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET conversations (member) status = %d, body = %s", rec.Code, rec.Body)
 	}
@@ -154,27 +164,26 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		t.Fatalf("member conversation list = %#v, want just %q", memberList.Conversations, conversation.ID)
 	}
 
-	// A fellow Space member who was never added to the conversation must not
-	// see it in their list, even though they can otherwise read the Space.
-	rec = performConversationRequest(t, router, http.MethodGet, listPath, spacemateToken, nil)
+	// The Space's owner isn't in it, so doesn't see it in their list, even though
+	// they can otherwise read the whole Space.
+	rec = performConversationRequest(t, router, http.MethodGet, listPath, ownerToken, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET conversations (spacemate) status = %d, body = %s", rec.Code, rec.Body)
+		t.Fatalf("GET conversations (owner) status = %d, body = %s", rec.Code, rec.Body)
 	}
-	var spacemateList struct {
+	var ownerList struct {
 		Conversations []map[string]any `json:"conversations"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &spacemateList); err != nil {
-		t.Fatalf("unmarshal spacemate conversations: %v", err)
+	if err := json.Unmarshal(rec.Body.Bytes(), &ownerList); err != nil {
+		t.Fatalf("unmarshal owner conversations: %v", err)
 	}
-	if len(spacemateList.Conversations) != 0 {
-		t.Fatalf("spacemate conversation list = %#v, want none", spacemateList.Conversations)
+	if len(ownerList.Conversations) != 0 {
+		t.Fatalf("owner conversation list = %#v, want none", ownerList.Conversations)
 	}
 
-	// That same non-member is rejected outright if they try to read the
-	// conversation's messages directly by ID.
-	rec = performConversationRequest(t, router, http.MethodGet, messagesPath, spacemateToken, nil)
+	// The owner is rejected outright if they try to read it directly by ID.
+	rec = performConversationRequest(t, router, http.MethodGet, messagesPath, ownerToken, nil)
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("GET messages (spacemate) status = %d, body = %s, want 403", rec.Code, rec.Body)
+		t.Fatalf("GET messages (owner) status = %d, body = %s, want 403", rec.Code, rec.Body)
 	}
 
 	// A user outside the Space entirely is rejected too (space-level check
@@ -188,35 +197,59 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		t.Fatalf("GET messages (outsider) status = %d, body = %s, want 403", rec.Code, rec.Body)
 	}
 
-	// Editing is restricted to the conversation's creator: neither the
-	// non-member Space mate nor an actual conversation member (who didn't
-	// create it) may rename it or change its membership.
-	editBody := map[string]any{"title": "Hijacked", "participants": []db.SpaceActorRef{
-		{Kind: "person", UserID: owner.ID},
-		{Kind: "person", UserID: member.ID},
-	}}
-	rec = performConversationRequest(t, router, http.MethodPatch, conversationPath, spacemateToken, editBody)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("PATCH conversation (spacemate) status = %d, body = %s, want 403", rec.Code, rec.Body)
-	}
-	rec = performConversationRequest(t, router, http.MethodPatch, conversationPath, memberToken, editBody)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("PATCH conversation (non-creator member) status = %d, body = %s, want 403", rec.Code, rec.Body)
+	// Nobody can change a DM, or reach into it by renaming it, the Space's owner included.
+	editBody := map[string]any{"title": "Hijacked"}
+	for _, token := range []string{ownerToken, memberToken} {
+		rec = performConversationRequest(t, router, http.MethodPatch, conversationPath, token, editBody)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("PATCH DM status = %d, body = %s, want 403", rec.Code, rec.Body)
+		}
 	}
 
-	// The creator can rename the conversation and add the space mate; only
-	// then does the space mate gain visibility into it.
-	growBody := map[string]any{"title": "Launch crew v2", "participants": []db.SpaceActorRef{
-		{Kind: "person", UserID: member.ID},
-		{Kind: "person", UserID: spacemate.ID},
-	}}
-	rec = performConversationRequest(t, router, http.MethodPatch, conversationPath, ownerToken, growBody)
+	// A group chat is public to the Space: everyone in it sees it without being
+	// named, and someone who joins later does too. Outsiders still don't.
+	rec = performConversationRequest(t, router, http.MethodPost, listPath, memberToken, map[string]any{"title": "Launch crew"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST group chat status = %d, body = %s", rec.Code, rec.Body)
+	}
+	var group db.SpaceConversation
+	if err := json.Unmarshal(rec.Body.Bytes(), &group); err != nil || group.Kind != "standard" || !group.VisibleToSpace || len(group.Participants) != 3 {
+		t.Fatalf("group chat = %#v, %v", group, err)
+	}
+	groupMessages := "/spaces/" + space.ID + "/conversations/" + group.ID + "/messages"
+	for _, token := range []string{ownerToken, memberToken, spacemateToken} {
+		rec = performConversationRequest(t, router, http.MethodGet, groupMessages, token, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET group chat messages status = %d, body = %s", rec.Code, rec.Body)
+		}
+	}
+	rec = performConversationRequest(t, router, http.MethodGet, groupMessages, outsiderToken, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("GET group chat messages (outsider) status = %d, want 403", rec.Code)
+	}
+	invite, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, outsider.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.RespondToSpaceInvite(ctx, outsider.ID, invite.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	rec = performConversationRequest(t, router, http.MethodGet, groupMessages, outsiderToken, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("PATCH conversation (owner) status = %d, body = %s", rec.Code, rec.Body)
+		t.Fatalf("GET group chat messages (after joining) status = %d, body = %s", rec.Code, rec.Body)
+	}
+	joined, err := database.SpaceConversations(ctx, outsider.ID, space.ID)
+	if err != nil || len(joined) != 1 || joined[0].ID != group.ID {
+		t.Fatalf("someone who joined later sees %#v, %v, want just the group chat", joined, err)
 	}
 
-	rec = performConversationRequest(t, router, http.MethodGet, messagesPath, spacemateToken, nil)
+	// Only the Space's owner renames a group chat.
+	rec = performConversationRequest(t, router, http.MethodPatch, "/spaces/"+space.ID+"/conversations/"+group.ID, memberToken, editBody)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("PATCH group chat (member) status = %d, body = %s, want 403", rec.Code, rec.Body)
+	}
+	rec = performConversationRequest(t, router, http.MethodPatch, "/spaces/"+space.ID+"/conversations/"+group.ID, ownerToken, map[string]any{"title": "Launch crew v2"})
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET messages (spacemate after being added) status = %d, body = %s", rec.Code, rec.Body)
+		t.Fatalf("PATCH group chat (owner) status = %d, body = %s", rec.Code, rec.Body)
 	}
 }

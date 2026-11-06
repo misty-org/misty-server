@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/accounts"
 )
 
 const (

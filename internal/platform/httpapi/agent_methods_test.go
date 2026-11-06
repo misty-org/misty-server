@@ -2,8 +2,8 @@ package api
 
 import (
 	"errors"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/test/testkit"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/test/testkit"
 	"os"
 	"testing"
 	"time"

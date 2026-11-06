@@ -3,7 +3,7 @@ package security
 import (
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/security"
+	. "github.com/misty-org/misty-server/internal/platform/security"
 )
 
 func TestGenerateSecureToken(t *testing.T) {

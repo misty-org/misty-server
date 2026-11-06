@@ -3,19 +3,29 @@ package accounts
 import (
 	"errors"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
 
 var ErrInvalidUsername = errors.New("username must be 3-30 lowercase letters, numbers, or underscores")
-var ErrInvalidPassword = errors.New("password must be at least 8 characters and at most 72 bytes")
+var ErrInvalidPassword = errors.New("password must be at least 8 characters and at most 72 bytes, with a lowercase letter and a special character")
 
-// ValidateNewPassword is the rule for a password someone chooses: long enough
-// to resist online guessing, and within bcrypt's 72-byte input limit. Existing
-// passwords are never re-checked at sign-in.
+// ValidateNewPassword is the rule for a password someone chooses: at least 8
+// characters, a lowercase letter and a special character, the same as the app's
+// and the website's, and within bcrypt's 72-byte input limit. Existing passwords
+// are never re-checked at sign-in.
 func ValidateNewPassword(password string) error {
 	if utf8.RuneCountInString(password) < 8 || len(password) > 72 {
+		return ErrInvalidPassword
+	}
+	lower, special := false, false
+	for _, character := range password {
+		lower = lower || unicode.IsLower(character)
+		special = special || !(unicode.IsLetter(character) || unicode.IsNumber(character))
+	}
+	if !lower || !special {
 		return ErrInvalidPassword
 	}
 	return nil

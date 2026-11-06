@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func TestAIConversationTurnsExposeOriginalPromptAndDurableOutcome(t *testing.T) {
@@ -23,7 +23,7 @@ func TestAIConversationTurnsExposeOriginalPromptAndDurableOutcome(t *testing.T) 
 	if err := database.CreateAgentSession(ctx, conversationID, owner.ID, state, now.Add(time.Hour), now.Add(24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.BindAskSurfaceConversation(ctx, owner.ID, conversationID, "", "test-model", "activity", "/activity", "private"); err != nil {
+	if err := database.BindAskSurfaceConversation(ctx, owner.ID, conversationID, "test-model", "activity", "/activity", "private"); err != nil {
 		t.Fatal(err)
 	}
 	if _, created, err := database.CreateAIInvocationRecord(ctx, AIInvocationRecord{

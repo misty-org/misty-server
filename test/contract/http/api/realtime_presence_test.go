@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 import (
@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 
-	"github.com/kannachi323/misty/server/test/testkit"
+	"github.com/misty-org/misty-server/test/testkit"
 )
 
 // testDatabaseLockID matches the advisory lock ID used by the db and

@@ -10,7 +10,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // The Customers page lists the server's accounts with what each uses against
@@ -58,11 +58,17 @@ func (s *Server) customersPage(r *http.Request) templ.Component {
 	if s.db == nil {
 		return databaseUnavailable("Customers")
 	}
-	view := customersView{Search: strings.TrimSpace(r.URL.Query().Get("q")), Selected: r.URL.Query().Get("id")}
+	return customersPage(s.customersViewFor(r, r.URL.Query().Get("id")))
+}
+
+// customersViewFor loads the list and the selected account, or the first one
+// when none is selected.
+func (s *Server) customersViewFor(r *http.Request, selected string) customersView {
+	view := customersView{Search: strings.TrimSpace(r.URL.Query().Get("q")), Selected: selected}
 	customers, err := s.db.OperatorAccounts(r.Context(), db.OperatorAccountSearch{Text: view.Search}, 100)
 	if err != nil {
 		view.Err = "Couldn't load customers: " + err.Error()
-		return customersPage(view)
+		return view
 	}
 	view.Customers = customers
 	if view.Selected == "" && len(customers) > 0 {
@@ -72,7 +78,7 @@ func (s *Server) customersPage(r *http.Request) templ.Component {
 		detail := s.loadCustomer(r.Context(), view.Selected)
 		view.Detail = &detail
 	}
-	return customersPage(view)
+	return view
 }
 
 func (s *Server) loadCustomer(ctx context.Context, userID string) customerDetailView {

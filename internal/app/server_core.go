@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/browsersync"
-	"github.com/kannachi323/misty/server/internal/platform/metrics"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/browsersync"
+	"github.com/misty-org/misty-server/internal/platform/metrics"
 )
 
 type Server struct {
@@ -102,6 +102,7 @@ func CreateServer() (*Server, error) {
 	s.AgentRuntime = agentRuntime
 	s.Spaces.SetLibraryProvider(s.Library)
 	s.Spaces.SetAvatarStore(s.LibraryStore)
+	s.Spaces.SetToolOutputStore(s.LibraryStore)
 	s.Realtime = api.NewRealtimeService(s.Database, s.Database.GetDSN())
 
 	s.HealthMonitor = NewHealthMonitor(s)

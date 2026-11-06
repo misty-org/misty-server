@@ -5,17 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
 )
 
-func TestRecallToolsAreOfferedOnlyWithMemoryAndGateThemselves(t *testing.T) {
-	t.Setenv("MISTY_RECALL", "")
+func TestRecallToolsGateThemselves(t *testing.T) {
 	service := &SpacesService{}
-	if len(service.recallToolRegistrations()) != 0 {
-		t.Fatal("recall tools offered while Memory is off")
-	}
-	t.Setenv("MISTY_RECALL", "true")
 	registrations := service.recallToolRegistrations()
 	if len(registrations) != 4 {
 		t.Fatalf("recall tools = %d", len(registrations))

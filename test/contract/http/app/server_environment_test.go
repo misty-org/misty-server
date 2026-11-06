@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/app"
+	. "github.com/misty-org/misty-server/internal/app"
 )
 
 func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {

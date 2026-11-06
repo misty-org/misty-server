@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // recordInvocationOnboarding notes the Get started steps a newly accepted request

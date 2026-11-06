@@ -22,9 +22,6 @@ type User struct {
 	AvatarVersion       int64
 	EmailUpdatesEnabled bool
 	CreatedAt           time.Time
-	// CredentialPassword: the password hash is of a value the app derived on the
-	// device, so the server has never seen the password itself.
-	CredentialPassword bool
 }
 
 type UserSettings struct {
@@ -51,6 +48,20 @@ func (db Store) createUser(username, email, password string) (*User, error) {
 		return nil, err
 	}
 	return db.createIdentity(username, email, string(hash), "misty", "")
+}
+
+// CreateConfirmedUser makes the password account whose email was just confirmed, from
+// the hash kept while it waited. If someone took the username meanwhile it gets a
+// suffix, which the person can change in settings.
+func (db Store) CreateConfirmedUser(username, email, hash string) (*User, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		user, err := db.createIdentity(username, email, hash, "misty", "")
+		if !errors.Is(err, ErrUsernameTaken) {
+			return user, err
+		}
+		username = usernameWithSuffix(username)
+	}
+	return nil, ErrUsernameTaken
 }
 
 func (db Store) createIdentity(username, email, hash, provider, subject string) (*User, error) {
@@ -96,10 +107,10 @@ func (db Store) GetUserByEmail(email string) (*User, string, error) {
 	err := db.Transaction(context.Background(), AnonymousScope(normalizedEmail), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(
 			context.Background(),
-			`SELECT id, license_id, username, email, password_hash, created_at, provider, COALESCE(provider_subject,''), credential_password
+			`SELECT id, license_id, username, email, password_hash, created_at, provider, COALESCE(provider_subject,'')
 			 FROM users WHERE LOWER(email)=$1 AND lifecycle_state='active'`,
 			normalizedEmail,
-		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &hash, &u.CreatedAt, &u.Provider, &u.ProviderSubject, &u.CredentialPassword)
+		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &hash, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -160,10 +171,10 @@ func (db Store) GetUserByID(id string) (*User, error) {
 		return tx.QueryRowContext(
 			context.Background(),
 			`SELECT id, license_id, username, email, avatar_version,
-			        email_updates_enabled, created_at, provider, COALESCE(provider_subject,''), credential_password
+			        email_updates_enabled, created_at, provider, COALESCE(provider_subject,'')
 			 FROM users WHERE id=$1 AND lifecycle_state='active'`,
 			id,
-		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &u.AvatarVersion, &u.EmailUpdatesEnabled, &u.CreatedAt, &u.Provider, &u.ProviderSubject, &u.CredentialPassword)
+		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &u.AvatarVersion, &u.EmailUpdatesEnabled, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -192,6 +203,23 @@ func (db Store) GetUserSettingsByID(id string) (*UserSettings, error) {
 		return nil, err
 	}
 	return &settings, nil
+}
+
+// SetUsername changes the account's username and answers it as stored.
+func (db Store) SetUsername(id, username string) (string, error) {
+	normalized, err := NormalizeUsername(username)
+	if err != nil {
+		return "", err
+	}
+	err = db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(context.Background(), `UPDATE users SET username=$2 WHERE id=$1 AND lifecycle_state='active'`, id, normalized)
+		return err
+	})
+	var pqError *pq.Error
+	if errors.As(err, &pqError) && pqError.Constraint == "users_username_unique_idx" {
+		return "", ErrUsernameTaken
+	}
+	return normalized, err
 }
 
 func (db Store) UpdateUserSettings(id string, settings UserSettings) error {
@@ -230,13 +258,10 @@ var (
 	ErrNoPasswordAccount = errors.New("this account has no Misty password")
 )
 
-// ChangePassword replaces a password account's password. `current` and `next`
-// are opaque to the server: the desktop app sends a value it derived from the
-// person's password (see the native sync crate), older accounts send the
-// password itself, and bcrypt hashes either. It never returns the hash. Every
-// other session of the account ends with the change (the one named by
-// keepSessionHash stays), so a stolen session does not outlive the password.
-func (db Store) ChangePassword(id, current, next, keepSessionHash string, credential bool) error {
+// ChangePassword replaces a password account's password. It never returns the
+// hash. Every other session of the account ends with the change (the one named
+// by keepSessionHash stays), so a stolen session does not outlive the password.
+func (db Store) ChangePassword(id, current, next, keepSessionHash string) error {
 	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
 		var hash, provider string
 		err := tx.QueryRowContext(context.Background(),
@@ -256,7 +281,7 @@ func (db Store) ChangePassword(id, current, next, keepSessionHash string, creden
 		if err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(context.Background(), `UPDATE users SET password_hash=$1, credential_password=$3 WHERE id=$2`, string(updated), id, credential); err != nil {
+		if _, err = tx.ExecContext(context.Background(), `UPDATE users SET password_hash=$1 WHERE id=$2`, string(updated), id); err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(context.Background(), `DELETE FROM sessions WHERE user_id=$1 AND token_hash<>$2`, id, keepSessionHash)
@@ -266,13 +291,4 @@ func (db Store) ChangePassword(id, current, next, keepSessionHash string, creden
 		log.Println("Failed to change password:", err)
 	}
 	return err
-}
-
-// SetCredentialPassword records whether the account's password hash is of a
-// derived credential (see User.CredentialPassword).
-func (db Store) SetCredentialPassword(id string, credential bool) error {
-	return db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(context.Background(), `UPDATE users SET credential_password=$1 WHERE id=$2`, credential, id)
-		return err
-	})
 }

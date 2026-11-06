@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kannachi323/misty/server/deploy/setup/fakecloudflare"
+	"github.com/misty-org/misty-server/deploy/setup/fakecloudflare"
 )
 
 const (
@@ -54,8 +54,8 @@ func newHarness(t *testing.T) *harness {
 func writeBundles(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	for _, app := range []string{"journal-collab", "web-fetch"} {
-		config, err := os.ReadFile(filepath.Join("..", "..", "apps", app, "wrangler.jsonc"))
+	for _, app := range []string{"journal-collab"} {
+		config, err := os.ReadFile(filepath.Join("..", "..", "services", app, "wrangler.jsonc"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -92,7 +92,7 @@ func TestProvisionCreatesEverythingOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	fake := h.fake
-	if len(fake.Tunnels) != 1 || len(fake.DNS) != 1 || len(fake.Tokens) != 2 || len(fake.Buckets) != 2 || len(fake.Scripts) != 2 {
+	if len(fake.Tunnels) != 1 || len(fake.DNS) != 1 || len(fake.Tokens) != 2 || len(fake.Buckets) != 2 || len(fake.Scripts) != 1 {
 		t.Fatalf("resources: tunnels=%d dns=%d tokens=%d buckets=%d scripts=%d", len(fake.Tunnels), len(fake.DNS), len(fake.Tokens), len(fake.Buckets), len(fake.Scripts))
 	}
 	for _, record := range fake.DNS {
@@ -130,8 +130,8 @@ func TestProvisionCreatesEverythingOnce(t *testing.T) {
 	if !strings.Contains(stringify(collab.Metadata["bindings"]), "https://cloud.misty.example/v1") {
 		t.Fatal("collab worker does not call back to the API")
 	}
-	if h.store.Get("PARTYKIT_HOST") != names.CollabWorker+".misty-test.workers.dev" || h.store.Get("MISTY_WEB_FETCH_URL") != "https://"+names.FetchWorker+".misty-test.workers.dev" {
-		t.Fatalf("worker hosts %s %s", h.store.Get("PARTYKIT_HOST"), h.store.Get("MISTY_WEB_FETCH_URL"))
+	if h.store.Get("PARTYKIT_HOST") != names.CollabWorker+".misty-test.workers.dev" {
+		t.Fatalf("worker host %s", h.store.Get("PARTYKIT_HOST"))
 	}
 	if !strings.HasPrefix(h.store.Get("CLOUDFLARE_TUNNEL_TOKEN"), "fake-tunnel-token-") {
 		t.Fatal("tunnel token was not saved")

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 const (
@@ -25,15 +25,8 @@ const (
 // day recaps built from them), on the server with no device online. Reading
 // needs the
 // person's permission each time, or a remembered "Search your Memory" grant
-// in Auto; forgetting always asks. Offered only while Memory is on.
+// in Auto; forgetting always asks.
 func (s *SpacesService) recallToolRegistrations() []agenttools.Registration {
-	if !recallConfig().Enabled {
-		return nil
-	}
-	return recallToolRegistrationsFor(s)
-}
-
-func recallToolRegistrationsFor(s *SpacesService) []agenttools.Registration {
 	base := agenttools.Descriptor{Version: 1, OutputSchema: agentToolObjectOutputSchema(), Layer: agenttools.LayerPrivate, Locality: agenttools.LocalityServer}
 	when := map[string]any{"type": "string", "format": "date-time", "description": "RFC 3339 time."}
 	site := map[string]any{"type": "string", "maxLength": 255, "description": "A site such as nytimes.com."}
@@ -73,9 +66,6 @@ func (s *SpacesService) executeRecallTool(ctx context.Context, invocation agentt
 	var input recallInput
 	if json.Unmarshal(request.Arguments, &input) != nil {
 		return nil, agenttools.ErrArgumentsInvalid
-	}
-	if !recallConfig().Enabled {
-		return nil, agent.ErrInvalidRequest("Memory isn't available")
 	}
 	need := grantNeed{action: agent.GrantRecallRead, scopeKind: agent.ScopeRecall, scopeID: agent.RecallScopeID, label: "search your Memory"}
 	title := "Search your Memory"

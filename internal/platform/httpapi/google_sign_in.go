@@ -9,17 +9,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/idtoken"
 )
 
 const googleSignInTTL = 10 * time.Minute
 
 const googleSignInCookie = "misty_google_sign_in"
+
+// Marks the state cookie of a sign-in begun on the website, so it ends there with its
+// completion code instead of on the app's page. The code is no use without the polling
+// token, which only the tab that began the sign-in holds.
+const googleSignInWebsiteMark = ".website"
 
 type googleSignInStore interface {
 	CreateGoogleSignInFlow(context.Context, db.GoogleSignInFlow) error
@@ -35,12 +39,12 @@ type GoogleSignInService struct {
 	store    googleSignInStore
 	oauth    oauth2.Config
 	startURL string
-	validate func(context.Context, string, string) (*idtoken.Payload, error)
+	validate func(context.Context, string, string) (*googleIdentity, error)
 	session  func(http.ResponseWriter, *http.Request, *db.User)
 }
 
 func NewGoogleSignInService(database *db.Database) (*GoogleSignInService, error) {
-	s := &GoogleSignInService{store: database, validate: idtoken.Validate}
+	s := &GoogleSignInService{store: database, validate: newGoogleKeySet().validate}
 	s.session = func(w http.ResponseWriter, r *http.Request, u *db.User) {
 		writeAuthSession(w, r, database, u, http.StatusOK)
 	}
@@ -90,6 +94,7 @@ func (s *GoogleSignInService) Begin() http.HandlerFunc {
 		}
 		var body struct {
 			Reauthenticate bool `json:"reauthenticate"`
+			Website        bool `json:"website"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -129,7 +134,11 @@ func (s *GoogleSignInService) Begin() http.HandlerFunc {
 			http.Error(w, "internal error", 500)
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]any{"url": s.startURL + "?state=" + url.QueryEscape(state), "flow_token": poll, "expires_in": int(googleSignInTTL.Seconds())})
+		launch := s.startURL + "?state=" + url.QueryEscape(state)
+		if body.Website {
+			launch += "&to=website"
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"url": launch, "flow_token": poll, "expires_in": int(googleSignInTTL.Seconds())})
 	}
 }
 
@@ -148,7 +157,11 @@ func (s *GoogleSignInService) Start() http.HandlerFunc {
 			googleSignInPage(w, 400, "This sign-in link has expired. Return to Misty and try again.")
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: googleSignInCookie, Value: state, Path: "/", HttpOnly: true, Secure: strings.HasPrefix(s.oauth.RedirectURL, "https:"), SameSite: http.SameSiteLaxMode, MaxAge: int(googleSignInTTL.Seconds())})
+		bound := state
+		if r.URL.Query().Get("to") == "website" {
+			bound += googleSignInWebsiteMark
+		}
+		http.SetCookie(w, &http.Cookie{Name: googleSignInCookie, Value: bound, Path: "/", HttpOnly: true, Secure: strings.HasPrefix(s.oauth.RedirectURL, "https:"), SameSite: http.SameSiteLaxMode, MaxAge: int(googleSignInTTL.Seconds())})
 		options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(flow.Verifier), oauth2.SetAuthURLParam("nonce", flow.Nonce), oauth2.SetAuthURLParam("prompt", "select_account")}
 		http.Redirect(w, r, s.oauth.AuthCodeURL(state, options...), http.StatusSeeOther)
 	}
@@ -161,7 +174,11 @@ func (s *GoogleSignInService) Callback() http.HandlerFunc {
 		}
 		state := r.URL.Query().Get("state")
 		cookie, err := r.Cookie(googleSignInCookie)
-		if err != nil || state == "" || len(r.URL.Query()["state"]) != 1 || subtle.ConstantTimeCompare([]byte(state), []byte(cookie.Value)) != 1 {
+		bound, toWebsite := "", false
+		if err == nil {
+			bound, toWebsite = strings.CutSuffix(cookie.Value, googleSignInWebsiteMark)
+		}
+		if err != nil || state == "" || len(r.URL.Query()["state"]) != 1 || subtle.ConstantTimeCompare([]byte(state), []byte(bound)) != 1 {
 			googleSignInPage(w, 400, "Google sign-in could not be verified. Return to Misty and try again.")
 			return
 		}
@@ -187,6 +204,8 @@ func (s *GoogleSignInService) Callback() http.HandlerFunc {
 					if accountErr == nil && user != nil {
 						userID = user.ID
 						errorCode = ""
+					} else if errors.Is(accountErr, db.ErrPasswordAccount) {
+						errorCode = "password_account"
 					} else if errors.Is(accountErr, db.ErrProviderConflict) {
 						errorCode = "provider_conflict"
 					} else if errors.Is(accountErr, ErrRegistrationClosed) {
@@ -210,8 +229,16 @@ func (s *GoogleSignInService) Callback() http.HandlerFunc {
 			googleSignInPage(w, 500, "Could not finish sign-in. Return to Misty and try again.")
 			return
 		}
+		if errorCode != "" && toWebsite {
+			http.Redirect(w, r, websiteURL()+"/signin#google_error="+url.QueryEscape(errorCode), http.StatusSeeOther)
+			return
+		}
 		if errorCode != "" {
 			googleSignInPage(w, 400, googleSignInError(errorCode))
+			return
+		}
+		if toWebsite {
+			http.Redirect(w, r, websiteURL()+"/signin#google_code="+url.QueryEscape(completion), http.StatusSeeOther)
 			return
 		}
 		googleSignInCompletePage(w, completion)

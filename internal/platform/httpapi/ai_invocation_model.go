@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agent"
 )
 
 // chooseInvocationModel records the run under the model the app named, else

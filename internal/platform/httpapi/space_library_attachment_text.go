@@ -7,14 +7,13 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 
-	"github.com/coregx/gxpdf"
-	"github.com/kannachi323/misty/server/internal/workflow"
+	"github.com/ledongthuc/pdf"
+	"github.com/misty-org/misty-server/internal/workflow"
 )
 
 type docxTextNode struct {
@@ -69,36 +68,49 @@ func TestingExtractDOCXText(data []byte) (string, error) {
 	return extractDOCXText(data)
 }
 
+// Attachments are at most this big, and their text no bigger.
+const maxPDFTextBytes = 25_000_000
+
 func extractPDFText(data []byte) (string, error) {
-	file, err := os.CreateTemp("", "misty-agent-*.pdf")
+	return extractPDFTextLimited(data, maxPDFTextBytes)
+}
+
+// Some fonts decode spaces to NUL, which text columns and tools refuse.
+func cleanPDFText(content string) string {
+	return strings.ReplaceAll(content, "\x00", " ")
+}
+
+func extractPDFTextLimited(data []byte, limit int) (text string, err error) {
+	// The parser panics on some malformed files, and these come from anyone in a Space.
+	defer func() {
+		if recover() != nil {
+			text, err = "", workflow.ErrUnsupportedContent
+		}
+	}()
+	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return "", err
 	}
-	path := file.Name()
-	defer os.Remove(path)
-	if _, err := file.Write(data); err != nil {
-		file.Close()
-		return "", err
-	}
-	if err := file.Close(); err != nil {
-		return "", err
-	}
-	document, err := gxpdf.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer document.Close()
 	var builder strings.Builder
-	for page := 1; page <= document.PageCount(); page++ {
-		text, err := document.ExtractTextFromPage(page)
+	for number := 1; number <= reader.NumPage(); number++ {
+		page := reader.Page(number)
+		if page.V.IsNull() {
+			continue
+		}
+		content, err := page.GetPlainText(nil)
 		if err != nil {
 			return "", err
 		}
-		if strings.TrimSpace(text) == "" {
+		content = cleanPDFText(content)
+		if strings.TrimSpace(content) == "" {
 			continue
 		}
-		builder.WriteString("\n[Page " + strconv.Itoa(page) + "]\n")
-		builder.WriteString(text)
+		section := "\n[Page " + strconv.Itoa(number) + "]\n" + content
+		if builder.Len()+len(section) > limit {
+			builder.WriteString(section[:max(limit-builder.Len(), 0)])
+			break
+		}
+		builder.WriteString(section)
 	}
 	if strings.TrimSpace(builder.String()) == "" {
 		return "", workflow.ErrUnsupportedContent

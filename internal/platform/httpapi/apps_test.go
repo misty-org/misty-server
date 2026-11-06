@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/integrations/composio"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/integrations/composio"
 )
 
 func TestAppsToolsRegisterOnlyWhenConfigured(t *testing.T) {

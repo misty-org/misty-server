@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/spaces"
+	"github.com/misty-org/misty-server/internal/spaces"
 )
 
 const (

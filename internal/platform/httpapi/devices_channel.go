@@ -11,9 +11,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/kannachi323/misty/server/internal/accounts"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 const (
@@ -194,7 +194,7 @@ func (s *AgentsService) serveDeviceChannel(parent context.Context, conn *websock
 				}
 			case event := <-events:
 				switch event.Topic {
-				case "devices", "device-admission", "jobs", "reset":
+				case "devices", "jobs", "reset":
 				default:
 					continue
 				}

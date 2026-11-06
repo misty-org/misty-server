@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // MemoryExport downloads everything Memory kept as a zip: memory.jsonl with

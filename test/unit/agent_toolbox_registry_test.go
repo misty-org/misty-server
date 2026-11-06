@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
 )
 
 func TestAgentToolboxRejectsDuplicateNamesAndAliases(t *testing.T) {

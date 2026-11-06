@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Group threads in a Space. They act in one Space like the other Space data

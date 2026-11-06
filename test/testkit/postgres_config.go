@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	envconfig "github.com/misty-org/misty-server/internal/platform/config"
 )
 
 // loadDatabaseConfig resolves the destructive test database connection.

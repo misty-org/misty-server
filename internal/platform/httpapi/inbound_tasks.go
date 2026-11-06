@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/integrations/composio"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/integrations/composio"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Give the agent a task by email or Slack (roadmap C8). With a channel on,

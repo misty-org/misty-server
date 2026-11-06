@@ -1,50 +1,16 @@
 package api
 
 import (
-	"encoding/base64"
-	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// Devices: admission, signed list, policies, names and removal
-// (docs/sync/devices.md). Every change that affects trust carries a
-// signature the server checks but cannot produce.
+// Signed-in sessions' names, policies and removal.
 
-// DeviceTrust returns what clients verify against: the vault root public key
-// and the current root-signed device list.
-func (s *AgentsService) DeviceTrust() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
-		if !ok {
-			return
-		}
-		response := map[string]any{"accountId": userID, "vault": nil, "list": nil}
-		root, err := s.database.DeviceVaultRoot(r.Context(), userID)
-		if err != nil && !errors.Is(err, db.ErrDeviceVaultMissing) {
-			writeAgentError(w, err)
-			return
-		}
-		if root != nil {
-			response["vault"] = map[string]any{"vaultId": root.VaultID, "rootPublicKey": base64.StdEncoding.EncodeToString(root.RootPublicKey), "keyEpoch": root.KeyEpoch}
-		}
-		list, err := s.database.CurrentDeviceList(r.Context(), userID)
-		if err != nil {
-			writeAgentError(w, err)
-			return
-		}
-		if list != nil {
-			response["list"] = map[string]any{"payload": base64.StdEncoding.EncodeToString(list.Payload), "signature": list.Signature, "version": list.Version}
-		}
-		writeJSON(w, http.StatusOK, response)
-	}
-}
-
-// RenameDevice sets one device's name. Any added device may rename any device;
-// a pending device may rename only itself.
+// RenameDevice sets one device's name.
 func (s *AgentsService) RenameDevice() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		device, ok := requestDevice(r)
@@ -96,8 +62,7 @@ func (s *AgentsService) StoreDevicePolicy() http.HandlerFunc {
 	}
 }
 
-// RemoveDevice removes a device from the account. An added device needs the
-// root-signed list that drops it; a pending one only needs an added device.
+// RemoveDevice removes a signed-in session for good.
 func (s *AgentsService) RemoveDevice() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		device, ok := requireAdmittedDevice(w, r)
@@ -105,8 +70,7 @@ func (s *AgentsService) RemoveDevice() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			TargetDeviceID string              `json:"targetDeviceId"`
-			List           *signedDeviceRecord `json:"list,omitempty"`
+			TargetDeviceID string `json:"targetDeviceId"`
 		}
 		if decodeAIJSON(w, r, &body) != nil {
 			return
@@ -115,21 +79,7 @@ func (s *AgentsService) RemoveDevice() http.HandlerFunc {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		var change *db.DeviceListChange
-		if body.List != nil {
-			root, err := s.database.DeviceVaultRoot(r.Context(), device.UserID)
-			if err != nil {
-				writeAgentError(w, err)
-				return
-			}
-			parsed, accountID, epoch, err := parseDeviceList(*body.List, root.RootPublicKey)
-			if err != nil || accountID != device.UserID || parsed.VaultID != root.VaultID || epoch != root.KeyEpoch {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_device_list", "message": "The new device list could not be verified."})
-				return
-			}
-			change = parsed
-		}
-		if _, err := s.database.RemoveDevice(r.Context(), device.UserID, body.TargetDeviceID, change); err != nil {
+		if _, err := s.database.RemoveDevice(r.Context(), device.UserID, body.TargetDeviceID); err != nil {
 			writeAgentError(w, err)
 			return
 		}

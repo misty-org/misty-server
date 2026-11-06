@@ -12,9 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
-	"google.golang.org/api/idtoken"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 // The completion code binds a finished Google sign-in to the browser that
@@ -61,7 +60,7 @@ func normalizeGoogleCompletionCode(raw string) string {
 	return code.String()
 }
 
-func validGoogleIdentity(p *idtoken.Payload, nonce, clientID string) bool {
+func validGoogleIdentity(p *googleIdentity, nonce, clientID string) bool {
 	if p == nil || p.Subject == "" || (p.Issuer != "https://accounts.google.com" && p.Issuer != "accounts.google.com") || p.Audience != clientID || p.Expires <= time.Now().Unix() {
 		return false
 	}
@@ -148,15 +147,19 @@ func (s *GoogleSignInService) Complete() http.HandlerFunc {
 	}
 }
 
-func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *idtoken.Payload, email string) (*db.User, error) {
+func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *googleIdentity, email string) (*db.User, error) {
 	if flow.ReauthenticateUserID == "" {
-		// A server closed to new accounts still signs existing ones in.
+		// A server closed to new accounts still signs existing ones in, if they're on its list.
 		if gate, ok := s.store.(interface {
 			accountCounter
 			GetUserByEmail(string) (*db.User, string, error)
 		}); ok {
 			if existing, _, err := gate.GetUserByEmail(email); err != nil {
 				return nil, err
+			} else if existing != nil {
+				if err := s.checkSignInAllowed(existing); err != nil {
+					return nil, err
+				}
 			} else if existing == nil {
 				allowed, err := registrationAllowed(context.Background(), gate, email)
 				if err != nil {
@@ -164,6 +167,20 @@ func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *i
 				}
 				if !allowed {
 					return nil, ErrRegistrationClosed
+				}
+				if holder, ok := s.store.(interface {
+					SetAccountLimits(context.Context, string, db.AccountLimits) error
+				}); ok && openSignup() {
+					// The server's owner, its first account, is never held back.
+					hold, err := gate.AnyAccount(context.Background())
+					if err != nil {
+						return nil, err
+					}
+					user, err := s.store.GoogleUser(email, payload.Subject)
+					if err == nil && hold {
+						err = openSignupLimits(context.Background(), holder, user.ID)
+					}
+					return user, err
 				}
 			}
 		}
@@ -179,12 +196,34 @@ func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *i
 	return user, nil
 }
 
+// checkSignInAllowed refuses an existing account the server's allowlist leaves out. A store
+// that can't name the owner has no way to exempt them, so only the list decides.
+func (s *GoogleSignInService) checkSignInAllowed(user *db.User) error {
+	store, ok := s.store.(interface {
+		IsServerOwner(context.Context, string) (bool, error)
+	})
+	if !ok {
+		store = noOwner{}
+	}
+	allowed, err := signInAllowed(context.Background(), store, user)
+	if err == nil && !allowed {
+		return ErrRegistrationClosed
+	}
+	return err
+}
+
+type noOwner struct{}
+
+func (noOwner) IsServerOwner(context.Context, string) (bool, error) { return false, nil }
+
 func googleSignInError(code string) string {
 	switch code {
 	case "access_denied":
 		return "Google sign-in was cancelled. Return to Misty to try again."
+	case "password_account":
+		return "This email already exists as a Misty account. Please return to Misty and sign in with your email and password instead."
 	case "provider_conflict":
-		return "This email already has a Misty account. Use its original sign-in method."
+		return "This email already exists as a Misty account under a different Google account. Please return to Misty and sign in with that Google account instead."
 	case "registration_closed":
 		return "This server isn't taking new accounts. Ask its operator for access."
 	default:

@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/accounts"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // asMember runs fn as one person under the app role, so the RLS policies

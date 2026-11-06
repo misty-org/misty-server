@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func TestAuthLifecycle(t *testing.T) {
@@ -77,8 +77,8 @@ func TestAuthLifecycle(t *testing.T) {
 	}
 
 	bearerMeRec := performBearerJSONRequest(t, api.GetMe(database), http.MethodGet, "/me", nil, sessionCookie.Value)
-	if bearerMeRec.Code != http.StatusUnauthorized {
-		t.Fatalf("account JWT accepted as bearer: %d", bearerMeRec.Code)
+	if bearerMeRec.Code != http.StatusOK {
+		t.Fatalf("access token refused as bearer: %d", bearerMeRec.Code)
 	}
 	refreshRec := performJSONRequest(t, api.RefreshSession(database), http.MethodPost, "/auth/refresh", nil, refreshCookie)
 	if refreshRec.Code != http.StatusNoContent {

@@ -60,7 +60,6 @@ var secretSpecs = []secretSpec{
 	{Name: "JOURNAL_COLLAB_CONTROL_SECRET", Kind: randomKey, Previous: "JOURNAL_COLLAB_CONTROL_SECRET_PREVIOUS"},
 	{Name: "JOURNAL_COLLAB_PROJECTION_SECRET", Kind: randomKey, Previous: "JOURNAL_COLLAB_PROJECTION_SECRET_PREVIOUS"},
 	{Name: "JOURNAL_COLLAB_ROOM_SALT", Kind: randomKey, DataBound: true},
-	{Name: "MISTY_WEB_FETCH_SECRET", Kind: hexSecret, Rotatable: true},
 	{Name: "MISTY_BACKUP_AGE_IDENTITY", Kind: ageIdentity, DataBound: true},
 }
 

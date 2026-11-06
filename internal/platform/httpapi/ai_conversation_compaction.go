@@ -5,8 +5,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Conversation history for one turn follows the common harness pattern: the
@@ -29,7 +29,8 @@ func conversationHistoryBudget(windowTokens int) int {
 
 func conversationHistoryEntry(turn db.AIConversationTurnRecord) string {
 	entry := "User: " + truncateAgentRuntimeText(strings.TrimSpace(turn.Prompt), historyTurnPromptRunes) + "\n"
-	if reply := strings.TrimSpace(turn.Reply); reply != "" {
+	// The requirements ledger riding on a reply is for the app; the model has its own.
+	if reply := strings.TrimSpace(withLedgerRows(turn.Reply, nil)); reply != "" {
 		entry += "Assistant: " + truncateAgentRuntimeText(reply, historyTurnReplyRunes) + "\n"
 	}
 	return entry

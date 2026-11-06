@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/integrations/composio"
+	"github.com/misty-org/misty-server/internal/integrations/composio"
 )
 
 // Gmail and Slack for tasks by email or Slack (roadmap C8). Calls go through

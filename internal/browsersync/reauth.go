@@ -65,6 +65,9 @@ func (l *attemptLimiter) reset(key string) {
 	delete(l.events, key)
 }
 
+// An account with no password proves itself by signing in again this recently.
+const syncReauthWindow = 10 * time.Minute
+
 // Wrong passwords to confirm deleting a vault: five in fifteen minutes.
 var reauthFailures = newAttemptLimiter(5, 15*time.Minute)
 
@@ -73,13 +76,9 @@ var reauthFailures = newAttemptLimiter(5, 15*time.Minute)
 var keyRotations = newAttemptLimiter(10, 10*time.Minute)
 
 // confirmPassword checks a password given to confirm a destructive request
-// against the account's stored hash. An account that signs in another way
-// (Google) has no password, so its session is all there is to check. Wrong
-// attempts count toward a limit; a correct one clears them.
-func confirmPassword(limiter *attemptLimiter, key, provider, hash, password string, now time.Time) error {
-	if provider != "misty" {
-		return nil
-	}
+// against the account's stored hash. Wrong attempts count toward a limit; a
+// correct one clears them.
+func confirmPassword(limiter *attemptLimiter, key, hash, password string, now time.Time) error {
 	if limiter.blocked(key, now) {
 		return ErrSyncRateLimited
 	}

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/workflow"
+	"github.com/misty-org/misty-server/internal/workflow"
 )
 
 type WorkflowRunStep struct {

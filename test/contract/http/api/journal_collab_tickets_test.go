@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func testCollabConfig(t *testing.T) JournalCollabConfig {

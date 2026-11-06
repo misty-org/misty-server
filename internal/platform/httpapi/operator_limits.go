@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // operatorInvalid is a request the operator API refuses, with why.

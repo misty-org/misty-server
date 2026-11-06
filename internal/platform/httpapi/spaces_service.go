@@ -14,23 +14,25 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/kannachi323/misty/server/internal/agent"
+	serveragent "github.com/misty-org/misty-server/internal/agent"
 )
 
 type SpacesService struct {
-	JournalCollab  JournalCollabConfig
-	database       *db.Database
-	agent          *serveragent.Service
-	library        *SpaceLibraryService
-	avatarStore    LibraryObjectStore
-	aead           cipher.AEAD
-	keyVer         int16
-	agentRuntime   AgentRuntimeConfig
-	aiInvocations  *aiInvocationHub
-	appConnections AppConnectionRemover
+	JournalCollab JournalCollabConfig
+	database      *db.Database
+	agent         *serveragent.Service
+	library       *SpaceLibraryService
+	avatarStore   LibraryObjectStore
+	// toolOutputStore holds screenshots from agent tools.
+	toolOutputStore LibraryObjectStore
+	aead            cipher.AEAD
+	keyVer          int16
+	agentRuntime    AgentRuntimeConfig
+	aiInvocations   *aiInvocationHub
+	appConnections  AppConnectionRemover
 }
 
 func (s *SpacesService) SetAgentRuntime(config AgentRuntimeConfig) {
@@ -69,6 +71,12 @@ func (s *SpacesService) SetLibraryProvider(library *SpaceLibraryService) {
 // live under the avatars/ prefix in the shared bucket.
 func (s *SpacesService) SetAvatarStore(store LibraryObjectStore) {
 	s.avatarStore = store
+}
+
+// SetToolOutputStore installs the object store screenshots from agent tools go to,
+// the same bucket as Library files and attachments.
+func (s *SpacesService) SetToolOutputStore(store LibraryObjectStore) {
+	s.toolOutputStore = store
 }
 
 func parseSpaceEncryptionKey(value string) ([]byte, error) {

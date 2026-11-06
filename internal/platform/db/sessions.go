@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/accounts"
 )
 
 const SessionTTL = accounts.SessionTTL

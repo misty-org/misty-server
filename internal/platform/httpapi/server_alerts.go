@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // ServerAlerts answers GET /server/alerts: the open problems the alerts

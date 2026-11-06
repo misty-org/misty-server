@@ -1,7 +1,5 @@
 package agent
 
-import "strings"
-
 const (
 	FrontierModelCatalogVersion = "misty-gpt-v2"
 	DefaultFrontierModelID      = "openai/gpt-6-astra"
@@ -31,24 +29,3 @@ func ManagedReasoning(mode, legacyEffort string) string {
 	return HouseReasoning
 }
 
-func frontierCapabilities(capabilities []string) bool {
-	return gatewayCapabilitiesInclude(capabilities, "vision") &&
-		gatewayCapabilitiesInclude(capabilities, "tools", "tool-use", "tool_calling", "function_calling")
-}
-
-func TestingFrontierCapabilities(capabilities []string) bool {
-	return frontierCapabilities(capabilities)
-}
-
-func gatewayCapabilitiesInclude(capabilities []string, values ...string) bool {
-	allowed := map[string]bool{}
-	for _, value := range values {
-		allowed[strings.ToLower(value)] = true
-	}
-	for _, capability := range capabilities {
-		if allowed[strings.ToLower(strings.TrimSpace(capability))] {
-			return true
-		}
-	}
-	return false
-}

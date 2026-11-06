@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
 const healthCacheTTL = 15 * time.Second

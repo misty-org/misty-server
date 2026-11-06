@@ -79,6 +79,16 @@ func retentionTasks(server *Server) []retentionTask {
 			n, err := server.Database.PurgeExpiredAITransients(ctx, 250)
 			return int(n), err
 		}},
+		{"agent-conversations", 250, func(ctx context.Context) (int, error) {
+			n, keys, err := server.Database.PurgeExpiredAgentConversations(ctx, 250)
+			if server.LibraryStore != nil {
+				for _, key := range keys {
+					// A key left behind goes at the next inventory pass.
+					_ = server.LibraryStore.Delete(ctx, key)
+				}
+			}
+			return int(n), err
+		}},
 		{"library-expired", 100, func(ctx context.Context) (int, error) { return server.CleanupExpiredLibraryData(ctx, 100) }},
 		{"journal-assets", 100, func(ctx context.Context) (int, error) {
 			return server.CleanupExpiredJournalAssets(ctx, 24*time.Hour, 100)

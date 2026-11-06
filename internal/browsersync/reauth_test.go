@@ -9,14 +9,14 @@ import (
 )
 
 func TestConfirmingADeletionNeedsThePasswordAndLimitsGuesses(t *testing.T) {
-	hash, err := bcrypt.GenerateFromPassword([]byte("derived-credential"), bcrypt.MinCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte("account-password"), bcrypt.MinCost)
 	if err != nil {
 		t.Fatal(err)
 	}
 	limiter := newAttemptLimiter(3, time.Minute)
 	now := time.Now()
 	check := func(password string, at time.Time) error {
-		return confirmPassword(limiter, "account", "misty", string(hash), password, at)
+		return confirmPassword(limiter, "account", string(hash), password, at)
 	}
 	for i := 0; i < 3; i++ {
 		if err := check("a guess", now); !errors.Is(err, ErrSyncReauth) {
@@ -24,20 +24,16 @@ func TestConfirmingADeletionNeedsThePasswordAndLimitsGuesses(t *testing.T) {
 		}
 	}
 	// Past the limit even the right password waits, so guesses cannot be tried fast.
-	if err := check("derived-credential", now); !errors.Is(err, ErrSyncRateLimited) {
+	if err := check("account-password", now); !errors.Is(err, ErrSyncRateLimited) {
 		t.Fatalf("the limit did not hold: %v", err)
 	}
 	// After the window the right password works and clears the count.
 	later := now.Add(2 * time.Minute)
-	if err := check("derived-credential", later); err != nil {
+	if err := check("account-password", later); err != nil {
 		t.Fatalf("the right password was refused: %v", err)
 	}
 	if err := check("a guess", later); !errors.Is(err, ErrSyncReauth) {
 		t.Fatalf("the count was not cleared: %v", err)
-	}
-	// An account with no password (Google) is not asked for one.
-	if err := confirmPassword(limiter, "google", "google", "", "", later); err != nil {
-		t.Fatalf("an account without a password was refused: %v", err)
 	}
 }
 

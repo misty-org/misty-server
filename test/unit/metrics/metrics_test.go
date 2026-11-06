@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/metrics"
+	. "github.com/misty-org/misty-server/internal/platform/metrics"
 
 	"github.com/go-chi/chi/v5"
 )

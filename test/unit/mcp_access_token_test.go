@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func TestMCPAccessTokenBindsRunRuntimeAndSubject(t *testing.T) {

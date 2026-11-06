@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 var realtimeReset = []byte(`{"type":"replay","events":[],"resync_required":true}`)

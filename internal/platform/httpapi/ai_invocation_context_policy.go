@@ -3,7 +3,7 @@ package api
 import (
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func shouldRetrieveAccountContext(prompt string) bool {

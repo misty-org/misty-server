@@ -7,16 +7,16 @@ import (
 
 func TestBatchPolicyFrameIsTheClampedBaseForEveryone(t *testing.T) {
 	base := BatchPolicy{Revision: 3, Lanes: map[string]BatchLane{
-		"workspace": {QuietMs: 1_000, MaxWaitMs: 5_000, MaxEdits: 50},
-		"history":   {QuietMs: 10, MaxWaitMs: 5, MaxEdits: 5_000},
+		"records": {QuietMs: 1_000, MaxWaitMs: 5_000, MaxEdits: 50},
+		"history": {QuietMs: 10, MaxWaitMs: 5, MaxEdits: 5_000},
 	}}
 	policy := base.frame()["policy"].(map[string]any)
 	if policy["revision"] != int64(3) {
 		t.Fatalf("revision = %v", policy["revision"])
 	}
 	lanes := policy["lanes"].(map[string]BatchLane)
-	if lanes["workspace"] != (BatchLane{QuietMs: 1_000, MaxWaitMs: 5_000, MaxEdits: 50}) {
-		t.Fatalf("workspace lane changed: %+v", lanes["workspace"])
+	if lanes["records"] != (BatchLane{QuietMs: 1_000, MaxWaitMs: 5_000, MaxEdits: 50}) {
+		t.Fatalf("records lane changed: %+v", lanes["records"])
 	}
 	// Out-of-range operator values are clamped to what clients accept.
 	if got := lanes["history"]; got.QuietMs != 100 || got.MaxWaitMs < got.QuietMs || got.MaxEdits != 1_000 {
@@ -29,12 +29,12 @@ func TestBatchPolicyFrameIsTheClampedBaseForEveryone(t *testing.T) {
 
 func TestBatchPolicyFromEnvClampsAndRejectsUnknownLanes(t *testing.T) {
 	t.Setenv("MISTY_SYNC_BATCH_REVISION", "3")
-	t.Setenv("MISTY_SYNC_BATCH_LANES", `{"workspace":{"quiet_ms":10,"max_wait_ms":5,"max_edits":0}}`)
+	t.Setenv("MISTY_SYNC_BATCH_LANES", `{"records":{"quiet_ms":10,"max_wait_ms":5,"max_edits":0}}`)
 	policy, err := batchPolicyFromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if policy.Revision != 3 || policy.Lanes["workspace"] != (BatchLane{QuietMs: 100, MaxWaitMs: 250, MaxEdits: 1}) {
+	if policy.Revision != 3 || policy.Lanes["records"] != (BatchLane{QuietMs: 100, MaxWaitMs: 250, MaxEdits: 1}) {
 		t.Fatalf("policy = %+v", policy)
 	}
 	t.Setenv("MISTY_SYNC_BATCH_LANES", `{"bogus":{"quiet_ms":1,"max_wait_ms":1,"max_edits":1}}`)

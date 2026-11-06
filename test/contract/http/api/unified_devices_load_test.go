@@ -17,7 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func uuidString() string { return uuid.NewString() }

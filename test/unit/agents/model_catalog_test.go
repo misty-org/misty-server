@@ -2,10 +2,9 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/agent"
+	. "github.com/misty-org/misty-server/internal/agent"
 )
 
 func TestFilterChatModelsExcludesNonChatAndDuplicates(t *testing.T) {
@@ -17,13 +16,6 @@ func TestFilterChatModelsExcludesNonChatAndDuplicates(t *testing.T) {
 	})
 	if len(models) != 1 || models[0].ID != "provider/chat" {
 		t.Fatalf("filterChatModels() = %#v", models)
-	}
-}
-
-func TestGatewayCapabilitiesAcceptsObjectMetadata(t *testing.T) {
-	capabilities := GatewayCapabilities(json.RawMessage(`{"tool_calling":true,"image_generation":false,"vision":true}`))
-	if len(capabilities) != 2 || capabilities[0] != "tool_calling" || capabilities[1] != "vision" {
-		t.Fatalf("gatewayCapabilities() = %#v", capabilities)
 	}
 }
 

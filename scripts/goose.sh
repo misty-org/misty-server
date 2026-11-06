@@ -16,10 +16,11 @@ for misty_goose_name in \
     break
   fi
 done
-if [[ "$misty_goose_has_explicit_config" == false && -f .env/dev/database.env ]]; then
+misty_goose_env_file="${MISTY_ENV_DIR:-$HOME/.misty/server/dev}/database.env"
+if [[ "$misty_goose_has_explicit_config" == false && -f "$misty_goose_env_file" ]]; then
   set -a
-  # shellcheck disable=SC1091
-  source .env/dev/database.env
+  # shellcheck disable=SC1090
+  source "$misty_goose_env_file"
   set +a
 fi
 

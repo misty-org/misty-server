@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // startAgentMentionRequests turns @mentions of agent members in a Space chat

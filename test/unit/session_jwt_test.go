@@ -3,7 +3,7 @@ package unit
 import (
 	"encoding/base64"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/security"
 	"strings"
 	"testing"
 	"time"

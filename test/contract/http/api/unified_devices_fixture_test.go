@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 // Records the desktop app signs (testdata/device_records.json, written by
@@ -24,7 +24,7 @@ func TestDesktopSignedDeviceRecordsVerifyOnTheServer(t *testing.T) {
 	}
 	// A changed byte anywhere breaks it.
 	tampered := fixture
-	tampered.Policy.Signature = fixture.Grant.Signature
+	tampered.Policy.Signature = fixture.RunGrant.Signature
 	if err := TestingVerifyDeviceRecordFixture(tampered); err == nil {
 		t.Fatal("a policy with another record's signature verified")
 	}

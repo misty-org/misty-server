@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +80,13 @@ func (s *SpacesService) agentRuntimeEventAIInvocation(w http.ResponseWriter, r *
 			appendEvent(event)
 			if activity := deviceToolActivity(body.State, body.Output); activity != nil {
 				appendEvent(aiInvocationEvent{Type: "tool.detail", ToolCallID: event.ToolCallID, ToolName: toolName, Activity: activity})
+			}
+			// A tool the desktop ran itself: its finished checkpoint carries the output.
+			var device struct {
+				Output json.RawMessage `json:"device_output"`
+			}
+			if body.State == "completed" && json.Unmarshal(body.Output, &device) == nil && len(device.Output) > 0 {
+				s.recordAIInvocationToolOutput(r.Context(), record, agentRuntimeToolCall{CallID: event.ToolCallID, Name: toolName}, device.Output)
 			}
 		}
 		if strings.HasPrefix(body.NodeID, "model:") && body.State == "completed" {

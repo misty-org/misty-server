@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // A device that is running an agent's browser work holds its next claim open

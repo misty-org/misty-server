@@ -200,11 +200,11 @@ func TestPendingMigrations(t *testing.T) {
 
 func TestInputsAreAllRequired(t *testing.T) {
 	_, err := readInputs(func(string) string { return "" })
-	if err == nil || !strings.Contains(err.Error(), "MISTY_COMPOSIO_API_KEY in server/.env/composio.env") || !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID in server/.env/google.env") {
+	if err == nil || !strings.Contains(err.Error(), "MISTY_COMPOSIO_API_KEY in ~/.misty/server/prod/composio.env") || !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID in ~/.misty/server/prod/google.env") {
 		t.Fatalf("expected every missing input, got %v", err)
 	}
 	names := resourceNames("a-very-long-hostname-that-goes-on.and-on.misty.example")
-	if len(names.FetchWorker) > 63 || len(names.LibraryBucket) > 63 {
+	if len(names.CollabWorker) > 63 || len(names.LibraryBucket) > 63 {
 		t.Fatalf("names too long: %+v", names)
 	}
 }

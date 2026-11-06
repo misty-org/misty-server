@@ -1,21 +1,15 @@
 # The Misty tools image: the setup, migrate, backups, alerts, console and tunnel
-# services of compose.yml all run it. Build context: server/.
+# services of compose.yml all run it. Build context: the repository root.
 
-# Bundle both Workers with wrangler's dry run; the image ships the bundles so
+# Bundle the Worker with wrangler's dry run; the image ships the bundle so
 # setup deploys them through the Cloudflare API with no Node at run time.
 FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS workers
 ENV WRANGLER_SEND_METRICS=false CI=true
-WORKDIR /apps/journal-collab
-COPY apps/journal-collab/package.json apps/journal-collab/package-lock.json ./
+WORKDIR /services/journal-collab
+COPY services/journal-collab/package.json services/journal-collab/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
-COPY apps/journal-collab/tsconfig.json apps/journal-collab/wrangler.jsonc ./
-COPY apps/journal-collab/src ./src
-RUN npx wrangler deploy --dry-run --outdir dist
-WORKDIR /apps/web-fetch
-COPY apps/web-fetch/package.json apps/web-fetch/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
-COPY apps/web-fetch/tsconfig.json apps/web-fetch/wrangler.jsonc ./
-COPY apps/web-fetch/src ./src
+COPY services/journal-collab/tsconfig.json services/journal-collab/wrangler.jsonc ./
+COPY services/journal-collab/src ./src
 RUN npx wrangler deploy --dry-run --outdir dist
 
 FROM --platform=$BUILDPLATFORM golang:1.25.12-bookworm@sha256:ea341baa9bd5ba6784f6d7161ace70544349a6242d54d34a0fbfd2c4d51c9d58 AS tools
@@ -43,9 +37,7 @@ COPY --from=tools /out/goose /usr/local/bin/goose
 COPY --from=tools /out/setup /usr/local/bin/misty-setup
 COPY --from=tools /out/misty-console /usr/local/bin/misty-console
 COPY internal/platform/db/migrations /opt/misty/migrations
-COPY --from=workers /apps/journal-collab/wrangler.jsonc /opt/misty/workers/journal-collab/wrangler.jsonc
-COPY --from=workers /apps/journal-collab/dist /opt/misty/workers/journal-collab/dist
-COPY --from=workers /apps/web-fetch/wrangler.jsonc /opt/misty/workers/web-fetch/wrangler.jsonc
-COPY --from=workers /apps/web-fetch/dist /opt/misty/workers/web-fetch/dist
+COPY --from=workers /services/journal-collab/wrangler.jsonc /opt/misty/workers/journal-collab/wrangler.jsonc
+COPY --from=workers /services/journal-collab/dist /opt/misty/workers/journal-collab/dist
 ENTRYPOINT ["/usr/local/bin/misty-setup"]
 CMD ["init"]

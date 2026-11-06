@@ -5,15 +5,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
 DEV_COMPOSE=(docker compose -f compose.dev.yml)
-if [[ -d .env/dev ]]; then
+MISTY_DEV_ENV_DIR="${MISTY_ENV_DIR:-$HOME/.misty/server/dev}"
+if [[ -d "$MISTY_DEV_ENV_DIR" ]]; then
   set -a
   # shellcheck disable=SC1091
-  source .env/dev/database.env
+  source "$MISTY_DEV_ENV_DIR/database.env"
   set +a
   DEV_COMPOSE=(docker compose)
   while IFS= read -r misty_env_file; do
     DEV_COMPOSE+=(--env-file "$misty_env_file")
-  done < <(find .env/dev -type f -name '*.env' | sort)
+  done < <(find "$MISTY_DEV_ENV_DIR" -type f -name '*.env' | sort)
   DEV_COMPOSE+=(-f compose.dev.yml)
 fi
 
@@ -80,7 +81,7 @@ if [[ "$SHOULD_BOOTSTRAP_TEST_DB" == "true" ]]; then
   ADMIN_DB_USER="$TEST_DB_USER"
 
   # The bootstrapped container has no TLS, so a production DB_SSLMODE inherited
-  # from .env/dev/database.env would fail every connection.
+  # from ~/.misty/server/dev/database.env would fail every connection.
   if [[ -z "$EXPLICIT_TEST_DB_SSLMODE" ]]; then
     export TEST_DB_SSLMODE="disable"
   fi
@@ -124,7 +125,7 @@ SQL
       /^-- \+goose Down$/ { in_up = 0 }
       in_up && /^-- \+goose/ { next }
       in_up { print }
-    ' "$migration" | "${DEV_COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$ADMIN_DB_USER" -d "$TEST_DB_NAME"
+    ' "$migration" | "${DEV_COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 --single-transaction -U "$ADMIN_DB_USER" -d "$TEST_DB_NAME"
   done
 
   # Migrations are applied with psql rather than goose, so record them in the

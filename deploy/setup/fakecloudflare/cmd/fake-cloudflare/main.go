@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/kannachi323/misty/server/deploy/setup/fakecloudflare"
+	"github.com/misty-org/misty-server/deploy/setup/fakecloudflare"
 )
 
 func main() {

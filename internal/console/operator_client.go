@@ -10,7 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+// maxOperatorAnswer has room for an account export, the largest answer there is.
+const maxOperatorAnswer = 64 << 20
 
 // operatorClient changes accounts through the running server's operator
 // account API, so the console never re-implements limits, suspension or
@@ -64,6 +68,16 @@ func (c *operatorClient) signInLink(ctx context.Context, id string) (string, err
 	return answer.Account.SetupLink, nil
 }
 
+// exportAccount asks for the account's export. Signing a link for every file
+// can take a while, so it waits longer than the other calls.
+func (c *operatorClient) exportAccount(ctx context.Context, id string) (AccountExportManifest, error) {
+	patient := *c
+	patient.client = &http.Client{Timeout: 2 * time.Minute}
+	var manifest AccountExportManifest
+	err := patient.call(ctx, http.MethodPost, "/accounts/"+url.PathEscape(id)+"/export", nil, &manifest)
+	return manifest, err
+}
+
 func (c *operatorClient) do(ctx context.Context, method, path string, body any) error {
 	return c.call(ctx, method, path, body, nil)
 }
@@ -97,7 +111,7 @@ func (c *operatorClient) call(ctx context.Context, method, path string, body any
 		if out == nil {
 			return nil
 		}
-		return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out)
+		return json.NewDecoder(io.LimitReader(resp.Body, maxOperatorAnswer)).Decode(out)
 	}
 	var problem struct {
 		Code    string `json:"code"`

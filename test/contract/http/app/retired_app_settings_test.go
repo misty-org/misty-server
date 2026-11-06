@@ -1,7 +1,7 @@
 package app
 
 import (
-	. "github.com/kannachi323/misty/server/internal/app"
+	. "github.com/misty-org/misty-server/internal/app"
 	"net/http"
 	"net/http/httptest"
 	"testing"

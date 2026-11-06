@@ -3,7 +3,7 @@ package unit_test
 import (
 	"testing"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func TestValidateAIInvocationAcceptsAttachmentOnlyPrompt(t *testing.T) {

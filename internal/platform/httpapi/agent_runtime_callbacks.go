@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/workflow"
+	"github.com/misty-org/misty-server/internal/workflow"
 )
 
 func (s *SpacesService) AgentRuntimeEvent() http.HandlerFunc {

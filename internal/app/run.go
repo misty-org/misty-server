@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/email"
 
 	"github.com/google/uuid"
 )
@@ -46,12 +47,15 @@ func Run() {
 		WorkerFunc(func(ctx context.Context) { runRetention(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) {
 			if server.BrowserSync != nil {
-				server.BrowserSync.RunLiveness(ctx)
+				// Hijacked sockets outlive the HTTP server's own shutdown.
+				<-ctx.Done()
+				server.BrowserSync.Shutdown()
 			}
 		}),
 		WorkerFunc(func(ctx context.Context) { runPersonalAgentTaskProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runLibraryRenditionProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
+		WorkerFunc(func(ctx context.Context) { email.Run(ctx, server.Database) }),
 	)
 	// Domain gauges refresh on their own schedule so a scrape never holds a
 	// database connection.

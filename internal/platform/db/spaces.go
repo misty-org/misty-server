@@ -166,9 +166,6 @@ func (db *Database) DeleteSpace(ctx context.Context, userID, spaceID, confirmati
 		if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
-		if err := deleteSpaceVaultsTx(ctx, tx, spaceID, ""); err != nil {
-			return err
-		}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "space.deletion_requested", spaceID, map[string]any{"recover_days": 30}); err != nil {
 			return err
 		}

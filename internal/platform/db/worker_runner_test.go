@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/workqueue"
+	"github.com/misty-org/misty-server/internal/platform/workqueue"
 )
 
 func TestWorkerRunnerSleepsWhenEmptyAndExecutesPersistedDeadline(t *testing.T) {

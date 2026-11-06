@@ -29,3 +29,18 @@ __pycache__/
 
 # Workstation-specific rsync helper (local paths and remote host).
 /rsync.sh
+
+# Local server data: backups, logs, tools and generated reports.
+/.misty/
+/output/
+
+# Local secrets and deployment state
+*.env
+.env/
+.dev.vars
+.prod.vars
+.secrets/
+*.log
+*.tmp
+**/.cache/
+**/.venv

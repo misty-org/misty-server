@@ -2,15 +2,15 @@ package app
 
 import (
 	"context"
-	"github.com/kannachi323/misty/server/internal/browsersync"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/browsersync"
+	"github.com/misty-org/misty-server/internal/platform/security"
 	"net/http"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/kannachi323/misty/server/internal/platform/metrics"
+	"github.com/misty-org/misty-server/internal/platform/metrics"
 )
 
 // mountDeps holds the services and handlers that MountHandlers builds once and

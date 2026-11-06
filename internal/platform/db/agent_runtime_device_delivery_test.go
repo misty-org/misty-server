@@ -34,13 +34,11 @@ func deviceDeliveryTestDatabase(t *testing.T) *Database {
 	dispatchExec(t, database, `
  CREATE TABLE ai_invocations(id text PRIMARY KEY,user_id text,conversation_id text,runtime_endpoint text);
  CREATE TABLE space_runs(id text PRIMARY KEY,owner_user_id text,runtime_endpoint text);
- CREATE TABLE misty_ask_conversations(id text PRIMARY KEY,kept_on_device_id text);
  CREATE TABLE agent_runtime_deliveries(id text PRIMARY KEY,user_id text NOT NULL,run_id text NOT NULL,operation text NOT NULL,
   payload jsonb DEFAULT '{}' NOT NULL,state text DEFAULT 'pending' NOT NULL,attempts integer DEFAULT 0 NOT NULL,lease_id text,
   lease_expires_at timestamptz,available_at timestamptz DEFAULT now() NOT NULL,last_error text DEFAULT '' NOT NULL,
   created_at timestamptz DEFAULT now() NOT NULL,updated_at timestamptz DEFAULT now() NOT NULL);
- INSERT INTO misty_ask_conversations VALUES('kept','device_a'),('inbox',NULL);
- INSERT INTO ai_invocations VALUES('invocation_kept','owner','kept',NULL),('invocation_inbox','owner','inbox',NULL),
+ INSERT INTO ai_invocations VALUES('invocation_kept','owner','kept','device:device_a'),('invocation_inbox','owner','inbox',NULL),
   ('invocation_pinned','owner','inbox','device:device_b'),('invocation_other','someone','inbox',NULL);
  INSERT INTO space_runs VALUES('run_task','owner',NULL);`)
 	return database
@@ -59,7 +57,7 @@ func claimedRuns(t *testing.T, database *Database, deviceID string) map[string]A
 	return claimed
 }
 
-func TestDeviceRuntimeDeliveriesGoToTheDeviceThatKeepsTheRun(t *testing.T) {
+func TestDeviceRuntimeDeliveriesGoToTheComputerTheRunWasSentFrom(t *testing.T) {
 	database := deviceDeliveryTestDatabase(t)
 	ctx := context.Background()
 	for _, run := range []string{"invocation_kept", "invocation_inbox", "invocation_pinned", "invocation_other", "run_task"} {
@@ -91,7 +89,7 @@ func TestDeviceRuntimeDeliveriesGoToTheDeviceThatKeepsTheRun(t *testing.T) {
 		}
 	}
 	if _, ok := b["invocation_kept"]; ok {
-		t.Fatal("device B got the chat device A keeps")
+		t.Fatal("device B got the run device A sent")
 	}
 	if _, ok := b["invocation_other"]; ok {
 		t.Fatal("device B got another person's run")

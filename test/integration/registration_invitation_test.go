@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 // A production server takes its first account, then only invited ones.

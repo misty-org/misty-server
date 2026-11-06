@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	"github.com/kannachi323/misty/server/test/testkit"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/test/testkit"
 )
 
 const operatorToken = "operator-test-token"
@@ -124,7 +124,7 @@ func TestOperatorCreateReturnsASetupKeyThatSignsInLikeLogin(t *testing.T) {
 	if rec.Code != http.StatusOK || redeemed["email"] != "new@example.com" || redeemed["provider"] != "misty" {
 		t.Fatalf("redeem = %d %v", rec.Code, redeemed)
 	}
-	for _, field := range []string{"user_id", "username", "email", "provider", "credential_account"} {
+	for _, field := range []string{"user_id", "username", "email", "provider"} {
 		if _, ok := redeemed[field]; !ok {
 			t.Fatalf("redeem response lacks login's %q: %v", field, redeemed)
 		}
@@ -165,7 +165,7 @@ func TestSetupKeyResetsAForgottenPassword(t *testing.T) {
 	if rec, _ := call(t, handler, http.MethodPut, "/v1/me/password", "", `{"current_password":"","new_password":"a new long password"}`, session...); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("change without the reset token = %d", rec.Code)
 	}
-	if rec, _ := call(t, handler, http.MethodPut, "/v1/me/password", "", `{"reset_token":"`+reset+`","new_password":"a new long password","credential":true}`, session...); rec.Code != http.StatusOK {
+	if rec, _ := call(t, handler, http.MethodPut, "/v1/me/password", "", `{"reset_token":"`+reset+`","new_password":"a new long password"}`, session...); rec.Code != http.StatusOK {
 		t.Fatalf("reset = %d", rec.Code)
 	}
 	if rec, _ := call(t, handler, http.MethodPost, "/v1/login", "", `{"email":"owner@example.com","password":"a new long password"}`); rec.Code != http.StatusOK {
@@ -189,6 +189,46 @@ func TestOperatorLimitsPatchSetsOnlyNamedFields(t *testing.T) {
 	}
 	if rec, body := call(t, handler, http.MethodPatch, "/operator/v1/accounts/nobody", operatorToken, `{"limits":{}}`); rec.Code != http.StatusNotFound || body["code"] != "account_not_found" {
 		t.Fatalf("unknown account = %d %v", rec.Code, body)
+	}
+}
+
+func TestSuspendedSignInGetsAProofAndNoSession(t *testing.T) {
+	t.Setenv("MISTY_AUTH_SIGNING_KEY", "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=")
+	handler := operatorServer(t)
+	const login = `{"email":"owner@example.com","password":"the owner's password"}`
+	rec, body := call(t, handler, http.MethodPost, "/v1/login", "", login)
+	id, _ := body["user_id"].(string)
+	if rec.Code != http.StatusOK || id == "" {
+		t.Fatalf("login = %d %v", rec.Code, body)
+	}
+	if rec, _ := call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/suspend", operatorToken, ""); rec.Code != http.StatusOK {
+		t.Fatalf("suspend = %d", rec.Code)
+	}
+
+	// Only someone who knows the password learns anything.
+	rec, body = call(t, handler, http.MethodPost, "/v1/login", "", `{"email":"owner@example.com","password":"not the password at all"}`)
+	if rec.Code != http.StatusUnauthorized || body["proof"] != nil {
+		t.Fatalf("wrong password = %d %v", rec.Code, body)
+	}
+
+	rec, body = call(t, handler, http.MethodPost, "/v1/login", "", login)
+	proof, _ := body["proof"].(string)
+	if rec.Code != http.StatusForbidden || body["code"] != "account_suspended" || proof == "" {
+		t.Fatalf("suspended sign-in = %d %v", rec.Code, body)
+	}
+	if cookies := rec.Result().Cookies(); len(cookies) != 0 {
+		t.Fatalf("a suspended sign-in set cookies: %v", cookies)
+	}
+	if rec, body := call(t, handler, http.MethodPost, "/operator/v1/accounts/proof", operatorToken, `{"proof":"`+proof+`"}`); rec.Code != http.StatusOK || accountField(body, "id") != id {
+		t.Fatalf("proof = %d %v", rec.Code, body)
+	}
+
+	// Paid again, the same password signs in as usual.
+	if rec, _ := call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/resume", operatorToken, ""); rec.Code != http.StatusOK {
+		t.Fatalf("resume = %d", rec.Code)
+	}
+	if rec, _ := call(t, handler, http.MethodPost, "/v1/login", "", login); rec.Code != http.StatusOK {
+		t.Fatalf("login after resume = %d", rec.Code)
 	}
 }
 

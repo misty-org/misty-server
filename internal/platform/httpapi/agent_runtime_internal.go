@@ -8,14 +8,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/workflow"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/workflow"
 )
-
-type agentRuntimeIdentity struct {
-	RuntimeRunID string `json:"runtime_run_id"`
-}
 
 func (s *SpacesService) AgentRuntimeActivate() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

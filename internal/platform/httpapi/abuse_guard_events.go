@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/workqueue"
+	"github.com/misty-org/misty-server/internal/platform/workqueue"
 )
 
 type abuseBlockEvents interface {

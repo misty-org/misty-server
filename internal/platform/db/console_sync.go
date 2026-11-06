@@ -6,26 +6,24 @@ import (
 	"time"
 )
 
-// ConsoleSyncVault is one account's encrypted sync vault with its devices and
-// per-device-sign-in workspaces. Content is endpoint-encrypted; only counts
-// and sequence numbers are visible.
+// ConsoleSyncVault is one account's encrypted vault. Content is end-to-end encrypted: only counts
+// and sizes are visible.
 type ConsoleSyncVault struct {
-	VaultID        string
-	Email          string
-	Devices        int
-	RevokedDevices int
-	Workspaces     int
-	HeadSequence   int64
-	KeyEpoch       int64
-	ActiveDevice   string
-	ActiveSeenAt   *time.Time
-	CreatedAt      time.Time
+	VaultID         string
+	Email           string
+	Sessions        int
+	RevokedSessions int
+	Records         int64
+	Bytes           int64
+	HeadSequence    int64
+	LastSeenAt      *time.Time
+	CreatedAt       time.Time
 }
 
 type ConsoleSyncTotals struct {
 	Vaults        int
-	Devices       int
-	Workspaces    int
+	Sessions      int
+	Records       int64
 	ActiveLastDay int
 }
 
@@ -35,25 +33,25 @@ func (db *Database) ConsoleSyncVaults(ctx context.Context, limit int) ([]Console
 	var totals ConsoleSyncTotals
 	err := db.consoleTx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, `
-			SELECT (SELECT count(*) FROM browser_sync_vaults),
-			       (SELECT count(*) FROM browser_sync_devices WHERE revoked_at IS NULL),
-			       (SELECT count(*) FROM browser_sync_workspaces WHERE workspace_id <> vault_id),
-			       (SELECT count(*) FROM browser_sync_vaults WHERE active_seen_at > now() - interval '1 day')`,
-		).Scan(&totals.Vaults, &totals.Devices, &totals.Workspaces, &totals.ActiveLastDay); err != nil {
+			SELECT (SELECT count(*) FROM sync_vaults),
+			       (SELECT count(*) FROM sync_sessions WHERE revoked_at IS NULL),
+			       (SELECT count(*) FROM sync_records WHERE NOT deleted),
+			       (SELECT count(DISTINCT vault_id) FROM sync_sessions WHERE last_seen_at > now() - interval '1 day')`,
+		).Scan(&totals.Vaults, &totals.Sessions, &totals.Records, &totals.ActiveLastDay); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `
 			SELECT v.vault_id::text, COALESCE(u.email, v.user_id),
-			       (SELECT count(*) FROM browser_sync_devices d WHERE d.vault_id = v.vault_id AND d.revoked_at IS NULL),
-			       (SELECT count(*) FROM browser_sync_devices d WHERE d.vault_id = v.vault_id AND d.revoked_at IS NOT NULL),
-			       (SELECT count(*) FROM browser_sync_workspaces w WHERE w.vault_id = v.vault_id AND w.workspace_id <> v.vault_id),
-			       v.head_sequence, v.key_epoch,
-			       COALESCE((SELECT NULLIF(d.display_name, '') FROM browser_sync_devices d
-			                 WHERE d.vault_id = v.vault_id AND d.device_id = v.active_device_id), ''),
-			       v.active_seen_at, v.created_at
-			FROM browser_sync_vaults v
+			       (SELECT count(*) FROM sync_sessions s WHERE s.vault_id = v.vault_id AND s.revoked_at IS NULL),
+			       (SELECT count(*) FROM sync_sessions s WHERE s.vault_id = v.vault_id AND s.revoked_at IS NOT NULL),
+			       (SELECT count(*) FROM sync_records r WHERE r.vault_id = v.vault_id AND NOT r.deleted),
+			       COALESCE((SELECT sum(octet_length(r.sealed)) FROM sync_records r WHERE r.vault_id = v.vault_id), 0),
+			       v.head_sequence,
+			       (SELECT max(s.last_seen_at) FROM sync_sessions s WHERE s.vault_id = v.vault_id) AS seen,
+			       v.created_at
+			FROM sync_vaults v
 			LEFT JOIN users u ON u.id = v.user_id
-			ORDER BY v.active_seen_at DESC NULLS LAST, v.created_at DESC
+			ORDER BY seen DESC NULLS LAST, v.created_at DESC
 			LIMIT $1`, limit)
 		if err != nil {
 			return err
@@ -61,8 +59,8 @@ func (db *Database) ConsoleSyncVaults(ctx context.Context, limit int) ([]Console
 		defer rows.Close()
 		for rows.Next() {
 			var v ConsoleSyncVault
-			if err := rows.Scan(&v.VaultID, &v.Email, &v.Devices, &v.RevokedDevices, &v.Workspaces,
-				&v.HeadSequence, &v.KeyEpoch, &v.ActiveDevice, &v.ActiveSeenAt, &v.CreatedAt); err != nil {
+			if err := rows.Scan(&v.VaultID, &v.Email, &v.Sessions, &v.RevokedSessions, &v.Records,
+				&v.Bytes, &v.HeadSequence, &v.LastSeenAt, &v.CreatedAt); err != nil {
 				return err
 			}
 			vaults = append(vaults, v)

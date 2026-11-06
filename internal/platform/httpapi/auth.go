@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -22,8 +22,6 @@ func Register(database *db.Database) http.HandlerFunc {
 			Username string `json:"username"`
 			Email    string `json:"email"`
 			Password string `json:"password"`
-			// Credential: the password is one the app derived on the device.
-			Credential bool `json:"credential"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -47,6 +45,10 @@ func Register(database *db.Database) http.HandlerFunc {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+		if existing != nil && existing.Provider != "misty" {
+			writeUseGoogle(w)
+			return
+		}
 		if existing != nil {
 			http.Error(w, "email already registered", http.StatusConflict)
 			return
@@ -58,6 +60,17 @@ func Register(database *db.Database) http.HandlerFunc {
 			writeRegistrationClosed(w)
 			return
 		}
+		// The server's owner, its first account, is never held back.
+		anyAccount, err := database.AnyAccount(r.Context())
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if anyAccount && confirmsEmail() {
+			holdForConfirmation(w, r, database, db.PendingAccount{Username: body.Username, Email: body.Email, Password: body.Password})
+			return
+		}
+		hold := anyAccount && openSignup()
 
 		user, err := database.CreateUserWithUsername(body.Username, body.Email, body.Password)
 		if err != nil {
@@ -76,16 +89,22 @@ func Register(database *db.Database) http.HandlerFunc {
 			http.Error(w, "failed to create user", http.StatusInternalServerError)
 			return
 		}
-
-		if body.Credential {
-			if err := database.SetCredentialPassword(user.ID, true); err != nil {
+		if hold {
+			if err := openSignupLimits(r.Context(), database, user.ID); err != nil {
 				http.Error(w, "failed to create user", http.StatusInternalServerError)
 				return
 			}
-			user.CredentialPassword = true
 		}
+
 		writeAuthSession(w, r, database, user, http.StatusCreated)
 	}
+}
+
+// writeUseGoogle answers a password for an email that signs in with Google. It says so
+// because people forget which way they signed up. It is not a 401, so the app doesn't
+// retry with the password itself (accountSignIn).
+func writeUseGoogle(w http.ResponseWriter) {
+	writeJSON(w, http.StatusConflict, map[string]string{"code": "use_google", "message": "This email already exists as a Misty account. Please use Continue with Google instead."})
 }
 
 func Login(database *db.Database) http.HandlerFunc {
@@ -93,6 +112,9 @@ func Login(database *db.Database) http.HandlerFunc {
 		var body struct {
 			Email    string `json:"email"`
 			Password string `json:"password"`
+			// Waiting asks whether a sign-up's email has been confirmed yet, opening no
+			// session: 202 confirm_email until it is, then 200 confirmed.
+			Waiting bool `json:"waiting"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -113,10 +135,16 @@ func Login(database *db.Database) http.HandlerFunc {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		if user == nil || user.Provider != "misty" {
-			// Spend the same bcrypt work as a real check, so response time does
-			// not reveal which email addresses have password accounts.
-			_ = bcrypt.CompareHashAndPassword(unknownAccountHash(), []byte(body.Password))
+		if user == nil && pendingSignIn(w, r, database, body.Email, body.Password, body.Waiting) {
+			return
+		}
+		if user != nil && user.Provider != "misty" {
+			writeUseGoogle(w)
+			return
+		}
+		if user == nil {
+			// pendingSignIn spent the same bcrypt work as a real check, so response
+			// time does not reveal which email addresses have password accounts.
 			loginFailures.Fail(body.Email, time.Now())
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
@@ -127,7 +155,19 @@ func Login(database *db.Database) http.HandlerFunc {
 			return
 		}
 		loginFailures.Succeed(body.Email)
+		// After the password, so a stranger can't use this to learn who's on the list.
+		if allowed, err := signInAllowed(r.Context(), database, user); err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		} else if !allowed {
+			writeEmailNotAllowed(w)
+			return
+		}
 
+		if body.Waiting {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "confirmed"})
+			return
+		}
 		writeAuthSession(w, r, database, user, http.StatusOK)
 	}
 }
@@ -167,20 +207,19 @@ func writeAuthSessionWith(
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	} else if suspended {
-		writeAccountSuspended(w)
+		writeSuspendedSignIn(w, user.ID)
 		return
 	}
-	if err := issueSessionCookies(w, r, database, user.ID, db.SessionTTL); err != nil {
+	if err := issueSession(w, r, database, user.ID, db.SessionTTL); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
 	body := map[string]any{
-		"user_id":            user.ID,
-		"username":           user.Username,
-		"email":              user.Email,
-		"provider":           user.Provider,
-		"credential_account": user.CredentialPassword,
+		"user_id":  user.ID,
+		"username": user.Username,
+		"email":    user.Email,
+		"provider": user.Provider,
 	}
 	for key, value := range extra {
 		body[key] = value
@@ -203,12 +242,8 @@ func Logout(database *db.Database) http.HandlerFunc {
 			http.Error(w, "authentication unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		for _, item := range []struct{ name, kind string }{{RefreshCookieName, "refresh"}, {SessionCookieName, "access"}} {
-			cookie, err := r.Cookie(item.name)
-			if err != nil {
-				continue
-			}
-			claims, err := signer.Verify(cookie.Value, item.kind)
+		for _, presented := range presentedSessionTokens(r) {
+			claims, err := signer.Verify(presented.token, presented.kind)
 			if err != nil {
 				continue
 			}
@@ -221,6 +256,25 @@ func Logout(database *db.Database) http.HandlerFunc {
 
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
+}
+
+// sessionToken is a JWT a request presents, and what it must verify as.
+type sessionToken struct{ token, kind string }
+
+// presentedSessionTokens is every token that could name the session signing out: the desktop
+// app's bearer (its refresh token, which outlives an access token) and the website's cookies.
+func presentedSessionTokens(r *http.Request) []sessionToken {
+	var tokens []sessionToken
+	if token, ok := BearerTokenFromRequest(r); ok {
+		tokens = append(tokens, sessionToken{token, "refresh"}, sessionToken{token, "access"})
+	}
+	if cookie, err := r.Cookie(RefreshCookieName); err == nil {
+		tokens = append(tokens, sessionToken{cookie.Value, "refresh"})
+	}
+	if cookie, err := r.Cookie(SessionCookieName); err == nil {
+		tokens = append(tokens, sessionToken{cookie.Value, "access"})
+	}
+	return tokens
 }
 
 func IsSecureRequest(r *http.Request) bool {

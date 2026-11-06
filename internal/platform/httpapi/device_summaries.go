@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // A long chat's older turns become running notes. When agents run on desktops
@@ -23,7 +23,7 @@ func (s *SpacesService) deviceSummaryPlan(ctx context.Context, record *db.AIInvo
 	if record.ConversationID == "" || body.Mode == "companion" || teachTurn(body) {
 		return nil, conversationHistoryPlan{}, false
 	}
-	turns, err := s.invocationHistoryTurns(ctx, record, body)
+	turns, err := s.database.AIConversationTurns(ctx, record.UserID, record.ConversationID)
 	if err != nil {
 		return nil, conversationHistoryPlan{}, false
 	}

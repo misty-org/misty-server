@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

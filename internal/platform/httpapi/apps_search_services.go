@@ -4,7 +4,7 @@ import (
 	"context"
 	"regexp"
 
-	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/agenttools"
 )
 
 // Search apps are paid web search services the user would have to sign up

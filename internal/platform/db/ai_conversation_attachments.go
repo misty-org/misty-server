@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agent"
 )
 
 type AIConversationAttachment struct {
@@ -147,7 +147,7 @@ func (db *Database) AIConversationAttachmentsForInvocation(ctx context.Context, 
 	items := []AIConversationAttachment{}
 	err := db.WithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		history := len(includeConversation) > 0 && includeConversation[0]
-		rows, err := tx.QueryContext(ctx, `SELECT `+aiConversationAttachmentColumns+` FROM ai_conversation_attachments WHERE user_id=$1 AND (invocation_id=$2 OR ($3 AND invocation_id IS NOT NULL AND conversation_id=(SELECT conversation_id FROM ai_invocations WHERE id=$2 AND user_id=$1))) AND lifecycle_state='ready' AND (expires_at IS NULL OR expires_at>NOW()) ORDER BY (invocation_id=$2) DESC,created_at DESC LIMIT 12`, userID, invocationID, history)
+		rows, err := tx.QueryContext(ctx, `SELECT `+aiConversationAttachmentColumns+` FROM ai_conversation_attachments WHERE user_id=$1 AND scope<>'tool_output' AND (invocation_id=$2 OR ($3 AND invocation_id IS NOT NULL AND conversation_id=(SELECT conversation_id FROM ai_invocations WHERE id=$2 AND user_id=$1))) AND lifecycle_state='ready' AND (expires_at IS NULL OR expires_at>NOW()) ORDER BY (invocation_id=$2) DESC,created_at DESC LIMIT 12`, userID, invocationID, history)
 		if err != nil {
 			return err
 		}

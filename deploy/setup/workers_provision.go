@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// provisionWorkers deploys the collaboration and web-fetch Workers and
+// provisionWorkers deploys the collaboration Worker and
 // records where the API reaches them.
 func provisionWorkers(ctx context.Context, cf *cloudflare, inputs Inputs, names Names, store *Store, bundles string) error {
 	var account struct {
@@ -23,10 +23,6 @@ func provisionWorkers(ctx context.Context, cf *cloudflare, inputs Inputs, names 
 	if err != nil {
 		return err
 	}
-	fetch, err := loadWorkerBundle(filepath.Join(bundles, "web-fetch"))
-	if err != nil {
-		return err
-	}
 	deploys := []workerDeploy{
 		{Name: names.CollabWorker, Bundle: collab,
 			Vars: map[string]string{"MISTY_INTERNAL_API_BASE": "https://" + inputs.Hostname + "/v1"},
@@ -37,8 +33,6 @@ func provisionWorkers(ctx context.Context, cf *cloudflare, inputs Inputs, names 
 				"JOURNAL_COLLAB_CONTROL_SECRET_PREVIOUS":    store.Get("JOURNAL_COLLAB_CONTROL_SECRET_PREVIOUS"),
 				"JOURNAL_COLLAB_PROJECTION_SECRET":          store.Get("JOURNAL_COLLAB_PROJECTION_SECRET"),
 			}},
-		{Name: names.FetchWorker, Bundle: fetch,
-			Secrets: map[string]string{"MISTY_WEB_FETCH_SECRET": store.Get("MISTY_WEB_FETCH_SECRET")}},
 	}
 	for _, worker := range deploys {
 		if err := deployWorker(ctx, cf, store, worker); err != nil {
@@ -46,6 +40,5 @@ func provisionWorkers(ctx context.Context, cf *cloudflare, inputs Inputs, names 
 		}
 	}
 	store.Set("PARTYKIT_HOST", names.CollabWorker+"."+account.Subdomain+".workers.dev")
-	store.Set("MISTY_WEB_FETCH_URL", "https://"+names.FetchWorker+"."+account.Subdomain+".workers.dev")
 	return nil
 }

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/metrics"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/metrics"
 )
 
 const invocationWindowBytes = 256 << 10

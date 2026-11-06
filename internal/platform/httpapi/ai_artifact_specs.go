@@ -25,11 +25,6 @@ var aiArtifactSpecs = map[string]aiArtifactSpec{
 		Prompt: "Propose constrained scene operations for the current drawing selection. Preserve unrelated elements. For layout updates, copy the exact selection content hash into base_hash and change only x/y positions of selected elements.",
 		Shape:  `{"base_revision":"...","base_hash":"exact selection content hash","changes":[{"op":"add|update|delete","element_id":"opaque id","element":{"x":0,"y":0}}]}`,
 	},
-	"file_plan": {
-		Title: "Review file plan", Risk: "dangerous", ApprovalPolicy: "always_confirm",
-		Prompt: "Propose a file operation plan using opaque device scope identifiers, display names, and explicit conflict policies. Never emit raw local paths.",
-		Shape:  `{"steps":[{"action":"copy|move|rename|trash|mkdir","source_scope_id":"opaque id","destination_scope_id":"opaque id","display_name":"...","conflict_policy":"ask|skip|rename"}]}`,
-	},
 	"message_draft": {
 		Title: "Review message draft", Risk: "draft", ApprovalPolicy: "visible_apply",
 		Prompt: "Draft a Space message for review. Do not post it.",

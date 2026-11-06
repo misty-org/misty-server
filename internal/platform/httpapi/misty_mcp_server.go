@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -220,6 +220,7 @@ func (s *SpacesService) callAIInvocationMCPTool(ctx context.Context, access *mcp
 	result, err := s.executeAIInvocationMCPTool(ctx, access, call)
 	if err == nil {
 		s.recordAIInvocationToolActivity(access.record, call, result)
+		s.recordAIInvocationToolOutput(ctx, access.record, call, result)
 	}
 	if err != nil {
 		var intervention *aiInterventionRequired

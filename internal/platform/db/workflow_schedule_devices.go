@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -80,19 +81,41 @@ func (db *Database) DeviceScheduledRuns(ctx context.Context, userID, deviceID st
 	return items, err
 }
 
+// ErrScheduleProfileMissing: the computer claiming a run doesn't have the profile
+// its schedule uses. The schedule keeps waiting and says why in its last error.
+var ErrScheduleProfileMissing = errors.New("this computer doesn't have the schedule's profile")
+
 // ClaimDeviceScheduledRun lets one computer take a waiting run. Only the named
-// computer can, and only one claim is live at a time.
-func (db *Database) ClaimDeviceScheduledRun(ctx context.Context, userID, scheduleID, deviceID, claimHash string, now time.Time) (*WorkflowSchedule, error) {
+// computer can, only one claim is live at a time, and the computer must have the
+// schedule's profile among the ones it names.
+func (db *Database) ClaimDeviceScheduledRun(ctx context.Context, userID, scheduleID, deviceID, claimHash string, profiles []string, now time.Time) (*WorkflowSchedule, error) {
 	out := &WorkflowSchedule{}
+	missing := false
 	err := db.WithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		var profile string
+		err := tx.QueryRowContext(ctx, `SELECT profile FROM workflow_schedules WHERE id=$1 AND user_id=$2 AND device_id=$3`, scheduleID, userID, deviceID).Scan(&profile)
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(profiles, profile) {
+			if _, err := tx.ExecContext(ctx, `UPDATE workflow_schedules SET last_error=$3,updated_at=NOW() WHERE id=$1 AND user_id=$2`, scheduleID, userID,
+				`This schedule uses a profile this computer doesn't have ("`+profile+`"). Open that profile here, or change the schedule's profile.`); err != nil {
+				return err
+			}
+			missing = true
+			return nil
+		}
 		return scanWorkflowSchedule(tx.QueryRowContext(ctx, `UPDATE workflow_schedules
-			SET state='device_claimed',device_claim_hash=$4,device_claim_until=$5::timestamptz+`+deviceScheduleClaimTTL+`,updated_at=NOW()
+			SET state='device_claimed',device_claim_hash=$4,device_claim_until=$5::timestamptz+`+deviceScheduleClaimTTL+`,last_error=CASE WHEN last_error LIKE 'This schedule uses a profile%' THEN '' ELSE last_error END,updated_at=NOW()
 			WHERE id=$1 AND user_id=$2 AND device_id=$3 AND enabled
 			  AND (state='awaiting_device' OR (state='device_claimed' AND device_claim_until<=$5))
 			RETURNING `+workflowScheduleColumns, scheduleID, userID, deviceID, claimHash, now), out)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceConflict
+	}
+	if err == nil && missing {
+		return nil, ErrScheduleProfileMissing
 	}
 	return out, err
 }

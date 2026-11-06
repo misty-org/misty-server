@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // aiInvocationToolbox resolves one chat run's complete catalog: Misty data
@@ -23,8 +23,6 @@ func (s *SpacesService) aiInvocationToolbox(ctx context.Context, record *db.AIIn
 	connected = append(connected, s.notebookToolRegistrations(record, body)...)
 	connected = append(connected, s.delegationToolRegistrations(record, body)...)
 	connected = append(connected, s.codeDelegationToolRegistrations(ctx, record, body, s.attachedProjects(ctx, record), collaboration)...)
-	// web.fetch from the attached device, or the isolated Worker without one.
-	connected = withWebFetch(connected)
 	toolbox, invocation, manifest, err := resolveAIInvocationSpaceToolbox(ctx, s.database, actor, prompt, connected...)
 	invocation.PermissionMode = body.PermissionMode
 	invocation.MemorySpaceID = body.SpaceID

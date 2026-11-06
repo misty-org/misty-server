@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"strings"
 	"time"
 )
@@ -27,6 +28,8 @@ type MemoryNode struct {
 	LastAt     *time.Time `json:"last_at,omitempty"`
 	Searchable bool       `json:"searchable"`
 	Expandable bool       `json:"expandable"`
+	// A day's recap only: its threads and what was left to do.
+	Outline *RecapOutline `json:"outline,omitempty"`
 }
 
 // MemoryTreeQuery picks the nodes under Parent ("" for the branches), limited
@@ -200,7 +203,7 @@ func memoryTreeMoments(ctx context.Context, tx *sql.Tx, user, space string, q Me
 }
 
 func memoryTreeSummaries(ctx context.Context, tx *sql.Tx, user, space string) ([]MemoryNode, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT r.surface_id, r.cadence, r.last_result, COALESCE(r.last_run_at, r.updated_at), r.prompt,
+	rows, err := tx.QueryContext(ctx, `SELECT r.surface_id, r.cadence, r.last_result, COALESCE(r.last_run_at, r.updated_at), r.prompt, r.outline,
  EXISTS(SELECT 1 FROM memory_chunks c WHERE c.branch='summaries' AND c.record_id=r.space_id||':'||r.user_id||':'||r.surface_id AND c.embedding IS NOT NULL)
  FROM ai_recaps r WHERE r.user_id=$1 AND r.space_id=$2 AND btrim(r.last_result) <> '' ORDER BY 4 DESC LIMIT $3`, user, space, memoryTreeLeaves)
 	if err != nil {
@@ -212,7 +215,8 @@ func memoryTreeSummaries(ctx context.Context, tx *sql.Tx, user, space string) ([
 		var surface, cadence, text, prompt string
 		var at time.Time
 		var found bool
-		if err := rows.Scan(&surface, &cadence, &text, &at, &prompt, &found); err != nil {
+		var outline []byte
+		if err := rows.Scan(&surface, &cadence, &text, &at, &prompt, &outline, &found); err != nil {
 			return nil, err
 		}
 		node := MemoryNode{ID: "summary:" + surface, Parent: MemorySummaries, Type: "summary", Branch: MemorySummaries,
@@ -220,6 +224,15 @@ func memoryTreeSummaries(ctx context.Context, tx *sql.Tx, user, space string) ([
 			LastAt: &at, Searchable: found}
 		if strings.HasPrefix(surface, ManualSummaryPrefix) {
 			node.Label, node.Detail = firstNonEmpty(memoryClip(prompt, 80), "Summary"), "Added by you"
+		}
+		if strings.HasPrefix(surface, RecapSummaryPrefix) {
+			node.Label, node.Detail, node.Source = firstNonEmpty(memoryClip(prompt, 80), "Recap"), "Recap", "recap"
+			if len(outline) > 0 {
+				parsed := &RecapOutline{}
+				if json.Unmarshal(outline, parsed) == nil {
+					node.Outline = parsed
+				}
+			}
 		}
 		nodes = append(nodes, node)
 	}

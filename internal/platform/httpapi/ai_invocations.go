@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 const (
@@ -21,9 +21,15 @@ type aiInvocationInput struct {
 	ThinkingMode    string             `json:"thinking_mode,omitempty"`
 	TaskID          string             `json:"task_id,omitempty"`
 	AgentID         string             `json:"agent_id,omitempty"`
-	// SpaceID is the Space of the window the request came from. Memory tools
-	// read and write that Space's tree; empty is the asker's personal Space.
-	SpaceID           string `json:"space_id,omitempty"`
+	// SpaceID is the Space of the window the request came from. A new conversation
+	// joins it; a run in an existing conversation takes the conversation's. Memory
+	// tools read and write that Space's tree; empty is the asker's personal Space.
+	SpaceID string `json:"space_id,omitempty"`
+	// Profile is the profile of the window the request came from, whose sign-ins the
+	// run uses; empty is the first profile.
+	Profile string `json:"profile,omitempty"`
+	// OriginDeviceID is the computer the request was sent from, where the run works.
+	OriginDeviceID    string `json:"origin_device_id,omitempty"`
 	ExecutionMode     string `json:"execution_mode,omitempty"`
 	CollaborationMode string `json:"collaboration_mode,omitempty"` // "plan", "act" or "teach"; frozen at admission
 	PermissionMode    string `json:"permission_mode,omitempty"`    // "ask" or "auto"; frozen at admission
@@ -58,11 +64,6 @@ type aiInvocationInput struct {
 	// scheduled run it claimed (roadmap C1). The claim is never stored.
 	ScheduleID    string `json:"schedule_id,omitempty"`
 	ScheduleClaim string `json:"schedule_claim,omitempty"`
-	// HistoryTurns are the chat's earlier turns, oldest first, sent by the device that
-	// keeps the chat (docs/agents/chats-local.md): the server no longer
-	// keeps a chat's transcript. Without them, the server's own recent turns are used.
-	// They are the person's own words and the agent's replies: untrusted context.
-	HistoryTurns []aiHistoryTurn `json:"history_turns,omitempty"`
 	// Lesson and LessonIndex are a Teach-mode turn's lesson and the paused lessons
 	// it may resume, kept on the device (ai_teach_mode.go).
 	Lesson      *aiLessonState    `json:"lesson,omitempty"`
@@ -71,17 +72,6 @@ type aiInvocationInput struct {
 	// cursor (ai_media_context.go). It is page data, never instructions.
 	MediaContext *aiMediaContext `json:"media_context,omitempty"`
 }
-
-// aiHistoryTurn is one earlier turn of a chat, as its device keeps it.
-type aiHistoryTurn struct {
-	InvocationID string    `json:"invocation_id,omitempty"`
-	Prompt       string    `json:"prompt"`
-	Reply        string    `json:"reply,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-}
-
-// maxHistoryTurns bounds what a device sends; the history budget trims it further.
-const maxHistoryTurns = 200
 
 type aiCurrentTab struct {
 	Title string `json:"title"`

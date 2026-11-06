@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // spaceDeleteTarget finds one Space item to delete and returns its title and
@@ -91,15 +91,10 @@ func (s *SpacesService) renameToolRegistration() agenttools.Registration {
 			if err != nil {
 				return nil, err
 			}
-			thread, err := spaceThread(ctx, s.database, invocation.UserID, space.ID, id)
-			if err != nil {
+			if _, err := spaceThread(ctx, s.database, invocation.UserID, space.ID, id); err != nil {
 				return nil, notFound
 			}
-			participants := make([]db.SpaceActorRef, 0, len(thread.Participants))
-			for _, participant := range thread.Participants {
-				participants = append(participants, participant.SpaceActorRef)
-			}
-			renamed, err := s.database.UpdateSpaceConversation(ctx, invocation.UserID, space.ID, id, name, participants)
+			renamed, err := s.database.UpdateSpaceConversation(ctx, invocation.UserID, space.ID, id, name)
 			if err != nil {
 				return nil, notFound
 			}

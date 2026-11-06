@@ -1,38 +1,33 @@
 package console
 
-import "github.com/kannachi323/misty/server/internal/platform/db"
+import "github.com/misty-org/misty-server/internal/platform/db"
 
 templ syncPage(v syncView) {
-	@pageHeader("Sync", "Vaults, devices and per-device workspaces. Content is end-to-end encrypted; only counts are visible.")
+	@pageHeader("Sync", "Vaults and their signed-in sessions. Content is end-to-end encrypted; only counts and sizes are visible.")
 	if v.Err != "" {
 		@problem(v.Err)
 	}
 	<div class="metrics">
 		@metric("Vaults", itoa(v.Totals.Vaults))
-		@metric("Devices", itoa(v.Totals.Devices))
-		@metric("Workspaces", itoa(v.Totals.Workspaces))
+		@metric("Sessions", itoa(v.Totals.Sessions))
+		@metric("Records", itoa(int(v.Totals.Records)))
 		@metric("Active today", itoa(v.Totals.ActiveLastDay))
 	</div>
 	@sectionLabel("Vaults")
 	<div class="table sync-table">
-		<div class="table-head"><span>Account</span><span>Devices</span><span>Workspaces</span><span>Head</span><span>Active device</span></div>
+		<div class="table-head"><span>Account</span><span>Sessions</span><span>Records</span><span>Head</span><span>Last seen</span></div>
 		for _, vault := range v.Vaults {
 			<div class="table-row">
 				<span class="truncate" title={ vault.VaultID }>{ vault.Email }</span>
 				<span>
-					{ itoa(vault.Devices) }
-					if vault.RevokedDevices > 0 {
-						<span class="muted">{ " +" + itoa(vault.RevokedDevices) + " revoked" }</span>
+					{ itoa(vault.Sessions) }
+					if vault.RevokedSessions > 0 {
+						<span class="muted">{ " +" + itoa(vault.RevokedSessions) + " removed" }</span>
 					}
 				</span>
-				<span>{ itoa(vault.Workspaces) }</span>
-				<span class="muted">{ "#" + itoa(int(vault.HeadSequence)) + " · epoch " + itoa(int(vault.KeyEpoch)) }</span>
-				<span class="muted">
-					if vault.ActiveDevice != "" {
-						{ vault.ActiveDevice + " · " }
-					}
-					{ agoPtr(vault.ActiveSeenAt) }
-				</span>
+				<span>{ itoa(int(vault.Records)) }</span>
+				<span class="muted">{ "#" + itoa(int(vault.HeadSequence)) }</span>
+				<span class="muted">{ agoPtr(vault.LastSeenAt) }</span>
 			</div>
 		}
 		if len(v.Vaults) == 0 && v.Err == "" {

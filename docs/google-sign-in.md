@@ -9,7 +9,7 @@ password to a Google identity.
 
 ## Configuration
 
-In `server/.env/dev/integrations/google.env` (or the corresponding production
+In `~/.misty/server/dev/integrations/google.env` (or the corresponding production
 directory), configure:
 
 ```dotenv

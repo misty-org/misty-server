@@ -88,9 +88,6 @@ func openStore(dir string) (*Store, error) {
 
 func (s *Store) envPath() string { return filepath.Join(s.Dir, envFileName) }
 
-// Empty reports whether the volume holds no secrets at all.
-func (s *Store) Empty() bool { return len(s.Values) == 0 }
-
 // EnvMissing reports whether server.env is absent or blank, which is what a
 // lost or new secrets volume looks like.
 func (s *Store) EnvMissing() bool {

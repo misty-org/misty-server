@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	. "github.com/kannachi323/misty/server/internal/app"
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	. "github.com/misty-org/misty-server/internal/app"
+	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
 func TestRouteInventory(t *testing.T) {

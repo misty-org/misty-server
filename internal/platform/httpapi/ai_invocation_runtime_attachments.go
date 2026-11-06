@@ -7,7 +7,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func (s *SpacesService) aiInvocationModelAttachments(ctx context.Context, record *db.AIInvocationRecord) ([]map[string]any, error) {

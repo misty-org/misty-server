@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/accounts"
 )
 
 // OperatorAccount is one account as the operator account API and the console

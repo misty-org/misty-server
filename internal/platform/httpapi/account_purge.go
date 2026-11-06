@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/kannachi323/misty/server/internal/integrations/composio"
+	"github.com/misty-org/misty-server/internal/integrations/composio"
 )
 
 // The parts of an account's purge outside the database (docs/cloud/README.md):

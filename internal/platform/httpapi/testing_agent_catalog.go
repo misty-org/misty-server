@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
 )
 
 // TestingAgentCatalogToolNames lists every tool any agent run can be offered:
@@ -25,14 +25,10 @@ func TestingAgentCatalogToolNames() []string {
 		}
 	}
 	extra := append(agentMemberToolRegistrations(nil), service.accountAdminToolRegistrations()...)
-	// Memory tools are offered only while Memory is on; the account tools already include them then.
-	if !recallConfig().Enabled {
-		extra = append(extra, recallToolRegistrationsFor(service)...)
-	}
 	add(buildAgentToolbox(nil, agentToolboxOptions{accountLevel: true, delegation: noop, extra: extra, allLayers: true}).Descriptors())
 	add(spaceAgentToolbox(nil).Descriptors())
 	add(browserToolDescriptors())
-	for _, name := range []string{webSearchTool, appsSearchTool, appsSchemasTool, appsConnectedTool, appsConnectTool, appsExecuteTool, screenOpenTool, screenLookTool, screenCloseTool} {
+	for _, name := range []string{webSearchTool, webFetchTool, appsSearchTool, appsSchemasTool, appsConnectedTool, appsConnectTool, appsExecuteTool, screenOpenTool, screenLookTool, screenCloseTool} {
 		seen[name] = true
 	}
 	names := make([]string, 0, len(seen))

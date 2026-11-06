@@ -1,42 +1,28 @@
 {
   "accountId": "user_fixture",
-  "admission": {
-    "payload": "WyJtaXN0eS5kZXZpY2UuYWRtaXNzaW9uLnYxIiwidXNlcl9maXh0dXJlIiwiZGV2aWNlXzAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIi9GaWNzSHk0bVdHZDdFNWhVU0ZON2ExRWhEMVFwUE82WTdxRlZiL3RiUjQ9IiwiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQT0iLCIwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwxOTAwMDAwMDAwXQ==",
-    "signature": "xQYzeGWu/gN8tV3ZmrWRtfzJGBBOZ6fjbxJcW5OdsOFr727qwK8pxkXDDKKDgToaNZA56R0vwFkToLqBzi7vBQ=="
-  },
   "channel": {
     "challenge": "challenge-1",
     "instance": "instance-1",
-    "signature": "hNFayZtYIRlxkVC6LT5hNjD4iq/L6AbPygQpgiZG+6jkBqcd5Q+e7ClsZpRoyBC91MIJxv9pAySos+i7K09nDA=="
+    "signature": "eNu+bFTJiQLIEr2PMOk6t0Pww8AQAy4q87e+siNZfMb+vhU3hTmBI0CsQiLkGeiCyLZWN6sQkHr6QvNKhgRLCA=="
   },
   "deviceId": "device_00000000-0000-4000-8000-000000000002",
-  "devicePublicKey": "/FicsHy4mWGd7E5hUSFN7a1EhD1QpPO6Y7qFVb/tbR4=",
-  "grant": {
-    "payload": "WyJtaXN0eS5kZXZpY2UuZ3JhbnQudjIiLCJ1c2VyX2ZpeHR1cmUiLCIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJkZXZpY2VfMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwxLCIvRmljc0h5NG1XR2Q3RTVoVVNGTjdhMUVoRDFRcFBPNlk3cUZWYi90YlI0PSIsIiIsMTkwMDAwMDAwMCwiIl0=",
-    "signature": "My+PXq/s1ygzAILtZO0RcEPgJf84cj5wnkWD6INiou1gaEl/X23XG7TgxvplffpfS1fYola9wyaEAM5T573vAA=="
-  },
+  "devicePublicKey": "PrpTJVcd9BBYCDWkD4hNkdRf0J7Qht4FsCot61yLERk=",
   "issuedAt": 1900000000,
-  "list": {
-    "payload": "WyJtaXN0eS5kZXZpY2UubGlzdC52MSIsInVzZXJfZml4dHVyZSIsIjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsMSwxLFtbImRldmljZV8wMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCIvRmljc0h5NG1XR2Q3RTVoVVNGTjdhMUVoRDFRcFBPNlk3cUZWYi90YlI0PSJdXSxbXSwxOTAwMDAwMDAwXQ==",
-    "signature": "YMIyaf50K1xOvvJdqLa3DHx0vTnl/D1FoNPN8nyVQMHXJfFxwct4qoxAZ8FMUack0YzTej1ACLiFRmkS2EWgAw=="
-  },
   "policy": {
     "payload": "WyJtaXN0eS5kZXZpY2UucG9saWN5LnYxIiwidXNlcl9maXh0dXJlIiwiZGV2aWNlXzAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsNywidmlldyIsZmFsc2UsWyJicm93c2VyIiwiZm9sZGVycyJdLFtbInNjb3BlLTEiLCJSZXBvcnRzIOKAnDIwMjbigJ0iXV0sMTkwMDAwMDAwMF0=",
-    "signature": "fgZQKcHG8uQE1y2mWAKUpCqC9mxmvkfxpDne6dNAkB7g6XEN+pcyR6SBsoRIAPlthGYpf78TY2Eqhh+b9BiKDg=="
+    "signature": "EmlbIYb1uHyB/Kid8SY7eHaBeNEy/+Mkr5MeF02yaa5SrYSCAUs4A9H0tw66K2kh4kEQ9vmOwDCi/mDx8eFACQ=="
   },
   "registration": {
-    "endpointId": "fc589cb07cb899619dec4e6151214dedad44843d50a4f3ba63ba8555bfed6d1e",
-    "proof": "Iy/sizTW4ATXZi/OE/Zr1OwgmFIzYpIhRhSezhh+GHYOybYBbUURjKnenuKJAxorWdgUAMVk1Zi/bljhFF1vCQ=="
+    "endpointId": "3eba5325571df410580835a40f884d91d45fd09ed086de05b02a2deb5c8b1119",
+    "proof": "9QakNOsGLBiI/xxUQ/ms/veSD082qOnoAjAQkbMPBt8ShtuDtdTWgvxnTa4dP2esnzBnUCYCmGtDtAsGpxQsBg=="
   },
   "request": {
-    "canonical": "POST\n/api/devices/x/admit\n1900000000\nbm9uY2U=\nabababababababababababababababababababababababababababababababab",
-    "signature": "Wx6jw/vLR279bncwrPoA4tImtV1TqgHtAnZORw/mOv/r022LYx3wdPplunuyo5fV2qe9GIRATr6MfdUK7VjfDQ=="
+    "canonical": "POST\n/api/devices/x/policy\n1900000000\nbm9uY2U=\nabababababababababababababababababababababababababababababababab",
+    "signature": "JkDH7oQ7VVyTjY3Z4J9pD0Ge4zYaOwoarAC1Np80780rQGjK8QM4XI/KnP2cxJIOqZHMzLoJruFJWxgWIaXvDA=="
   },
-  "rootPublicKey": "yQJTmU/zPNwYfH9KxCqsrmF6Tt6q49piWcMD86+PgwY=",
   "runGrant": {
     "payload": "WyJtaXN0eS5kZXZpY2UucnVuLWdyYW50LnYxIiwidXNlcl9maXh0dXJlIiwicnVuZ3JhbnRfMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDA0IiwiZGV2aWNlXzAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsImRldmljZV8wMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCIiLFsiZm9sZGVyLmxpc3QiLCJmb2xkZXIucmVhZCJdLFsic2NvcGUtMSJdLDE5MDAwMDAwMDAsMTkwMDAwMzYwMF0=",
-    "signature": "h0kiugYBjLIYaBeF3kUY3ufTnv4RY4jlggUMEhcn99tuqJ9C7YLXm/geH/f3L5XK3ktGXBIN36BXCN50p1GRDg=="
+    "signature": "3MpUSix2/+kIoLaCYM6l6rsKIfKMLg0BiX+CH4gXR3LblHyo5o4nu99wB0CtiEvjF7t0CzHI2NtKTWWNCsn2Dw=="
   },
-  "targetDeviceId": "device_00000000-0000-4000-8000-000000000003",
-  "vaultId": "00000000-0000-4000-8000-000000000001"
+  "targetDeviceId": "device_00000000-0000-4000-8000-000000000003"
 }

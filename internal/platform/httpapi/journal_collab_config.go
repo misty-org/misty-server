@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	envconfig "github.com/misty-org/misty-server/internal/platform/config"
 )
 
 // Journal collaboration tickets for notes and drawings.
@@ -91,13 +91,6 @@ func (c JournalCollabConfig) httpOrigin() string {
 
 func (c JournalCollabConfig) websocketOrigin() string {
 	return "wss://" + c.Host
-}
-
-func envOrDefault(name, fallback string) string {
-	if value := strings.TrimSpace(envconfig.Getenv(name)); value != "" {
-		return value
-	}
-	return fallback
 }
 
 func parseEd25519PrivateKey(encoded string) (ed25519.PrivateKey, error) {

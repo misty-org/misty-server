@@ -1,6 +1,6 @@
 package main
 
-import "github.com/kannachi323/misty/server/internal/app"
+import "github.com/misty-org/misty-server/internal/app"
 
 func main() {
 	app.Run()

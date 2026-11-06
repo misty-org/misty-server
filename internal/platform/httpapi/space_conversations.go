@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func (s *SpacesService) Conversations() http.HandlerFunc {
@@ -40,6 +40,28 @@ func (s *SpacesService) Conversations() http.HandlerFunc {
 	}
 }
 
+// DirectConversation opens the DM between the caller and another person in the Space.
+func (s *SpacesService) DirectConversation() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := authenticatedUser(w, r, s.database)
+		if !ok {
+			return
+		}
+		var body struct {
+			UserID string `json:"user_id"`
+		}
+		if decodeJSON(w, r, &body) != nil {
+			return
+		}
+		item, err := s.database.DirectMemberConversation(r.Context(), userID, chi.URLParam(r, "spaceID"), body.UserID)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+	}
+}
+
 func (s *SpacesService) Conversation() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -63,13 +85,12 @@ func (s *SpacesService) Conversation() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Title        string             `json:"title"`
-			Participants []db.SpaceActorRef `json:"participants"`
+			Title string `json:"title"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		item, err := s.database.UpdateSpaceConversation(r.Context(), userID, spaceID, conversationID, body.Title, body.Participants)
+		item, err := s.database.UpdateSpaceConversation(r.Context(), userID, spaceID, conversationID, body.Title)
 		if err != nil {
 			writeSpaceError(w, err)
 			return

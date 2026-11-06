@@ -1,8 +1,8 @@
 # Misty Server
 
-Misty Server provides accounts, encrypted workspace sync, file services, and the control plane for agents. Agents, every model call and web search run on the person's desktop ([docs/agents/runtime.md](../docs/agents/runtime.md)); the server never calls a model, holds no search key and makes no search call. It lives in `server/` alongside the desktop app and CLI.
+Misty Server provides accounts, encrypted workspace sync, file services, and the control plane for agents. Agents, every model call and web search run on the person's desktop ([docs/agents/runtime.md](https://github.com/misty-org/misty/blob/main/docs/agents/runtime.md)); the server never calls a model, holds no search key and makes no search call. It lives in `server/` alongside the desktop app and CLI.
 
-Set up the backend before the [desktop app](../README.md#get-started).
+Set up the backend before the [desktop app](https://github.com/misty-org/misty/blob/main/README.md#get-started).
 
 ## Get started
 
@@ -14,18 +14,21 @@ Set up the backend before the [desktop app](../README.md#get-started).
 - curl, for Cloudflare API setup.
 - A Cloudflare account with a domain and a workers.dev subdomain enabled. Create an API token with access to the selected account and zone: account/zone read, Tunnel edit, DNS edit, and Workers Scripts edit. See [Cloudflare's tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
 
-Go, Node.js, PostgreSQL, Wrangler, and cloudflared run inside the containers. Desktop development needs its own [native toolchain](../README.md#prerequisites). The full development stack still uses Cloudflare; a complete local-only collaboration mode is not implemented.
+Go, Node.js, PostgreSQL, Wrangler, and cloudflared run inside the containers. Desktop development needs its own [native toolchain](https://github.com/misty-org/misty/blob/main/README.md#prerequisites). The full development stack still uses Cloudflare; a complete local-only collaboration mode is not implemented.
 
 ### 2. Installation
 
 ```sh
 git clone https://github.com/misty-org/misty.git
+git clone https://github.com/misty-org/misty-server.git
 cd misty
 cargo install --path cli --locked
 misty setup server
 ```
 
-Setup creates `server/.env/dev/` and generates development credentials and collaboration keys. Repeating it preserves existing values. Keep these keys with your database and out of Git.
+The `misty` CLI lives in the desktop repository and finds this one beside it, so keep both checkouts in the same folder.
+
+Setup creates `~/.misty/server/dev/` and generates development credentials and collaboration keys. Repeating it preserves existing values. Keep these keys with your database and out of Git.
 
 ### 3. Environment setup
 
@@ -66,7 +69,7 @@ misty server logs api --tail 100
 misty server logs api --follow
 ```
 
-Normal startup shows progress and service status. Failures show the relevant diagnostic tail. Bounded, redacted build diagnostics are saved under `server/.misty/logs/`; `--verbose` displays that output after the build. Container logs rotate at 10 MB with three files per service.
+Normal startup shows progress and service status. Failures show the relevant diagnostic tail. Bounded, redacted build diagnostics are saved under `.misty/logs/`; `--verbose` displays that output after the build. Container logs rotate at 10 MB with three files per service.
 
 ### Operator console
 
@@ -78,7 +81,7 @@ With `--gui`, `up` also opens the operator console in your browser. It covers he
 
 ### Accounts for other people
 
-The first account to register on a fresh server is its owner. Later accounts come from an open Space invitation to that email or from the operator account API under `/operator/v1`, which is mounted only when `MISTY_OPERATOR_TOKEN` is set and takes it as a bearer token. The API creates an account with limits on storage, devices and app actions (unlimited unless set, app actions per billing period), returns a single-use setup key and its sign-in link to the website's setup page (the server sends no email; the caller passes the link on, and the same link resets a forgotten password), suspends or resumes it, and closes it: read-only, then deleted with the full purge after the days given unless resumed. The server serves API routes only. [docs/cloud](../docs/cloud/README.md) has the contract.
+The first account to register on a fresh server is its owner. Later accounts come from an open Space invitation to that email or from the operator account API under `/operator/v1`, which is mounted only when `MISTY_OPERATOR_TOKEN` is set and takes it as a bearer token. The API creates an account with limits on storage, devices and app actions (unlimited unless set, app actions per billing period), returns a single-use setup key and its sign-in link to the website's setup page (the server sends no email; the caller passes the link on, and the same link resets a forgotten password), suspends or resumes it, and closes it: read-only, then deleted with the full purge after the days given unless resumed. The server serves API routes only. [docs/cloud](https://github.com/misty-org/misty/blob/main/docs/cloud/README.md) has the contract.
 
 Check `/health` on the configured public API origin before using another computer. Service health is not a substitute for testing account, sync, or agent workflows.
 
@@ -95,10 +98,10 @@ Desktop setup creates a root `.env` pointing at the local API if that file is ab
 ## Development and deployment
 
 This page sets up the development stack. To run a server for yourself or others, use
-`compose.yml` and its setup container instead: [docs/self-hosting.md](../docs/self-hosting.md).
+`compose.yml` and its setup container instead: [docs/self-hosting.md](https://github.com/misty-org/misty/blob/main/docs/self-hosting.md).
 The CLI never deploys.
 
-- [CLI commands](../cli/README.md)
+- [CLI commands](https://github.com/misty-org/misty/blob/main/cli/README.md)
 - [Environment configuration and the server stack](deploy/README.md)
 - [Backend architecture](https://github.com/misty-org/misty/wiki/Server-backend-architecture)
 - [Server development](https://github.com/misty-org/misty/wiki/Server-development)

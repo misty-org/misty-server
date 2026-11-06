@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 // accountEventSessionCheck bounds how long a stream outlives a revoked session.

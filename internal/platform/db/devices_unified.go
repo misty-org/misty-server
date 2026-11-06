@@ -19,9 +19,6 @@ import (
 var (
 	ErrDeviceKeyRevoked     = errors.New("device key was removed from this account")
 	ErrDeviceNotAdmitted    = errors.New("device is not added to this account")
-	ErrDeviceListConflict   = errors.New("device list changed")
-	ErrDeviceVaultMissing   = errors.New("account has no sync vault")
-	ErrDeviceAdmissionState = errors.New("device admission request is not in that state")
 	ErrDevicePolicyStale    = errors.New("device policy is older than the current one")
 )
 
@@ -61,12 +58,6 @@ type DevicePolicyRecord struct {
 type DeviceSharedFolder struct {
 	ScopeID string `json:"scopeId"`
 	Name    string `json:"name"`
-}
-
-type DeviceVaultRoot struct {
-	VaultID       string
-	RootPublicKey []byte
-	KeyEpoch      int64
 }
 
 const deviceRecordColumns = `d.id,d.name,d.platform,d.public_key,COALESCE(d.p2p_endpoint_id,''),d.admission_state,d.identity_version,d.os_version,d.app_version,
@@ -162,7 +153,7 @@ func (db *Database) RegisterUnifiedDevice(ctx context.Context, userID, name, pub
 			id = "device_" + uuid.NewString()
 			_, err = tx.ExecContext(ctx, `INSERT INTO trusted_devices(id,user_id,name,public_key,platform,p2p_endpoint_id,device_protocol_versions,capabilities,
 				admission_state,identity_version,os_version,app_version,session_hash)
-				VALUES($1,$2,$3,$4,$5,$6,'["misty-device/3"]'::jsonb,$7,'pending',2,$8,$9,NULLIF($10,''))`,
+				VALUES($1,$2,$3,$4,$5,$6,'["misty-device/3"]'::jsonb,$7,'admitted',2,$8,$9,NULLIF($10,''))`,
 				id, userID, name, publicKey, platform, endpointID, capabilities, osVersion, appVersion, sessionHash)
 			return err
 		case err != nil:
@@ -171,10 +162,7 @@ func (db *Database) RegisterUnifiedDevice(ctx context.Context, userID, name, pub
 			return ErrDeviceKeyRevoked
 		}
 		// Possession of this key was proven, so the row it already names is this device.
-		nextState := state
-		if state == "legacy" {
-			nextState = "pending"
-		}
+		nextState := "admitted"
 		_, err = tx.ExecContext(ctx, `UPDATE trusted_devices SET public_key=$3,p2p_endpoint_id=$4,platform=$5,os_version=$6,app_version=$7,capabilities=$8,
 			identity_version=2,admission_state=$9,device_protocol_versions='["misty-device/3"]'::jsonb,session_hash=COALESCE(NULLIF($10,''),session_hash),
 			name=CASE WHEN name_updated_at IS NULL THEN $11 ELSE name END,last_seen_at=NOW(),updated_at=NOW()
@@ -202,17 +190,6 @@ func (db *Database) UnifiedDeviceKey(ctx context.Context, userID, deviceID strin
 		err = ErrDeviceNotFound
 	}
 	return publicKey, state, err
-}
-
-func (db *Database) DeviceVaultRoot(ctx context.Context, userID string) (*DeviceVaultRoot, error) {
-	root := &DeviceVaultRoot{}
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT vault_id::text,root_public_key,key_epoch FROM browser_sync_vaults WHERE user_id=$1 AND key_envelope IS NOT NULL`, userID).Scan(&root.VaultID, &root.RootPublicKey, &root.KeyEpoch)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrDeviceVaultMissing
-	}
-	return root, err
 }
 
 func cleanDeviceText(value string, limit int) string {

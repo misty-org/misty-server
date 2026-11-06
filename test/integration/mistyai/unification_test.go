@@ -3,8 +3,8 @@ package mistyai_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/test/testkit"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/test/testkit"
 	"strings"
 	"testing"
 	"time"

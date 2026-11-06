@@ -1,51 +1,59 @@
 package accounts
 
 import (
-	"github.com/kannachi323/misty/server/internal/platform/security"
-	"github.com/kannachi323/misty/server/internal/platform/transport"
+	"github.com/misty-org/misty-server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/transport"
 	"net/http"
 	"strings"
 )
 
 const SessionCookieName = "misty_session"
 
-func SessionUserID(r *http.Request) (string, error) {
-	_, bearer := BearerTokenFromRequest(r)
-	if !bearer {
-		cookie, err := r.Cookie(SessionCookieName)
-		if err != nil {
-			return "", nil
-		}
-		signer, err := security.SessionSignerFromEnv()
-		if err != nil {
-			return "", err
-		}
-		claims, err := signer.Verify(cookie.Value, "access")
-		if err != nil {
-			return "", nil
-		}
-		return claims.Subject, nil
+// accessToken is the access JWT a request presents: the desktop app's bearer, or the website's
+// cookie. A bearer always speaks for the request, so one that fails to verify is never rescued by
+// a cookie sent with it.
+func accessToken(r *http.Request) (string, bool) {
+	if token, bearer := BearerTokenFromRequest(r); bearer {
+		return token, true
 	}
-	// Installed-app bearer sessions are retired. Only the signed account cookie authenticates browser requests.
-	return "", nil
+	cookie, err := r.Cookie(SessionCookieName)
+	if err != nil {
+		return "", false
+	}
+	return cookie.Value, true
+}
+
+// SessionUserID is the account a request is signed in as, or "" when it is not. Other bearer
+// tokens (a run's MCP token, the operator's) don't verify as access tokens, so they are not signed in.
+func SessionUserID(r *http.Request) (string, error) {
+	token, ok := accessToken(r)
+	if !ok {
+		return "", nil
+	}
+	signer, err := security.SessionSignerFromEnv()
+	if err != nil {
+		return "", err
+	}
+	claims, err := signer.Verify(token, "access")
+	if err != nil {
+		return "", nil
+	}
+	return claims.Subject, nil
 }
 
 // SessionID returns the account session that signed this request's access
 // token, so a long-lived stream can revalidate that session later. It is empty
-// when the request is not cookie-authenticated.
+// when the request has no valid access token.
 func SessionID(r *http.Request) string {
-	if _, bearer := BearerTokenFromRequest(r); bearer {
-		return ""
-	}
-	cookie, err := r.Cookie(SessionCookieName)
-	if err != nil {
+	token, ok := accessToken(r)
+	if !ok {
 		return ""
 	}
 	signer, err := security.SessionSignerFromEnv()
 	if err != nil {
 		return ""
 	}
-	claims, err := signer.Verify(cookie.Value, "access")
+	claims, err := signer.Verify(token, "access")
 	if err != nil {
 		return ""
 	}

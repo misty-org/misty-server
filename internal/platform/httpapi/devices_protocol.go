@@ -9,8 +9,6 @@ import (
 	"errors"
 	"regexp"
 	"time"
-
-	"github.com/kannachi323/misty/server/internal/platform/db"
 )
 
 // Signed device records (docs/sync/devices.md). Each is a compact JSON
@@ -19,18 +17,14 @@ import (
 // re-serializes a record, so client and server cannot disagree on encoding.
 
 const (
-	deviceGrantDomain     = "misty.device.grant.v2"
-	deviceListDomain      = "misty.device.list.v1"
 	devicePolicyDomain    = "misty.device.policy.v1"
 	deviceRunGrantDomain  = "misty.device.run-grant.v1"
-	deviceAdmissionDomain = "misty.device.admission.v1"
 	deviceRegisterDomain  = "misty.device.register.v1"
 	deviceChannelDomain   = "misty.device.channel.v1"
 	deviceRequestDomain   = "misty.device.request.v1"
 
 	deviceRecordClockSkew = 10 * time.Minute
 	deviceRunGrantMaxAge  = 24 * time.Hour
-	maxDeviceListMembers  = 64
 )
 
 // deviceClock is the time record freshness is checked against; tests pin it.
@@ -38,7 +32,6 @@ var deviceClock = time.Now
 
 var (
 	errSignedDeviceRecord  = errors.New("signed device record is invalid")
-	deviceSyncIDPattern    = regexp.MustCompile(`^[0-9a-f-]{36}$`)
 	deviceAgentIDPattern   = regexp.MustCompile(`^[A-Za-z0-9_:.-]{1,128}$`)
 	deviceGrantIDPattern   = regexp.MustCompile(`^rungrant_[0-9a-f-]{36}$`)
 	deviceScopeRefPattern  = regexp.MustCompile(`^[A-Za-z0-9_:./+=-]{1,512}$`)
@@ -98,132 +91,6 @@ func decodeDevicePublicKey(value string) ([]byte, bool) {
 
 func deviceTimeFresh(unix int64) bool {
 	return deviceClock().Sub(time.Unix(unix, 0)).Abs() <= deviceRecordClockSkew
-}
-
-// admissionGrant is a vault-root-signed admission of one device key.
-type admissionGrant struct {
-	AccountID          string
-	VaultID            string
-	DeviceID           string
-	KeyEpoch           int64
-	PublicKey          string
-	SyncDeviceID       string
-	IssuedAt           int64
-	ApprovedByDeviceID string
-	Payload            []byte
-	Signature          string
-}
-
-func parseDeviceGrant(record signedDeviceRecord, root []byte) (*admissionGrant, error) {
-	payload, fields, err := record.verify(root, deviceGrantDomain)
-	if err != nil {
-		return nil, err
-	}
-	grant := &admissionGrant{Payload: payload, Signature: record.Signature}
-	if err := decodeDeviceFields(fields, &grant.AccountID, &grant.VaultID, &grant.DeviceID, &grant.KeyEpoch, &grant.PublicKey, &grant.SyncDeviceID, &grant.IssuedAt, &grant.ApprovedByDeviceID); err != nil {
-		return nil, err
-	}
-	if _, ok := decodeDevicePublicKey(grant.PublicKey); !ok || !deviceIDPattern.MatchString(grant.DeviceID) || !deviceSyncIDPattern.MatchString(grant.VaultID) ||
-		(grant.SyncDeviceID != "" && !deviceSyncIDPattern.MatchString(grant.SyncDeviceID)) ||
-		(grant.ApprovedByDeviceID != "" && !deviceIDPattern.MatchString(grant.ApprovedByDeviceID)) || grant.KeyEpoch < 1 || !deviceTimeFresh(grant.IssuedAt) {
-		return nil, errSignedDeviceRecord
-	}
-	return grant, nil
-}
-
-func (g *admissionGrant) record() db.DeviceGrantRecord {
-	return db.DeviceGrantRecord{DeviceID: g.DeviceID, PublicKey: g.PublicKey, VaultID: g.VaultID, KeyEpoch: g.KeyEpoch,
-		SyncDeviceID: g.SyncDeviceID, ApprovedByDeviceID: g.ApprovedByDeviceID, Payload: g.Payload, Signature: g.Signature}
-}
-
-// parseDeviceList verifies a root-signed list. Members are sorted and unique;
-// no key is both admitted and removed.
-func parseDeviceList(record signedDeviceRecord, root []byte) (*db.DeviceListChange, string, int64, error) {
-	payload, fields, err := record.verify(root, deviceListDomain)
-	if err != nil {
-		return nil, "", 0, err
-	}
-	var accountID, vaultID string
-	var version, epoch, issuedAt int64
-	var admitted, revoked [][2]string
-	if err := decodeDeviceFields(fields, &accountID, &vaultID, &version, &epoch, &admitted, &revoked, &issuedAt); err != nil {
-		return nil, "", 0, err
-	}
-	if !deviceSyncIDPattern.MatchString(vaultID) || version < 1 || epoch < 1 || !deviceTimeFresh(issuedAt) || len(admitted)+len(revoked) > maxDeviceListMembers*4 {
-		return nil, "", 0, errSignedDeviceRecord
-	}
-	members := func(raw [][2]string) ([]db.DeviceListMember, bool) {
-		out := make([]db.DeviceListMember, 0, len(raw))
-		for index, pair := range raw {
-			if !deviceIDPattern.MatchString(pair[0]) {
-				return nil, false
-			}
-			if _, ok := decodeDevicePublicKey(pair[1]); !ok {
-				return nil, false
-			}
-			if index > 0 && pair[0] <= raw[index-1][0] {
-				return nil, false
-			}
-			out = append(out, db.DeviceListMember{DeviceID: pair[0], PublicKey: pair[1]})
-		}
-		return out, true
-	}
-	admittedMembers, ok := members(admitted)
-	if !ok || len(admittedMembers) > maxDeviceListMembers {
-		return nil, "", 0, errSignedDeviceRecord
-	}
-	revokedMembers, ok := members(revoked)
-	if !ok {
-		return nil, "", 0, errSignedDeviceRecord
-	}
-	removedKeys := map[string]bool{}
-	for _, member := range revokedMembers {
-		removedKeys[member.PublicKey] = true
-	}
-	for _, member := range admittedMembers {
-		if removedKeys[member.PublicKey] {
-			return nil, "", 0, errSignedDeviceRecord
-		}
-	}
-	return &db.DeviceListChange{VaultID: vaultID, Version: version, Payload: payload, Signature: record.Signature, Admitted: admittedMembers, Revoked: revokedMembers}, accountID, epoch, nil
-}
-
-// deviceAdmissionRequest is a pending device asking an added one to approve it.
-type deviceAdmissionRequest struct {
-	AccountID    string
-	DeviceID     string
-	PublicKey    string
-	X25519Public string
-	Commitment   string
-	IssuedAt     int64
-	Payload      []byte
-}
-
-func parseDeviceAdmissionRequest(record signedDeviceRecord, devicePublicKey []byte) (*deviceAdmissionRequest, error) {
-	payload, fields, err := record.verify(devicePublicKey, deviceAdmissionDomain)
-	if err != nil {
-		return nil, err
-	}
-	request := &deviceAdmissionRequest{Payload: payload}
-	if err := decodeDeviceFields(fields, &request.AccountID, &request.DeviceID, &request.PublicKey, &request.X25519Public, &request.Commitment, &request.IssuedAt); err != nil {
-		return nil, err
-	}
-	commitment, commitErr := hex.DecodeString(request.Commitment)
-	if _, ok := decodeDevicePublicKey(request.PublicKey); !ok || !validX25519Public(request.X25519Public) || commitErr != nil || len(commitment) != 32 ||
-		!deviceIDPattern.MatchString(request.DeviceID) || !deviceTimeFresh(request.IssuedAt) {
-		return nil, errSignedDeviceRecord
-	}
-	return request, nil
-}
-
-func validX25519Public(value string) bool {
-	raw, err := base64.StdEncoding.DecodeString(value)
-	return err == nil && len(raw) == 32 && base64.StdEncoding.EncodeToString(raw) == value
-}
-
-func validDeviceNonce(value string) bool {
-	raw, err := base64.StdEncoding.DecodeString(value)
-	return err == nil && len(raw) == 32 && base64.StdEncoding.EncodeToString(raw) == value
 }
 
 // deviceRegistrationProof shows the registering install holds the private key

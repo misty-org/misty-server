@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // The memory tree (docs/plans/spaces-as-profiles.md, phase 7): one per person

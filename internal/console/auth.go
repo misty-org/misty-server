@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 const sessionCookie = "misty_console_session"

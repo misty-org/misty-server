@@ -7,8 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	. "github.com/kannachi323/misty/server/internal/platform/db"
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/db"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 	"strings"
 	"testing"
 	"time"
@@ -74,8 +74,8 @@ func TestUnifiedMistyInvocationOwnsAndExecutesItsBrowserContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if activated.SpaceID != "" {
-		t.Fatalf("account-owned invocation has Space %q", activated.SpaceID)
+	if activated.SpaceID != invocation.SpaceID {
+		t.Fatalf("activated run moved from Space %q to %q", invocation.SpaceID, activated.SpaceID)
 	}
 	prompt := "Inspect Family Space members, research summer camps in the attached browser, create a task named Compare summer camps, save the research, and post a cited summary to Family Space"
 	toolNames, err := api.TestingResolveAIInvocationSpaceToolNames(

@@ -5,12 +5,9 @@ import (
 	"time"
 )
 
-// Per-device budget for publishes (workspace ops and collection pushes) from
-// batching clients. Balanced batching sends about one op every few seconds
-// under continuous use; the budget allows bursts of contended, near-live
-// editing and retries, and turns away a client that ignores its policy.
-// Older clients are not limited here: they would treat the rejection as a
-// bad edit and drop it. The per-socket frame cap still bounds them.
+// Per-session budget for pushes. Batching sends about one every few seconds under
+// continuous use; the budget allows bursts and retries, and turns away a client that
+// ignores its policy.
 const (
 	syncPublishBurst  = 60
 	syncPublishRefill = time.Second
@@ -29,7 +26,7 @@ type publishLimiter struct {
 	swept   time.Time
 }
 
-// take spends one publish for device, or reports how long until one is
+// take spends one publish for session, or reports how long until one is
 // available.
 func (l *publishLimiter) take(device string, now time.Time) (bool, time.Duration) {
 	l.mu.Lock()

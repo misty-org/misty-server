@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/app"
+	. "github.com/misty-org/misty-server/internal/app"
 
 	"github.com/go-chi/chi/v5"
 )

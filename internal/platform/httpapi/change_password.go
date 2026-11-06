@@ -6,16 +6,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 // ChangePassword replaces the signed-in person's password (PUT /me/password).
-// Both values are opaque strings to the server: the desktop app sends values it
-// derived on the device, so the server never learns the password itself, and
-// accounts that have not upgraded still send the password as typed. Wrong
-// attempts count toward the same lockout as sign-in. reset_token, from a
+// Wrong attempts count toward the same lockout as sign-in. reset_token, from a
 // setup key's sign-in, stands in for the current password: that is how a
 // forgotten password is reset.
 func ChangePassword(database *db.Database) http.HandlerFunc {
@@ -27,8 +24,6 @@ func ChangePassword(database *db.Database) http.HandlerFunc {
 		var body struct {
 			CurrentPassword string `json:"current_password"`
 			NewPassword     string `json:"new_password"`
-			// Credential: the new value is one the app derived on the device.
-			Credential bool `json:"credential"`
 			// ResetToken: password_reset_token from POST /setup-keys/redeem.
 			ResetToken string `json:"reset_token"`
 		}
@@ -58,9 +53,9 @@ func ChangePassword(database *db.Database) http.HandlerFunc {
 		// Other sessions end with the change; this request's own stays.
 		keep := security.HashToken(accounts.SessionID(r))
 		if body.ResetToken != "" {
-			err = database.ResetPassword(r.Context(), userID, security.HashToken(body.ResetToken), body.NewPassword, keep, body.Credential, time.Now())
+			err = database.ResetPassword(r.Context(), userID, security.HashToken(body.ResetToken), body.NewPassword, keep, time.Now())
 		} else {
-			err = database.ChangePassword(userID, body.CurrentPassword, body.NewPassword, keep, body.Credential)
+			err = database.ChangePassword(userID, body.CurrentPassword, body.NewPassword, keep)
 		}
 		switch {
 		case err == nil:

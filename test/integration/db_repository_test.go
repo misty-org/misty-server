@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -61,10 +61,10 @@ func TestPasswordResetGrantPersistenceAndReset(t *testing.T) {
 	if err := database.GrantPasswordReset(ctx, user.ID, tokenHash, time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("GrantPasswordReset() error = %v", err)
 	}
-	if err := database.ResetPassword(ctx, user.ID, tokenHash, "new-password", "", false, time.Now()); err != nil {
+	if err := database.ResetPassword(ctx, user.ID, tokenHash, "new-password", "", time.Now()); err != nil {
 		t.Fatalf("ResetPassword() error = %v", err)
 	}
-	if err := database.ResetPassword(ctx, user.ID, tokenHash, "new-password", "", false, time.Now()); err != db.ErrPasswordResetTokenInvalid {
+	if err := database.ResetPassword(ctx, user.ID, tokenHash, "new-password", "", time.Now()); err != db.ErrPasswordResetTokenInvalid {
 		t.Fatalf("ResetPassword() after reset error = %v, want %v", err, db.ErrPasswordResetTokenInvalid)
 	}
 

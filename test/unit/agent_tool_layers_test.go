@@ -6,9 +6,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 // Every tool any run can be offered declares its layer, and the startup check

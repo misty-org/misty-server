@@ -3,13 +3,13 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/security"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/test/testkit"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/test/testkit"
 )
 
 const sessionCookieName = "misty_session"

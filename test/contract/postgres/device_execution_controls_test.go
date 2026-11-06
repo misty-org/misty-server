@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	. "github.com/kannachi323/misty/server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/db"
 	"testing"
 	"time"
 )
@@ -51,8 +51,8 @@ func TestDeviceExecutionControls(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if job.SpaceID != "" {
-			t.Fatalf("account-owned device claim acquired a Space owner: %q", job.SpaceID)
+		if job.SpaceID != space.ID {
+			t.Fatalf("device claim has Space %q, want the run's %q", job.SpaceID, space.ID)
 		}
 		return job, token
 	}
@@ -78,7 +78,7 @@ func TestDeviceExecutionControls(t *testing.T) {
 		t.Fatalf("old token began execution: %v", err)
 	}
 	begun, err := database.BeginWorkflowDeviceNodeJob(user, device.ID, job.ID, newToken)
-	if err != nil || begun.SpaceID != "" || begun.State != "executing" || begun.ExecutionStartedAt == nil {
+	if err != nil || begun.SpaceID != space.ID || begun.State != "executing" || begun.ExecutionStartedAt == nil {
 		t.Fatalf("begin: %#v %v", begun, err)
 	}
 	if _, err = database.Conn.Exec(`UPDATE workflow_device_node_jobs SET lease_expires_at=NOW()-INTERVAL '1 second' WHERE id=$1`, job.ID); err != nil {

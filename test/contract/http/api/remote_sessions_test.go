@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	serveragent "github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	serveragent "github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 // The agent's own browser session (docs/agents/evals/odysseys.md): when a run
@@ -32,12 +32,6 @@ func newRemoteSessionFixture(t *testing.T) *remoteSessionFixture {
 	f := newDeviceFixture(t)
 	device := f.register("Laptop")
 	other := f.register("Mac mini")
-	for version, admitted := range [][]testDevice{{device}, {device, other}} {
-		added := admitted[len(admitted)-1]
-		if response := f.admit(added, int64(version+1), admitted, f.root); response.Code != http.StatusOK {
-			t.Fatalf("admit: %d %s", response.Code, response.Body.String())
-		}
-	}
 	agents := NewAgentsService(f.database)
 	for _, action := range []string{"begin", "complete", "fail"} {
 		f.router.Post("/devices/{deviceID}/workflow-node-jobs/{jobID}/"+action, agents.DeviceAuthenticated(agents.WorkflowNodeLeaseAction(action)))

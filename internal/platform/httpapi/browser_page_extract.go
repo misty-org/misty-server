@@ -7,8 +7,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
 )
 
 func validBrowserExtractRequest(raw json.RawMessage) (string, json.RawMessage, error) {

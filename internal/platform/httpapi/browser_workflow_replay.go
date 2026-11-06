@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Cached workflow replays (docs/agents/harness.md, Workflows as memory). A workflow

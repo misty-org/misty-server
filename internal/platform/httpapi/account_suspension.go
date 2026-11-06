@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/accounts"
 )
 
 // suspensionRefresh is how stale the suspended and closing lists may get.
@@ -142,6 +142,23 @@ func (g *SuspensionGuard) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+const accountSuspendedMessage = "This account is suspended. Its data is kept; contact the server's operator."
+
 func writeAccountSuspended(w http.ResponseWriter) {
-	writeJSON(w, http.StatusForbidden, map[string]string{"code": "account_suspended", "message": "This account is suspended. Its data is kept; contact the server's operator."})
+	writeJSON(w, http.StatusForbidden, map[string]string{"code": "account_suspended", "message": accountSuspendedMessage})
+}
+
+// writeSuspendedSignIn refuses a session to someone who has just shown they hold a suspended
+// account, and answers with a proof of it (account_proof.go). A suspension from a failed payment
+// is lifted by paying, and they can't reach account settings to do that, so the proof is what lets
+// the website open their card page. It is good for minutes and opens nothing on this server.
+func writeSuspendedSignIn(w http.ResponseWriter, userID string) {
+	body := map[string]string{"code": "account_suspended", "message": accountSuspendedMessage}
+	if proof, err := newAccountProof(userID, time.Now()); err == nil {
+		body["proof"] = proof
+	} else {
+		log.Printf("no proof for a suspended sign-in: %v", err)
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusForbidden, body)
 }

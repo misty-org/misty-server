@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func writeAgentResult(w http.ResponseWriter, value any, err error, status int) {
@@ -20,6 +20,8 @@ func writeAgentResult(w http.ResponseWriter, value any, err error, status int) {
 func writeAgentError(w http.ResponseWriter, err error) {
 	var invalidRequest agent.ErrInvalidRequest
 	switch {
+	case errors.Is(err, db.ErrNoDevicesAllowed):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "no_devices_allowed", "message": "This account can't add devices yet."})
 	case errors.Is(err, db.ErrDeviceLimit):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "device_limit_reached", "message": "This account has all the devices its plan allows. Remove one in Settings › Devices, then add this one."})
 	case errors.Is(err, db.ErrDeviceIdentityConflict):
@@ -38,12 +40,6 @@ func writeAgentError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"code": "device_removed", "message": "This device was removed from your account."})
 	case errors.Is(err, db.ErrDeviceNotAdmitted):
 		writeJSON(w, http.StatusForbidden, map[string]string{"code": "device_not_added", "message": "Add this device to your account first."})
-	case errors.Is(err, db.ErrDeviceListConflict):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "device_list_conflict", "message": "Your devices changed. Misty will try again."})
-	case errors.Is(err, db.ErrDeviceVaultMissing):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "sync_setup_required", "message": "Set up sync to add devices."})
-	case errors.Is(err, db.ErrDeviceAdmissionState):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "admission_state", "message": "This approval ended. Start again from the new device."})
 	case errors.Is(err, db.ErrDevicePolicyStale):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "device_policy_stale", "message": "A newer setting already applies."})
 	case errors.Is(err, db.ErrPersonalAgentConflict), errors.Is(err, db.ErrLibraryConflict):

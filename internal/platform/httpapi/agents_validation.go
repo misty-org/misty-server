@@ -9,15 +9,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/workflow"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/workflow"
 )
 
 var (
 	deviceIDPattern      = regexp.MustCompile(`^device_[0-9a-f-]{36}$`)
 	deviceJobIDPattern   = regexp.MustCompile(`^devicejob_[0-9a-f-]{36}$`)
 	deviceNoncePattern   = regexp.MustCompile(`^[A-Za-z0-9+/=_-]{16,200}$`)
-	p2pEndpointIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32,128}$`)
 )
 
 const (

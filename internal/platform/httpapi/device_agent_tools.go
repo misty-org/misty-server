@@ -6,10 +6,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/workflow"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/workflow"
 )
 
 // Device tools reach the member's own computer through grants the desktop
@@ -29,8 +29,6 @@ const (
 // deviceGrant is one attached device context the tools can reach.
 type deviceGrant struct {
 	scopeID, name, deviceID, deviceName string
-	// fetch: the grant allows web.fetch (desktops from phase 1 on).
-	fetch bool
 }
 
 func (s *SpacesService) deviceToolRegistrations(ctx context.Context, record *db.AIInvocationRecord) []agenttools.Registration {
@@ -50,8 +48,6 @@ func (s *SpacesService) deviceToolRegistrations(ctx context.Context, record *db.
 	folders, projects, workspaces := []deviceGrant{}, []deviceGrant{}, []deviceGrant{}
 	for _, item := range contexts {
 		grant := deviceGrant{scopeID: item.OpaqueRef, name: item.DisplayName, deviceID: item.DeviceID, deviceName: names[item.DeviceID]}
-		var capabilities []string
-		grant.fetch = json.Unmarshal(item.Capabilities, &capabilities) == nil && containsString(capabilities, webFetchTool)
 		switch item.Kind {
 		case "local_folder":
 			folders = append(folders, grant)
@@ -72,7 +68,6 @@ func (s *SpacesService) deviceToolRegistrations(ctx context.Context, record *db.
 	_ = projects
 	if len(workspaces) > 0 {
 		registrations = append(registrations, s.workspaceToolRegistrations(workspaces)...)
-		registrations = append(registrations, s.webFetchDeviceRegistration(workspaces)...)
 	}
 	return registrations
 }
@@ -262,10 +257,6 @@ func deviceToolFailure(code string) error {
 		"workspace_unavailable":    "the Misty browser is not open on the user's computer",
 		"device_grant_invalid":     "the user's computer could not confirm this request",
 		"code_sandbox_unavailable": "the user's computer can't run commands safely (code projects need macOS)",
-		"private_address":          "that address is not a public website",
-		"fetch_timeout":            "the page took too long to answer",
-		"fetch_failed":             "the page could not be reached",
-		"too_many_redirects":       "the page redirected too many times",
 	}[code]
 	if message == "" {
 		message = "the user's computer could not do that (" + code + ")"

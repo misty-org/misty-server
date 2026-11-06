@@ -97,6 +97,7 @@ var memoryTreeTables = [][2]string{
 
 // purgeSpaceMemberTx deletes everything of one person's in a Space, in the
 // transaction that takes them out of it: their memory rows and chunks, their
+// agent conversations, their
 // private notes, drawings, files and links, and (through the membership's
 // cascades) their code projects and agents' memberships.
 // Their public items stay with the Space. Their vault in the Space is the
@@ -104,6 +105,16 @@ var memoryTreeTables = [][2]string{
 func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
 	for _, table := range memoryTreeTables {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table[0]+` WHERE space_id=$1 AND `+table[1]+`=$2`, spaceID, userID); err != nil {
+			return err
+		}
+	}
+	conversations, err := privateItemIDsTx(ctx, tx, `SELECT id FROM misty_ask_conversations WHERE space_id=$1 AND user_id=$2`, spaceID, userID)
+	if err != nil {
+		return err
+	}
+	if len(conversations) > 0 {
+		// Their objects go at the next inventory pass, once no row names them.
+		if err := deleteAgentConversationsTx(ctx, tx, userID, conversations); err != nil {
 			return err
 		}
 	}

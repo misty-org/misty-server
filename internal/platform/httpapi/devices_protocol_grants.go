@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // devicePolicy is a device's own signed permissions.

@@ -69,6 +69,10 @@ func NormalizeRateLimitPath(path string) string {
 		}
 		return "/" + strings.Join(parts, "/")
 	}
+	// One budget across every invite code, so guessing them gets no fresh budget per try.
+	if parts[0] == "invites" && len(parts) == 2 {
+		return "/invites/{code}"
+	}
 	// Operator account routes name an account; one budget covers them all.
 	if parts[0] == "operator" && len(parts) >= 4 && parts[2] == "accounts" {
 		parts[3] = "{id}"

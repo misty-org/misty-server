@@ -125,9 +125,6 @@ func (db *Database) DeleteSpaceData(ctx context.Context, spaceID string) error {
 		if _, err := tx.ExecContext(ctx, `SET CONSTRAINTS security_domains_space_fk, spaces_security_domain_fk DEFERRED`); err != nil {
 			return err
 		}
-		if err := deleteSpaceVaultsTx(ctx, tx, spaceID, ""); err != nil {
-			return err
-		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM spaces WHERE id=$1`, spaceID); err != nil {
 			return err
 		}

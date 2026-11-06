@@ -36,7 +36,7 @@ func (db *Database) GrantPasswordReset(ctx context.Context, userID, hashedToken 
 // of the current password, then ends every other session (keepSessionHash
 // stays). The grant is used up; an expired or unknown one is
 // ErrPasswordResetTokenInvalid.
-func (db *Database) ResetPassword(ctx context.Context, userID, hashedToken, newPassword, keepSessionHash string, credential bool, now time.Time) error {
+func (db *Database) ResetPassword(ctx context.Context, userID, hashedToken, newPassword, keepSessionHash string, now time.Time) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -59,8 +59,8 @@ func (db *Database) ResetPassword(ctx context.Context, userID, hashedToken, newP
 			return ErrPasswordResetTokenInvalid
 		}
 		result, err := tx.ExecContext(ctx,
-			`UPDATE users SET password_hash=$1, credential_password=$3 WHERE id=$2 AND provider='misty' AND lifecycle_state='active'`,
-			string(hash), userID, credential)
+			`UPDATE users SET password_hash=$1 WHERE id=$2 AND provider='misty' AND lifecycle_state='active'`,
+			string(hash), userID)
 		if err != nil {
 			return err
 		}

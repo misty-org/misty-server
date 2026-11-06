@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	platformmetrics "github.com/kannachi323/misty/server/internal/platform/metrics"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	platformmetrics "github.com/misty-org/misty-server/internal/platform/metrics"
 )
 
 const MaxAIJSONBodyBytes = 2 << 20

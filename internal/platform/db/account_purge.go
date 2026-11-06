@@ -35,11 +35,11 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"space_resolve_tickets", "user_id"},
 	{"device_channel_tickets", "user_id"},
 	{"account_setup_keys", "user_id"},
+	{"email_outbox", "user_id"},
 	{"account_usage", "user_id"},
 	{"account_controls", "user_id"},
 	// Encrypted sync: every vault, with its records, blobs and devices.
-	{"browser_sync_restore_runs", "user_id"},
-	{"browser_sync_vaults", "user_id"},
+	{"sync_vaults", "user_id"},
 	// Memory and embeddings.
 	{"memory_backlog", "owner_user_id"},
 	{"memory_chunks", "owner_user_id"},
@@ -48,6 +48,7 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"ai_retrieval_documents", "owner_user_id"},
 	// Agent chats, runs and their working state.
 	{"misty_ask_conversation_events", "user_id"},
+	{"agent_lesson_documents", "owner_user_id"},
 	{"misty_ask_conversations", "user_id"},
 	{"ai_conversation_attachments", "user_id"},
 	{"ai_conversation_summaries", "user_id"},
@@ -98,8 +99,6 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"cloud_connections", "user_id"},
 	{"space_provider_credentials", "user_id"},
 	// Devices.
-	{"device_admission_requests", "user_id"},
-	{"device_lists", "user_id"},
 	{"device_policies", "user_id"},
 	{"device_revoked_keys", "user_id"},
 	{"trusted_device_request_nonces", "owner_user_id"},

@@ -1,44 +1,6 @@
 package agent
 
-import (
-	"encoding/json"
-	"sort"
-	"strings"
-)
-
-func GatewayCapabilities(raw json.RawMessage) []string {
-	var list []string
-	if json.Unmarshal(raw, &list) == nil {
-		return list
-	}
-	var values map[string]any
-	if json.Unmarshal(raw, &values) != nil {
-		return nil
-	}
-	for key, value := range values {
-		if enabled, ok := value.(bool); !ok || enabled {
-			list = append(list, key)
-		}
-	}
-	sort.Strings(list)
-	return list
-}
-
-func normalizedCapabilities(capabilities []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(capabilities))
-	for _, capability := range capabilities {
-		capability = strings.TrimSpace(capability)
-		key := strings.ToLower(capability)
-		if key == "" || seen[key] {
-			continue
-		}
-		seen[key] = true
-		out = append(out, capability)
-	}
-	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
-	return out
-}
+import "strings"
 
 func FilterChatModels(models []GatewayModel) []GatewayModel {
 	seen := map[string]bool{}

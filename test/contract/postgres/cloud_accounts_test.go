@@ -5,14 +5,15 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
-	. "github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
-	"github.com/kannachi323/misty/server/test/testkit"
+	. "github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
+	"github.com/misty-org/misty-server/test/testkit"
 )
 
 func limit(n int64) *int64 { return &n }
@@ -37,10 +38,10 @@ func TestOperatorAccountCreateIsIdempotentPerEmail(t *testing.T) {
 		t.Fatalf("hash = %q %v", hash, err)
 	}
 	// The first password is set without a current one; later ones need it.
-	if err := database.ChangePassword(first.ID, "", "a-long-enough-password", "", false); err != nil {
+	if err := database.ChangePassword(first.ID, "", "a-long-enough-password", ""); err != nil {
 		t.Fatalf("first password: %v", err)
 	}
-	if err := database.ChangePassword(first.ID, "", "another-long-password", "", false); !errors.Is(err, ErrWrongCurrentPassword) {
+	if err := database.ChangePassword(first.ID, "", "another-long-password", ""); !errors.Is(err, ErrWrongCurrentPassword) {
 		t.Fatalf("second password without current = %v", err)
 	}
 	// A taken username gets a suffix instead of failing.
@@ -173,6 +174,53 @@ func TestMonthlyUsageStopsAtTheLimitAndCountsUnlimited(t *testing.T) {
 	}
 }
 
+func TestGoogleSignInRefusesAnEmailAnotherAccountHolds(t *testing.T) {
+	database := testkit.OpenDatabase(t)
+	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+	email := "same." + suffix + "@example.com"
+	if _, err := database.CreateUserWithUsername("pw_"+suffix, email, "the-password"); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := database.GoogleUser(strings.ToUpper(email), "subject-"+suffix); !errors.Is(err, ErrPasswordAccount) {
+		t.Fatalf("found %+v, %v", found, err)
+	}
+	if _, hash, err := database.GetUserByEmail(email); err != nil || hash == "" {
+		t.Fatalf("the password went: %q, %v", hash, err)
+	}
+	// One Google identity holds an email; another claiming it is refused.
+	google := "google." + suffix + "@example.com"
+	if _, err := database.GoogleUser(google, "first-"+suffix); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.GoogleUser(google, "second-"+suffix); !errors.Is(err, ErrProviderConflict) {
+		t.Fatalf("second identity: %v", err)
+	}
+}
+
+func TestSetUsername(t *testing.T) {
+	database := testkit.OpenDatabase(t)
+	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
+	user, err := database.GoogleUser("rename."+suffix+"@example.com", "rename-"+suffix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = database.CreateUserWithUsername("taken_"+suffix, "taken."+suffix+"@example.com", "the-password"); err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := database.SetUsername(user.ID, " New_"+suffix+" "); err != nil || saved != "new_"+suffix {
+		t.Fatalf("saved %q, %v", saved, err)
+	}
+	if read, err := database.GetUserByID(user.ID); err != nil || read.Username != "new_"+suffix {
+		t.Fatalf("read %+v, %v", read, err)
+	}
+	if _, err = database.SetUsername(user.ID, "taken_"+suffix); !errors.Is(err, ErrUsernameTaken) {
+		t.Fatalf("taken: %v", err)
+	}
+	if _, err = database.SetUsername(user.ID, "no spaces"); !errors.Is(err, ErrInvalidUsername) {
+		t.Fatalf("invalid: %v", err)
+	}
+}
+
 func TestDeviceLimitRefusesTheNextNewDevice(t *testing.T) {
 	database := testkit.OpenDatabase(t)
 	ctx := context.Background()
@@ -184,6 +232,15 @@ func TestDeviceLimitRefusesTheNextNewDevice(t *testing.T) {
 		key := base64.RawURLEncoding.EncodeToString([]byte(uuid.NewString()[:32]))
 		_, err := database.RegisterUnifiedDevice(ctx, user.ID, name, key, "endpoint-"+uuid.NewString(), "macos", "15", "1.0", "", nil)
 		return err
+	}
+	if err := database.SetAccountLimits(ctx, user.ID, AccountLimits{Devices: limit(0)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := register("Studio"); !errors.Is(err, ErrNoDevicesAllowed) {
+		t.Fatalf("no devices allowed = %v", err)
+	}
+	if err := database.SetAccountLimits(ctx, user.ID, AccountLimits{Devices: limit(1)}); err != nil {
+		t.Fatal(err)
 	}
 	if err := register("Studio"); err != nil {
 		t.Fatalf("first device = %v", err)

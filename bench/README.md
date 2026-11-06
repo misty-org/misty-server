@@ -5,8 +5,8 @@ credentials in the environment of the computer running k6; do not commit them.
 
 ## First smoke run
 
-Run a test server from `server/compose.yml` on a spare host
-([docs/self-hosting.md](../../docs/self-hosting.md)) with `MISTY_HOST_PORT=8082`, and never load
+Run a test server from `compose.yml` on a spare host
+([docs/self-hosting.md](https://github.com/misty-org/misty/blob/main/docs/self-hosting.md)) with `MISTY_HOST_PORT=8082`, and never load
 test a server people use. From the computer that runs k6, keep an SSH tunnel open:
 
 ```sh
@@ -32,7 +32,7 @@ Do not use a production account.
 Run the one-user login-and-session smoke scenario:
 
 ```sh
-K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=/tmp/misty-auth-smoke.html k6 run server/bench/auth-smoke.js
+K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=/tmp/misty-auth-smoke.html k6 run bench/auth-smoke.js
 ```
 
 The script targets `http://127.0.0.1:8082/v1` by default. Override that with

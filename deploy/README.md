@@ -2,8 +2,8 @@
 
 Misty has one canonical API `Dockerfile` and two Compose files:
 
-- `compose.yml`, the server stack anyone runs: four env files under `server/.env/` and the setup
-  container in [`setup/`](setup/). [docs/self-hosting.md](../../docs/self-hosting.md) is the
+- `compose.yml`, the server stack anyone runs: four env files under `~/.misty/server/prod/` and the setup
+  container in [`setup/`](setup/). [docs/self-hosting.md](https://github.com/misty-org/misty/blob/main/docs/self-hosting.md) is the
   walkthrough and lists every value.
 - `compose.dev.yml` for developing Misty, driven by the development-only `misty` CLI.
 
@@ -16,7 +16,7 @@ The API always listens on port 8080 inside its container.
 
 Use the [server setup guide](../README.md#get-started). The CLI owns environment initialization, validation, Cloudflare provisioning, startup, and Worker deployment. The server is part of the Misty checkout under `server/`.
 
-`misty setup server` creates private `server/.env/dev/` files without replacing existing values. `misty env describe` lists variables and their files; `misty env set dev NAME` reads a value from stdin and writes it to the registered file. Use `misty env check dev` before startup and `misty doctor server` afterwards.
+`misty setup server` creates private `~/.misty/server/dev/` files without replacing existing values. `misty env describe` lists variables and their files; `misty env set dev NAME` reads a value from stdin and writes it to the registered file. Use `misty env check dev` before startup and `misty doctor server` afterwards.
 
 `misty setup cloudflare` previews infrastructure changes; `--apply` provisions the selected tunnel and DNS route. `misty server deploy` deploys the Worker separately. Cloudflare account IDs and hostnames are explicit configuration; there are no implicit Misty account defaults in the development stack.
 
@@ -29,10 +29,10 @@ Do not recreate a service with only a subset of those files loaded for Compose i
 ### AI models
 
 Models run on each person's desktop, on the device's own keys
-([docs/byok.md](../../docs/byok.md)). Web search runs there too, on a search key the person keeps
+([docs/byok.md](https://github.com/misty-org/misty/blob/main/docs/byok.md)). Web search runs there too, on a search key the person keeps
 on that device. The development stack has no agent runtime, no model keys and no search key
 either: runs go to a desktop signed in to it, as they do in production. The private
-`server/.env/dev/integrations/ai.env` holds only the settings the server itself uses:
+`~/.misty/server/dev/integrations/ai.env` holds only the settings the server itself uses:
 
 | Name | Value |
 | --- | --- |
@@ -76,7 +76,7 @@ Database volumes survive `misty server down`; only explicit `--volumes` removes 
 
 | Service | Role |
 | --- | --- |
-| `setup` | One-shot `misty-setup init`: generates missing secrets into the `secrets` volume, refuses to start when the database holds data but its secrets are gone, provisions Cloudflare ([docs/cloudflare.md](../../docs/cloudflare.md)) |
+| `setup` | One-shot `misty-setup init`: generates missing secrets into the `secrets` volume, refuses to start when the database holds data but its secrets are gone, provisions Cloudflare ([docs/cloudflare.md](https://github.com/misty-org/misty/blob/main/docs/cloudflare.md)) |
 | `postgres` | PostgreSQL with pgvector; its superuser password comes from the secrets volume |
 | `migrate` | One-shot `misty-setup migrate`: syncs the API role's password, applies migrations, grants the role its tables |
 | `api` | The Go API, published only on `127.0.0.1:8081`; it loads the secrets volume's `server.env` when it starts |
@@ -89,7 +89,7 @@ Every service reads the four env files; only `setup` keeps `CLOUDFLARE_API_TOKEN
 volume holds `server.env` (what the API and console read) and separate files for what the API must
 never see: the database superuser password, the tunnel token, and the backup key and
 credentials. There is no agent runtime and no workflow database: agents run on the desktop
-([docs/agents/runtime.md](../../docs/agents/runtime.md)).
+([docs/agents/runtime.md](https://github.com/misty-org/misty/blob/main/docs/agents/runtime.md)).
 
 ### Alerts
 

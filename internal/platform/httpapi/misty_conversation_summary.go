@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string, summary db.AgentSessionSummary) (mistyConversation, error) {
@@ -112,7 +112,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 			SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
 			OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, ModelOverride: summary.ModelOverride, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
 			CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),
-			UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true, KeptOnDeviceID: summary.KeptOnDeviceID,
+			UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true, PersonalSpace: summary.PersonalSpace,
 		}, nil
 	}
 	transcript, err := s.runtime.Transcript(r.Context(), summary.ID, userID)
@@ -143,7 +143,7 @@ func (s *AIService) mistyConversationFromSummary(r *http.Request, userID string,
 		SpaceID: summary.SpaceID, Kind: summary.ConversationKind, OriginSurface: summary.OriginSurface,
 		OriginHref: summary.OriginHref, Privacy: summary.PrivacyBoundary, ModelID: modelID, ModelOverride: summary.ModelOverride, Reasoning: agent.ManagedReasoning("", summary.ReasoningEffort),
 		CreatedAt: summary.CreatedAt.UTC().Format(time.RFC3339Nano),
-		UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true, KeptOnDeviceID: summary.KeptOnDeviceID,
+		UpdatedAt: summary.UpdatedAt.UTC().Format(time.RFC3339Nano), LastReadAt: formatReadAt(summary.LastReadAt), Messages: messages, Remote: true, PersonalSpace: summary.PersonalSpace,
 	}, nil
 }
 

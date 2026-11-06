@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // loadAgentMemoryContext is the run's recent memories from the Space it was

@@ -24,6 +24,9 @@ type WorkflowSchedule struct {
 	// DeviceID names the computer whose Misty browser the run uses. Empty runs
 	// on the server with no browser.
 	DeviceID string `json:"device_id,omitempty"`
+	// Profile is the profile whose sign-ins the run uses, chosen when the schedule
+	// is made. A computer without it can't run the schedule, and says why.
+	Profile string `json:"profile"`
 	// DueAt is the occurrence waiting for that computer, and MissedCount the
 	// later ones that passed while it waited.
 	DueAt            *time.Time `json:"due_at,omitempty"`
@@ -40,16 +43,19 @@ type WorkflowSchedule struct {
 
 const MaxWorkflowSchedulesPerUser = 50
 
+// FirstProfileID is the first profile's id, the same on every computer.
+const FirstProfileID = "personal"
+
 const workflowScheduleColumns = `id,user_id,method_id,COALESCE(conversation_id,''),timezone,rules,skip_dates,inputs,
 	enabled,state,next_run_at,COALESCE(last_invocation_id,''),last_run_at,last_error,run_count,created_at,updated_at,
-	COALESCE(device_id,''),due_at,missed_count`
+	COALESCE(device_id,''),due_at,missed_count,profile`
 
 func scanWorkflowSchedule(scanner interface{ Scan(...any) error }, item *WorkflowSchedule) error {
 	var rules, skip, inputs []byte
 	err := scanner.Scan(&item.ID, &item.UserID, &item.MethodID, &item.ConversationID, &item.Timezone,
 		&rules, &skip, &inputs, &item.Enabled, &item.State, &item.NextRunAt, &item.LastInvocationID,
 		&item.LastRunAt, &item.LastError, &item.RunCount, &item.CreatedAt, &item.UpdatedAt,
-		&item.DeviceID, &item.DueAt, &item.MissedCount)
+		&item.DeviceID, &item.DueAt, &item.MissedCount, &item.Profile)
 	if err != nil {
 		return err
 	}
@@ -128,6 +134,10 @@ func (db *Database) SaveWorkflowSchedule(ctx context.Context, userID, conversati
 	if err != nil {
 		return nil, ErrSpaceInvalid
 	}
+	profile := item.Profile
+	if profile == "" {
+		profile = FirstProfileID
+	}
 	out := &WorkflowSchedule{}
 	err = db.WithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
 		var count int
@@ -149,11 +159,11 @@ func (db *Database) SaveWorkflowSchedule(ctx context.Context, userID, conversati
 		// A run already waiting for a computer keeps waiting, for the newly
 		// chosen one; with no computer chosen it is dropped.
 		return scanWorkflowSchedule(tx.QueryRowContext(ctx, `
-			INSERT INTO workflow_schedules(id,user_id,method_id,conversation_id,timezone,rules,skip_dates,inputs,enabled,next_run_at,device_id)
-			VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10,NULLIF($11,''))
+			INSERT INTO workflow_schedules(id,user_id,method_id,conversation_id,timezone,rules,skip_dates,inputs,enabled,next_run_at,device_id,profile)
+			VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10,NULLIF($11,''),$12)
 			ON CONFLICT(method_id) DO UPDATE SET timezone=EXCLUDED.timezone,rules=EXCLUDED.rules,
 				skip_dates=EXCLUDED.skip_dates,inputs=EXCLUDED.inputs,enabled=EXCLUDED.enabled,
-				next_run_at=EXCLUDED.next_run_at,device_id=EXCLUDED.device_id,
+				next_run_at=EXCLUDED.next_run_at,device_id=EXCLUDED.device_id,profile=EXCLUDED.profile,
 				state=CASE WHEN workflow_schedules.state IN ('running','device_claimed') THEN workflow_schedules.state
 					WHEN workflow_schedules.state='awaiting_device' AND EXCLUDED.device_id IS NOT NULL AND EXCLUDED.enabled THEN 'awaiting_device'
 					ELSE 'idle' END,
@@ -164,7 +174,7 @@ func (db *Database) SaveWorkflowSchedule(ctx context.Context, userID, conversati
 			RETURNING `+workflowScheduleColumns,
 			"workflow_schedule_"+uuid.NewString(), userID, item.MethodID, conversationID, item.Timezone,
 			jsonOrEmpty(item.Rules, `[]`), jsonOrEmpty(item.SkipDates, `[]`), jsonOrEmpty(item.Inputs, `{}`),
-			item.Enabled, next, item.DeviceID), out)
+			item.Enabled, next, item.DeviceID, profile), out)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound

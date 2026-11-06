@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
-	"github.com/kannachi323/misty/server/test/testkit"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
+	"github.com/misty-org/misty-server/test/testkit"
 )
 
 // Admission, ownership, persistence, scheduler and completion projection are real.

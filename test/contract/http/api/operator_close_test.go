@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	"github.com/kannachi323/misty/server/test/testkit"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/test/testkit"
 )
 
 func closingServer(t *testing.T) (http.Handler, *db.Database) {
@@ -65,7 +65,7 @@ func TestCloseMakesReadOnlyAndDeletesOnTheDateWithoutEmails(t *testing.T) {
 	if rec.Code != http.StatusOK || reset == "" {
 		t.Fatalf("redeem while closing = %d %v", rec.Code, redeemed)
 	}
-	if rec, body := call(t, handler, http.MethodPut, "/v1/me/password", "", `{"reset_token":"`+reset+`","new_password":"a long enough password","credential":true}`, rec.Result().Cookies()...); rec.Code != http.StatusOK {
+	if rec, body := call(t, handler, http.MethodPut, "/v1/me/password", "", `{"reset_token":"`+reset+`","new_password":"a long enough password"}`, rec.Result().Cookies()...); rec.Code != http.StatusOK {
 		t.Fatalf("password while closing = %d %v", rec.Code, body)
 	}
 

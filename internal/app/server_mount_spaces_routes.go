@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, realtime *api.RealtimeService) {
@@ -50,6 +50,7 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/messages", spaces.Messages())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/conversations", spaces.Conversations())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/conversations", spaces.Conversations())
+	s.Router.Post(prefix+"/spaces/{spaceID}/conversations/dm", spaces.DirectConversation())
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/conversations/{conversationID}", spaces.Conversation())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/conversations/{conversationID}", spaces.Conversation())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/conversations/{conversationID}/messages", spaces.ConversationMessages())
@@ -125,18 +126,9 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 	s.Router.Get(prefix+"/devices", service.ListDevices())
 	// One device identity for sync, agents and the shared clipboard. Trust changes
 	// carry signatures the server verifies but cannot produce.
-	s.Router.Get(prefix+"/devices/trust", service.DeviceTrust())
-	s.Router.Get(prefix+"/devices/admission-requests", service.ListAdmissionRequests())
 	s.Router.Get(prefix+"/devices/channel", service.DeviceChannel())
 	s.Router.Post(prefix+"/devices/{deviceID}/channel-ticket", service.DeviceChannelTicket())
 	s.Router.Post(prefix+"/devices/{deviceID}/heartbeat", service.DeviceAuthenticated(service.HeartbeatDevice()))
-	s.Router.Post(prefix+"/devices/{deviceID}/admit", service.DeviceAuthenticated(service.AdmitDevice()))
-	s.Router.Post(prefix+"/devices/{deviceID}/admission-requests", service.DeviceAuthenticated(service.CreateAdmissionRequest()))
-	s.Router.Get(prefix+"/devices/{deviceID}/admission-requests/{requestID}", service.DeviceAuthenticated(service.AdmissionRequest()))
-	s.Router.Post(prefix+"/devices/{deviceID}/admission-requests/{requestID}/challenge", service.DeviceAuthenticated(service.ChallengeAdmission()))
-	s.Router.Post(prefix+"/devices/{deviceID}/admission-requests/{requestID}/reveal", service.DeviceAuthenticated(service.RevealAdmission()))
-	s.Router.Post(prefix+"/devices/{deviceID}/admission-requests/{requestID}/approve", service.DeviceAuthenticated(service.ApproveAdmission()))
-	s.Router.Post(prefix+"/devices/{deviceID}/admission-requests/{requestID}/deny", service.DeviceAuthenticated(service.DenyAdmission()))
 	s.Router.Put(prefix+"/devices/{deviceID}/devices/{targetID}/name", service.DeviceAuthenticated(service.RenameDevice()))
 	s.Router.Put(prefix+"/devices/{deviceID}/policy", service.DeviceAuthenticated(service.StoreDevicePolicy()))
 	s.Router.Post(prefix+"/devices/{deviceID}/remove-device", service.DeviceAuthenticated(service.RemoveDevice()))

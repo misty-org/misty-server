@@ -1,13 +1,16 @@
 package api
 
 import (
+	"context"
+	"log"
 	"net/http"
 	"net/url"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/email"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/security"
 	"strings"
 )
 
@@ -50,6 +53,7 @@ func (s *SpacesService) Invite() http.HandlerFunc {
 			return
 		}
 		invite.Link = SpaceInvitationLink(token)
+		invite.Emailed = s.emailInvitation(r.Context(), invite)
 		writeJSON(w, http.StatusCreated, invite)
 	}
 }
@@ -65,6 +69,9 @@ func (s *SpacesService) SpaceInvitationItem() http.HandlerFunc {
 			if err := s.database.RevokeSpaceInvitation(r.Context(), userID, spaceID, inviteID); err != nil {
 				writeSpaceError(w, err)
 				return
+			}
+			if err := s.database.CancelInvitationEmail(r.Context(), inviteID); err != nil {
+				log.Printf("invitation email not cancelled: %v", err)
 			}
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -86,15 +93,30 @@ func (s *SpacesService) SpaceInvitationItem() http.HandlerFunc {
 			return
 		}
 		invite.Link = SpaceInvitationLink(token)
+		invite.Emailed = s.emailInvitation(r.Context(), invite)
 		writeJSON(w, http.StatusOK, invite)
 	}
 }
 
 // SpaceInvitationLink opens the invitation in Misty (misty://open/invite/...).
-// The server sends no email: creating an invitation, or a new link for one
-// (which replaces the old link), answers with it and the owner passes it on.
+// Creating an invitation, or a new link for one (which replaces the old link),
+// answers with it for the owner to pass on; a server with Mailjet configured also
+// emails it.
 func SpaceInvitationLink(token string) string {
 	return "misty://open/invite/" + url.PathEscape(token)
+}
+
+// emailInvitation stores the invitation's email and reports whether it will go. The
+// invitation stands either way: the owner still has its link.
+func (s *SpacesService) emailInvitation(ctx context.Context, invite *db.SpaceInvitation) bool {
+	if !email.Configured() {
+		return false
+	}
+	if err := s.database.QueueInvitationEmail(ctx, invite.ID, invite.InvitedEmail, invite.Link, invite.SpaceName, invite.InviterName); err != nil {
+		log.Printf("invitation email not stored: %v", err)
+		return false
+	}
+	return true
 }
 
 func (s *SpacesService) SpaceInvitationToken() http.HandlerFunc {

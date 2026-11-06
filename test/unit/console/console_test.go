@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/console"
+	. "github.com/misty-org/misty-server/internal/console"
 )
 
 const launchToken = "launch-token"

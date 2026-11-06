@@ -1,8 +1,9 @@
 name: misty
 
 # The Misty server stack (docs/self-hosting.md). Everything you configure is in
-# four files under server/.env/; every secret is generated into the secrets
-# volume by the setup service, which also provisions Cloudflare on each start.
+# four files under ~/.misty/server/prod/ (MISTY_ENV_DIR names another folder);
+# every secret is generated into the secrets volume by the setup service, which
+# also provisions Cloudflare on each start.
 # Data lives in the pgdata volume and in R2, and is removed only when the
 # whole stack is (docker compose down --volumes).
 
@@ -10,10 +11,10 @@ x-config: &config
   # Every service reads the same four files. The API token for Cloudflare is
   # blanked for every service except setup, the only one that calls the API.
   env_file:
-    - ${MISTY_ENV_DIR:-.env}/misty.env
-    - ${MISTY_ENV_DIR:-.env}/cloudflare.env
-    - ${MISTY_ENV_DIR:-.env}/composio.env
-    - ${MISTY_ENV_DIR:-.env}/google.env
+    - ${MISTY_ENV_DIR:-~/.misty/server/prod}/misty.env
+    - ${MISTY_ENV_DIR:-~/.misty/server/prod}/cloudflare.env
+    - ${MISTY_ENV_DIR:-~/.misty/server/prod}/composio.env
+    - ${MISTY_ENV_DIR:-~/.misty/server/prod}/google.env
   logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
 
 # setup, migrate, backups, alerts, console and cloudflared run one small image
@@ -93,6 +94,14 @@ services:
       context: .
       dockerfile: Dockerfile
     <<: *config
+    # The four files, and Mailjet if this server sends email (docs/self-hosting.md#email).
+    env_file:
+      - ${MISTY_ENV_DIR:-~/.misty/server/prod}/misty.env
+      - ${MISTY_ENV_DIR:-~/.misty/server/prod}/cloudflare.env
+      - ${MISTY_ENV_DIR:-~/.misty/server/prod}/composio.env
+      - ${MISTY_ENV_DIR:-~/.misty/server/prod}/google.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/server/prod}/mailjet.env
+        required: false
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-ec", "set -a; . /run/misty/secrets/server.env; set +a; exec /usr/local/bin/misty-server"]
     environment:

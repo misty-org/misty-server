@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func TestTrustedDeviceSignatureBindsMethodPathNonceAndBody(t *testing.T) {
@@ -25,56 +25,6 @@ func TestTrustedDeviceSignatureBindsMethodPathNonceAndBody(t *testing.T) {
 	tampered := DeviceSignaturePayload("POST", "/api/devices/device_123/workflow-node-jobs/claim", "1700000000", "unique-nonce-1234", []byte(`{"limit":2}`))
 	if ed25519.Verify(publicKey, []byte(tampered), signature) {
 		t.Fatal("tampered request reused a signature")
-	}
-}
-
-func TestTrustedDeviceRegistrationIsStrict(t *testing.T) {
-	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	key := base64.RawURLEncoding.EncodeToString(publicKey)
-	if !TestingValidDeviceRegistration("My Mac", key, "ed25519", json.RawMessage(`{"workflowNodeLeases":true}`)) {
-		t.Fatal("valid trusted device registration rejected")
-	}
-	if TestingValidDeviceRegistration("My Mac", key, "rsa", json.RawMessage(`{}`)) {
-		t.Fatal("unsupported key algorithm accepted")
-	}
-	if TestingValidDeviceRegistration("My Mac", key, "ed25519", json.RawMessage(`{"libraryPath":"/Users/me"}`)) {
-		t.Fatal("device capabilities leaked a local path")
-	}
-}
-
-func TestConnectedDeviceRegistrationRequiresEndpointAndProtocolTogether(t *testing.T) {
-	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	key := base64.RawURLEncoding.EncodeToString(publicKey)
-	endpointID := "endpoint_abcdefghijklmnopqrstuvwxyz0123456789"
-	if !ValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, json.RawMessage(`["misty-device/1"]`), json.RawMessage(`{"connectedDevices":true}`)) {
-		t.Fatal("valid connected-device registration rejected")
-	}
-	if ValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, nil, json.RawMessage(`{}`)) {
-		t.Fatal("endpoint without a protocol was accepted")
-	}
-	if ValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, json.RawMessage(`["misty-device/2"]`), json.RawMessage(`{}`)) {
-		t.Fatal("unsupported protocol was accepted")
-	}
-	if ValidDeviceRegistrationV2("My Mac", key, "ed25519", "macos", endpointID, json.RawMessage(`["misty-device/1"]`), json.RawMessage(`{"clipboardPayload":"secret"}`)) {
-		t.Fatal("clipboard data was accepted in registration")
-	}
-}
-
-func TestConnectedDeviceFingerprintIsSymmetric(t *testing.T) {
-	first := "endpoint_abcdefghijklmnopqrstuvwxyz0123456789"
-	second := "endpoint_9876543210zyxwvutsrqponmlkjihgfedcba"
-	forward := TestingConnectedDeviceFingerprint(first, second)
-	if forward != TestingConnectedDeviceFingerprint(second, first) {
-		t.Fatal("fingerprint changes with endpoint order")
-	}
-	if len(forward) != 9 || forward[4] != '-' {
-		t.Fatalf("fingerprint = %q, want XXXX-XXXX", forward)
 	}
 }
 

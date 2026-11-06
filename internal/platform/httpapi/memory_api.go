@@ -8,14 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/platform/config"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// RecallConfig is Memory on the server. It is off unless MISTY_RECALL=true.
-// The backlog cap bounds how much may wait for an embedding per person.
+// RecallConfig is Memory on the server, which every server has. The backlog
+// cap bounds how much may wait for an embedding per person.
 type RecallConfig struct {
-	Enabled    bool
 	BacklogCap int
 }
 
@@ -24,16 +23,12 @@ func recallConfig() RecallConfig {
 	if parsed, err := strconv.Atoi(strings.TrimSpace(config.Getenv("MISTY_RECALL_BACKLOG_CAP"))); err == nil && parsed > 0 && parsed <= 100_000 {
 		limit = parsed
 	}
-	return RecallConfig{Enabled: strings.EqualFold(strings.TrimSpace(config.Getenv("MISTY_RECALL")), "true"), BacklogCap: limit}
+	return RecallConfig{BacklogCap: limit}
 }
 
 const memoryBacklogMessage = "Memory is catching up, so new pages aren't being kept for now. It continues on its own once it has caught up."
 
 func (s *SpacesService) memoryUser(w http.ResponseWriter, r *http.Request) (string, bool) {
-	if !recallConfig().Enabled {
-		writeJSON(w, http.StatusNotFound, map[string]string{"code": "memory_unavailable", "message": "Memory isn't available yet."})
-		return "", false
-	}
 	return s.appsUser(w, r)
 }
 

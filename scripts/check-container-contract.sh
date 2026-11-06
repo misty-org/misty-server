@@ -26,7 +26,7 @@ fail() {
   fail "the legacy standalone staging stack must not diverge from the shared stack"
 [ ! -e Dockerfile.cloudflared-dev ] ||
   fail "the development tunnel build must stay inside compose.dev.yml"
-[ ! -e apps/journal-collab/Dockerfile.dev ] ||
+[ ! -e services/journal-collab/Dockerfile.dev ] ||
   fail "the development Worker build must stay inside compose.dev.yml"
 
 grep -q 'dockerfile: Dockerfile' compose.dev.yml ||
@@ -55,10 +55,10 @@ grep -q 'MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}/v1' compose.dev.yml |
   fail "development must publish the canonical versioned API base"
 grep -q 'MISTY_DEV_API_ORIGIN:?run misty setup cloudflare' compose.dev.yml ||
   fail "the development Worker must callback through the stable named API tunnel"
-if grep -q 'trycloudflare.com' apps/journal-collab/docker/cloudflare-deploy.sh; then
+if grep -q 'trycloudflare.com' services/journal-collab/docker/cloudflare-deploy.sh; then
   fail "the development Worker callback must not depend on an ephemeral quick tunnel"
 fi
-cloudflare_env_consumers="$(grep -c 'path: .env/dev/integrations/cloudflare.env' compose.dev.yml)"
+cloudflare_env_consumers="$(grep -c '/integrations/cloudflare.env$' compose.dev.yml)"
 [ "$cloudflare_env_consumers" -ge 2 ] ||
   fail "the development tunnel and Worker deploy must load the Cloudflare environment bundle"
 grep -q '^  setup:' compose.dev.yml ||
@@ -91,7 +91,7 @@ for service in setup postgres migrate api cloudflared backups console; do
   grep -q "^  $service:" compose.yml || fail "the server stack is missing its $service service"
 done
 for file in misty cloudflare composio google; do
-  grep -q "/$file.env" compose.yml || fail "the server stack must read server/.env/$file.env"
+  grep -q "/$file.env" compose.yml || fail "the server stack must read ~/.misty/server/prod/$file.env"
 done
 ! grep -q '/search.env' compose.yml ||
   fail "the server holds no search key: web search runs on each device"

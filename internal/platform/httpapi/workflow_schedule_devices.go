@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 // Scheduled runs on a computer (roadmap C1). When a schedule names a computer,
@@ -50,6 +50,8 @@ func (s *AIService) ClaimDeviceScheduledRun() http.HandlerFunc {
 		}
 		var body struct {
 			DeviceID string `json:"device_id"`
+			// The profiles this computer has. A run uses its schedule's profile.
+			Profiles []string `json:"profiles"`
 		}
 		if decodeAIJSON(w, r, &body) != nil {
 			return
@@ -60,7 +62,11 @@ func (s *AIService) ClaimDeviceScheduledRun() http.HandlerFunc {
 			return
 		}
 		now := time.Now().UTC()
-		schedule, err := s.database.ClaimDeviceScheduledRun(r.Context(), userID, chi.URLParam(r, "scheduleID"), strings.TrimSpace(body.DeviceID), security.HashToken(token), now)
+		schedule, err := s.database.ClaimDeviceScheduledRun(r.Context(), userID, chi.URLParam(r, "scheduleID"), strings.TrimSpace(body.DeviceID), security.HashToken(token), body.Profiles, now)
+		if errors.Is(err, db.ErrScheduleProfileMissing) {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "schedule_profile_missing", "message": "This computer doesn't have the profile this schedule uses."})
+			return
+		}
 		if errors.Is(err, db.ErrSpaceConflict) {
 			writeJSON(w, http.StatusConflict, map[string]string{"code": "schedule_not_waiting", "message": "This run already started or isn't waiting for this computer."})
 			return
@@ -76,7 +82,7 @@ func (s *AIService) ClaimDeviceScheduledRun() http.HandlerFunc {
 		}
 		conversationID := schedule.ConversationID
 		if conversationID == "" {
-			if conversationID, err = createScheduleConversation(r.Context(), s.database, userID, method.Definition.Title, method.AgentID); err != nil {
+			if conversationID, err = createScheduleConversation(r.Context(), s.database, userID, method.SpaceID, method.Definition.Title, method.AgentID); err != nil {
 				WriteAIError(w, err)
 				return
 			}
@@ -88,7 +94,7 @@ func (s *AIService) ClaimDeviceScheduledRun() http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"claim": token, "schedule_id": schedule.ID, "agent_id": method.AgentID, "conversation_id": conversationID,
 			"method_version_id": method.VersionID, "inputs": schedule.Inputs, "timezone": schedule.Timezone, "title": method.Definition.Title,
-			"due_at": due, "missed_count": schedule.MissedCount,
+			"due_at": due, "missed_count": schedule.MissedCount, "profile": schedule.Profile, "space_id": method.SpaceID,
 			"idempotency_key": "workflow-schedule:" + schedule.ID + ":" + due.UTC().Format(time.RFC3339),
 		})
 	}
@@ -136,6 +142,7 @@ func (s *AIService) admitDeviceScheduledRun(ctx context.Context, userID string, 
 	body.MethodInputs = schedule.Inputs
 	body.Timezone = schedule.Timezone
 	body.Mode, body.SurfaceID, body.Trigger = "drawer", "global", scheduledRunTrigger
+	body.Profile = schedule.Profile
 	body.IdempotencyKey = "workflow-schedule:" + schedule.ID + ":" + due.UTC().Format(time.RFC3339)
 	return &deviceScheduledRunAdmission{schedule: schedule}, nil
 }

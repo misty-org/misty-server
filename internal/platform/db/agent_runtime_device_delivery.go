@@ -9,10 +9,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// Agent runs work on the person's desktop (docs/agents/runtime.md). A run
-// a desktop started is pinned to it (runtime_endpoint 'device:<id>'). A run not
-// started yet goes to the desktop that keeps its chat, or, with none, to the
-// first of the person's desktops that claims it.
+// Agent runs work on the person's computer (docs/agents/runtime.md). A run is
+// pinned to the computer it was sent from (runtime_endpoint 'device:<id>'), from
+// its admission. A run nobody sent from a computer (+misty email, @misty Slack, a
+// schedule with no computer) goes to the first of the person's computers to claim it.
 
 // DeviceRuntimeEndpoint is the runtime pin of a run that works on deviceID.
 func DeviceRuntimeEndpoint(deviceID string) string { return "device:" + deviceID }
@@ -67,9 +67,8 @@ func (db *Database) ClaimDeviceAgentRuntimeDeliveries(ctx context.Context, userI
    WHERE d.id IN (SELECT q.id FROM agent_runtime_deliveries q
      LEFT JOIN ai_invocations i ON i.id=q.run_id
      LEFT JOIN space_runs r ON r.id=q.run_id
-     LEFT JOIN misty_ask_conversations c ON c.id=i.conversation_id
      WHERE q.user_id=$3 AND q.available_at<=NOW() AND (q.state='pending' OR q.state='leased' AND q.lease_expires_at<NOW())
-       AND COALESCE(i.runtime_endpoint,r.runtime_endpoint,'device:'||c.kept_on_device_id,$4)=$4
+       AND COALESCE(i.runtime_endpoint,r.runtime_endpoint,$4)=$4
      ORDER BY q.available_at,q.created_at FOR UPDATE OF q SKIP LOCKED LIMIT $2)
    RETURNING id,user_id,run_id,operation,payload,lease_id,attempts`, uuid.NewString(), limit, userID, DeviceRuntimeEndpoint(deviceID))
 		if err != nil {
@@ -99,6 +98,28 @@ func (db *Database) LeasedAgentRuntimeDelivery(ctx context.Context, userID, id, 
 		err = ErrSpaceConflict
 	}
 	return item, err
+}
+
+// AIInvocationRuntimeEndpoint is the computer a run is pinned to, empty if none yet.
+// A sub-agent stays on its parent's.
+func (db *Database) AIInvocationRuntimeEndpoint(ctx context.Context, userID, invocationID string) (string, error) {
+	var endpoint sql.NullString
+	err := db.WithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT runtime_endpoint FROM ai_invocations WHERE id=$1 AND user_id=$2`, invocationID, userID).Scan(&endpoint)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrSpaceNotFound
+	}
+	return endpoint.String, err
+}
+
+// DeviceBelongsToUser reports whether a computer is one of the person's own.
+func (db *Database) DeviceBelongsToUser(ctx context.Context, userID, deviceID string) (bool, error) {
+	var owned bool
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM trusted_devices WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL)`, deviceID, userID).Scan(&owned)
+	})
+	return owned, err
 }
 
 // AnyDesktopOnline reports whether one of the person's devices was seen in the

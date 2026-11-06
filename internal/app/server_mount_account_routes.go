@@ -1,7 +1,7 @@
 package app
 
 import (
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func (s *Server) mountAccountRoutes(prefix string, spaces *api.SpacesService) {

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agent"
 )
 
 func TestScreenGoalsThatNameNothingConsequentialRunWithoutTheFlag(t *testing.T) {

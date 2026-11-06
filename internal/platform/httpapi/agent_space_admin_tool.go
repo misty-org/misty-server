@@ -6,10 +6,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 // space.manage covers rarely used Space administration in one tool, so the
@@ -28,7 +28,7 @@ func (s *SpacesService) spaceAdminToolRegistration() agenttools.Registration {
 				"cancel_invitation (space, invitation_id), resend_invitation (space, invitation_id), remove_member (space, member_id from space_member_list), leave (space). " +
 				"Only the Space owner can rename, invite, see or cancel invitations and remove members. " +
 				"invite, remove_member and leave change access and may show the user an approval card first. Act only when the user asked. " +
-				"invite and resend_invitation return the invitation's link (resending replaces the old one); Misty sends no email, so give the link to the user to pass on.",
+				"invite and resend_invitation return the invitation's link (resending replaces the old one). When emailed is true the person was emailed it; otherwise give the link to the user to pass on.",
 			InputSchema: agentToolSchema(map[string]any{
 				"action":        map[string]any{"type": "string", "enum": []string{"create", "rename", "invite", "list_invitations", "cancel_invitation", "resend_invitation", "remove_member", "leave"}},
 				"space":         text(200),
@@ -100,9 +100,13 @@ func (s *SpacesService) executeSpaceAdmin(ctx context.Context, invocation agentt
 		if refreshErr != nil {
 			return nil, spaceAdminError(refreshErr)
 		}
-		result = map[string]any{"resent": invite.ID, "link": SpaceInvitationLink(token)}
+		invite.Link = SpaceInvitationLink(token)
+		result = map[string]any{"resent": invite.ID, "link": invite.Link, "emailed": s.emailInvitation(ctx, invite)}
 	case "cancel_invitation":
 		err = s.database.RevokeSpaceInvitation(ctx, invocation.UserID, space.ID, strings.TrimSpace(input.InvitationID))
+		if err == nil {
+			err = s.database.CancelInvitationEmail(ctx, strings.TrimSpace(input.InvitationID))
+		}
 		result = map[string]any{"canceled": input.InvitationID}
 	case "invite", "remove_member", "leave":
 		return s.executeSpaceAccessChange(ctx, invocation, space, input)
@@ -146,7 +150,8 @@ func (s *SpacesService) executeSpaceAccessChange(ctx context.Context, invocation
 		if err != nil {
 			return nil, spaceAdminError(err)
 		}
-		return json.Marshal(map[string]any{"invited": input.Email, "invitation_id": invite.ID, "link": SpaceInvitationLink(token)})
+		invite.Link = SpaceInvitationLink(token)
+		return json.Marshal(map[string]any{"invited": input.Email, "invitation_id": invite.ID, "link": invite.Link, "emailed": s.emailInvitation(ctx, invite)})
 	case "remove_member":
 		if err := s.database.RemoveSpaceMember(ctx, invocation.UserID, space.ID, strings.TrimSpace(input.MemberID)); err != nil {
 			return nil, spaceAdminError(err)

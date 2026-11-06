@@ -2,13 +2,10 @@ package api
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
-	"encoding/base32"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 )
@@ -63,14 +60,6 @@ func (s *AgentsService) requireConnectedDevices(w http.ResponseWriter) bool {
 	return true
 }
 
-func connectedDeviceFingerprint(first, second string) string {
-	parts := []string{first, second}
-	sort.Strings(parts)
-	digest := sha256.Sum256([]byte(parts[0] + "\x00" + parts[1]))
-	value := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(digest[:5])
-	return value[:4] + "-" + value[4:8]
-}
-
 func containsClipboardValue(raw json.RawMessage) bool {
 	var value any
 	if json.Unmarshal(raw, &value) != nil {
@@ -99,10 +88,6 @@ func containsForbiddenDeviceValue(value any) bool {
 		}
 	}
 	return false
-}
-
-func TestingConnectedDeviceFingerprint(first, second string) string {
-	return connectedDeviceFingerprint(first, second)
 }
 
 func TestingVerifyConnectedDeviceTicket(ticket string, publicKey ed25519.PublicKey, now time.Time) error {

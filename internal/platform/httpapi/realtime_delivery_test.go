@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/platform/db"
 	"github.com/lib/pq"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func testRealtimeClient(s *RealtimeService, user string, capacity int) *RealtimeClient {

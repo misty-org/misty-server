@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func UpdateDevice(database *db.Database) http.HandlerFunc {

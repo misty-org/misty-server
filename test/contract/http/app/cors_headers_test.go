@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/app"
+	. "github.com/misty-org/misty-server/internal/app"
 )
 
 // corsTestServer builds a server with the minimum valid configuration. Note

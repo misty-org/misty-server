@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Agent runs work on the person's desktop (docs/agents/runtime.md). The
@@ -64,13 +64,20 @@ type agentRuntimeContextRequest struct {
 // device says it has it.
 const webSearchTool = "web.search"
 
+// webFetchTool also runs in the desktop runtime, on every run: an agent run is always
+// on the computer that started it, so the server never reads a page.
+const webFetchTool = "web.fetch"
+
 // deviceTools are the tools the desktop runs itself for this run, of those the
 // server knows to describe.
 func (b agentRuntimeContextRequest) deviceTools() []string {
-	if slices.Contains(b.DeviceTools, webSearchTool) {
-		return []string{webSearchTool}
+	var tools []string
+	for _, name := range []string{webSearchTool, webFetchTool} {
+		if slices.Contains(b.DeviceTools, name) {
+			tools = append(tools, name)
+		}
 	}
-	return nil
+	return tools
 }
 
 // deviceModel is the model the desktop reported, when it reported a usable one.

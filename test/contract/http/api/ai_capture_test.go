@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func TestValidateAICaptureAcceptsBoundedImageData(t *testing.T) {

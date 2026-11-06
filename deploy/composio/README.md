@@ -15,11 +15,11 @@ see **Verify** below.
 
 ## Configure
 
-Put the Composio project's API key in `server/.env/composio.env` as
-`MISTY_COMPOSIO_API_KEY` ([docs/self-hosting.md](../../../docs/self-hosting.md)
+Put the Composio project's API key in `~/.misty/server/prod/composio.env` as
+`MISTY_COMPOSIO_API_KEY` ([docs/self-hosting.md](https://github.com/misty-org/misty/blob/main/docs/self-hosting.md)
 lists the file). Every server has connected apps: the key is required and there
 is no separate opt-in. A development stack reads `COMPOSIO_API_KEY` from
-`server/.env/dev/composio.env`. Never expose the key through `VITE_*` variables
+`~/.misty/server/dev/integrations/composio.env`. Never expose the key through `VITE_*` variables
 or a browser bundle.
 
 Composio-managed auth covers most toolkits without any auth config; a toolkit

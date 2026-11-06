@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/platform/security"
 	"github.com/lib/pq"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 // These focused integration tests need only the account tables; they can run

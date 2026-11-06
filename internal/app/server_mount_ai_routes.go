@@ -3,7 +3,7 @@ package app
 import (
 	"net/http"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
@@ -36,6 +36,7 @@ func (s *Server) mountAIRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Post(prefix+"/invocations", aiService.CreateInvocation())
 	s.Router.Get(prefix+"/invocations/{invocationID}/events", aiService.InvocationEvents())
 	s.Router.Get(prefix+"/invocations/{invocationID}/progress", aiService.InvocationProgress())
+	s.Router.Get(prefix+"/invocations/{invocationID}/tool-output", aiService.InvocationToolOutput())
 	s.Router.Get(prefix+"/invocations/{invocationID}/state", aiService.InvocationState())
 	s.Router.Post(prefix+"/invocations/{invocationID}/cancel", aiService.CancelInvocation())
 	s.Router.Post(prefix+"/invocations/{invocationID}/steering", aiService.SteerInvocation())
@@ -58,6 +59,11 @@ func (s *Server) mountMistyRoutes(prefix string, aiService *api.AIService) {
 	s.Router.Delete(prefix+"/misty/agents/{agentID}", aiService.PersonalAgent())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/misty/conversations", aiService.MistyConversations())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/misty/conversations", aiService.MistyConversations())
+	s.Router.Post(prefix+"/misty/conversations/{conversationID}/turns", aiService.MistyConversationTurns())
+	s.Router.Post(prefix+"/misty/conversations/{conversationID}/ledger", aiService.MistyConversationLedger())
+	s.Router.Get(prefix+"/misty/lessons", aiService.MistyLessons())
+	s.Router.Put(prefix+"/misty/lessons/{kind}/{id}", aiService.MistyLesson())
+	s.Router.Delete(prefix+"/misty/lessons/{kind}/{id}", aiService.MistyLesson())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/misty/conversations/{conversationID}", aiService.MistyConversation())
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/misty/conversations/{conversationID}", aiService.MistyConversation())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/misty/onboarding", aiService.AgentOnboarding())

@@ -3,7 +3,7 @@ package app
 import (
 	"net/http"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 // mountNoteRoutes registers the server-backed note API. Current Space

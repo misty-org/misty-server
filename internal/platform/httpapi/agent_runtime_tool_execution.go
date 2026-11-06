@@ -6,10 +6,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/internal/workflow"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/workflow"
 )
 
 type agentRuntimeToolCall struct {
@@ -74,7 +74,7 @@ func (s *SpacesService) resolvePersonalAgentRuntimeToolbox(ctx context.Context, 
 			browserCapabilities[descriptor.Name] = activeBrowserRuntimeCapability(contexts, descriptor.Name)
 		}
 	}
-	connected := withWebFetch(s.appsToolRegistrations())
+	connected := s.appsToolRegistrations()
 	connected = append(connected, agentMemberToolRegistrations(s.database)...)
 	connected = append(connected, s.accountAdminToolRegistrations()...)
 	toolbox := buildAgentToolbox(s.database, agentToolboxOptions{

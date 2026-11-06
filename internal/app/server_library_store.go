@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	envconfig "github.com/kannachi323/misty/server/internal/platform/config"
+	envconfig "github.com/misty-org/misty-server/internal/platform/config"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 // libraryR2Names are the R2 settings, all required in production. The setup

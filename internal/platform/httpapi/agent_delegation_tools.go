@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/agenttools"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/agenttools"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Sub-agents (docs/agents/harness.md, Sub-agents and the notebook). agent_delegate starts
@@ -252,7 +252,7 @@ func (s *SpacesService) startDelegatedInvocation(ctx context.Context, parent *db
 	model := strings.TrimSpace(body.ModelID)
 	child := aiInvocationInput{
 		Mode: "drawer", SurfaceID: "global", Trigger: "delegated", Prompt: delegatedPrompt(task), Timezone: body.Timezone,
-		AgentID: body.AgentID, SpaceID: body.SpaceID, ExecutionMode: body.ExecutionMode, TaskID: body.TaskID, WindowLabel: body.WindowLabel,
+		AgentID: body.AgentID, SpaceID: body.SpaceID, Profile: body.Profile, ExecutionMode: body.ExecutionMode, TaskID: body.TaskID, WindowLabel: body.WindowLabel,
 		CollaborationMode: body.CollaborationMode, PermissionMode: body.PermissionMode, ModelID: model, ReasoningEffort: body.ReasoningEffort,
 		IdempotencyKey: "delegate:" + parent.ID + ":" + callID + ":" + strconv.Itoa(index),
 		NotebookKey:    notebookKey(parent, body), DelegatedFrom: parent.ID,
@@ -264,8 +264,12 @@ func (s *SpacesService) startDelegatedInvocation(ctx context.Context, parent *db
 	if err != nil {
 		return "", err
 	}
+	endpoint, err := s.database.AIInvocationRuntimeEndpoint(ctx, parent.UserID, parent.ID)
+	if err != nil {
+		return "", err
+	}
 	stored, created, err := s.database.CreateAIInvocationRecord(ctx, db.AIInvocationRecord{
-		DispatchRuntime: true, ModelTurnLimit: parent.ModelTurnLimit,
+		DispatchRuntime: true, ModelTurnLimit: parent.ModelTurnLimit, SpaceID: parent.SpaceID, Profile: body.Profile, RuntimeEndpoint: endpoint,
 		ID: "invocation_" + uuid.NewString(), UserID: parent.UserID, SurfaceID: "global", Mode: "drawer", Trigger: "message", State: "queued",
 		IdempotencyKey: child.IdempotencyKey, RequestPayload: payload, ExpiresAt: time.Now().UTC().Add(aiInvocationTTL),
 	})

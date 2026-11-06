@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/kannachi323/misty/server/internal/platform/transport"
+	"github.com/misty-org/misty-server/internal/platform/transport"
 	"sync"
 	"time"
 

@@ -158,18 +158,19 @@ func (db *Database) SpaceConversations(ctx context.Context, userID, spaceID stri
 	return items, err
 }
 
+// CreateSpaceConversation makes a group chat, which is public to the Space:
+// everyone in the Space is in it, and everyone who joins later joins it
+// (space_members_join_group_chats). Naming people adds nothing, though each named
+// person must still be in the Space. A private chat is a DM.
 func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef) (*SpaceConversation, error) {
 	title, err := normalizeConversationTitle(title)
 	if err != nil {
 		return nil, err
 	}
-	participants := normalizeSpaceActorRefs(append(participantRefs, SpaceActorRef{Kind: "person", UserID: userID}))
-	if len(participants) < 2 {
-		return nil, ErrSpaceInvalid
-	}
+	participants := normalizeSpaceActorRefs(participantRefs)
 	out := &SpaceConversation{
 		ID: "space_conversation_" + uuid.NewString(), SpaceID: spaceID, Title: title,
-		Kind: "standard", CreatedByUserID: userID,
+		Kind: "standard", CreatedByUserID: userID, VisibleToSpace: true,
 	}
 	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
@@ -178,17 +179,16 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 		if err := validateSpaceActorRefsTx(ctx, tx, userID, spaceID, participants); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,created_by_user_id)
-			VALUES($1,$2,$3,$4) RETURNING created_at,updated_at`, out.ID, spaceID, title, userID).
+		if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,created_by_user_id,visible_to_space)
+			VALUES($1,$2,$3,$4,TRUE) RETURNING created_at,updated_at`, out.ID, spaceID, title, userID).
 			Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err
 		}
-		for _, participant := range participants {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,user_id,agent_id,actor_kind) VALUES($1,NULLIF($2,''),NULLIF($3,''),$4)`, out.ID, participant.UserID, participant.AgentID, participant.Kind); err != nil {
-				return err
-			}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,user_id,actor_kind)
+			SELECT $1,user_id,'person' FROM space_members WHERE space_id=$2`, out.ID, spaceID); err != nil {
+			return err
 		}
-		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "conversation.created", out.ID, map[string]any{"conversation_id": out.ID, "title": title, "participants": participants}); err != nil {
+		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "conversation.created", out.ID, map[string]any{"conversation_id": out.ID, "title": title}); err != nil {
 			return err
 		}
 		return loadSpaceConversationParticipantsTx(ctx, tx, out)
@@ -196,10 +196,9 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 	return out, err
 }
 
-// DirectMemberConversation returns the one private conversation between two
-// people in a Space, creating it atomically. It is represented as a hidden
-// standard conversation because direct conversations are reserved for a person
-// and an installed Agent in the storage model.
+// DirectMemberConversation returns the one DM between two people in a Space,
+// creating it atomically. Only those two ever see it: not the rest of the Space,
+// and not the Space's owner.
 func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceID, targetUserID string) (*SpaceConversation, error) {
 	userID, targetUserID = strings.TrimSpace(userID), strings.TrimSpace(targetUserID)
 	if userID == "" || targetUserID == "" || userID == targetUserID {
@@ -228,7 +227,7 @@ func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceI
 		}
 		err := tx.QueryRowContext(ctx, `SELECT c.id,c.space_id,c.title,c.kind,c.created_by_user_id,c.created_at,c.updated_at
 			FROM space_conversations c
-			WHERE c.space_id=$1 AND c.kind='standard' AND NOT c.visible_to_space
+			WHERE c.space_id=$1 AND c.kind='dm'
 			  AND (SELECT count(*) FROM space_conversation_members cm WHERE cm.conversation_id=c.id)=2
 			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.actor_kind='person' AND cm.user_id=$2)
 			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.actor_kind='person' AND cm.user_id=$3)
@@ -238,9 +237,9 @@ func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceI
 		}
 		if errors.Is(err, sql.ErrNoRows) {
 			out.ID = "space_conversation_" + uuid.NewString()
-			out.SpaceID, out.Title, out.Kind, out.CreatedByUserID = spaceID, privateMemberConversationTitle(leftName, rightName), "standard", userID
-			if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,created_by_user_id)
-				VALUES($1,$2,$3,$4) RETURNING created_at,updated_at`, out.ID, spaceID, out.Title, userID).Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
+			out.SpaceID, out.Title, out.Kind, out.CreatedByUserID = spaceID, privateMemberConversationTitle(leftName, rightName), "dm", userID
+			if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,created_by_user_id,kind)
+				VALUES($1,$2,$3,$4,'dm') RETURNING created_at,updated_at`, out.ID, spaceID, out.Title, userID).Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
 				return err
 			}
 			for _, memberID := range ids {

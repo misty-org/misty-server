@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/integrations/composio"
+	"github.com/misty-org/misty-server/internal/integrations/composio"
 )
 
 func TestGitHubProjectRepositories(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 // mountPublicRoutes registers every public route group under one prefix. The
@@ -26,6 +26,8 @@ func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 	s.Router.Post(prefix+"/register", deps.register)
 	s.Router.Post(prefix+"/login", deps.login)
 	s.Router.Post(prefix+"/setup-keys/redeem", deps.redeemSetupKey)
+	s.Router.Post(prefix+"/auth/confirm-email", api.ConfirmEmail(s.Database))
+	s.Router.Post(prefix+"/auth/confirm-email/sign-in", api.ConfirmEmailSignIn(s.Database))
 	s.Router.Get(prefix+"/auth/google", deps.googleSignIn.Available())
 	s.Router.Post(prefix+"/auth/google", deps.googleSignIn.Begin())
 	s.Router.Get(prefix+"/auth/google/start", deps.googleSignIn.Start())
@@ -42,20 +44,23 @@ func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/me", api.GetMe(s.Database))
 	s.Router.Put(prefix+"/me/password", api.ChangePassword(s.Database))
+	s.Router.Post(prefix+"/me/account-proof", api.AccountProof(s.Database))
+	s.Router.Get(prefix+"/me/invite-code", api.MyInviteCode(s.Database))
+	s.Router.Get(prefix+"/invites/{code}", api.InviteByCode(s.Database))
 	s.Router.Get(prefix+"/server/alerts", api.ServerAlerts(s.Database))
 }
 
-// mountPublicSyncRoutes registers the browser sync vault, device, and restore routes.
+// mountPublicSyncRoutes registers the vault, its signed-in sessions, and its socket.
 func (s *Server) mountPublicSyncRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/sync/vault", deps.browserSync.Vault())
 	s.Router.Post(prefix+"/sync/vault", deps.browserSync.Vault())
 	s.Router.Delete(prefix+"/sync/vault", deps.browserSync.Vault())
 	s.Router.Put(prefix+"/sync/vault/key", deps.browserSync.VaultKey())
-	s.Router.Get(prefix+"/sync/vaults", deps.browserSync.Vaults())
-	s.Router.Post(prefix+"/sync/vaults", deps.browserSync.Vaults())
-	s.Router.Get(prefix+"/sync/devices", deps.browserSync.Devices())
-	s.Router.Post(prefix+"/sync/devices", deps.browserSync.Devices())
-	s.Router.Post(prefix+"/sync/control", deps.browserSync.ControlDevice())
+	s.Router.Get(prefix+"/sync/sessions", deps.browserSync.Sessions())
+	s.Router.Post(prefix+"/sync/sessions", deps.browserSync.Sessions())
+	s.Router.Put(prefix+"/sync/sessions/{sessionID}/name", deps.browserSync.SessionName())
+	s.Router.Post(prefix+"/sync/sessions/{sessionID}/remove", deps.browserSync.SessionRemove())
+	s.Router.Get(prefix+"/sync/usage", deps.browserSync.Usage())
 	s.Router.Post(prefix+"/sync/ticket", deps.browserSync.Ticket())
 	s.Router.Get(prefix+"/sync/ws", deps.browserSync.Connect())
 }
@@ -70,6 +75,7 @@ func (s *Server) mountPublicProfileRoutes(prefix string, deps *mountDeps) {
 	s.Router.Put(prefix+"/me/device", api.UpdateDevice(s.Database))
 	s.Router.Get(prefix+"/me/settings", api.GetSettings(s.Database))
 	s.Router.Put(prefix+"/me/settings", api.UpdateSettings(s.Database))
+	s.Router.Put(prefix+"/me/username", api.UpdateUsername(s.Database))
 	s.Router.Get(prefix+"/me/space-people", api.SpacePeople(s.Database))
 	s.Router.Get(prefix+"/me/agent-interventions", s.Spaces.AIUserInterventionControl())
 	s.Router.Post(prefix+"/me/agent-interventions/{waitID}", s.Spaces.AIUserInterventionControl())
@@ -120,5 +126,6 @@ func (s *Server) mountOperatorRoutes() {
 	s.Router.Route("/operator/v1", func(r chi.Router) {
 		r.Use(api.RequireOperator(token))
 		operator.Mount(r)
+		r.Post("/accounts/{id}/export", s.Spaces.OperatorAccountExport())
 	})
 }

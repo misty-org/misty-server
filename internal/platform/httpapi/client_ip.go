@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
 // Client IP resolution for rate limiting and abuse blocking.

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	. "github.com/kannachi323/misty/server/internal/app"
+	. "github.com/misty-org/misty-server/internal/app"
 )
 
 func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
@@ -38,7 +38,7 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"/sync/ws", "/sync/vault", "/sync/devices", "/sync/control", "/spaces", "/internal/agent-runtime/runs/{runID}/events"} {
+	for _, required := range []string{"/sync/ws", "/sync/vault", "/sync/sessions", "/spaces", "/internal/agent-runtime/runs/{runID}/events"} {
 		if !found[required] {
 			t.Errorf("retained route missing: %s", required)
 		}

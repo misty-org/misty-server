@@ -13,17 +13,12 @@ import (
 // server's parsers are checked against the exact bytes clients send.
 type DeviceRecordFixture struct {
 	AccountID       string             `json:"accountId"`
-	VaultID         string             `json:"vaultId"`
-	RootPublicKey   string             `json:"rootPublicKey"`
 	DeviceID        string             `json:"deviceId"`
 	DevicePublicKey string             `json:"devicePublicKey"`
 	TargetDeviceID  string             `json:"targetDeviceId"`
 	IssuedAt        int64              `json:"issuedAt"`
-	Grant           signedDeviceRecord `json:"grant"`
-	List            signedDeviceRecord `json:"list"`
 	Policy          signedDeviceRecord `json:"policy"`
 	RunGrant        signedDeviceRecord `json:"runGrant"`
-	Admission       signedDeviceRecord `json:"admission"`
 	Registration    struct {
 		EndpointID string `json:"endpointId"`
 		Proof      string `json:"proof"`
@@ -45,21 +40,9 @@ func TestingVerifyDeviceRecordFixture(fixture DeviceRecordFixture) error {
 	previous := deviceClock
 	deviceClock = func() time.Time { return time.Unix(fixture.IssuedAt+60, 0) }
 	defer func() { deviceClock = previous }()
-	root, err := base64.StdEncoding.DecodeString(fixture.RootPublicKey)
-	if err != nil {
-		return err
-	}
 	device, ok := decodeDevicePublicKey(fixture.DevicePublicKey)
 	if !ok {
 		return errors.New("device key")
-	}
-	grant, err := parseDeviceGrant(fixture.Grant, root)
-	if err != nil || grant.AccountID != fixture.AccountID || grant.VaultID != fixture.VaultID || grant.DeviceID != fixture.DeviceID || grant.PublicKey != fixture.DevicePublicKey {
-		return fmt.Errorf("grant: %v %+v", err, grant)
-	}
-	list, account, epoch, err := parseDeviceList(fixture.List, root)
-	if err != nil || account != fixture.AccountID || epoch != 1 || len(list.Admitted) != 1 || list.Admitted[0].DeviceID != fixture.DeviceID {
-		return fmt.Errorf("list: %v", err)
 	}
 	policy, err := parseDevicePolicy(fixture.Policy, device)
 	if err != nil || policy.DeviceID != fixture.DeviceID || policy.Record.Files != "view" || len(policy.Record.SharedFolders) != 1 {
@@ -71,10 +54,6 @@ func TestingVerifyDeviceRecordFixture(fixture DeviceRecordFixture) error {
 	}
 	if requester := unverifiedRunGrantRequester(fixture.RunGrant); requester != fixture.DeviceID {
 		return fmt.Errorf("run grant requester %q", requester)
-	}
-	admission, err := parseDeviceAdmissionRequest(fixture.Admission, device)
-	if err != nil || admission.DeviceID != fixture.DeviceID {
-		return fmt.Errorf("admission: %v", err)
 	}
 	if !verifyDeviceRegistrationProof(fixture.AccountID, fixture.DevicePublicKey, fixture.Registration.EndpointID, fixture.IssuedAt, fixture.Registration.Proof) ||
 		fixture.Registration.EndpointID != hex.EncodeToString(device) {

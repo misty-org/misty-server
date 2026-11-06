@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	api "github.com/kannachi323/misty/server/internal/platform/httpapi"
+	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
 // Every route that changes data is either reachable by an agent through a
@@ -30,7 +30,7 @@ var agentRouteRules = []agentRouteRule{
 	{pattern: `^\S+ /operator/v1/`, why: "the server operator's account API, authorized by the operator token; no account or agent reaches it"},
 	{pattern: `^\S+ /sync/`, why: "encrypted vault and device sync; agents never hold vault keys"},
 	{pattern: `^\S+ /devices(/|$)`, why: "adding, approving, naming and permitting devices is signed with device and vault keys agents never hold"},
-	{pattern: `^\S+ /me/(deletion|export|avatar|profile|device|telemetry|password)$`, why: "account identity and security"},
+	{pattern: `^\S+ /me/(deletion|export|avatar|profile|username|device|telemetry|password|account-proof)$`, why: "account identity and security"},
 	{pattern: `^\S+ /realtime/`, why: "live session transports"},
 	{pattern: `^(POST|PATCH|DELETE) /me/voice/transcripts(/\{transcriptID\})?$`, why: "saves, renames speakers in, or deletes a capture the person started"},
 	{pattern: `^POST /me/voice/transcribe$`, why: "saves the transcript the person's desktop made of a Library file on its own model"},
@@ -55,6 +55,8 @@ var agentRouteRules = []agentRouteRule{
 	{pattern: `^\S+ /space-invitations/`, why: "accepting an invitation is the invitee's choice"},
 	{pattern: `^\S+ /misty/attachments`, why: "chat attachments come from the person's files"},
 	{pattern: `^\S+ /misty/conversations`, why: "the person's own chat list"},
+	{pattern: `^\S+ /misty/lessons`, why: "a person's Teach-mode progress, which the app saves as replies arrive"},
+	{pattern: `^POST /spaces/\{spaceID\}/conversations/dm$`, why: "opening a DM is the person's; an agent messaging someone privately opens theirs through its message tool"},
 	{pattern: `^\S+ /misty/conversation-folders`, why: "folders that arrange the person's own chat list"},
 	{pattern: `^\S+ /misty/agents`, tool: "agent.configure"},
 	{pattern: `^PUT /ai/agent-methods/\{methodID\}/schedule$`, tool: "memory.workflow.schedule"},

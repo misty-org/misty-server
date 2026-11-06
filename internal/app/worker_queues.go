@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/platform/workqueue"
+	"github.com/misty-org/misty-server/internal/platform/workqueue"
 )
 
 func runDatabaseQueue(ctx context.Context, server *Server, kind string, process func(context.Context) (int, error)) {

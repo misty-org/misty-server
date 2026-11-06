@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	"github.com/kannachi323/misty/server/test/testkit"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/test/testkit"
 )
 
 const readOnlyPassword = "a-long-enough-password"
@@ -38,6 +38,7 @@ func readOnlyServer(t *testing.T) http.Handler {
 	router.Route("/operator/v1", func(r chi.Router) {
 		r.Use(RequireOperator(operatorToken))
 		NewOperatorAccounts(database, guard).Mount(r)
+		r.Post("/accounts/{id}/export", spaces.OperatorAccountExport())
 	})
 	if _, err := database.CreateUser("reader@example.com", readOnlyPassword); err != nil {
 		t.Fatal(err)

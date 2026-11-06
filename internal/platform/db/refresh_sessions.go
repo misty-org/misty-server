@@ -76,6 +76,17 @@ func (db *Database) RotateRefreshSession(ctx context.Context, sessionHash, oldHa
 	return valid, err
 }
 
+// AccountSessionFresh reports whether a session was signed in within the window, the proof a
+// destructive request needs from an account that has no password to type.
+func (db *Database) AccountSessionFresh(ctx context.Context, sessionHash, userID string, window time.Duration) (bool, error) {
+	fresh := false
+	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sessions s
+   WHERE s.token_hash=$1 AND s.user_id=$2 AND s.expires_at>clock_timestamp() AND s.created_at>clock_timestamp()-$3::interval)`, sessionHash, userID, window.String()).Scan(&fresh)
+	})
+	return fresh, err
+}
+
 // AccountSessionActive reports whether a session can still mint access tokens
 // for an active account. Long-lived streams call it instead of reconnecting to
 // re-present a credential.

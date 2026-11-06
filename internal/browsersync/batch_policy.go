@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
 // Batching: clients hold edits briefly and publish each burst as one op. The
-// server owns the base timings so load can be tuned without a client release; each
-// device scales them by its own sync frequency, which never reaches the server. Only
-// clients that connect with batching=1 receive the frame (older ones reject unknown
-// frames).
+// server owns the timings so load can be tuned without a client release.
 
 // BatchLane is one stream of outgoing changes, as the client sees it.
 type BatchLane struct {
@@ -21,7 +18,7 @@ type BatchLane struct {
 	MaxEdits  int64 `json:"max_edits"`
 }
 
-// BatchPolicy is the base each device scales. Revision lets operators push a changed
+// BatchPolicy is what every client follows. Revision lets operators push a changed
 // base past a client's current one.
 type BatchPolicy struct {
 	Revision int64
@@ -30,12 +27,8 @@ type BatchPolicy struct {
 
 func defaultBatchPolicy() BatchPolicy {
 	return BatchPolicy{Revision: 1, Lanes: map[string]BatchLane{
-		"workspace":   {QuietMs: 1_000, MaxWaitMs: 5_000, MaxEdits: 50},
-		"slots":       {QuietMs: 3_000, MaxWaitMs: 15_000, MaxEdits: 100},
-		"collections": {QuietMs: 1_000, MaxWaitMs: 5_000, MaxEdits: 50},
-		"history":     {QuietMs: 10_000, MaxWaitMs: 60_000, MaxEdits: 200},
-		// Another machine is editing the same workspace: near-live, never scaled.
-		"contended": {QuietMs: 250, MaxWaitMs: 1_000, MaxEdits: 50},
+		"records": {QuietMs: 500, MaxWaitMs: 2_000, MaxEdits: 50},
+		"history": {QuietMs: 10_000, MaxWaitMs: 60_000, MaxEdits: 200},
 	}}
 }
 

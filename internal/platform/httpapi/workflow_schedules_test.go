@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
-	"github.com/kannachi323/misty/server/test/testkit"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/test/testkit"
 )
 
 func TestScheduleConversationsBelongToTheWorkflowsAgentPostgres(t *testing.T) {
@@ -26,7 +26,7 @@ func TestScheduleConversationsBelongToTheWorkflowsAgentPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conversationID, err := createScheduleConversation(ctx, database, owner.ID, "Research briefing", identity.ID)
+	conversationID, err := createScheduleConversation(ctx, database, owner.ID, "", "Research briefing", identity.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestScheduleConversationsBelongToTheWorkflowsAgentPostgres(t *testing.T) {
 	if err != nil || bound.AgentID != identity.ID {
 		t.Fatalf("conversation agent = %+v, error = %v", bound, err)
 	}
-	if _, err = createScheduleConversation(ctx, database, other.ID, "Foreign schedule", identity.ID); err == nil {
+	if _, err = createScheduleConversation(ctx, database, other.ID, "", "Foreign schedule", identity.ID); err == nil {
 		t.Fatal("another account was allowed to schedule this agent")
 	}
 }

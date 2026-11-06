@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // The agent's own browser session (docs/agents/evals/odysseys.md): when the

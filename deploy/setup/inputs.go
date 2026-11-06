@@ -6,11 +6,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/kannachi323/misty/server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
 // requiredInputs are the values the operator writes into the four files under
-// server/.env/. Every one is required: Misty has no optional integrations. The
+// ~/.misty/server/prod/. Every one is required: Misty has no optional integrations. The
 // server sends no email, so there is no mail provider to configure.
 var requiredInputs = []struct{ File, Name string }{
 	{"misty.env", "MISTY_HOSTNAME"},
@@ -43,7 +43,7 @@ func readInputs(getenv func(string) string) (Inputs, error) {
 	var missing []string
 	for _, input := range requiredInputs {
 		if strings.TrimSpace(getenv(input.Name)) == "" {
-			missing = append(missing, fmt.Sprintf("%s in server/.env/%s", input.Name, input.File))
+			missing = append(missing, fmt.Sprintf("%s in ~/.misty/server/prod/%s", input.Name, input.File))
 		}
 	}
 	if len(missing) > 0 {
@@ -95,7 +95,7 @@ func validHostname(host string) error {
 // Names derives every Cloudflare resource name from the hostname, so a second
 // run (or a rebuilt server with the same files) finds the same resources.
 type Names struct {
-	Tunnel, LibraryBucket, BackupBucket, LibraryToken, BackupToken, CollabWorker, FetchWorker string
+	Tunnel, LibraryBucket, BackupBucket, LibraryToken, BackupToken, CollabWorker string
 }
 
 func resourceNames(hostname string) Names {
@@ -112,7 +112,6 @@ func resourceNames(hostname string) Names {
 		LibraryToken:  base + " library",
 		BackupToken:   base + " backups",
 		CollabWorker:  base + "-collab",
-		FetchWorker:   base + "-web-fetch",
 	}
 }
 

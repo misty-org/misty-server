@@ -119,7 +119,7 @@ func forgetSummaries(ctx context.Context, tx *sql.Tx, user, space, surface strin
 		err := tx.QueryRowContext(ctx, `SELECT count(*) FROM ai_recaps WHERE `+where, user, space, surface).Scan(&n)
 		return n, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE ai_recaps SET last_result='', last_citations='[]'::jsonb, updated_at=now() WHERE `+where, user, space, surface)
+	result, err := tx.ExecContext(ctx, `UPDATE ai_recaps SET last_result='', last_citations='[]'::jsonb, outline=NULL, updated_at=now() WHERE `+where, user, space, surface)
 	if err != nil {
 		return 0, err
 	}

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/kannachi323/misty/server/internal/platform/httpapi"
-	"github.com/kannachi323/misty/server/internal/platform/security"
+	. "github.com/misty-org/misty-server/internal/platform/httpapi"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 // The account stream stays open across revalidations while its session is

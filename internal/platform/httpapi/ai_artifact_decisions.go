@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func (s *AIService) DecideArtifact() http.HandlerFunc {
@@ -150,14 +150,9 @@ func validateAIInvocationInput(body *aiInvocationInput) error {
 	body.SurfaceID = strings.TrimSpace(body.SurfaceID)
 	body.Trigger = strings.TrimSpace(body.Trigger)
 	body.Prompt = strings.TrimSpace(body.Prompt)
-	if len(body.HistoryTurns) > maxHistoryTurns {
-		body.HistoryTurns = body.HistoryTurns[len(body.HistoryTurns)-maxHistoryTurns:]
-	}
-	for index := range body.HistoryTurns {
-		turn := &body.HistoryTurns[index]
-		turn.InvocationID = truncateAgentRuntimeText(strings.TrimSpace(turn.InvocationID), 120)
-		turn.Prompt = truncateAgentRuntimeText(strings.TrimSpace(turn.Prompt), historyTurnPromptRunes)
-		turn.Reply = truncateAgentRuntimeText(strings.TrimSpace(turn.Reply), historyTurnReplyRunes)
+	body.Profile = strings.TrimSpace(body.Profile)
+	if body.Profile != "" && !invocationProfilePattern.MatchString(body.Profile) {
+		return errors.New("profile is invalid")
 	}
 	body.Timezone = strings.TrimSpace(body.Timezone)
 	body.ModelID = strings.TrimSpace(body.ModelID)

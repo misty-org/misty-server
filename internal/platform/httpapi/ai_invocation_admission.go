@@ -3,12 +3,13 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/kannachi323/misty/server/internal/agent"
-	"github.com/kannachi323/misty/server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/agent"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // aiInvocationAdmitState carries what admission decides about the run's
@@ -16,8 +17,47 @@ import (
 type aiInvocationAdmitState struct {
 	conversationID string
 	spaceID        string
-	modelID        string
-	reasoning      string
+	// homeSpaceID is the Space the run and its conversation belong to. spaceID stays
+	// empty: a chat run's tools aren't limited to one Space.
+	homeSpaceID string
+	modelID     string
+	reasoning   string
+}
+
+// invocationProfilePattern is a profile id as the app names them.
+var invocationProfilePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,100}$`)
+
+// resolveInvocationSpace settles the Space the run belongs to. A conversation keeps
+// its Space whichever window continues it; a new one joins the Space the window
+// names, which must be one the person is in.
+func (s *AIService) resolveInvocationSpace(w http.ResponseWriter, r *http.Request, userID string, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
+	var err error
+	if st.conversationID != "" {
+		st.homeSpaceID, err = s.database.AgentConversationSpace(r.Context(), userID, st.conversationID)
+		if err != nil {
+			WriteAIError(w, err)
+			return false
+		}
+	} else {
+		st.homeSpaceID, err = s.database.MemorySpace(r.Context(), userID, body.SpaceID)
+		if err != nil {
+			writeSpaceError(w, err)
+			return false
+		}
+	}
+	body.SpaceID = st.homeSpaceID
+	return true
+}
+
+// invocationOriginDevice is the computer the run works on: the one whose grant it
+// carries, else the one it names. Empty when nothing sent it from a computer.
+func invocationOriginDevice(body *aiInvocationInput) string {
+	for _, grant := range body.DeviceContexts {
+		if grant.RunGrant != nil && strings.TrimSpace(grant.DeviceID) != "" {
+			return strings.TrimSpace(grant.DeviceID)
+		}
+	}
+	return strings.TrimSpace(body.OriginDeviceID)
 }
 
 func decodeAIInvocationBody(w http.ResponseWriter, r *http.Request, body *aiInvocationInput) bool {
@@ -150,7 +190,7 @@ func (s *AIService) admitInvocationExecution(w http.ResponseWriter, r *http.Requ
 func (s *AIService) createInvocationConversation(w http.ResponseWriter, r *http.Request, userID string, body *aiInvocationInput, st *aiInvocationAdmitState) bool {
 	var err error
 	if st.conversationID == "" && (body.Mode == "drawer" || body.Mode == "companion") && body.RequestedArtifactKind == "" {
-		st.conversationID, err = s.database.CreatePersonalAgentConversation(r.Context(), userID, st.spaceID, body.AgentID)
+		st.conversationID, err = s.database.CreatePersonalAgentConversation(r.Context(), userID, st.homeSpaceID, body.AgentID)
 		if err != nil {
 			WriteAIError(w, err)
 			return false
@@ -159,7 +199,7 @@ func (s *AIService) createInvocationConversation(w http.ResponseWriter, r *http.
 		_ = s.database.UpdateMistyConversationModel(r.Context(), userID, st.conversationID, st.modelID, st.reasoning, agent.FrontierModelCatalogVersion)
 	}
 	if st.conversationID == "" && body.Mode == "companion" {
-		st.conversationID, err = s.database.CreatePersonalAgentConversation(r.Context(), userID, st.spaceID, body.AgentID)
+		st.conversationID, err = s.database.CreatePersonalAgentConversation(r.Context(), userID, st.homeSpaceID, body.AgentID)
 		if err != nil {
 			WriteAIError(w, err)
 			return false
@@ -183,7 +223,7 @@ func (s *AIService) checkInvocationSurface(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	if body.Mode == "companion" && st.conversationID != "" {
-		if err := s.database.BindAskSurfaceConversation(r.Context(), userID, st.conversationID, st.spaceID, st.modelID, body.SurfaceID, firstAIContextHref(body.Context), aiInvocationPrivacyBoundary(body.Context)); err != nil {
+		if err := s.database.BindAskSurfaceConversation(r.Context(), userID, st.conversationID, st.modelID, body.SurfaceID, firstAIContextHref(body.Context), aiInvocationPrivacyBoundary(body.Context)); err != nil {
 			WriteAIError(w, err)
 			return false
 		}
@@ -222,9 +262,23 @@ func (s *AIService) storeInvocationRecord(w http.ResponseWriter, r *http.Request
 		// Stored like the server's own scheduled runs, and run the same way.
 		recordTrigger = "schedule"
 	}
+	endpoint := ""
+	if device := invocationOriginDevice(body); device != "" {
+		owned, err := s.database.DeviceBelongsToUser(r.Context(), userID, device)
+		if err != nil {
+			WriteAIError(w, err)
+			return db.AIInvocationRecord{}, false, now, false
+		}
+		if !owned {
+			writeJSON(w, http.StatusForbidden, map[string]any{"code": "device_grant_required", "message": "This computer couldn't confirm the request. Sign in again and try once more."})
+			return db.AIInvocationRecord{}, false, now, false
+		}
+		endpoint = db.DeviceRuntimeEndpoint(device)
+	}
 	stored, created, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
 		DispatchRuntime: true,
-		ID:              "invocation_" + uuid.NewString(), UserID: userID, SpaceID: st.spaceID, ConversationID: st.conversationID,
+		ID:              "invocation_" + uuid.NewString(), UserID: userID, SpaceID: st.homeSpaceID, ConversationID: st.conversationID,
+		Profile: body.Profile, RuntimeEndpoint: endpoint,
 		SurfaceID: body.SurfaceID, Mode: body.Mode, Trigger: recordTrigger, State: "queued",
 		IdempotencyKey: body.IdempotencyKey, RequestPayload: requestPayload, ExpiresAt: now.Add(aiInvocationTTL),
 	})

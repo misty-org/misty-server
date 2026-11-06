@@ -62,6 +62,7 @@ type mistyConversation struct {
 	LastReadAt    string                     `json:"lastReadAt,omitempty"`
 	Messages      []mistyConversationMessage `json:"messages"`
 	Remote        bool                       `json:"remote"`
-	// KeptOnDeviceID is the device that keeps this chat; empty while it waits in the inbox.
-	KeptOnDeviceID string `json:"keptOnDeviceId,omitempty"`
+	// PersonalSpace says SpaceID is the owner's personal Space, which a window
+	// shows without knowing its id.
+	PersonalSpace bool `json:"personalSpace,omitempty"`
 }

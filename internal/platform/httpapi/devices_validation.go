@@ -1,10 +1,7 @@
 package api
 
 import (
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"strings"
 	"unicode/utf8"
 )
@@ -27,34 +24,6 @@ func validJSONObject(raw json.RawMessage) bool {
 	return ok
 }
 
-func TestingValidDeviceRegistration(name, key, algorithm string, capabilities json.RawMessage) bool {
-	return ValidDeviceRegistrationV2(name, key, algorithm, "", "", nil, capabilities)
-}
-
-func ValidDeviceRegistrationV2(name, key, algorithm, platform, endpointID string, protocolVersions, capabilities json.RawMessage) bool {
-	decodedKey, err := decodeDeviceBase64(key)
-	if !validText(name, 1, 100) || err != nil || len(decodedKey) != ed25519.PublicKeySize || (algorithm != "" && algorithm != "ed25519") || !validJSONObject(capabilities) || containsLocalPath(capabilities) || containsClipboardValue(capabilities) {
-		return false
-	}
-	platform = normalizedDevicePlatform(platform)
-	if platform == "" || (endpointID != "" && !p2pEndpointIDPattern.MatchString(endpointID)) {
-		return false
-	}
-	if len(protocolVersions) == 0 {
-		return endpointID == ""
-	}
-	var versions []string
-	if json.Unmarshal(protocolVersions, &versions) != nil || len(versions) > 8 {
-		return false
-	}
-	for _, version := range versions {
-		if version != "misty-device/1" {
-			return false
-		}
-	}
-	return (endpointID == "") == (len(versions) == 0)
-}
-
 func normalizedDevicePlatform(platform string) string {
 	platform = strings.ToLower(strings.TrimSpace(platform))
 	if platform == "" {
@@ -66,16 +35,6 @@ func normalizedDevicePlatform(platform string) string {
 		}
 	}
 	return ""
-}
-
-func decodeDeviceBase64(value string) ([]byte, error) {
-	value = strings.TrimSpace(value)
-	for _, encoding := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
-		if decoded, err := encoding.DecodeString(value); err == nil {
-			return decoded, nil
-		}
-	}
-	return nil, errors.New("invalid base64")
 }
 
 func containsLocalPath(raw json.RawMessage) bool {

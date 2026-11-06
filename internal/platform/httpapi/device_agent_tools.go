@@ -217,7 +217,7 @@ const shellRunDescription = "Run a shell command on the user's computer, in this
 // and starts each command under its own OS profile (docs/plans/app-permissions.md).
 func (s *SpacesService) shellToolRegistration(workspaces, folders []deviceGrant) agenttools.Registration {
 	properties := map[string]any{
-		"command":         map[string]any{"type": "string", "minLength": 1, "maxLength": 60000, "description": "The command, run by /bin/sh in the workspace."},
+		"command":         map[string]any{"type": "string", "minLength": 1, "maxLength": 60000, "description": "The command, run by the computer's shell (sh on macOS, cmd on Windows) in the workspace."},
 		"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": 600, "description": "How long it may run. Defaults to 120."},
 	}
 	deviceNames := make([]string, 0, len(workspaces))

@@ -63,6 +63,9 @@ type deviceRunGrant struct {
 	RequesterDeviceID string
 	TargetDeviceID    string
 	AgentID           string
+	// ChatKey names the chat or scheduled run. Only the device acts on it: its workspace and write
+	// access come from this, so a job can't reach another chat's.
+	ChatKey           string
 	Capabilities      []string
 	Scopes            []string
 	IssuedAt          int64
@@ -77,12 +80,12 @@ func parseDeviceRunGrant(record signedDeviceRecord, requesterKey []byte) (*devic
 		return nil, err
 	}
 	grant := &deviceRunGrant{Payload: payload, Signature: record.Signature}
-	if err := decodeDeviceFields(fields, &grant.AccountID, &grant.GrantID, &grant.RequesterDeviceID, &grant.TargetDeviceID, &grant.AgentID, &grant.Capabilities, &grant.Scopes, &grant.IssuedAt, &grant.ExpiresAt); err != nil {
+	if err := decodeDeviceFields(fields, &grant.AccountID, &grant.GrantID, &grant.RequesterDeviceID, &grant.TargetDeviceID, &grant.AgentID, &grant.ChatKey, &grant.Capabilities, &grant.Scopes, &grant.IssuedAt, &grant.ExpiresAt); err != nil {
 		return nil, err
 	}
 	now := deviceClock().Unix()
 	if !deviceGrantIDPattern.MatchString(grant.GrantID) || !deviceIDPattern.MatchString(grant.RequesterDeviceID) || !deviceIDPattern.MatchString(grant.TargetDeviceID) ||
-		(grant.AgentID != "" && !deviceAgentIDPattern.MatchString(grant.AgentID)) || !deviceTimeFresh(grant.IssuedAt) || grant.ExpiresAt <= now ||
+		(grant.AgentID != "" && !deviceAgentIDPattern.MatchString(grant.AgentID)) || !deviceTimeFresh(grant.IssuedAt) || grant.ExpiresAt <= now || len(grant.ChatKey) > 256 ||
 		grant.ExpiresAt-grant.IssuedAt > int64(deviceRunGrantMaxAge/time.Second) || len(grant.Capabilities) == 0 || len(grant.Capabilities) > 64 || len(grant.Scopes) == 0 || len(grant.Scopes) > 64 {
 		return nil, errSignedDeviceRecord
 	}

@@ -157,7 +157,7 @@ func TestDevicePolicyIsSignedOnlyByItsDevice(t *testing.T) {
 
 func runGrant(key ed25519.PrivateKey, userID, requester, target string, capabilities, scopes []string) map[string]string {
 	now := time.Now().Unix()
-	return signedRecord(key, "misty.device.run-grant.v1", userID, "rungrant_"+uuid.NewString(), requester, target, "", capabilities, scopes, now, now+3600)
+	return signedRecord(key, "misty.device.run-grant.v1", userID, "rungrant_"+uuid.NewString(), requester, target, "", "chat-1", capabilities, scopes, now, now+3600)
 }
 
 func TestRunGrantsLimitWhatAgentsMayDoOnADevice(t *testing.T) {

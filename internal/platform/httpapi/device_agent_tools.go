@@ -62,7 +62,7 @@ func (s *SpacesService) deviceToolRegistrations(ctx context.Context, record *db.
 	}
 	if len(workspaces) > 0 {
 		registrations = append(registrations, s.workspaceToolRegistrations(workspaces)...)
-		registrations = append(registrations, s.shellToolRegistration(record.ConversationID, workspaces, folders))
+		registrations = append(registrations, s.shellToolRegistration(workspaces, folders))
 	}
 	return registrations
 }
@@ -215,7 +215,7 @@ const shellRunDescription = "Run a shell command on the user's computer, in this
 
 // shellToolRegistration runs commands as a device job. The computer checks the run's grant again
 // and starts each command under its own OS profile (docs/plans/app-permissions.md).
-func (s *SpacesService) shellToolRegistration(conversationID string, workspaces, folders []deviceGrant) agenttools.Registration {
+func (s *SpacesService) shellToolRegistration(workspaces, folders []deviceGrant) agenttools.Registration {
 	properties := map[string]any{
 		"command":         map[string]any{"type": "string", "minLength": 1, "maxLength": 60000, "description": "The command, run by the computer's shell (sh on macOS, cmd on Windows) in the workspace."},
 		"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": 600, "description": "How long it may run. Defaults to 120."},
@@ -249,12 +249,8 @@ func (s *SpacesService) shellToolRegistration(conversationID string, workspaces,
 				return nil, agent.ErrInvalidRequest("name the computer: " + strings.Join(deviceNames, ", "))
 			}
 		}
-		// Each chat keeps one workspace across its runs. A run with no chat gets its own.
-		key := conversationID
-		if key == "" {
-			key = invocation.RunID
-		}
-		arguments := map[string]any{"command": input.Command, "workspaceKey": key}
+		// The computer takes the workspace from the run's signed grant, not from here.
+		arguments := map[string]any{"command": input.Command}
 		if input.TimeoutSeconds > 0 {
 			arguments["timeoutSeconds"] = input.TimeoutSeconds
 		}

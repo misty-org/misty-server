@@ -163,7 +163,7 @@ func TestDeviceAgentToolsPostgres(t *testing.T) {
 		})
 	}
 	var shellArguments map[string]any
-	if json.Unmarshal([]byte(shellInput), &shellArguments) != nil || shellArguments["workspaceKey"] != chat.ConversationID {
+	if json.Unmarshal([]byte(shellInput), &shellArguments) != nil || shellArguments["workspaceKey"] != nil {
 		t.Fatalf("shell.run job input = %q", shellInput)
 	}
 	cancelShell()

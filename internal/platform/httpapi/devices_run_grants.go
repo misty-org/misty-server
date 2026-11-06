@@ -25,7 +25,7 @@ func unverifiedRunGrantRequester(record signedDeviceRecord) string {
 		return ""
 	}
 	var fields []json.RawMessage
-	if json.Unmarshal(payload, &fields) != nil || len(fields) != 10 {
+	if json.Unmarshal(payload, &fields) != nil || len(fields) != 11 {
 		return ""
 	}
 	var requester string

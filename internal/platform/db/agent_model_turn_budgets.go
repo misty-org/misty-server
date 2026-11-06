@@ -86,8 +86,8 @@ func invocationModelTurnLimitTx(ctx context.Context, tx *sql.Tx, record AIInvoca
 		return 0, err
 	}
 	if (input.Mode != "agent" && input.Mode != "auto" && input.Mode != "team") || input.AgentID == "" || input.TaskID == "" || input.WindowLabel == "" {
-		// Higher plans may take more model turns per request; a development eval may ask for
-		// up to 200 (plan_models.go, evalTurnLimit), which the runtime also allows.
+		// A development eval may ask for up to 200 model turns (turn_limits.go, evalTurnLimit),
+		// which the runtime also allows.
 		if record.ModelTurnLimit > ordinaryLimit {
 			return min(record.ModelTurnLimit, 200), nil
 		}

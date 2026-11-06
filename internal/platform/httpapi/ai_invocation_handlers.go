@@ -95,20 +95,21 @@ func (s *AIService) CreateInvocation() http.HandlerFunc {
 			}
 		}
 		if !created {
-			writeAIInvocationCreated(w, record)
+			writeAIInvocationCreated(w, record, stored.ModelTurnLimit)
 			return
 		}
 		s.recordInvocationOnboarding(r.Context(), userID, body)
-		writeAIInvocationCreated(w, record)
+		writeAIInvocationCreated(w, record, stored.ModelTurnLimit)
 	}
 }
 
-func writeAIInvocationCreated(w http.ResponseWriter, record *aiInvocationRecord) {
+func writeAIInvocationCreated(w http.ResponseWriter, record *aiInvocationRecord, modelTurnLimit int) {
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"invocationId":   record.ID,
 		"conversationId": record.ConversationID,
 		"state":          record.State,
 		"eventsUrl":      "/ai/invocations/" + record.ID + "/events",
+		"modelTurnLimit": modelTurnLimit,
 	})
 }
 

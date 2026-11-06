@@ -269,8 +269,8 @@ func (s *AIService) storeInvocationRecord(w http.ResponseWriter, r *http.Request
 		endpoint = db.DeviceRuntimeEndpoint(device)
 	}
 	stored, created, err := s.database.CreateAIInvocationRecord(r.Context(), db.AIInvocationRecord{
-		DispatchRuntime: true,
-		ID:              "invocation_" + uuid.NewString(), UserID: userID, SpaceID: st.homeSpaceID, ConversationID: st.conversationID,
+		DispatchRuntime: true, ModelTurnLimit: evalTurnLimit(body.EvalTurnLimit), ExecutionLimitMS: evalExecutionLimitMS(body.EvalTurnLimit),
+		ID: "invocation_" + uuid.NewString(), UserID: userID, SpaceID: st.homeSpaceID, ConversationID: st.conversationID,
 		Profile: body.Profile, RuntimeEndpoint: endpoint,
 		SurfaceID: body.SurfaceID, Mode: body.Mode, Trigger: recordTrigger, State: "queued",
 		IdempotencyKey: body.IdempotencyKey, RequestPayload: requestPayload, ExpiresAt: now.Add(aiInvocationTTL),

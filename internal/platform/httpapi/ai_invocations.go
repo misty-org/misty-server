@@ -67,6 +67,9 @@ type aiInvocationInput struct {
 	// MediaContext is what the video in front was saying, for a question at the
 	// cursor (ai_media_context.go). It is page data, never instructions.
 	MediaContext *aiMediaContext `json:"media_context,omitempty"`
+	// EvalTurnLimit is a development eval's own model-turn limit (evalTurnLimit);
+	// any other server ignores it.
+	EvalTurnLimit int `json:"eval_turn_limit,omitempty"`
 }
 
 type aiCurrentTab struct {

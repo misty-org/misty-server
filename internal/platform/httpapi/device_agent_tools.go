@@ -209,6 +209,8 @@ func (s *SpacesService) workspaceToolRegistrations(workspaces []deviceGrant) []a
 
 const shellRunDescription = "Run a shell command on the user's computer, in this chat's private workspace folder, which keeps its files between commands. " +
 	"Use it for scripts, data and file work, and to do many things in one call instead of one call each. " +
+	"It's a bash-compatible shell with the same tools on every computer: base64, cat, cp, cut, date, du, env, find, fold, grep, gzip, gunzip, head, join, ln, ls, mkdir, mktemp, mv, od, paste, realpath, rm, sed, seq, sort, split, tac, tail, tar, tee, touch, tr, uniq, unzip, wc, xargs and zip. " +
+	"Nothing else can run, including awk, Python, Perl, git and curl: use the shell's own loops and arithmetic instead, and run a script as sh script.sh rather than ./script.sh. " +
 	"There's no network, so nothing can be installed or downloaded: get what you need with your web tools and write it to a file here. " +
 	"The chat's shared folder, if it has one, is at ./shared-folder. If it allows changes you can add and edit files there, but deleting, renaming and moving are refused, " +
 	"so tools that save by renaming, such as sed -i, fail: write the new content to the file instead. Commands can't reach browser tabs: use browser_run for those."
@@ -217,7 +219,7 @@ const shellRunDescription = "Run a shell command on the user's computer, in this
 // and starts each command under its own OS profile (docs/plans/app-permissions.md).
 func (s *SpacesService) shellToolRegistration(workspaces, folders []deviceGrant) agenttools.Registration {
 	properties := map[string]any{
-		"command":         map[string]any{"type": "string", "minLength": 1, "maxLength": 60000, "description": "The command, run by the computer's shell (sh on macOS, cmd on Windows) in the workspace."},
+		"command":         map[string]any{"type": "string", "minLength": 1, "maxLength": 60000, "description": "The command, run by the shell in the workspace."},
 		"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": 600, "description": "How long it may run. Defaults to 120."},
 	}
 	deviceNames := make([]string, 0, len(workspaces))

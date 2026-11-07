@@ -15,10 +15,8 @@ type DeviceRecordFixture struct {
 	AccountID       string             `json:"accountId"`
 	DeviceID        string             `json:"deviceId"`
 	DevicePublicKey string             `json:"devicePublicKey"`
-	TargetDeviceID  string             `json:"targetDeviceId"`
 	IssuedAt        int64              `json:"issuedAt"`
 	Policy          signedDeviceRecord `json:"policy"`
-	RunGrant        signedDeviceRecord `json:"runGrant"`
 	Registration    struct {
 		EndpointID string `json:"endpointId"`
 		Proof      string `json:"proof"`
@@ -47,13 +45,6 @@ func TestingVerifyDeviceRecordFixture(fixture DeviceRecordFixture) error {
 	policy, err := parseDevicePolicy(fixture.Policy, device)
 	if err != nil || policy.DeviceID != fixture.DeviceID || policy.Record.Files != "view" || len(policy.Record.SharedFolders) != 1 {
 		return fmt.Errorf("policy: %v", err)
-	}
-	run, err := parseDeviceRunGrant(fixture.RunGrant, device)
-	if err != nil || run.TargetDeviceID != fixture.TargetDeviceID || !run.allows("scope-1", []string{"folder.read"}) {
-		return fmt.Errorf("run grant: %v", err)
-	}
-	if requester := unverifiedRunGrantRequester(fixture.RunGrant); requester != fixture.DeviceID {
-		return fmt.Errorf("run grant requester %q", requester)
 	}
 	if !verifyDeviceRegistrationProof(fixture.AccountID, fixture.DevicePublicKey, fixture.Registration.EndpointID, fixture.IssuedAt, fixture.Registration.Proof) ||
 		fixture.Registration.EndpointID != hex.EncodeToString(device) {

@@ -214,8 +214,6 @@ func (s *GoogleSignInService) checkSignInAllowed(user *db.User) error {
 
 type noOwner struct{}
 
-func (noOwner) IsServerOwner(context.Context, string) (bool, error) { return false, nil }
-
 func googleSignInError(code string) string {
 	switch code {
 	case "access_denied":
@@ -252,3 +250,5 @@ func googleSignInPage(w http.ResponseWriter, status int, message string) {
 	w.WriteHeader(status)
 	fmt.Fprintf(w, `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Misty sign-in</title><style>body{background:#111;color:#fff;font:16px system-ui;display:grid;place-items:center;min-height:95vh;margin:0}main{max-width:28rem;margin:2rem;padding:2rem;border:1px solid #444;border-radius:12px}p{color:#ccc;line-height:1.6}</style><main><h1>Misty sign-in</h1><p>%s</p></main></html>`, html.EscapeString(message))
 }
+
+func (noOwner) IsServerOwner(context.Context, string) (bool, error) { return false, nil }

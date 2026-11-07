@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"testing"
-
 )
 
 func TestOwnedSpacesStorageUsageAddsUp(t *testing.T) {

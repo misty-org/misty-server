@@ -3,7 +3,7 @@ package api
 import "encoding/json"
 
 // What the desktop sends back after transcribing a file or writing a Note on
-// its own models (docs/agents/runtime.md), and what it writes the Note from.
+// its own models, and what it writes the Note from.
 
 type voiceTurnResult struct {
 	Speaker  string  `json:"speaker"`

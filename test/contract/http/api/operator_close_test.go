@@ -98,10 +98,10 @@ func TestCloseMakesReadOnlyAndDeletesOnTheDateWithoutEmails(t *testing.T) {
 
 func TestPatchSetsAndClearsThePeriodAnchor(t *testing.T) {
 	handler, _ := closingServer(t)
-	_, body := call(t, handler, http.MethodPost, "/operator/v1/accounts", operatorToken, `{"email":"anchor@example.com","limits":{"app_actions_per_month":1000}}`)
+	_, body := call(t, handler, http.MethodPost, "/operator/v1/accounts", operatorToken, `{"email":"anchor@example.com","limits":{"devices":5}}`)
 	id, _ := accountField(body, "id").(string)
 	rec, body := call(t, handler, http.MethodPatch, "/operator/v1/accounts/"+id, operatorToken, `{"period_anchor":"2026-01-31T08:00:00Z"}`)
-	if rec.Code != http.StatusOK || accountField(body, "period_anchor") != "2026-01-31T08:00:00Z" || accountField(body, "limits", "app_actions_per_month") != float64(1000) {
+	if rec.Code != http.StatusOK || accountField(body, "period_anchor") != "2026-01-31T08:00:00Z" {
 		t.Fatalf("anchor = %d %v", rec.Code, body)
 	}
 	start, _ := time.Parse(time.RFC3339, accountField(body, "usage", "period_start").(string))

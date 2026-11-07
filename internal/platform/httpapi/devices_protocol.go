@@ -11,31 +11,26 @@ import (
 	"time"
 )
 
-// Signed device records (docs/sync/devices.md). Each is a compact JSON
+// Signed device records. Each is a compact JSON
 // array whose first element is its domain string, sent as the exact signed
 // bytes. The server verifies those bytes and then reads them; it never
 // re-serializes a record, so client and server cannot disagree on encoding.
 
 const (
-	devicePolicyDomain    = "misty.device.policy.v1"
-	deviceRunGrantDomain  = "misty.device.run-grant.v1"
-	deviceRegisterDomain  = "misty.device.register.v1"
-	deviceChannelDomain   = "misty.device.channel.v1"
-	deviceRequestDomain   = "misty.device.request.v1"
+	devicePolicyDomain   = "misty.device.policy.v1"
+	deviceRegisterDomain = "misty.device.register.v1"
+	deviceChannelDomain  = "misty.device.channel.v1"
+	deviceRequestDomain  = "misty.device.request.v1"
 
 	deviceRecordClockSkew = 10 * time.Minute
-	deviceRunGrantMaxAge  = 24 * time.Hour
 )
 
 // deviceClock is the time record freshness is checked against; tests pin it.
 var deviceClock = time.Now
 
 var (
-	errSignedDeviceRecord  = errors.New("signed device record is invalid")
-	deviceAgentIDPattern   = regexp.MustCompile(`^[A-Za-z0-9_:.-]{1,128}$`)
-	deviceGrantIDPattern   = regexp.MustCompile(`^rungrant_[0-9a-f-]{36}$`)
-	deviceScopeRefPattern  = regexp.MustCompile(`^[A-Za-z0-9_:./+=-]{1,512}$`)
-	deviceCapabilityFormat = regexp.MustCompile(`^[a-z_]+(\.[a-z_]+)+$`)
+	errSignedDeviceRecord = errors.New("signed device record is invalid")
+	deviceScopeRefPattern = regexp.MustCompile(`^[A-Za-z0-9_:./+=-]{1,512}$`)
 )
 
 // deviceAgentSurfaces are what a device's policy can let agents use.

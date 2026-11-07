@@ -16,7 +16,6 @@ templ overviewPanel(v overviewView) {
 			@metric("Requests/min", v.requestsPerMin())
 			@metric("5xx rate", v.errorRate())
 			@metric("Accounts", v.count(v.Accounts))
-			@metric("Active runs", v.count(v.ActiveRuns))
 		</div>
 		if v.MetricsErr != "" {
 			@note(v.MetricsErr)

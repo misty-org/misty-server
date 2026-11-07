@@ -8,7 +8,6 @@ import (
 	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/misty-org/misty-server/internal/agent"
 	"github.com/misty-org/misty-server/internal/browsersync"
 	"github.com/misty-org/misty-server/internal/platform/metrics"
 )
@@ -17,7 +16,6 @@ type Server struct {
 	AbuseGuard          *api.AbuseGuard
 	Router              *chi.Mux
 	Database            *db.Database
-	AIAgent             *agent.Service
 	LibraryStore        api.LibraryObjectStore
 	Library             *api.SpaceLibraryService
 	Spaces              *api.SpacesService
@@ -26,8 +24,6 @@ type Server struct {
 	WebsiteURL          string
 	HealthMonitor       *healthMonitor
 	Metrics             *metrics.Registry
-	AI                  *api.AIService
-	AgentRuntime        api.AgentRuntimeConfig
 	BrowserSync         *browsersync.BrowserSyncService
 	Suspensions         *api.SuspensionGuard
 }
@@ -52,10 +48,6 @@ func CreateServer() (*Server, error) {
 		AuthHandoffStartURL: authHandoffStartURL,
 		WebsiteURL:          websiteURL,
 	}
-	// The server never calls a model: agents and every model call run on the
-	// person's desktop (docs/agents/runtime.md). Older conversations' transcripts
-	// are still read from misty_ask_conversations.
-	s.AIAgent = agent.NewService(s.Database)
 	s.LibraryStore, err = LibraryStoreFromEnv()
 	if err != nil {
 		return nil, err
@@ -85,7 +77,7 @@ func CreateServer() (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.Spaces, err = api.NewSpacesService(s.Database, s.AIAgent, spaceKey)
+	s.Spaces, err = api.NewSpacesService(s.Database, spaceKey)
 	if err != nil {
 		return nil, fmt.Errorf("configure Space link encryption: %w", err)
 	}
@@ -94,15 +86,8 @@ func CreateServer() (*Server, error) {
 		return nil, fmt.Errorf("configure journal collaboration: %w", err)
 	}
 	s.Spaces.SetJournalCollab(journalCollab)
-	agentRuntime, err := api.AgentRuntimeConfigFromEnv()
-	if err != nil {
-		return nil, fmt.Errorf("configure Agent runtime: %w", err)
-	}
-	s.Spaces.SetAgentRuntime(agentRuntime)
-	s.AgentRuntime = agentRuntime
 	s.Spaces.SetLibraryProvider(s.Library)
 	s.Spaces.SetAvatarStore(s.LibraryStore)
-	s.Spaces.SetToolOutputStore(s.LibraryStore)
 	s.Realtime = api.NewRealtimeService(s.Database, s.Database.GetDSN())
 
 	s.HealthMonitor = NewHealthMonitor(s)

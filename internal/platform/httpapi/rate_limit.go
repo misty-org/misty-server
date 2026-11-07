@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -69,10 +68,6 @@ func NewAPIRateLimiter() *APIRateLimiter {
 		defaultGET:   RateLimitPolicy{Limit: 120, Window: time.Minute},
 		defaultWrite: RateLimitPolicy{Limit: 30, Window: time.Minute},
 		RoutePolicies: map[string]RateLimitPolicy{
-			// Valid MCP calls are limited again by verified runtime identity. This
-			// edge policy only protects the unauthenticated boundary and must leave
-			// headroom for many Vercel runs sharing a single egress address.
-			"POST /mcp":                        {Limit: 6000, Window: time.Minute},
 			"POST /register":                   {Limit: 10, Window: time.Minute},
 			"POST /login":                      {Limit: 20, Window: time.Minute},
 			"POST /auth/confirm-email":         {Limit: 20, Window: time.Minute},
@@ -98,7 +93,6 @@ func NewAPIRateLimiter() *APIRateLimiter {
 			"GET /auth/handoff/start":                                   {Limit: 20, Window: time.Minute},
 			"POST /me/export":                                           {Limit: 3, Window: time.Hour},
 			"POST /me/deletion":                                         {Limit: 3, Window: time.Hour},
-			"POST /ai/complete":                                         {Limit: 12, Window: time.Minute},
 			"POST /spaces/{spaceID}/notes/{id}/collaboration-ticket":    {Limit: 30, Window: time.Minute},
 			"POST /spaces/{spaceID}/drawings/{id}/collaboration-ticket": {Limit: 30, Window: time.Minute},
 			"POST /spaces/{spaceID}/notes/{id}/assets/uploads":          {Limit: 20, Window: time.Minute},
@@ -169,7 +163,7 @@ func (l *SlidingWindowLimiter) purgeExpired(cutoff time.Time) {
 
 func (l *APIRateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions || isAgentRuntimeCallback(r) {
+		if r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -198,11 +192,6 @@ func (l *APIRateLimiter) Middleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-func isAgentRuntimeCallback(r *http.Request) bool {
-	return r.Method == http.MethodPost &&
-		strings.HasPrefix(r.URL.Path, "/internal/agent-runtime/runs/")
 }
 
 func (l *APIRateLimiter) policyFor(method, path string) RateLimitPolicy {

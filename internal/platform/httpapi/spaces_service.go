@@ -17,34 +17,18 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 
 	"github.com/go-chi/chi/v5"
-	serveragent "github.com/misty-org/misty-server/internal/agent"
 )
 
 type SpacesService struct {
 	JournalCollab JournalCollabConfig
 	database      *db.Database
-	agent         *serveragent.Service
 	library       *SpaceLibraryService
 	avatarStore   LibraryObjectStore
-	// toolOutputStore holds screenshots from agent tools.
-	toolOutputStore LibraryObjectStore
-	aead            cipher.AEAD
-	keyVer          int16
-	agentRuntime    AgentRuntimeConfig
-	aiInvocations   *aiInvocationHub
-	appConnections  AppConnectionRemover
+	aead          cipher.AEAD
+	keyVer        int16
 }
 
-func (s *SpacesService) SetAgentRuntime(config AgentRuntimeConfig) {
-	config.database = s.database
-	s.agentRuntime = config
-}
-
-func NewSpacesService(database *db.Database, agent *serveragent.Service, encryptionKey string) (*SpacesService, error) {
-	// Every agent tool declares its layer; a tool without one stops the server here.
-	if err := validateAgentToolLayers(); err != nil {
-		return nil, err
-	}
+func NewSpacesService(database *db.Database, encryptionKey string) (*SpacesService, error) {
 	key, err := parseSpaceEncryptionKey(encryptionKey)
 	if err != nil {
 		return nil, err
@@ -57,12 +41,11 @@ func NewSpacesService(database *db.Database, agent *serveragent.Service, encrypt
 	if err != nil {
 		return nil, err
 	}
-	return &SpacesService{database: database, agent: agent, aead: aead, keyVer: 1}, nil
+	return &SpacesService{database: database, aead: aead, keyVer: 1}, nil
 }
 
-// SetLibraryProvider installs the server-side Library provider used by Agent
-// workflow actions. Connections and authorization still come from the run's
-// requesting user; the provider is only the byte/object transport.
+// SetLibraryProvider installs the Library service that voice transcription
+// reads files through.
 func (s *SpacesService) SetLibraryProvider(library *SpaceLibraryService) {
 	s.library = library
 }
@@ -71,12 +54,6 @@ func (s *SpacesService) SetLibraryProvider(library *SpaceLibraryService) {
 // live under the avatars/ prefix in the shared bucket.
 func (s *SpacesService) SetAvatarStore(store LibraryObjectStore) {
 	s.avatarStore = store
-}
-
-// SetToolOutputStore installs the object store screenshots from agent tools go to,
-// the same bucket as Library files and attachments.
-func (s *SpacesService) SetToolOutputStore(store LibraryObjectStore) {
-	s.toolOutputStore = store
 }
 
 func parseSpaceEncryptionKey(value string) ([]byte, error) {
@@ -155,8 +132,6 @@ func writeSpaceError(w http.ResponseWriter, err error) {
 		writeAccountClosing(w, closing.DeleteAt)
 	case errors.Is(err, db.ErrSpaceNotFound), errors.Is(err, db.ErrSpaceInviteNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
-	case errors.Is(err, db.ErrPersonalAgentNotFound):
-		writeJSON(w, http.StatusNotFound, map[string]string{"code": "agent_not_found"})
 	case errors.Is(err, db.ErrSpaceInviteeNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "invitee_not_found"})
 	case errors.Is(err, db.ErrSpaceForbidden), errors.Is(err, db.ErrLibraryForbidden):

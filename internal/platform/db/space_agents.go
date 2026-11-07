@@ -3,78 +3,75 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"errors"
+	"strings"
 	"time"
+	"unicode/utf8"
 )
 
-// SpaceAgent is an agent's membership in a Space, under the person who owns
-// it. Anyone in the Space can ask it for work.
+// SpaceAgent lists an agent in a Space, under the person who owns it. The agent
+// lives on that person's computer: the Space keeps its id and name and nothing
+// else, and only its owner can ask it to act.
 type SpaceAgent struct {
-	SpaceID       string          `json:"space_id"`
-	SpaceName     string          `json:"space_name"`
-	AgentID       string          `json:"agent_id"`
-	AgentName     string          `json:"agent_name"`
-	AgentRole     string          `json:"agent_role"`
-	AgentAvatar   json.RawMessage `json:"agent_avatar"`
-	SystemManaged bool            `json:"system_managed"`
-	OwnerUserID   string          `json:"owner_user_id"`
-	OwnerName     string          `json:"owner_name"`
-	AddedAt       time.Time       `json:"added_at"`
+	SpaceID     string    `json:"space_id"`
+	SpaceName   string    `json:"space_name"`
+	AgentID     string    `json:"agent_id"`
+	AgentName   string    `json:"agent_name"`
+	OwnerUserID string    `json:"owner_user_id"`
+	OwnerName   string    `json:"owner_name"`
+	AddedAt     time.Time `json:"added_at"`
 	// Visibility is "public" or "private": a private agent is invisible to the
 	// rest of the Space and can't be @mentioned there.
 	Visibility string `json:"visibility"`
 }
 
-var (
-	ErrAgentNotInSpace     = errors.New("agent is not in this Space")
-	ErrAgentRequestBusy    = errors.New("agent has too many open requests")
-	ErrAgentRequestChained = errors.New("work requested by another member cannot request more work")
-	ErrAgentRequestLimit   = errors.New("agent request limit reached")
-)
+const spaceAgentColumns = `m.space_id,s.name,m.agent_id,m.agent_name,m.owner_user_id,COALESCE(u.username,''),m.added_at,m.visibility`
 
-const spaceAgentColumns = `m.space_id,s.name,m.agent_id,a.name,a.role,a.avatar,a.system_managed,m.owner_user_id,COALESCE(u.username,''),m.added_at,m.visibility`
-
-// Only enabled agents in active Spaces are visible or reachable. The owner is
-// always a member: membership cascades from space_members.
+// Only agents in active Spaces are visible. The owner is always a member:
+// a listing cascades from space_members.
 const spaceAgentJoins = ` FROM space_agents m
 	JOIN spaces s ON s.id=m.space_id AND s.lifecycle_state='active'
-	JOIN misty_ask_identities a ON a.id=m.agent_id AND a.owner_user_id=m.owner_user_id AND a.enabled AND a.deleted_at IS NULL
 	LEFT JOIN users u ON u.id=m.owner_user_id`
 
 func scanSpaceAgent(row interface{ Scan(...any) error }, out *SpaceAgent) error {
-	return row.Scan(&out.SpaceID, &out.SpaceName, &out.AgentID, &out.AgentName, &out.AgentRole, &out.AgentAvatar, &out.SystemManaged, &out.OwnerUserID, &out.OwnerName, &out.AddedAt, &out.Visibility)
+	return row.Scan(&out.SpaceID, &out.SpaceName, &out.AgentID, &out.AgentName, &out.OwnerUserID, &out.OwnerName, &out.AddedAt, &out.Visibility)
 }
 
-// AddSpaceAgent brings one of the caller's agents into a Space they belong to.
-func (db *Database) AddSpaceAgent(ctx context.Context, userID, spaceID, agentID string) (*SpaceAgent, error) {
+const (
+	maxSpaceAgentIDLength   = 200
+	maxSpaceAgentNameLength = 80
+)
+
+// AddSpaceAgent lists one of the caller's agents in a Space they belong to, or
+// updates its name if it's already there. The id and name come from the
+// caller's computer and mean nothing to the server beyond this listing.
+func (db *Database) AddSpaceAgent(ctx context.Context, userID, spaceID, agentID, name string) (*SpaceAgent, error) {
+	agentID, name = strings.TrimSpace(agentID), strings.TrimSpace(name)
+	if agentID == "" || len(agentID) > maxSpaceAgentIDLength || name == "" || utf8.RuneCountInString(name) > maxSpaceAgentNameLength {
+		return nil, ErrSpaceInvalid
+	}
 	out := &SpaceAgent{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
-		var owned bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM misty_ask_identities WHERE id=$1 AND owner_user_id=$2 AND deleted_at IS NULL)`, agentID, userID).Scan(&owned); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_agents(space_id,agent_id,owner_user_id,agent_name) VALUES($1,$2,$3,$4)
+			ON CONFLICT (space_id,owner_user_id,agent_id) DO UPDATE SET agent_name=EXCLUDED.agent_name`, spaceID, agentID, userID, name); err != nil {
 			return err
 		}
-		if !owned {
-			return ErrPersonalAgentNotFound
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_agents(space_id,agent_id,owner_user_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, spaceID, agentID, userID); err != nil {
-			return err
-		}
-		if err := scanSpaceAgent(tx.QueryRowContext(ctx, `SELECT `+spaceAgentColumns+spaceAgentJoins+` WHERE m.space_id=$1 AND m.agent_id=$2`, spaceID, agentID), out); err != nil {
+		if err := scanSpaceAgent(tx.QueryRowContext(ctx, `SELECT `+spaceAgentColumns+spaceAgentJoins+` WHERE m.space_id=$1 AND m.agent_id=$2 AND m.owner_user_id=$3`, spaceID, agentID, userID), out); err != nil {
 			return err
 		}
 		_, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "agent.added", agentID, map[string]any{"agent": out})
 		return err
 	})
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // RemoveSpaceAgent takes an agent out of a Space. Its owner or the Space's
-// owner may do it. Open requests stop at their next tool call, because every
-// call re-checks membership.
+// owner may do it.
 func (db *Database) RemoveSpaceAgent(ctx context.Context, userID, spaceID, agentID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
@@ -109,7 +106,7 @@ func (db *Database) SpaceAgents(ctx context.Context, userID, spaceID string) ([]
 		rows, err := tx.QueryContext(ctx, `SELECT `+spaceAgentColumns+spaceAgentJoins+`
 			JOIN space_members viewer ON viewer.space_id=m.space_id AND viewer.user_id=$1
 			WHERE ($2='' OR m.space_id=$2) AND (m.visibility='public' OR m.owner_user_id=$1)
-			ORDER BY s.name,a.name,m.agent_id LIMIT 500`, userID, spaceID)
+			ORDER BY s.name,m.agent_name,m.agent_id LIMIT 500`, userID, spaceID)
 		if err != nil {
 			return err
 		}
@@ -124,28 +121,6 @@ func (db *Database) SpaceAgents(ctx context.Context, userID, spaceID string) ([]
 		return rows.Err()
 	})
 	return items, err
-}
-
-// AgentSpaceIDs lists the Spaces one of the caller's agents is in.
-func (db *Database) AgentSpaceIDs(ctx context.Context, userID, agentID string) ([]string, error) {
-	ids := []string{}
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT m.space_id FROM space_agents m JOIN spaces s ON s.id=m.space_id AND s.lifecycle_state='active'
-			WHERE m.agent_id=$1 AND m.owner_user_id=$2 ORDER BY s.is_default DESC,s.name,m.space_id`, agentID, userID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				return err
-			}
-			ids = append(ids, id)
-		}
-		return rows.Err()
-	})
-	return ids, err
 }
 
 func agentInSpaceTx(ctx context.Context, tx *sql.Tx, ownerUserID, spaceID, agentID string) (bool, error) {

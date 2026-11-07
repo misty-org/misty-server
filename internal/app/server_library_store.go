@@ -10,7 +10,7 @@ import (
 )
 
 // libraryR2Names are the R2 settings, all required in production. The setup
-// container provisions the bucket and its credentials (docs/self-hosting.md).
+// container provisions the bucket and its credentials.
 var libraryR2Names = []string{"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY"}
 
 func libraryR2Configured() bool {

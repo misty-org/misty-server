@@ -7,7 +7,8 @@ import (
 )
 
 // mountDrawingRoutes registers metadata and collaboration-ticket endpoints for
-// Space drawings. Scene updates travel directly over DrawingRoom WebSockets.
+// Space drawings. People's scene updates travel directly over DrawingRoom
+// WebSockets; /scene is the same room's control command, as data.
 func (s *Server) mountDrawingRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.MethodFunc(
 		http.MethodGet,
@@ -34,6 +35,8 @@ func (s *Server) mountDrawingRoutes(prefix string, spaces *api.SpacesService) {
 		prefix+"/spaces/{spaceID}/drawings/{drawingID}",
 		spaces.SpaceDrawing(),
 	)
+	s.Router.Get(prefix+"/spaces/{spaceID}/drawings/{drawingID}/scene", spaces.SpaceDrawingScene())
+	s.Router.Post(prefix+"/spaces/{spaceID}/drawings/{drawingID}/scene", spaces.SpaceDrawingScene())
 	s.Router.Post(
 		prefix+"/spaces/{spaceID}/drawings/{drawingID}/collaboration-ticket",
 		spaces.SpaceDrawingCollaborationTicket(),

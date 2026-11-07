@@ -35,7 +35,7 @@ func (c composeService) status() string {
 }
 
 // setupJobs finish and exit; successful ones are hidden like `misty server status`.
-var setupJobs = []string{"setup", "dev-init", "migrate", "database-permissions", "agent-runtime-setup", "cloudflare-deploy"}
+var setupJobs = []string{"setup", "dev-init", "migrate", "database-permissions", "cloudflare-deploy"}
 
 type composeRunner interface {
 	PS(ctx context.Context) ([]composeService, error)

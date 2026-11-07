@@ -46,33 +46,18 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 	vault := uuid.New()
 	exec(t, database, `INSERT INTO sync_vaults(user_id,vault_id,root_public_key,key_envelope) VALUES($1,$2,$3,'{}')`, alice.ID, vault, make([]byte, 32))
 	exec(t, database, `INSERT INTO sync_records(vault_id,scope,record_key,version,sequence,session_id,sealed) VALUES($1,repeat('b',64),repeat('a',64),1,1,$2,$3)`, vault, uuid.New(), make([]byte, 28))
-	exec(t, database, `INSERT INTO misty_memories(id,user_id,space_id,scope_key,memory_key,content) VALUES('memory-1',$1,$2,'s',repeat('k',64),'likes tea')`, alice.ID, club.ID)
-	exec(t, database, `INSERT INTO memory_chunks(space_id,owner_user_id,branch,record_id,text,content_hash) VALUES($1,$2,'facts','r','likes tea',repeat('h',32))`, club.ID, alice.ID)
-	conversation := "conversation_" + uuid.NewString()
-	exec(t, database, `INSERT INTO misty_ask_conversations(id,user_id) VALUES($1,$2)`, conversation, alice.ID)
-	exec(t, database, `INSERT INTO ai_conversation_attachments(id,user_id,conversation_id,scope,display_name,mime_type,byte_size,sha256,width,height,object_key,model_mime_type,model_byte_size,model_sha256,model_width,model_height,model_object_key)
-		VALUES('attachment-1',$1,$2,'conversation','a.png','image/png',1,repeat('a',64),1,1,'agent-attachments/a','image/png',1,repeat('a',64),1,1,'agent-attachments/a-model')`, alice.ID, conversation)
-	exec(t, database, `INSERT INTO composio_sessions(owner_user_id,session_id) VALUES($1,'composio-session')`, alice.ID)
 	exec(t, database, `INSERT INTO trusted_devices(id,user_id,name,public_key) VALUES($1,$2,'Laptop',repeat('k',32))`, "device_"+uuid.NewString(), alice.ID)
 	exec(t, database, `INSERT INTO voice_transcripts(id,owner_user_id,source,turns) VALUES($1,$2,'{}','[]')`, uuid.New(), alice.ID)
-	if err := database.ConsumeAccountUsage(ctx, alice.ID, UsageAppActions, 2); err != nil {
-		t.Fatal(err)
-	}
+	exec(t, database, `INSERT INTO space_agents(space_id,agent_id,owner_user_id,agent_name) VALUES($1,'agent-1',$2,'Writer')`, club.ID, alice.ID)
 
 	before := map[string][]any{
-		`SELECT count(*) FROM library_blobs WHERE security_domain_id=$1`:    {personal.SecurityDomainID},
-		`SELECT count(*) FROM sync_records WHERE vault_id=$1`:               {vault},
-		`SELECT count(*) FROM memory_chunks WHERE owner_user_id=$1`:         {alice.ID},
-		`SELECT count(*) FROM misty_memories WHERE user_id=$1`:              {alice.ID},
-		`SELECT count(*) FROM ai_conversation_attachments WHERE user_id=$1`: {alice.ID},
+		`SELECT count(*) FROM library_blobs WHERE security_domain_id=$1`: {personal.SecurityDomainID},
+		`SELECT count(*) FROM sync_records WHERE vault_id=$1`:            {vault},
 	}
 	for query, args := range before {
 		if n := count(t, database, query, args...); n == 0 {
 			t.Fatalf("fixture missing: %s", query)
 		}
-	}
-	if keys, err := database.AccountPurgeObjectKeys(ctx, alice.ID); err != nil || len(keys) != 2 {
-		t.Fatalf("attachment keys = %v %v", keys, err)
 	}
 
 	// Closed, and not yet due; then with its date already here. The server
@@ -109,7 +94,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 		`SELECT count(*) FROM library_blobs WHERE security_domain_id=$1`: {personal.SecurityDomainID},
 		`SELECT count(*) FROM security_domains WHERE id=$1`:              {personal.SecurityDomainID},
 		`SELECT count(*) FROM sync_records WHERE vault_id=$1`:            {vault},
-		`SELECT count(*) FROM memory_chunks WHERE space_id=$1`:           {club.ID},
 		`SELECT count(*) FROM space_members WHERE user_id=$1`:            {alice.ID},
 		`SELECT count(*) FROM space_notes WHERE id=$1`:                   {"note-1"},
 		`SELECT count(*) FROM space_drawings WHERE id=$1`:                {"drawing-1"},
@@ -181,47 +165,6 @@ func TestOperatorCreateRefusesAnEmailBeingDeleted(t *testing.T) {
 	}
 	if _, _, err := database.CreateOperatorAccount(ctx, "Leaving@example.test", AccountLimits{}); err != ErrAccountPendingDeletion {
 		t.Fatalf("create = %v, want ErrAccountPendingDeletion", err)
-	}
-}
-
-// TestUsagePeriodsFollowTheBillingAnchor resets app actions on the anchor day.
-func TestUsagePeriodsFollowTheBillingAnchor(t *testing.T) {
-	database := testkit.OpenDatabase(t)
-	ctx := context.Background()
-	user, _, err := database.CreateOperatorAccount(ctx, "anchor@example.test", AccountLimits{AppActionsPerMonth: limit(3)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC()
-	// Anchored to tomorrow's day of month: the period began on that day last
-	// month (or this month's end, for a short month), so it differs from the
-	// calendar month unless today is the 1st.
-	anchor := now.AddDate(0, 0, 1)
-	if err := database.SetAccountPeriodAnchor(ctx, user.ID, &anchor); err != nil {
-		t.Fatal(err)
-	}
-	usage, err := database.AccountMonthUsage(ctx, user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !usage.PeriodStart.Before(now) || usage.PeriodStart.Day() == now.Day() || now.Sub(usage.PeriodStart) > 32*24*time.Hour {
-		t.Fatalf("period start %v for anchor %v", usage.PeriodStart, anchor)
-	}
-	// Last period's app actions do not count against this one.
-	exec(t, database, `INSERT INTO account_usage(user_id,metric,period,used) VALUES($1,'app_actions',$2::date - 1,3)`, user.ID, usage.PeriodStart)
-	if err := database.ConsumeAccountUsage(ctx, user.ID, UsageAppActions, 3); err != nil {
-		t.Fatalf("a new period's app actions = %v", err)
-	}
-	err = database.ConsumeAccountUsage(ctx, user.ID, UsageAppActions, 1)
-	limitErr, ok := err.(UsageLimitError)
-	if !ok || !limitErr.Renews.After(now) || limitErr.Renews.Day() != min(anchor.Day(), limitErr.Renews.AddDate(0, 1, -limitErr.Renews.Day()).Day()) {
-		t.Fatalf("over the limit = %#v", err)
-	}
-	if err := database.SetAccountPeriodAnchor(ctx, user.ID, nil); err != nil {
-		t.Fatal(err)
-	}
-	if usage, err := database.AccountMonthUsage(ctx, user.ID); err != nil || usage.PeriodStart.Day() != 1 {
-		t.Fatalf("calendar period = %v %v", usage.PeriodStart, err)
 	}
 }
 

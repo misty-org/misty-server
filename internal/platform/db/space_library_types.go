@@ -11,25 +11,19 @@ import (
 )
 
 const (
-	PermissionLibraryView        = spaces.PermissionLibraryView
-	PermissionMessagesRead       = spaces.PermissionMessagesRead
-	PermissionMessagesWrite      = spaces.PermissionMessagesWrite
-	PermissionLibraryUpload      = spaces.PermissionLibraryUpload
-	PermissionAttachmentUpload   = spaces.PermissionAttachmentUpload
-	PermissionLibraryAdd         = spaces.PermissionLibraryAdd
-	PermissionLibraryEdit        = spaces.PermissionLibraryEdit
-	PermissionLibraryDownload    = spaces.PermissionLibraryDownload
-	PermissionLibraryImport      = spaces.PermissionLibraryImport
-	PermissionStorageViewOwn     = spaces.PermissionStorageViewOwn
-	PermissionStudioView         = spaces.PermissionStudioView
-	PermissionAskRun             = spaces.PermissionAskRun
-	PermissionIntegrationsManage = spaces.PermissionIntegrationsManage
-	PermissionSpaceInvite        = spaces.PermissionSpaceInvite
-	PermissionSpaceRename        = spaces.PermissionSpaceRename
-	PermissionSpaceTransfer      = spaces.PermissionSpaceTransfer
-	PermissionSpaceDelete        = spaces.PermissionSpaceDelete
-	PermissionSpaceLeave         = spaces.PermissionSpaceLeave
-	LibraryRecoveryWindow        = spaces.LibraryRecoveryWindow
+	PermissionLibraryView      = spaces.PermissionLibraryView
+	PermissionMessagesRead     = spaces.PermissionMessagesRead
+	PermissionMessagesWrite    = spaces.PermissionMessagesWrite
+	PermissionLibraryUpload    = spaces.PermissionLibraryUpload
+	PermissionAttachmentUpload = spaces.PermissionAttachmentUpload
+	PermissionLibraryAdd       = spaces.PermissionLibraryAdd
+	PermissionLibraryEdit      = spaces.PermissionLibraryEdit
+	PermissionLibraryDownload  = spaces.PermissionLibraryDownload
+	PermissionLibraryImport    = spaces.PermissionLibraryImport
+	PermissionStorageViewOwn   = spaces.PermissionStorageViewOwn
+	PermissionStudioView       = spaces.PermissionStudioView
+	PermissionAskRun           = spaces.PermissionAskRun
+	LibraryRecoveryWindow      = spaces.LibraryRecoveryWindow
 )
 
 // Upload purposes decide which Space permission an upload needs and which
@@ -69,18 +63,18 @@ var (
 )
 
 type SpaceStorageUsage struct {
-	SpaceID                string                `json:"space_id"`
-	OwnerUserID            string                `json:"owner_user_id,omitempty"`
-	SpaceUsedBytes         int64                 `json:"space_used_bytes"`
-	SpaceReservedBytes     int64                 `json:"space_reserved_bytes"`
-	PersonalUsedBytes      int64                 `json:"personal_used_bytes"`
-	PersonalReservedBytes  int64                 `json:"personal_reserved_bytes"`
-	Personal               StorageUsageDimension `json:"personal"`
-	Space                  StorageUsageDimension `json:"space"`
+	SpaceID               string                `json:"space_id"`
+	OwnerUserID           string                `json:"owner_user_id,omitempty"`
+	SpaceUsedBytes        int64                 `json:"space_used_bytes"`
+	SpaceReservedBytes    int64                 `json:"space_reserved_bytes"`
+	PersonalUsedBytes     int64                 `json:"personal_used_bytes"`
+	PersonalReservedBytes int64                 `json:"personal_reserved_bytes"`
+	Personal              StorageUsageDimension `json:"personal"`
+	Space                 StorageUsageDimension `json:"space"`
 	// Compatibility fields: these mirror the requesting user's personal usage.
-	UsedBytes      int64 `json:"used_bytes"`
-	ReservedBytes  int64 `json:"reserved_bytes"`
-	Version        int64 `json:"version"`
+	UsedBytes     int64 `json:"used_bytes"`
+	ReservedBytes int64 `json:"reserved_bytes"`
+	Version       int64 `json:"version"`
 }
 
 type LibraryUpload struct {

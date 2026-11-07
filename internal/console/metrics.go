@@ -23,7 +23,6 @@ type MetricsSummary struct {
 	RequestsPerMin float64
 	ErrorRate      float64
 	InFlight       float64
-	AIInvocations  float64
 }
 
 type metricsSample struct {
@@ -73,7 +72,6 @@ func (m *metricsSampler) Sample(ctx context.Context) (MetricsSummary, error) {
 	current := metricsSample{at: time.Now()}
 	current.requests, current.serverErr = requestTotals(families["misty_http_requests_total"])
 	summary.InFlight = gaugeValue(families["misty_http_requests_in_flight"])
-	summary.AIInvocations = counterSum(families["misty_ai_invocations_total"])
 
 	m.mu.Lock()
 	prev := m.prev

@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -13,17 +12,15 @@ import (
 )
 
 type SpaceActorRef struct {
-	Kind    string `json:"kind"`
-	UserID  string `json:"user_id,omitempty"`
-	AgentID string `json:"agent_id,omitempty"`
+	Kind   string `json:"kind"`
+	UserID string `json:"user_id,omitempty"`
 }
 
 type SpaceConversationParticipant struct {
 	SpaceActorRef
-	Name     string          `json:"name"`
-	Email    string          `json:"email,omitempty"`
-	Avatar   json.RawMessage `json:"avatar,omitempty"`
-	JoinedAt time.Time       `json:"joined_at"`
+	Name     string    `json:"name"`
+	Email    string    `json:"email,omitempty"`
+	JoinedAt time.Time `json:"joined_at"`
 }
 
 type SpaceConversation struct {
@@ -33,8 +30,6 @@ type SpaceConversation struct {
 	Kind            string                         `json:"kind"`
 	CreatedByUserID string                         `json:"created_by_user_id"`
 	VisibleToSpace  bool                           `json:"visible_to_space"`
-	DirectUserID    string                         `json:"direct_user_id,omitempty"`
-	DirectAgentID   string                         `json:"direct_agent_id,omitempty"`
 	Participants    []SpaceConversationParticipant `json:"participants"`
 	CreatedAt       time.Time                      `json:"created_at"`
 	UpdatedAt       time.Time                      `json:"updated_at"`
@@ -78,17 +73,11 @@ func requireSpaceConversationMemberTx(ctx context.Context, tx *sql.Tx, userID, s
 
 func loadSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, conversation *SpaceConversation) error {
 	conversation.Participants = []SpaceConversationParticipant{}
-	query := `SELECT cm.actor_kind,COALESCE(cm.user_id,''),COALESCE(cm.agent_id,''),
-		CASE WHEN cm.actor_kind='person' THEN u.username ELSE COALESCE(v.name,'Former agent') END,
-		CASE WHEN cm.actor_kind='person' THEN u.email ELSE '' END,
-		CASE WHEN cm.actor_kind='agent' THEN v.avatar ELSE NULL END,cm.joined_at
-		FROM space_conversation_members cm
-		LEFT JOIN users u ON u.id=cm.user_id
-		LEFT JOIN misty_ask_identities pa ON pa.id=cm.agent_id
-		LEFT JOIN misty_ask_identity_versions v ON v.agent_id=pa.id AND v.version=pa.version
-		WHERE cm.conversation_id=$1 ORDER BY cm.actor_kind,u.username,v.name`
+	query := `SELECT cm.user_id,u.username,u.email,cm.joined_at
+		FROM space_conversation_members cm JOIN users u ON u.id=cm.user_id
+		WHERE cm.conversation_id=$1 ORDER BY u.username`
 	if conversation.VisibleToSpace {
-		query = `SELECT 'person',sm.user_id,'',u.username,u.email,NULL,sm.joined_at
+		query = `SELECT sm.user_id,u.username,u.email,sm.joined_at
 			FROM space_members sm JOIN users u ON u.id=sm.user_id
 			WHERE sm.space_id=$1 ORDER BY u.username,u.email`
 	}
@@ -104,13 +93,9 @@ func loadSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, conver
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var participant SpaceConversationParticipant
-		var avatar []byte
-		if err := rows.Scan(&participant.Kind, &participant.UserID, &participant.AgentID, &participant.Name, &participant.Email, &avatar, &participant.JoinedAt); err != nil {
+		participant := SpaceConversationParticipant{SpaceActorRef: SpaceActorRef{Kind: "person"}}
+		if err := rows.Scan(&participant.UserID, &participant.Name, &participant.Email, &participant.JoinedAt); err != nil {
 			return err
-		}
-		if len(avatar) > 0 {
-			participant.Avatar = append(json.RawMessage(nil), avatar...)
 		}
 		conversation.Participants = append(conversation.Participants, participant)
 	}
@@ -124,7 +109,7 @@ func (db *Database) SpaceConversations(ctx context.Context, userID, spaceID stri
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT c.id,c.space_id,c.title,c.kind,c.created_by_user_id,
-			c.visible_to_space,COALESCE(c.direct_user_id,''),COALESCE(c.direct_agent_id,''),c.created_at,c.updated_at
+			c.visible_to_space,c.created_at,c.updated_at
 			FROM space_conversations c
 			LEFT JOIN space_conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$2
 			WHERE c.space_id=$1 AND (c.visible_to_space OR cm.user_id=$2)
@@ -135,7 +120,7 @@ func (db *Database) SpaceConversations(ctx context.Context, userID, spaceID stri
 		for rows.Next() {
 			var item SpaceConversation
 			if err := rows.Scan(&item.ID, &item.SpaceID, &item.Title, &item.Kind, &item.CreatedByUserID,
-				&item.VisibleToSpace, &item.DirectUserID, &item.DirectAgentID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+				&item.VisibleToSpace, &item.CreatedAt, &item.UpdatedAt); err != nil {
 				rows.Close()
 				return err
 			}
@@ -184,8 +169,8 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 			Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,user_id,actor_kind)
-			SELECT $1,user_id,'person' FROM space_members WHERE space_id=$2`, out.ID, spaceID); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,user_id)
+			SELECT $1,user_id FROM space_members WHERE space_id=$2`, out.ID, spaceID); err != nil {
 			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "conversation.created", out.ID, map[string]any{"conversation_id": out.ID, "title": title}); err != nil {
@@ -229,8 +214,8 @@ func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceI
 			FROM space_conversations c
 			WHERE c.space_id=$1 AND c.kind='dm'
 			  AND (SELECT count(*) FROM space_conversation_members cm WHERE cm.conversation_id=c.id)=2
-			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.actor_kind='person' AND cm.user_id=$2)
-			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.actor_kind='person' AND cm.user_id=$3)
+			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.user_id=$2)
+			  AND EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.user_id=$3)
 			ORDER BY c.created_at LIMIT 1`, spaceID, ids[0], ids[1]).Scan(&out.ID, &out.SpaceID, &out.Title, &out.Kind, &out.CreatedByUserID, &out.CreatedAt, &out.UpdatedAt)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
@@ -243,7 +228,7 @@ func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceI
 				return err
 			}
 			for _, memberID := range ids {
-				if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,user_id,actor_kind) VALUES($1,$2,'person')`, out.ID, memberID); err != nil {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,user_id) VALUES($1,$2)`, out.ID, memberID); err != nil {
 					return err
 				}
 			}
@@ -261,21 +246,9 @@ func normalizeSpaceActorRefs(values []SpaceActorRef) []SpaceActorRef {
 	seen := map[string]bool{}
 	out := make([]SpaceActorRef, 0, len(values))
 	for _, value := range values {
-		value.Kind, value.UserID, value.AgentID = strings.TrimSpace(value.Kind), strings.TrimSpace(value.UserID), strings.TrimSpace(value.AgentID)
-		if value.Kind == "person" {
-			value.AgentID = ""
-		} else if value.Kind == "agent" {
-			value.UserID = ""
-		} else {
-			continue
-		}
-		id := value.UserID
-		if value.Kind == "agent" {
-			id = value.AgentID
-		}
-		key := value.Kind + ":" + id
-		if id != "" && !seen[key] {
-			seen[key] = true
+		value.Kind, value.UserID = strings.TrimSpace(value.Kind), strings.TrimSpace(value.UserID)
+		if value.Kind == "person" && value.UserID != "" && !seen[value.UserID] {
+			seen[value.UserID] = true
 			out = append(out, value)
 		}
 	}
@@ -284,14 +257,10 @@ func normalizeSpaceActorRefs(values []SpaceActorRef) []SpaceActorRef {
 
 func validateSpaceActorRefsTx(ctx context.Context, tx *sql.Tx, userID, spaceID string, refs []SpaceActorRef) error {
 	for _, ref := range refs {
-		if ref.Kind == "person" {
-			var exists bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_members WHERE space_id=$1 AND user_id=$2)`, spaceID, ref.UserID).Scan(&exists); err != nil || !exists {
-				return ErrSpaceInvalid
-			}
-			continue
+		var exists bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_members WHERE space_id=$1 AND user_id=$2)`, spaceID, ref.UserID).Scan(&exists); err != nil || !exists {
+			return ErrSpaceInvalid
 		}
-		return ErrSpaceInvalid
 	}
 	return nil
 }

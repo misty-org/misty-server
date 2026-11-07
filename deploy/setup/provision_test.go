@@ -33,7 +33,7 @@ func newHarness(t *testing.T) *harness {
 	values := map[string]string{
 		"MISTY_HOSTNAME": "cloud.misty.example", "CLOUDFLARE_API_TOKEN": "cf-token",
 		"CLOUDFLARE_ACCOUNT_ID": testAccount, "CLOUDFLARE_ZONE_ID": testZone,
-		"MISTY_COMPOSIO_API_KEY": "c", "GOOGLE_CLIENT_ID": "g", "GOOGLE_CLIENT_SECRET": "g",
+		"GOOGLE_CLIENT_ID": "g", "GOOGLE_CLIENT_SECRET": "g",
 		"MISTY_CLOUDFLARE_API_URL": server.URL + "/client/v4",
 	}
 	inputs, err := readInputs(func(name string) string { return values[name] })

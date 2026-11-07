@@ -30,7 +30,7 @@ func TestOperatorAccountCreateIsIdempotentPerEmail(t *testing.T) {
 		t.Fatalf("second create = %+v %v %v", again, created, err)
 	}
 	limits, err := database.AccountLimitsFor(ctx, first.ID)
-	if err != nil || *limits.Devices != 2 || *limits.StorageBytes != 50_000_000_000 || limits.AppActionsPerMonth != nil {
+	if err != nil || *limits.Devices != 2 || *limits.StorageBytes != 50_000_000_000 {
 		t.Fatalf("limits = %+v %v", limits, err)
 	}
 	// No password yet: password sign-in finds an empty hash that matches nothing.
@@ -132,45 +132,6 @@ func TestSuspensionEndsSessionsKeepsDataAndRefusesKeys(t *testing.T) {
 	}
 	if err := database.SuspendAccount(ctx, "missing"); !errors.Is(err, ErrAccountNotFound) {
 		t.Fatalf("suspend unknown = %v", err)
-	}
-}
-
-func TestMonthlyUsageStopsAtTheLimitAndCountsUnlimited(t *testing.T) {
-	database := testkit.OpenDatabase(t)
-	ctx := context.Background()
-	user, _, err := database.CreateOperatorAccount(ctx, "usage@example.com", AccountLimits{AppActionsPerMonth: limit(4)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := database.ConsumeAccountUsage(ctx, user.ID, UsageAppActions, 3); err != nil {
-		t.Fatal(err)
-	}
-	var limitErr UsageLimitError
-	if err := database.ConsumeAccountUsage(ctx, user.ID, UsageAppActions, 3); !errors.As(err, &limitErr) || limitErr.Code() != "app_action_limit_reached" {
-		t.Fatalf("over the limit = %v", err)
-	}
-	if err := database.ConsumeAccountUsage(ctx, user.ID, UsageAppActions, 1); err != nil {
-		t.Fatalf("last app action = %v", err)
-	}
-	if err := database.ReleaseAccountUsage(ctx, user.ID, UsageAppActions, 1); err != nil {
-		t.Fatal(err)
-	}
-	usage, err := database.AccountMonthUsage(ctx, user.ID)
-	if err != nil || usage.AppActions != 3 {
-		t.Fatalf("usage = %+v %v", usage, err)
-	}
-	// Without a limit the account is still counted.
-	free, _, err := database.CreateOperatorAccount(ctx, "unlimited@example.com", AccountLimits{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 3; i++ {
-		if err := database.ConsumeAccountUsage(ctx, free.ID, UsageAppActions, 1); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if usage, err := database.AccountMonthUsage(ctx, free.ID); err != nil || usage.AppActions != 3 {
-		t.Fatalf("unlimited usage = %+v %v", usage, err)
 	}
 }
 

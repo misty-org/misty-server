@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-// A closing account (docs/cloud/README.md#closing-an-account) is read-only
+// A closing account is read-only
 // until its deletion date: it signs in, reads and exports, and changes
 // nothing. The HTTP guard refuses its writes before any handler runs; the
-// checks here cover writes that arrive another way (the sync socket, agent
-// runs another member or a schedule starts) and back the guard up.
+// checks here cover writes that arrive another way (the sync socket) and back
+// the guard up.
 
 // ErrAccountClosing refuses a change from a closing account.
 var ErrAccountClosing = errors.New("account_closing")
@@ -82,17 +82,4 @@ func (db *Database) ClosingAccounts(ctx context.Context) (map[string]time.Time, 
 		return rows.Err()
 	})
 	return out, err
-}
-
-// stopClosingAccountWorkTx cancels the agent work a closing account has under
-// way: its personal invocations, and the runs it asked for or its agents were
-// doing. Schedules stay as they are and wait (ClaimDueWorkflowSchedules
-// skips closing accounts), so resuming the account brings them back.
-func stopClosingAccountWorkTx(ctx context.Context, tx *sql.Tx, userID string) error {
-	if _, err := tx.ExecContext(ctx, `UPDATE ai_invocations SET state='canceled',error_code='account_closing',
-		canceled_at=NOW(),updated_at=NOW() WHERE user_id=$1
-		AND state IN ('queued','running','awaiting_device','awaiting_intervention','awaiting_timer')`, userID); err != nil {
-		return err
-	}
-	return cancelAccountRunsTx(ctx, tx, userID, "account_closing")
 }

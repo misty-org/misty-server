@@ -101,30 +101,6 @@ func TestAPIRateLimiterMiddleware(t *testing.T) {
 	}
 }
 
-func TestAPIRateLimiterReservesMCPForAuthenticatedRunLimit(t *testing.T) {
-	limiter := NewAPIRateLimiter()
-	policy, ok := limiter.RoutePolicies["POST /mcp"]
-	if !ok {
-		t.Fatal("expected an explicit public MCP rate-limit policy")
-	}
-	if policy.Limit < 120 {
-		t.Fatalf("MCP public limit = %d, want shared-runtime headroom", policy.Limit)
-	}
-
-	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	for requestNumber := 0; requestNumber < 31; requestNumber++ {
-		request := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-		request.RemoteAddr = "203.0.113.8:44200"
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		if response.Code != http.StatusNoContent {
-			t.Fatalf("MCP request %d status = %d, want %d", requestNumber+1, response.Code, http.StatusNoContent)
-		}
-	}
-}
-
 func TestAPIRateLimiterSharesOneBudgetAcrossSpaces(t *testing.T) {
 	limiter := NewAPIRateLimiter()
 	limiter.Now = func() time.Time { return time.Unix(0, 0) }

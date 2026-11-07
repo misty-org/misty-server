@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -35,7 +36,11 @@ func TestAccountEventsRevalidateSessionWithoutReconnecting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewAIService(database, nil).AccountEvents())
+	service, err := NewSpacesService(database, base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(service.AccountEvents())
 	defer server.Close()
 	req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
 	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: access})

@@ -23,36 +23,18 @@ type ConsoleJob struct {
 	UpdatedAt time.Time
 }
 
+// Only the Library's own jobs still run on the server: every agent, schedule and
+// model call happens on the person's computer.
 const consoleJobStateCounts = `
-	SELECT 'Workflow schedules', state, count(*) FROM workflow_schedules WHERE enabled GROUP BY state
-	UNION ALL
-	SELECT 'AI invocations (24h)', state, count(*) FROM ai_invocations
-		WHERE created_at > now() - interval '1 day' GROUP BY state
-	UNION ALL
-	SELECT 'Agent runs (24h)', state, count(*) FROM agent_run_jobs
+	SELECT 'Library jobs (24h)', state, count(*) FROM library_processing_jobs
 		WHERE updated_at > now() - interval '1 day' GROUP BY state
 	ORDER BY 1, 2`
 
 const consoleJobAttention = `
-	(SELECT 'Workflow schedule', COALESCE(v.definition->>'title', t.method_id), COALESCE(u.email, t.user_id), t.state,
-	        CASE WHEN t.state = 'failed' THEN t.last_error ELSE 'next run ' || COALESCE(to_char(t.next_run_at, 'YYYY-MM-DD HH24:MI'), 'unscheduled') END,
-	        t.updated_at
-	 FROM workflow_schedules t LEFT JOIN users u ON u.id = t.user_id
-	 LEFT JOIN agent_methods m ON m.id = t.method_id
-	 LEFT JOIN agent_method_versions v ON v.method_id = m.id AND v.version = m.current_version
-	 WHERE t.enabled AND t.state IN ('running','failed'))
-	UNION ALL
-	(SELECT 'AI invocation', i.mode || ' · ' || i.surface_id, COALESCE(u.email, i.user_id), i.state,
-	        i.error_code, i.updated_at
-	 FROM ai_invocations i LEFT JOIN users u ON u.id = i.user_id
-	 WHERE i.state NOT IN ('completed','failed','canceled')
-	    OR (i.state = 'failed' AND i.updated_at > now() - interval '1 day'))
-	UNION ALL
-	(SELECT 'Agent run', j.agent_id, COALESCE(j.space_id, ''), j.state,
-	        j.last_error_message, j.updated_at
-	 FROM agent_run_jobs j
-	 WHERE j.state IN ('queued','leased','dispatched')
-	    OR (j.state = 'failed' AND j.updated_at > now() - interval '1 day'))
+	SELECT 'Library job', j.job_kind, COALESCE(j.space_id, ''), j.state, COALESCE(j.error_code, ''), j.updated_at
+	FROM library_processing_jobs j
+	WHERE j.state IN ('queued','leased','running')
+	   OR (j.state = 'failed' AND j.updated_at > now() - interval '1 day')
 	ORDER BY 6 DESC LIMIT $1`
 
 func (db *Database) ConsoleJobs(ctx context.Context, limit int) ([]ConsoleStateCount, []ConsoleJob, error) {
@@ -78,24 +60,6 @@ func (db *Database) ConsoleJobs(ctx context.Context, limit int) ([]ConsoleStateC
 		return rows.Err()
 	})
 	return counts, jobs, err
-}
-
-// ConsoleAIUsage summarizes the last day of AI invocations by state and the
-// most common failure codes.
-func (db *Database) ConsoleAIUsage(ctx context.Context) (states, failures []ConsoleStateCount, err error) {
-	err = db.consoleTx(ctx, func(tx *sql.Tx) error {
-		if states, err = queryStateCounts(ctx, tx, `
-			SELECT mode, state, count(*) FROM ai_invocations
-			WHERE created_at > now() - interval '1 day' GROUP BY mode, state ORDER BY 1, 2`); err != nil {
-			return err
-		}
-		failures, err = queryStateCounts(ctx, tx, `
-			SELECT 'failed', COALESCE(NULLIF(error_code, ''), 'unknown'), count(*) FROM ai_invocations
-			WHERE state = 'failed' AND created_at > now() - interval '1 day'
-			GROUP BY 2 ORDER BY 3 DESC LIMIT 8`)
-		return err
-	})
-	return states, failures, err
 }
 
 func queryStateCounts(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]ConsoleStateCount, error) {

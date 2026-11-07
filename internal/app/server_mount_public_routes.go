@@ -65,9 +65,10 @@ func (s *Server) mountPublicSyncRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/sync/ws", deps.browserSync.Connect())
 }
 
-// mountPublicProfileRoutes registers profile, avatar, device, settings, space,
-// agent intervention, and telemetry preference routes.
+// mountPublicProfileRoutes registers profile, avatar, device, settings, space
+// and telemetry preference routes.
 func (s *Server) mountPublicProfileRoutes(prefix string, deps *mountDeps) {
+	s.Router.Get(prefix+"/me/events", s.Spaces.AccountEvents())
 	s.Router.Post(prefix+"/me/export", s.Spaces.AccountExportManifest())
 	s.Router.Post(prefix+"/me/deletion", s.Spaces.BeginAccountDeletion())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
@@ -77,16 +78,12 @@ func (s *Server) mountPublicProfileRoutes(prefix string, deps *mountDeps) {
 	s.Router.Put(prefix+"/me/settings", api.UpdateSettings(s.Database))
 	s.Router.Put(prefix+"/me/username", api.UpdateUsername(s.Database))
 	s.Router.Get(prefix+"/me/space-people", api.SpacePeople(s.Database))
-	s.Router.Get(prefix+"/me/agent-interventions", s.Spaces.AIUserInterventionControl())
-	s.Router.Post(prefix+"/me/agent-interventions/{waitID}", s.Spaces.AIUserInterventionControl())
 
 	s.Router.Put(prefix+"/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
 }
 
-// mountPublicFeatureRoutes mounts the AI, library, agents, and spaces route trees.
+// mountPublicFeatureRoutes mounts the device, Spaces and Library route trees.
 func (s *Server) mountPublicFeatureRoutes(prefix string, deps *mountDeps) {
-	s.mountAIRoutes(prefix+"/ai", deps.ai)
-	s.mountMistyRoutes(prefix, deps.ai)
 	s.mountAgentsRoutes(prefix, deps.agents)
 	s.mountSpacesRoutes(prefix, s.Spaces, s.Realtime)
 	if s.Library != nil {
@@ -94,23 +91,13 @@ func (s *Server) mountPublicFeatureRoutes(prefix string, deps *mountDeps) {
 	}
 }
 
-// mountOperationalRoutes registers the unversioned metrics, agent-runtime
-// callback, and MCP endpoints.
+// mountOperationalRoutes registers the unversioned metrics and operator endpoints.
 func (s *Server) mountOperationalRoutes(deps *mountDeps) {
 	// Unmounted entirely when no token is configured: the output names every
 	// route, its traffic volume, and its error rate.
 	if token := metricsToken(); token != "" {
 		s.Router.Get("/metrics", s.Metrics.Handler(token))
 	}
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/activate", s.Spaces.AgentRuntimeActivate())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/start-receipt", s.Spaces.AgentRuntimeStartReceipt())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/budget", s.Spaces.AgentRuntimeExecutionBudget())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/steering", s.Spaces.AgentRuntimeSteering())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/context", s.Spaces.AgentRuntimeContext())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/mcp-token", s.Spaces.AgentRuntimeMCPAccess())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/events", s.Spaces.AgentRuntimeEvent())
-	s.Router.Post("/internal/agent-runtime/runs/{runID}/complete", s.Spaces.AgentRuntimeComplete())
-	s.Router.Post("/mcp", s.Spaces.MistyMCP().ServeHTTP)
 	s.mountOperatorRoutes()
 }
 

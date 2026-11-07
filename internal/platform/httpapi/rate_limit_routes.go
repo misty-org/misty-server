@@ -32,7 +32,6 @@ const overflowRouteKey = "{overflow}"
 // they are charged per account rather than per address. Keyed by the normalized
 // path the limiter already computes.
 var costBearingRoutes = map[string]bool{
-	"/ai/complete": true,
 	// Egress and storage operations bill per byte and per request.
 	"/spaces/{spaceID}/library/items/{id}/download":                true,
 	"/spaces/{spaceID}/attachments/{id}/download":                  true,

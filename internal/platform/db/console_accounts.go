@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"time"
 )
 
@@ -30,9 +29,9 @@ type ConsoleDevice struct {
 
 type ConsoleAccountDetail struct {
 	ConsoleAccount
-	StorageBytes   int64
+	StorageBytes int64
 	SyncSessions int // per-device-sign-in workspaces, excluding the shared one
-	DeviceList     []ConsoleDevice
+	DeviceList   []ConsoleDevice
 }
 
 func (db *Database) consoleTx(ctx context.Context, fn func(*sql.Tx) error) error {
@@ -48,32 +47,6 @@ const consoleAccountColumns = `
 func scanConsoleAccount(row interface{ Scan(...any) error }, a *ConsoleAccount) error {
 	return row.Scan(&a.ID, &a.Email, &a.Username, &a.State, &a.CreatedAt,
 		&a.Devices, &a.Sessions)
-}
-
-// ConsoleListAccounts returns the newest accounts matching an email or
-// username fragment.
-func (db *Database) ConsoleListAccounts(ctx context.Context, search string, limit int) ([]ConsoleAccount, error) {
-	pattern := "%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(strings.TrimSpace(search)) + "%"
-	var accounts []ConsoleAccount
-	err := db.consoleTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT `+consoleAccountColumns+`
-			WHERE u.lifecycle_state <> 'deleted'
-			  AND (u.email ILIKE $1 OR u.username ILIKE $1)
-			ORDER BY u.created_at DESC LIMIT $2`, pattern, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var a ConsoleAccount
-			if err := scanConsoleAccount(rows, &a); err != nil {
-				return err
-			}
-			accounts = append(accounts, a)
-		}
-		return rows.Err()
-	})
-	return accounts, err
 }
 
 func (db *Database) ConsoleAccountDetail(ctx context.Context, userID string) (ConsoleAccountDetail, error) {

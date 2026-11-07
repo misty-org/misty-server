@@ -197,10 +197,11 @@ func TestAttackForgedInternalAndCrossSiteCalls(t *testing.T) {
 		"/internal/agent-runtime/runs/run_00000000-0000-0000-0000-000000000000/complete",
 		"/mcp",
 	} {
+		// The server holds no agent runs, so a forged call has nothing to reach.
 		response := user.do(http.MethodPost, path, map[string]string{"tool": "space.delete"}, map[string]string{
 			"X-Misty-Agent-Timestamp": "1", "X-Misty-Agent-Signature": "00", "Idempotency-Key": "forged",
 		})
-		if response.Code != http.StatusUnauthorized && response.Code != http.StatusServiceUnavailable {
+		if response.Code != http.StatusNotFound {
 			t.Fatalf("forged %s = %d %s", path, response.Code, response.Body.String())
 		}
 	}

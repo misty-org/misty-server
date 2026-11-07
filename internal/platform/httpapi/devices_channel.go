@@ -36,7 +36,7 @@ type deviceChannelFrame struct {
 }
 
 // DeviceChannelTicket issues a one-use, 60-second ticket for the device socket.
-func (s *AgentsService) DeviceChannelTicket() http.HandlerFunc {
+func (s *DevicesService) DeviceChannelTicket() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
 		if !ok {
@@ -49,7 +49,7 @@ func (s *AgentsService) DeviceChannelTicket() http.HandlerFunc {
 		}
 		token, err := security.GenerateSecureToken()
 		if err != nil {
-			writeAgentError(w, err)
+			writeDeviceError(w, err)
 			return
 		}
 		session := ""
@@ -57,7 +57,7 @@ func (s *AgentsService) DeviceChannelTicket() http.HandlerFunc {
 			session = security.HashToken(sid)
 		}
 		if err := s.database.CreateDeviceChannelTicket(r.Context(), userID, deviceID, security.HashToken(token), session); err != nil {
-			writeAgentError(w, err)
+			writeDeviceError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"ticket": token, "expiresIn": 60})
@@ -67,7 +67,7 @@ func (s *AgentsService) DeviceChannelTicket() http.HandlerFunc {
 // DeviceChannel is the control channel: presence, admission, revocation and
 // account-event hints. Devices never reach each other through it; it never
 // carries file data.
-func (s *AgentsService) DeviceChannel() http.HandlerFunc {
+func (s *DevicesService) DeviceChannel() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if !websocket.IsWebSocketUpgrade(r) {
@@ -119,7 +119,7 @@ func (s *AgentsService) DeviceChannel() http.HandlerFunc {
 	}
 }
 
-func (s *AgentsService) serveDeviceChannel(parent context.Context, conn *websocket.Conn, identity *db.DeviceChannelIdentity) {
+func (s *DevicesService) serveDeviceChannel(parent context.Context, conn *websocket.Conn, identity *db.DeviceChannelIdentity) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	hub := s.devices()
@@ -248,7 +248,7 @@ func (s *AgentsService) serveDeviceChannel(parent context.Context, conn *websock
 // deviceRevokedFrame asks the writer to tell the device it was removed, then close.
 type deviceRevokedFrame struct{}
 
-func (s *AgentsService) devices() *deviceHub {
+func (s *DevicesService) devices() *deviceHub {
 	s.deviceHubOnce.Do(func() {
 		s.deviceHub = newDeviceHub(s.database)
 		s.deviceHub.start(context.Background())

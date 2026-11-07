@@ -58,7 +58,7 @@ grep -q 'MISTY_DEV_API_ORIGIN:?run misty setup cloudflare' compose.dev.yml ||
 if grep -q 'trycloudflare.com' services/journal-collab/docker/cloudflare-deploy.sh; then
   fail "the development Worker callback must not depend on an ephemeral quick tunnel"
 fi
-cloudflare_env_consumers="$(grep -c '/integrations/cloudflare.env$' compose.dev.yml)"
+cloudflare_env_consumers="$(grep -c '/cloudflare.env$' compose.dev.yml)"
 [ "$cloudflare_env_consumers" -ge 2 ] ||
   fail "the development tunnel and Worker deploy must load the Cloudflare environment bundle"
 grep -q '^  setup:' compose.dev.yml ||
@@ -79,8 +79,8 @@ fi
 grep -q 'COPY --from=api /app/migrations' scripts/docker/setup.Dockerfile ||
   fail "setup must copy canonical API migrations"
 
-# The server stack: nothing optional, everything from four env files and the
-# setup container's secrets volume (docs/self-hosting.md).
+# The server stack: nothing optional, everything from three env files and the
+# setup container's secrets volume.
 if grep -Eq '^ *profiles:|COMPOSE_PROFILES' compose.yml; then
   fail "the server stack has no optional profiles"
 fi
@@ -90,8 +90,8 @@ fi
 for service in setup postgres migrate api cloudflared backups console; do
   grep -q "^  $service:" compose.yml || fail "the server stack is missing its $service service"
 done
-for file in misty cloudflare composio google; do
-  grep -q "/$file.env" compose.yml || fail "the server stack must read ~/.misty/server/prod/$file.env"
+for file in misty cloudflare google; do
+  grep -q "/$file.env" compose.yml || fail "the server stack must read ~/.misty/.env/server/$file.env"
 done
 ! grep -q '/search.env' compose.yml ||
   fail "the server holds no search key: web search runs on each device"

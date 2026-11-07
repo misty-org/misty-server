@@ -19,7 +19,7 @@ import (
 
 func TestRepositoryLayout(t *testing.T) {
 	root := repositoryRoot(t)
-	for _, name := range []string{"accounts", "browsersync", "spaces", "agent", "workflow", "integrations"} {
+	for _, name := range []string{"accounts", "browsersync", "spaces"} {
 		requireDirectory(t, filepath.Join(root, "internal", name))
 	}
 	for _, legacy := range []string{"api", "db", "agent", "billing", "workflow"} {
@@ -100,10 +100,9 @@ func TestEnvironmentAccessIsCentralized(t *testing.T) {
 
 // environmentContract is every environment variable the server reads. A
 // server's values come from server/.env/ and the setup container
-// (docs/self-hosting.md); no env file is committed.
+// no env file is committed.
 const environmentContract = `
 CLOUDFLARE_API_TOKEN
-COMPOSIO_API_KEY
 DB_CONN_MAX_IDLE_TIME
 DB_CONN_MAX_LIFETIME
 DB_HOST
@@ -124,9 +123,6 @@ JOURNAL_COLLAB_PROJECTION_SECRET_PREVIOUS
 JOURNAL_COLLAB_ROOM_SALT
 JOURNAL_COLLAB_TICKET_PRIVATE_KEY
 MISTY_AGENT_MODEL
-MISTY_AGENT_RUNTIME_CONTROL_SECRET
-MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS
-MISTY_AGENT_RUNTIME_URL
 MISTY_AI_MODEL_CATALOG_JSON
 MAILJET_API_BASE_URL
 MAILJET_API_KEY
@@ -137,8 +133,6 @@ MISTY_ALLOWED_ORIGINS
 MISTY_AUTH_SIGNING_KEY
 MISTY_AUTH_SIGNING_KEY_PREVIOUS
 MISTY_CHAT_ATTACHMENT_MAX_FILE_BYTES
-MISTY_COMPOSIO_API_KEY
-MISTY_DEVICE_JOBS_ENABLED
 MISTY_DEVICE_PAIRING_PEPPER
 MISTY_DEVICE_TICKET_PREVIOUS_PUBLIC_KEYS
 MISTY_DEVICE_TICKET_PRIVATE_KEY

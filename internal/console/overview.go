@@ -20,7 +20,6 @@ type overviewView struct {
 	DBLatency  time.Duration
 	DBErr      string
 	Accounts   int
-	ActiveRuns int
 	CountsErr  bool
 	Activity   []db.ConsoleAuditEntry
 	// Alerts are the alerts service's open problems (server_alerts). The
@@ -64,7 +63,7 @@ func (s *Server) loadOverview(ctx context.Context) overviewView {
 	}
 	view.DBLatency = time.Since(started)
 	var err error
-	if view.Accounts, view.ActiveRuns, err = s.db.ConsoleOverviewCounts(ctx); err != nil {
+	if view.Accounts, err = s.db.ConsoleOverviewCounts(ctx); err != nil {
 		view.CountsErr = true
 	}
 	view.Activity, _ = s.db.ConsoleRecentAudit(ctx, 5)

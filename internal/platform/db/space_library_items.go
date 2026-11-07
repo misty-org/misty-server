@@ -26,7 +26,7 @@ func (db *Database) LibraryItems(ctx context.Context, userID, spaceID string, qu
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryView); err != nil {
 			return err
 		}
-		filter := newLibraryItemFilter(spaceID, state, userID, itemViewer(ctx, userID))
+		filter := newLibraryItemFilter(spaceID, state, userID, userID)
 		filter.applyAttributeFilters(query, structuredSearch)
 		if err := filter.applyMediaFilter(query.MediaType); err != nil {
 			return err

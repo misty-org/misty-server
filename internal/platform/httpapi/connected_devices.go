@@ -35,11 +35,11 @@ type connectedDeviceTicketClaims struct {
 	Expires             int64    `json:"exp"`
 }
 
-func (s *AgentsService) SetConnectedDevices(config ConnectedDevicesConfig) {
+func (s *DevicesService) SetConnectedDevices(config ConnectedDevicesConfig) {
 	s.connectedDevices = config
 }
 
-func (s *AgentsService) ConnectedDeviceTicketKeys() http.HandlerFunc {
+func (s *DevicesService) ConnectedDeviceTicketKeys() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := s.requireUser(w, r); !ok || !s.requireConnectedDevices(w) {
 			return
@@ -52,7 +52,7 @@ func (s *AgentsService) ConnectedDeviceTicketKeys() http.HandlerFunc {
 	}
 }
 
-func (s *AgentsService) requireConnectedDevices(w http.ResponseWriter) bool {
+func (s *DevicesService) requireConnectedDevices(w http.ResponseWriter) bool {
 	if !s.connectedDevices.valid() {
 		http.Error(w, "connected devices unavailable", http.StatusServiceUnavailable)
 		return false

@@ -39,9 +39,9 @@ services:
     logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
     restart: "no"
     env_file:
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/integrations/cloudflare.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/cloudflare.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/crypto/journal.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/journal.env
         required: false
     environment:
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
@@ -76,37 +76,27 @@ services:
     logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
     restart: unless-stopped
     env_file:
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/runtime.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/runtime.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/database.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/database.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/storage.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/storage.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/observability.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/observability.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/integrations/ai.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/mailjet.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/composio.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/google.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/integrations/composio.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/documents.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/integrations/dropbox.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/journal.env
         required: false
-      - path: ~/.misty/server/prod/mailjet.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/devices.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/integrations/google.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/spaces.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/integrations/microsoft.env
-        required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/crypto/documents.env
-        required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/crypto/journal.env
-        required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/crypto/devices.env
-        required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/crypto/spaces.env
-        required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/crypto/services.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/services.env
         required: false
     environment:
       PORT: "8080"
@@ -126,9 +116,6 @@ services:
       PARTYKIT_HOST: ${MISTY_CLOUDFLARE_WORKER_HOST:?run misty setup cloudflare}
       MISTY_JOURNAL_SERVER_ENV_FILE: /run/misty/journal-server.env
       # browser_act and every other screen task run as device jobs.
-      MISTY_DEVICE_JOBS_ENABLED: ${MISTY_DEVICE_JOBS_ENABLED:-true}
-      MISTY_AGENT_RUNTIME_CONTROL_SECRET: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET:-bWlzdHktYWdlbnQtcnVudGltZS1kZXYtc2VjcmV0ISE=}
-      MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS: ${MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS:-}
     volumes:
       - dev_runtime:/run/misty:ro
     depends_on:
@@ -164,7 +151,7 @@ services:
     restart: unless-stopped
 
     env_file:
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/dev}/integrations/cloudflare.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/cloudflare.env
         required: false
 
     environment:

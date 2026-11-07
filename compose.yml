@@ -1,20 +1,19 @@
 name: misty
 
-# The Misty server stack (docs/self-hosting.md). Everything you configure is in
-# four files under ~/.misty/server/prod/ (MISTY_ENV_DIR names another folder);
+# The Misty server stack. Everything you configure is in
+# three files under ~/.misty/.env/server/ (MISTY_ENV_DIR names another folder);
 # every secret is generated into the secrets volume by the setup service, which
 # also provisions Cloudflare on each start.
 # Data lives in the pgdata volume and in R2, and is removed only when the
 # whole stack is (docker compose down --volumes).
 
 x-config: &config
-  # Every service reads the same four files. The API token for Cloudflare is
+  # Every service reads the same three files. The API token for Cloudflare is
   # blanked for every service except setup, the only one that calls the API.
   env_file:
-    - ${MISTY_ENV_DIR:-~/.misty/server/prod}/misty.env
-    - ${MISTY_ENV_DIR:-~/.misty/server/prod}/cloudflare.env
-    - ${MISTY_ENV_DIR:-~/.misty/server/prod}/composio.env
-    - ${MISTY_ENV_DIR:-~/.misty/server/prod}/google.env
+    - ${MISTY_ENV_DIR:-~/.misty/.env/server}/misty.env
+    - ${MISTY_ENV_DIR:-~/.misty/.env/server}/cloudflare.env
+    - ${MISTY_ENV_DIR:-~/.misty/.env/server}/google.env
   logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
 
 # setup, migrate, backups, alerts, console and cloudflared run one small image
@@ -25,7 +24,7 @@ x-tools: &tools
     context: .
     dockerfile: deploy/setup/Dockerfile
 
-# What the API and the console read besides the four files. The rest of their
+# What the API and the console read besides the three files. The rest of their
 # configuration (secrets, R2, the Worker hosts) is the secrets volume's
 # server.env, loaded when each starts.
 x-server-environment: &server-environment
@@ -94,13 +93,12 @@ services:
       context: .
       dockerfile: Dockerfile
     <<: *config
-    # The four files, and Mailjet if this server sends email (docs/self-hosting.md#email).
+    # The three files, and Mailjet if this server sends email.
     env_file:
-      - ${MISTY_ENV_DIR:-~/.misty/server/prod}/misty.env
-      - ${MISTY_ENV_DIR:-~/.misty/server/prod}/cloudflare.env
-      - ${MISTY_ENV_DIR:-~/.misty/server/prod}/composio.env
-      - ${MISTY_ENV_DIR:-~/.misty/server/prod}/google.env
-      - path: ${MISTY_ENV_DIR:-~/.misty/server/prod}/mailjet.env
+      - ${MISTY_ENV_DIR:-~/.misty/.env/server}/misty.env
+      - ${MISTY_ENV_DIR:-~/.misty/.env/server}/cloudflare.env
+      - ${MISTY_ENV_DIR:-~/.misty/.env/server}/google.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/mailjet.env
         required: false
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-ec", "set -a; . /run/misty/secrets/server.env; set +a; exec /usr/local/bin/misty-server"]

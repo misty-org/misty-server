@@ -90,8 +90,12 @@ func TestAccountArchiveStopsOnAFileThatDoesNotMatch(t *testing.T) {
 	sum := sha256.Sum256([]byte(file))
 	checksum := hex.EncodeToString(sum[:])
 	for name, manifest := range map[string]func(string) AccountExportManifest{
-		"size":     func(base string) AccountExportManifest { return exportManifest(t, base, "a.txt", checksum, len(file)+1) },
-		"checksum": func(base string) AccountExportManifest { return exportManifest(t, base, "a.txt", strings.Repeat("0", 64), len(file)) },
+		"size": func(base string) AccountExportManifest {
+			return exportManifest(t, base, "a.txt", checksum, len(file)+1)
+		},
+		"checksum": func(base string) AccountExportManifest {
+			return exportManifest(t, base, "a.txt", strings.Repeat("0", 64), len(file))
+		},
 	} {
 		downloads := exportDownloads(t, file)
 		err := WriteAccountArchive(context.Background(), io.Discard, manifest(downloads.URL), downloads.Client(), time.Now())

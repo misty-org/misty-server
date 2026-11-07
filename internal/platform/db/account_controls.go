@@ -10,9 +10,8 @@ import (
 // AccountLimits are what an account may use on this server. A nil field is
 // unlimited, which is every account's default (a self-hosted server sets none).
 type AccountLimits struct {
-	StorageBytes       *int64 `json:"storage_bytes"`
-	Devices            *int64 `json:"devices"`
-	AppActionsPerMonth *int64 `json:"app_actions_per_month"`
+	StorageBytes *int64 `json:"storage_bytes"`
+	Devices      *int64 `json:"devices"`
 }
 
 var (
@@ -26,23 +25,6 @@ var (
 	ErrNoDevicesAllowed = errors.New("no_devices_allowed")
 )
 
-// UsageAppActions is the metric counted per billing period (see usagePeriod).
-// Web search runs on the person's device and is never counted here.
-const UsageAppActions = "app_actions"
-
-// UsageLimitError refuses a metered action once the period's allowance is
-// used. Renews is when the next period starts.
-type UsageLimitError struct {
-	Metric string
-	Limit  int64
-	Renews time.Time
-}
-
-func (e UsageLimitError) Error() string { return e.Metric + " limit reached" }
-
-// Code is what the API and agent tools report: app_action_limit_reached.
-func (e UsageLimitError) Code() string { return "app_action_limit_reached" }
-
 func (db *Database) serviceTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return db.WithRLSContext(ctx, ServiceRLSSettings(), fn)
 }
@@ -53,11 +35,10 @@ func (db *Database) SetAccountLimits(ctx context.Context, userID string, limits 
 		if err := requireActiveAccountTx(ctx, tx, userID); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO account_controls(user_id,storage_bytes,devices,app_actions_per_month)
-			VALUES($1,$2,$3,$4)
-			ON CONFLICT(user_id) DO UPDATE SET storage_bytes=EXCLUDED.storage_bytes,devices=EXCLUDED.devices,
-			app_actions_per_month=EXCLUDED.app_actions_per_month,updated_at=now()`,
-			userID, limits.StorageBytes, limits.Devices, limits.AppActionsPerMonth)
+		_, err := tx.ExecContext(ctx, `INSERT INTO account_controls(user_id,storage_bytes,devices)
+			VALUES($1,$2,$3)
+			ON CONFLICT(user_id) DO UPDATE SET storage_bytes=EXCLUDED.storage_bytes,devices=EXCLUDED.devices,updated_at=now()`,
+			userID, limits.StorageBytes, limits.Devices)
 		return err
 	})
 }
@@ -75,17 +56,17 @@ func (db *Database) AccountLimitsFor(ctx context.Context, userID string) (Accoun
 
 func accountControlsTx(ctx context.Context, tx *sql.Tx, userID string) (AccountLimits, *time.Time, error) {
 	var limits AccountLimits
-	var storage, devices, actions sql.NullInt64
+	var storage, devices sql.NullInt64
 	var suspended sql.NullTime
-	err := tx.QueryRowContext(ctx, `SELECT storage_bytes,devices,app_actions_per_month,suspended_at
-		FROM account_controls WHERE user_id=$1`, userID).Scan(&storage, &devices, &actions, &suspended)
+	err := tx.QueryRowContext(ctx, `SELECT storage_bytes,devices,suspended_at
+		FROM account_controls WHERE user_id=$1`, userID).Scan(&storage, &devices, &suspended)
 	if errors.Is(err, sql.ErrNoRows) {
 		return limits, nil, nil
 	}
 	if err != nil {
 		return limits, nil, err
 	}
-	limits = AccountLimits{nullableInt(storage), nullableInt(devices), nullableInt(actions)}
+	limits = AccountLimits{nullableInt(storage), nullableInt(devices)}
 	if suspended.Valid {
 		return limits, &suspended.Time, nil
 	}

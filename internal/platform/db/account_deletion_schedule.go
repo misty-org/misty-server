@@ -107,12 +107,6 @@ func (db *Database) ScheduleAccountDeletion(
 			WHERE user_id=$1`, userID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE workflow_device_node_jobs
-			SET state='canceled',completed_at=NOW()
-			WHERE user_id=$1 AND state IN ('queued','leased')`, userID); err != nil {
-			return err
-		}
 		_, err = tx.ExecContext(ctx, `
 			UPDATE account_deletion_requests
 			SET status='scheduled',provider_revocation_status=$1,
@@ -175,9 +169,6 @@ func (db *Database) CompleteAccountDeletion(
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-		if err := purgeAccountAgentsTx(ctx, tx, userID); err != nil {
 			return err
 		}
 		if err := purgeAccountDataTx(ctx, tx, userID); err != nil {

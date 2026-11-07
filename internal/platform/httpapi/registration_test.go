@@ -21,10 +21,6 @@ func (s fakeAccounts) PendingAccountInvitation(_ context.Context, email string) 
 
 type fakeOwner string
 
-func (owner fakeOwner) IsServerOwner(_ context.Context, id string) (bool, error) {
-	return string(owner) == id, nil
-}
-
 func TestAllowlistDecidesWhoSignsUp(t *testing.T) {
 	t.Setenv("MISTY_ALLOWED_EMAILS", " Listed@Example.com, second@example.com\nthird@example.com ")
 	t.Setenv("MISTY_OPEN_SIGNUP", "")
@@ -108,4 +104,8 @@ func TestRegistrationFirstAccountThenInvitationOnly(t *testing.T) {
 	if recorder.Code != 403 || !strings.Contains(recorder.Body.String(), `"code":"registration_closed"`) {
 		t.Fatalf("closed response = %d %s", recorder.Code, recorder.Body)
 	}
+}
+
+func (owner fakeOwner) IsServerOwner(_ context.Context, id string) (bool, error) {
+	return string(owner) == id, nil
 }

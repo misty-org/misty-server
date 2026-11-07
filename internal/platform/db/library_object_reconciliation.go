@@ -39,15 +39,7 @@ func (db *Database) LibraryObjectExpectations(
 			  AND state IN (
 			      'initiated','uploading','uploaded_unverified','quarantined',
 			      'scanning','processing','ready'
-			  )
-			UNION ALL
-			SELECT object_key,byte_size,sha256,'attachment'
-			FROM ai_conversation_attachments
-			WHERE object_key=ANY($1) AND lifecycle_state<>'deleted'
-			UNION ALL
-			SELECT model_object_key,model_byte_size,model_sha256,'attachment'
-			FROM ai_conversation_attachments
-			WHERE model_object_key=ANY($1) AND lifecycle_state<>'deleted'`,
+			  )`,
 			pq.Array(objectKeys),
 		)
 		if err != nil {

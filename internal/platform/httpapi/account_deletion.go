@@ -94,9 +94,6 @@ func (s *SpacesService) ProcessAccountDeletions(
 	completed := 0
 	for _, request := range requests {
 		status, processErr := s.revokeAccountProviders(ctx, request.UserID)
-		if processErr == nil {
-			processErr = s.removeAppConnections(ctx, request.UserID, status)
-		}
 		if processErr == nil && s.avatarStore != nil {
 			processErr = s.avatarStore.Delete(ctx, avatarObjectKey(request.UserID))
 			if errors.Is(processErr, ErrLibraryObjectNotFound) {
@@ -129,15 +126,8 @@ func (s *SpacesService) PurgeDueAccountDeletions(
 	}
 	completed := 0
 	for _, request := range requests {
-		// Attachment objects go first: once their rows are gone nothing
-		// would name them. The Spaces it owned are purged after this.
-		keys, err := s.database.AccountPurgeObjectKeys(ctx, request.UserID)
-		if err == nil {
-			err = s.deleteStoredObjects(ctx, keys)
-		}
-		if err == nil {
-			err = s.database.CompleteAccountDeletion(ctx, request.ID)
-		}
+		// The Spaces it owned are purged after this.
+		err := s.database.CompleteAccountDeletion(ctx, request.ID)
 		if err != nil {
 			_ = s.database.RecordAccountDeletionFailure(ctx, request.ID, "purge_failed")
 			return completed, err

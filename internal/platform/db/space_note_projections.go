@@ -87,7 +87,7 @@ func (db *Database) SpaceNoteBacklinks(ctx context.Context, userID, targetNoteID
 			  AND (source.audience_kind='space' OR EXISTS(
 			      SELECT 1 FROM space_conversation_members cm
 			      WHERE cm.conversation_id=source.audience_conversation_id
-			        AND cm.actor_kind='person' AND cm.user_id=$2))
+			        AND cm.user_id=$2))
 			ORDER BY source.updated_at DESC`, targetNoteID, userID)
 		if err != nil {
 			return err

@@ -33,7 +33,7 @@ type deviceRequestIdentity struct {
 // DeviceAuthenticated requires the account session AND a fresh signature by the
 // unified device key over the exact request, prefixed with its domain string.
 // Legacy keys (made in the webview before the unified identity) are refused.
-func (s *AgentsService) DeviceAuthenticated(next http.HandlerFunc) http.HandlerFunc {
+func (s *DevicesService) DeviceAuthenticated(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
 		if !ok {
@@ -99,7 +99,7 @@ func DeviceSignaturePayload(method, path, timestamp, nonce string, body []byte) 
 // RegisterDevice records this install's unified device key as pending. The
 // body carries a proof signed by that key, so nobody can register a key they
 // do not hold. A pending device can do nothing until it is added.
-func (s *AgentsService) RegisterDevice() http.HandlerFunc {
+func (s *DevicesService) RegisterDevice() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
 		if !ok {
@@ -116,7 +116,7 @@ func (s *AgentsService) RegisterDevice() http.HandlerFunc {
 			IssuedAt      int64           `json:"issuedAt"`
 			Proof         string          `json:"proof"`
 		}
-		if decodeAIJSON(w, r, &body) != nil {
+		if decodeStrictJSON(w, r, &body) != nil {
 			return
 		}
 		body.Name = strings.TrimSpace(body.Name)
@@ -135,13 +135,13 @@ func (s *AgentsService) RegisterDevice() http.HandlerFunc {
 		}
 		device, err := s.database.RegisterUnifiedDevice(r.Context(), userID, body.Name, body.PublicKey, body.P2PEndpointID, platform,
 			db.CleanDeviceVersion(body.OSVersion), db.CleanDeviceVersion(body.AppVersion), session, body.Capabilities)
-		writeAgentResult(w, device, err, http.StatusCreated)
+		writeDeviceResult(w, device, err, http.StatusCreated)
 	}
 }
 
 // ListDevices returns the account's devices with their signed policies and
 // who is online. Addresses are never listed.
-func (s *AgentsService) ListDevices() http.HandlerFunc {
+func (s *DevicesService) ListDevices() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
 		if !ok {
@@ -149,14 +149,14 @@ func (s *AgentsService) ListDevices() http.HandlerFunc {
 		}
 		devices, err := s.database.AccountDevices(r.Context(), userID)
 		if err != nil {
-			writeAgentError(w, err)
+			writeDeviceError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"devices": devices, "presence": s.devices().snapshot(userID)})
 	}
 }
 
-func (s *AgentsService) HeartbeatDevice() http.HandlerFunc {
+func (s *DevicesService) HeartbeatDevice() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := s.requireUser(w, r)
 		if !ok {
@@ -166,16 +166,16 @@ func (s *AgentsService) HeartbeatDevice() http.HandlerFunc {
 		var body struct {
 			Capabilities json.RawMessage `json:"capabilities"`
 		}
-		if !deviceIDPattern.MatchString(deviceID) || decodeAIJSON(w, r, &body) != nil || !validJSONObject(body.Capabilities) || containsLocalPath(body.Capabilities) {
+		if !deviceIDPattern.MatchString(deviceID) || decodeStrictJSON(w, r, &body) != nil || !validJSONObject(body.Capabilities) || containsLocalPath(body.Capabilities) {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
 		device, err := s.database.HeartbeatTrustedDevice(userID, deviceID, body.Capabilities)
-		writeAgentResult(w, device, err, http.StatusOK)
+		writeDeviceResult(w, device, err, http.StatusOK)
 	}
 }
 
-func (s *AgentsService) requireUser(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (s *DevicesService) requireUser(w http.ResponseWriter, r *http.Request) (string, bool) {
 	userID, err := sessionUserID(r, s.database)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)

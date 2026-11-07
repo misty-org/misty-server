@@ -25,10 +25,9 @@ type mountDeps struct {
 	mintHandoff    http.HandlerFunc
 	startHandoff   http.HandlerFunc
 
+	agents       *api.DevicesService
 	googleSignIn *api.GoogleSignInService
 	browserSync  *browsersync.BrowserSyncService
-	ai           *api.AIService
-	agents       *api.AgentsService
 }
 
 func (s *Server) MountHandlers() error {
@@ -84,7 +83,7 @@ func (s *Server) mountRequestMiddleware() {
 	s.Metrics = metrics.New()
 	s.registerDomainGauges(s.Metrics)
 	s.Router.Use(s.Metrics.Middleware)
-	// Model keys stay on each device (docs/agents/runtime.md). An older
+	// Model keys stay on each device. An older
 	// app's X-Misty-Models header is dropped before any handler or log sees it.
 	s.Router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +101,7 @@ func (s *Server) buildMountDeps() (*mountDeps, error) {
 		return nil, err
 	}
 	deps := &mountDeps{}
-	if err := s.wireAIServices(deps); err != nil {
+	if err := s.wireDevices(deps); err != nil {
 		return nil, err
 	}
 	if err := s.wireAccountHandlers(deps, authHandoffService); err != nil {
@@ -112,15 +111,9 @@ func (s *Server) buildMountDeps() (*mountDeps, error) {
 	return deps, nil
 }
 
-// wireAIServices builds the AI, library search, and agents services.
-func (s *Server) wireAIServices(deps *mountDeps) error {
-	aiService := api.NewAIService(s.Database, s.AIAgent)
-	s.AI = aiService
-	aiService.SetAgentRuntime(s.AgentRuntime)
-	aiService.AttachSpacesRuntime(s.Spaces)
-	aiService.SetMetrics(s.Metrics)
-	aiService.SetAttachmentStore(s.LibraryStore)
-	agentsService := api.NewAgentsService(s.Database)
+// wireDevices builds the service behind /devices.
+func (s *Server) wireDevices(deps *mountDeps) error {
+	agentsService := api.NewDevicesService(s.Database)
 	if serverConnectedDevicesConfigured() {
 		connectedDevicesConfig, configErr := api.ConnectedDevicesConfigFromEnv()
 		if configErr != nil {
@@ -128,7 +121,6 @@ func (s *Server) wireAIServices(deps *mountDeps) error {
 		}
 		agentsService.SetConnectedDevices(connectedDevicesConfig)
 	}
-	deps.ai = aiService
 	deps.agents = agentsService
 	return nil
 }
@@ -161,8 +153,7 @@ func (s *Server) wireAccountHandlers(deps *mountDeps, authHandoffService *api.Au
 	return nil
 }
 
-// wireBrowserSync builds the browser sync service and points its restore step
-// at the AI agent when one is configured.
+// wireBrowserSync builds the browser sync service.
 func (s *Server) wireBrowserSync(deps *mountDeps) {
 	browserSync := browsersync.NewBrowserSyncService(s.Database)
 	s.BrowserSync = browserSync

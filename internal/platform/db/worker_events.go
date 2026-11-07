@@ -22,7 +22,7 @@ type workerEventHub struct {
 
 func workerQueue(kind string) bool {
 	switch kind {
-	case "library-ai", "library-edit", "note-control", "drawing-control", "drawing-purge", "embedding", "abuse-blocks", "abuse-retention", "agent-runtime", "agent-tasks", "scheduled", "ai-cleanup", "account-deletion", "rendition-reservations":
+	case "library-ai", "library-edit", "note-control", "drawing-control", "drawing-purge", "abuse-blocks", "abuse-retention", "account-deletion", "rendition-reservations":
 		return true
 	}
 	return false
@@ -123,7 +123,7 @@ func (h *workerEventHub) listen() {
 	for notification := range h.listener.Notify {
 		if notification == nil {
 			h.publish("")
-		} else if workerQueue(notification.Extra) || resourceLeaseTopic(notification.Extra) || invocationEventTopic(notification.Extra) {
+		} else if workerQueue(notification.Extra) {
 			h.publish(notification.Extra)
 		}
 	}

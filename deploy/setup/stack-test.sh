@@ -65,7 +65,6 @@ CLOUDFLARE_ZONE_ID=fedcba9876543210fedcba9876543210
 MISTY_CLOUDFLARE_API_URL=$fake/client/v4
 MISTY_R2_ENDPOINT_URL=https://host.docker.internal:$s3_port
 EOF
-printf 'MISTY_COMPOSIO_API_KEY=test-composio\n' >"$MISTY_ENV_DIR/composio.env"
 printf 'GOOGLE_CLIENT_ID=test.apps.googleusercontent.com\nGOOGLE_CLIENT_SECRET=test\n' >"$MISTY_ENV_DIR/google.env"
 
 # The tunnel connector would dial Cloudflare's real edge; here it only checks

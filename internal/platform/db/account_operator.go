@@ -29,13 +29,12 @@ type OperatorAccount struct {
 	StorageKnown bool          `json:"-"`
 }
 
-// AccountUse is what the account uses against each limit. App actions count
-// from PeriodStart, the start of its current billing period.
+// AccountUse is what the account uses against each limit. PeriodStart is the
+// start of its current billing period.
 type AccountUse struct {
-	StorageBytes        *int64    `json:"storage_bytes,omitempty"`
-	Devices             int64     `json:"devices"`
-	AppActionsThisMonth int64     `json:"app_actions_this_month"`
-	PeriodStart         time.Time `json:"period_start"`
+	StorageBytes *int64    `json:"storage_bytes,omitempty"`
+	Devices      int64     `json:"devices"`
+	PeriodStart  time.Time `json:"period_start"`
 }
 
 // CreateOperatorAccount makes a password-less account for the email with the
@@ -93,16 +92,16 @@ func (db *Database) CreateOperatorAccount(ctx context.Context, email string, lim
 
 const operatorAccountColumns = `u.id,u.email,u.username,u.created_at,
 	u.id=(SELECT id FROM users ORDER BY created_at,id LIMIT 1),
-	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,c.app_actions_per_month,
+	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,
 	(SELECT count(*) FROM trusted_devices d WHERE d.user_id=u.id AND d.revoked_at IS NULL AND d.admission_state<>'revoked')
 	FROM users u LEFT JOIN account_controls c ON c.user_id=u.id`
 
 func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, error) {
 	var a OperatorAccount
 	var suspended, deleteAt, anchor sql.NullTime
-	var storage, devices, actions sql.NullInt64
+	var storage, devices sql.NullInt64
 	if err := row.Scan(&a.ID, &a.Email, &a.Username, &a.CreatedAt, &a.Owner, &suspended, &deleteAt, &anchor,
-		&storage, &devices, &actions, &a.Usage.Devices); err != nil {
+		&storage, &devices, &a.Usage.Devices); err != nil {
 		return a, err
 	}
 	if deleteAt.Valid {
@@ -111,21 +110,20 @@ func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, 
 	if anchor.Valid {
 		a.PeriodAnchor = &anchor.Time
 	}
-	a.Limits = AccountLimits{nullableInt(storage), nullableInt(devices), nullableInt(actions)}
+	a.Limits = AccountLimits{nullableInt(storage), nullableInt(devices)}
 	if suspended.Valid {
 		a.Suspended, a.SuspendedAt = true, &suspended.Time
 	}
 	return a, nil
 }
 
-// fillOperatorAccountTx adds this period's use and the setup state; storage is
+// fillOperatorAccountTx adds the billing period and the setup state; storage is
 // measured only when asked, since it sums every stored payload.
 func fillOperatorAccountTx(ctx context.Context, tx *sql.Tx, a *OperatorAccount, storage bool) error {
-	month, err := accountMonthUsageTx(ctx, tx, a.ID)
+	err := tx.QueryRowContext(ctx, `SELECT misty_usage_period((SELECT period_anchor FROM account_controls WHERE user_id=$1), now())`, a.ID).Scan(&a.Usage.PeriodStart)
 	if err != nil {
 		return err
 	}
-	a.Usage.AppActionsThisMonth, a.Usage.PeriodStart = month.AppActions, month.PeriodStart
 	if a.Setup, err = accountSetupStateTx(ctx, tx, a.ID); err != nil {
 		return err
 	}

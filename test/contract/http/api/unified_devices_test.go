@@ -42,13 +42,12 @@ func newDeviceFixture(t *testing.T) *deviceFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewAgentsService(database)
+	service := NewDevicesService(database)
 	router := chi.NewRouter()
 	router.Post("/devices", service.RegisterDevice())
 	router.Get("/devices", service.ListDevices())
 	router.Put("/devices/{deviceID}/policy", service.DeviceAuthenticated(service.StoreDevicePolicy()))
 	router.Post("/devices/{deviceID}/remove-device", service.DeviceAuthenticated(service.RemoveDevice()))
-	router.Post("/devices/{deviceID}/workflow-node-jobs/claim", service.DeviceAuthenticated(service.ClaimWorkflowNodeJob()))
 	return &deviceFixture{t: t, database: database, router: router, token: newConversationTestBearerToken(t, database, user.ID), userID: user.ID}
 }
 
@@ -152,59 +151,5 @@ func TestDevicePolicyIsSignedOnlyByItsDevice(t *testing.T) {
 	// A replayed older policy cannot undo a newer one.
 	if response := f.signed(first, http.MethodPut, "/devices/"+first.id+"/policy", map[string]any{"policy": policyRecord(first.key, f.userID, first.id, 4, "edit")}); response.Code != http.StatusConflict {
 		t.Fatalf("older policy: %d", response.Code)
-	}
-}
-
-func runGrant(key ed25519.PrivateKey, userID, requester, target string, capabilities, scopes []string) map[string]string {
-	now := time.Now().Unix()
-	return signedRecord(key, "misty.device.run-grant.v1", userID, "rungrant_"+uuid.NewString(), requester, target, "", "chat-1", capabilities, scopes, now, now+3600)
-}
-
-func TestRunGrantsLimitWhatAgentsMayDoOnADevice(t *testing.T) {
-	f := newDeviceFixture(t)
-	first := f.register("First")
-	second := f.register("Second")
-	check := func(contexts []map[string]any) error {
-		raw, _ := json.Marshal(contexts)
-		return TestingVerifyDeviceContextGrants(t.Context(), f.database, f.userID, "", raw)
-	}
-	folder := func(device testDevice, grant map[string]string) map[string]any {
-		return map[string]any{"device_id": device.id, "kind": "local_folder", "opaque_ref": "scope-1", "capabilities": []string{"folder.list", "folder.read"}, "run_grant": grant}
-	}
-	if err := check([]map[string]any{folder(first, nil)}); err == nil {
-		t.Fatal("a device context without a grant was accepted")
-	}
-	if err := check([]map[string]any{folder(first, runGrant(first.key, f.userID, first.id, first.id, []string{"folder.list", "folder.read"}, []string{"scope-1"}))}); err != nil {
-		t.Fatalf("own grant: %v", err)
-	}
-	// The grant cannot be widened: it named only listing.
-	if err := check([]map[string]any{folder(first, runGrant(first.key, f.userID, first.id, first.id, []string{"folder.list"}, []string{"scope-1"}))}); err == nil {
-		t.Fatal("a context wider than its grant was accepted")
-	}
-	// Signed by a key other than the named requester.
-	if err := check([]map[string]any{folder(second, runGrant(second.key, f.userID, first.id, second.id, []string{"folder.list", "folder.read"}, []string{"scope-1"}))}); err == nil {
-		t.Fatal("a grant with a forged requester was accepted")
-	}
-	// Never another device, even one whose own policy lets agents in.
-	cross := folder(second, runGrant(first.key, f.userID, first.id, second.id, []string{"folder.list", "folder.read"}, []string{"scope-1"}))
-	if response := f.signed(second, http.MethodPut, "/devices/"+second.id+"/policy", map[string]any{"policy": policyRecord(second.key, f.userID, second.id, 1, "view")}); response.Code != http.StatusOK {
-		t.Fatalf("policy: %d", response.Code)
-	}
-	if err := check([]map[string]any{cross}); err == nil {
-		t.Fatal("cross-device work was accepted")
-	}
-	// A new session may let agents work on itself, and nowhere else.
-	third := f.register("Third")
-	if err := check([]map[string]any{folder(third, runGrant(third.key, f.userID, third.id, third.id, []string{"folder.list", "folder.read"}, []string{"scope-1"}))}); err != nil {
-		t.Fatalf("a new session working on itself: %v", err)
-	}
-	if err := check([]map[string]any{folder(second, runGrant(third.key, f.userID, third.id, second.id, []string{"folder.list", "folder.read"}, []string{"scope-1"}))}); err == nil {
-		t.Fatal("a new session reached another device")
-	}
-	// Device inboxes are gone: files go to the Space Library, never to another device.
-	inbox := map[string]any{"device_id": second.id, "kind": "inbox", "opaque_ref": "inbox:" + second.id, "capabilities": []string{"files.receive"},
-		"run_grant": runGrant(first.key, f.userID, first.id, second.id, []string{"files.receive"}, []string{"inbox:" + second.id})}
-	if err := check([]map[string]any{inbox}); err == nil {
-		t.Fatal("an inbox grant was accepted")
 	}
 }

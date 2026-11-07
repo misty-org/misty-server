@@ -25,7 +25,7 @@ type channelClient struct {
 }
 
 func (f *deviceFixture) channelServer() *httptest.Server {
-	service := NewAgentsService(f.database)
+	service := NewDevicesService(f.database)
 	f.router.Post("/devices/{deviceID}/channel-ticket", service.DeviceChannelTicket())
 	f.router.Get("/devices/channel", service.DeviceChannel())
 	server := httptest.NewServer(f.router)

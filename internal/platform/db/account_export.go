@@ -73,7 +73,7 @@ func (db *Database) AccountPortableExport(
 	ctx context.Context, userID string,
 ) (*AccountPortableExport, error) {
 	out := &AccountPortableExport{
-		FormatVersion: 2,
+		FormatVersion: 3,
 		ExportedAt:    time.Now().UTC(),
 		Spaces:        []AccountExportSpace{},
 		Journal:       []AccountExportJournal{},

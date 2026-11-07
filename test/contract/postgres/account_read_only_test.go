@@ -22,14 +22,6 @@ func TestClosingAccountIsReadOnlyUntilResumed(t *testing.T) {
 	if err := database.CreateSession("closing-session-hash", user.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.Conn.Exec(`INSERT INTO ai_invocations(id,user_id,surface_id,mode,trigger_kind,state,idempotency_key)
-		VALUES('invocation_closing_running',$1,'global','drawer','message','running','closing-running')`, user.ID); err != nil {
-		t.Fatal(err)
-	}
-	if available, err := database.AIActionAvailable(ctx, user.ID, "global", "ask", "any"); err != nil || !available {
-		t.Fatalf("agents before closing = %v %v", available, err)
-	}
-
 	want := time.Now().Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
 	held, err := database.CloseAccount(ctx, user.ID, want)
 	if err != nil || !held.Equal(want) {
@@ -59,19 +51,11 @@ func TestClosingAccountIsReadOnlyUntilResumed(t *testing.T) {
 		t.Fatalf("export while closing: %v", err)
 	}
 
-	// Writes and agents are refused, naming the date.
+	// Writes are refused, naming the date.
 	var closingErr AccountClosingError
 	if err := database.RequireAccountWritable(ctx, user.ID); !errors.As(err, &closingErr) || !closingErr.DeleteAt.Equal(want) || !errors.Is(err, ErrAccountClosing) {
 		t.Fatalf("writable while closing = %v", err)
 	}
-	if available, err := database.AIActionAvailable(ctx, user.ID, "global", "ask", "any"); err != nil || available {
-		t.Fatalf("agents while closing = %v %v", available, err)
-	}
-	var state, code string
-	if err := database.Conn.QueryRow(`SELECT state,error_code FROM ai_invocations WHERE id='invocation_closing_running'`).Scan(&state, &code); err != nil || state != "canceled" || code != "account_closing" {
-		t.Fatalf("running invocation after close = %s %s %v", state, code, err)
-	}
-
 	if err := database.ResumeAccount(ctx, user.ID); err != nil {
 		t.Fatal(err)
 	}

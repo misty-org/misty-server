@@ -21,10 +21,10 @@ type operatorLimits struct {
 	fields map[string]json.RawMessage
 }
 
-// retiredSearchLimit was the monthly web search limit. Web search now runs on
-// the person's device on their own key, so the server counts no searches; a
-// billing service that still sends the field has it ignored.
-const retiredSearchLimit = "searches_per_month"
+// retiredLimits were monthly limits on web search and app actions. Both now run
+// on the person's computer on their own keys, so the server counts neither; a
+// billing service that still sends one has it ignored.
+var retiredLimits = map[string]bool{"searches_per_month": true, "app_actions_per_month": true}
 
 func (l *operatorLimits) UnmarshalJSON(data []byte) error {
 	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
@@ -35,15 +35,15 @@ func (l *operatorLimits) UnmarshalJSON(data []byte) error {
 
 func (l operatorLimits) apply(base db.AccountLimits) (db.AccountLimits, error) {
 	targets := map[string]**int64{
-		"storage_bytes": &base.StorageBytes, "devices": &base.Devices, "app_actions_per_month": &base.AppActionsPerMonth,
+		"storage_bytes": &base.StorageBytes, "devices": &base.Devices,
 	}
 	for name, raw := range l.fields {
 		target, known := targets[name]
-		if name == retiredSearchLimit {
+		if retiredLimits[name] {
 			continue
 		}
 		if !known {
-			return base, operatorInvalid("unknown limit " + strconv.Quote(name) + "; limits are storage_bytes, devices and app_actions_per_month")
+			return base, operatorInvalid("unknown limit " + strconv.Quote(name) + "; limits are storage_bytes and devices")
 		}
 		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			*target = nil

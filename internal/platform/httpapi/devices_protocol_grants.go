@@ -2,7 +2,6 @@ package api
 
 import (
 	"sort"
-	"time"
 
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
@@ -53,71 +52,4 @@ func parseDevicePolicy(record signedDeviceRecord, devicePublicKey []byte) (*devi
 		policy.Record.AgentSurfaces = []string{}
 	}
 	return policy, nil
-}
-
-// deviceRunGrant lets one run use named scopes and capabilities on a target
-// device. The requesting device signs it; the server cannot widen it.
-type deviceRunGrant struct {
-	AccountID         string
-	GrantID           string
-	RequesterDeviceID string
-	TargetDeviceID    string
-	AgentID           string
-	// ChatKey names the chat or scheduled run. Only the device acts on it: its workspace and write
-	// access come from this, so a job can't reach another chat's.
-	ChatKey           string
-	Capabilities      []string
-	Scopes            []string
-	IssuedAt          int64
-	ExpiresAt         int64
-	Payload           []byte
-	Signature         string
-}
-
-func parseDeviceRunGrant(record signedDeviceRecord, requesterKey []byte) (*deviceRunGrant, error) {
-	payload, fields, err := record.verify(requesterKey, deviceRunGrantDomain)
-	if err != nil {
-		return nil, err
-	}
-	grant := &deviceRunGrant{Payload: payload, Signature: record.Signature}
-	if err := decodeDeviceFields(fields, &grant.AccountID, &grant.GrantID, &grant.RequesterDeviceID, &grant.TargetDeviceID, &grant.AgentID, &grant.ChatKey, &grant.Capabilities, &grant.Scopes, &grant.IssuedAt, &grant.ExpiresAt); err != nil {
-		return nil, err
-	}
-	now := deviceClock().Unix()
-	if !deviceGrantIDPattern.MatchString(grant.GrantID) || !deviceIDPattern.MatchString(grant.RequesterDeviceID) || !deviceIDPattern.MatchString(grant.TargetDeviceID) ||
-		(grant.AgentID != "" && !deviceAgentIDPattern.MatchString(grant.AgentID)) || !deviceTimeFresh(grant.IssuedAt) || grant.ExpiresAt <= now || len(grant.ChatKey) > 256 ||
-		grant.ExpiresAt-grant.IssuedAt > int64(deviceRunGrantMaxAge/time.Second) || len(grant.Capabilities) == 0 || len(grant.Capabilities) > 64 || len(grant.Scopes) == 0 || len(grant.Scopes) > 64 {
-		return nil, errSignedDeviceRecord
-	}
-	for _, capability := range grant.Capabilities {
-		if !deviceCapabilityFormat.MatchString(capability) {
-			return nil, errSignedDeviceRecord
-		}
-	}
-	for _, scope := range grant.Scopes {
-		if !deviceScopeRefPattern.MatchString(scope) {
-			return nil, errSignedDeviceRecord
-		}
-	}
-	return grant, nil
-}
-
-func (g *deviceRunGrant) allows(scope string, capabilities []string) bool {
-	scopes := map[string]bool{}
-	for _, value := range g.Scopes {
-		scopes[value] = true
-	}
-	granted := map[string]bool{}
-	for _, value := range g.Capabilities {
-		granted[value] = true
-	}
-	if !scopes[scope] {
-		return false
-	}
-	for _, capability := range capabilities {
-		if !granted[capability] {
-			return false
-		}
-	}
-	return true
 }

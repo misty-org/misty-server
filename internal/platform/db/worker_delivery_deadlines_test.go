@@ -19,7 +19,7 @@ func workerExec(t *testing.T, database *Database, statement string) {
 		t.Fatal(err)
 	}
 }
-func TestWorkerControlAndEmbeddingDeadlines(t *testing.T) {
+func TestWorkerControlDeadlines(t *testing.T) {
 	database := workerTestDatabase(t)
 	workerExec(t, database, `INSERT INTO space_note_control_outbox VALUES('note',now()+interval '1 hour',NULL)`)
 	checkWorkerDelay(t, database, "note-control", true, 59*time.Minute, time.Hour)
@@ -36,13 +36,6 @@ func TestWorkerControlAndEmbeddingDeadlines(t *testing.T) {
 		t.Fatal(n, err)
 	}
 	checkWorkerDelay(t, database, "drawing-purge", false, 0, 0)
-	workerExec(t, database, `INSERT INTO ai_retrieval_documents VALUES('doc','owner','active');
- INSERT INTO ai_retrieval_chunks VALUES('doc',0,NULL,NULL)`)
-	checkWorkerDelay(t, database, "embedding", true, 0, 0)
-	workerExec(t, database, `UPDATE ai_retrieval_chunks SET embedding_lease_until=now()+interval '5 minutes'`)
-	checkWorkerDelay(t, database, "embedding", true, 4*time.Minute, 5*time.Minute)
-	workerExec(t, database, `UPDATE ai_retrieval_documents SET lifecycle_state='deleted'`)
-	checkWorkerDelay(t, database, "embedding", false, 0, 0)
 }
 func TestWorkerSocialDeadlinesNeverReplayUnknownSends(t *testing.T) {
 	database := workerTestDatabase(t)

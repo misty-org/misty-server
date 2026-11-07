@@ -55,7 +55,7 @@ templ stateCounts(groups [][]db.ConsoleStateCount) {
 }
 
 templ jobsPage(v jobsView) {
-	@pageHeader("Jobs", "Workflow schedules, AI invocations, agent runs and library reindexing")
+	@pageHeader("Jobs", "Library processing on this server")
 	if v.Err != "" {
 		@problem(v.Err)
 	}
@@ -82,37 +82,6 @@ templ jobsPage(v jobsView) {
 			<div class="table-row"><span class="muted">Nothing running and no failures in the last day.</span></div>
 		}
 	</div>
-}
-
-templ aiPage(v aiView) {
-	@pageHeader("AI", "Model provider and the last day of invocations")
-	@sectionLabel("Model")
-	<ul class="rows">
-		for _, s := range v.Model {
-			@settingRow(s)
-		}
-		if v.Gateway != nil {
-			@healthRow(v.Gateway.Label(), v.Gateway.OK(), checkDetail(*v.Gateway))
-		}
-	</ul>
-	@note("Models run on each person's desktop, on that device's own keys. The server holds none.")
-	if v.Err != "" {
-		@problem(v.Err)
-	}
-	@sectionLabel("Invocations in the last day, by mode")
-	if len(v.States) > 0 {
-		@stateCounts(countGroups(v.States))
-	} else {
-		@note("No invocations in the last day.")
-	}
-	if len(v.Failures) > 0 {
-		@sectionLabel("Top failure codes")
-		<ul class="rows">
-			for _, f := range v.Failures {
-				<li class="row"><span><code>{ f.State }</code></span><span>{ itoa(f.Count) }</span></li>
-			}
-		</ul>
-	}
 }
 
 templ settingRow(s setting) {

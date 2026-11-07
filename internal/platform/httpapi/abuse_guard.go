@@ -227,7 +227,7 @@ func (g *AbuseGuard) refresh(ctx context.Context) error {
 // Middleware rejects blocked callers before any routing or handler work.
 func (g *AbuseGuard) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions || isAgentRuntimeCallback(r) {
+		if r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
 		}

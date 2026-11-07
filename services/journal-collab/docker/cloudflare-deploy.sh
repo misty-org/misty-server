@@ -3,14 +3,14 @@ set -eu
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
   echo "CLOUDFLARE_API_TOKEN is required for the containerized Worker deployment." >&2
-  echo "Add a Workers Scripts:Edit API token to ~/.misty/server/dev/integrations/cloudflare.env." >&2
+  echo "Add a Workers Scripts:Edit API token to ~/.misty/.env/server/cloudflare.env." >&2
   exit 1
 fi
 
 if [ -z "${JOURNAL_COLLAB_TICKET_PUBLIC_KEY:-}" ] ||
   [ -z "${JOURNAL_COLLAB_CONTROL_SECRET:-}" ] ||
   [ -z "${JOURNAL_COLLAB_PROJECTION_SECRET:-}" ]; then
-  echo "The Worker secrets are missing from ~/.misty/server/dev/crypto/journal.env." >&2
+  echo "The Worker secrets are missing from ~/.misty/.env/server/crypto/journal.env." >&2
   exit 1
 fi
 

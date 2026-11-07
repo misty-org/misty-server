@@ -28,7 +28,7 @@ func limitsFromForm(form url.Values) (map[string]any, error) {
 		limits["storage_bytes"] = int64(math.Round(gb * gigabyte))
 	}
 	for _, field := range []struct{ name, label string }{
-		{"devices", "Devices"}, {"app_actions_per_month", "App actions a month"},
+		{"devices", "Devices"},
 	} {
 		value := strings.ReplaceAll(strings.TrimSpace(form.Get(field.name)), ",", "")
 		if value == "" {

@@ -16,7 +16,7 @@ for misty_goose_name in \
     break
   fi
 done
-misty_goose_env_file="${MISTY_ENV_DIR:-$HOME/.misty/server/dev}/database.env"
+misty_goose_env_file="${MISTY_ENV_DIR:-$HOME/.misty/.env/server}/database.env"
 if [[ "$misty_goose_has_explicit_config" == false && -f "$misty_goose_env_file" ]]; then
   set -a
   # shellcheck disable=SC1090

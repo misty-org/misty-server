@@ -38,10 +38,6 @@ func (db *Database) RemoveDevice(ctx context.Context, userID, targetID string) (
 			}
 			sessionHash = session.String
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE workflow_device_node_jobs SET cancel_requested_at=COALESCE(cancel_requested_at,NOW())
-			WHERE user_id=$1 AND assigned_device_id=$2 AND state IN ('queued','leased','running')`, userID, targetID); err != nil {
-			return err
-		}
 		_, err = tx.ExecContext(ctx, `DELETE FROM device_channel_tickets WHERE device_id=$1`, targetID)
 		return err
 	})

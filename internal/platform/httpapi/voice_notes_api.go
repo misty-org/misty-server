@@ -19,7 +19,7 @@ var voiceNoteModes = map[string]string{"notes": "Notes", "summary": "Summary", "
 // or chapters. The transcript is attached at the end of the Note.
 func (s *SpacesService) VoiceTranscriptNotes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := s.appsUser(w, r)
+		user, ok := authenticatedUser(w, r, s.database)
 		if !ok {
 			return
 		}
@@ -29,11 +29,11 @@ func (s *SpacesService) VoiceTranscriptNotes() http.HandlerFunc {
 			Template  string `json:"template"`
 			NoteID    string `json:"note_id"`
 			Language  string `json:"language"`
-			// A desktop writes the Note on its own model and sends it (docs/agents/runtime.md).
+			// A desktop writes the Note on its own model and sends it.
 			Result *voiceNotesResult `json:"result"`
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
-		if decodeAIJSON(w, r, &body) != nil || voiceNoteModes[body.Mode] == "" || len(body.UserNotes) > 40_000 || len(body.Template) > 8_000 || len(body.NoteID) > 200 {
+		if decodeStrictJSON(w, r, &body) != nil || voiceNoteModes[body.Mode] == "" || len(body.UserNotes) > 40_000 || len(body.Template) > 8_000 || len(body.NoteID) > 200 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_voice_notes"})
 			return
 		}

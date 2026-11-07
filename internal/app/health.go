@@ -96,8 +96,6 @@ func (monitor *healthMonitor) evaluate(ctx context.Context) (HealthSnapshot, int
 	})
 
 	checks["public_api"] = PublicAPIConfigurationCheck()
-	// Agents run on desktops; the server needs only the secret that signs run keys.
-	checks["agent_runtime"] = environmentConfigurationCheck("MISTY_AGENT_RUNTIME_CONTROL_SECRET")
 
 	overall, status := SummarizeHealth(checks)
 	version := strings.TrimSpace(config.Getenv("MISTY_SERVER_VERSION"))
@@ -127,25 +125,6 @@ func activeHealthCheck(ctx context.Context, critical bool, check func(context.Co
 		result.Message = "dependency check failed"
 	}
 	result.DurationMS = time.Since(started).Milliseconds()
-	return result
-}
-
-func environmentConfigurationCheck(groups ...string) HealthCheck {
-	result := HealthCheck{Status: "ready", Mode: "configuration", Critical: false}
-	for _, group := range groups {
-		configured := false
-		for _, key := range strings.Split(group, "|") {
-			if strings.TrimSpace(config.Getenv(key)) != "" {
-				configured = true
-				break
-			}
-		}
-		if !configured {
-			result.Status = "unconfigured"
-			result.Message = "configuration incomplete"
-			return result
-		}
-	}
 	return result
 }
 

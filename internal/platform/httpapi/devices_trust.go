@@ -11,7 +11,7 @@ import (
 // Signed-in sessions' names, policies and removal.
 
 // RenameDevice sets one device's name.
-func (s *AgentsService) RenameDevice() http.HandlerFunc {
+func (s *DevicesService) RenameDevice() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		device, ok := requestDevice(r)
 		if !ok {
@@ -21,7 +21,7 @@ func (s *AgentsService) RenameDevice() http.HandlerFunc {
 		var body struct {
 			Name string `json:"name"`
 		}
-		if decodeAIJSON(w, r, &body) != nil {
+		if decodeStrictJSON(w, r, &body) != nil {
 			return
 		}
 		body.Name = strings.TrimSpace(body.Name)
@@ -30,17 +30,17 @@ func (s *AgentsService) RenameDevice() http.HandlerFunc {
 			return
 		}
 		if target != device.DeviceID && device.State != "admitted" {
-			writeAgentError(w, db.ErrDeviceNotAdmitted)
+			writeDeviceError(w, db.ErrDeviceNotAdmitted)
 			return
 		}
 		err := s.database.RenameDevice(r.Context(), device.UserID, target, body.Name)
-		writeAgentResult(w, map[string]string{"name": body.Name}, err, http.StatusOK)
+		writeDeviceResult(w, map[string]string{"name": body.Name}, err, http.StatusOK)
 	}
 }
 
 // StoreDevicePolicy records a device's own signed permissions. Only the device
 // itself can sign them, so permissions change only on that device.
-func (s *AgentsService) StoreDevicePolicy() http.HandlerFunc {
+func (s *DevicesService) StoreDevicePolicy() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		device, ok := requestDevice(r)
 		if !ok {
@@ -49,7 +49,7 @@ func (s *AgentsService) StoreDevicePolicy() http.HandlerFunc {
 		var body struct {
 			Policy signedDeviceRecord `json:"policy"`
 		}
-		if decodeAIJSON(w, r, &body) != nil {
+		if decodeStrictJSON(w, r, &body) != nil {
 			return
 		}
 		policy, err := parseDevicePolicy(body.Policy, device.Key)
@@ -58,12 +58,12 @@ func (s *AgentsService) StoreDevicePolicy() http.HandlerFunc {
 			return
 		}
 		err = s.database.StoreDevicePolicy(r.Context(), device.UserID, device.DeviceID, policy.Record)
-		writeAgentResult(w, map[string]any{"version": policy.Record.Version}, err, http.StatusOK)
+		writeDeviceResult(w, map[string]any{"version": policy.Record.Version}, err, http.StatusOK)
 	}
 }
 
 // RemoveDevice removes a signed-in session for good.
-func (s *AgentsService) RemoveDevice() http.HandlerFunc {
+func (s *DevicesService) RemoveDevice() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		device, ok := requireAdmittedDevice(w, r)
 		if !ok {
@@ -72,7 +72,7 @@ func (s *AgentsService) RemoveDevice() http.HandlerFunc {
 		var body struct {
 			TargetDeviceID string `json:"targetDeviceId"`
 		}
-		if decodeAIJSON(w, r, &body) != nil {
+		if decodeStrictJSON(w, r, &body) != nil {
 			return
 		}
 		if !deviceIDPattern.MatchString(body.TargetDeviceID) {
@@ -80,7 +80,7 @@ func (s *AgentsService) RemoveDevice() http.HandlerFunc {
 			return
 		}
 		if _, err := s.database.RemoveDevice(r.Context(), device.UserID, body.TargetDeviceID); err != nil {
-			writeAgentError(w, err)
+			writeDeviceError(w, err)
 			return
 		}
 		s.devices().kick(device.UserID, body.TargetDeviceID)

@@ -22,16 +22,6 @@ func TestWorkerHubTargetsOneResourceAndResetsAll(t *testing.T) {
 		t.Fatal("reset failed to cover subscriptions")
 	}
 }
-func TestWorkerResourceTopicValidation(t *testing.T) {
-	for _, topic := range []string{"resource-lease:", "resource-lease:private-path", "resource-lease:" + fmt.Sprintf("%064s", "z"), "unknown"} {
-		if resourceLeaseTopic(topic) {
-			t.Fatalf("accepted malformed topic %q", topic)
-		}
-	}
-	if !resourceLeaseTopic("resource-lease:" + fmt.Sprintf("%064x", 1)) {
-		t.Fatal("rejected digest topic")
-	}
-}
 func BenchmarkWorkerHintIndexedByResource(b *testing.B) {
 	for _, count := range []int{1, 10000} {
 		b.Run(fmt.Sprint(count), func(b *testing.B) {

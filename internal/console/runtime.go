@@ -1,10 +1,8 @@
 package console
 
 import (
-	"context"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/a-h/templ"
 
@@ -93,35 +91,4 @@ func isSecretName(name string) bool {
 func (s *Server) setting(name string, required bool) setting {
 	value, ok := s.cfg.lookup(name)
 	return setting{Name: name, Value: value, Set: ok && value != "", Secret: isSecretName(name), Required: required}
-}
-
-type aiView struct {
-	Config   Config
-	Model    []setting
-	Gateway  *HealthCheck
-	States   []db.ConsoleStateCount
-	Failures []db.ConsoleStateCount
-	Err      string
-}
-
-func (s *Server) aiPage(r *http.Request) templ.Component {
-	view := aiView{Config: s.cfg}
-	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
-	defer cancel()
-	if snapshot, err := s.health.Fetch(ctx); err == nil {
-		if check, ok := snapshot.Checks["agent_runtime"]; ok {
-			check.Name = "agent_runtime"
-			view.Gateway = &check
-		}
-	}
-	if s.db == nil {
-		view.Err = "Database unavailable, so usage can't be shown."
-		return aiPage(view)
-	}
-	states, failures, err := s.db.ConsoleAIUsage(ctx)
-	view.States, view.Failures = states, failures
-	if err != nil {
-		view.Err = "Couldn't load AI usage: " + err.Error()
-	}
-	return aiPage(view)
 }

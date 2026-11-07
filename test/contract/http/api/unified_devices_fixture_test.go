@@ -24,7 +24,7 @@ func TestDesktopSignedDeviceRecordsVerifyOnTheServer(t *testing.T) {
 	}
 	// A changed byte anywhere breaks it.
 	tampered := fixture
-	tampered.Policy.Signature = fixture.RunGrant.Signature
+	tampered.Policy.Signature = fixture.Request.Signature
 	if err := TestingVerifyDeviceRecordFixture(tampered); err == nil {
 		t.Fatal("a policy with another record's signature verified")
 	}

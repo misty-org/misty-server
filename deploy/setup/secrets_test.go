@@ -200,7 +200,7 @@ func TestPendingMigrations(t *testing.T) {
 
 func TestInputsAreAllRequired(t *testing.T) {
 	_, err := readInputs(func(string) string { return "" })
-	if err == nil || !strings.Contains(err.Error(), "MISTY_COMPOSIO_API_KEY in ~/.misty/server/prod/composio.env") || !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID in ~/.misty/server/prod/google.env") {
+	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_API_TOKEN in ~/.misty/.env/server/cloudflare.env") || !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID in ~/.misty/.env/server/google.env") {
 		t.Fatalf("expected every missing input, got %v", err)
 	}
 	names := resourceNames("a-very-long-hostname-that-goes-on.and-on.misty.example")

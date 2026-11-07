@@ -126,10 +126,8 @@ func beginAccountDeletionTx(
 		WHERE id=$1`, userID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID); err != nil {
-		return err
-	}
-	return disableAccountAgentsTx(ctx, tx, userID)
+	_, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID)
+	return err
 }
 
 func (db *Database) AccountDeletionConnections(

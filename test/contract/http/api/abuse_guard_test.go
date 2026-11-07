@@ -67,7 +67,7 @@ func TestCostRoutesAreChargedPerAccountNotPerAddress(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		// One stolen credential, replayed from 200 different addresses — the
 		// botnet case that per-IP limiting cannot see.
-		request := httptest.NewRequest(http.MethodPost, "/ai/complete", nil)
+		request := httptest.NewRequest(http.MethodPost, "/spaces/space-1/notes/note_0123456789abcdef/assets/uploads", nil)
 		request.RemoteAddr = fmt.Sprintf("203.0.113.%d:1234", i%256)
 		request.Header.Set("Authorization", "Bearer stolen-session-token")
 		recorder := httptest.NewRecorder()
@@ -76,8 +76,8 @@ func TestCostRoutesAreChargedPerAccountNotPerAddress(t *testing.T) {
 			allowed++
 		}
 	}
-	if allowed > 12 {
-		t.Fatalf("one credential across many IPs got %d AI calls, want the 12/min account budget", allowed)
+	if allowed > 20 {
+		t.Fatalf("one credential across many IPs got %d uploads, want the 20/min account budget", allowed)
 	}
 }
 
@@ -86,14 +86,14 @@ func TestDistinctAccountsKeepIndependentBudgets(t *testing.T) {
 	handler := hardeningHandler(limiter)
 
 	call := func(token string) int {
-		request := httptest.NewRequest(http.MethodPost, "/ai/complete", nil)
+		request := httptest.NewRequest(http.MethodPost, "/spaces/space-1/notes/note_0123456789abcdef/assets/uploads", nil)
 		request.RemoteAddr = "203.0.113.7:1234"
 		request.Header.Set("Authorization", "Bearer "+token)
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, request)
 		return recorder.Code
 	}
-	for i := 0; i < 12; i++ {
+	for i := 0; i < 20; i++ {
 		call("account-one")
 	}
 	// A second account sharing the same NAT address must not inherit the first
@@ -104,7 +104,7 @@ func TestDistinctAccountsKeepIndependentBudgets(t *testing.T) {
 }
 
 func TestUnauthenticatedTrafficStillKeysOnAddress(t *testing.T) {
-	request := httptest.NewRequest(http.MethodPost, "/ai/complete", nil)
+	request := httptest.NewRequest(http.MethodPost, "/spaces/space-1/notes/note_0123456789abcdef/assets/uploads", nil)
 	request.RemoteAddr = "203.0.113.7:1234"
 	if got := RateLimitIdentity(request); got != "ip:203.0.113.7" {
 		t.Fatalf("rateLimitIdentity() = %q, want the address for anonymous traffic", got)
@@ -112,7 +112,7 @@ func TestUnauthenticatedTrafficStillKeysOnAddress(t *testing.T) {
 }
 
 func TestIdentityKeyDoesNotLeakTheCredential(t *testing.T) {
-	request := httptest.NewRequest(http.MethodPost, "/ai/complete", nil)
+	request := httptest.NewRequest(http.MethodPost, "/spaces/space-1/notes/note_0123456789abcdef/assets/uploads", nil)
 	request.Header.Set("Authorization", "Bearer super-secret-session-token")
 	key := RateLimitIdentity(request)
 	if strings.Contains(key, "super-secret-session-token") {
@@ -124,10 +124,10 @@ func TestIdentityKeyDoesNotLeakTheCredential(t *testing.T) {
 }
 
 func TestBearerAndCookieCredentialsAreBothRecognised(t *testing.T) {
-	bearer := httptest.NewRequest(http.MethodPost, "/ai/complete", nil)
+	bearer := httptest.NewRequest(http.MethodPost, "/spaces/space-1/notes/note_0123456789abcdef/assets/uploads", nil)
 	bearer.Header.Set("Authorization", "Bearer token-value")
 
-	cookie := httptest.NewRequest(http.MethodPost, "/ai/complete", nil)
+	cookie := httptest.NewRequest(http.MethodPost, "/spaces/space-1/notes/note_0123456789abcdef/assets/uploads", nil)
 	cookie.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "token-value"})
 
 	// The same session presented either way must land in the same bucket,

@@ -16,9 +16,8 @@ import (
 
 func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, realtime *api.RealtimeService) {
 	s.mountAccountRoutes(prefix, spaces)
-	s.Router.Get(prefix+"/agent-runs/{runID}", spaces.PersonalAgentRunDetail())
-	s.Router.Post(prefix+"/agent-runs/{runID}/cancel", spaces.CancelPersonalAgentRun())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces", api.ConditionalGET(spaces.Spaces()))
+	s.Router.Get(prefix+"/search", spaces.Search())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces", spaces.Spaces())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}", spaces.Space())
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}", spaces.Space())
@@ -27,11 +26,10 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.Patch(prefix+"/spaces/{spaceID}/item-state", api.SpacePersonalItems(s.Database))
 	s.Router.Get(prefix+"/spaces/{spaceID}/members", spaces.Members())
 	s.Router.Get(prefix+"/spaces/{spaceID}/agents", spaces.SpaceAgents())
+	s.Router.Put(prefix+"/spaces/{spaceID}/agents/{agentID}", spaces.SpaceAgent())
+	s.Router.Delete(prefix+"/spaces/{spaceID}/agents/{agentID}", spaces.SpaceAgent())
 	s.Router.Get(prefix+"/me/space-agents", spaces.MySpaceAgents())
 	s.Router.Get(prefix+"/spaces/{spaceID}/agent-artifacts", spaces.AgentArtifacts())
-	s.Router.Get(prefix+"/agent-mentions", spaces.AgentMentions())
-	s.Router.Get(prefix+"/agent-requests/{requestID}", spaces.AgentMemberRequest())
-	s.Router.Get(prefix+"/agent-requests/{requestID}/transcript", spaces.AgentRequestTranscript())
 	s.Router.Get(prefix+"/spaces/{spaceID}/members/{userID}/avatar", spaces.MemberAvatar())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/invitations", spaces.Invite())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/invitations", spaces.Invite())
@@ -45,6 +43,7 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.Post(prefix+"/spaces/{spaceID}/transfer", spaces.TransferOwner())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/messages", api.ConditionalGET(spaces.Messages()))
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/messages", spaces.Messages())
+	s.Router.Get(prefix+"/spaces/{spaceID}/messages/search", spaces.SearchMessages())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/conversations", spaces.Conversations())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/conversations", spaces.Conversations())
 	s.Router.Post(prefix+"/spaces/{spaceID}/conversations/dm", spaces.DirectConversation())
@@ -114,14 +113,13 @@ func (s *Server) CleanupExpiredJournalAssets(
 	return s.Library.CleanupExpiredJournalAssets(ctx, safetyWindow, limit)
 }
 
-func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
-	deviceJobsEnabled := serverFeatureEnabled("MISTY_DEVICE_JOBS_ENABLED")
+func (s *Server) mountAgentsRoutes(prefix string, service *api.DevicesService) {
 	connectedDevicesEnabled := serverConnectedDevicesConfigured()
-	// Devices are always available: adding one is how sync, agents and the
-	// shared clipboard trust it.
+	// Devices are always available: adding one is how sync and the shared
+	// clipboard trust it.
 	s.Router.Post(prefix+"/devices", service.RegisterDevice())
 	s.Router.Get(prefix+"/devices", service.ListDevices())
-	// One device identity for sync, agents and the shared clipboard. Trust changes
+	// One device identity for sync and the shared clipboard. Trust changes
 	// carry signatures the server verifies but cannot produce.
 	s.Router.Get(prefix+"/devices/channel", service.DeviceChannel())
 	s.Router.Post(prefix+"/devices/{deviceID}/channel-ticket", service.DeviceChannelTicket())
@@ -133,25 +131,6 @@ func (s *Server) mountAgentsRoutes(prefix string, service *api.AgentsService) {
 		// Space peer sessions between accounts still verify server tickets.
 		s.Router.Get(prefix+"/devices/peer-ticket-keys", service.ConnectedDeviceTicketKeys())
 	}
-	// Agent runs work on the desktop that keeps them (docs/agents/runtime.md).
-	s.Router.Post(prefix+"/devices/{deviceID}/agent-runtime/deliveries/claim", service.DeviceAuthenticated(s.Spaces.ClaimDeviceAgentRuntimeDeliveries()))
-	s.Router.Post(prefix+"/devices/{deviceID}/agent-runtime/deliveries/{deliveryID}/finish", service.DeviceAuthenticated(s.Spaces.FinishDeviceAgentRuntimeDelivery()))
-	s.Router.Post(prefix+"/devices/{deviceID}/embeddings/claim", service.DeviceAuthenticated(s.Spaces.ClaimDeviceEmbeddings()))
-	s.Router.Post(prefix+"/devices/{deviceID}/embeddings/complete", service.DeviceAuthenticated(s.Spaces.CompleteDeviceEmbeddings()))
-	if !deviceJobsEnabled {
-		return
-	}
-	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/claim", service.DeviceAuthenticated(service.ClaimWorkflowNodeJob()))
-	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/begin", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("begin")))
-	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/uncertain", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("uncertain")))
-	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/lease", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("renew")))
-	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/complete", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("complete")))
-	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/fail", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("fail")))
-	s.Router.Post(prefix+"/devices/{deviceID}/workflow-node-jobs/{jobID}/release", service.DeviceAuthenticated(service.WorkflowNodeLeaseAction("release")))
-}
-
-func serverFeatureEnabled(name string) bool {
-	return strings.EqualFold(strings.TrimSpace(config.Getenv(name)), "true")
 }
 
 func serverConnectedDevicesConfigured() bool {

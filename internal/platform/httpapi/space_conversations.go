@@ -130,12 +130,12 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		message, agentMentions, err := s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+		// An @mention runs on the sender's own computer, which posts the reply as an ordinary message.
+		message, _, err := s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		s.startAgentMentionRequests(r.Context(), userID, message, agentMentions)
 		writeJSON(w, http.StatusCreated, map[string]any{"message": message})
 	}
 }

@@ -12,14 +12,14 @@ import (
 	"github.com/lib/pq"
 )
 
-// Unified devices (docs/sync/devices.md). Signatures are verified by the
+// Unified devices. Signatures are verified by the
 // HTTP layer before any of these run; these functions keep the account's
 // device records, signed list, policies and admission requests consistent.
 
 var (
-	ErrDeviceKeyRevoked     = errors.New("device key was removed from this account")
-	ErrDeviceNotAdmitted    = errors.New("device is not added to this account")
-	ErrDevicePolicyStale    = errors.New("device policy is older than the current one")
+	ErrDeviceKeyRevoked  = errors.New("device key was removed from this account")
+	ErrDeviceNotAdmitted = errors.New("device is not added to this account")
+	ErrDevicePolicyStale = errors.New("device policy is older than the current one")
 )
 
 type DeviceRecord struct {

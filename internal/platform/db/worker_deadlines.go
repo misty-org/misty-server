@@ -47,31 +47,10 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 		deadline = `SELECT clock_timestamp() FROM space_drawings d WHERE d.lifecycle_state='deleting'
    AND EXISTS(SELECT 1 FROM space_drawing_control_outbox o WHERE o.drawing_id=d.id
    AND o.command='purge' AND o.delivered_at IS NOT NULL) LIMIT 1`
-	case "agent-runtime":
-		deadline = agentRuntimeWorkerDeadline
-	case "agent-tasks":
-		deadline = agentTaskWorkerDeadline
-	case "scheduled":
-		deadline = scheduledWorkerDeadline
-	case "ai-cleanup":
-		deadline = aiCleanupWorkerDeadline
 	case "account-deletion":
 		deadline = accountDeletionWorkerDeadline
 	case "rendition-reservations":
 		deadline = renditionReservationWorkerDeadline
-	case "embedding":
-		deadline = `SELECT min(due) FROM (
-   (SELECT clock_timestamp() AS due FROM ai_retrieval_chunks c JOIN ai_retrieval_documents d ON d.id=c.document_id
-    WHERE d.lifecycle_state='active' AND d.owner_user_id IS NOT NULL AND c.embedding IS NULL
-    AND c.embedding_lease_until IS NULL LIMIT 1)
-   UNION ALL
-   (SELECT c.embedding_lease_until AS due FROM ai_retrieval_chunks c JOIN ai_retrieval_documents d ON d.id=c.document_id
-    WHERE d.lifecycle_state='active' AND d.owner_user_id IS NOT NULL AND c.embedding IS NULL
-    AND c.embedding_lease_until IS NOT NULL ORDER BY c.embedding_lease_until LIMIT 1)
-   UNION ALL
-   (SELECT GREATEST(due_at, COALESCE(embedding_lease_until, due_at)) AS due FROM memory_chunks
-    WHERE embedding IS NULL ORDER BY due_at LIMIT 1)
-   ) pending`
 	default:
 		return 0, false, errors.New("unknown worker queue")
 	}

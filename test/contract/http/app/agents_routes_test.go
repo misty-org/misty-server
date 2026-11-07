@@ -10,7 +10,6 @@ import (
 
 func TestAgentRoutesRequireAuthentication(t *testing.T) {
 	configureJournalCollabForTest(t)
-	t.Setenv("MISTY_DEVICE_JOBS_ENABLED", "true")
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatal(err)

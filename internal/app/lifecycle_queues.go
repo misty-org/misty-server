@@ -4,29 +4,14 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// Scheduled runs and lifecycle steps wake on committed hints and their earliest
-// database deadline. Each queue starts only when its owning service exists, so
+// Lifecycle steps wake on committed hints and their earliest database deadline. Each queue starts only when its owning service exists, so
 // a disabled service can never leave due work that its queue cannot clear.
 func runLifecycleQueues(ctx context.Context, server *Server) {
-	queues := map[string]func(context.Context) (int, error){
-		"ai-cleanup": func(ctx context.Context) (int, error) { return server.Database.ProcessAICleanupJobs(ctx, 25) },
-	}
-	if server.AI != nil {
-		queues["scheduled"] = func(ctx context.Context) (int, error) {
-			now := time.Now().UTC()
-			recaps, err := server.AI.ProcessDueAIRecaps(ctx, now, 25)
-			if err != nil {
-				return recaps, err
-			}
-			workflows, err := server.AI.ProcessDueWorkflowSchedules(ctx, now, 25)
-			return recaps + workflows, err
-		}
-	}
+	queues := map[string]func(context.Context) (int, error){}
 	if server.Spaces != nil {
 		closings := api.NewAccountClosings(server.Database)
 		queues["account-deletion"] = func(ctx context.Context) (int, error) {

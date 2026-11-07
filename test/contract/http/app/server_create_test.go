@@ -101,11 +101,11 @@ func productionCoreValues() map[string]string {
 		"PORT":                 "8080",
 	}
 	for _, name := range []string{
-		"SPACE_LINK_ENCRYPTION_KEY", "MISTY_AUTH_SIGNING_KEY", "MISTY_AGENT_RUNTIME_CONTROL_SECRET",
+		"SPACE_LINK_ENCRYPTION_KEY", "MISTY_AUTH_SIGNING_KEY",
 		"MISTY_DEVICE_TICKET_PRIVATE_KEY", "MISTY_DEVICE_PAIRING_PEPPER", "R2_ACCESS_KEY", "R2_SECRET_KEY",
 		"PARTYKIT_HOST", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY", "JOURNAL_COLLAB_CONTROL_SECRET",
 		"JOURNAL_COLLAB_PROJECTION_SECRET", "JOURNAL_COLLAB_ROOM_SALT",
-		"MISTY_COMPOSIO_API_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+		"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
 	} {
 		values[name] = "configured"
 	}
@@ -120,7 +120,7 @@ func TestValidateProductionEnvironmentRequiresEveryIntegration(t *testing.T) {
 	if err := ValidateProductionEnvironment(); err != nil {
 		t.Fatalf("a complete production configuration = %v", err)
 	}
-	for _, name := range []string{"R2_ACCESS_KEY", "PARTYKIT_HOST", "MISTY_COMPOSIO_API_KEY", "GOOGLE_CLIENT_ID"} {
+	for _, name := range []string{"R2_ACCESS_KEY", "PARTYKIT_HOST", "GOOGLE_CLIENT_ID"} {
 		t.Setenv(name, "")
 		if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), name) {
 			t.Fatalf("production without %s = %v", name, err)

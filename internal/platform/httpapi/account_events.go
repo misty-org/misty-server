@@ -22,9 +22,9 @@ func accountEventRevalidation(d time.Duration) time.Duration {
 
 // AccountEvents streams committed invalidations, not private record contents.
 // Every reconnect starts with reset: snapshots remain the durable source of truth.
-func (s *AIService) AccountEvents() http.HandlerFunc {
+func (s *SpacesService) AccountEvents() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.requireUser(w, r)
+		userID, ok := authenticatedUser(w, r, s.database)
 		if !ok {
 			return
 		}

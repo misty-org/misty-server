@@ -21,7 +21,7 @@ func readOnlyServer(t *testing.T) http.Handler {
 	t.Helper()
 	t.Setenv("MISTY_PUBLIC_API_URL", "https://cloud.misty.example/v1")
 	database := testkit.OpenDatabase(t)
-	spaces, err := NewSpacesService(database, nil, base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
+	spaces, err := NewSpacesService(database, base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
 	if err != nil {
 		t.Fatal(err)
 	}

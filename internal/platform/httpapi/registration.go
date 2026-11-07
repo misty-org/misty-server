@@ -82,8 +82,8 @@ func writeEmailNotAllowed(w http.ResponseWriter) {
 func openSignupLimits(ctx context.Context, store interface {
 	SetAccountLimits(context.Context, string, db.AccountLimits) error
 }, userID string) error {
-	var storage, devices, actions int64
-	return store.SetAccountLimits(ctx, userID, db.AccountLimits{StorageBytes: &storage, Devices: &devices, AppActionsPerMonth: &actions})
+	var storage, devices int64
+	return store.SetAccountLimits(ctx, userID, db.AccountLimits{StorageBytes: &storage, Devices: &devices})
 }
 
 // registrationAllowed reports whether email may create an account now.

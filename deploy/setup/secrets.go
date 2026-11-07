@@ -49,7 +49,6 @@ var secretSpecs = []secretSpec{
 	{Name: "DB_MIGRATION_PASSWORD", Kind: hexSecret, DataBound: true},
 	{Name: "DB_PASSWORD", Kind: hexSecret, Rotatable: true},
 	{Name: "MISTY_AUTH_SIGNING_KEY", Kind: randomKey, Previous: "MISTY_AUTH_SIGNING_KEY_PREVIOUS"},
-	{Name: "MISTY_AGENT_RUNTIME_CONTROL_SECRET", Kind: randomKey, Previous: "MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS"},
 	{Name: "MISTY_OPERATOR_TOKEN", Kind: operatorToken, Previous: "MISTY_OPERATOR_TOKEN_PREVIOUS"},
 	{Name: "MISTY_METRICS_TOKEN", Kind: hexSecret, Rotatable: true},
 	{Name: "MISTY_DEVICE_PAIRING_PEPPER", Kind: randomKey, DataBound: true},

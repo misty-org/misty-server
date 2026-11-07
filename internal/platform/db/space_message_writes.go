@@ -37,81 +37,6 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 	})
 }
 
-func (db *Database) CreateMistySpaceMessageWithContent(ctx context.Context, userID, spaceID string, content []MessageSpan) (*SpaceMessage, error) {
-	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, "", "", content, false)
-}
-
-func (db *Database) CreateMistySpaceConversationMessageWithContent(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan) (*SpaceMessage, error) {
-	return db.createSpaceAgentMessageWithMembership(ctx, userID, spaceID, conversationID, "", content, false)
-}
-
-func (db *Database) createSpaceAgentMessageWithMembership(ctx context.Context, actingUserID, spaceID, conversationID, agentID string, content []MessageSpan, enforceMembership bool) (*SpaceMessage, error) {
-	return db.createSpaceAgentMessageWithProvenance(ctx, actingUserID, spaceID, conversationID, agentID, content, enforceMembership, "", nil)
-}
-
-func (db *Database) createSpaceAgentMessageWithProvenance(ctx context.Context, actingUserID, spaceID, conversationID, agentID string, content []MessageSpan, enforceMembership bool, replyToMessageID string, origin json.RawMessage) (*SpaceMessage, error) {
-	if err := ValidateMessage(content, nil); err != nil {
-		return nil, err
-	}
-	replyToMessageID = strings.TrimSpace(replyToMessageID)
-	if len(origin) == 0 {
-		origin = json.RawMessage(`{}`)
-	}
-	if !validJSONObject(origin) {
-		return nil, ErrSpaceInvalid
-	}
-	senderKind := "agent"
-	if agentID == "" {
-		senderKind = "system"
-		origin, _ = json.Marshal(map[string]any{"kind": "misty_assistant", "author_name": "Misty"})
-	}
-	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), SpaceID: spaceID, ConversationID: conversationID, SenderUserID: actingUserID, SenderKind: senderKind, SenderAgentID: agentID, Content: content, FileNodeIDs: []string{}, LibraryItemIDs: []string{}, Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID, Origin: origin}
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, actingUserID, spaceID); err != nil {
-			return err
-		}
-		if enforceMembership {
-			if _, err := askExecutionContextTx(ctx, tx, actingUserID, spaceID, agentID); err != nil {
-				return err
-			}
-		}
-		if conversationID != "" {
-			if err := requireSpaceConversationMemberTx(ctx, tx, actingUserID, spaceID, conversationID); err != nil {
-				return err
-			}
-		}
-		if replyToMessageID != "" {
-			var exists bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3)`, replyToMessageID, spaceID, conversationID).Scan(&exists); err != nil || !exists {
-				return ErrSpaceInvalid
-			}
-		}
-		raw, _ := json.Marshal(content)
-		if err := tx.QueryRowContext(ctx, `INSERT INTO space_messages(id,space_id,conversation_id,sender_user_id,sender_kind,sender_agent_id,content,reply_to_message_id,origin)
-			VALUES($1,$2,NULLIF($3,''),$4,$5,NULLIF($6,''),$7,NULLIF($8,''),$9) RETURNING seq,created_at`, out.ID, spaceID, conversationID, actingUserID, senderKind, agentID, raw, replyToMessageID, origin).Scan(&out.Seq, &out.CreatedAt); err != nil {
-			return err
-		}
-		if conversationID != "" {
-			if _, err := tx.ExecContext(ctx, `UPDATE space_conversations SET updated_at=NOW() WHERE id=$1 AND space_id=$2`, conversationID, spaceID); err != nil {
-				return err
-			}
-		}
-		if senderKind == "system" {
-			out.SenderName = "Misty"
-		} else {
-			if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT name FROM misty_ask_identities WHERE id=$1),'Former agent')`, agentID).Scan(&out.SenderName); err != nil {
-				return err
-			}
-		}
-		out.Sender = SpaceMessageSender{Kind: senderKind, AgentID: agentID, DisplayName: out.SenderName}
-		if _, err := recordSpaceEventTx(ctx, tx, spaceID, actingUserID, "message.created", out.ID, out); err != nil {
-			return err
-		}
-		return nil
-	})
-	return out, err
-}
-
 func (db *Database) UpsertSpaceNode(ctx context.Context, userID string, node SpaceNode) (*SpaceNode, error) {
 	node.DisplayName = strings.TrimSpace(node.DisplayName)
 	if node.ID == "" {
@@ -197,7 +122,7 @@ func (db *Database) SpaceNodes(ctx context.Context, userID, spaceID string) ([]S
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT id,space_id,COALESCE(parent_id,''),kind,display_name,uploader_user_id,mime_type,size_bytes,stale,metadata,created_at,updated_at
-			FROM space_nodes WHERE space_id=$1 AND (visibility='public' OR uploader_user_id=$2) ORDER BY parent_id NULLS FIRST,kind,display_name`, spaceID, itemViewer(ctx, userID))
+			FROM space_nodes WHERE space_id=$1 AND (visibility='public' OR uploader_user_id=$2) ORDER BY parent_id NULLS FIRST,kind,display_name`, spaceID, userID)
 		if err != nil {
 			return err
 		}
@@ -221,7 +146,7 @@ func (db *Database) SpaceNodeSecret(ctx context.Context, userID, spaceID, nodeID
 			return err
 		}
 		return tx.QueryRowContext(ctx, `SELECT id,space_id,COALESCE(parent_id,''),kind,display_name,uploader_user_id,mime_type,size_bytes,stale,metadata,created_at,updated_at,target_ciphertext,target_nonce,COALESCE(target_key_version,0)
-			FROM space_nodes WHERE id=$1 AND space_id=$2 AND (visibility='public' OR uploader_user_id=$3)`, nodeID, spaceID, itemViewer(ctx, userID)).Scan(&out.ID, &out.SpaceID, &out.ParentID, &out.Kind, &out.DisplayName, &out.UploaderUserID, &out.MIMEType, &out.SizeBytes, &out.Stale, &out.Metadata, &out.CreatedAt, &out.UpdatedAt, &out.TargetCipher, &out.TargetNonce, &out.KeyVersion)
+			FROM space_nodes WHERE id=$1 AND space_id=$2 AND (visibility='public' OR uploader_user_id=$3)`, nodeID, spaceID, userID).Scan(&out.ID, &out.SpaceID, &out.ParentID, &out.Kind, &out.DisplayName, &out.UploaderUserID, &out.MIMEType, &out.SizeBytes, &out.Stale, &out.Metadata, &out.CreatedAt, &out.UpdatedAt, &out.TargetCipher, &out.TargetNonce, &out.KeyVersion)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound

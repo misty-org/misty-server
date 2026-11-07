@@ -88,10 +88,10 @@ func (db *Database) MessageAttachmentDownload(ctx context.Context, userID, space
 	return out, err
 }
 
-// ExplicitAgentLibraryItemDownload resolves a Library item selected by a human
+// ExplicitLibraryItemDownload resolves a Library item selected by a human
 // for Agent context. It requires current Library visibility but does not grant
 // the Agent general download or enumeration access.
-func (db *Database) ExplicitAgentLibraryItemDownload(ctx context.Context, userID, spaceID, itemID string) (*LibraryDownload, error) {
+func (db *Database) ExplicitLibraryItemDownload(ctx context.Context, userID, spaceID, itemID string) (*LibraryDownload, error) {
 	out := &LibraryDownload{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryView); err != nil {

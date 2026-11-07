@@ -62,29 +62,6 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 			return false, err
 		}
 		permission = PermissionMessagesRead
-	case strings.HasPrefix(event.EventType, "agent.run."), strings.HasPrefix(event.EventType, "workflow.run."):
-		run := &SpaceRun{}
-		if err := scanSpaceRun(tx.QueryRowContext(ctx, `SELECT `+spaceRunColumns+` FROM space_runs WHERE id=$1`, event.EntityID), run); errors.Is(err, sql.ErrNoRows) {
-			// Retain requester-only visibility for legacy run events that predate
-			// canonical space_runs rows. Never expose another member's orphaned
-			// event through Studio visibility alone.
-			if event.ActorUserID != userID {
-				return false, nil
-			}
-			permission = PermissionAskRun
-		} else if err != nil {
-			return false, err
-		} else {
-			visible, err := sharedSpaceRunVisibleToUserTx(ctx, tx, run, userID)
-			if err != nil || !visible {
-				return false, err
-			}
-			if run.RequestingMemberID == userID {
-				permission = PermissionAskRun
-			} else {
-				permission = PermissionStudioView
-			}
-		}
 	case strings.HasPrefix(event.EventType, "note."):
 		// Notes are private to their creator and explicit grantees, so a note
 		// event must never reach the whole Space the way other event families
@@ -92,7 +69,7 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 		// answer comes from the note's own ACL, evaluated now rather than when
 		// the event was recorded.
 		return noteEventVisibleToUserTx(ctx, tx, userID, event)
-	case strings.HasPrefix(event.EventType, "agent."), strings.HasPrefix(event.EventType, "workflow."):
+	case strings.HasPrefix(event.EventType, "agent."):
 		permission = PermissionStudioView
 	default:
 		return true, nil
@@ -111,7 +88,7 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 
 func humanConversationParticipantTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID string) (bool, error) {
 	var visible bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_conversation_members cm JOIN space_conversations c ON c.id=cm.conversation_id WHERE cm.conversation_id=$1 AND cm.actor_kind='person' AND cm.user_id=$2 AND c.space_id=$3)`, conversationID, userID, spaceID).Scan(&visible)
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_conversation_members cm JOIN space_conversations c ON c.id=cm.conversation_id WHERE cm.conversation_id=$1 AND cm.user_id=$2 AND c.space_id=$3)`, conversationID, userID, spaceID).Scan(&visible)
 	return visible, err
 }
 

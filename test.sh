@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
 DEV_COMPOSE=(docker compose -f compose.dev.yml)
-MISTY_DEV_ENV_DIR="${MISTY_ENV_DIR:-$HOME/.misty/server/dev}"
+MISTY_DEV_ENV_DIR="${MISTY_ENV_DIR:-$HOME/.misty/.env/server}"
 if [[ -d "$MISTY_DEV_ENV_DIR" ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -81,7 +81,7 @@ if [[ "$SHOULD_BOOTSTRAP_TEST_DB" == "true" ]]; then
   ADMIN_DB_USER="$TEST_DB_USER"
 
   # The bootstrapped container has no TLS, so a production DB_SSLMODE inherited
-  # from ~/.misty/server/dev/database.env would fail every connection.
+  # from ~/.misty/.env/server/database.env would fail every connection.
   if [[ -z "$EXPLICIT_TEST_DB_SSLMODE" ]]; then
     export TEST_DB_SSLMODE="disable"
   fi

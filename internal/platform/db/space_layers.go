@@ -6,41 +6,15 @@ import (
 	"strings"
 )
 
-// Private and public layers (docs/spaces/as-profiles.md#private-and-public).
-// A Space item is public or private. A private item opens only for its owner,
-// and for the owner's own agents on runs the owner asked for. The RLS policies
-// say "public, or owned by the viewer"; queries that run as the service say
-// the same with itemViewer, so a forgotten filter in either still can't leak.
+// Private and public layers.
+// A Space item is public or private. A private item opens only for its owner.
+// The RLS policies say "public, or owned by the viewer"; queries that run as the
+// service say the same, so a forgotten filter in either still can't leak.
 
 const (
 	VisibilityPublic  = "public"
 	VisibilityPrivate = "private"
 )
-
-type publicLayerOnlyKey struct{}
-
-// WithPublicLayerOnly marks work that may read only the public layer, such
-// as a run a teammate asked of someone's agent: the agent acts as its owner,
-// but none of the owner's private items open for it.
-func WithPublicLayerOnly(ctx context.Context) context.Context {
-	return context.WithValue(ctx, publicLayerOnlyKey{}, true)
-}
-
-// PublicLayerOnly reports whether the work may read only the public layer.
-func PublicLayerOnly(ctx context.Context) bool {
-	only, _ := ctx.Value(publicLayerOnlyKey{}).(bool)
-	return only
-}
-
-// itemViewer is whose private items a query may return: the user, or nobody
-// when the work is public-only. Queries compare it as
-// (visibility='public' OR owner=$viewer).
-func itemViewer(ctx context.Context, userID string) string {
-	if PublicLayerOnly(ctx) {
-		return ""
-	}
-	return userID
-}
 
 func validVisibility(visibility string) bool {
 	return visibility == VisibilityPublic || visibility == VisibilityPrivate
@@ -81,42 +55,12 @@ func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID,
 	})
 }
 
-// memoryTreeTables hold one person's memory tree in a Space (phase 7), with
-// the column naming its owner.
-var memoryTreeTables = [][2]string{
-	{"memory_chunks", "owner_user_id"},
-	{"memory_backlog", "owner_user_id"},
-	{"memory_events", "owner_user_id"},
-	{"ai_recaps", "user_id"},
-	{"misty_memories", "user_id"},
-	{"agent_method_lessons", "user_id"},
-	{"agent_method_versions", "user_id"},
-	{"agent_methods", "user_id"},
-}
-
 // purgeSpaceMemberTx deletes everything of one person's in a Space, in the
-// transaction that takes them out of it: their memory rows and chunks, their
-// agent conversations, their
-// private notes, drawings, files and links, and (through the membership's
-// cascades) their agents' memberships.
+// transaction that takes them out of it: their private notes, drawings, files
+// and links, and (through the membership's cascades) their agents' listings.
 // Their public items stay with the Space. Their vault in the Space is the
 // sync tree's (phase 1) and goes through its own object deletion.
 func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
-	for _, table := range memoryTreeTables {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table[0]+` WHERE space_id=$1 AND `+table[1]+`=$2`, spaceID, userID); err != nil {
-			return err
-		}
-	}
-	conversations, err := privateItemIDsTx(ctx, tx, `SELECT id FROM misty_ask_conversations WHERE space_id=$1 AND user_id=$2`, spaceID, userID)
-	if err != nil {
-		return err
-	}
-	if len(conversations) > 0 {
-		// Their objects go at the next inventory pass, once no row names them.
-		if err := deleteAgentConversationsTx(ctx, tx, userID, conversations); err != nil {
-			return err
-		}
-	}
 	notes, err := privateItemIDsTx(ctx, tx, `SELECT id FROM space_notes WHERE space_id=$1 AND creator_user_id=$2 AND visibility='private' AND lifecycle_state IN ('active','archived','archived_creator_left')`, spaceID, userID)
 	if err != nil {
 		return err

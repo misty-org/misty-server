@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/misty-org/misty-server/internal/platform/db"
 
@@ -40,27 +39,14 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		message, agentMentions, err := s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+		// An @mention runs on the sender's own computer, which posts the reply as an ordinary message.
+		message, _, err := s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		s.startAgentMentionRequests(r.Context(), userID, message, agentMentions)
 		writeJSON(w, http.StatusCreated, map[string]any{"message": message})
 	}
-}
-
-func renderMessageText(content []db.MessageSpan) string {
-	var b strings.Builder
-	for _, span := range content {
-		if span.Type == "text" {
-			b.WriteString(span.Text)
-		} else if span.Label != "" {
-			b.WriteString("@")
-			b.WriteString(span.Label)
-		}
-	}
-	return strings.TrimSpace(b.String())
 }
 
 func (s *SpacesService) Message() http.HandlerFunc {

@@ -139,7 +139,7 @@ func confirmEmail(link string) (subject, text, htmlBody string) {
 }
 
 const (
-	htmlStart =`<!doctype html><html><body style="margin:0;padding:24px;background:#fff;color:#111;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5"><div style="max-width:520px">`
+	htmlStart = `<!doctype html><html><body style="margin:0;padding:24px;background:#fff;color:#111;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5"><div style="max-width:520px">`
 	htmlEnd   = `<p style="margin:24px 0 0;color:#777;font-size:13px">Misty</p></div></body></html>`
 )
 

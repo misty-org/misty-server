@@ -1,7 +1,7 @@
 // Package email sends a server's email through Mailjet's v3.1 send API
 // (https://dev.mailjet.com/email/guides/send-api-v31/): one message per call,
 // over HTTPS with the API key and secret as basic auth. Mailjet is optional: a
-// server without it answers with links instead (docs/self-hosting.md#email).
+// server without it answers with links instead.
 package email
 
 import (

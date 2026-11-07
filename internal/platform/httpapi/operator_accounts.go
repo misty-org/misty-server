@@ -25,7 +25,7 @@ import (
 // The operator account API (/operator/v1) lets whoever runs this server, or
 // its billing service, create accounts with limits, change the limits and
 // billing period, and suspend, close (read-only, then deleted) or resume an account. It is
-// authorized by MISTY_OPERATOR_TOKEN, unmounted while that is unset; docs/cloud/README.md has the contract.
+// authorized by MISTY_OPERATOR_TOKEN, unmounted while that is unset.
 // A setup key it issues comes back in the answer as setup_key and setup_link for
 // the caller to pass on; a server with Mailjet configured also emails it.
 

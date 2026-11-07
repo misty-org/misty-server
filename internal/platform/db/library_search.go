@@ -35,7 +35,7 @@ func (db *Database) LibraryFacets(ctx context.Context, userID, spaceID, prefix s
 			return err
 		}
 		// Counts cover public items and the viewer's own private ones.
-		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.item_viewer',$1,true)`, itemViewer(ctx, userID)); err != nil {
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.item_viewer',$1,true)`, userID); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FILTER(WHERE i.lifecycle_state='ready' AND i.hidden=FALSE),count(*) FILTER(WHERE i.lifecycle_state='ready' AND i.hidden=FALSE AND i.favorite=TRUE),count(*) FILTER(WHERE i.lifecycle_state='ready' AND i.hidden=TRUE),count(*) FILTER(WHERE i.lifecycle_state='trash') FROM space_library_items i WHERE i.space_id=$1 AND (i.visibility='public' OR i.added_by_user_id=current_setting('app.item_viewer',true))`, spaceID).Scan(&out.Total, &out.Favorites, &out.Hidden, &out.RecentlyDeleted); err != nil {

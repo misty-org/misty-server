@@ -16,7 +16,6 @@ func (db *Database) accountStore() accounts.Store {
 }
 
 var ErrInvalidUsername = accounts.ErrInvalidUsername
-var ErrInvalidPassword = accounts.ErrInvalidPassword
 var ErrUsernameTaken = accounts.ErrUsernameTaken
 var ErrPasswordAccount = accounts.ErrPasswordAccount
 var ErrEmailTaken = accounts.ErrEmailTaken
@@ -77,24 +76,6 @@ func (db *Database) AnyAccount(ctx context.Context) (bool, error) {
 	var exists bool
 	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users)`).Scan(&exists)
-	})
-	return exists, err
-}
-
-// PendingInvitationForEmail reports whether a live Space invitation (not
-// accepted, revoked or expired) names this email, which lets its owner create
-// an account on a server that takes new accounts only by invitation.
-func (db *Database) PendingInvitationForEmail(ctx context.Context, email string) (bool, error) {
-	email = normalizeEmail(email)
-	if email == "" {
-		return false, nil
-	}
-	var exists bool
-	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `SELECT EXISTS(
-			SELECT 1 FROM space_invitations
-			WHERE lower(invited_email)=$1 AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at>NOW()
-		)`, email).Scan(&exists)
 	})
 	return exists, err
 }

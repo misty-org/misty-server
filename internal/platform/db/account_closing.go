@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Closing an account (docs/cloud/README.md): the operator account API, or the
+// Closing an account: the operator account API, or the
 // billing service through it, sets the day the account's data is deleted.
 // Until then the account is read-only (account_read_only.go): it signs in,
 // reads and exports, and changes nothing. On the date the account-deletion
@@ -36,7 +36,7 @@ func (db *Database) CloseAccount(ctx context.Context, userID string, deleteAt ti
 			RETURNING delete_at`, userID, deleteAt.UTC()).Scan(&held); err != nil {
 			return err
 		}
-		return stopClosingAccountWorkTx(ctx, tx, userID)
+		return nil
 	})
 	return held.UTC(), err
 }

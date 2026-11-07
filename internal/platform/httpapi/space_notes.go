@@ -67,6 +67,20 @@ func (s *SpacesService) SpaceNotes() http.HandlerFunc {
 		spaceID := chi.URLParam(r, "spaceID")
 		switch r.Method {
 		case http.MethodGet:
+			if r.URL.Query().Has("q") {
+				text, valid := spaceSearchText(r)
+				if !valid {
+					writeSpaceError(w, db.ErrSpaceInvalid)
+					return
+				}
+				notes, err := s.database.SearchSpaceNotes(r.Context(), userID, spaceID, text, spaceSearchLimit(r))
+				if err != nil {
+					writeSpaceError(w, err)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]any{"notes": notes})
+				return
+			}
 			notes, err := s.database.AccessibleSpaceNotes(r.Context(), userID, spaceID)
 			if err != nil {
 				writeSpaceError(w, err)
@@ -74,18 +88,7 @@ func (s *SpacesService) SpaceNotes() http.HandlerFunc {
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"notes": notes})
 		case http.MethodPost:
-			var body struct {
-				Title string `json:"title"`
-			}
-			if decodeJSON(w, r, &body) != nil {
-				return
-			}
-			note, err := s.database.CreateSpaceNote(r.Context(), userID, spaceID, body.Title)
-			if err != nil {
-				writeSpaceError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusCreated, note)
+			s.createSpaceNote(w, r, userID, spaceID)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}

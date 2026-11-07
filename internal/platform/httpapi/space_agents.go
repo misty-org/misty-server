@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // SpaceAgents lists the agents in a Space, each under the person who owns it.
@@ -38,58 +39,36 @@ func (s *SpacesService) MySpaceAgents() http.HandlerFunc {
 	}
 }
 
-// AgentMemberRequest shows one request to the member who sent it or the owner
-// of the agent doing it.
-func (s *SpacesService) AgentMemberRequest() http.HandlerFunc {
+// SpaceAgent lists one of the caller's agents in a Space, or takes it out. The
+// agent itself lives on the caller's computer: the Space keeps its id and name
+// under its person, and nothing else about it.
+func (s *SpacesService) SpaceAgent() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
 		if !ok {
 			return
 		}
-		request, err := s.database.AgentMemberRequestForUser(r.Context(), userID, chi.URLParam(r, "requestID"))
+		spaceID, agentID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "agentID")
+		if r.Method == http.MethodDelete {
+			if err := s.database.RemoveSpaceAgent(r.Context(), userID, spaceID, agentID); err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := decodeJSON(w, r, &body); err != nil {
+			writeSpaceError(w, db.ErrSpaceInvalid)
+			return
+		}
+		agent, err := s.database.AddSpaceAgent(r.Context(), userID, spaceID, agentID, body.Name)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"request": request, "state": memberRequestState(request), "view": agentRequestView(request)})
-	}
-}
-
-// AgentMentions lists the caller's own @mentions of agents with how each run
-// went, for the Mentions list on the Agents page.
-func (s *SpacesService) AgentMentions() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		requests, err := s.database.AgentMentionsForUser(r.Context(), userID, 100)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		mentions := make([]map[string]any, 0, len(requests))
-		for index := range requests {
-			request := &requests[index]
-			mentions = append(mentions, map[string]any{"request": request, "state": memberRequestState(request), "view": agentRequestView(request)})
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"mentions": mentions})
-	}
-}
-
-// AgentRequestTranscript shows the steps behind an agent's reply to the person
-// who mentioned it, so they can see how it was done. No one else may.
-func (s *SpacesService) AgentRequestTranscript() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		steps, err := s.database.AgentRequestTranscript(r.Context(), userID, chi.URLParam(r, "requestID"))
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"steps": steps})
+		writeJSON(w, http.StatusOK, agent)
 	}
 }

@@ -3,13 +3,10 @@ package app
 import (
 	"context"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/misty-org/misty-server/internal/platform/config"
 	"github.com/misty-org/misty-server/internal/platform/email"
-
-	"github.com/google/uuid"
 )
 
 func Run() {
@@ -52,7 +49,6 @@ func Run() {
 				server.BrowserSync.Shutdown()
 			}
 		}),
-		WorkerFunc(func(ctx context.Context) { runPersonalAgentTaskProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runLibraryRenditionProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { email.Run(ctx, server.Database) }),
@@ -68,27 +64,4 @@ func Run() {
 		panic(err)
 	}
 	log.Println("Misty server stopped")
-}
-
-// The agent dispatcher runs as two durable queues woken by committed hints and
-// their earliest real deadline: invocation runtime deliveries and Space runs.
-func runPersonalAgentTaskProcessing(ctx context.Context, server *Server) {
-	if server.Spaces == nil {
-		return
-	}
-	workerID := "personal-agent-task-worker-" + uuid.NewString()
-	var workers sync.WaitGroup
-	if server.Spaces.AgentRuntimeDeliveriesEnabled() {
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
-			runDatabaseQueue(ctx, server, "agent-runtime", func(ctx context.Context) (int, error) {
-				return server.Spaces.ProcessAgentRuntimeDeliveries(ctx, 2)
-			})
-		}()
-	}
-	runDatabaseQueue(ctx, server, "agent-tasks", func(ctx context.Context) (int, error) {
-		return server.Spaces.ProcessPersonalAgentTasks(ctx, workerID, 2)
-	})
-	workers.Wait()
 }

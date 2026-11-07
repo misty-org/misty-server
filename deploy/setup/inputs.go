@@ -9,15 +9,14 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// requiredInputs are the values the operator writes into the four files under
-// ~/.misty/server/prod/. Every one is required: Misty has no optional integrations. The
+// requiredInputs are the values the operator writes into the three files under
+// ~/.misty/.env/server/. Every one is required: Misty has no optional integrations. The
 // server sends no email, so there is no mail provider to configure.
 var requiredInputs = []struct{ File, Name string }{
 	{"misty.env", "MISTY_HOSTNAME"},
 	{"cloudflare.env", "CLOUDFLARE_API_TOKEN"},
 	{"cloudflare.env", "CLOUDFLARE_ACCOUNT_ID"},
 	{"cloudflare.env", "CLOUDFLARE_ZONE_ID"},
-	{"composio.env", "MISTY_COMPOSIO_API_KEY"},
 	{"google.env", "GOOGLE_CLIENT_ID"},
 	{"google.env", "GOOGLE_CLIENT_SECRET"},
 }
@@ -43,11 +42,11 @@ func readInputs(getenv func(string) string) (Inputs, error) {
 	var missing []string
 	for _, input := range requiredInputs {
 		if strings.TrimSpace(getenv(input.Name)) == "" {
-			missing = append(missing, fmt.Sprintf("%s in ~/.misty/server/prod/%s", input.Name, input.File))
+			missing = append(missing, fmt.Sprintf("%s in ~/.misty/.env/server/%s", input.Name, input.File))
 		}
 	}
 	if len(missing) > 0 {
-		return Inputs{}, fmt.Errorf("missing %s (docs/self-hosting.md lists every value)", strings.Join(missing, ", "))
+		return Inputs{}, fmt.Errorf("missing %s", strings.Join(missing, ", "))
 	}
 	inputs := Inputs{
 		Hostname:  strings.ToLower(strings.TrimSpace(getenv("MISTY_HOSTNAME"))),

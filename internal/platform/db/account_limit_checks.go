@@ -100,14 +100,3 @@ func RequireAccountStorageRoomTx(ctx context.Context, tx *sql.Tx, userID string,
 	}
 	return nil
 }
-
-// AccountStorageUsed is what the account stores, for the operator.
-func (db *Database) AccountStorageUsed(ctx context.Context, userID string) (int64, error) {
-	var used int64
-	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
-		var err error
-		used, err = accountStorageUsedTx(ctx, tx, userID)
-		return err
-	})
-	return used, err
-}

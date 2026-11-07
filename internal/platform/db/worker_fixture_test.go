@@ -54,8 +54,6 @@ func workerTestDatabase(t *testing.T) *Database {
  CREATE TABLE social_scheduled_messages(id text PRIMARY KEY,status text,scheduled_at timestamptz,authority_id text);
  CREATE TABLE social_send_authorities(id text PRIMARY KEY,allow_scheduled bool,revoked_at timestamptz);
  CREATE TABLE social_bindings(id text PRIMARY KEY,status text,disabled_at timestamptz);
- CREATE TABLE ai_retrieval_documents(id text PRIMARY KEY,owner_user_id text,lifecycle_state text);
- CREATE TABLE ai_retrieval_chunks(document_id text,ordinal int,embedding text,embedding_lease_until timestamptz);
  INSERT INTO library_blobs(id) VALUES('blob');
  INSERT INTO library_files(id,blob_id) VALUES('file','blob');
  INSERT INTO space_library_items(id,file_id) VALUES('item','file');

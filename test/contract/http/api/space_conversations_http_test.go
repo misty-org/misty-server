@@ -84,7 +84,7 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 	ctx := context.Background()
 
 	key := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
-	spaces, err := NewSpacesService(database, nil, key)
+	spaces, err := NewSpacesService(database, key)
 	if err != nil {
 		t.Fatalf("NewSpacesService() error = %v", err)
 	}

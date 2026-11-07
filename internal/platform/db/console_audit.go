@@ -46,13 +46,10 @@ func (db *Database) ConsoleRecentAudit(ctx context.Context, limit int) ([]Consol
 	return entries, err
 }
 
-// ConsoleOverviewCounts returns active accounts and in-progress AI runs.
-func (db *Database) ConsoleOverviewCounts(ctx context.Context) (accounts, activeRuns int, err error) {
+// ConsoleOverviewCounts returns the number of active accounts.
+func (db *Database) ConsoleOverviewCounts(ctx context.Context) (accounts int, err error) {
 	err = db.consoleTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `
-			SELECT (SELECT count(*) FROM users WHERE lifecycle_state = 'active'),
-			       (SELECT count(*) FROM ai_invocations WHERE state NOT IN ('completed','failed','canceled'))`,
-		).Scan(&accounts, &activeRuns)
+		return tx.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE lifecycle_state = 'active'`).Scan(&accounts)
 	})
-	return accounts, activeRuns, err
+	return accounts, err
 }

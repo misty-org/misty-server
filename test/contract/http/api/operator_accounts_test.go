@@ -179,7 +179,7 @@ func TestOperatorLimitsPatchSetsOnlyNamedFields(t *testing.T) {
 	id, _ := accountField(body, "id").(string)
 	rec, body := call(t, handler, http.MethodPatch, "/operator/v1/accounts/"+id, operatorToken, `{"limits":{"devices":null,"storage_bytes":150000000000}}`)
 	if rec.Code != http.StatusOK || accountField(body, "limits", "devices") != nil ||
-		accountField(body, "limits", "storage_bytes") != float64(150000000000) || accountField(body, "limits", "app_actions_per_month") != float64(1000) {
+		accountField(body, "limits", "storage_bytes") != float64(150000000000) || accountField(body, "limits", "app_actions_per_month") != nil {
 		t.Fatalf("patch = %d %v", rec.Code, body)
 	}
 	for _, bad := range []string{`{"limits":{"seats":3}}`, `{"limits":{"devices":-1}}`, `{"limits":{"devices":"5"}}`} {

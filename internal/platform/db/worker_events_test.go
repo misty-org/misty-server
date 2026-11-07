@@ -89,7 +89,7 @@ func TestWorkerNotificationsCommitRollbackIsolationAndReconnect(t *testing.T) {
 func TestWorkerDeadlinesAndClaimEligibility(t *testing.T) {
 	database := workerTestDatabase(t)
 	ctx := context.Background()
-	for _, queue := range []string{"library-edit", "note-control", "drawing-control", "drawing-purge", "embedding"} {
+	for _, queue := range []string{"library-edit", "note-control", "drawing-control", "drawing-purge"} {
 		if _, pending, err := database.NextWorkerDelay(ctx, queue); err != nil || pending {
 			t.Fatal("empty queue", queue, pending, err)
 		}

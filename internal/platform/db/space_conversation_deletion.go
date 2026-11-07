@@ -103,7 +103,7 @@ func messageIDsForConversationTx(ctx context.Context, tx *sql.Tx, spaceID, conve
 
 func humanMemberIDsForConversationTx(ctx context.Context, tx *sql.Tx, conversationID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT user_id FROM space_conversation_members
-		WHERE conversation_id=$1 AND actor_kind='person' AND user_id IS NOT NULL`, conversationID)
+		WHERE conversation_id=$1 `, conversationID)
 	if err != nil {
 		return nil, err
 	}
@@ -117,17 +117,6 @@ func humanMemberIDsForConversationTx(ctx context.Context, tx *sql.Tx, conversati
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
-}
-
-func cleanupSpaceConversationRunsTx(ctx context.Context, tx *sql.Tx, spaceID, conversationID string) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM space_events e USING space_runs r
-		WHERE e.entity_id=r.id AND r.space_id=$1
-		AND (r.scope_conversation_id=$2 OR r.source_conversation_id=$2)`, spaceID, conversationID); err != nil {
-		return err
-	}
-	_, err := tx.ExecContext(ctx, `DELETE FROM space_runs
-		WHERE space_id=$1 AND (scope_conversation_id=$2 OR source_conversation_id=$2)`, spaceID, conversationID)
-	return err
 }
 
 // DeleteOrClearSpaceConversation permanently closes a conversation and removes
@@ -156,9 +145,6 @@ func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, 
 		}
 		participantUserIDs, err := humanMemberIDsForConversationTx(ctx, tx, conversationID)
 		if err != nil {
-			return err
-		}
-		if err := cleanupSpaceConversationRunsTx(ctx, tx, spaceID, conversationID); err != nil {
 			return err
 		}
 		ids, err := messageIDsForConversationTx(ctx, tx, spaceID, conversationID)

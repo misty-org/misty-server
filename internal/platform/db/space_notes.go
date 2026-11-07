@@ -78,12 +78,12 @@ func noteAccessForTx(ctx context.Context, tx *sql.Tx, userID, noteID string) (No
 	isCreator := userID == creatorUserID
 	isOwner := role == "owner"
 	// A private note opens only for its creator, and not on public-only work.
-	if visibility == VisibilityPrivate && itemViewer(ctx, userID) != creatorUserID {
+	if visibility == VisibilityPrivate && userID != creatorUserID {
 		return noteAccessDenied, nil
 	}
 	if audienceKind == SpaceAudienceConversation {
 		var participant bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_conversation_members WHERE conversation_id=$1 AND actor_kind='person' AND user_id=$2)`, audienceConversationID, userID).Scan(&participant); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_conversation_members WHERE conversation_id=$1 AND user_id=$2)`, audienceConversationID, userID).Scan(&participant); err != nil {
 			return noteAccessDenied, err
 		}
 		if !participant {
@@ -255,12 +255,12 @@ func (db *Database) AccessibleSpaceNotes(ctx context.Context, userID, spaceID st
 			           AND (source.audience_kind='space' OR EXISTS(
 			               SELECT 1 FROM space_conversation_members cm
 			               WHERE cm.conversation_id=source.audience_conversation_id
-			                 AND cm.actor_kind='person' AND cm.user_id=$1))) AS backlink_count
+			                 AND cm.user_id=$1))) AS backlink_count
 			 FROM space_notes n
 			 WHERE n.space_id=$2 AND n.lifecycle_state='active'
 			   AND (n.visibility='public' OR n.creator_user_id=$3)
-			   AND (n.audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=n.audience_conversation_id AND cm.actor_kind='person' AND cm.user_id=$1))
-			 ORDER BY n.updated_at DESC`, userID, spaceID, itemViewer(ctx, userID))
+			   AND (n.audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=n.audience_conversation_id AND cm.user_id=$1))
+			 ORDER BY n.updated_at DESC`, userID, spaceID, userID)
 		if err != nil {
 			return err
 		}

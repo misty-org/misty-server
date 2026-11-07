@@ -11,7 +11,7 @@ import (
 
 func TestSpaceLinkEncryptionRoundTrip(t *testing.T) {
 	key := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
-	service, err := NewSpacesService(nil, nil, key)
+	service, err := NewSpacesService(nil, key)
 	if err != nil {
 		t.Fatal(err)
 	}

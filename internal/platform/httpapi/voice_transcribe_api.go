@@ -20,7 +20,7 @@ const voiceFileMaxBytes = 25_000_000
 // needs Library view permission in that Space.
 func (s *SpacesService) VoiceTranscribeLibraryItem() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := s.appsUser(w, r)
+		user, ok := authenticatedUser(w, r, s.database)
 		if !ok {
 			return
 		}
@@ -29,11 +29,10 @@ func (s *SpacesService) VoiceTranscribeLibraryItem() http.HandlerFunc {
 			LibraryItemID string `json:"library_item_id"`
 			Language      string `json:"language"`
 			// A desktop transcribes on its own model and sends what it heard
-			// (docs/agents/runtime.md).
 			Result *diarizedResult `json:"result"`
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<20)
-		if decodeAIJSON(w, r, &body) != nil || body.SpaceID == "" || body.LibraryItemID == "" || len(body.Language) > 16 {
+		if decodeStrictJSON(w, r, &body) != nil || body.SpaceID == "" || body.LibraryItemID == "" || len(body.Language) > 16 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_transcribe"})
 			return
 		}
@@ -52,7 +51,7 @@ func (e voiceFileError) Error() string { return string(e) }
 // transcribeLibraryItemOnDevice answers a desktop in two steps: first the file to transcribe,
 // then, with the desktop's result, the saved transcript.
 func (s *SpacesService) transcribeLibraryItemOnDevice(w http.ResponseWriter, r *http.Request, user, spaceID, itemID string, result *diarizedResult) {
-	audio, download, err := s.library.ReadExplicitAgentAttachment(r.Context(), user, spaceID, "library_item", itemID, voiceFileMaxBytes)
+	audio, download, err := s.library.ReadLibraryItem(r.Context(), user, spaceID, itemID, voiceFileMaxBytes)
 	if err != nil {
 		writeTranscribeError(w, err)
 		return

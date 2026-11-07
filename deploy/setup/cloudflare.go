@@ -28,7 +28,7 @@ type apiError struct {
 }
 
 func (e *apiError) Error() string {
-	return fmt.Sprintf("Cloudflare refused %s %s (HTTP %d, codes %v); check the API token's permissions (docs/cloudflare.md)", e.Method, e.Path, e.Status, e.Codes)
+	return fmt.Sprintf("Cloudflare refused %s %s (HTTP %d, codes %v); check the API token's permissions", e.Method, e.Path, e.Status, e.Codes)
 }
 
 func notFound(err error) bool {

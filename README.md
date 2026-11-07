@@ -1,6 +1,6 @@
 # Misty Server
 
-Misty Server provides accounts, encrypted workspace sync, file services, and the control plane for agents. Agents, every model call and web search run on the person's desktop ([docs/agents/runtime.md](https://github.com/misty-org/misty/blob/main/docs/agents/runtime.md)); the server never calls a model, holds no search key and makes no search call. It lives in `server/` alongside the desktop app and CLI.
+Misty Server provides accounts, encrypted workspace sync, Spaces and file services. Agents, every model call and web search run on the person's desktop; the server never calls a model, holds no search key and makes no search call. It lives in `server/` alongside the desktop app and CLI.
 
 Set up the backend before the [desktop app](https://github.com/misty-org/misty/blob/main/README.md#get-started).
 
@@ -28,11 +28,11 @@ misty setup server
 
 The `misty` CLI lives in the desktop repository and finds this one beside it, so keep both checkouts in the same folder.
 
-Setup creates `~/.misty/server/dev/` and generates development credentials and collaboration keys. Repeating it preserves existing values. Keep these keys with your database and out of Git.
+Setup creates `~/.misty/.env/server/` and generates development credentials and collaboration keys. Repeating it preserves existing values. Keep these keys with your database and out of Git.
 
 ### 3. Environment setup
 
-Set `CLOUDFLARE_API_TOKEN` in your shell or save it through `misty env set dev CLOUDFLARE_API_TOKEN`, which reads its value from stdin. Do not put credentials in command arguments.
+Set `CLOUDFLARE_API_TOKEN` in your shell or save it through `misty env set CLOUDFLARE_API_TOKEN`, which reads its value from stdin. Do not put credentials in command arguments.
 
 Preview your infrastructure configuration:
 
@@ -46,11 +46,11 @@ Inspect available settings and validate configuration:
 
 ```sh
 misty env describe
-misty env status dev
-misty env check dev
+misty env status
+misty env check
 ```
 
-Provider integrations require their own credentials. See the [environment guide](deploy/README.md). `misty doctor server --fix` can create missing local files and development secrets; it does not provision remote infrastructure.
+Provider integrations require their own credentials. `misty doctor server --fix` can create missing local files and development secrets; it does not provision remote infrastructure.
 
 ### 4. Start and verify
 
@@ -81,9 +81,9 @@ With `--gui`, `up` also opens the operator console in your browser. It covers he
 
 ### Accounts for other people
 
-The first account to register on a fresh server is its owner. Later accounts come from an open Space invitation to that email or from the operator account API under `/operator/v1`, which is mounted only when `MISTY_OPERATOR_TOKEN` is set and takes it as a bearer token. The API creates an account with limits on storage, devices and app actions (unlimited unless set, app actions per billing period), returns a single-use setup key and its sign-in link to the website's setup page (the server sends no email; the caller passes the link on, and the same link resets a forgotten password), suspends or resumes it, and closes it: read-only, then deleted with the full purge after the days given unless resumed. The server serves API routes only. [docs/cloud](https://github.com/misty-org/misty/blob/main/docs/cloud/README.md) has the contract.
+The first account to register on a fresh server is its owner. Later accounts come from an open Space invitation to that email or from the operator account API under `/operator/v1`, which is mounted only when `MISTY_OPERATOR_TOKEN` is set and takes it as a bearer token. The API creates an account with limits on storage, devices and app actions (unlimited unless set, app actions per billing period), returns a single-use setup key and its sign-in link to the website's setup page (the server sends no email; the caller passes the link on, and the same link resets a forgotten password), suspends or resumes it, and closes it: read-only, then deleted with the full purge after the days given unless resumed. The server serves API routes only. has the contract.
 
-Check `/health` on the configured public API origin before using another computer. Service health is not a substitute for testing account, sync, or agent workflows.
+Check `/health` on the configured public API origin before using another computer. Service health is not a substitute for testing account, sync, or Space workflows.
 
 Then return to the desktop setup:
 
@@ -98,11 +98,9 @@ Desktop setup creates a root `.env` pointing at the local API if that file is ab
 ## Development and deployment
 
 This page sets up the development stack. To run a server for yourself or others, use
-`compose.yml` and its setup container instead: [docs/self-hosting.md](https://github.com/misty-org/misty/blob/main/docs/self-hosting.md).
+`compose.yml` and its setup container instead.
 The CLI never deploys.
 
-- [CLI commands](https://github.com/misty-org/misty/blob/main/cli/README.md)
-- [Environment configuration and the server stack](deploy/README.md)
 - [Backend architecture](https://github.com/misty-org/misty/wiki/Server-backend-architecture)
 - [Server development](https://github.com/misty-org/misty/wiki/Server-development)
 - [Repository migration and validation ledger](https://github.com/misty-org/misty/wiki/Cli-server-consolidation)

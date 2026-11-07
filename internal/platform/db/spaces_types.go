@@ -100,7 +100,6 @@ type SpaceMessage struct {
 	SenderName          string                 `json:"sender_name"`
 	SenderAvatarVersion int64                  `json:"sender_avatar_version,omitempty"`
 	SenderKind          string                 `json:"sender_kind"`
-	SenderAgentID       string                 `json:"sender_agent_id,omitempty"`
 	Sender              SpaceMessageSender     `json:"sender"`
 	Content             []MessageSpan          `json:"content"`
 	FileNodeIDs         []string               `json:"file_node_ids"`
@@ -109,16 +108,12 @@ type SpaceMessage struct {
 	Reactions           []SpaceMessageReaction `json:"reactions"`
 	ReplyToMessageID    string                 `json:"reply_to_message_id,omitempty"`
 	EditedAt            *time.Time             `json:"edited_at,omitempty"`
-	// Provenance for a mirrored message. Absent means Misty-native chat, so
-	// every existing client stays valid and "no origin" reads as "ours".
-	Origin    json.RawMessage `json:"origin,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
+	CreatedAt           time.Time              `json:"created_at"`
 }
 
 type SpaceMessageSender struct {
 	Kind          string `json:"kind"`
 	UserID        string `json:"user_id,omitempty"`
-	AgentID       string `json:"agent_id,omitempty"`
 	DisplayName   string `json:"display_name"`
 	AvatarVersion int64  `json:"avatar_version,omitempty"`
 }
@@ -155,54 +150,6 @@ type SpaceEvent struct {
 	EntityID    string          `json:"entity_id,omitempty"`
 	Payload     json.RawMessage `json:"payload"`
 	CreatedAt   time.Time       `json:"created_at"`
-}
-
-type SpaceRun struct {
-	ID                    string          `json:"id"`
-	SpaceID               string          `json:"space_id"`
-	ResourceKind          string          `json:"resource_kind"`
-	ResourceID            string          `json:"resource_id"`
-	InitiatedByUserID     string          `json:"initiated_by_user_id"`
-	ModelUserID           string          `json:"model_user_id"`
-	TriggerKind           string          `json:"trigger_kind"`
-	State                 string          `json:"state"`
-	Input                 json.RawMessage `json:"input"`
-	Result                json.RawMessage `json:"result"`
-	ErrorCode             string          `json:"error_code,omitempty"`
-	CreatedAt             time.Time       `json:"created_at"`
-	CompletedAt           *time.Time      `json:"completed_at,omitempty"`
-	RequestingMemberID    string          `json:"requesting_member_id"`
-	SourceConversationID  string          `json:"source_conversation_id,omitempty"`
-	ConversationScopeKind string          `json:"conversation_scope_kind"`
-	ScopeConversationID   string          `json:"scope_conversation_id,omitempty"`
-	SourceMessageID       string          `json:"source_message_id,omitempty"`
-	SourceType            string          `json:"source_type"`
-	AgentID               string          `json:"agent_id,omitempty"`
-	Progress              int             `json:"progress"`
-	Outputs               json.RawMessage `json:"outputs"`
-	Artifacts             json.RawMessage `json:"artifacts"`
-	ErrorMessage          string          `json:"error_message,omitempty"`
-	RetryOfRunID          string          `json:"retry_of_run_id,omitempty"`
-	CanceledAt            *time.Time      `json:"canceled_at,omitempty"`
-	UpdatedAt             time.Time       `json:"updated_at"`
-	AgentInstanceID       string          `json:"agent_instance_id,omitempty"`
-	AgentVersionID        string          `json:"agent_version_id,omitempty"`
-	Attempt               int             `json:"attempt"`
-	NextRetryAt           *time.Time      `json:"next_retry_at,omitempty"`
-	RuntimeKind           string          `json:"runtime_kind,omitempty"`
-	RuntimeRunID          string          `json:"runtime_run_id,omitempty"`
-	RuntimePhase          string          `json:"runtime_phase,omitempty"`
-	RuntimeHeartbeatAt    *time.Time      `json:"runtime_heartbeat_at,omitempty"`
-	OwnerUserID           string          `json:"owner_user_id"`
-	InitialRunMode        string          `json:"initial_run_mode"`
-	EffectiveRunMode      string          `json:"effective_run_mode"`
-	AgentVersionSnapshot  json.RawMessage `json:"agent_version_snapshot"`
-	ParentRunID           string          `json:"parent_run_id,omitempty"`
-	DelegationDepth       int             `json:"delegation_depth"`
-	ContextBindings       json.RawMessage `json:"context_bindings"`
-	DeviceWaitHookToken   string          `json:"-"`
-	DeviceWaitExpiresAt   *time.Time      `json:"device_wait_expires_at,omitempty"`
-	IdempotentReplay      bool            `json:"-"`
 }
 
 func (db *Database) SpaceTx(ctx context.Context, fn func(*sql.Tx) error) error {

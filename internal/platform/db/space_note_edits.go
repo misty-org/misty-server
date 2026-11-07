@@ -68,8 +68,8 @@ func (db *Database) SpaceNoteByID(ctx context.Context, userID, noteID string) (*
 			           AND (source.audience_kind='space' OR EXISTS(
 			               SELECT 1 FROM space_conversation_members cm
 			               WHERE cm.conversation_id=source.audience_conversation_id
-			                 AND cm.actor_kind='person' AND cm.user_id=$2)))
-			 FROM space_notes WHERE id=$1`, noteID, userID, itemViewer(ctx, userID)).Scan(
+			                 AND cm.user_id=$2)))
+			 FROM space_notes WHERE id=$1`, noteID, userID, userID).Scan(
 			&note.ID, &note.SpaceID, &note.CreatorUserID, &note.TitleProjection,
 			&note.MarkdownProjection, &note.PlainTextProjection, &note.LifecycleState, &note.CollaborationRevision,
 			&note.ACLVersion, &note.AudienceKind, &note.AudienceConversationID, &note.Visibility, &note.CreatedAt, &note.UpdatedAt, &note.BacklinkCount)

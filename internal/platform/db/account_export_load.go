@@ -73,7 +73,7 @@ func loadExportJournal(
 			  AND (n.audience_kind='space' OR EXISTS(
 			      SELECT 1 FROM space_conversation_members cm
 			      WHERE cm.conversation_id=n.audience_conversation_id
-			        AND cm.actor_kind='person' AND cm.user_id=$1
+			        AND cm.user_id=$1
 			  ))
 			UNION ALL
 			SELECT 'drawing',id,space_id,title,acl_version,created_at,updated_at
@@ -86,7 +86,7 @@ func loadExportJournal(
 			  AND (d.audience_kind='space' OR EXISTS(
 			      SELECT 1 FROM space_conversation_members cm
 			      WHERE cm.conversation_id=d.audience_conversation_id
-			        AND cm.actor_kind='person' AND cm.user_id=$1
+			        AND cm.user_id=$1
 			  ))
 			ORDER BY created_at`, userID, func(rows *sql.Rows) error {
 		var item AccountExportJournal
@@ -118,7 +118,7 @@ func loadExportAssets(
 			  AND (n.audience_kind='space' OR EXISTS(
 			      SELECT 1 FROM space_conversation_members cm
 			      WHERE cm.conversation_id=n.audience_conversation_id
-			        AND cm.actor_kind='person' AND cm.user_id=$1
+			        AND cm.user_id=$1
 			  ))
 			UNION ALL
 			SELECT 'drawing',a.id,a.drawing_id,a.display_name,b.r2_object_key,
@@ -133,7 +133,7 @@ func loadExportAssets(
 			  AND (d.audience_kind='space' OR EXISTS(
 			      SELECT 1 FROM space_conversation_members cm
 			      WHERE cm.conversation_id=d.audience_conversation_id
-			        AND cm.actor_kind='person' AND cm.user_id=$1
+			        AND cm.user_id=$1
 			  ))
 			UNION ALL
 			SELECT 'library',i.id,i.space_id,i.display_name,b.r2_object_key,
@@ -151,7 +151,7 @@ func loadExportAssets(
 			  AND (i.audience_kind='space' OR EXISTS(
 			      SELECT 1 FROM space_conversation_members cm
 			      WHERE cm.conversation_id=i.audience_conversation_id
-			        AND cm.actor_kind='person' AND cm.user_id=$1
+			        AND cm.user_id=$1
 			  ))
 			UNION ALL
 			SELECT 'message_attachment',a.id,COALESCE(a.message_id,a.space_id),
@@ -172,7 +172,7 @@ func loadExportAssets(
 			      WHERE message.id=a.message_id AND (message.conversation_id IS NULL OR EXISTS(
 			          SELECT 1 FROM space_conversation_members cm
 			          WHERE cm.conversation_id=message.conversation_id
-			            AND cm.actor_kind='person' AND cm.user_id=$1
+			            AND cm.user_id=$1
 			      ))
 			  ))
 			ORDER BY created_at`, userID, func(rows *sql.Rows) error {
@@ -196,11 +196,11 @@ func loadExportMessages(
 	return scanExportQuery(ctx, tx, `
 			SELECT id,space_id,content,created_at,COALESCE(edited_at,created_at)
 			FROM space_messages
-			WHERE sender_user_id=$1 AND sender_kind='person'
+			WHERE sender_user_id=$1
 			  AND (conversation_id IS NULL OR EXISTS(
 			      SELECT 1 FROM space_conversation_members cm
 			      WHERE cm.conversation_id=space_messages.conversation_id
-			        AND cm.actor_kind='person' AND cm.user_id=$1
+			        AND cm.user_id=$1
 			  ))
 			ORDER BY created_at`, userID, func(rows *sql.Rows) error {
 		var item AccountExportMessage

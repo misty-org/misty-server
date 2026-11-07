@@ -68,14 +68,12 @@ templ customerDetail(v customerDetailView) {
 			<ul class="rows compact">
 				@usageRow("Storage", storageAgainst(v.Account.Usage.StorageBytes, v.Account.Limits.StorageBytes), v.Account.Usage.StorageBytes != nil && atLimit(*v.Account.Usage.StorageBytes, v.Account.Limits.StorageBytes))
 				@usageRow("Devices", usageAgainst(v.Account.Usage.Devices, v.Account.Limits.Devices), atLimit(v.Account.Usage.Devices, v.Account.Limits.Devices))
-				@usageRow("App actions", usageAgainst(v.Account.Usage.AppActionsThisMonth, v.Account.Limits.AppActionsPerMonth), atLimit(v.Account.Usage.AppActionsThisMonth, v.Account.Limits.AppActionsPerMonth))
 			</ul>
 			if v.CanChange {
 				@sectionLabel("Limits")
 				<form class="limits-form" hx-post={ v.actionPath("limits") } hx-target="#customer-detail" hx-swap="outerHTML">
 					@limitField("Storage (GB)", "storage_gb", storageInput(v.Account.Limits.StorageBytes))
 					@limitField("Devices", "devices", limitInput(v.Account.Limits.Devices))
-					@limitField("App actions per period", "app_actions_per_month", limitInput(v.Account.Limits.AppActionsPerMonth))
 					<p class="muted">Leave a field blank for no limit.</p>
 					<div class="actions"><button class="button" type="submit" hx-disabled-elt="this">Save limits</button></div>
 				</form>

@@ -18,13 +18,13 @@ const voiceTranscriptBodyLimit = 8 << 20
 // VoiceTranscripts saves a finished capture's diarized transcript.
 func (s *SpacesService) VoiceTranscripts() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := s.appsUser(w, r)
+		user, ok := authenticatedUser(w, r, s.database)
 		if !ok {
 			return
 		}
 		var body db.VoiceTranscript
 		r.Body = http.MaxBytesReader(w, r.Body, voiceTranscriptBodyLimit)
-		if decodeAIJSON(w, r, &body) != nil {
+		if decodeStrictJSON(w, r, &body) != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_transcript"})
 			return
 		}
@@ -41,7 +41,7 @@ func (s *SpacesService) VoiceTranscripts() http.HandlerFunc {
 // VoiceTranscript reads, renames speakers on, or deletes one transcript.
 func (s *SpacesService) VoiceTranscript() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, ok := s.appsUser(w, r)
+		user, ok := authenticatedUser(w, r, s.database)
 		if !ok {
 			return
 		}
@@ -65,7 +65,7 @@ func (s *SpacesService) VoiceTranscript() http.HandlerFunc {
 				RecordingItemID string            `json:"recording_item_id"`
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-			if decodeAIJSON(w, r, &body) != nil || (body.Speakers == nil && body.RecordingItemID == "") {
+			if decodeStrictJSON(w, r, &body) != nil || (body.Speakers == nil && body.RecordingItemID == "") {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_speakers"})
 				return
 			}
@@ -93,7 +93,7 @@ func writeVoiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, db.ErrSpaceNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found", "message": "That transcript is no longer available."})
 	default:
-		writeAgentError(w, err)
+		writeDeviceError(w, err)
 	}
 }
 

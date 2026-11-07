@@ -2,8 +2,6 @@ package db
 
 import (
 	"context"
-	"encoding/json"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -36,18 +34,6 @@ func (db *Database) TestingCreateSpaceMessageWithReferences(ctx context.Context,
 
 func (db *Database) TestingCreateSpaceConversationMessageWithReferences(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID string) (*SpaceMessage, []string, error) {
 	return db.CreateSpaceConversationMessageWithReferencesAndClientNonce(ctx, userID, spaceID, conversationID, content, fileNodeIDs, attachmentIDs, libraryItemIDs, replyToMessageID, "")
-}
-
-func (db *Database) TestingAppendAIInvocationEvent(ctx context.Context, userID, invocationID string, sequence int64, eventType string, payload json.RawMessage, state string) error {
-	if sequence < 1 {
-		return ErrSpaceInvalid
-	}
-	_, err := db.CommitAIInvocationEvent(ctx, userID, invocationID, "compat:"+strconv.FormatInt(sequence, 10), eventType, payload, state)
-	return err
-}
-
-func (db *Database) TestingAwaitAIUserIntervention(ctx context.Context, user, run, runtime, call, hook, scope, action, reason, digest string) (*AIInterventionWait, error) {
-	return db.AwaitAgentUserIntervention(ctx, user, run, runtime, call, hook, scope, action, reason, digest)
 }
 
 func TestingDefaultLibraryEditDefinition() LibraryEditDefinition {

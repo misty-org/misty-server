@@ -135,7 +135,7 @@ func (db *Database) AccessibleSpaceDrawings(
 			 WHERE d.space_id=$2 AND d.lifecycle_state='active'
 			   AND (d.visibility='public' OR d.creator_user_id=$3)
 			   AND `+resourceAudienceSQL("d", "$1")+`
-			 ORDER BY d.updated_at DESC`, userID, spaceID, itemViewer(ctx, userID))
+			 ORDER BY d.updated_at DESC`, userID, spaceID, userID)
 		if err != nil {
 			return err
 		}
@@ -191,7 +191,7 @@ func drawingAccessForTx(
 		return DrawingAccess{}, err
 	}
 	// A private drawing opens only for its creator, and not on public-only work.
-	if visibility == VisibilityPrivate && itemViewer(ctx, userID) != creatorID {
+	if visibility == VisibilityPrivate && userID != creatorID {
 		return DrawingAccess{}, nil
 	}
 	if audienceKind == SpaceAudienceConversation {

@@ -14,7 +14,6 @@ import (
 // devices is online right now, never a history, dropped when its socket
 // closes. Devices never connect to each other; everything between them goes
 // through the server, and this channel carries only presence and hints
-// (docs/sync/devices.md).
 
 const (
 	deviceLivenessInterval  = 45 * time.Second

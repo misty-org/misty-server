@@ -40,7 +40,7 @@ func (db *Database) InviteToSpaceWithToken(
 	out := &SpaceInvitation{
 		ID: "invite_" + uuid.NewString(), SpaceID: spaceID, InvitedByUserID: ownerID,
 		InvitedEmail: email,
-		ExpiresAt: time.Now().UTC().Add(7 * 24 * time.Hour),
+		ExpiresAt:    time.Now().UTC().Add(7 * 24 * time.Hour),
 	}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
@@ -70,6 +70,9 @@ func (db *Database) InviteToSpaceWithToken(
 		}
 		if already {
 			return ErrSpaceConflict
+		}
+		if err := requireSpaceSharingRoomTx(ctx, tx, ownerID, spaceID); err != nil {
+			return err
 		}
 		if err := tx.QueryRowContext(ctx, `SELECT username FROM users WHERE id=$1`, ownerID).Scan(&out.InviterName); err != nil {
 			return err

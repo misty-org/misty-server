@@ -92,16 +92,16 @@ func (db *Database) CreateOperatorAccount(ctx context.Context, email string, lim
 
 const operatorAccountColumns = `u.id,u.email,u.username,u.created_at,
 	u.id=(SELECT id FROM users ORDER BY created_at,id LIMIT 1),
-	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,
+	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,c.shared_spaces,c.space_members,
 	(SELECT count(*) FROM trusted_devices d WHERE d.user_id=u.id AND d.revoked_at IS NULL AND d.admission_state<>'revoked')
 	FROM users u LEFT JOIN account_controls c ON c.user_id=u.id`
 
 func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, error) {
 	var a OperatorAccount
 	var suspended, deleteAt, anchor sql.NullTime
-	var storage, devices sql.NullInt64
+	var storage, devices, sharedSpaces, spaceMembers sql.NullInt64
 	if err := row.Scan(&a.ID, &a.Email, &a.Username, &a.CreatedAt, &a.Owner, &suspended, &deleteAt, &anchor,
-		&storage, &devices, &a.Usage.Devices); err != nil {
+		&storage, &devices, &sharedSpaces, &spaceMembers, &a.Usage.Devices); err != nil {
 		return a, err
 	}
 	if deleteAt.Valid {
@@ -110,7 +110,10 @@ func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, 
 	if anchor.Valid {
 		a.PeriodAnchor = &anchor.Time
 	}
-	a.Limits = AccountLimits{nullableInt(storage), nullableInt(devices)}
+	a.Limits = AccountLimits{
+		StorageBytes: nullableInt(storage), Devices: nullableInt(devices),
+		SharedSpaces: nullableInt(sharedSpaces), SpaceMembers: nullableInt(spaceMembers),
+	}
 	if suspended.Valid {
 		a.Suspended, a.SuspendedAt = true, &suspended.Time
 	}

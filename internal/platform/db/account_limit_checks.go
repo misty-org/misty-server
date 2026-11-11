@@ -100,3 +100,38 @@ func RequireAccountStorageRoomTx(ctx context.Context, tx *sql.Tx, userID string,
 	}
 	return nil
 }
+
+// requireSpaceSharingRoomTx refuses one more invitation once the owner's account is at a sharing
+// limit: the people one Space may hold (members and open invitations both count), or the number
+// of its Spaces that may be shared at all. A Space already shared never counts against itself.
+func requireSpaceSharingRoomTx(ctx context.Context, tx *sql.Tx, ownerID, spaceID string) error {
+	return asServiceTx(ctx, tx, func() error {
+		limits, _, err := accountControlsTx(ctx, tx, ownerID)
+		if err != nil || (limits.SpaceMembers == nil && limits.SharedSpaces == nil) {
+			return err
+		}
+		const people = `(SELECT count(*) FROM space_members m WHERE m.space_id=s.id) +
+			(SELECT count(*) FROM space_invitations i WHERE i.space_id=s.id AND i.expires_at>NOW()
+			  AND i.revoked_at IS NULL AND i.consumed_at IS NULL)`
+		var here int64
+		if err := tx.QueryRowContext(ctx, `SELECT `+people+` FROM spaces s WHERE s.id=$1`, spaceID).Scan(&here); err != nil {
+			return err
+		}
+		if limits.SpaceMembers != nil && here >= *limits.SpaceMembers {
+			return ErrSpacePeopleLimit
+		}
+		if limits.SharedSpaces == nil || here > 1 {
+			return nil
+		}
+		var shared int64
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM spaces s
+			WHERE s.owner_user_id=$1 AND s.lifecycle_state='active' AND s.id<>$2 AND `+people+` > 1`,
+			ownerID, spaceID).Scan(&shared); err != nil {
+			return err
+		}
+		if shared >= *limits.SharedSpaces {
+			return ErrSpaceLimit
+		}
+		return nil
+	})
+}

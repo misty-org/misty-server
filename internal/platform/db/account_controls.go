@@ -12,6 +12,10 @@ import (
 type AccountLimits struct {
 	StorageBytes *int64 `json:"storage_bytes"`
 	Devices      *int64 `json:"devices"`
+	// SharedSpaces is how many of the Spaces the account owns may be shared with other people.
+	SharedSpaces *int64 `json:"shared_spaces"`
+	// SpaceMembers is how many people, the owner included, one of its Spaces may hold.
+	SpaceMembers *int64 `json:"space_members"`
 }
 
 var (
@@ -35,10 +39,11 @@ func (db *Database) SetAccountLimits(ctx context.Context, userID string, limits 
 		if err := requireActiveAccountTx(ctx, tx, userID); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO account_controls(user_id,storage_bytes,devices)
-			VALUES($1,$2,$3)
-			ON CONFLICT(user_id) DO UPDATE SET storage_bytes=EXCLUDED.storage_bytes,devices=EXCLUDED.devices,updated_at=now()`,
-			userID, limits.StorageBytes, limits.Devices)
+		_, err := tx.ExecContext(ctx, `INSERT INTO account_controls(user_id,storage_bytes,devices,shared_spaces,space_members)
+			VALUES($1,$2,$3,$4,$5)
+			ON CONFLICT(user_id) DO UPDATE SET storage_bytes=EXCLUDED.storage_bytes,devices=EXCLUDED.devices,
+			shared_spaces=EXCLUDED.shared_spaces,space_members=EXCLUDED.space_members,updated_at=now()`,
+			userID, limits.StorageBytes, limits.Devices, limits.SharedSpaces, limits.SpaceMembers)
 		return err
 	})
 }
@@ -56,17 +61,20 @@ func (db *Database) AccountLimitsFor(ctx context.Context, userID string) (Accoun
 
 func accountControlsTx(ctx context.Context, tx *sql.Tx, userID string) (AccountLimits, *time.Time, error) {
 	var limits AccountLimits
-	var storage, devices sql.NullInt64
+	var storage, devices, sharedSpaces, spaceMembers sql.NullInt64
 	var suspended sql.NullTime
-	err := tx.QueryRowContext(ctx, `SELECT storage_bytes,devices,suspended_at
-		FROM account_controls WHERE user_id=$1`, userID).Scan(&storage, &devices, &suspended)
+	err := tx.QueryRowContext(ctx, `SELECT storage_bytes,devices,shared_spaces,space_members,suspended_at
+		FROM account_controls WHERE user_id=$1`, userID).Scan(&storage, &devices, &sharedSpaces, &spaceMembers, &suspended)
 	if errors.Is(err, sql.ErrNoRows) {
 		return limits, nil, nil
 	}
 	if err != nil {
 		return limits, nil, err
 	}
-	limits = AccountLimits{nullableInt(storage), nullableInt(devices)}
+	limits = AccountLimits{
+		StorageBytes: nullableInt(storage), Devices: nullableInt(devices),
+		SharedSpaces: nullableInt(sharedSpaces), SpaceMembers: nullableInt(spaceMembers),
+	}
 	if suspended.Valid {
 		return limits, &suspended.Time, nil
 	}

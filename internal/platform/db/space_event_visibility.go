@@ -69,6 +69,9 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 		// answer comes from the note's own ACL, evaluated now rather than when
 		// the event was recorded.
 		return noteEventVisibleToUserTx(ctx, tx, userID, event)
+	case strings.HasPrefix(event.EventType, "task."), strings.HasPrefix(event.EventType, "calendar."):
+		// The planner is the whole Space's: every member sees its changes.
+		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "agent."):
 		permission = PermissionStudioView
 	default:

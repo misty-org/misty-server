@@ -11,10 +11,11 @@ import (
 // sent by a connected client.
 func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []byte) {
 	var msg struct {
-		Type           string `json:"type"`
-		SpaceID        string `json:"space_id"`
-		ConversationID string `json:"conversation_id"`
-		Active         bool   `json:"active"`
+		Type           string        `json:"type"`
+		SpaceID        string        `json:"space_id"`
+		ConversationID string        `json:"conversation_id"`
+		Active         bool          `json:"active"`
+		Agents         []agentStatus `json:"agents"`
 	}
 	if json.Unmarshal(payload, &msg) != nil {
 		return
@@ -23,6 +24,8 @@ func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []
 		s.SetViewing(client, msg.SpaceID, msg.Active)
 	} else if msg.Type == "typing" {
 		s.broadcastTyping(client, msg.SpaceID, msg.ConversationID, msg.Active)
+	} else if msg.Type == "agents" {
+		s.broadcastAgents(client, msg.SpaceID, msg.Agents)
 	}
 }
 

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/misty-org/misty-server/internal/platform/db"
 	"github.com/lib/pq"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 const (
@@ -37,6 +37,10 @@ type RealtimeClient struct {
 	// lastTypingAt bounds typing frame processing for this socket.
 	lastTypingAt time.Time
 	typingScopes map[string]bool
+	// lastAgentsAt bounds agent status frames for this socket, and agentStates holds what each of
+	// this client's agents was last said to be doing, to log only changes.
+	lastAgentsAt time.Time
+	agentStates  map[string]string
 }
 
 type RealtimeService struct {

@@ -73,6 +73,8 @@ var accountPurgeKept = map[string]string{
 	"space_notes.creator_user_id":                         "notes in those Spaces",
 	"space_note_assets.uploader_user_id":                  "files in those notes",
 	"space_drawings.creator_user_id":                      "drawings in those Spaces",
+	"space_tasks.created_by_user_id":                      "tasks in those Spaces",
+	"space_calendar_events.created_by_user_id":            "events in those Spaces",
 	"space_drawing_assets.uploader_user_id":               "files in those drawings",
 	"space_nodes.uploader_user_id":                        "files in those Spaces",
 	"space_item_aliases.created_by_user_id":               "links in those Spaces",
@@ -111,6 +113,10 @@ func purgeAccountDataTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM space_members m USING spaces s
 		WHERE m.space_id=s.id AND m.user_id=$1 AND s.owner_user_id<>$1`, userID); err != nil {
+		return err
+	}
+	// Tasks in Spaces other people still use stay, with nobody assigned.
+	if _, err := tx.ExecContext(ctx, `UPDATE space_tasks SET assignee_user_id=NULL WHERE assignee_user_id=$1`, userID); err != nil {
 		return err
 	}
 	for _, target := range accountPurgeTables {

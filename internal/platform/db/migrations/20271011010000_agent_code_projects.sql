@@ -1,5 +1,5 @@
 -- +goose Up
--- Code projects (docs/agents/coding-tools.md): a chat may attach a
+-- Code projects: a chat may attach a
 -- folder the person shared with write access on their own computer. Its
 -- capabilities are the code.* tools, checked again on the device.
 ALTER TABLE ai_invocation_contexts DROP CONSTRAINT ai_invocation_contexts_kind_check;

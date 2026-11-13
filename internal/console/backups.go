@@ -22,8 +22,8 @@ type backupsView struct {
 	Err     string
 }
 
-// backupsPage lists the database dumps in server/.misty/backups on this
-// machine. It cannot see copies kept elsewhere (an R2 bucket, another host),
+// backupsPage lists the database dumps in the server checkout's .misty/backups
+// on this machine. It cannot see copies kept elsewhere (an R2 bucket, another host),
 // and a listed file is not proof it restores; the page says both.
 func (s *Server) backupsPage(*http.Request) templ.Component {
 	view := backupsView{Dir: filepath.Join(s.cfg.ServerDir, ".misty", "backups")}

@@ -83,7 +83,7 @@ func testDatabaseRole() (user, password string) {
 
 // testDatabaseSSLMode ignores a production DB_SSLMODE for loopback hosts. The
 // bootstrapped container has no TLS, so inheriting sslmode=require from
-// .env/dev/database.env would fail every connection.
+// ~/.misty/.env/server/database.env would fail every connection.
 func testDatabaseSSLMode(host string) string {
 	if mode := configured("TEST_DB_SSLMODE"); mode != "" {
 		return mode

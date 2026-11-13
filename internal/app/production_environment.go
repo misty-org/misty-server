@@ -16,7 +16,6 @@ import (
 var productionRequired = []string{
 	"DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "MISTY_PUBLIC_API_URL",
 	"SPACE_LINK_ENCRYPTION_KEY", "MISTY_AUTH_SIGNING_KEY",
-	"MISTY_DEVICE_TICKET_PRIVATE_KEY", "MISTY_DEVICE_PAIRING_PEPPER",
 	"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY",
 	"PARTYKIT_HOST", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY", "JOURNAL_COLLAB_CONTROL_SECRET",
 	"JOURNAL_COLLAB_PROJECTION_SECRET", "JOURNAL_COLLAB_ROOM_SALT",
@@ -25,7 +24,7 @@ var productionRequired = []string{
 
 // productionForbidden are model keys and retired operator model settings. A
 // server never calls a model: agents and every model call run on the person's
-// desktop, on that device's own keys. A server that still sets
+// computer, on that person's own keys. A server that still sets
 // one stops at startup, so a stale configuration is noticed.
 var productionForbidden = []string{
 	"AI_GATEWAY_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY",
@@ -48,12 +47,17 @@ func ValidateProductionEnvironment() error {
 	}
 	for _, name := range productionForbidden {
 		if strings.TrimSpace(config.Getenv(name)) != "" {
-			return fmt.Errorf("%s is set, but a Misty server holds no model keys or models; remove it (models run on each device)", name)
+			return fmt.Errorf("%s is set, but a Misty server holds no model keys or models; remove it (models run on each person's computer)", name)
 		}
 	}
 	publicURL, err := url.Parse(strings.TrimSpace(config.Getenv("MISTY_PUBLIC_API_URL")))
 	if err != nil || publicURL.Scheme != "https" || publicURL.Host == "" {
 		return fmt.Errorf("MISTY_PUBLIC_API_URL must be an absolute https URL in production")
+	}
+	// The server answers only under /v1, and Google's sign-in callback and
+	// sign-in links are built from this address.
+	if !strings.HasSuffix(strings.TrimRight(publicURL.Path, "/"), "/v1") {
+		return fmt.Errorf("MISTY_PUBLIC_API_URL must end in /v1, such as https://misty.example.com/v1: the server answers only under /v1")
 	}
 	if rawPort := strings.TrimSpace(config.Getenv("PORT")); rawPort != "" {
 		port, err := strconv.Atoi(rawPort)

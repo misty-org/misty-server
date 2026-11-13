@@ -14,8 +14,8 @@ import (
 //   - Spaces it owns alone, the personal Space included, are marked for the
 //     Space purge (space_purge.go), which removes their notes, drawings,
 //     chats, Library and R2 objects;
-//   - every row in accountPurgeTables: voice transcripts, devices,
-//     sessions, connections and settings.
+//   - every row in accountPurgeTables: voice transcripts, sessions,
+//     connections and settings.
 //
 // What stays, by design, is listed in accountPurgeKept. The purge test
 // (test/contract/postgres/account_purge_test.go) checks every table that
@@ -24,7 +24,6 @@ import (
 // accountPurgeTables are deleted by their user column, in this order.
 var accountPurgeTables = []struct{ Table, Column string }{
 	{"sessions", "user_id"},
-	{"auth_handoff_tokens", "user_id"},
 	{"email_verification_tokens", "user_id"},
 	{"password_reset_tokens", "user_id"},
 	{"google_reauthentication_tokens", "user_id"},
@@ -32,7 +31,6 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"google_sign_in_flows", "reauthenticate_user_id"},
 	{"realtime_tickets", "user_id"},
 	{"space_resolve_tickets", "user_id"},
-	{"device_channel_tickets", "user_id"},
 	{"account_setup_keys", "user_id"},
 	{"email_outbox", "user_id"},
 	{"account_controls", "user_id"},
@@ -41,11 +39,6 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	// Connections.
 	{"cloud_connections", "user_id"},
 	{"space_provider_credentials", "user_id"},
-	// Devices.
-	{"device_policies", "user_id"},
-	{"device_revoked_keys", "user_id"},
-	{"trusted_device_request_nonces", "owner_user_id"},
-	{"trusted_devices", "user_id"},
 	// The account's private layer in Spaces it belonged to.
 	{"space_personal_item_state", "user_id"},
 	{"space_library_item_views", "user_id"},

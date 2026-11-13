@@ -1,5 +1,5 @@
 -- +goose Up
--- One row per live transcription ticket (docs/voice-memory/README.md).
+-- One row per live transcription ticket.
 -- The ticket's id is single-use: the runtime settles it once, with the audio it
 -- actually streamed, against the billing reservation taken when it was issued.
 -- Weekly voice minutes are summed from these rows.

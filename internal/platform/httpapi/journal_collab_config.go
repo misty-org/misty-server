@@ -181,7 +181,7 @@ func (c JournalCollabConfig) SignControlRequest(timestamp string, body []byte) s
 	return SignServicePayload(c.controlSecret, timestamp, body)
 }
 
-// JournalTicket is what the desktop needs in order to open a collaboration socket.
+// JournalTicket is what the desktop needs to open a collaboration socket.
 type JournalTicket struct {
 	Ticket    string    `json:"ticket"`
 	Room      string    `json:"room"`

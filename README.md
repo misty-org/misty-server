@@ -1,48 +1,49 @@
 # Misty Server
 
-Misty Server provides accounts, Spaces and file services. Agents, every model call and web search run on the person's desktop; the server never calls a model, holds no search key and makes no search call. It lives in `server/` alongside the desktop app and CLI.
+Misty Server provides accounts, Spaces and file services for [Misty](https://github.com/misty-org/misty). Agents, model calls and web search run on each person's desktop: the server never calls a model, holds no search key and makes no search call.
 
-Set up the backend before the [desktop app](https://github.com/misty-org/misty/blob/main/CONTRIBUTING.md#get-started).
+This page sets up the development stack, which the [`misty` CLI](https://github.com/misty-org/misty-cli) runs. To run a server for yourself or other people, see [Self-hosting](#self-hosting).
 
-## Get started
+## Development stack
 
-### 1. Prerequisites
+### Prerequisites
 
-- Git and access to this repository.
-- Rust/Cargo through rustup, to build the CLI using the pinned toolchain.
-- Docker Engine with Compose v2 and Linux containers enabled.
-- curl, for Cloudflare API setup.
-- A Cloudflare account with a domain and a workers.dev subdomain enabled. Create an API token with access to the selected account and zone: account/zone read, Tunnel edit, DNS edit, and Workers Scripts edit. See [Cloudflare's tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
+- Git.
+- Rust through rustup, to build the `misty` CLI with its pinned toolchain.
+- Docker Engine with Compose v2.
+- curl, which the CLI uses to call the Cloudflare API.
+- A Cloudflare account with a domain and a workers.dev subdomain turned on, and an API token for that account and zone with account and zone read, Tunnel edit, DNS edit and Workers Scripts edit. See [Cloudflare's tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
 
-Go, Node.js, PostgreSQL, Wrangler, and cloudflared run inside the containers. Desktop development needs its own [native toolchain](https://github.com/misty-org/misty/blob/main/CONTRIBUTING.md#prerequisites). The full development stack still uses Cloudflare; a complete local-only collaboration mode is not implemented.
+Go, Node.js, PostgreSQL, Wrangler and cloudflared run inside the containers. The development stack always uses Cloudflare; there is no local-only collaboration mode. Working on the desktop app needs its own [toolchain](https://github.com/misty-org/misty/blob/main/CONTRIBUTING.md#prerequisites).
 
-### 2. Installation
+### Install
+
+The CLI finds this repository and the desktop app beside it, so keep all three checkouts in one folder:
 
 ```sh
 git clone https://github.com/misty-org/misty.git
 git clone https://github.com/misty-org/misty-server.git
-cd misty
-cargo install --path cli --locked
+git clone https://github.com/misty-org/misty-cli.git
+cd misty-cli
+cargo install --path . --locked
 misty setup server
 ```
 
-The `misty` CLI lives in the desktop repository and finds this one beside it, so keep both checkouts in the same folder.
+`misty setup server` creates `~/.misty/.env/server/` with development credentials and collaboration keys. Running it again keeps existing values. Keep these keys with your database and out of Git.
 
-Setup creates `~/.misty/.env/server/` and generates development credentials and collaboration keys. Repeating it preserves existing values. Keep these keys with your database and out of Git.
+### Configure Cloudflare
 
-### 3. Environment setup
+Set `CLOUDFLARE_API_TOKEN` in your shell, or save it with `misty env set CLOUDFLARE_API_TOKEN`, which reads the value from stdin. Don't put credentials in command arguments.
 
-Set `CLOUDFLARE_API_TOKEN` in your shell or save it through `misty env set CLOUDFLARE_API_TOKEN`, which reads its value from stdin. Do not put credentials in command arguments.
-
-Preview your infrastructure configuration:
+Preview the tunnel and DNS route, then run the same command with `--apply` to create them and save the configuration:
 
 ```sh
 misty setup cloudflare --account ACCOUNT_ID --zone ZONE_ID --hostname api.example.com
 ```
 
-Repeat with `--apply` to provision the tunnel and DNS route and save the configuration. Setup reuses the named tunnel and rejects conflicting DNS records. It preserves unrelated tunnel routes. It does not deploy the Worker until explicitly requested.
+Setup reuses the named tunnel, keeps unrelated tunnel routes and stops on a conflicting DNS record. It doesn't deploy the Worker.
 
-Inspect available settings and validate configuration:
+To see and check your settings:
 
 ```sh
 misty env describe
@@ -50,9 +51,9 @@ misty env status
 misty env check
 ```
 
-Provider integrations require their own credentials. `misty doctor server --fix` can create missing local files and development secrets; it does not provision remote infrastructure.
+`misty doctor server --fix` creates missing local files and development secrets. It doesn't touch Cloudflare.
 
-### 4. Start and verify
+### Start
 
 ```sh
 misty server up
@@ -61,31 +62,18 @@ misty doctor server
 misty doctor cloudflare
 ```
 
-`up` builds and starts containers, applies migrations, waits for service health, and returns. It does not redeploy the Worker. `deploy` explicitly deploys the development collaboration Worker.
+`up` builds and starts the containers, applies migrations, waits until the services are healthy and returns. `deploy` deploys the development collaboration Worker; `up` never does. If startup fails, `up` prints the end of the relevant log. Build output, with secrets redacted, is saved in `.misty/logs/` here, and `--verbose` prints it after the build. Container logs rotate at 10 MB, three files per service.
 
 ```sh
 misty server status
 misty server logs api --tail 100
 misty server logs api --follow
+misty server down
 ```
 
-Normal startup shows progress and service status. Failures show the relevant diagnostic tail. Bounded, redacted build diagnostics are saved under `.misty/logs/`; `--verbose` displays that output after the build. Container logs rotate at 10 MB with three files per service.
+Check `/health` on your public API hostname before connecting from another computer. The API itself answers only under `/v1`, so a production server refuses to start unless `MISTY_PUBLIC_API_URL` ends in `/v1`. A healthy service doesn't prove that accounts and Spaces work, so try them in the app too.
 
-### Operator console
-
-```sh
-misty server up --gui
-```
-
-With `--gui`, `up` also opens the operator console in your browser. It covers health and traffic, development services, customers (accounts with their usage against limits, sessions and devices), background jobs, AI usage, configuration, database migrations, local backups and service logs. With `MISTY_OPERATOR_TOKEN` in its environment, the Customers page also sets limits, suspends, closes and resumes accounts and emails new setup keys, through the server's operator account API. Every change made there is recorded in the audit log shown on the Overview. It listens only on `127.0.0.1:7070` and never goes through the tunnel. A one-time link authenticates the browser. Running the command again reuses the console that is already running, and `misty server down` stops it. Traffic metrics require `MISTY_METRICS_TOKEN`. Its views are templ files in `internal/console`; run `make generate` after editing them.
-
-### Accounts for other people
-
-The first account to register on a fresh server is its owner. Later accounts come from an open Space invitation to that email or from the operator account API under `/operator/v1`, which is mounted only when `MISTY_OPERATOR_TOKEN` is set and takes it as a bearer token. The API creates an account with limits on storage, devices and app actions (unlimited unless set, app actions per billing period), returns a single-use setup key and its sign-in link to the website's setup page (the server sends no email; the caller passes the link on, and the same link resets a forgotten password), suspends or resumes it, and closes it: read-only, then deleted with the full purge after the days given unless resumed. The server serves API routes only. has the contract.
-
-Check `/health` on the configured public API origin before using another computer. Service health is not a substitute for testing account or Space workflows.
-
-Then return to the desktop setup:
+### Run the desktop app against it
 
 ```sh
 misty setup desktop
@@ -93,14 +81,42 @@ misty doctor desktop
 misty desktop dev
 ```
 
-Desktop setup creates a root `.env` pointing at the local API if that file is absent. Existing configuration is preserved. Set `MISTY_PUBLIC_API_URL` to your HTTPS API URL ending in `/v1` for remote devices.
+`misty desktop dev` points the app at this stack's API and website unless `MISTY_PUBLIC_API_URL` or `MISTY_PUBLIC_URL` is already set in your shell.
 
-## Development and deployment
+### Operator console
 
-This page sets up the development stack. To run a server for yourself or others, use
-`compose.yml` and its setup container instead.
-The CLI never deploys.
+```sh
+misty server up --gui
+```
+
+With `--gui`, `up` also opens the operator console in your browser. It listens only on `127.0.0.1:7070`, never through the tunnel, and a one-time link signs the browser in. Running the command again reuses a console that is already running; `misty server down` stops it.
+
+The console shows health and traffic, the development services, customers (accounts with their storage against its limit, and their sessions), background jobs, configuration, database migrations, local backups and service logs. Traffic needs `MISTY_METRICS_TOKEN`. With `MISTY_OPERATOR_TOKEN` set, the Customers page can also set limits, suspend, close and resume accounts and issue sign-in links, through the operator account API. Each change is recorded in the audit log on the Overview.
+
+The views are templ files in `internal/console`; run `make generate` after editing them.
+
+## Accounts
+
+The first account to register on a fresh server owns it. Later accounts come from an open Space invitation to that email, or from the operator account API under `/operator/v1`, which is mounted only when `MISTY_OPERATOR_TOKEN` is set and takes it as a bearer token.
+
+The API creates an account with limits on storage, shared Spaces and people per Space (unlimited unless set), plus whether the account is set up for use (`devices`: `0` means not yet, anything else means yes), and returns a single-use setup key with its sign-in link. Without Mailjet configured the server sends no email, so the caller passes the link on; the same link resets a forgotten password. The API also suspends and resumes accounts, and closes them: a closed account is read-only, then deleted with all its data after the given number of days unless it is resumed.
+
+## Self-hosting
+
+A server for real use runs from `compose.yml`, not the CLI. You write three env files under `~/.misty/.env/server/` (`MISTY_ENV_DIR` names another folder). On every start the setup service generates missing secrets and provisions the Cloudflare tunnel, DNS, R2 buckets and Worker, and the migrate service applies migrations. The secrets live only in the stack's `secrets` volume, so keep a copy off the server.
+
+```sh
+git clone https://github.com/misty-org/misty-server.git
+cd misty-server
+mkdir -p -m 700 ~/.misty/.env/server
+# write misty.env, cloudflare.env and google.env under ~/.misty/.env/server/
+docker compose up -d --build
+docker compose logs setup
+```
+
+The [self-hosting guide](https://docs.mistysys.com/self-hosting) lists every value and covers optional email, backups, secret rotation and the console.
+
+## More
 
 - [Backend architecture](https://github.com/misty-org/misty/wiki/Server-backend-architecture)
 - [Server development](https://github.com/misty-org/misty/wiki/Server-development)
-- [Repository migration and validation ledger](https://github.com/misty-org/misty/wiki/Cli-server-consolidation)

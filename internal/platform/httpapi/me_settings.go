@@ -6,34 +6,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-func UpdateDevice(database *db.Database) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, err := sessionUserID(r, database)
-		if err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		if userID == "" {
-			http.Error(w, "not authenticated", http.StatusUnauthorized)
-			return
-		}
-
-		var body struct {
-			Device string `json:"device"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-
-		if err := database.UpdateLicenseDevice(userID, body.Device); err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	}
-}
-
 func GetSettings(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, err := sessionUserID(r, database)
@@ -92,32 +64,6 @@ func UpdateSettings(database *db.Database) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	}
-}
-
-func UpdateTelemetryPreferences(database *db.Database) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, err := sessionUserID(r, database)
-		if err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		if userID == "" {
-			http.Error(w, "not authenticated", http.StatusUnauthorized)
-			return
-		}
-		var body struct {
-			AnalyticsEnabled      bool `json:"analytics_enabled"`
-			ErrorReportingEnabled bool `json:"error_reporting_enabled"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		if err := database.UpdateTelemetryPreferences(userID, body.AnalyticsEnabled, body.ErrorReportingEnabled); err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }

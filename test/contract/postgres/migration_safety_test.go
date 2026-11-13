@@ -18,7 +18,6 @@ func TestUnifiedAgentMigrationPreservesSharedProductData(t *testing.T) {
 		"delete from space_chats",
 		"delete from library",
 		"delete from provider_integrations",
-		"delete from trusted_devices",
 	} {
 		if strings.Contains(sql, destructive) {
 			t.Fatalf("migration contains prohibited destructive statement %q", destructive)

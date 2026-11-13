@@ -26,19 +26,6 @@ func (db *Database) DeleteSpaceNode(ctx context.Context, userID, spaceID, nodeID
 	})
 }
 
-func (db *Database) MarkSpaceNodeStale(ctx context.Context, userID, spaceID, nodeID string) error {
-	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE space_nodes SET stale=TRUE,updated_at=NOW() WHERE id=$1 AND space_id=$2 AND (visibility='public' OR uploader_user_id=$3)`, nodeID, spaceID, userID); err != nil {
-			return err
-		}
-		_, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "node.stale", nodeID, map[string]any{})
-		return err
-	})
-}
-
 func (db *Database) MarkSpaceRead(ctx context.Context, userID, spaceID string, seq int64) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {

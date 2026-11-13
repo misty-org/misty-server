@@ -1,5 +1,5 @@
 -- +goose Up
--- Workflows as memory (docs/agents/harness.md, phase 7). A saved workflow has two
+-- Workflows as memory. A saved workflow has two
 -- owners: the person's request (agent_method_versions, which the agent changes only when
 -- asked) and the steps the agent learned from running it, kept here as versions. Each
 -- successful run may add a version; the newest is offered the next time the workflow runs.

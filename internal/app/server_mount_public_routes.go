@@ -17,11 +17,10 @@ func (s *Server) mountPublicRoutes(prefix string, deps *mountDeps) {
 	s.mountPublicFeatureRoutes(prefix, deps)
 }
 
-// mountPublicAuthRoutes registers health, instance, sign-in, sign-out, password
-// reset, and handoff routes.
+// mountPublicAuthRoutes registers health, sign-in, sign-out and password reset
+// routes.
 func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/health", deps.health)
-	s.Router.Get(prefix+"/instance", deps.instance)
 	s.Router.Post(prefix+"/register", deps.register)
 	s.Router.Post(prefix+"/login", deps.login)
 	s.Router.Post(prefix+"/setup-keys/redeem", deps.redeemSetupKey)
@@ -34,8 +33,6 @@ func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 	s.Router.Post(prefix+"/auth/google/complete", deps.googleSignIn.Complete())
 	s.Router.Post(prefix+"/logout", deps.logout)
 	s.Router.Post(prefix+"/auth/refresh", api.RefreshSession(s.Database))
-	s.Router.Post(prefix+"/auth/handoff", deps.mintHandoff)
-	s.Router.Get(prefix+"/auth/handoff/start", deps.startHandoff)
 }
 
 // mountPublicAccountRoutes registers the current-user routes and the server
@@ -49,26 +46,22 @@ func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/server/alerts", api.ServerAlerts(s.Database))
 }
 
-// mountPublicProfileRoutes registers profile, avatar, device, settings, space
-// and telemetry preference routes.
+// mountPublicProfileRoutes registers profile, avatar, settings and Space people
+// routes.
 func (s *Server) mountPublicProfileRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/me/events", s.Spaces.AccountEvents())
 	s.Router.Post(prefix+"/me/export", s.Spaces.AccountExportManifest())
 	s.Router.Post(prefix+"/me/deletion", s.Spaces.BeginAccountDeletion())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
 	s.Router.MethodFunc(http.MethodPut, prefix+"/me/avatar", api.UserAvatar(s.Database, s.LibraryStore))
-	s.Router.Put(prefix+"/me/device", api.UpdateDevice(s.Database))
 	s.Router.Get(prefix+"/me/settings", api.GetSettings(s.Database))
 	s.Router.Put(prefix+"/me/settings", api.UpdateSettings(s.Database))
 	s.Router.Put(prefix+"/me/username", api.UpdateUsername(s.Database))
 	s.Router.Get(prefix+"/me/space-people", api.SpacePeople(s.Database))
-
-	s.Router.Put(prefix+"/me/telemetry", api.UpdateTelemetryPreferences(s.Database))
 }
 
-// mountPublicFeatureRoutes mounts the device, Spaces and Library route trees.
+// mountPublicFeatureRoutes mounts the Spaces and Library route trees.
 func (s *Server) mountPublicFeatureRoutes(prefix string, deps *mountDeps) {
-	s.mountAgentsRoutes(prefix, deps.agents)
 	s.mountSpacesRoutes(prefix, s.Spaces, s.Realtime)
 	if s.Library != nil {
 		s.mountLibraryRoutes(prefix, s.Library)

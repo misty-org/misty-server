@@ -1,5 +1,5 @@
 -- +goose Up
--- The open server sends no email (docs/self-hosting.md). The alerts service
+-- The open server sends no email. The alerts service
 -- records the problems it sees here instead of emailing them; the console and
 -- the server owner's app read them. A row is an open alert: it is written once
 -- a problem is seen on two checks in a row and deleted when it clears.

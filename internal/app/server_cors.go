@@ -43,12 +43,6 @@ var allowedCORSRequestHeaders = []string{
 	"X-Misty-Platform",
 	"X-Misty-CSRF",
 	"X-Misty-Release-Channel",
-	"X-Misty-Session-Id",
-	"X-Misty-Analytics-Enabled",
-	"X-Misty-Device-Timestamp",
-	"X-Misty-Device-Nonce",
-	"X-Misty-Device-Signature",
-	"X-Misty-Attachment-Upload-Token",
 	"X-Misty-Library-Upload-Token",
 }
 

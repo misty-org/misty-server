@@ -1,6 +1,6 @@
 -- +goose Up
--- The memory tree per person per Space (docs/plans/spaces-as-profiles.md,
--- phase 7). Moments (memory_events, memory_backlog), Summaries (ai_recaps),
+-- The memory tree per person per Space. Moments (memory_events,
+-- memory_backlog), Summaries (ai_recaps),
 -- Facts (misty_memories) and Workflows (agent_methods, agent_method_versions,
 -- agent_method_lessons) each belong to one person in one Space. The server
 -- keeps them readable and private to their owner, and searches them by
@@ -37,7 +37,7 @@ DELETE FROM agent_method_versions WHERE space_id IS NULL;
 DELETE FROM agent_methods WHERE space_id IS NULL;
 DROP TABLE memory_personal_spaces;
 
--- Leaving a Space removes its member rows through the leave job (phase 9);
+-- Leaving a Space removes its member rows through the leave job;
 -- a Space that is deleted takes its memory with it.
 ALTER TABLE memory_events ALTER COLUMN space_id SET NOT NULL,
     ADD CONSTRAINT memory_events_space_fkey FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE;
@@ -134,7 +134,7 @@ CREATE TRIGGER agent_method_lessons_space BEFORE INSERT OR UPDATE OF space_id ON
     FOR EACH ROW EXECUTE FUNCTION misty_memory_child_space();
 
 -- Owner and Space: a row opens only for its owner, and only while they are a
--- member of its Space. Phase 9 adds the agent check on top, in the tools.
+-- member of its Space. The tools add the agent check on top.
 DROP POLICY memory_events_owner ON memory_events;
 CREATE POLICY memory_events_owner ON memory_events
     USING (misty_rls_is_service() OR (owner_user_id = misty_rls_user_id() AND misty_is_space_member(space_id)))

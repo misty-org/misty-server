@@ -102,15 +102,6 @@ func registrationAllowed(ctx context.Context, store accountCounter, email string
 	return store.PendingAccountInvitation(ctx, email)
 }
 
-// registrationState is what /instance reports: "open" until the first account
-// exists or while signup is open, then "invitation", since only invited people may sign up.
-func registrationState(ctx context.Context, store accountCounter) string {
-	if exists, err := store.AnyAccount(ctx); err == nil && exists && !openSignup() {
-		return "invitation"
-	}
-	return "open"
-}
-
 func writeRegistrationClosed(w http.ResponseWriter) {
 	if allowedEmails() != nil {
 		writeEmailNotAllowed(w)

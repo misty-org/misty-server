@@ -80,7 +80,7 @@ func TestNoAgentsChecksCatchWhatTheyClaimTo(t *testing.T) {
 		}
 	}
 	for _, path := range []string{
-		"/spaces/{spaceID}/agents/{agentID}", "/me/space-agents", "/devices", "/spaces/{spaceID}/agent-artifacts",
+		"/spaces/{spaceID}/agents/{agentID}", "/me/space-agents", "/me/settings", "/spaces/{spaceID}/agent-artifacts",
 		"/api/spaces/{spaceID}/messages", "/me/voice/transcripts", "/server/alerts", "/auth/google",
 	} {
 		if problem := routeProblem(path); problem != "" {

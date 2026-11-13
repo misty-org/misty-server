@@ -2,7 +2,7 @@
 # services of compose.yml all run it. Build context: the repository root.
 
 # Bundle the Worker with wrangler's dry run; the image ships the bundle so
-# setup deploys them through the Cloudflare API with no Node at run time.
+# setup deploys it through the Cloudflare API with no Node at run time.
 FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS workers
 ENV WRANGLER_SEND_METRICS=false CI=true
 WORKDIR /services/journal-collab

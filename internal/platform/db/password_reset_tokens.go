@@ -17,8 +17,8 @@ const PasswordResetTTL = 30 * time.Minute
 var ErrPasswordResetTokenInvalid = errors.New("password reset token is invalid or expired")
 
 // GrantPasswordReset stores (by hash) the reset token a setup key's sign-in
-// returns. The server sends no email, so a setup key is how a forgotten
-// password is reset: whoever holds the key could sign in with it anyway. An
+// returns. There is no reset by email: a setup key is how a forgotten
+// password is reset, since whoever holds the key could sign in with it anyway. An
 // account holds one grant at a time; a newer one replaces it.
 func (db *Database) GrantPasswordReset(ctx context.Context, userID, hashedToken string, expiresAt time.Time) error {
 	return db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {

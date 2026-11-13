@@ -50,9 +50,9 @@ func (c *operatorClient) close(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodPost, "/accounts/"+url.PathEscape(id)+"/close", map[string]any{"delete_after_days": 30})
 }
 
-// signInLink issues a new setup key and returns its sign-in link. The server
-// sends no email, so the console shows the link to pass on; earlier unused
-// links stop working.
+// signInLink issues a new setup key and returns its sign-in link. The console
+// shows the link to pass on, since a server without Mailjet configured sends
+// no email; earlier unused links stop working.
 func (c *operatorClient) signInLink(ctx context.Context, id string) (string, error) {
 	var answer struct {
 		Account struct {

@@ -46,14 +46,11 @@ func NormalizeRateLimitPath(path string) string {
 	if trimmed == "" {
 		return "/"
 	}
-	for _, prefix := range []string{"/api", "/v1"} {
-		if trimmed == prefix {
-			return "/"
-		}
-		if strings.HasPrefix(trimmed, prefix+"/") {
-			trimmed = trimmed[len(prefix):]
-			break
-		}
+	if trimmed == "/v1" {
+		return "/"
+	}
+	if strings.HasPrefix(trimmed, "/v1/") {
+		trimmed = trimmed[len("/v1"):]
 	}
 	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
 	// Space-scoped routes carry ids in the path. Collapsing them keeps one

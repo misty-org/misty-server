@@ -1,10 +1,7 @@
-# Reviewed 2026-11-05: historical gitleaks findings that are not credentials. Carried over from
-# misty when this repository was split out, with its rewritten commit ids. None grant access.
-4aafe1beafa3bb6b30d82449f66d38e018fef3e1:test/fixtures/compatibility/self-host-proofs.json:jwt:4
-4aafe1beafa3bb6b30d82449f66d38e018fef3e1:test/fixtures/compatibility/self-host-proofs.json:jwt:6
-5e2a2c0ffadcb2f34a80255408b06a0f05d04661:apps/agent-runtime/test/model-provider.test.ts:generic-api-key:216
-9fc01cfee47ce80879b05f2d1e2aa2df4453085f:self-host/collab/control.test.mjs:generic-api-key:9
-b3b0e574d44a98082c275dd8b8ba12a260500c7c:test/fixtures/compatibility/self-host-proofs.json:jwt:4
-b3b0e574d44a98082c275dd8b8ba12a260500c7c:test/fixtures/compatibility/self-host-proofs.json:jwt:6
-d0ef0b30319484fd981b27403d1b7d8fbc2651e9:internal/platform/httpapi/cloud_connections_cloud_authorization_callback.go:dropbox-api-token:115
-f430f5384112118808ce5726d7d5cd05f85bb908:internal/modelruntime/client_test.go:generic-api-key:34
+# Reviewed 2026-11-12: full-history gitleaks findings that are not credentials. All are test
+# fixtures (placeholder API keys, migration-test-only JWTs, a fixed internal test secret). None grant access.
+c31f15bc4913a5d709c3d3a938564ca68c65c1e5:apps/agent-runtime/test/model-provider.test.ts:generic-api-key:216
+6286cf34369a243d857eeb730c7ac594fb8e7a6d:internal/modelruntime/client_test.go:generic-api-key:34
+d6ecae7e3fe828e289e0c4cea3b93ce1e640487b:test/fixtures/compatibility/self-host-proofs.json:jwt:4
+d6ecae7e3fe828e289e0c4cea3b93ce1e640487b:test/fixtures/compatibility/self-host-proofs.json:jwt:6
+a99695345c6e1a099939be54e3cc22158ad11407:self-host/collab/control.test.mjs:generic-api-key:9

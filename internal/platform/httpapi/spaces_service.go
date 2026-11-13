@@ -144,8 +144,6 @@ func writeSpaceError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "default_space_protected"})
 	case errors.Is(err, db.ErrSpacePeopleLimit):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_people_limit_reached"})
-	case errors.Is(err, db.ErrSpaceNodeLimit):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_node_limit_reached"})
 	case errors.Is(err, db.ErrLibraryQuota):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "owner_storage_quota_exceeded"})
 	case errors.Is(err, db.ErrSpaceConflict):

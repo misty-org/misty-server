@@ -95,7 +95,7 @@ func (s *Server) loadCustomer(ctx context.Context, userID string) customerDetail
 	if detail, err := s.db.ConsoleAccountDetail(ctx, userID); err == nil {
 		view.Console = detail
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		view.Err = "Couldn't load the account's devices: " + err.Error()
+		view.Err = "Couldn't load the account's sessions and storage: " + err.Error()
 	}
 	return view
 }
@@ -112,9 +112,10 @@ func (s *Server) renderCustomerAction(w http.ResponseWriter, r *http.Request, fl
 	render(w, r, customerDetail(view))
 }
 
-// signInLink issues a new setup key and shows its link once. The server sends
-// no email: the operator passes the link on, to onboard someone or to reset a
-// forgotten password (the sign-in lets them choose a new one).
+// signInLink issues a new setup key and shows its link once. The operator
+// passes the link on, to onboard someone or to reset a forgotten password (the
+// sign-in lets them choose a new one). A server with Mailjet configured also
+// emails it.
 func (s *Server) signInLink(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
 		http.NotFound(w, r)

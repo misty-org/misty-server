@@ -102,8 +102,8 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 	render(w, r, layout(view))
 }
 
-// audit records an operator action; failures are logged into the response
-// flow by callers only when the action itself failed.
+// audit records an operator action. A failed write is ignored so it never
+// fails the action it records.
 func (s *Server) audit(r *http.Request, action, target, detail string) {
 	if s.db != nil {
 		_ = s.db.ConsoleRecordAudit(r.Context(), action, target, detail)

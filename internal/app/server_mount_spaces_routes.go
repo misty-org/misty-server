@@ -66,8 +66,6 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/messages/{messageID}/reactions/{emoji}", spaces.MessageReaction())
 	s.Router.Post(prefix+"/spaces/{spaceID}/read", spaces.MarkRead())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/nodes", api.ConditionalGET(spaces.Nodes()))
-	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/nodes", spaces.Nodes())
-	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/nodes/{nodeID}", spaces.Node())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/nodes/{nodeID}", spaces.Node())
 	s.Router.Post(prefix+"/spaces/{spaceID}/nodes/{nodeID}/resolve", spaces.ResolveTicket())
 	s.Router.Get(prefix+"/spaces/resolve/{ticket}", spaces.Resolve())
@@ -113,29 +111,4 @@ func (s *Server) CleanupExpiredJournalAssets(
 		return 0, nil
 	}
 	return s.Library.CleanupExpiredJournalAssets(ctx, safetyWindow, limit)
-}
-
-func (s *Server) mountAgentsRoutes(prefix string, service *api.DevicesService) {
-	connectedDevicesEnabled := serverConnectedDevicesConfigured()
-	// Devices are always available: adding one is how the shared clipboard
-	// trusts it.
-	s.Router.Post(prefix+"/devices", service.RegisterDevice())
-	s.Router.Get(prefix+"/devices", service.ListDevices())
-	// One device identity for the shared clipboard. Trust changes
-	// carry signatures the server verifies but cannot produce.
-	s.Router.Get(prefix+"/devices/channel", service.DeviceChannel())
-	s.Router.Post(prefix+"/devices/{deviceID}/channel-ticket", service.DeviceChannelTicket())
-	s.Router.Post(prefix+"/devices/{deviceID}/heartbeat", service.DeviceAuthenticated(service.HeartbeatDevice()))
-	s.Router.Put(prefix+"/devices/{deviceID}/devices/{targetID}/name", service.DeviceAuthenticated(service.RenameDevice()))
-	s.Router.Put(prefix+"/devices/{deviceID}/policy", service.DeviceAuthenticated(service.StoreDevicePolicy()))
-	s.Router.Post(prefix+"/devices/{deviceID}/remove-device", service.DeviceAuthenticated(service.RemoveDevice()))
-	if connectedDevicesEnabled {
-		// Space peer sessions between accounts still verify server tickets.
-		s.Router.Get(prefix+"/devices/peer-ticket-keys", service.ConnectedDeviceTicketKeys())
-	}
-}
-
-func serverConnectedDevicesConfigured() bool {
-	return strings.TrimSpace(config.Getenv("MISTY_DEVICE_TICKET_PRIVATE_KEY")) != "" &&
-		strings.TrimSpace(config.Getenv("MISTY_DEVICE_PAIRING_PEPPER")) != ""
 }

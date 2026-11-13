@@ -23,10 +23,6 @@ var (
 	ErrAccountSuspended = errors.New("account_suspended")
 	// ErrAccountNotFound names an account the operator asked for that does not exist.
 	ErrAccountNotFound = errors.New("account not found")
-	// ErrDeviceLimit refuses one more device than the account's limit.
-	ErrDeviceLimit = errors.New("device_limit_reached")
-	// ErrNoDevicesAllowed refuses a device on an account allowed none.
-	ErrNoDevicesAllowed = errors.New("no_devices_allowed")
 )
 
 func (db *Database) serviceTx(ctx context.Context, fn func(*sql.Tx) error) error {

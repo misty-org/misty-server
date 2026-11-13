@@ -1,6 +1,6 @@
 -- +goose Up
 -- Search in Spaces is Postgres full-text search on the words people wrote, not
--- meaning (docs/plans/agents-off-server.md, decision 3). Notes already have their
+-- meaning. Notes already have their
 -- index, space_notes_search_idx; messages get theirs here. Only the text and
 -- mention labels of a message's spans count: its span types and ids are not
 -- words anyone wrote, and "text" would otherwise match every message.

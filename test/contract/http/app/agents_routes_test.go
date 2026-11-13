@@ -18,8 +18,7 @@ func TestAgentRoutesRequireAuthentication(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{
-		"/api/devices",
-		"/api/spaces/space-1/notes",
+		"/v1/spaces/space-1/notes",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
@@ -44,19 +43,19 @@ func TestCustomAgentMutationAndInvocationRoutesAreAbsent(t *testing.T) {
 		path   string
 		want   int
 	}{
-		{http.MethodGet, "/api/agents", http.StatusNotFound},
-		{http.MethodPost, "/api/spaces/space-1/agents", http.StatusMethodNotAllowed},
-		{http.MethodGet, "/api/spaces/space-1/chat-agents", http.StatusNotFound},
-		{http.MethodPut, "/api/settings/companion-agent", http.StatusNotFound},
-		{http.MethodPost, "/api/agents", http.StatusNotFound},
-		{http.MethodPatch, "/api/agents/personal-1", http.StatusNotFound},
-		{http.MethodDelete, "/api/agents/personal-1", http.StatusNotFound},
-		{http.MethodPut, "/api/agents/personal-1/avatar", http.StatusNotFound},
-		{http.MethodPost, "/api/spaces/space-1/agents/personal-1/runs", http.StatusNotFound},
-		{http.MethodPost, "/api/agents/delegate", http.StatusNotFound},
-		{http.MethodPut, "/api/agents/personal-1/mcp-tools", http.StatusNotFound},
-		{http.MethodGet, "/api/agents/personal-1/mcp-executions", http.StatusNotFound},
-		{http.MethodPost, "/api/spaces/space-1/conversations/direct", http.StatusMethodNotAllowed},
+		{http.MethodGet, "/v1/agents", http.StatusNotFound},
+		{http.MethodPost, "/v1/spaces/space-1/agents", http.StatusMethodNotAllowed},
+		{http.MethodGet, "/v1/spaces/space-1/chat-agents", http.StatusNotFound},
+		{http.MethodPut, "/v1/settings/companion-agent", http.StatusNotFound},
+		{http.MethodPost, "/v1/agents", http.StatusNotFound},
+		{http.MethodPatch, "/v1/agents/personal-1", http.StatusNotFound},
+		{http.MethodDelete, "/v1/agents/personal-1", http.StatusNotFound},
+		{http.MethodPut, "/v1/agents/personal-1/avatar", http.StatusNotFound},
+		{http.MethodPost, "/v1/spaces/space-1/agents/personal-1/runs", http.StatusNotFound},
+		{http.MethodPost, "/v1/agents/delegate", http.StatusNotFound},
+		{http.MethodPut, "/v1/agents/personal-1/mcp-tools", http.StatusNotFound},
+		{http.MethodGet, "/v1/agents/personal-1/mcp-executions", http.StatusNotFound},
+		{http.MethodPost, "/v1/spaces/space-1/conversations/direct", http.StatusMethodNotAllowed},
 	}
 	for _, test := range tests {
 		recorder := httptest.NewRecorder()
@@ -77,9 +76,9 @@ func TestRetiredAgentChatRoutesAreAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{
-		"/api/agent-conversations",
-		"/api/ai/sessions",
-		"/api/mika/discovery",
+		"/v1/agent-conversations",
+		"/v1/ai/sessions",
+		"/v1/mika/discovery",
 	} {
 		recorder := httptest.NewRecorder()
 		server.Router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))

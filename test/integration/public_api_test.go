@@ -60,10 +60,7 @@ func TestPublicAccountResponsesHideLicenseID(t *testing.T) {
 	if meBody["username"] != "ada_lovelace" {
 		t.Fatalf("/me username = %#v, want ada_lovelace", meBody["username"])
 	}
-	if got, ok := meBody["allows_use"].(bool); !ok || !got {
-		t.Fatalf("/me allows_use = %#v, want true", meBody["allows_use"])
-	}
-	for _, retired := range []string{"tier", "status", "billing", "trial_eligible"} {
+	for _, retired := range []string{"tier", "status", "billing", "trial_eligible", "allows_use", "email_verified", "license_device"} {
 		if _, ok := meBody[retired]; ok {
 			t.Fatalf("/me still reports %s: %#v", retired, meBody)
 		}

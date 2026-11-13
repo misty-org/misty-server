@@ -92,8 +92,6 @@ services:
         required: false
       - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/journal.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/devices.env
-        required: false
       - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/spaces.env
         required: false
       - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/services.env
@@ -115,7 +113,6 @@ services:
       CLOUDFLARE_API_TOKEN: ""
       PARTYKIT_HOST: ${MISTY_CLOUDFLARE_WORKER_HOST:?run misty setup cloudflare}
       MISTY_JOURNAL_SERVER_ENV_FILE: /run/misty/journal-server.env
-      # browser_act and every other screen task run as device jobs.
     volumes:
       - dev_runtime:/run/misty:ro
     depends_on:

@@ -44,11 +44,3 @@ func LibraryStoreFromEnv() (api.LibraryObjectStore, error) {
 	}
 	return store, nil
 }
-
-// libraryStorageName names a Library store for /instance.
-func libraryStorageName(store api.LibraryObjectStore) string {
-	if _, ok := store.(*api.S3LibraryObjectStore); ok {
-		return "s3"
-	}
-	return "memory"
-}

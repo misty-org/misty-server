@@ -23,34 +23,6 @@ func asServiceTx(ctx context.Context, tx *sql.Tx, fn func() error) error {
 	return err
 }
 
-// requireDeviceRoomTx refuses a new device once the account holds as many
-// devices as its limit allows. Pending and added devices count; removed ones
-// do not, so removing a device frees its place.
-func requireDeviceRoomTx(ctx context.Context, tx *sql.Tx, userID string) error {
-	return asServiceTx(ctx, tx, func() error {
-		limits, _, err := accountControlsTx(ctx, tx, userID)
-		if err != nil || limits.Devices == nil {
-			return err
-		}
-		// Two new devices registering at once must not both take the last place.
-		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "devices:"+userID); err != nil {
-			return err
-		}
-		var count int64
-		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM trusted_devices
-			WHERE user_id=$1 AND revoked_at IS NULL AND admission_state<>'revoked'`, userID).Scan(&count); err != nil {
-			return err
-		}
-		if *limits.Devices <= 0 {
-			return ErrNoDevicesAllowed
-		}
-		if count >= *limits.Devices {
-			return ErrDeviceLimit
-		}
-		return nil
-	})
-}
-
 // accountStorageUsedTx is everything the account stores on this server: its
 // Library, notes, messages and pending uploads.
 func accountStorageUsedTx(ctx context.Context, tx *sql.Tx, userID string) (int64, error) {

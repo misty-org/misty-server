@@ -12,7 +12,7 @@ import (
 func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	values := productionCoreValues()
-	values["MISTY_PUBLIC_API_URL"] = "http://api.example.com/api"
+	values["MISTY_PUBLIC_API_URL"] = "http://api.example.com/v1"
 	for key, value := range values {
 		t.Setenv(key, value)
 	}
@@ -20,7 +20,7 @@ func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {
 		t.Fatalf("validateProductionEnvironment() error = %v, want https rejection", err)
 	}
 
-	t.Setenv("MISTY_PUBLIC_API_URL", "https://api.example.com/api")
+	t.Setenv("MISTY_PUBLIC_API_URL", "https://api.example.com/v1")
 	t.Setenv("PORT", "70000")
 	if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), "PORT") {
 		t.Fatalf("validateProductionEnvironment() error = %v, want invalid PORT rejection", err)

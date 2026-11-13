@@ -1,5 +1,5 @@
 -- +goose Up
--- Agents on devices (docs/agents/chats-local.md): while an agent
+-- Agents on devices: while an agent
 -- works on one of the person's computers, that computer stays awake. On by
 -- default; the display may still turn off.
 ALTER TABLE ai_user_settings ADD COLUMN IF NOT EXISTS keep_awake_for_agents boolean NOT NULL DEFAULT true;

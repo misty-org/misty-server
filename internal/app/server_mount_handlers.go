@@ -13,18 +13,14 @@ import (
 )
 
 // mountDeps holds the services and handlers that MountHandlers builds once and
-// then wires into every public route prefix.
+// then wires into the /v1 routes.
 type mountDeps struct {
 	health         http.HandlerFunc
-	instance       http.HandlerFunc
 	register       http.HandlerFunc
 	login          http.HandlerFunc
 	redeemSetupKey http.HandlerFunc
 	logout         http.HandlerFunc
-	mintHandoff    http.HandlerFunc
-	startHandoff   http.HandlerFunc
 
-	agents       *api.DevicesService
 	googleSignIn *api.GoogleSignInService
 }
 
@@ -39,11 +35,10 @@ func (s *Server) MountHandlers() error {
 		return err
 	}
 
-	// /v1 is the canonical contract. The bare and /api trees remain available
-	// for existing desktop releases.
-	for _, prefix := range []string{"", "/api", "/v1"} {
-		s.mountPublicRoutes(prefix, deps)
-	}
+	// Every client uses /v1. Docker, compose and the setup tools probe the
+	// bare /health, so it stays outside /v1 too.
+	s.mountPublicRoutes("/v1", deps)
+	s.Router.Get("/health", deps.health)
 	s.mountOperationalRoutes(deps)
 
 	return nil
@@ -81,72 +76,30 @@ func (s *Server) mountRequestMiddleware() {
 	s.Metrics = metrics.New()
 	s.registerDomainGauges(s.Metrics)
 	s.Router.Use(s.Metrics.Middleware)
-	// Model keys stay on each device. An older
-	// app's X-Misty-Models header is dropped before any handler or log sees it.
-	s.Router.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Header.Del("X-Misty-Models")
-			next.ServeHTTP(w, r)
-		})
-	})
 }
 
-// buildMountDeps constructs the services and handlers in the order the route
-// table has always depended on.
+// buildMountDeps constructs the sign-in handlers and the health handler.
 func (s *Server) buildMountDeps() (*mountDeps, error) {
-	authHandoffService, err := api.NewAuthHandoffService(s.Database, s.AuthHandoffStartURL, s.WebsiteURL)
-	if err != nil {
-		return nil, err
-	}
 	deps := &mountDeps{}
-	if err := s.wireDevices(deps); err != nil {
-		return nil, err
-	}
-	if err := s.wireAccountHandlers(deps, authHandoffService); err != nil {
+	if err := s.wireAccountHandlers(deps); err != nil {
 		return nil, err
 	}
 	return deps, nil
 }
 
-// wireDevices builds the service behind /devices.
-func (s *Server) wireDevices(deps *mountDeps) error {
-	agentsService := api.NewDevicesService(s.Database)
-	if serverConnectedDevicesConfigured() {
-		connectedDevicesConfig, configErr := api.ConnectedDevicesConfigFromEnv()
-		if configErr != nil {
-			return configErr
-		}
-		agentsService.SetConnectedDevices(connectedDevicesConfig)
-	}
-	deps.agents = agentsService
-	return nil
-}
-
-// wireAccountHandlers builds the sign-in and handoff handlers, plus the health
-// and instance handlers. The server sends no email, so there is no email
-// verification or reset by email: a setup key resets a password.
-func (s *Server) wireAccountHandlers(deps *mountDeps, authHandoffService *api.AuthHandoffService) error {
-	registerHandler := api.Register(s.Database)
-	loginHandler := api.Login(s.Database)
+// wireAccountHandlers builds the sign-in handlers and the health handler.
+// There is no reset by email: a setup key's sign-in link resets a password.
+func (s *Server) wireAccountHandlers(deps *mountDeps) error {
 	googleSignIn, err := api.NewGoogleSignInService(s.Database)
 	if err != nil {
 		return err
 	}
-	logoutHandler := api.Logout(s.Database)
-	mintHandoffHandler := authHandoffService.Mint()
-	startHandoffHandler := authHandoffService.Start()
-	healthHandler := s.HealthMonitor.Handler()
-	instanceHandler := api.Instance(s.Database, libraryStorageName(s.LibraryStore))
-
 	deps.googleSignIn = googleSignIn
-	deps.register = registerHandler
-	deps.login = loginHandler
+	deps.register = api.Register(s.Database)
+	deps.login = api.Login(s.Database)
 	deps.redeemSetupKey = api.RedeemSetupKey(s.Database)
-	deps.logout = logoutHandler
-	deps.mintHandoff = mintHandoffHandler
-	deps.startHandoff = startHandoffHandler
-	deps.health = healthHandler
-	deps.instance = instanceHandler
+	deps.logout = api.Logout(s.Database)
+	deps.health = s.HealthMonitor.Handler()
 	return nil
 }
 

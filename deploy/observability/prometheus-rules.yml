@@ -34,7 +34,7 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: Misty API database pool is over 85% utilized
+          summary: Misty API database pool is over 85% in use
       - alert: MistyMetricsSamplingStale
         expr: misty_metrics_sample_age_seconds > 60
         for: 5m

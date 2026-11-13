@@ -1,5 +1,5 @@
 -- +goose Up
--- Scheduled tasks that drive the browser (roadmap C1). A schedule can name one
+-- Scheduled tasks that drive the browser. A schedule can name one
 -- of the person's computers. When it's due, the run waits for Misty to be open
 -- on that computer, which starts it with its own signed browser grant. A run
 -- that comes due while the computer is away waits for it and says so; it never

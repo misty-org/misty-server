@@ -8,7 +8,7 @@ import (
 )
 
 // provisionWorkers deploys the collaboration Worker and
-// records where the API reaches them.
+// records where the API reaches it.
 func provisionWorkers(ctx context.Context, cf *cloudflare, inputs Inputs, names Names, store *Store, bundles string) error {
 	var account struct {
 		Subdomain string `json:"subdomain"`

@@ -1,5 +1,5 @@
 -- +goose Up
--- Give the agent a task by email or Slack (roadmap C8). The person turns a
+-- Give the agent a task by email or Slack. The person turns a
 -- channel on; Misty watches their own connected Gmail or Slack through
 -- Composio for messages they wrote to it, starts a task for each, and answers
 -- in the same thread. Only the person's own messages start tasks.

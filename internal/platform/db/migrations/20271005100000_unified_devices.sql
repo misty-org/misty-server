@@ -1,6 +1,6 @@
 -- +goose Up
--- One device identity for sync, agents and LAN file sharing
--- (docs/sync/devices.md). A device is admitted only with a grant
+-- One device identity for sync, agents and LAN file sharing.
+-- A device is admitted only with a grant
 -- signed by the vault root key, which the server can verify but never make.
 -- Same-account pairing, its server tickets and per-pair sessions are retired.
 ALTER TABLE trusted_devices

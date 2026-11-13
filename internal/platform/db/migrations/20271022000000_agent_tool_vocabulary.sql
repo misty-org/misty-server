@@ -1,5 +1,5 @@
 -- +goose Up
--- Agent tools take the agent vocabulary (docs/agents/harness.md): dotted, singular names
+-- Agent tools take the agent vocabulary: dotted, singular names
 -- that never use UI labels. No aliases are kept, so stored references move with them: the
 -- action journal, device job capabilities and the capability lists on grants.
 CREATE TEMP TABLE tool_renames(old_name text PRIMARY KEY, new_name text NOT NULL);

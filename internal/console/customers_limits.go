@@ -2,7 +2,6 @@ package console
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"net/url"
 	"strconv"
@@ -14,7 +13,8 @@ import (
 // gigabyte is the decimal gigabyte plans are sold in (50 GB = 50,000,000,000 bytes).
 const gigabyte = 1_000_000_000
 
-// limitsFromForm reads the limits form. A blank field is unlimited.
+// limitsFromForm reads the limits form. A blank storage field is unlimited.
+// Devices is on or off: blank when the account is set up, 0 when not yet.
 func limitsFromForm(form url.Values) (map[string]any, error) {
 	limits := map[string]any{}
 	storage := strings.TrimSpace(form.Get("storage_gb"))
@@ -27,30 +27,20 @@ func limitsFromForm(form url.Values) (map[string]any, error) {
 		}
 		limits["storage_bytes"] = int64(math.Round(gb * gigabyte))
 	}
-	for _, field := range []struct{ name, label string }{
-		{"devices", "Devices"},
-	} {
-		value := strings.ReplaceAll(strings.TrimSpace(form.Get(field.name)), ",", "")
-		if value == "" {
-			limits[field.name] = nil
-			continue
-		}
-		n, err := strconv.ParseInt(value, 10, 64)
-		if err != nil || n < 0 {
-			return nil, errors.New(field.label + " must be a whole number, or blank for unlimited.")
-		}
-		limits[field.name] = n
+	switch strings.TrimSpace(form.Get("devices")) {
+	case "":
+		limits["devices"] = nil
+	case "0":
+		limits["devices"] = int64(0)
+	default:
+		return nil, errors.New("Set up for use must be Yes or Not yet.")
 	}
 	return limits, nil
 }
 
-// limitInput is a limit as the form shows it: blank when unlimited.
-func limitInput(limit *int64) string {
-	if limit == nil {
-		return ""
-	}
-	return strconv.FormatInt(*limit, 10)
-}
+// setUpForUse reports whether the devices limit lets the account use Misty:
+// any value but 0. The number itself is not shown.
+func setUpForUse(limit *int64) bool { return limit == nil || *limit > 0 }
 
 func storageInput(limit *int64) string {
 	if limit == nil {
@@ -61,14 +51,6 @@ func storageInput(limit *int64) string {
 
 func gbLabel(n int64) string {
 	return strconv.FormatFloat(float64(n)/gigabyte, 'f', 1, 64) + " GB"
-}
-
-// usageAgainst is "3 of 5" or "3 · no limit".
-func usageAgainst(used int64, limit *int64) string {
-	if limit == nil {
-		return fmt.Sprintf("%d · no limit", used)
-	}
-	return fmt.Sprintf("%d of %d", used, *limit)
 }
 
 func storageAgainst(used *int64, limit *int64) string {
@@ -84,13 +66,6 @@ func storageAgainst(used *int64, limit *int64) string {
 
 // atLimit marks a row whose use has reached its limit.
 func atLimit(used int64, limit *int64) bool { return limit != nil && used >= *limit }
-
-func deviceColumn(a db.OperatorAccount) string {
-	if a.Limits.Devices == nil {
-		return strconv.FormatInt(a.Usage.Devices, 10)
-	}
-	return fmt.Sprintf("%d/%d", a.Usage.Devices, *a.Limits.Devices)
-}
 
 func setupLabel(a db.OperatorAccount) string {
 	switch {
@@ -112,7 +87,7 @@ func closingLabel(a db.OperatorAccount) string {
 	return "Closed and read-only: it can sign in and export until " + date(*a.DeleteAt) + ", when its data is deleted unless it is resumed first."
 }
 
-// periodLabel names the billing period app actions count in.
+// periodLabel heads the usage rows with the account's current billing period.
 func periodLabel(a db.OperatorAccount) string {
 	if a.Usage.PeriodStart.IsZero() {
 		return "Usage this period"

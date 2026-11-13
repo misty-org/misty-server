@@ -73,13 +73,10 @@ func positiveEnvDuration(name string, fallback time.Duration) time.Duration {
 	return value
 }
 
-// configureTransfers turns on direct transfer whenever the object store can
-// sign, which is the only thing that actually determines whether it can work.
-//
-// Deriving it from capability rather than a flag means production cannot be
-// misconfigured into proxying file bytes: the R2 store always signs, so direct
-// transfer is always on there. The local and in-memory development stores
-// cannot sign, so they transparently keep the proxy route.
+// ConfigureTransfers turns on direct transfer whenever the object store can
+// sign. Deriving it from capability rather than a flag means production cannot
+// be misconfigured into proxying file bytes; the local and in-memory
+// development stores cannot sign, so they keep the proxy route.
 func (s *SpaceLibraryService) ConfigureTransfers(ttls TransferTTLs) error {
 	if _, err := validatePresignTTL(ttls.UploadURLTTL); err != nil {
 		return fmt.Errorf("upload URL TTL: %w", err)

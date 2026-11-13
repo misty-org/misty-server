@@ -16,6 +16,3 @@
 
 # CLI diagnostics are never part of an image build.
 .misty
-
-# Eval screenshots and reports are local output, never part of an image.
-**/evals/**/reports

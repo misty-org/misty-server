@@ -14,7 +14,7 @@ templ customersPage(v customersView) {
 	}
 	<div class="split">
 		<div class="table customers-table">
-			<div class="table-head"><span>Email</span><span>Devices</span><span>Status</span></div>
+			<div class="table-head"><span>Email</span><span>Status</span></div>
 			for _, account := range v.Customers {
 				<a
 					class={ "table-row", "row-link", templ.KV("selected", account.ID == v.Selected) }
@@ -24,7 +24,6 @@ templ customersPage(v customersView) {
 					}
 				>
 					<span class="truncate">{ account.Email }</span>
-					<span>{ deviceColumn(account) }</span>
 					<span>
 						@stateTag(customerStatus(account))
 					</span>
@@ -53,7 +52,7 @@ templ customerDetail(v customerDetailView) {
 					<input id="sign-in-link" type="text" readonly value={ v.SignInLink } aria-label="Sign-in link"/>
 					<button class="button" type="button" data-copy="sign-in-link">Copy</button>
 				</div>
-				<p class="muted">It signs { v.Account.Email } in once within 7 days, on the computer where Misty is installed, and lets them choose a new password. Misty sends no email, so pass it on yourself.</p>
+				<p class="muted">It signs { v.Account.Email } in once within 7 days, on the computer where Misty is installed, and lets them choose a new password. Unless this server sends email through Mailjet, pass it on yourself.</p>
 			}
 			if v.Err != "" {
 				@problem(v.Err)
@@ -67,38 +66,16 @@ templ customerDetail(v customerDetailView) {
 			@sectionLabel(periodLabel(v.Account))
 			<ul class="rows compact">
 				@usageRow("Storage", storageAgainst(v.Account.Usage.StorageBytes, v.Account.Limits.StorageBytes), v.Account.Usage.StorageBytes != nil && atLimit(*v.Account.Usage.StorageBytes, v.Account.Limits.StorageBytes))
-				@usageRow("Devices", usageAgainst(v.Account.Usage.Devices, v.Account.Limits.Devices), atLimit(v.Account.Usage.Devices, v.Account.Limits.Devices))
 			</ul>
 			if v.CanChange {
 				@sectionLabel("Limits")
 				<form class="limits-form" hx-post={ v.actionPath("limits") } hx-target="#customer-detail" hx-swap="outerHTML">
 					@limitField("Storage (GB)", "storage_gb", storageInput(v.Account.Limits.StorageBytes))
-					@limitField("Devices", "devices", limitInput(v.Account.Limits.Devices))
-					<p class="muted">Leave a field blank for no limit.</p>
+					@setUpField(setUpForUse(v.Account.Limits.Devices))
+					<p class="muted">Leave Storage blank for no limit. Accounts from open sign-up start as not set up.</p>
 					<div class="actions"><button class="button" type="submit" hx-disabled-elt="this">Save limits</button></div>
 				</form>
 			}
-			@sectionLabel("Devices")
-			<ul class="rows compact">
-				for _, device := range v.Console.DeviceList {
-					<li class="row">
-						<span class="row-label">
-							@deviceIcon(device.Platform)
-							{ device.Name }
-						</span>
-						<span class="muted">
-							if device.Revoked {
-								removed
-							} else {
-								{ "seen " + ago(device.LastSeen) }
-							}
-						</span>
-					</li>
-				}
-				if len(v.Console.DeviceList) == 0 {
-					@emptyRow("No devices")
-				}
-			</ul>
 			@sectionLabel("Account")
 			<p class="muted">{ plural(v.Console.Sessions, "active session", "active sessions") }</p>
 			<div class="actions">
@@ -121,7 +98,7 @@ templ customerDetail(v customerDetailView) {
 							hx-post={ v.actionPath("close") }
 							hx-target="#customer-detail"
 							hx-swap="outerHTML"
-							hx-confirm={ "Close " + v.Account.Email + "? It becomes read-only now, and everything in it is deleted in 30 days unless you resume it first. Misty sends no email, so tell them yourself." }
+							hx-confirm={ "Close " + v.Account.Email + "? It becomes read-only now, and everything in it is deleted in 30 days unless you resume it first. Unless this server sends email through Mailjet, tell them yourself." }
 							hx-disabled-elt="this"
 						>Close account</button>
 					}
@@ -167,11 +144,13 @@ templ limitField(label, name, value string) {
 	</label>
 }
 
-templ deviceIcon(platform string) {
-	switch platform {
-		case "macos":
-			@iconLaptop()
-		default:
-			@iconMonitor()
-	}
+// setUpField is the account's on/off devices limit: blank when set up, 0 when not yet.
+templ setUpField(setUp bool) {
+	<label class="limit-field">
+		<span class="muted">Set up for use</span>
+		<select name="devices">
+			<option value="" selected?={ setUp }>Yes</option>
+			<option value="0" selected?={ !setUp }>Not yet</option>
+		</select>
+	</label>
 }

@@ -1,5 +1,5 @@
 -- +goose Up
--- Sync starts over (docs/plans/vault-sync.md). An account has one vault, sealed under a password
+-- Sync starts over. An account has one vault, sealed under a password
 -- only its clients know. Everything in it is an opaque record: the server sees scopes and keys
 -- that only clients can name, versions, sizes and ciphertext. Workspace trees, seats, leases,
 -- signed operation logs, the sign-in slots and vaults per Space are gone, and every existing vault

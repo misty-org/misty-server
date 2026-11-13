@@ -25,7 +25,7 @@ func TestMetricsEndpointThroughTheRealRouter(t *testing.T) {
 
 	// Generate some traffic so tier 2 has something to report.
 	for range 3 {
-		server.Router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/spaces/space-1/notes", nil))
+		server.Router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/spaces/space-1/notes", nil))
 	}
 
 	authorized := httptest.NewRequest(http.MethodGet, "/metrics", nil)
@@ -39,7 +39,7 @@ func TestMetricsEndpointThroughTheRealRouter(t *testing.T) {
 	for _, want := range []string{
 		"go_goroutines",
 		"misty_http_requests_total",
-		`route="/api/spaces/{spaceID}/notes"`,
+		`route="/v1/spaces/{spaceID}/notes"`,
 		"misty_realtime_connections",
 		"misty_note_control_backlog",
 		"misty_library_jobs_pending_rendition",

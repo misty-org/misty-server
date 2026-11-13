@@ -1,5 +1,5 @@
 -- +goose Up
--- Closing an account (docs/cloud/README.md). The operator, or billing, closes an
+-- Closing an account. The operator, or billing, closes an
 -- account: it is suspended at once and its data is deleted on delete_at with
 -- the same full purge as a person deleting their own account. A notice is
 -- emailed when it closes and a warning three days before deletion. Resuming

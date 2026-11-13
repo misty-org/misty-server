@@ -112,16 +112,6 @@ func requestTotals(family *dto.MetricFamily) (total, serverErr float64) {
 	return total, serverErr
 }
 
-func counterSum(family *dto.MetricFamily) float64 {
-	var sum float64
-	if family != nil {
-		for _, metric := range family.GetMetric() {
-			sum += metric.GetCounter().GetValue()
-		}
-	}
-	return sum
-}
-
 func gaugeValue(family *dto.MetricFamily) float64 {
 	if family == nil || len(family.GetMetric()) == 0 {
 		return 0

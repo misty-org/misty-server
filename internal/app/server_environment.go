@@ -9,18 +9,10 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// WebsiteURLFromEnv is the base the desktop-to-browser handoff redirects
-// into. Must be https unless it targets localhost.
+// WebsiteURLFromEnv is Misty's website, read from MISTY_WEBSITE_URL. Must be
+// https unless it targets localhost.
 func WebsiteURLFromEnv() (string, error) {
 	return validatedURLFromEnv("MISTY_WEBSITE_URL", "http://localhost:5174")
-}
-
-// AuthHandoffStartURLFromEnv is the API-origin URL the desktop app opens.
-// The handoff writes the host-only HttpOnly session cookie on that API origin,
-// then redirects to the website. The browser sends it on credentialed API
-// requests even when the website is hosted on a separate allowed origin.
-func AuthHandoffStartURLFromEnv() (string, error) {
-	return validatedURLFromEnv("AUTH_HANDOFF_START_URL", "http://localhost:8080/auth/handoff/start")
 }
 
 func validatedURLFromEnv(name, fallback string) (string, error) {

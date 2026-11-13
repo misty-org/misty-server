@@ -7,21 +7,3 @@ condition = "AND"
 paths = ['''internal/platform/httpapi/cloud_connections_cloud_authorization_callback\.go$''']
 regexTarget = "line"
 regexes = ['''accountProvider = "dropbox"''']
-
-[[allowlists]]
-description = "Clipboard cache key assertions, not credentials"
-condition = "AND"
-paths = ['''src\-tauri/src/core/clipboard/cache\.rs$''']
-regexes = ['''IMG_0481\.jpeg''']
-
-[[allowlists]]
-description = "Legacy command identifiers, not credentials"
-condition = "AND"
-paths = ['''proxy/core/setup/default/commands\.msy$''']
-regexes = ['''CmdOrCtrl\+Shift\+N''', '''CmdOrCtrl\+Shift\+Y''']
-
-[[allowlists]]
-description = "xxHash read expressions, not credentials"
-condition = "AND"
-paths = ['''vendor/xxhash/xxhash\.h$''']
-regexes = ['''_mm512_srli_epi64''']

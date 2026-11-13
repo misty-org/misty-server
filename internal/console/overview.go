@@ -23,7 +23,7 @@ type overviewView struct {
 	CountsErr  bool
 	Activity   []db.ConsoleAuditEntry
 	// Alerts are the alerts service's open problems (server_alerts). The
-	// server sends no email, so this page and the owner's app show them.
+	// server never emails alerts, so this page and the owner's app show them.
 	Alerts    []db.ServerAlert
 	AlertsErr bool
 }

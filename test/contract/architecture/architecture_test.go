@@ -99,7 +99,7 @@ func TestEnvironmentAccessIsCentralized(t *testing.T) {
 }
 
 // environmentContract is every environment variable the server reads. A
-// server's values come from server/.env/ and the setup container
+// server's values come from ~/.misty/.env/server/ and the setup container;
 // no env file is committed.
 const environmentContract = `
 CLOUDFLARE_API_TOKEN
@@ -133,15 +133,11 @@ MISTY_ALLOWED_ORIGINS
 MISTY_AUTH_SIGNING_KEY
 MISTY_AUTH_SIGNING_KEY_PREVIOUS
 MISTY_CHAT_ATTACHMENT_MAX_FILE_BYTES
-MISTY_DEVICE_PAIRING_PEPPER
-MISTY_DEVICE_TICKET_PREVIOUS_PUBLIC_KEYS
-MISTY_DEVICE_TICKET_PRIVATE_KEY
 MISTY_DRAWING_ASSET_MAX_FILE_BYTES
 MISTY_EGRESS_MAX_BYTES_PER_DAY
 MISTY_EGRESS_MAX_BYTES_PER_IDENTITY_DAY
 MISTY_ENVIRONMENT
 MISTY_HOSTNAME
-MISTY_INSTANCE_NAME
 MISTY_LIBRARY_MAX_FILE_BYTES
 MISTY_METRICS_TOKEN
 MISTY_NOTE_ATTACHMENT_MAX_FILE_BYTES

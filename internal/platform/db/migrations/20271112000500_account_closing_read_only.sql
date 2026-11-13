@@ -1,5 +1,5 @@
 -- +goose Up
--- A closing account is read-only instead of suspended (docs/cloud/README.md):
+-- A closing account is read-only instead of suspended:
 -- until delete_at it signs in, reads and exports, and changes nothing. Closing
 -- no longer sets suspended_at, so the two are independent, and when both are
 -- set the suspension wins. An account closed before this keeps the suspension

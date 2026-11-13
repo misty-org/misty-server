@@ -18,7 +18,7 @@ func TestCookieCSRFProtection(t *testing.T) {
 		{"Google begin missing header", "/v1/auth/google", "https://misty.test", "", false, false, 403},
 		{"Google completion untrusted origin", "/v1/auth/google/complete", "https://evil.test", "1", false, false, 403},
 		{"Google native completion", "/v1/auth/google/complete", "", "1", false, false, 204},
-		{"login untrusted origin", "/api/login", "https://evil.test", "1", false, false, 403},
+		{"login untrusted origin", "/v1/login", "https://evil.test", "1", false, false, 403},
 		{"cookie missing header", "/v1/spaces", "https://misty.test", "", true, false, 403},
 		{"cookie trusted origin", "/v1/spaces", "https://misty.test", "1", true, false, 204},
 		{"native explicit header", "/v1/login", "", "1", false, false, 204},

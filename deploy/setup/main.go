@@ -1,5 +1,5 @@
 // Command misty-setup prepares and maintains a Misty server stack
-// (server/compose.yml). Each Compose service that is not the API runs one of
+// (compose.yml). Each Compose service that is not the API runs one of
 // its commands:
 //
 //	init (default)  generate missing secrets, refuse lost ones, provision Cloudflare
@@ -10,7 +10,7 @@
 //	backups         list the backups
 //	restore KEY     restore one backup ("latest" for the newest)
 //	backup-key      print the backup key, to keep a copy off the server
-//	watch           email the operator when the server is down or failing
+//	watch           record an alert when the server is down or failing
 //
 // It never changes stored data: secrets that protect data are generated once
 // and never replaced.

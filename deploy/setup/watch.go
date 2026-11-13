@@ -22,8 +22,8 @@ import (
 // (from /metrics), the free space on the database volume and, hourly, that a
 // backup was made in the last 26 hours. A problem seen on two checks in a row
 // becomes an open alert in the server_alerts table, which the console and the
-// server owner's app show; it is removed when the problem clears. The server
-// sends no email. A write that fails (the database itself may be down) is
+// server owner's app show; it is removed when the problem clears. Alerts are
+// never emailed. A write that fails (the database itself may be down) is
 // tried again on the next check.
 
 const (

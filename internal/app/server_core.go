@@ -12,18 +12,17 @@ import (
 )
 
 type Server struct {
-	AbuseGuard          *api.AbuseGuard
-	Router              *chi.Mux
-	Database            *db.Database
-	LibraryStore        api.LibraryObjectStore
-	Library             *api.SpaceLibraryService
-	Spaces              *api.SpacesService
-	Realtime            *api.RealtimeService
-	AuthHandoffStartURL string
-	WebsiteURL          string
-	HealthMonitor       *healthMonitor
-	Metrics             *metrics.Registry
-	Suspensions         *api.SuspensionGuard
+	AbuseGuard    *api.AbuseGuard
+	Router        *chi.Mux
+	Database      *db.Database
+	LibraryStore  api.LibraryObjectStore
+	Library       *api.SpaceLibraryService
+	Spaces        *api.SpacesService
+	Realtime      *api.RealtimeService
+	WebsiteURL    string
+	HealthMonitor *healthMonitor
+	Metrics       *metrics.Registry
+	Suspensions   *api.SuspensionGuard
 }
 
 func CreateServer() (*Server, error) {
@@ -31,20 +30,15 @@ func CreateServer() (*Server, error) {
 		return nil, fmt.Errorf("validate production environment: %w", err)
 	}
 	warnOnProxyConfiguration()
-	authHandoffStartURL, err := AuthHandoffStartURLFromEnv()
-	if err != nil {
-		return nil, err
-	}
 	websiteURL, err := WebsiteURLFromEnv()
 	if err != nil {
 		return nil, err
 	}
 
 	s := &Server{
-		Router:              chi.NewRouter(),
-		Database:            &db.Database{},
-		AuthHandoffStartURL: authHandoffStartURL,
-		WebsiteURL:          websiteURL,
+		Router:     chi.NewRouter(),
+		Database:   &db.Database{},
+		WebsiteURL: websiteURL,
 	}
 	s.LibraryStore, err = LibraryStoreFromEnv()
 	if err != nil {

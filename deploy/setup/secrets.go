@@ -51,8 +51,6 @@ var secretSpecs = []secretSpec{
 	{Name: "MISTY_AUTH_SIGNING_KEY", Kind: randomKey, Previous: "MISTY_AUTH_SIGNING_KEY_PREVIOUS"},
 	{Name: "MISTY_OPERATOR_TOKEN", Kind: operatorToken, Previous: "MISTY_OPERATOR_TOKEN_PREVIOUS"},
 	{Name: "MISTY_METRICS_TOKEN", Kind: hexSecret, Rotatable: true},
-	{Name: "MISTY_DEVICE_PAIRING_PEPPER", Kind: randomKey, DataBound: true},
-	{Name: "MISTY_DEVICE_TICKET_PRIVATE_KEY", Kind: ed25519Key, Previous: "MISTY_DEVICE_TICKET_PREVIOUS_PUBLIC_KEYS"},
 	{Name: "SPACE_LINK_ENCRYPTION_KEY", Kind: randomKey, DataBound: true},
 	{Name: "DOCUMENT_SIGNING_KEY", Kind: randomKey, DataBound: true},
 	{Name: "JOURNAL_COLLAB_TICKET_PRIVATE_KEY", Kind: ed25519Key, Previous: "JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS"},

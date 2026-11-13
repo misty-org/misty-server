@@ -2,7 +2,7 @@
 -- The browser actions of a workflow's last successful run, with each control
 -- named by a locator (role, name, index) rather than a ref, so the next run of
 -- that workflow can replay them without model calls and fall back to the agent
--- at the first step the page no longer matches (docs/agents/harness.md).
+-- at the first step the page no longer matches.
 CREATE TABLE browser_workflow_replays (
     owner_user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     method_version_id text NOT NULL CHECK (char_length(method_version_id) BETWEEN 1 AND 200),

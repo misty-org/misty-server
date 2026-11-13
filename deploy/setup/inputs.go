@@ -10,8 +10,8 @@ import (
 )
 
 // requiredInputs are the values the operator writes into the three files under
-// ~/.misty/.env/server/. Every one is required: Misty has no optional integrations. The
-// server sends no email, so there is no mail provider to configure.
+// ~/.misty/.env/server/. Every one is required: Misty has no optional integrations. Setup
+// configures no mail provider, so a server it sets up sends no email.
 var requiredInputs = []struct{ File, Name string }{
 	{"misty.env", "MISTY_HOSTNAME"},
 	{"cloudflare.env", "CLOUDFLARE_API_TOKEN"},
@@ -118,7 +118,6 @@ func resourceNames(hostname string) Names {
 func deriveConfig(store *Store, inputs Inputs) {
 	origin := "https://" + inputs.Hostname
 	store.Set("MISTY_PUBLIC_API_URL", origin+"/v1")
-	store.Set("AUTH_HANDOFF_START_URL", origin+"/v1/auth/handoff/start")
 }
 
 func envOr(name, fallback string) string {

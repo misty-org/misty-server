@@ -14,8 +14,7 @@ func (db Store) CreateSession(tokenHash, userID string) error {
 	return db.CreateSessionWithTTL(tokenHash, userID, SessionTTL)
 }
 
-// CreateSessionWithTTL backs CreateSession and lets callers that did not verify
-// a password — the desktop-to-browser handoff — mint a shorter-lived session.
+// CreateSessionWithTTL backs CreateSession with the session's lifetime.
 func (db Store) CreateSessionWithTTL(tokenHash, userID string, ttl time.Duration) error {
 	now := time.Now()
 	expiresAt := now.Add(ttl)

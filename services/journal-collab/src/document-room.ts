@@ -32,7 +32,7 @@ export type { Env } from "./room-env";
  * burning a single-use ticket id, and comparing a ticket's ACL version against
  * the newest version this room has seen.
  *
- * This class wires the Durable Object lifecycle to the modules that do the work.
+ * The room-* modules do the work; the class wires the Durable Object lifecycle to them.
  */
 export abstract class PersistentDocumentRoom extends YServer<Env> {
   protected abstract readonly resourceType: CollaborationResourceType;

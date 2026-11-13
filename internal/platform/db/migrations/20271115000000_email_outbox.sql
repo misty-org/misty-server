@@ -1,5 +1,5 @@
 -- +goose Up
--- A server with Mailjet configured sends email (docs/self-hosting.md#email). Each
+-- A server with Mailjet configured sends email. Each
 -- email is stored before it is sent and retried until Mailjet takes it:
 --   setup             the sign-in link of a new account
 --   sign_in           a sign-in link for an account that has signed in before

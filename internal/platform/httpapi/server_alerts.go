@@ -8,7 +8,7 @@ import (
 
 // ServerAlerts answers GET /server/alerts: the open problems the alerts
 // service recorded, for the server's owner only (403 not_server_owner for
-// anyone else). The server sends no email, so the owner's app shows these.
+// anyone else). The server never emails alerts, so the owner's app shows these.
 func ServerAlerts(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, database)

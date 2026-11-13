@@ -77,17 +77,12 @@ func GetMe(database *db.Database) http.HandlerFunc {
 		devicesAllowed := limits.Devices == nil || *limits.Devices > 0
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id":             user.ID,
-			"username":       user.Username,
-			"email":          user.Email,
-			"provider":       user.Provider,
-			"avatar_version": user.AvatarVersion,
-			"created_at":     user.CreatedAt,
-			"allows_use":     true,
-			"license_device": "",
-			// The server sends no email, so there is nothing to confirm. Kept
-			// for apps that still read it.
-			"email_verified":  true,
+			"id":              user.ID,
+			"username":        user.Username,
+			"email":           user.Email,
+			"provider":        user.Provider,
+			"avatar_version":  user.AvatarVersion,
+			"created_at":      user.CreatedAt,
 			"delete_at":       deleteAt,
 			"server_owner":    owner,
 			"devices_allowed": devicesAllowed,

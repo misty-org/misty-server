@@ -62,9 +62,6 @@ func (db *Database) GetUserSettingsByID(id string) (*UserSettings, error) {
 func (db *Database) UpdateUserSettings(id string, s UserSettings) error {
 	return db.accountStore().UpdateUserSettings(id, s)
 }
-func (db *Database) UpdateTelemetryPreferences(id string, a, e bool) error {
-	return db.accountStore().UpdateTelemetryPreferences(id, a, e)
-}
 func normalizeEmail(email string) string { return accounts.NormalizeEmail(email) }
 func TestingNormalizeUsername(username string) (string, error) {
 	return accounts.NormalizeUsername(username)

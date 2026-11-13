@@ -118,7 +118,7 @@ func invitationEmail(inviter, space, link string) (subject, text, htmlBody strin
 	}
 	subject = inviter + " invited you to " + space + " on Misty"
 	opening := inviter + " invited you to " + space + " on Misty."
-	open := "With Misty installed, paste this link into Misty's address bar to accept:"
+	open := "With Misty installed, open this link to accept. If your mail app won't open it, copy it into your web browser's address bar:"
 	closing := "If you weren't expecting this, you can ignore it."
 	text = strings.Join([]string{opening, open, link, closing}, "\n\n") + "\n"
 	htmlBody = htmlStart + paragraph(opening) + paragraph(open) + monospace(link) + paragraph(closing) + htmlEnd

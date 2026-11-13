@@ -27,13 +27,13 @@ func TestNoteRoutesRequireAuthentication(t *testing.T) {
 	server := noteRouteTestServer(t)
 
 	cases := []struct{ method, path string }{
-		{http.MethodGet, "/api/spaces/space-1/notes"},
-		{http.MethodPost, "/api/spaces/space-1/notes"},
-		{http.MethodGet, "/api/spaces/space-1/notes/note-1"},
-		{http.MethodDelete, "/api/spaces/space-1/notes/note-1"},
-		{http.MethodPatch, "/api/spaces/space-1/notes/note-1/metadata"},
-		{http.MethodPatch, "/api/spaces/space-1/notes/note-1"},
-		{http.MethodPost, "/api/spaces/space-1/notes/note-1/collaboration-ticket"},
+		{http.MethodGet, "/v1/spaces/space-1/notes"},
+		{http.MethodPost, "/v1/spaces/space-1/notes"},
+		{http.MethodGet, "/v1/spaces/space-1/notes/note-1"},
+		{http.MethodDelete, "/v1/spaces/space-1/notes/note-1"},
+		{http.MethodPatch, "/v1/spaces/space-1/notes/note-1/metadata"},
+		{http.MethodPatch, "/v1/spaces/space-1/notes/note-1"},
+		{http.MethodPost, "/v1/spaces/space-1/notes/note-1/collaboration-ticket"},
 	}
 
 	for _, testCase := range cases {
@@ -46,13 +46,18 @@ func TestNoteRoutesRequireAuthentication(t *testing.T) {
 	}
 }
 
-// The routes must exist on the canonical /v1 tree and both compatibility trees.
-func TestNoteRoutesAreMountedOnEveryPublicPrefix(t *testing.T) {
+// The routes exist only on the /v1 tree.
+func TestNoteRoutesAreMountedOnlyUnderV1(t *testing.T) {
 	server := noteRouteTestServer(t)
 
+	for _, path := range []string{"/spaces/space-1/notes", "/api/spaces/space-1/notes"} {
+		recorder := httptest.NewRecorder()
+		server.Router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("GET %s = %d, want 404", path, recorder.Code)
+		}
+	}
 	for _, path := range []string{
-		"/spaces/space-1/notes",
-		"/api/spaces/space-1/notes",
 		"/v1/spaces/space-1/notes",
 	} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)

@@ -133,19 +133,10 @@ func DatabaseDSN(t testing.TB, user, password string) string {
 	return config.dsn()
 }
 
-// resetDatabase truncates every application table.
-//
-// The table list is read from the catalog rather than hand-maintained. It used
-// to name six tables explicitly, which stopped covering the schema as
-// migrations added tables: rows in tables reachable from users only through
-// TRUNCATE ... CASCADE were cleared, and everything else survived. Tables with
-// no foreign key into users accumulated across runs, so a test replaying a
-// fixed event ID passed on a freshly bootstrapped database and failed on every
-// rerun.
-//
-// Migrations seed no static reference data (their INSERTs all backfill from
-// spaces/users), so nothing here needs preserving except goose_db_version,
-// which records the schema version checkSchemaVersion reads.
+// resetDatabase truncates every application table. The list comes from the
+// catalog, because a hand-kept list missed tables added by later migrations and
+// their rows leaked into the next run. Only goose_db_version is kept, since
+// checkSchemaVersion reads it; migrations seed no reference data.
 func resetDatabase(t testing.TB, database *db.Database) {
 	t.Helper()
 	// TRUNCATE replaces every table's files, which dominated the suite's time

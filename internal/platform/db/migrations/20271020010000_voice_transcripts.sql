@@ -1,6 +1,6 @@
 -- +goose Up
--- Diarized transcripts from voice captures and transcribed files
--- (docs/voice-memory/README.md). Text is kept until deleted; audio is
+-- Diarized transcripts from voice captures and transcribed files.
+-- Text is kept until deleted; audio is
 -- kept only when the person chose "Keep recording", as a Library item.
 CREATE TABLE voice_transcripts (
     id uuid PRIMARY KEY,

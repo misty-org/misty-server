@@ -17,39 +17,30 @@ import (
 // tool calls in the MCP server, and note and drawing rooms through a viewer
 // ticket.
 
-// readOnlyPosts are the POST routes a closing account may still use, after any
-// /v1 or /api prefix: signing in and out (a setup key's sign-in link
-// included), refreshing, exporting or deleting
-// the account, opening the website signed in (to subscribe again), the tickets
-// that open live updates, collaboration rooms and Space files for
-// reading, read receipts, and a device's presence.
+// readOnlyPosts are the POST routes a closing account may still use, after the
+// /v1 prefix: signing in and out (a setup key's sign-in link included),
+// refreshing, exporting or deleting the account, the tickets that open live
+// updates, collaboration rooms and Space files for reading, and read receipts.
 var readOnlyPosts = []*regexp.Regexp{
 	regexp.MustCompile(`^/(login|register|logout|setup-keys/redeem)$`),
-	regexp.MustCompile(`^/auth/(refresh|handoff|google|google/complete|confirm-email|confirm-email/sign-in)$`),
+	regexp.MustCompile(`^/auth/(refresh|google|google/complete|confirm-email|confirm-email/sign-in)$`),
 	regexp.MustCompile(`^/me/(export|deletion|account-proof)$`),
 	regexp.MustCompile(`^/realtime/tickets?$`),
 	regexp.MustCompile(`^/spaces/[^/]+/(notes|drawings)/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/nodes/[^/]+/resolve$`),
 	regexp.MustCompile(`^/spaces/[^/]+/(conversations/[^/]+/)?read$`),
-	regexp.MustCompile(`^/devices/[^/]+/(heartbeat|channel-ticket)$`),
 }
 
 // readOnlyRequest reports whether a closing account may make this request.
 func readOnlyRequest(r *http.Request) bool {
-	path := strings.TrimSuffix(r.URL.Path, "/")
-	for _, prefix := range []string{"/v1", "/api"} {
-		if strings.HasPrefix(path, prefix+"/") {
-			path = strings.TrimPrefix(path, prefix)
-			break
-		}
-	}
+	path := strings.TrimPrefix(strings.TrimSuffix(r.URL.Path, "/"), "/v1")
 	switch r.Method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
 		return true
 	case http.MethodPut:
 		// Choosing a password, after a setup key's sign-in link too: a closing
-		// customer who forgot theirs still signs in and exports. The server sends
-		// no email, so a sign-in link is the only reset.
+		// customer who forgot theirs still signs in and exports. A sign-in link
+		// is the only reset.
 		return path == "/me/password"
 	case http.MethodPost:
 	default:

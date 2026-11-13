@@ -1,5 +1,5 @@
 -- +goose Up
--- Accounts on a shared server (docs/cloud/README.md). The operator account API
+-- Accounts on a shared server. The operator account API
 -- creates an account with limits and emails a setup key; the key signs it in
 -- once. Every limit is NULL (unlimited) unless the operator sets one, so a
 -- self-hosted server behaves as before. A suspended account keeps its data.

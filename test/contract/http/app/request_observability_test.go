@@ -81,17 +81,17 @@ func TestRequestObservabilitySuppressesRoutineMePolling(t *testing.T) {
 
 			router := chi.NewRouter()
 			router.Use(RequestObservabilityMiddleware)
-			router.Get("/api/me", func(w http.ResponseWriter, r *http.Request) {
+			router.Get("/v1/me", func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(status)
 			})
 
 			router.ServeHTTP(
 				httptest.NewRecorder(),
-				httptest.NewRequest(http.MethodGet, "/api/me", nil),
+				httptest.NewRequest(http.MethodGet, "/v1/me", nil),
 			)
 
 			if output := logs.String(); output != "" {
-				t.Fatalf("routine /api/me request was logged: %s", output)
+				t.Fatalf("routine /v1/me request was logged: %s", output)
 			}
 		})
 	}
@@ -105,18 +105,18 @@ func TestRequestObservabilityStillLogsMeServerFailures(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Use(RequestObservabilityMiddleware)
-	router.Get("/api/me", func(w http.ResponseWriter, r *http.Request) {
+	router.Get("/v1/me", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed", http.StatusInternalServerError)
 	})
 
 	router.ServeHTTP(
 		httptest.NewRecorder(),
-		httptest.NewRequest(http.MethodGet, "/api/me", nil),
+		httptest.NewRequest(http.MethodGet, "/v1/me", nil),
 	)
 
 	output := logs.String()
-	if !strings.Contains(output, `"route":"/api/me"`) ||
+	if !strings.Contains(output, `"route":"/v1/me"`) ||
 		!strings.Contains(output, `"status":500`) {
-		t.Fatalf("/api/me server failure was not logged: %s", output)
+		t.Fatalf("/v1/me server failure was not logged: %s", output)
 	}
 }

@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	MaxSpaceNodes   = 5000
 	MaxMessageChars = 4000
 	MaxMessageFiles = 5
 	// Per-object processing bound, independent of any account or Space allowance.
@@ -23,7 +22,6 @@ var (
 	ErrSpaceLimit            = errors.New("space limit reached")
 	ErrSpaceOwnershipLimit   = errors.New("space ownership limit reached")
 	ErrSpacePeopleLimit      = errors.New("space member limit reached")
-	ErrSpaceNodeLimit        = errors.New("space node limit reached")
 	ErrSpaceConflict         = errors.New("space resource version conflict")
 	ErrSpaceInviteNotFound   = errors.New("space invitation not found")
 	ErrSpaceInviteeNotFound  = errors.New("no misty account found for invitee email")

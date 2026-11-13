@@ -16,21 +16,12 @@ type ConsoleAccount struct {
 	Username  string
 	State     string
 	CreatedAt time.Time
-	Devices   int
 	Sessions  int
-}
-
-type ConsoleDevice struct {
-	Name     string
-	Platform string
-	LastSeen time.Time
-	Revoked  bool
 }
 
 type ConsoleAccountDetail struct {
 	ConsoleAccount
 	StorageBytes int64
-	DeviceList   []ConsoleDevice
 }
 
 func (db *Database) consoleTx(ctx context.Context, fn func(*sql.Tx) error) error {
@@ -39,13 +30,11 @@ func (db *Database) consoleTx(ctx context.Context, fn func(*sql.Tx) error) error
 
 const consoleAccountColumns = `
 	u.id, u.email, u.username, u.lifecycle_state, u.created_at,
-	(SELECT count(*) FROM trusted_devices d WHERE d.user_id = u.id AND d.revoked_at IS NULL),
 	(SELECT count(*) FROM sessions s WHERE s.user_id = u.id AND s.expires_at > now())
 	FROM users u`
 
 func scanConsoleAccount(row interface{ Scan(...any) error }, a *ConsoleAccount) error {
-	return row.Scan(&a.ID, &a.Email, &a.Username, &a.State, &a.CreatedAt,
-		&a.Devices, &a.Sessions)
+	return row.Scan(&a.ID, &a.Email, &a.Username, &a.State, &a.CreatedAt, &a.Sessions)
 }
 
 func (db *Database) ConsoleAccountDetail(ctx context.Context, userID string) (ConsoleAccountDetail, error) {
@@ -55,27 +44,9 @@ func (db *Database) ConsoleAccountDetail(ctx context.Context, userID string) (Co
 		if err := scanConsoleAccount(row, &d.ConsoleAccount); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, `
+		return tx.QueryRowContext(ctx, `
 			SELECT COALESCE((SELECT used_bytes FROM owner_storage_usage WHERE owner_user_id = $1), 0)`, userID,
-		).Scan(&d.StorageBytes); err != nil {
-			return err
-		}
-		rows, err := tx.QueryContext(ctx, `
-			SELECT name, platform, last_seen_at, revoked_at IS NOT NULL
-			FROM trusted_devices WHERE user_id = $1
-			ORDER BY revoked_at IS NOT NULL, last_seen_at DESC LIMIT 20`, userID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var device ConsoleDevice
-			if err := rows.Scan(&device.Name, &device.Platform, &device.LastSeen, &device.Revoked); err != nil {
-				return err
-			}
-			d.DeviceList = append(d.DeviceList, device)
-		}
-		return rows.Err()
+		).Scan(&d.StorageBytes)
 	})
 	return d, err
 }

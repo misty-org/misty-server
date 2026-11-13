@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-// Restoring the browser's Spaces UI must not depend on retired app routes.
+// The Spaces routes stay mounted and need a signed-in session.
 func TestSpacesToolsRemainMountedAndAuthenticated(t *testing.T) {
 	server := noteRouteTestServer(t)
-	for _, prefix := range []string{"", "/api", "/v1"} {
+	for _, prefix := range []string{"/v1"} {
 		for _, endpoint := range []struct{ method, path string }{
 			{"GET", "/spaces"}, {"POST", "/spaces"},
 			{"GET", "/spaces/example"}, {"GET", "/spaces/example/members"},

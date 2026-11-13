@@ -1,6 +1,6 @@
 -- +goose Up
--- Agent chats live on the device they were started on, like Claude Code and Codex
--- (docs/agents/chats-local.md). The server keeps a thin row per chat so
+-- Agent chats live on the device they were started on, like Claude Code and Codex.
+-- The server keeps a thin row per chat so
 -- its runs can be admitted, billed and titled, and names the device that keeps it.
 -- A chat no device keeps yet (one Misty started by email, Slack or a schedule) waits
 -- in that person's inbox until a device takes it. Runs of a chat a device keeps are

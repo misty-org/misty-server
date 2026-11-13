@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
@@ -179,45 +178,6 @@ func TestSetUsername(t *testing.T) {
 	}
 	if _, err = database.SetUsername(user.ID, "no spaces"); !errors.Is(err, ErrInvalidUsername) {
 		t.Fatalf("invalid: %v", err)
-	}
-}
-
-func TestDeviceLimitRefusesTheNextNewDevice(t *testing.T) {
-	database := testkit.OpenDatabase(t)
-	ctx := context.Background()
-	user, _, err := database.CreateOperatorAccount(ctx, "devices@example.com", AccountLimits{Devices: limit(1)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	register := func(name string) error {
-		key := base64.RawURLEncoding.EncodeToString([]byte(uuid.NewString()[:32]))
-		_, err := database.RegisterUnifiedDevice(ctx, user.ID, name, key, "endpoint-"+uuid.NewString(), "macos", "15", "1.0", "", nil)
-		return err
-	}
-	if err := database.SetAccountLimits(ctx, user.ID, AccountLimits{Devices: limit(0)}); err != nil {
-		t.Fatal(err)
-	}
-	if err := register("Studio"); !errors.Is(err, ErrNoDevicesAllowed) {
-		t.Fatalf("no devices allowed = %v", err)
-	}
-	if err := database.SetAccountLimits(ctx, user.ID, AccountLimits{Devices: limit(1)}); err != nil {
-		t.Fatal(err)
-	}
-	if err := register("Studio"); err != nil {
-		t.Fatalf("first device = %v", err)
-	}
-	if err := register("Laptop"); !errors.Is(err, ErrDeviceLimit) {
-		t.Fatalf("second device = %v", err)
-	}
-	if err := database.SetAccountLimits(ctx, user.ID, AccountLimits{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := register("Laptop"); err != nil {
-		t.Fatalf("unlimited device = %v", err)
-	}
-	account, err := database.OperatorAccountByID(ctx, user.ID)
-	if err != nil || account.Usage.Devices != 2 || account.Usage.StorageBytes == nil {
-		t.Fatalf("overview = %+v %v", account, err)
 	}
 }
 

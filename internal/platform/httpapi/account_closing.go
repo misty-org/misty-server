@@ -11,8 +11,8 @@ import (
 
 // AccountClosings is the account-deletion worker's part for closed accounts
 // (POST /operator/v1/accounts/{id}/close): it starts the purge once the date
-// comes. The server sends no email; the billing service, or the operator,
-// tells the person.
+// comes. A server with Mailjet configured emails the notice and the warning;
+// without it, the billing service or the operator tells the person.
 type AccountClosings struct {
 	database *db.Database
 }

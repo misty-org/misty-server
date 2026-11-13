@@ -12,8 +12,9 @@ import (
 // Until then the account is read-only (account_read_only.go): it signs in,
 // reads and exports, and changes nothing. On the date the account-deletion
 // worker deletes it with the same full purge as a person deleting their own
-// account. The server sends no email: telling the person is the billing
-// service's job (or the operator's). Resuming before then cancels it all. A
+// account. A server with Mailjet configured emails the person; without it,
+// telling them is the billing service's job (or the operator's). Resuming
+// before then cancels it all. A
 // suspension is separate and, when both apply, wins.
 
 // ErrAccountPendingDeletion refuses an operator create for an email whose

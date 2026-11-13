@@ -54,15 +54,12 @@ func TestClientIPIgnoresForwardedHeadersByDefault(t *testing.T) {
 
 func TestNormalizeRateLimitPath(t *testing.T) {
 	tests := map[string]string{
-		"/api/login":             "/login",
-		"/v1/login":              "/login",
-		"/api/auth/reset":        "/auth/reset",
-		"/v1/auth/reset":         "/auth/reset",
-		"/login":                 "/login",
-		"/api":                   "/",
-		"/v1":                    "/",
-		"":                       "/",
-		"   /api/auth/forgot   ": "/auth/forgot",
+		"/v1/login":             "/login",
+		"/v1/auth/reset":        "/auth/reset",
+		"/login":                "/login",
+		"/v1":                   "/",
+		"":                      "/",
+		"   /v1/auth/forgot   ": "/auth/forgot",
 	}
 
 	for input, want := range tests {
@@ -81,7 +78,7 @@ func TestAPIRateLimiterMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	first := httptest.NewRequest(http.MethodPost, "/api/login", nil)
+	first := httptest.NewRequest(http.MethodPost, "/v1/login", nil)
 	first.RemoteAddr = "203.0.113.5:1234"
 	firstRecorder := httptest.NewRecorder()
 	handler.ServeHTTP(firstRecorder, first)
@@ -89,7 +86,7 @@ func TestAPIRateLimiterMiddleware(t *testing.T) {
 		t.Fatalf("first request code = %d, want %d", firstRecorder.Code, http.StatusOK)
 	}
 
-	second := httptest.NewRequest(http.MethodPost, "/api/login", nil)
+	second := httptest.NewRequest(http.MethodPost, "/v1/login", nil)
 	second.RemoteAddr = "203.0.113.5:5678"
 	secondRecorder := httptest.NewRecorder()
 	handler.ServeHTTP(secondRecorder, second)
@@ -107,7 +104,7 @@ func TestAPIRateLimiterSharesOneBudgetAcrossSpaces(t *testing.T) {
 	limiter.RoutePolicies["POST /spaces/{spaceID}/leave"] = RateLimitPolicy{Limit: 1, Window: time.Minute}
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 	for index, spaceID := range []string{"first", "second"} {
-		request := httptest.NewRequest(http.MethodPost, "/api/spaces/"+spaceID+"/leave", nil)
+		request := httptest.NewRequest(http.MethodPost, "/v1/spaces/"+spaceID+"/leave", nil)
 		request.RemoteAddr = "203.0.113.10:1234"
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, request)

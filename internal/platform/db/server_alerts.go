@@ -7,8 +7,8 @@ import (
 )
 
 // ServerAlert is a problem the alerts service saw on two checks in a row and
-// that has not cleared (deploy/setup/watch.go writes them). The server sends
-// no email, so the console and the server owner's app show these instead.
+// that has not cleared (deploy/setup/watch.go writes them). The server never
+// emails alerts, so the console and the server owner's app show these instead.
 type ServerAlert struct {
 	Probe    string    `json:"probe"`
 	Title    string    `json:"title"`

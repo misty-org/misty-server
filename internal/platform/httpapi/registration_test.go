@@ -86,7 +86,7 @@ func TestOpenSignupIgnoresTheAllowlist(t *testing.T) {
 func TestRegistrationFirstAccountThenInvitationOnly(t *testing.T) {
 	ctx := context.Background()
 	fresh := fakeAccounts{}
-	if allowed, _ := registrationAllowed(ctx, fresh, "owner@example.com"); !allowed || registrationState(ctx, fresh) != "open" {
+	if allowed, _ := registrationAllowed(ctx, fresh, "owner@example.com"); !allowed {
 		t.Fatal("the first account was refused")
 	}
 	used := fakeAccounts{accounts: true, invited: map[string]bool{"guest@example.com": true}}
@@ -95,9 +95,6 @@ func TestRegistrationFirstAccountThenInvitationOnly(t *testing.T) {
 	}
 	if allowed, _ := registrationAllowed(ctx, used, "guest@example.com"); !allowed {
 		t.Fatal("an invited account was refused")
-	}
-	if registrationState(ctx, used) != "invitation" {
-		t.Fatalf("state = %q", registrationState(ctx, used))
 	}
 	recorder := httptest.NewRecorder()
 	writeRegistrationClosed(recorder)

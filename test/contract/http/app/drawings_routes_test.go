@@ -12,14 +12,14 @@ func TestDrawingRoutesRequireAuthentication(t *testing.T) {
 		method string
 		path   string
 	}{
-		{http.MethodGet, "/api/spaces/space-1/drawings"},
-		{http.MethodPost, "/api/spaces/space-1/drawings"},
-		{http.MethodGet, "/api/spaces/space-1/drawings/drawing-1"},
-		{http.MethodPatch, "/api/spaces/space-1/drawings/drawing-1"},
-		{http.MethodDelete, "/api/spaces/space-1/drawings/drawing-1"},
+		{http.MethodGet, "/v1/spaces/space-1/drawings"},
+		{http.MethodPost, "/v1/spaces/space-1/drawings"},
+		{http.MethodGet, "/v1/spaces/space-1/drawings/drawing-1"},
+		{http.MethodPatch, "/v1/spaces/space-1/drawings/drawing-1"},
+		{http.MethodDelete, "/v1/spaces/space-1/drawings/drawing-1"},
 		{
 			http.MethodPost,
-			"/api/spaces/space-1/drawings/drawing-1/collaboration-ticket",
+			"/v1/spaces/space-1/drawings/drawing-1/collaboration-ticket",
 		},
 	}
 
@@ -38,11 +38,17 @@ func TestDrawingRoutesRequireAuthentication(t *testing.T) {
 	}
 }
 
-func TestDrawingRoutesAreMountedOnBothPrefixes(t *testing.T) {
+func TestDrawingRoutesAreMountedOnlyUnderV1(t *testing.T) {
 	server := noteRouteTestServer(t)
+	for _, path := range []string{"/spaces/space-1/drawings", "/api/spaces/space-1/drawings"} {
+		recorder := httptest.NewRecorder()
+		server.Router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("GET %s = %d, want 404", path, recorder.Code)
+		}
+	}
 	for _, path := range []string{
-		"/spaces/space-1/drawings",
-		"/api/spaces/space-1/drawings",
+		"/v1/spaces/space-1/drawings",
 	} {
 		recorder := httptest.NewRecorder()
 		server.Router.ServeHTTP(

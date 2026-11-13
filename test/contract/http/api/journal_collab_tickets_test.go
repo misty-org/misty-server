@@ -144,7 +144,7 @@ func TestDrawingTicketUsesDrawingRoomAndClaims(t *testing.T) {
 	}
 }
 
-// 60 seconds, per the plan: long enough to open a socket, short enough that a
+// 60 seconds: long enough to open a socket, short enough that a
 // revoked user cannot sit on a usable ticket.
 func TestTicketExpiresInOneMinute(t *testing.T) {
 	config := testCollabConfig(t)

@@ -38,7 +38,7 @@ x-server-environment: &server-environment
 services:
   # One-shot: generates missing secrets, refuses to start when the database
   # holds data its secrets no longer match, and provisions the tunnel, DNS,
-  # R2 buckets and credentials, and both Workers.
+  # R2 buckets and credentials, and the collaboration Worker.
   setup:
     <<: [*tools, *config]
     command: ["init"]

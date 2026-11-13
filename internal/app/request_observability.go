@@ -100,6 +100,6 @@ func requestLogLevel(status int) string {
 // traffic. Server failures remain visible.
 func shouldLogRequest(method, route string, status int) bool {
 	return method != http.MethodGet ||
-		(route != "/api/me" && route != "/v1/me") ||
+		route != "/v1/me" ||
 		responseStatus(status) >= http.StatusInternalServerError
 }

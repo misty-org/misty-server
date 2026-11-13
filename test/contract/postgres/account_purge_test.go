@@ -43,7 +43,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 
 	exec(t, database, `INSERT INTO space_notes(id,space_id,creator_user_id,visibility) VALUES('note-1',$1,$2,'private')`, personal.ID, alice.ID)
 	exec(t, database, `INSERT INTO space_drawings(id,space_id,creator_user_id,visibility) VALUES('drawing-1',$1,$2,'private')`, personal.ID, alice.ID)
-	exec(t, database, `INSERT INTO trusted_devices(id,user_id,name,public_key) VALUES($1,$2,'Laptop',repeat('k',32))`, "device_"+uuid.NewString(), alice.ID)
 	exec(t, database, `INSERT INTO voice_transcripts(id,owner_user_id,source,turns) VALUES($1,$2,'{}','[]')`, uuid.New(), alice.ID)
 	exec(t, database, `INSERT INTO space_agents(space_id,agent_id,owner_user_id,agent_name) VALUES($1,'agent-1',$2,'Writer')`, club.ID, alice.ID)
 

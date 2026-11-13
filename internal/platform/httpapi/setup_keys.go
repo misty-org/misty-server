@@ -16,7 +16,7 @@ import (
 
 // A setup key is "misty_setup_" and 32 base32 characters (160 random bits).
 // The operator account API and the console issue one as a sign-in link; it
-// signs that account in once, within db.SetupKeyTTL. The server sends no
+// signs that account in once, within db.SetupKeyTTL. There is no reset by
 // email, so a setup key is also how a forgotten password is reset.
 const setupKeyPrefix = "misty_setup_"
 

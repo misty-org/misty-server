@@ -21,8 +21,6 @@ func TestTablesHaveRowLevelSecurityEnabled(t *testing.T) {
 		"sessions",
 		"password_reset_tokens",
 		"owner_storage_usage",
-		"trusted_devices",
-		"trusted_device_request_nonces",
 		"spaces",
 		"space_members",
 		"space_invitations",

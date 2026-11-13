@@ -1,5 +1,5 @@
 -- +goose Up
--- Nothing AI runs on the server (docs/plans/agents-off-server.md). Agents, their
+-- Nothing AI runs on the server. Agents, their
 -- runs, memory, workflows, schedules, chats and connected apps all live on the
 -- person's computer now, so every table and function behind them goes. Spaces
 -- keep what a person would have made by hand: notes, drawings, files, messages.

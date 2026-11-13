@@ -1,5 +1,5 @@
 -- +goose Up
--- Agent runs work on the person's desktop (docs/plans/desktop-runtime.md). A queued
+-- Agent runs work on the person's desktop. A queued
 -- runtime delivery tells the person's desktops on the 'runtime' account topic, so the
 -- desktop that keeps the run claims it at once instead of on its next check.
 -- +goose StatementBegin

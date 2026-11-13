@@ -1,5 +1,5 @@
 -- +goose Up
--- Private and public layers (docs/spaces/as-profiles.md#private-and-public).
+-- Private and public layers.
 -- Every Space item has a private/public toggle: notes, drawings, Library files
 -- and images, folders and links, code projects, and agents in a Space. A
 -- private item stays in the Space but only its owner sees it. New items start

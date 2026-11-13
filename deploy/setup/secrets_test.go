@@ -114,13 +114,13 @@ func TestRotation(t *testing.T) {
 	if store.Get("MISTY_AUTH_SIGNING_KEY_PREVIOUS") != old || store.Get("MISTY_AUTH_SIGNING_KEY") == old {
 		t.Fatal("rotation did not keep the previous key")
 	}
-	device := store.Get("MISTY_DEVICE_TICKET_PRIVATE_KEY")
-	public, _ := ed25519PublicKey(device)
-	if err := rotate(store, "MISTY_DEVICE_TICKET_PRIVATE_KEY"); err != nil {
+	ticket := store.Get("JOURNAL_COLLAB_TICKET_PRIVATE_KEY")
+	public, _ := ed25519PublicKey(ticket)
+	if err := rotate(store, "JOURNAL_COLLAB_TICKET_PRIVATE_KEY"); err != nil {
 		t.Fatal(err)
 	}
-	if store.Get("MISTY_DEVICE_TICKET_PREVIOUS_PUBLIC_KEYS") != public {
-		t.Fatal("the previous device key slot must hold the old public key")
+	if store.Get("JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS") != public {
+		t.Fatal("the previous ticket key slot must hold the old public key")
 	}
 	for _, name := range []string{"SPACE_LINK_ENCRYPTION_KEY", "DB_MIGRATION_PASSWORD", "JOURNAL_COLLAB_ROOM_SALT", "UNKNOWN"} {
 		if err := rotate(store, name); err == nil {

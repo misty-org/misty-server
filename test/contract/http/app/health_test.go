@@ -58,11 +58,11 @@ func TestSummarizeHealthUses503OnlyForCriticalFailures(t *testing.T) {
 
 func TestPublicAPIHealthRequiresHTTPSInProduction(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
-	t.Setenv("MISTY_PUBLIC_API_URL", "http://mistysys.com/api")
+	t.Setenv("MISTY_PUBLIC_API_URL", "http://mistysys.com/v1")
 	if got := PublicAPIConfigurationCheck(); got.Status != "degraded" {
 		t.Fatalf("HTTP production API health = %+v, want degraded", got)
 	}
-	t.Setenv("MISTY_PUBLIC_API_URL", "https://mistysys.com/api")
+	t.Setenv("MISTY_PUBLIC_API_URL", "https://mistysys.com/v1")
 	if got := PublicAPIConfigurationCheck(); got.Status != "ready" {
 		t.Fatalf("HTTPS production API health = %+v, want ready", got)
 	}

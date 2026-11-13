@@ -36,7 +36,7 @@ func TestStripeWebhookIsNotMounted(t *testing.T) {
 	if err = server.MountHandlers(); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/stripe/webhook", "/api/stripe/webhook"} {
+	for _, path := range []string{"/stripe/webhook", "/v1/stripe/webhook"} {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		rec := httptest.NewRecorder()
 		server.Router.ServeHTTP(rec, req)
@@ -61,13 +61,13 @@ func TestCreateServerAndMountHandlers(t *testing.T) {
 		t.Fatalf("MountHandlers() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/login", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/login", nil)
 	req.Header.Set("X-Misty-CSRF", "1")
 	req.Header.Set("Origin", "tauri://localhost")
 	rec := httptest.NewRecorder()
 	server.Router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("POST /api/login status = %d, want %d", rec.Code, http.StatusBadRequest)
+		t.Fatalf("POST /v1/login status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
 
@@ -95,14 +95,14 @@ func productionCoreValues() map[string]string {
 		"DB_USER":              "misty",
 		"DB_PASSWORD":          "password",
 		"DB_NAME":              "misty",
-		"MISTY_PUBLIC_API_URL": "https://api.example.com/api",
+		"MISTY_PUBLIC_API_URL": "https://api.example.com/v1",
 		"R2_ENDPOINT":          "https://account.r2.cloudflarestorage.com",
 		"R2_BUCKET":            "misty-production",
 		"PORT":                 "8080",
 	}
 	for _, name := range []string{
 		"SPACE_LINK_ENCRYPTION_KEY", "MISTY_AUTH_SIGNING_KEY",
-		"MISTY_DEVICE_TICKET_PRIVATE_KEY", "MISTY_DEVICE_PAIRING_PEPPER", "R2_ACCESS_KEY", "R2_SECRET_KEY",
+		"R2_ACCESS_KEY", "R2_SECRET_KEY",
 		"PARTYKIT_HOST", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY", "JOURNAL_COLLAB_CONTROL_SECRET",
 		"JOURNAL_COLLAB_PROJECTION_SECRET", "JOURNAL_COLLAB_ROOM_SALT",
 		"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
@@ -162,5 +162,26 @@ func TestValidateProductionEnvironmentRequiresHTTPS(t *testing.T) {
 	t.Setenv("MISTY_PUBLIC_API_URL", "http://api.example.com/v1")
 	if err := ValidateProductionEnvironment(); err == nil {
 		t.Fatal("production accepted an http public URL")
+	}
+}
+
+// The server answers only under /v1, so a public URL without it would send
+// Google's sign-in callback and sign-in links to paths that answer 404.
+func TestValidateProductionEnvironmentRequiresV1PublicURL(t *testing.T) {
+	t.Setenv("MISTY_ENVIRONMENT", "production")
+	for key, value := range productionCoreValues() {
+		t.Setenv(key, value)
+	}
+	for _, value := range []string{"https://api.example.com", "https://api.example.com/", "https://api.example.com/api", "https://api.example.com/v1/extra"} {
+		t.Setenv("MISTY_PUBLIC_API_URL", value)
+		if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), "/v1") {
+			t.Fatalf("production with MISTY_PUBLIC_API_URL=%s = %v", value, err)
+		}
+	}
+	for _, value := range []string{"https://api.example.com/v1", "https://api.example.com/v1/", "https://example.com/misty/v1"} {
+		t.Setenv("MISTY_PUBLIC_API_URL", value)
+		if err := ValidateProductionEnvironment(); err != nil {
+			t.Fatalf("production with MISTY_PUBLIC_API_URL=%s = %v", value, err)
+		}
 	}
 }

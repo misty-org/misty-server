@@ -214,20 +214,14 @@ func CookieCSRFProtection(allowedOrigin func(string) bool) func(http.Handler) ht
 			_, accessErr := r.Cookie(SessionCookieName)
 			_, refreshErr := r.Cookie(RefreshCookieName)
 			// Login also needs protection against login CSRF.
-			path := r.URL.Path
-			for _, prefix := range []string{"/api/v1", "/v1", "/api"} {
-				if strings.HasPrefix(path, prefix+"/") {
-					path = strings.TrimPrefix(path, prefix)
-					break
-				}
-			}
+			path := strings.TrimPrefix(r.URL.Path, "/v1")
 			// A confirmation link's form comes from the website, with any cookies this browser
 			// has here. Its token is all it uses, and it opens no session.
 			if path == "/auth/confirm-email" {
 				next.ServeHTTP(w, r)
 				return
 			}
-			login := path == "/login" || path == "/api/login" || path == "/register" || path == "/api/register" ||
+			login := path == "/login" || path == "/register" ||
 				path == "/auth/google" || path == "/auth/google/complete" || path == "/setup-keys/redeem" ||
 				path == "/auth/confirm-email/sign-in"
 			if accessErr == nil || refreshErr == nil || login {

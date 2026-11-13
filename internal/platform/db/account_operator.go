@@ -33,7 +33,6 @@ type OperatorAccount struct {
 // start of its current billing period.
 type AccountUse struct {
 	StorageBytes *int64    `json:"storage_bytes,omitempty"`
-	Devices      int64     `json:"devices"`
 	PeriodStart  time.Time `json:"period_start"`
 }
 
@@ -92,8 +91,7 @@ func (db *Database) CreateOperatorAccount(ctx context.Context, email string, lim
 
 const operatorAccountColumns = `u.id,u.email,u.username,u.created_at,
 	u.id=(SELECT id FROM users ORDER BY created_at,id LIMIT 1),
-	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,c.shared_spaces,c.space_members,
-	(SELECT count(*) FROM trusted_devices d WHERE d.user_id=u.id AND d.revoked_at IS NULL AND d.admission_state<>'revoked')
+	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,c.shared_spaces,c.space_members
 	FROM users u LEFT JOIN account_controls c ON c.user_id=u.id`
 
 func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, error) {
@@ -101,7 +99,7 @@ func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, 
 	var suspended, deleteAt, anchor sql.NullTime
 	var storage, devices, sharedSpaces, spaceMembers sql.NullInt64
 	if err := row.Scan(&a.ID, &a.Email, &a.Username, &a.CreatedAt, &a.Owner, &suspended, &deleteAt, &anchor,
-		&storage, &devices, &sharedSpaces, &spaceMembers, &a.Usage.Devices); err != nil {
+		&storage, &devices, &sharedSpaces, &spaceMembers); err != nil {
 		return a, err
 	}
 	if deleteAt.Valid {

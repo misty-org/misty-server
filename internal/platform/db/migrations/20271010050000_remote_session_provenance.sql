@@ -1,5 +1,5 @@
 -- +goose Up
--- Agents on devices (docs/agents/chats-local.md): a device proves a
+-- Agents on devices: a device proves a
 -- tab is a session it opened for another device's request by the session job
 -- that returned it. This finds those jobs quickly at claim time.
 CREATE INDEX IF NOT EXISTS workflow_device_session_jobs_idx

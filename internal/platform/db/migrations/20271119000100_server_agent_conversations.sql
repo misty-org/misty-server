@@ -1,5 +1,5 @@
 -- +goose Up
--- Spaces and agents (docs/agents/README.md, Where conversations live). Agent
+-- Spaces and agents. Agent
 -- conversations go back on the server: each one belongs to one person in one
 -- Space, with its turns, tool output and screenshots. A chat is no longer kept
 -- on a device, so kept_on_device_id, the inbox and the legacy copy go.

@@ -1,6 +1,6 @@
 -- +goose Up
--- Web search runs on the person's desktop on a search key they keep there
--- (docs/agents/runtime.md), so the server counts and limits no searches.
+-- Web search runs on the person's desktop on a search key they keep there,
+-- so the server counts and limits no searches.
 DELETE FROM account_usage WHERE metric = 'web_searches';
 ALTER TABLE account_usage DROP CONSTRAINT IF EXISTS account_usage_metric_check;
 ALTER TABLE account_usage ADD CONSTRAINT account_usage_metric_check CHECK (metric IN ('app_actions'));

@@ -240,17 +240,6 @@ func (db Store) UpdateUserSettings(id string, settings UserSettings) error {
 	return err
 }
 
-func (db Store) UpdateTelemetryPreferences(id string, analyticsEnabled, errorReportingEnabled bool) error {
-	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(context.Background(), `UPDATE users SET analytics_enabled = $1, error_reporting_enabled = $2 WHERE id = $3`, analyticsEnabled, errorReportingEnabled, id)
-		return err
-	})
-	if err != nil {
-		log.Println("Failed to update telemetry preferences:", err)
-	}
-	return err
-}
-
 var (
 	// ErrWrongCurrentPassword means the current password did not match.
 	ErrWrongCurrentPassword = errors.New("current password is wrong")

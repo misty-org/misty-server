@@ -43,7 +43,7 @@ func IsWebSocketRequest(r *http.Request) bool {
 // proxy route and server-generated previews still stream.
 func IsTransferRequest(r *http.Request) bool {
 	path := r.URL.Path
-	if !strings.HasPrefix(path, "/api/") && !strings.HasPrefix(path, "/v1/") {
+	if !strings.HasPrefix(path, "/v1/") {
 		return false
 	}
 	return strings.Contains(path, "/content") ||

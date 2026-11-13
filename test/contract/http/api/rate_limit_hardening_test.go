@@ -151,8 +151,8 @@ func TestSpaceRoutesShareOneBudgetPerRouteShape(t *testing.T) {
 
 func TestProviderRoutesNormalizeToTheirPolicy(t *testing.T) {
 	cases := map[string]string{
-		"/api/spaces/space_abcdefabcdefabcdef/notes/note_abcdefabcdefabcdef/collaboration-ticket": "/spaces/{spaceID}/notes/{id}/collaboration-ticket",
-		"/spaces/space_abcdefabcdefabcdef/tasks/calendar":                                         "/spaces/{spaceID}/tasks/calendar",
+		"/v1/spaces/space_abcdefabcdefabcdef/notes/note_abcdefabcdefabcdef/collaboration-ticket": "/spaces/{spaceID}/notes/{id}/collaboration-ticket",
+		"/spaces/space_abcdefabcdefabcdef/tasks/calendar":                                        "/spaces/{spaceID}/tasks/calendar",
 	}
 	for input, want := range cases {
 		if got := NormalizeRateLimitPath(input); got != want {

@@ -37,8 +37,8 @@ func TestWriteDeadlineMiddlewareSkipsWebSocketUpgrades(t *testing.T) {
 		upgrade      bool
 		wantDeadline bool
 	}{
-		{name: "json route gets a deadline", path: "/api/spaces/space_1/tasks", wantDeadline: true},
-		{name: "websocket upgrade gets none", path: "/api/realtime", upgrade: true, wantDeadline: false},
+		{name: "json route gets a deadline", path: "/v1/spaces/space_1/tasks", wantDeadline: true},
+		{name: "websocket upgrade gets none", path: "/v1/realtime", upgrade: true, wantDeadline: false},
 	}
 
 	for _, testCase := range cases {
@@ -76,7 +76,7 @@ func TestIsWebSocketRequestRequiresBothHeaders(t *testing.T) {
 	}
 
 	for _, testCase := range cases {
-		request := httptest.NewRequest(http.MethodGet, "/api/realtime", nil)
+		request := httptest.NewRequest(http.MethodGet, "/v1/realtime", nil)
 		request.Header.Set("Upgrade", testCase.upgrade)
 		request.Header.Set("Connection", testCase.connection)
 		if got := IsWebSocketRequest(request); got != testCase.want {
@@ -88,9 +88,9 @@ func TestIsWebSocketRequestRequiresBothHeaders(t *testing.T) {
 
 func TestIsTransferRequestOnlyMatchesObjectByteRoutes(t *testing.T) {
 	transfers := []string{
-		"/api/spaces/space_1/library/uploads/upload_1/content",
-		"/api/spaces/space_1/library/items/item_1/download",
-		"/api/spaces/space_1/library/items/item_1/preview",
+		"/v1/spaces/space_1/library/uploads/upload_1/content",
+		"/v1/spaces/space_1/library/items/item_1/download",
+		"/v1/spaces/space_1/library/items/item_1/preview",
 		"/v1/spaces/space_1/library/items/item_1/download",
 	}
 	for _, path := range transfers {
@@ -98,7 +98,7 @@ func TestIsTransferRequestOnlyMatchesObjectByteRoutes(t *testing.T) {
 			t.Fatalf("isTransferRequest(%q) = false, want true", path)
 		}
 	}
-	plain := []string{"/api/spaces/space_1/tasks", "/api/me", "/healthz"}
+	plain := []string{"/v1/spaces/space_1/tasks", "/v1/me", "/healthz"}
 	for _, path := range plain {
 		if IsTransferRequest(httptest.NewRequest(http.MethodGet, path, nil)) {
 			t.Fatalf("isTransferRequest(%q) = true, want false", path)
@@ -134,7 +134,7 @@ func TestRunHTTPServerDrainsInFlightRequestsAndStopsWorkers(t *testing.T) {
 
 	responses := make(chan string, 1)
 	go func() {
-		response, requestErr := http.Get("http://" + listener.Addr().String() + "/api/me")
+		response, requestErr := http.Get("http://" + listener.Addr().String() + "/v1/me")
 		if requestErr != nil {
 			responses <- "error: " + requestErr.Error()
 			return

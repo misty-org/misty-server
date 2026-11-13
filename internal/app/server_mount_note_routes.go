@@ -13,8 +13,7 @@ func (s *Server) mountNoteRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/notes", spaces.SpaceNotes())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/notes/{noteID}", spaces.SpaceNote())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/notes/{noteID}", spaces.SpaceNote())
-	// Archive/unarchive. The handler and SetSpaceNoteArchived already existed;
-	// without this the path was unreachable over HTTP.
+	// Archive/unarchive.
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/notes/{noteID}", spaces.SpaceNote())
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/notes/{noteID}/metadata", spaces.SpaceNoteMetadata())
 	s.Router.Put(prefix+"/spaces/{spaceID}/notes/{noteID}/content", spaces.SpaceNoteContent())

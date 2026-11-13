@@ -11,7 +11,7 @@ import (
 )
 
 // envSchemaEntry is one variable in the schema file the CLI writes from its
-// environment registry (cli/src/environment.rs).
+// environment registry (misty-cli's src/environment/registry.rs).
 type envSchemaEntry struct {
 	File     string `json:"file"`
 	Name     string `json:"name"`

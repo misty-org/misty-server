@@ -60,17 +60,11 @@ func TestPreflightAllowsEveryClientHeader(t *testing.T) {
 		"Content-Type",
 		"X-Misty-Platform",
 		"X-Misty-Release-Channel",
-		"X-Misty-Session-Id",
-		"X-Misty-Analytics-Enabled",
-		"X-Misty-Device-Timestamp",
-		"X-Misty-Device-Nonce",
-		"X-Misty-Device-Signature",
-		"X-Misty-Attachment-Upload-Token",
 		"X-Misty-Library-Upload-Token",
 	}
 
 	for _, header := range clientHeaders {
-		request := httptest.NewRequest(http.MethodOptions, "/api/spaces/space_1/library", nil)
+		request := httptest.NewRequest(http.MethodOptions, "/v1/spaces/space_1/library", nil)
 		request.Header.Set("Origin", "http://127.0.0.1:5174")
 		request.Header.Set("Access-Control-Request-Method", http.MethodGet)
 		request.Header.Set("Access-Control-Request-Headers", strings.ToLower(header))

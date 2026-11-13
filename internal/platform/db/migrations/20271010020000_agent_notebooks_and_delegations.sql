@@ -1,5 +1,5 @@
 -- +goose Up
--- A run's notebook (docs/agents/harness.md, Phase 4): its plan and its
+-- A run's notebook: its plan and its
 -- findings with sources, kept outside the model's context so they survive
 -- compaction, shown in the conversation and mirrored to a note.
 CREATE TABLE agent_notebooks (

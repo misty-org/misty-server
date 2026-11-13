@@ -44,7 +44,7 @@ func OpenDatabase(t testing.TB) *db.Database {
 	if err := connection.Ping(); err != nil {
 		_ = connection.Close()
 		t.Fatalf(
-			"database ping failed for %s@%s:%s/%s: %v\nrun ./test.sh to bootstrap the test database",
+			"database ping failed for %s@%s:%s/%s: %v\nrun misty server test to bootstrap the test database",
 			config.user, config.host, config.port, config.name, err,
 		)
 	}
@@ -79,7 +79,7 @@ func OpenDatabase(t testing.TB) *db.Database {
 // go test runs each package with its own directory as the working directory,
 // so the files are resolved from the repository root rather than relative to
 // the caller. godotenv never overwrites a value already present in the
-// process environment, so test.sh's exports and CI's job environment still
+// process environment, so misty server test's exports and CI's job environment still
 // take precedence over the scoped development files.
 func LoadEnvironment() {
 	loadEnvironmentOnce.Do(func() {

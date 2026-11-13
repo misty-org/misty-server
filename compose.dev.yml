@@ -21,7 +21,6 @@ services:
       - "127.0.0.1:${DB_PORT:-5435}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./scripts/docker/postgres-init-app-role.sh:/docker-entrypoint-initdb.d/10-misty-app-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 3s
@@ -127,7 +126,6 @@ services:
       interval: 15m
       timeout: 5s
       retries: 3
-    entrypoint: ["/bin/sh", "/usr/local/bin/misty-dev-api-entrypoint"]
     ports:
       - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"
     networks: [edge, database]

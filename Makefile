@@ -20,7 +20,7 @@ run: ## Run the API server
 	go run ./cmd/misty-server
 
 test: ## Full suite — bootstraps Docker Postgres on :5435
-	./test.sh
+	misty server test
 
 test-unit: ## Every Go test without the Docker bootstrap (DB tests need Postgres already up)
 	go test -p 1 ./... -count=1
@@ -59,6 +59,6 @@ sizes: ## Enforce the 500-line file cap
 	misty check go-sizes
 
 migrate: ## Apply database migrations
-	./scripts/goose.sh up
+	misty server goose up
 
 check: fmt-check vet sizes lint test ## Every check to run before pushing (there is no CI)

@@ -11,7 +11,7 @@ import (
 // loadDatabaseConfig resolves the destructive test database connection.
 //
 // Each field falls back from TEST_DB_* to the matching DB_* value, applying
-// the same derivations test.sh applies when it bootstraps the container, so a
+// the same derivations misty server test applies when it bootstraps the container, so a
 // bare `go test ./...` against an already-bootstrapped database resolves the
 // same connection the full harness does.
 func loadDatabaseConfig(t testing.TB) databaseConfig {
@@ -48,7 +48,7 @@ func testDatabaseHost() string {
 	switch host {
 	case "localhost", "::1":
 		// The development Postgres port is intentionally IPv4 loopback-only,
-		// and macOS resolves localhost to ::1 first. test.sh makes the same
+		// and macOS resolves localhost to ::1 first. misty server test makes the same
 		// substitution when it bootstraps the container.
 		return "127.0.0.1"
 	}
@@ -56,7 +56,7 @@ func testDatabaseHost() string {
 }
 
 // testDatabaseName never returns the development database: a DB_NAME without
-// "test" in it gains the same _test suffix test.sh creates.
+// "test" in it gains the same _test suffix misty server test creates.
 func testDatabaseName() string {
 	if name := configured("TEST_DB_NAME"); name != "" {
 		return name
@@ -99,7 +99,7 @@ func testDatabaseSSLMode(host string) string {
 
 func missingDatabaseEnvironment(field, names string) string {
 	return fmt.Sprintf(
-		"missing integration DB %s; set %s, or run ./test.sh to bootstrap the test database",
+		"missing integration DB %s; set %s, or run misty server test to bootstrap the test database",
 		field, names,
 	)
 }

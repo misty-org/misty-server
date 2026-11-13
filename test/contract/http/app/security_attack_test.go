@@ -19,11 +19,11 @@ import (
 // forging internal calls, cross-site requests and injection payloads.
 
 // attackServer is the full router on the disposable test database that
-// .githooks/server-tests.sh provides.
+// `misty server test --isolated` (the pre-push suite) provides.
 func attackServer(t *testing.T) *Server {
 	t.Helper()
 	if os.Getenv("TEST_DB_HOST") == "" {
-		t.Skip("requires the disposable PostgreSQL from .githooks/server-tests.sh")
+		t.Skip("requires the disposable PostgreSQL from misty server test --isolated")
 	}
 	server := noteRouteTestServer(t)
 	if err := server.Database.Start(); err != nil {

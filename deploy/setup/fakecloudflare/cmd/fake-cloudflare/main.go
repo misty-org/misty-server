@@ -1,5 +1,5 @@
 // Command fake-cloudflare serves the fake Cloudflare API for the stack test
-// (deploy/setup/stack-test.sh). GET /_state dumps what it holds.
+// (misty server stack-test). GET /_state dumps what it holds.
 package main
 
 import (

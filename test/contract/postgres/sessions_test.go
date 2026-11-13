@@ -117,7 +117,7 @@ func openRuntimeRoleDatabase(t *testing.T, adminDatabase *Database) *Database {
 	if runtimeUser == "" || runtimePassword == "" {
 		t.Skip("DB_USER and DB_PASSWORD are required to exercise the runtime RLS role")
 	}
-	// Mirror scripts/docker/postgres-grant-app-role.sh, which production runs
+	// Mirror the application role grants (deploy/setup and cmd/misty-dev-setup), which run
 	// after every migration: the runtime role gets DML on every table.
 	if _, err := adminDatabase.Conn.Exec(
 		"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO " + pq.QuoteIdentifier(runtimeUser),

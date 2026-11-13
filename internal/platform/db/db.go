@@ -137,12 +137,12 @@ func (db *Database) CheckSchemaVersion() error {
 		`SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version WHERE is_applied = true`,
 	).Scan(&applied); err != nil {
 		return fmt.Errorf(
-			"read applied schema version (run ./scripts/goose.sh up if migrations have never been applied): %w", err,
+			"read applied schema version (run misty server goose up if migrations have never been applied): %w", err,
 		)
 	}
 	if applied < expected {
 		return fmt.Errorf(
-			"database schema is out of date: applied migration %d, latest migration is %d — run ./scripts/goose.sh up",
+			"database schema is out of date: applied migration %d, latest migration is %d — run misty server goose up",
 			applied, expected,
 		)
 	}

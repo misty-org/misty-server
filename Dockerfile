@@ -33,7 +33,6 @@ RUN apt-get update \
 COPY --from=builder --chown=10001:10001 /out/misty-server /usr/local/bin/misty-server
 COPY --from=builder --chown=10001:10001 /out/goose /usr/local/bin/goose
 COPY --chown=10001:10001 internal/platform/db/migrations /app/migrations
-COPY --chmod=0555 scripts/docker/api-entrypoint.sh /usr/local/bin/misty-dev-api-entrypoint
 
 USER 10001:10001
 EXPOSE 8080

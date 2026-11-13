@@ -1,0 +1,79 @@
+package db
+
+import (
+	"encoding/json"
+	. "github.com/misty-org/misty-server/internal/platform/db"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
+	fixture := newNoteFixture(t, "account-export")
+	createTestSpace(t, fixture.database, fixture.ctx, fixture.creator, "Creator Home")
+	if _, err := fixture.database.CreateSpaceDrawing(
+		fixture.ctx, fixture.creator, fixture.spaceID, "Exported drawing",
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := fixture.database.TestingCreateSpaceMessage(
+		fixture.ctx,
+		fixture.creator,
+		fixture.spaceID,
+		[]MessageSpan{{Type: "text", Text: "portable message"}},
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.database.AddSpaceAgent(fixture.ctx, fixture.creator, fixture.spaceID, "agent-on-this-computer", "Writer"); err != nil {
+		t.Fatal(err)
+	}
+	digest := strings.Repeat("d", 64)
+	upload, err := fixture.database.CreateLibraryUpload(
+		fixture.ctx, fixture.creator, fixture.spaceID, "library",
+		"portable-file.png", "image/png", 32, digest,
+		"library/portableexport", "portable-token", time.Now().Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.database.SetLibraryUploadState(
+		fixture.ctx, fixture.creator, fixture.spaceID, upload.ID,
+		"portable-token", "initiated", "uploaded_unverified",
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.database.CompleteLibraryUpload(
+		fixture.ctx, fixture.creator, fixture.spaceID, upload.ID,
+		"portable-token", 32, digest, "image/png", nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	export, err := fixture.database.AccountPortableExport(
+		fixture.ctx, fixture.creator,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The fixture Space, "Creator Home" and the personal Space from sign-up.
+	if export.FormatVersion != 3 || len(export.Spaces) != 3 ||
+		len(export.Journal) != 2 || len(export.Messages) != 1 ||
+		len(export.Assets) != 1 || export.Assets[0].Kind != "library" ||
+		len(export.Agents) != 1 || export.Agents[0].Name != "Writer" || export.Agents[0].SpaceID != fixture.spaceID {
+		t.Fatalf("portable export = %#v", export)
+	}
+	raw, err := json.Marshal(export)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.ToLower(string(raw))
+	for _, forbidden := range []string{
+		"password_hash", "credential_ciphertext", "credential_nonce",
+		"status_token", "object_key",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("portable export exposed %q: %s", forbidden, text)
+		}
+	}
+}

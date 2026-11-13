@@ -1,0 +1,67 @@
+package console
+
+import "github.com/misty-org/misty-server/internal/platform/db"
+
+templ stateCounts(groups [][]db.ConsoleStateCount) {
+	<div class="count-groups">
+		for _, group := range groups {
+			<div class="count-group">
+				<div class="muted">{ group[0].Kind }</div>
+				<ul class="rows compact">
+					for _, c := range group {
+						<li class={ "row", templ.KV("row-problem", problemState(c.State)) }>
+							<span>{ humanize(c.State) }</span>
+							<span>{ itoa(c.Count) }</span>
+						</li>
+					}
+				</ul>
+			</div>
+		}
+	</div>
+}
+
+templ jobsPage(v jobsView) {
+	@pageHeader("Jobs", "Library processing on this server")
+	if v.Err != "" {
+		@problem(v.Err)
+	}
+	if len(v.Counts) > 0 {
+		@stateCounts(countGroups(v.Counts))
+	}
+	@sectionLabel("In progress or failed today")
+	<div class="table jobs-table">
+		<div class="table-head"><span>Job</span><span>Owner</span><span>State</span><span>Detail</span><span>Updated</span></div>
+		for _, job := range v.Jobs {
+			<div class={ "table-row", templ.KV("row-problem", problemState(job.State)) }>
+				<span class="truncate">
+					<span class="muted">{ job.Kind + " · " }</span>{ job.Title }
+				</span>
+				<span class="truncate muted">{ job.Owner }</span>
+				<span>
+					@stateTag(job.State)
+				</span>
+				<span class="truncate muted" title={ job.Detail }>{ job.Detail }</span>
+				<span class="muted">{ ago(job.UpdatedAt) }</span>
+			</div>
+		}
+		if len(v.Jobs) == 0 && v.Err == "" {
+			<div class="table-row"><span class="muted">Nothing running and no failures in the last day.</span></div>
+		}
+	</div>
+}
+
+templ settingRow(s setting) {
+	<li class={ "row", templ.KV("row-problem", s.Required && !s.Set) }>
+		<span class="row-label">
+			if s.Set {
+				@iconCheck()
+			} else if s.Required {
+				@iconAlert()
+			} else {
+				@iconMinus()
+			}
+			<code>{ s.Name }</code>
+		</span>
+		<span class={ "truncate", templ.KV("muted", s.Set || !s.Required) }>{ s.display() }</span>
+	</li>
+}

@@ -1,0 +1,76 @@
+package console
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/a-h/templ"
+
+	"github.com/misty-org/misty-server/internal/platform/db"
+)
+
+type jobsView struct {
+	Counts []db.ConsoleStateCount
+	Jobs   []db.ConsoleJob
+	Err    string
+}
+
+// countGroups groups state counts under their job kind, preserving order.
+func countGroups(counts []db.ConsoleStateCount) [][]db.ConsoleStateCount {
+	var groups [][]db.ConsoleStateCount
+	for _, c := range counts {
+		if len(groups) == 0 || groups[len(groups)-1][0].Kind != c.Kind {
+			groups = append(groups, nil)
+		}
+		groups[len(groups)-1] = append(groups[len(groups)-1], c)
+	}
+	return groups
+}
+
+func (s *Server) jobsPage(r *http.Request) templ.Component {
+	if s.db == nil {
+		return databaseUnavailable("Jobs")
+	}
+	counts, jobs, err := s.db.ConsoleJobs(r.Context(), 50)
+	view := jobsView{Counts: counts, Jobs: jobs}
+	if err != nil {
+		view.Err = "Couldn't load jobs: " + err.Error()
+	}
+	return jobsPage(view)
+}
+
+// setting is one configuration value shown with secrets masked.
+type setting struct {
+	Name     string
+	Value    string
+	Set      bool
+	Secret   bool
+	Required bool
+}
+
+func (s setting) display() string {
+	switch {
+	case !s.Set:
+		return "not set"
+	case s.Secret:
+		return "set · hidden"
+	case len(s.Value) > 64:
+		return s.Value[:61] + "…"
+	default:
+		return s.Value
+	}
+}
+
+func isSecretName(name string) bool {
+	for _, marker := range []string{"KEY", "SECRET", "TOKEN", "PASSWORD", "PEPPER", "PRIVATE", "CREDENTIAL", "DSN"} {
+		if strings.Contains(name, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) setting(name string, required bool) setting {
+	value, ok := s.cfg.lookup(name)
+	return setting{Name: name, Value: value, Set: ok && value != "", Secret: isSecretName(name), Required: required}
+}

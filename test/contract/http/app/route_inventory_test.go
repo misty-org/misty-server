@@ -1,0 +1,76 @@
+package app
+
+import (
+	"net/http"
+	"os"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/go-chi/chi/v5"
+	. "github.com/misty-org/misty-server/internal/app"
+	"github.com/misty-org/misty-server/internal/platform/config"
+)
+
+func TestRouteInventory(t *testing.T) {
+	configureJournalCollabForTest(t)
+	t.Setenv("MISTY_ENVIRONMENT", "")
+	t.Setenv("MISTY_METRICS_TOKEN", "")
+	// The inventory includes the operator account API, which mounts only with a token.
+	t.Setenv("MISTY_OPERATOR_TOKEN", "route-inventory")
+	t.Setenv("R2_ENDPOINT", "")
+	t.Setenv("R2_BUCKET", "")
+	t.Setenv("R2_ACCESS_KEY", "")
+	t.Setenv("R2_SECRET_KEY", "")
+
+	server, err := CreateServer()
+	if err != nil {
+		t.Fatalf("CreateServer() error = %v", err)
+	}
+	if err := server.MountHandlers(); err != nil {
+		t.Fatalf("MountHandlers() error = %v", err)
+	}
+
+	var routes []string
+	if err := chi.Walk(server.Router, func(method, path string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		routes = append(routes, method+" "+path)
+		return nil
+	}); err != nil {
+		t.Fatalf("walk routes: %v", err)
+	}
+	sort.Strings(routes)
+	actual := strings.Join(routes, "\n") + "\n"
+
+	const inventoryPath = "routes.golden"
+	if config.Getenv("UPDATE_ROUTE_GOLDEN") == "1" {
+		if err := os.WriteFile(inventoryPath, []byte(actual), 0o644); err != nil {
+			t.Fatalf("update route inventory: %v", err)
+		}
+	}
+	expected, err := os.ReadFile(inventoryPath)
+	if err != nil {
+		t.Fatalf("read route inventory: %v", err)
+	}
+	if actual != string(expected) {
+		t.Fatalf("route inventory changed; review the HTTP compatibility impact and run UPDATE_ROUTE_GOLDEN=1 go test ./test/contract/http/app -run TestRouteInventory")
+	}
+}
+
+func TestOperatorAccountAPIIsUnmountedWithoutAToken(t *testing.T) {
+	configureJournalCollabForTest(t)
+	t.Setenv("MISTY_ENVIRONMENT", "")
+	t.Setenv("MISTY_OPERATOR_TOKEN", "")
+	server, err := CreateServer()
+	if err != nil {
+		t.Fatalf("CreateServer() error = %v", err)
+	}
+	if err := server.MountHandlers(); err != nil {
+		t.Fatalf("MountHandlers() error = %v", err)
+	}
+	_ = chi.Walk(server.Router, func(method, path string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		if strings.HasPrefix(path, "/operator/") {
+			t.Errorf("%s %s is mounted without MISTY_OPERATOR_TOKEN", method, path)
+		}
+		return nil
+	})
+}

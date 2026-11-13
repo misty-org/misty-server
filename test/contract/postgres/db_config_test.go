@@ -1,0 +1,24 @@
+package db
+
+import (
+	"testing"
+
+	. "github.com/misty-org/misty-server/internal/platform/db"
+)
+
+func TestDatabaseSSLMode(t *testing.T) {
+	tests := map[string]string{
+		"localhost":           "disable",
+		"127.0.0.1":           "disable",
+		"::1":                 "disable",
+		"postgres":            "disable",
+		"/var/run/postgresql": "disable",
+		"database.internal":   "require",
+		"db.example.com":      "require",
+	}
+	for host, want := range tests {
+		if got := DatabaseSSLMode(host); got != want {
+			t.Errorf("databaseSSLMode(%q) = %q, want %q", host, got, want)
+		}
+	}
+}

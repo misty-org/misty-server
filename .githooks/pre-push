@@ -1,0 +1,10 @@
+#!/bin/sh
+# Refuses pushes that would publish history the public repository must not
+# contain, then runs every check on the clean working tree.
+set -eu
+root=$(git rev-parse --show-toplevel)
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$local_sha" in 0000000000000000000000000000000000000000) continue ;; esac
+  python3 "$root/scripts/check-public-history.py" "$local_sha" || exit 1
+done
+exec "$root/.githooks/checks.sh" push

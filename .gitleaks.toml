@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Historical provider selector; this literal is not an OAuth token"
+condition = "AND"
+paths = ['''internal/platform/httpapi/cloud_connections_cloud_authorization_callback\.go$''']
+regexTarget = "line"
+regexes = ['''accountProvider = "dropbox"''']

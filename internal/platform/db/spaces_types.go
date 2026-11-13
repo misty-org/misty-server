@@ -1,0 +1,179 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"strings"
+	"time"
+)
+
+const (
+	MaxMessageChars = 4000
+	MaxMessageFiles = 5
+	// Per-object processing bound, independent of any account or Space allowance.
+	MaxSpaceStorageBytes = int64(1_000_000_000)
+)
+
+var (
+	ErrSpaceNotFound         = errors.New("space not found")
+	ErrSpaceForbidden        = errors.New("space permission denied")
+	ErrSpaceLimit            = errors.New("space limit reached")
+	ErrSpaceOwnershipLimit   = errors.New("space ownership limit reached")
+	ErrSpacePeopleLimit      = errors.New("space member limit reached")
+	ErrSpaceConflict         = errors.New("space resource version conflict")
+	ErrSpaceInviteNotFound   = errors.New("space invitation not found")
+	ErrSpaceInviteeNotFound  = errors.New("no misty account found for invitee email")
+	ErrSpaceInviteExpired    = errors.New("space invitation expired")
+	ErrSpaceInvalid          = errors.New("invalid space data")
+	ErrDefaultSpaceProtected = errors.New("default space cannot be deleted or transferred")
+)
+
+type Space struct {
+	ID               string `json:"id"`
+	SecurityDomainID string `json:"security_domain_id"`
+	OwnerUserID      string `json:"owner_user_id"`
+	Name             string `json:"name"`
+	IsDefault        bool   `json:"is_default"`
+	Role             string `json:"role"`
+	MemberCount      int    `json:"member_count"`
+	PendingCount     int    `json:"pending_count"`
+	IsShared         bool   `json:"is_shared"`
+	// AvatarVersion names the Space's uploaded picture; 0 means it has none.
+	AvatarVersion int64     `json:"avatar_version"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type SpaceMember struct {
+	SpaceID  string    `json:"space_id"`
+	UserID   string    `json:"user_id"`
+	Name     string    `json:"name"`
+	Email    string    `json:"email"`
+	Role     string    `json:"role"`
+	JoinedAt time.Time `json:"joined_at"`
+	ReadSeq  int64     `json:"read_message_seq"`
+	// AvatarVersion names the member's profile picture; 0 means they have none.
+	AvatarVersion int64 `json:"avatar_version"`
+}
+
+type SpaceInvitation struct {
+	ID              string  `json:"id"`
+	SpaceID         string  `json:"space_id"`
+	SpaceName       string  `json:"space_name"`
+	InvitedUserID   *string `json:"invited_user_id"`
+	InvitedUserName *string `json:"invited_user_name"`
+	InvitedEmail    string  `json:"invited_email"`
+	InvitedByUserID string  `json:"invited_by_user_id"`
+	InviterName     string  `json:"inviter_name,omitempty"`
+	// Emailed says this server is emailing the link to the invited person.
+	Emailed bool `json:"emailed,omitempty"`
+	// Link is the invitation's link, only in the answer that made it, for the
+	// owner to pass on. Only its hash is kept, once any email of it has gone.
+	Link      string    `json:"link,omitempty"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type SpaceInvitationPreview struct {
+	SpaceName    string    `json:"space_name"`
+	InviterName  string    `json:"inviter_name"`
+	InvitedEmail string    `json:"invited_email"`
+	ExpiresAt    time.Time `json:"expires_at"`
+}
+
+type MessageSpan struct {
+	Type    string `json:"type"`
+	Text    string `json:"text,omitempty"`
+	UserID  string `json:"user_id,omitempty"`
+	AgentID string `json:"agent_id,omitempty"`
+	Label   string `json:"label,omitempty"`
+	URL     string `json:"url,omitempty"`
+}
+
+type SpaceMessage struct {
+	Seq                 int64                  `json:"seq"`
+	ID                  string                 `json:"id"`
+	ClientNonce         string                 `json:"client_nonce,omitempty"`
+	SpaceID             string                 `json:"space_id"`
+	ConversationID      string                 `json:"conversation_id,omitempty"`
+	SenderUserID        string                 `json:"sender_user_id"`
+	SenderName          string                 `json:"sender_name"`
+	SenderAvatarVersion int64                  `json:"sender_avatar_version,omitempty"`
+	SenderKind          string                 `json:"sender_kind"`
+	Sender              SpaceMessageSender     `json:"sender"`
+	Content             []MessageSpan          `json:"content"`
+	FileNodeIDs         []string               `json:"file_node_ids"`
+	LibraryItemIDs      []string               `json:"library_item_ids"`
+	Attachments         []MessageAttachment    `json:"attachments"`
+	Reactions           []SpaceMessageReaction `json:"reactions"`
+	ReplyToMessageID    string                 `json:"reply_to_message_id,omitempty"`
+	EditedAt            *time.Time             `json:"edited_at,omitempty"`
+	CreatedAt           time.Time              `json:"created_at"`
+}
+
+type SpaceMessageSender struct {
+	Kind          string `json:"kind"`
+	UserID        string `json:"user_id,omitempty"`
+	DisplayName   string `json:"display_name"`
+	AvatarVersion int64  `json:"avatar_version,omitempty"`
+}
+
+type SpaceMessageReaction struct {
+	Emoji       string `json:"emoji"`
+	Count       int    `json:"count"`
+	ReactedByMe bool   `json:"reacted_by_me,omitempty"`
+}
+
+type SpaceNode struct {
+	ID             string          `json:"id"`
+	SpaceID        string          `json:"space_id"`
+	ParentID       string          `json:"parent_id,omitempty"`
+	Kind           string          `json:"kind"`
+	DisplayName    string          `json:"display_name"`
+	UploaderUserID string          `json:"uploader_user_id"`
+	MIMEType       string          `json:"mime_type"`
+	SizeBytes      *int64          `json:"size_bytes,omitempty"`
+	Stale          bool            `json:"stale"`
+	Metadata       json.RawMessage `json:"metadata"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+	TargetCipher   []byte          `json:"-"`
+	TargetNonce    []byte          `json:"-"`
+	KeyVersion     int16           `json:"-"`
+}
+
+type SpaceEvent struct {
+	ID          int64           `json:"id"`
+	SpaceID     string          `json:"space_id"`
+	EventType   string          `json:"type"`
+	ActorUserID string          `json:"actor_user_id,omitempty"`
+	EntityID    string          `json:"entity_id,omitempty"`
+	Payload     json.RawMessage `json:"payload"`
+	CreatedAt   time.Time       `json:"created_at"`
+}
+
+func (db *Database) SpaceTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	return db.WithRLSContext(ctx, ServiceRLSSettings(), fn)
+}
+
+// maxSpaceNameRunes keeps a Space's name short enough to show whole in the app's Space switcher.
+const maxSpaceNameRunes = 64
+
+func normalizeSpaceName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if len([]rune(name)) < 1 || len([]rune(name)) > maxSpaceNameRunes {
+		return "", ErrSpaceInvalid
+	}
+	return name, nil
+}
+
+func requireSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) (string, error) {
+	var role string
+	err := tx.QueryRowContext(ctx, `SELECT m.role FROM space_members m JOIN spaces s ON s.id=m.space_id WHERE m.space_id=$1 AND m.user_id=$2 AND s.lifecycle_state='active'`, spaceID, userID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrSpaceForbidden
+	}
+	return role, err
+}

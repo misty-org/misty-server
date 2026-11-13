@@ -1,0 +1,18 @@
+**/.env
+**/.env/**
+**/.env.*
+**/.dev.vars
+**/.secrets
+**/.secrets/**
+**/.wrangler
+**/node_modules
+**/.output
+**/.nitro
+**/.cache
+**/dist
+**/build
+**/target
+.git
+
+# CLI diagnostics are never part of an image build.
+.misty

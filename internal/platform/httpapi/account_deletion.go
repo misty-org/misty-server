@@ -1,0 +1,160 @@
+package api
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
+)
+
+const accountDeletionRetention = 30 * 24 * time.Hour
+
+func (s *SpacesService) BeginAccountDeletion() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := authenticatedUser(w, r, s.database)
+		if !ok {
+			return
+		}
+		var body struct {
+			Password              string `json:"password"`
+			ReauthenticationToken string `json:"reauthentication_token"`
+			Confirmation          string `json:"confirmation"`
+		}
+		if decodeJSON(w, r, &body) != nil {
+			return
+		}
+		if body.Confirmation != "DELETE" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"code": "account_deletion_confirmation_required",
+			})
+			return
+		}
+		valid, err := s.database.VerifyAccountReauthentication(r.Context(), userID, body.Password, body.ReauthenticationToken)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		if !valid {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{
+				"code": "account_reauthentication_failed",
+			})
+			return
+		}
+		blockers, err := s.database.AccountDeletionBlockers(r.Context(), userID)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		if len(blockers) > 0 {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"code":    "account_deletion_space_ownership",
+				"message": "Transfer or delete every Space you own before deleting your account.",
+				"spaces":  blockers,
+			})
+			return
+		}
+
+		statusToken := randomProviderValue(32)
+		requestID := "deletion_" + uuid.NewString()
+		request, err := s.database.BeginAccountDeletion(
+			r.Context(), userID, requestID, security.HashToken(statusToken),
+			accountDeletionRetention,
+		)
+		if errors.Is(err, db.ErrAccountDeletionBlocked) {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"code": "account_deletion_already_pending",
+			})
+			return
+		}
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"request":      request,
+			"status_token": statusToken,
+		})
+	}
+}
+
+func (s *SpacesService) ProcessAccountDeletions(
+	ctx context.Context, limit int,
+) (int, error) {
+	requests, err := s.database.ProcessingAccountDeletions(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	completed := 0
+	for _, request := range requests {
+		status, processErr := s.revokeAccountProviders(ctx, request.UserID)
+		if processErr == nil && s.avatarStore != nil {
+			// The current picture's own key, and the fixed one pictures had before uploads got
+			// their own.
+			keys := []string{avatarObjectKey(request.UserID)}
+			if avatar, err := s.database.GetUserAvatarReference(request.UserID); err == nil &&
+				avatar.ObjectKey != keys[0] {
+				keys = append(keys, avatar.ObjectKey)
+			}
+			for _, key := range keys {
+				if err := s.avatarStore.Delete(ctx, key); err != nil &&
+					!errors.Is(err, ErrLibraryObjectNotFound) {
+					processErr = err
+					break
+				}
+			}
+		}
+		if processErr != nil {
+			_ = s.database.RecordAccountDeletionFailure(
+				ctx, request.ID, "provider_or_storage_cleanup_failed",
+			)
+			return completed, processErr
+		}
+		if err := s.database.ScheduleAccountDeletion(ctx, request.ID, status); err != nil {
+			_ = s.database.RecordAccountDeletionFailure(
+				ctx, request.ID, "database_cleanup_failed",
+			)
+			return completed, err
+		}
+		completed++
+	}
+	return completed, nil
+}
+
+func (s *SpacesService) PurgeDueAccountDeletions(
+	ctx context.Context, limit int,
+) (int, error) {
+	requests, err := s.database.DueAccountDeletions(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	completed := 0
+	for _, request := range requests {
+		// The Spaces it owned are purged after this.
+		err := s.database.CompleteAccountDeletion(ctx, request.ID)
+		if err != nil {
+			_ = s.database.RecordAccountDeletionFailure(ctx, request.ID, "purge_failed")
+			return completed, err
+		}
+		completed++
+	}
+	if completed > 0 {
+		// A deleted account's Spaces are due at once.
+		if _, err := s.PurgeDeletedSpaces(ctx, 25); err != nil {
+			return completed, err
+		}
+	}
+	return completed, nil
+}
+
+func randomProviderValue(size int) string {
+	value := make([]byte, size)
+	_, _ = rand.Read(value)
+	return base64.RawURLEncoding.EncodeToString(value)
+}

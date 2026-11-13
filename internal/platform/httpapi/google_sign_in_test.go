@@ -1,0 +1,437 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/misty-org/misty-server/internal/platform/db"
+	"golang.org/x/oauth2"
+)
+
+type googleFlowStub struct {
+	flow       db.GoogleSignInFlow
+	completion string
+	phase      string
+	user       *db.User
+	accountErr error
+	creations  int
+}
+
+func (f *googleFlowStub) CreateGoogleReauthenticationToken(context.Context, string, string) error {
+	return nil
+}
+
+func (f *googleFlowStub) CreateGoogleSignInFlow(_ context.Context, flow db.GoogleSignInFlow) error {
+	f.flow = flow
+	f.phase = "pending"
+	return nil
+}
+func (f *googleFlowStub) AdvanceGoogleSignInFlow(_ context.Context, state, from, to string) (db.GoogleSignInFlow, error) {
+	if state != f.flow.StateHash || f.phase != from || time.Now().After(f.flow.ExpiresAt) {
+		return db.GoogleSignInFlow{}, db.ErrGoogleFlowInvalid
+	}
+	f.phase = to
+	return f.flow, nil
+}
+func (f *googleFlowStub) FinishGoogleSignInFlow(_ context.Context, state, user, code, completion string) error {
+	if state != f.flow.StateHash || f.phase != "exchanging" {
+		return db.ErrGoogleFlowInvalid
+	}
+	f.flow.UserID = user
+	f.flow.ErrorCode = code
+	f.completion = completion
+	f.phase = "ready"
+	return nil
+}
+func (f *googleFlowStub) ConsumeGoogleSignInFlow(_ context.Context, poll, completion string) (*db.GoogleSignInFlow, error) {
+	if poll != f.flow.PollHash || f.phase == "consumed" {
+		return nil, db.ErrGoogleFlowInvalid
+	}
+	if f.phase != "ready" {
+		return nil, nil
+	}
+	if f.flow.ErrorCode == "" {
+		if completion == "" {
+			return nil, db.ErrGoogleFlowNeedsCode
+		}
+		if completion != f.completion {
+			f.phase = "consumed"
+			return nil, db.ErrGoogleFlowInvalid
+		}
+	}
+	f.phase = "consumed"
+	return &f.flow, nil
+}
+func (f *googleFlowStub) GoogleUser(email, subject string) (*db.User, error) {
+	f.creations++
+	if f.accountErr != nil {
+		return nil, f.accountErr
+	}
+	f.user = &db.User{ID: "google-user", Email: email, Provider: "google", ProviderSubject: subject}
+	return f.user, nil
+}
+func (f *googleFlowStub) GetUserByID(id string) (*db.User, error) { return f.user, nil }
+
+func googlePayload(nonce string) *googleIdentity {
+	return &googleIdentity{Issuer: "https://accounts.google.com", Audience: "client-id", Subject: "google-subject", Expires: time.Now().Add(time.Hour).Unix(), Claims: map[string]any{"email": "user@example.com", "email_verified": true, "name": "Google User", "nonce": nonce}}
+}
+
+func TestGoogleIdentityValidation(t *testing.T) {
+	cases := []struct {
+		name   string
+		change func(*googleIdentity)
+	}{
+		{"issuer", func(p *googleIdentity) { p.Issuer = "https://evil.test" }},
+		{"audience", func(p *googleIdentity) { p.Audience = "another-client" }},
+		{"subject", func(p *googleIdentity) { p.Subject = "" }},
+		{"expiry", func(p *googleIdentity) { p.Expires = time.Now().Add(-time.Minute).Unix() }},
+		{"unverified", func(p *googleIdentity) { p.Claims["email_verified"] = false }},
+		{"string verified", func(p *googleIdentity) { p.Claims["email_verified"] = "true" }},
+		{"email", func(p *googleIdentity) { delete(p.Claims, "email") }},
+		{"nonce", func(p *googleIdentity) { p.Claims["nonce"] = "another-flow" }},
+		{"authorized party", func(p *googleIdentity) { p.Claims["azp"] = "another-client" }},
+	}
+	if !validGoogleIdentity(googlePayload("nonce"), "nonce", "client-id") {
+		t.Fatal("valid identity rejected")
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := googlePayload("nonce")
+			tc.change(p)
+			if validGoogleIdentity(p, "nonce", "client-id") {
+				t.Fatal("invalid identity accepted")
+			}
+		})
+	}
+}
+
+func TestGoogleSignInRoundTrip(t *testing.T) {
+	for _, outcome := range []string{"success", "denied", "conflict", "bad-signature", "bad-nonce", "exchange-error"} {
+		t.Run(outcome, func(t *testing.T) {
+			store := &googleFlowStub{}
+			exchanges := 0
+			tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				exchanges++
+				if err := r.ParseForm(); err != nil {
+					t.Error(err)
+				}
+				if r.Form.Get("code_verifier") != store.flow.Verifier || r.Form.Get("redirect_uri") != "https://misty.test/v1/auth/google/callback" || r.Form.Get("code") != "google-code" {
+					t.Error("token exchange was not bound to PKCE and the configured callback")
+				}
+				if outcome == "exchange-error" {
+					http.Error(w, "token exchange failed", 400)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"access_token":"unused","token_type":"Bearer","id_token":"signed-token"}`))
+			}))
+			defer tokenServer.Close()
+			if outcome == "conflict" {
+				store.accountErr = db.ErrProviderConflict
+			}
+			sessions := 0
+			service := &GoogleSignInService{store: store, startURL: "https://misty.test/v1/auth/google/start", oauth: oauth2.Config{ClientID: "client-id", ClientSecret: "client-secret", RedirectURL: "https://misty.test/v1/auth/google/callback", Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: tokenServer.URL, AuthStyle: oauth2.AuthStyleInParams}, Scopes: []string{"openid", "email", "profile"}}, validate: func(_ context.Context, raw, audience string) (*googleIdentity, error) {
+				if raw != "signed-token" || audience != "client-id" {
+					t.Error("wrong ID token validation inputs")
+				}
+				if outcome == "bad-signature" {
+					return nil, errors.New("bad signature")
+				}
+				p := googlePayload(store.flow.Nonce)
+				if outcome == "bad-nonce" {
+					p.Claims["nonce"] = "attacker"
+				}
+				return p, nil
+			}, session: func(w http.ResponseWriter, r *http.Request, u *db.User) {
+				sessions++
+				if u.Provider != "google" {
+					t.Error("wrong account")
+				}
+				w.WriteHeader(200)
+			}}
+			begin := httptest.NewRecorder()
+			service.Begin()(begin, httptest.NewRequest("POST", "/v1/auth/google", strings.NewReader(`{}`)))
+			if begin.Code != 201 {
+				t.Fatal(begin.Code)
+			}
+			var flow struct {
+				URL   string `json:"url"`
+				Token string `json:"flow_token"`
+			}
+			if err := json.Unmarshal(begin.Body.Bytes(), &flow); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(flow.URL, flow.Token) || flow.Token == "" {
+				t.Fatal("poll secret leaked or missing")
+			}
+			launch, _ := url.Parse(flow.URL)
+			state := launch.Query().Get("state")
+			poll := func(token string, code ...string) *httptest.ResponseRecorder {
+				w := httptest.NewRecorder()
+				request := map[string]string{"flow_token": token}
+				if len(code) > 0 {
+					request["completion_code"] = code[0]
+				}
+				body, _ := json.Marshal(request)
+				service.Complete()(w, httptest.NewRequest("POST", "/v1/auth/google/complete", strings.NewReader(string(body))))
+				return w
+			}
+			if poll(state).Code != 410 {
+				t.Fatal("browser state can redeem a session")
+			}
+			if poll(flow.Token).Code != 202 {
+				t.Fatal("pending flow not pending")
+			}
+			start := httptest.NewRecorder()
+			service.Start()(start, httptest.NewRequest("GET", flow.URL, nil))
+			if start.Code != 303 {
+				t.Fatal(start.Code)
+			}
+			destination, _ := url.Parse(start.Header().Get("Location"))
+			q := destination.Query()
+			if q.Get("state") != state || q.Get("code_challenge") != oauth2.S256ChallengeFromVerifier(store.flow.Verifier) || q.Get("code_challenge_method") != "S256" || q.Get("nonce") != store.flow.Nonce || q.Get("scope") != "openid email profile" {
+				t.Fatal("authorization parameters incomplete")
+			}
+			cookies := start.Result().Cookies()
+			if len(cookies) != 1 || !cookies[0].HttpOnly || !cookies[0].Secure || cookies[0].SameSite != http.SameSiteLaxMode {
+				t.Fatal("insecure state cookie")
+			}
+			callbackURL := service.oauth.RedirectURL + "?state=" + state + "&code=google-code"
+			if outcome == "denied" {
+				callbackURL = service.oauth.RedirectURL + "?state=" + state + "&error=access_denied"
+			}
+			callback := func(cookie *http.Cookie) *httptest.ResponseRecorder {
+				w := httptest.NewRecorder()
+				r := httptest.NewRequest("GET", callbackURL, nil)
+				if cookie != nil {
+					r.AddCookie(cookie)
+				}
+				service.Callback()(w, r)
+				return w
+			}
+			if callback(nil).Code != 400 || callback(&http.Cookie{Name: googleSignInCookie, Value: "wrong"}).Code != 400 || exchanges != 0 {
+				t.Fatal("callback without browser binding reached Google")
+			}
+			result := callback(cookies[0])
+			want := 400
+			if outcome == "success" {
+				want = 200
+			}
+			if result.Code != want {
+				t.Fatalf("callback=%d body=%s", result.Code, result.Body.String())
+			}
+			before := exchanges
+			if callback(cookies[0]).Code != 400 || exchanges != before {
+				t.Fatal("callback replay accepted")
+			}
+			code := ""
+			if outcome == "success" {
+				page := result.Body.String()
+				_, rest, found := strings.Cut(page, "misty://auth/google/complete?code=")
+				code, _, _ = strings.Cut(rest, `"`)
+				if !found || normalizeGoogleCompletionCode(code) == "" || !strings.Contains(page, `http-equiv="refresh"`) {
+					t.Fatalf("completion page has no deep link: %s", page)
+				}
+				// Holding only the polling secret, as whoever sent the link
+				// would, must not redeem the session.
+				if pending := poll(flow.Token); pending.Code != 202 || !strings.Contains(pending.Body.String(), "confirm") || sessions != 0 {
+					t.Fatalf("session redeemed without the browser's code: %d", pending.Code)
+				}
+				if poll(flow.Token, "not-a-code").Code != 400 || sessions != 0 {
+					t.Fatal("malformed code accepted")
+				}
+				code = strings.ToLower(code[:5]) + "-" + code[5:]
+			}
+			complete := poll(flow.Token, code)
+			want = 409
+			if outcome == "success" {
+				want = 200
+			}
+			if complete.Code != want {
+				t.Fatalf("complete=%d body=%s", complete.Code, complete.Body.String())
+			}
+			if outcome == "success" && sessions != 1 || outcome != "success" && sessions != 0 {
+				t.Fatal("unexpected session issued")
+			}
+			if outcome != "success" && outcome != "conflict" && store.creations != 0 {
+				t.Fatal("invalid identity provisioned")
+			}
+			if poll(flow.Token).Code != 410 {
+				t.Fatal("completion replay accepted")
+			}
+		})
+	}
+}
+
+func TestGoogleSignInCanEndOnTheWebsite(t *testing.T) {
+	t.Setenv("MISTY_WEBSITE_URL", "https://site.test/")
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"unused","token_type":"Bearer","id_token":"signed-token"}`))
+	}))
+	defer tokenServer.Close()
+	store := &googleFlowStub{}
+	sessions := 0
+	service := &GoogleSignInService{store: store, startURL: "https://misty.test/v1/auth/google/start", oauth: oauth2.Config{ClientID: "client-id", ClientSecret: "client-secret", RedirectURL: "https://misty.test/v1/auth/google/callback", Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: tokenServer.URL, AuthStyle: oauth2.AuthStyleInParams}}, validate: func(context.Context, string, string) (*googleIdentity, error) {
+		return googlePayload(store.flow.Nonce), nil
+	}, session: func(w http.ResponseWriter, _ *http.Request, _ *db.User) {
+		sessions++
+		w.WriteHeader(200)
+	}}
+	begin := httptest.NewRecorder()
+	service.Begin()(begin, httptest.NewRequest("POST", "/v1/auth/google", strings.NewReader(`{"website":true}`)))
+	var flow struct {
+		URL   string `json:"url"`
+		Token string `json:"flow_token"`
+	}
+	if err := json.Unmarshal(begin.Body.Bytes(), &flow); err != nil {
+		t.Fatal(err)
+	}
+	start := httptest.NewRecorder()
+	service.Start()(start, httptest.NewRequest("GET", flow.URL, nil))
+	launch, _ := url.Parse(flow.URL)
+	callback := httptest.NewRequest("GET", service.oauth.RedirectURL+"?state="+launch.Query().Get("state")+"&code=google-code", nil)
+	callback.AddCookie(start.Result().Cookies()[0])
+	finished := httptest.NewRecorder()
+	service.Callback()(finished, callback)
+	destination := finished.Header().Get("Location")
+	code, onSite := strings.CutPrefix(destination, "https://site.test/signin#google_code=")
+	if finished.Code != http.StatusSeeOther || !onSite || normalizeGoogleCompletionCode(code) == "" {
+		t.Fatalf("callback=%d to %q", finished.Code, destination)
+	}
+	// The address the code travels in must not reach the server hosting the website.
+	if strings.Contains(strings.Split(destination, "#")[0], code) {
+		t.Fatal("completion code outside the fragment")
+	}
+	complete := httptest.NewRecorder()
+	body, _ := json.Marshal(map[string]string{"flow_token": flow.Token, "completion_code": code})
+	service.Complete()(complete, httptest.NewRequest("POST", "/v1/auth/google/complete", strings.NewReader(string(body))))
+	if complete.Code != 200 || sessions != 1 {
+		t.Fatalf("complete=%d sessions=%d", complete.Code, sessions)
+	}
+}
+
+func TestGoogleSignInWrongCodeEndsTheFlow(t *testing.T) {
+	store := &googleFlowStub{flow: db.GoogleSignInFlow{PollHash: "poll", ExpiresAt: time.Now().Add(time.Minute)}, phase: "ready", completion: "right"}
+	if _, err := store.ConsumeGoogleSignInFlow(context.Background(), "poll", "wrong"); !errors.Is(err, db.ErrGoogleFlowInvalid) {
+		t.Fatal("wrong code accepted")
+	}
+	if _, err := store.ConsumeGoogleSignInFlow(context.Background(), "poll", "right"); !errors.Is(err, db.ErrGoogleFlowInvalid) {
+		t.Fatal("flow survived a wrong code")
+	}
+}
+
+func TestGoogleCompletionCodes(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		code, err := newGoogleCompletionCode()
+		if err != nil || len(code) != googleCompletionLength || normalizeGoogleCompletionCode(code) != code || seen[code] {
+			t.Fatalf("bad code %q %v", code, err)
+		}
+		seen[code] = true
+	}
+	for _, raw := range []string{"", "ABCDE", "ABCDE-FGHJK-M", "ABCDE-FGHJ0", "ABCDE_FGHJK"} {
+		if normalizeGoogleCompletionCode(raw) != "" {
+			t.Fatalf("accepted %q", raw)
+		}
+	}
+	if normalizeGoogleCompletionCode("abcde-fghjk") != "ABCDEFGHJK" {
+		t.Fatal("display form rejected")
+	}
+}
+
+func TestGoogleSignInConfiguration(t *testing.T) {
+	t.Setenv("GOOGLE_CLIENT_ID", "client")
+	t.Setenv("GOOGLE_CLIENT_SECRET", "secret")
+	t.Setenv("MISTY_PUBLIC_API_URL", "https://api.misty.test/v1")
+	t.Setenv("GOOGLE_SIGN_IN_REDIRECT_URL", "")
+	s, err := NewGoogleSignInService(nil)
+	if err != nil || s.oauth.RedirectURL != "https://api.misty.test/v1/auth/google/callback" {
+		t.Fatalf("configuration: %v", err)
+	}
+	for _, value := range []string{"http://evil.test/v1/auth/google/callback", "https://api.test/wrong", "https://user:pass@api.test/auth/google/callback", "https://api.test/auth/google/callback?next=evil"} {
+		t.Setenv("GOOGLE_SIGN_IN_REDIRECT_URL", value)
+		if _, err := NewGoogleSignInService(nil); err == nil {
+			t.Fatalf("accepted %s", value)
+		}
+	}
+	t.Setenv("GOOGLE_SIGN_IN_REDIRECT_URL", "")
+	t.Setenv("GOOGLE_CLIENT_SECRET", "")
+	s, err = NewGoogleSignInService(nil)
+	if err != nil || s.oauth.ClientID != "" {
+		t.Fatal("missing credentials enabled sign-in")
+	}
+}
+
+func TestGoogleReauthenticationRequiresSameIdentity(t *testing.T) {
+	store := &googleFlowStub{user: &db.User{ID: "existing", Provider: "google", ProviderSubject: "google-subject"}}
+	service := &GoogleSignInService{store: store}
+	flow := db.GoogleSignInFlow{ReauthenticateUserID: "existing", ExpiresAt: time.Now().Add(googleSignInTTL)}
+	payload := googlePayload("nonce")
+	if user, err := service.googleAccount(flow, payload, "user@example.com"); err != nil || user.ID != "existing" {
+		t.Fatal("fresh reauthentication rejected")
+	}
+	payload.Subject = "another-subject"
+	if _, err := service.googleAccount(flow, payload, "other@example.com"); !errors.Is(err, db.ErrProviderConflict) {
+		t.Fatal("different identity accepted")
+	}
+	if store.creations != 0 {
+		t.Fatal("reauthentication creates accounts")
+	}
+}
+
+func TestGoogleSaysToUseThePasswordOnAPasswordAccount(t *testing.T) {
+	if got := googleSignInError("password_account"); !strings.Contains(got, "email and password") {
+		t.Fatalf("message = %q", got)
+	}
+	t.Setenv("MISTY_WEBSITE_URL", "https://site.test/")
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"unused","token_type":"Bearer","id_token":"signed-token"}`))
+	}))
+	defer tokenServer.Close()
+	store := &googleFlowStub{accountErr: db.ErrPasswordAccount}
+	service := &GoogleSignInService{store: store, startURL: "https://misty.test/v1/auth/google/start", oauth: oauth2.Config{ClientID: "client-id", RedirectURL: "https://misty.test/v1/auth/google/callback", Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: tokenServer.URL}}, validate: func(context.Context, string, string) (*googleIdentity, error) {
+		return googlePayload(store.flow.Nonce), nil
+	}, session: func(w http.ResponseWriter, _ *http.Request, _ *db.User) { w.WriteHeader(200) }}
+	begin := httptest.NewRecorder()
+	service.Begin()(begin, httptest.NewRequest("POST", "/v1/auth/google", strings.NewReader(`{"website":true}`)))
+	var flow struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(begin.Body.Bytes(), &flow); err != nil {
+		t.Fatal(err)
+	}
+	start := httptest.NewRecorder()
+	service.Start()(start, httptest.NewRequest("GET", flow.URL, nil))
+	launch, _ := url.Parse(flow.URL)
+	callback := httptest.NewRequest("GET", service.oauth.RedirectURL+"?state="+launch.Query().Get("state")+"&code=google-code", nil)
+	callback.AddCookie(start.Result().Cookies()[0])
+	finished := httptest.NewRecorder()
+	service.Callback()(finished, callback)
+	if finished.Code != http.StatusSeeOther || finished.Header().Get("Location") != "https://site.test/signin#google_error=password_account" {
+		t.Fatalf("callback = %d %q", finished.Code, finished.Header().Get("Location"))
+	}
+}
+
+func TestConfirmationFormNeedsNoCSRFHeader(t *testing.T) {
+	reached := 0
+	handler := CookieCSRFProtection(func(string) bool { return false })(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached++ }))
+	for path, want := range map[string]int{"/v1/auth/confirm-email": 1, "/v1/auth/confirm-email/sign-in": 0, "/v1/login": 0} {
+		reached = 0
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.Header.Set("Origin", "https://mistysys.com")
+		req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "session"})
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+		if reached != want {
+			t.Fatalf("%s reached the handler %d times, want %d", path, reached, want)
+		}
+	}
+}

@@ -1,0 +1,77 @@
+package console
+
+templ overviewPanel(v overviewView) {
+	<section id="overview" hx-get="/overview/panel" hx-trigger="every 10s" hx-swap="outerHTML">
+		@pageHeader("Overview", v.subtitle()) {
+			<span class={ "tag", templ.KV("tag-problem", !v.healthy()) }>
+				if v.healthy() {
+					@iconCheck()
+				} else {
+					@iconAlert()
+				}
+				{ v.statusLabel() }
+			</span>
+		}
+		<div class="metrics">
+			@metric("Requests/min", v.requestsPerMin())
+			@metric("5xx rate", v.errorRate())
+			@metric("Accounts", v.count(v.Accounts))
+		</div>
+		if v.MetricsErr != "" {
+			@note(v.MetricsErr)
+		}
+		@sectionLabel("Open alerts")
+		<ul class="rows">
+			for _, alert := range v.Alerts {
+				<li class="row row-problem">
+					<span class="row-label">
+						@iconAlert()
+						<span>{ alert.Title }<span class="muted">{ " · " + alert.Detail }</span></span>
+					</span>
+					<span class="muted">{ "since " + ago(alert.OpenedAt) }</span>
+				</li>
+			}
+			if v.AlertsErr {
+				@emptyRow("Open alerts couldn't be read.")
+			} else if len(v.Alerts) == 0 {
+				@emptyRow("None. The alerts service records a problem here once it is seen on two checks in a row, and removes it when it clears.")
+			}
+		</ul>
+		@sectionLabel("Health checks")
+		<ul class="rows">
+			@healthRow("Database (console connection)", v.DBErr == "", v.dbDetail())
+			if v.HealthErr != "" {
+				@healthRow("API server", false, v.HealthErr)
+			}
+			for _, check := range v.Health.SortedChecks() {
+				@healthRow(check.Label(), check.OK(), checkDetail(check))
+			}
+		</ul>
+		@sectionLabel("Recent admin activity")
+		<ul class="rows">
+			for _, entry := range v.Activity {
+				<li class="row">
+					<span>{ entry.Action }<span class="muted">{ " " + entry.Target }</span></span>
+					<span class="muted">{ ago(entry.CreatedAt) }</span>
+				</li>
+			}
+			if len(v.Activity) == 0 {
+				@emptyRow("Actions you take in the console appear here.")
+			}
+		</ul>
+	</section>
+}
+
+templ healthRow(label string, ok bool, detail string) {
+	<li class={ "row", templ.KV("row-problem", !ok) }>
+		<span class="row-label">
+			if ok {
+				@iconCheck()
+			} else {
+				@iconAlert()
+			}
+			{ label }
+		</span>
+		<span class={ templ.KV("muted", ok) }>{ detail }</span>
+	</li>
+}

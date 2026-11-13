@@ -1,0 +1,163 @@
+package api
+
+import (
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
+	"errors"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/misty-org/misty-server/internal/platform/db"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type SpacesService struct {
+	JournalCollab JournalCollabConfig
+	database      *db.Database
+	library       *SpaceLibraryService
+	avatarStore   LibraryObjectStore
+	aead          cipher.AEAD
+	keyVer        int16
+}
+
+func NewSpacesService(database *db.Database, encryptionKey string) (*SpacesService, error) {
+	key, err := parseSpaceEncryptionKey(encryptionKey)
+	if err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	return &SpacesService{database: database, aead: aead, keyVer: 1}, nil
+}
+
+// SetLibraryProvider installs the Library service that voice transcription
+// reads files through.
+func (s *SpacesService) SetLibraryProvider(library *SpaceLibraryService) {
+	s.library = library
+}
+
+// SetAvatarStore installs the object store used to serve member avatars, which
+// live under the avatars/ prefix in the shared bucket.
+func (s *SpacesService) SetAvatarStore(store LibraryObjectStore) {
+	s.avatarStore = store
+}
+
+func parseSpaceEncryptionKey(value string) ([]byte, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, errors.New("space link encryption key is required")
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(value); err == nil && len(decoded) == 32 {
+		return decoded, nil
+	}
+	if decoded, err := hex.DecodeString(value); err == nil && len(decoded) == 32 {
+		return decoded, nil
+	}
+	if len(value) == 32 {
+		return []byte(value), nil
+	}
+	return nil, errors.New("space link encryption key must be 32 bytes, base64, or hexadecimal")
+}
+
+func (s *SpacesService) EncryptTarget(target string) ([]byte, []byte, error) {
+	nonce := make([]byte, s.aead.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, nil, err
+	}
+	return s.aead.Seal(nil, nonce, []byte(target), []byte("misty-space-link-v1")), nonce, nil
+}
+
+func (s *SpacesService) DecryptTarget(ciphertext, nonce []byte) (string, error) {
+	plaintext, err := s.aead.Open(nil, nonce, ciphertext, []byte("misty-space-link-v1"))
+	if err != nil {
+		return "", err
+	}
+	return string(plaintext), nil
+}
+
+func ValidGoogleDriveTarget(raw string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Host == "" {
+		return nil, db.ErrSpaceInvalid
+	}
+	host := strings.ToLower(parsed.Hostname())
+	allowed := host == "drive.google.com" || host == "docs.google.com" || host == "drive.usercontent.google.com" || host == "lh3.googleusercontent.com" || strings.HasSuffix(host, ".googleusercontent.com")
+	if !allowed {
+		return nil, db.ErrSpaceInvalid
+	}
+	parsed.Fragment = ""
+	return parsed, nil
+}
+
+func (s *SpacesService) MemberAvatar() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		requestingUserID, ok := authenticatedUser(w, r, s.database)
+		if !ok {
+			return
+		}
+		spaceID := chi.URLParam(r, "spaceID")
+		memberID := chi.URLParam(r, "userID")
+		avatar, err := s.database.SpaceMemberAvatarReference(r.Context(), requestingUserID, spaceID, memberID)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		if avatar.Version == 0 {
+			writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
+			return
+		}
+		// Authorization was checked above; stream the bytes from the object store.
+		serveAvatarObject(w, r, s.avatarStore, avatar.ObjectKey, avatar.Version)
+	}
+}
+
+func writeSpaceError(w http.ResponseWriter, err error) {
+	var closing db.AccountClosingError
+	switch {
+	case errors.As(err, &closing):
+		writeAccountClosing(w, closing.DeleteAt)
+	case errors.Is(err, db.ErrSpaceNotFound), errors.Is(err, db.ErrSpaceInviteNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
+	case errors.Is(err, db.ErrSpaceInviteeNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"code": "invitee_not_found"})
+	case errors.Is(err, db.ErrSpaceForbidden), errors.Is(err, db.ErrLibraryForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "forbidden"})
+	case errors.Is(err, db.ErrSpaceLimit):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_limit_reached"})
+	case errors.Is(err, db.ErrSpaceOwnershipLimit):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_ownership_limit_reached"})
+	case errors.Is(err, db.ErrDefaultSpaceProtected):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "default_space_protected"})
+	case errors.Is(err, db.ErrSpacePeopleLimit):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_people_limit_reached"})
+	case errors.Is(err, db.ErrLibraryQuota):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "owner_storage_quota_exceeded"})
+	case errors.Is(err, db.ErrSpaceConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict"})
+	case errors.Is(err, db.ErrSpaceInviteExpired):
+		writeJSON(w, http.StatusGone, map[string]string{"code": "invite_expired"})
+	case errors.Is(err, db.ErrSpaceInvalid), errors.Is(err, db.ErrLibraryInvalid):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_request"})
+	case errors.Is(err, context.Canceled):
+		return
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"code": "request_timeout"})
+	default:
+		log.Printf("spaces API internal error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "internal_error"})
+	}
+}

@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"github.com/misty-org/misty-server/internal/browsersync"
 	"github.com/misty-org/misty-server/internal/platform/security"
 	"net/http"
 
@@ -27,7 +26,6 @@ type mountDeps struct {
 
 	agents       *api.DevicesService
 	googleSignIn *api.GoogleSignInService
-	browserSync  *browsersync.BrowserSyncService
 }
 
 func (s *Server) MountHandlers() error {
@@ -107,7 +105,6 @@ func (s *Server) buildMountDeps() (*mountDeps, error) {
 	if err := s.wireAccountHandlers(deps, authHandoffService); err != nil {
 		return nil, err
 	}
-	s.wireBrowserSync(deps)
 	return deps, nil
 }
 
@@ -151,13 +148,6 @@ func (s *Server) wireAccountHandlers(deps *mountDeps, authHandoffService *api.Au
 	deps.health = healthHandler
 	deps.instance = instanceHandler
 	return nil
-}
-
-// wireBrowserSync builds the browser sync service.
-func (s *Server) wireBrowserSync(deps *mountDeps) {
-	browserSync := browsersync.NewBrowserSyncService(s.Database)
-	s.BrowserSync = browserSync
-	deps.browserSync = browserSync
 }
 
 func (s *Server) mountLibraryRoutes(prefix string, library *api.SpaceLibraryService) {

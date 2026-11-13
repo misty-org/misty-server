@@ -58,8 +58,7 @@ func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID,
 // purgeSpaceMemberTx deletes everything of one person's in a Space, in the
 // transaction that takes them out of it: their private notes, drawings, files
 // and links, and (through the membership's cascades) their agents' listings.
-// Their public items stay with the Space. Their vault in the Space is the
-// sync tree's (phase 1) and goes through its own object deletion.
+// Their public items stay with the Space.
 func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
 	notes, err := privateItemIDsTx(ctx, tx, `SELECT id FROM space_notes WHERE space_id=$1 AND creator_user_id=$2 AND visibility='private' AND lifecycle_state IN ('active','archived','archived_creator_left')`, spaceID, userID)
 	if err != nil {

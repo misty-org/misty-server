@@ -19,7 +19,7 @@ import (
 
 func TestRepositoryLayout(t *testing.T) {
 	root := repositoryRoot(t)
-	for _, name := range []string{"accounts", "browsersync", "spaces"} {
+	for _, name := range []string{"accounts", "spaces"} {
 		requireDirectory(t, filepath.Join(root, "internal", name))
 	}
 	for _, legacy := range []string{"api", "db", "agent", "billing", "workflow"} {
@@ -155,8 +155,6 @@ MISTY_RECALL
 MISTY_RECALL_BACKLOG_CAP
 MISTY_RELEASE_CHANNEL
 MISTY_SERVER_VERSION
-MISTY_SYNC_BATCH_LANES
-MISTY_SYNC_BATCH_REVISION
 MISTY_WEBSITE_URL
 PARTYKIT_HOST
 PORT

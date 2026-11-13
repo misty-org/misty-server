@@ -139,7 +139,7 @@ func TestRouteGoldenHasNoRemovedRoutes(t *testing.T) {
 // Every JSON field in the handler packages, whichever way it travels: a struct a
 // route could decode a prompt or a tool result into has no business here.
 func TestServerHandlersDeclareNoFieldForAModelsWork(t *testing.T) {
-	for _, dir := range []string{"../../../../internal/platform/httpapi", "../../../../internal/browsersync", "../../../../internal/platform/db"} {
+	for _, dir := range []string{"../../../../internal/platform/httpapi", "../../../../internal/platform/db"} {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil || len(files) == 0 {
 			t.Fatalf("no sources in %s: %v", dir, err)

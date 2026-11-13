@@ -13,7 +13,8 @@ import (
 
 // agentStatus is what a member's computer says one of their agents is doing now. The agents run on
 // that computer; the server only passes this on to the Space's other members. State and Doing are
-// fixed codes and Files are file names, so nothing a model wrote can travel here.
+// fixed codes and Files are the agent's claim: paths relative to the Space's linked folder of the
+// files its run is changing, so nothing a model wrote can travel here.
 type agentStatus struct {
 	ID    string   `json:"id"`
 	Name  string   `json:"name"`
@@ -52,8 +53,7 @@ func cleanAgentStatuses(raw []agentStatus) []agentStatus {
 			if len(files) == maxAgentFiles {
 				break
 			}
-			// A name only, never a path or a line of text.
-			if file == "" || len(file) > 120 || strings.ContainsAny(file, "/\\\n\r\t") {
+			if !claimPath(file) {
 				continue
 			}
 			files = append(files, file)
@@ -138,4 +138,19 @@ func (s *SpacesService) AgentActivity() http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"activity": lines})
 	}
+}
+
+// claimPath reports whether a claimed file is a short path inside a linked folder: relative,
+// forward slashes only, never climbing out, never a line of text.
+func claimPath(file string) bool {
+	if file == "" || len(file) > 200 || strings.HasPrefix(file, "/") ||
+		strings.ContainsAny(file, "\\\n\r\t:") {
+		return false
+	}
+	for _, part := range strings.Split(file, "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
 }

@@ -43,16 +43,12 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 
 	exec(t, database, `INSERT INTO space_notes(id,space_id,creator_user_id,visibility) VALUES('note-1',$1,$2,'private')`, personal.ID, alice.ID)
 	exec(t, database, `INSERT INTO space_drawings(id,space_id,creator_user_id,visibility) VALUES('drawing-1',$1,$2,'private')`, personal.ID, alice.ID)
-	vault := uuid.New()
-	exec(t, database, `INSERT INTO sync_vaults(user_id,vault_id,root_public_key,key_envelope) VALUES($1,$2,$3,'{}')`, alice.ID, vault, make([]byte, 32))
-	exec(t, database, `INSERT INTO sync_records(vault_id,scope,record_key,version,sequence,session_id,sealed) VALUES($1,repeat('b',64),repeat('a',64),1,1,$2,$3)`, vault, uuid.New(), make([]byte, 28))
 	exec(t, database, `INSERT INTO trusted_devices(id,user_id,name,public_key) VALUES($1,$2,'Laptop',repeat('k',32))`, "device_"+uuid.NewString(), alice.ID)
 	exec(t, database, `INSERT INTO voice_transcripts(id,owner_user_id,source,turns) VALUES($1,$2,'{}','[]')`, uuid.New(), alice.ID)
 	exec(t, database, `INSERT INTO space_agents(space_id,agent_id,owner_user_id,agent_name) VALUES($1,'agent-1',$2,'Writer')`, club.ID, alice.ID)
 
 	before := map[string][]any{
 		`SELECT count(*) FROM library_blobs WHERE security_domain_id=$1`: {personal.SecurityDomainID},
-		`SELECT count(*) FROM sync_records WHERE vault_id=$1`:            {vault},
 	}
 	for query, args := range before {
 		if n := count(t, database, query, args...); n == 0 {
@@ -93,7 +89,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 		`SELECT count(*) FROM space_library_items WHERE id=$1`:           {photo.ID},
 		`SELECT count(*) FROM library_blobs WHERE security_domain_id=$1`: {personal.SecurityDomainID},
 		`SELECT count(*) FROM security_domains WHERE id=$1`:              {personal.SecurityDomainID},
-		`SELECT count(*) FROM sync_records WHERE vault_id=$1`:            {vault},
 		`SELECT count(*) FROM space_members WHERE user_id=$1`:            {alice.ID},
 		`SELECT count(*) FROM space_notes WHERE id=$1`:                   {"note-1"},
 		`SELECT count(*) FROM space_drawings WHERE id=$1`:                {"drawing-1"},

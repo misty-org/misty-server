@@ -14,9 +14,9 @@ func (db *Database) RemoveDevice(ctx context.Context, userID, targetID string) (
 			return err
 		}
 		var state, key string
-		var syncDevice, vault, session sql.NullString
-		err := tx.QueryRowContext(ctx, `SELECT admission_state,public_key,sync_device_id,vault_id,session_hash FROM trusted_devices WHERE id=$1 AND user_id=$2 FOR UPDATE`, targetID, userID).
-			Scan(&state, &key, &syncDevice, &vault, &session)
+		var session sql.NullString
+		err := tx.QueryRowContext(ctx, `SELECT admission_state,public_key,session_hash FROM trusted_devices WHERE id=$1 AND user_id=$2 FOR UPDATE`, targetID, userID).
+			Scan(&state, &key, &session)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrDeviceNotFound
 		}
@@ -44,18 +44,14 @@ func (db *Database) RemoveDevice(ctx context.Context, userID, targetID string) (
 	return sessionHash, err
 }
 
-// RenameDevice sets the one name every surface shows for a device, including
-// its sync workspace.
+// RenameDevice sets the one name every surface shows for a device.
 func (db *Database) RenameDevice(ctx context.Context, userID, targetID, name string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		var syncDevice, vault sql.NullString
+		var id string
 		err := tx.QueryRowContext(ctx, `UPDATE trusted_devices SET name=$3,name_updated_at=NOW(),updated_at=NOW()
-			WHERE id=$1 AND user_id=$2 AND identity_version=2 AND admission_state<>'revoked' RETURNING sync_device_id,vault_id`, targetID, userID, name).Scan(&syncDevice, &vault)
+			WHERE id=$1 AND user_id=$2 AND identity_version=2 AND admission_state<>'revoked' RETURNING id`, targetID, userID, name).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrDeviceNotFound
-		}
-		if err != nil {
-			return err
 		}
 		return err
 	})

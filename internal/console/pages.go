@@ -28,7 +28,6 @@ var pages = []Page{
 	{Slug: "overview", Title: "Overview", Icon: iconDashboard, Available: always, Render: (*Server).overviewPage},
 	{Slug: "services", Title: "Services", Icon: iconBox, Available: developmentOnly, Render: (*Server).servicesPage},
 	{Slug: "customers", Title: "Customers", Group: "People", Icon: iconUsers, Available: always, Render: (*Server).customersPage},
-	{Slug: "sync", Title: "Sync", Group: "People", Icon: iconRefresh, Available: always, Render: (*Server).syncPage},
 	{Slug: "jobs", Title: "Jobs", Group: "Runtime", Icon: iconClock, Available: always, Render: (*Server).jobsPage},
 	{Slug: "configuration", Title: "Configuration", Group: "System", Icon: iconSliders, Available: always, Render: (*Server).configurationPage},
 	{Slug: "database", Title: "Database", Group: "System", Icon: iconDatabase, Available: always, Render: (*Server).databasePage},

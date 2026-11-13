@@ -115,7 +115,7 @@ func TestErrorShareComparesCountersBetweenChecks(t *testing.T) {
 	metrics := func(ok, failed int) string {
 		return "# TYPE misty_http_requests_total counter\n" +
 			`misty_http_requests_total{method="GET",route="/v1/me",status="2xx"} ` + itoa(ok) + "\n" +
-			`misty_http_requests_total{method="POST",route="/v1/sync",status="5xx"} ` + itoa(failed) + "\n"
+			`misty_http_requests_total{method="POST",route="/v1/spaces",status="5xx"} ` + itoa(failed) + "\n"
 	}
 	share := &errorShare{}
 	ctx := context.Background()

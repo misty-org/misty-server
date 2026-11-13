@@ -23,17 +23,16 @@ import (
 
 // Registry owns the metric collectors and the HTTP surfaces that feed them.
 type Registry struct {
-	syncTraffic syncTraffic
 	registry    *prometheus.Registry
 	workerWakes *prometheus.CounterVec
 
-	requests        *prometheus.CounterVec
-	duration        *prometheus.HistogramVec
-	inFlight        prometheus.Gauge
-	sampleAge       prometheus.GaugeFunc
-	lastSample      time.Time
-	traffic         *prometheus.CounterVec
-	sampleFail      prometheus.Counter
+	requests   *prometheus.CounterVec
+	duration   *prometheus.HistogramVec
+	inFlight   prometheus.Gauge
+	sampleAge  prometheus.GaugeFunc
+	lastSample time.Time
+	traffic    *prometheus.CounterVec
+	sampleFail prometheus.Counter
 
 	mu       sync.Mutex
 	samplers []sampler
@@ -87,7 +86,6 @@ func New() *Registry {
 	})
 	m.initWorkers()
 	m.initTraffic()
-	m.initSyncTraffic()
 	registry.MustRegister(m.requests, m.duration, m.inFlight, m.sampleAge, m.sampleFail)
 	return m
 }
@@ -163,7 +161,6 @@ func (m *Registry) sampleOnce(ctx context.Context) {
 // Middleware records request counts and latency per route.
 func (m *Registry) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(context.WithValue(r.Context(), registryContextKey{}, m))
 		// chi's wrapper preserves http.Hijacker and http.Flusher. A naive
 		// ResponseWriter wrapper would break the realtime WebSocket upgrade,
 		// which needs to take over the connection.

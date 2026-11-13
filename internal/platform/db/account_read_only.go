@@ -10,8 +10,7 @@ import (
 // A closing account is read-only
 // until its deletion date: it signs in, reads and exports, and changes
 // nothing. The HTTP guard refuses its writes before any handler runs; the
-// checks here cover writes that arrive another way (the sync socket) and back
-// the guard up.
+// checks here cover writes that arrive another way and back the guard up.
 
 // ErrAccountClosing refuses a change from a closing account.
 var ErrAccountClosing = errors.New("account_closing")

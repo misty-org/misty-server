@@ -51,25 +51,13 @@ func requireDeviceRoomTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	})
 }
 
-// syncStorageBytesTx is the ciphertext the account's sync vaults hold.
-func syncStorageBytesTx(ctx context.Context, tx *sql.Tx, userID string) (int64, error) {
-	var bytes int64
-	err := tx.QueryRowContext(ctx, `SELECT COALESCE(sum(octet_length(r.sealed)),0) FROM sync_records r JOIN sync_vaults v USING(vault_id) WHERE v.user_id=$1`,
-		userID).Scan(&bytes)
-	return bytes, err
-}
-
 // accountStorageUsedTx is everything the account stores on this server: its
-// Library, notes, messages and pending uploads, plus its encrypted sync vault.
+// Library, notes, messages and pending uploads.
 func accountStorageUsedTx(ctx context.Context, tx *sql.Tx, userID string) (int64, error) {
 	var used int64
 	err := asServiceTx(ctx, tx, func() error {
 		library, err := accountStorageTx(ctx, tx, userID)
-		if err != nil {
-			return err
-		}
-		vault, err := syncStorageBytesTx(ctx, tx, userID)
-		used = library.UsedBytes + library.ReservedBytes + vault
+		used = library.UsedBytes + library.ReservedBytes
 		return err
 	})
 	return used, err

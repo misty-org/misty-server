@@ -22,7 +22,8 @@ that repository checked out beside this one, as `../misty`, because the CLI runs
   sees only what it would see from the person using the app by hand: a note saved, a chat message
   sent, a file uploaded. A Space lists an agent as a name under its person, with no row behind it.
   Never add a route that takes a prompt, a tool result or a model's output
-  (`test/contract/http/app/no_agents_on_server_test.go`). Only the vault is protected from the server.
+  (`test/contract/http/app/no_agents_on_server_test.go`). The server can read what it stores: Space
+  notes, chats and files.
 - No `*.env` file is ever committed, not even an example.
 - Many Go files use CRLF line endings. Scripted edits must preserve them.
 

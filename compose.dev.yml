@@ -124,9 +124,12 @@ services:
         restart: true
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
-      interval: 3s
+      # Quick checks only while starting, so dependents come up fast; then every 15 minutes.
+      start_period: 90s
+      start_interval: 3s
+      interval: 15m
       timeout: 5s
-      retries: 30
+      retries: 3
     entrypoint: ["/bin/sh", "/usr/local/bin/misty-dev-api-entrypoint"]
     ports:
       - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"

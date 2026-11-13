@@ -24,7 +24,7 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 	err = chi.Walk(server.Router, func(method, path string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		normalized := strings.TrimPrefix(strings.TrimPrefix(path, "/api/"), "/v1/")
 		normalized = "/" + strings.TrimLeft(normalized, "/")
-		for _, retired := range []string{"/stripe/webhook", "/billing", "/me/referral", "/internal/voice/live/settle", "/apps", "/me/apps", "/app-runtime", "/me/routines", "/me/routine-runs", "/automations", "/waitlist", "/activepieces", "/capabilities", "/me/sdk-targets", "/me/sdk-runs", "/me/capability-approvals", "/me/agent-approvals", "/me/agent-invocations", "/mcp/connections", "/studio", "/self-host", "/internal/self-host", "/billing/self-host-entitlement", "/ai/inbound-channels"} {
+		for _, retired := range []string{"/stripe/webhook", "/billing", "/me/referral", "/internal/voice/live/settle", "/apps", "/me/apps", "/app-runtime", "/me/routines", "/me/routine-runs", "/automations", "/waitlist", "/activepieces", "/capabilities", "/me/sdk-targets", "/me/sdk-runs", "/me/capability-approvals", "/me/agent-approvals", "/me/agent-invocations", "/mcp/connections", "/studio", "/self-host", "/internal/self-host", "/billing/self-host-entitlement", "/ai/inbound-channels", "/sync"} {
 			if normalized == retired || strings.HasPrefix(normalized, retired+"/") {
 				t.Errorf("retired route remains: %s %s", method, path)
 			}
@@ -38,7 +38,7 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"/sync/ws", "/sync/vault", "/sync/sessions", "/spaces", "/devices", "/spaces/{spaceID}/agents"} {
+	for _, required := range []string{"/spaces", "/devices", "/spaces/{spaceID}/agents"} {
 		if !found[required] {
 			t.Errorf("retained route missing: %s", required)
 		}

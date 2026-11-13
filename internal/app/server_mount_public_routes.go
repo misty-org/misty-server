@@ -13,7 +13,6 @@ import (
 func (s *Server) mountPublicRoutes(prefix string, deps *mountDeps) {
 	s.mountPublicAuthRoutes(prefix, deps)
 	s.mountPublicAccountRoutes(prefix, deps)
-	s.mountPublicSyncRoutes(prefix, deps)
 	s.mountPublicProfileRoutes(prefix, deps)
 	s.mountPublicFeatureRoutes(prefix, deps)
 }
@@ -48,21 +47,6 @@ func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/me/invite-code", api.MyInviteCode(s.Database))
 	s.Router.Get(prefix+"/invites/{code}", api.InviteByCode(s.Database))
 	s.Router.Get(prefix+"/server/alerts", api.ServerAlerts(s.Database))
-}
-
-// mountPublicSyncRoutes registers the vault, its signed-in sessions, and its socket.
-func (s *Server) mountPublicSyncRoutes(prefix string, deps *mountDeps) {
-	s.Router.Get(prefix+"/sync/vault", deps.browserSync.Vault())
-	s.Router.Post(prefix+"/sync/vault", deps.browserSync.Vault())
-	s.Router.Delete(prefix+"/sync/vault", deps.browserSync.Vault())
-	s.Router.Put(prefix+"/sync/vault/key", deps.browserSync.VaultKey())
-	s.Router.Get(prefix+"/sync/sessions", deps.browserSync.Sessions())
-	s.Router.Post(prefix+"/sync/sessions", deps.browserSync.Sessions())
-	s.Router.Put(prefix+"/sync/sessions/{sessionID}/name", deps.browserSync.SessionName())
-	s.Router.Post(prefix+"/sync/sessions/{sessionID}/remove", deps.browserSync.SessionRemove())
-	s.Router.Get(prefix+"/sync/usage", deps.browserSync.Usage())
-	s.Router.Post(prefix+"/sync/ticket", deps.browserSync.Ticket())
-	s.Router.Get(prefix+"/sync/ws", deps.browserSync.Connect())
 }
 
 // mountPublicProfileRoutes registers profile, avatar, device, settings, space

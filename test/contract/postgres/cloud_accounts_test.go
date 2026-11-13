@@ -221,7 +221,7 @@ func TestDeviceLimitRefusesTheNextNewDevice(t *testing.T) {
 	}
 }
 
-func TestStorageLimitCountsLibraryAndVault(t *testing.T) {
+func TestStorageLimitCountsLibrary(t *testing.T) {
 	database := testkit.OpenDatabase(t)
 	ctx := context.Background()
 	user, _, err := database.CreateOperatorAccount(ctx, "storage@example.com", AccountLimits{StorageBytes: limit(1000)})

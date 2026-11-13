@@ -453,9 +453,9 @@ func customerDetail(v customerDetailView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var17 string
-			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(plural(v.Console.Sessions, "active session", "active sessions") + " · " + plural(v.Console.SyncSessions, "synced workspace", "synced workspaces"))
+			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(plural(v.Console.Sessions, "active session", "active sessions"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/console/customers.templ`, Line: 103, Col: 168}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/console/customers.templ`, Line: 103, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {

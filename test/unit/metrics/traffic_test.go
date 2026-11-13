@@ -36,33 +36,3 @@ func TestBodyBytesUpdateBeforeStreamCloses(t *testing.T) {
 	})
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/stream/private-id", strings.NewReader("abcdef")))
 }
-
-func TestSyncLabelsAreBoundedAndConnectionsAreBalanced(t *testing.T) {
-	registry := New()
-	handler := registry.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		done := TrackSyncConnection(r.Context())
-		RecordSyncMessage(r.Context(), "in", "heartbeat", 12)
-		RecordSyncMessage(r.Context(), "out", "records", 50)
-		RecordSyncMessage(r.Context(), "in", "user-controlled-private-id", 7)
-		body := scrape(t, registry, "secret")
-		if !strings.Contains(body, "misty_sync_connections 1") {
-			t.Fatal("missing live connection")
-		}
-		done()
-	}))
-	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/sync", nil))
-	body := scrape(t, registry, "secret")
-	for _, sample := range []string{
-		"misty_sync_connections 0",
-		`misty_sync_payload_bytes_total{direction="in",type="heartbeat"} 12`,
-		`misty_sync_payload_bytes_total{direction="out",type="records"} 50`,
-		`misty_sync_messages_total{direction="in",type="other"} 1`,
-	} {
-		if !strings.Contains(body, sample) {
-			t.Fatalf("missing %s", sample)
-		}
-	}
-	if strings.Contains(body, "private-id") {
-		t.Fatal("unbounded type label")
-	}
-}

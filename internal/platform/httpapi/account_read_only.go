@@ -12,8 +12,8 @@ import (
 // it is deleted: it signs in, refreshes, reads everything and exports, and
 // every change answers 403 account_closing with the deletion date. The guard
 // decides by method: GET, HEAD and OPTIONS read, and so do the few POST routes
-// listed here and PUT /me/password. Writes that arrive another way are refused where they land: the
-// sync socket and agent runs in the database (db.ErrAccountClosing), agent
+// listed here and PUT /me/password. Writes that arrive another way are refused where they land:
+// agent runs in the database (db.ErrAccountClosing), agent
 // tool calls in the MCP server, and note and drawing rooms through a viewer
 // ticket.
 
@@ -21,13 +21,13 @@ import (
 // /v1 or /api prefix: signing in and out (a setup key's sign-in link
 // included), refreshing, exporting or deleting
 // the account, opening the website signed in (to subscribe again), the tickets
-// that open sync, live updates, collaboration rooms and Space files for
+// that open live updates, collaboration rooms and Space files for
 // reading, read receipts, and a device's presence.
 var readOnlyPosts = []*regexp.Regexp{
 	regexp.MustCompile(`^/(login|register|logout|setup-keys/redeem)$`),
 	regexp.MustCompile(`^/auth/(refresh|handoff|google|google/complete|confirm-email|confirm-email/sign-in)$`),
 	regexp.MustCompile(`^/me/(export|deletion|account-proof)$`),
-	regexp.MustCompile(`^/(sync|realtime)/tickets?$`),
+	regexp.MustCompile(`^/realtime/tickets?$`),
 	regexp.MustCompile(`^/spaces/[^/]+/(notes|drawings)/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/nodes/[^/]+/resolve$`),
 	regexp.MustCompile(`^/spaces/[^/]+/(conversations/[^/]+/)?read$`),

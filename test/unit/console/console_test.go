@@ -134,7 +134,7 @@ func TestUnknownPagesRedirectToOverview(t *testing.T) {
 func TestEveryPageRendersWithoutDatabase(t *testing.T) {
 	handler := newConsoleWith(t, Config{APIURL: "http://127.0.0.1:1", Environment: "development"})
 	cookie := signIn(t, handler)
-	for _, page := range []string{"overview", "services", "customers", "sync", "jobs", "configuration", "database", "backups", "logs"} {
+	for _, page := range []string{"overview", "services", "customers", "jobs", "configuration", "database", "backups", "logs"} {
 		rec := request(t, handler, "/"+page, cookie)
 		if rec.Code != http.StatusOK {
 			t.Errorf("/%s: got %d", page, rec.Code)

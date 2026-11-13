@@ -9,24 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-type syncView struct {
-	Vaults []db.ConsoleSyncVault
-	Totals db.ConsoleSyncTotals
-	Err    string
-}
-
-func (s *Server) syncPage(r *http.Request) templ.Component {
-	if s.db == nil {
-		return databaseUnavailable("Sync")
-	}
-	vaults, totals, err := s.db.ConsoleSyncVaults(r.Context(), 100)
-	view := syncView{Vaults: vaults, Totals: totals}
-	if err != nil {
-		view.Err = "Couldn't load sync state: " + err.Error()
-	}
-	return syncPage(view)
-}
-
 type jobsView struct {
 	Counts []db.ConsoleStateCount
 	Jobs   []db.ConsoleJob

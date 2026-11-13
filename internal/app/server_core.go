@@ -8,7 +8,6 @@ import (
 	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/misty-org/misty-server/internal/browsersync"
 	"github.com/misty-org/misty-server/internal/platform/metrics"
 )
 
@@ -24,7 +23,6 @@ type Server struct {
 	WebsiteURL          string
 	HealthMonitor       *healthMonitor
 	Metrics             *metrics.Registry
-	BrowserSync         *browsersync.BrowserSyncService
 	Suspensions         *api.SuspensionGuard
 }
 

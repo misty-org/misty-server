@@ -42,13 +42,6 @@ func Run() {
 		}),
 		WorkerFunc(func(ctx context.Context) { runLifecycleQueues(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runRetention(ctx, server) }),
-		WorkerFunc(func(ctx context.Context) {
-			if server.BrowserSync != nil {
-				// Hijacked sockets outlive the HTTP server's own shutdown.
-				<-ctx.Done()
-				server.BrowserSync.Shutdown()
-			}
-		}),
 		WorkerFunc(func(ctx context.Context) { runLibraryRenditionProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { email.Run(ctx, server.Database) }),

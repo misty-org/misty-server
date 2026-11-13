@@ -30,7 +30,6 @@ type ConsoleDevice struct {
 type ConsoleAccountDetail struct {
 	ConsoleAccount
 	StorageBytes int64
-	SyncSessions int // per-device-sign-in workspaces, excluding the shared one
 	DeviceList   []ConsoleDevice
 }
 
@@ -57,11 +56,8 @@ func (db *Database) ConsoleAccountDetail(ctx context.Context, userID string) (Co
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `
-			SELECT COALESCE((SELECT used_bytes FROM owner_storage_usage WHERE owner_user_id = $1), 0),
-			       (SELECT count(*) FROM sync_sessions s
-			        JOIN sync_vaults v ON v.vault_id = s.vault_id
-			        WHERE v.user_id = $1 AND s.revoked_at IS NULL)`, userID,
-		).Scan(&d.StorageBytes, &d.SyncSessions); err != nil {
+			SELECT COALESCE((SELECT used_bytes FROM owner_storage_usage WHERE owner_user_id = $1), 0)`, userID,
+		).Scan(&d.StorageBytes); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `

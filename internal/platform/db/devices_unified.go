@@ -32,8 +32,6 @@ type DeviceRecord struct {
 	IdentityVersion    int                 `json:"identityVersion"`
 	OSVersion          string              `json:"osVersion"`
 	AppVersion         string              `json:"appVersion"`
-	VaultID            string              `json:"vaultId,omitempty"`
-	SyncDeviceID       string              `json:"syncDeviceId,omitempty"`
 	ApprovedByDeviceID string              `json:"approvedByDeviceId,omitempty"`
 	AdmittedAt         *time.Time          `json:"admittedAt,omitempty"`
 	LastSeenAt         time.Time           `json:"lastSeenAt"`
@@ -61,7 +59,7 @@ type DeviceSharedFolder struct {
 }
 
 const deviceRecordColumns = `d.id,d.name,d.platform,d.public_key,COALESCE(d.p2p_endpoint_id,''),d.admission_state,d.identity_version,d.os_version,d.app_version,
-	COALESCE(d.vault_id,''),COALESCE(d.sync_device_id,''),COALESCE(d.approved_by_device_id,''),d.admitted_at,d.last_seen_at,d.created_at,d.revoked_at,
+	COALESCE(d.approved_by_device_id,''),d.admitted_at,d.last_seen_at,d.created_at,d.revoked_at,
 	p.policy_version,p.payload,p.signature,p.files,p.clipboard,p.agent_surfaces,p.shared_folders,p.updated_at`
 
 func scanDeviceRecord(row scanner, item *DeviceRecord) error {
@@ -72,7 +70,7 @@ func scanDeviceRecord(row scanner, item *DeviceRecord) error {
 	var surfaces, folders []byte
 	var updated sql.NullTime
 	if err := row.Scan(&item.ID, &item.Name, &item.Platform, &item.PublicKey, &item.P2PEndpointID, &item.AdmissionState, &item.IdentityVersion,
-		&item.OSVersion, &item.AppVersion, &item.VaultID, &item.SyncDeviceID, &item.ApprovedByDeviceID, &item.AdmittedAt, &item.LastSeenAt,
+		&item.OSVersion, &item.AppVersion, &item.ApprovedByDeviceID, &item.AdmittedAt, &item.LastSeenAt,
 		&item.CreatedAt, &item.RevokedAt, &version, &payload, &signature, &files, &clipboard, &surfaces, &folders, &updated); err != nil {
 		return err
 	}

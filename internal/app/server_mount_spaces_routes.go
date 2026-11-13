@@ -117,11 +117,11 @@ func (s *Server) CleanupExpiredJournalAssets(
 
 func (s *Server) mountAgentsRoutes(prefix string, service *api.DevicesService) {
 	connectedDevicesEnabled := serverConnectedDevicesConfigured()
-	// Devices are always available: adding one is how sync and the shared
-	// clipboard trust it.
+	// Devices are always available: adding one is how the shared clipboard
+	// trusts it.
 	s.Router.Post(prefix+"/devices", service.RegisterDevice())
 	s.Router.Get(prefix+"/devices", service.ListDevices())
-	// One device identity for sync and the shared clipboard. Trust changes
+	// One device identity for the shared clipboard. Trust changes
 	// carry signatures the server verifies but cannot produce.
 	s.Router.Get(prefix+"/devices/channel", service.DeviceChannel())
 	s.Router.Post(prefix+"/devices/{deviceID}/channel-ticket", service.DeviceChannelTicket())

@@ -81,7 +81,7 @@ func requestDevice(r *http.Request) (deviceRequestIdentity, bool) {
 }
 
 // requireAdmittedDevice limits a signed route to devices already added to the
-// account with a vault-root grant.
+// account.
 func requireAdmittedDevice(w http.ResponseWriter, r *http.Request) (deviceRequestIdentity, bool) {
 	identity, ok := requestDevice(r)
 	if !ok || identity.State != "admitted" {

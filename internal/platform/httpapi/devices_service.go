@@ -18,7 +18,7 @@ const (
 	deviceSignedBodyLimit  = 2 << 20
 )
 
-// DevicesService exposes trusted-device identity, for sync and Connected Devices.
+// DevicesService exposes trusted-device identity, for Connected Devices.
 type DevicesService struct {
 	database         *db.Database
 	connectedDevices ConnectedDevicesConfig

@@ -115,9 +115,12 @@ services:
         restart: true
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/health >/dev/null"]
-      interval: 3s
+      # Quick checks only while starting, so dependents come up fast; then every 15 minutes.
+      start_period: 90s
+      start_interval: 3s
+      interval: 15m
       timeout: 5s
-      retries: 30
+      retries: 3
     networks: [edge, database]
 
   # Publishes the API at https://MISTY_HOSTNAME through the tunnel setup made.

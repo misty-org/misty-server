@@ -1,8 +1,8 @@
 # Misty Server
 
-Misty Server provides accounts, encrypted workspace sync, Spaces and file services. Agents, every model call and web search run on the person's desktop; the server never calls a model, holds no search key and makes no search call. It lives in `server/` alongside the desktop app and CLI.
+Misty Server provides accounts, Spaces and file services. Agents, every model call and web search run on the person's desktop; the server never calls a model, holds no search key and makes no search call. It lives in `server/` alongside the desktop app and CLI.
 
-Set up the backend before the [desktop app](https://github.com/misty-org/misty/blob/main/README.md#get-started).
+Set up the backend before the [desktop app](https://github.com/misty-org/misty/blob/main/CONTRIBUTING.md#get-started).
 
 ## Get started
 
@@ -14,7 +14,7 @@ Set up the backend before the [desktop app](https://github.com/misty-org/misty/b
 - curl, for Cloudflare API setup.
 - A Cloudflare account with a domain and a workers.dev subdomain enabled. Create an API token with access to the selected account and zone: account/zone read, Tunnel edit, DNS edit, and Workers Scripts edit. See [Cloudflare's tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
 
-Go, Node.js, PostgreSQL, Wrangler, and cloudflared run inside the containers. Desktop development needs its own [native toolchain](https://github.com/misty-org/misty/blob/main/README.md#prerequisites). The full development stack still uses Cloudflare; a complete local-only collaboration mode is not implemented.
+Go, Node.js, PostgreSQL, Wrangler, and cloudflared run inside the containers. Desktop development needs its own [native toolchain](https://github.com/misty-org/misty/blob/main/CONTRIBUTING.md#prerequisites). The full development stack still uses Cloudflare; a complete local-only collaboration mode is not implemented.
 
 ### 2. Installation
 
@@ -77,13 +77,13 @@ Normal startup shows progress and service status. Failures show the relevant dia
 misty server up --gui
 ```
 
-With `--gui`, `up` also opens the operator console in your browser. It covers health and traffic, development services, customers (accounts with their usage against limits, sessions and devices), sync vaults, background jobs, AI usage, configuration, database migrations, local backups and service logs. With `MISTY_OPERATOR_TOKEN` in its environment, the Customers page also sets limits, suspends, closes and resumes accounts and emails new setup keys, through the server's operator account API. Every change made there is recorded in the audit log shown on the Overview. It listens only on `127.0.0.1:7070` and never goes through the tunnel. A one-time link authenticates the browser. Running the command again reuses the console that is already running, and `misty server down` stops it. Traffic metrics require `MISTY_METRICS_TOKEN`. Its views are templ files in `internal/console`; run `make generate` after editing them.
+With `--gui`, `up` also opens the operator console in your browser. It covers health and traffic, development services, customers (accounts with their usage against limits, sessions and devices), background jobs, AI usage, configuration, database migrations, local backups and service logs. With `MISTY_OPERATOR_TOKEN` in its environment, the Customers page also sets limits, suspends, closes and resumes accounts and emails new setup keys, through the server's operator account API. Every change made there is recorded in the audit log shown on the Overview. It listens only on `127.0.0.1:7070` and never goes through the tunnel. A one-time link authenticates the browser. Running the command again reuses the console that is already running, and `misty server down` stops it. Traffic metrics require `MISTY_METRICS_TOKEN`. Its views are templ files in `internal/console`; run `make generate` after editing them.
 
 ### Accounts for other people
 
 The first account to register on a fresh server is its owner. Later accounts come from an open Space invitation to that email or from the operator account API under `/operator/v1`, which is mounted only when `MISTY_OPERATOR_TOKEN` is set and takes it as a bearer token. The API creates an account with limits on storage, devices and app actions (unlimited unless set, app actions per billing period), returns a single-use setup key and its sign-in link to the website's setup page (the server sends no email; the caller passes the link on, and the same link resets a forgotten password), suspends or resumes it, and closes it: read-only, then deleted with the full purge after the days given unless resumed. The server serves API routes only. has the contract.
 
-Check `/health` on the configured public API origin before using another computer. Service health is not a substitute for testing account, sync, or Space workflows.
+Check `/health` on the configured public API origin before using another computer. Service health is not a substitute for testing account or Space workflows.
 
 Then return to the desktop setup:
 

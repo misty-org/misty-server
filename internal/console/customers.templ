@@ -100,7 +100,7 @@ templ customerDetail(v customerDetailView) {
 				}
 			</ul>
 			@sectionLabel("Account")
-			<p class="muted">{ plural(v.Console.Sessions, "active session", "active sessions") + " · " + plural(v.Console.SyncSessions, "synced workspace", "synced workspaces") }</p>
+			<p class="muted">{ plural(v.Console.Sessions, "active session", "active sessions") }</p>
 			<div class="actions">
 				if v.CanChange {
 					if v.Account.Suspended {

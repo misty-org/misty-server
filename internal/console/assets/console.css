@@ -137,7 +137,6 @@ input[type="search"], input[type="password"], input[type="text"] {
 .table-row:last-child { border-bottom: none; }
 .services-table .table-head, .services-table .table-row { grid-template-columns: minmax(0, 1.4fr) 120px minmax(0, 1fr) 110px; }
 .customers-table .table-head, .customers-table .table-row { grid-template-columns: minmax(0, 1fr) 64px 130px; }
-.sync-table .table-head, .sync-table .table-row { grid-template-columns: minmax(0, 1.6fr) minmax(0, .9fr) 90px minmax(0, 1fr) minmax(0, 1.3fr); }
 .jobs-table .table-head, .jobs-table .table-row { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.1fr) 150px minmax(0, 1.4fr) 90px; }
 .row-actions { display: flex; justify-content: flex-end; gap: 2px; }
 .row-link { color: inherit; text-decoration: none; padding-left: 8px; padding-right: 8px; margin: 0 -8px; border-radius: 6px; }
@@ -170,8 +169,6 @@ input[type="search"], input[type="password"], input[type="text"] {
 @media (max-width: 900px) {
   .split { grid-template-columns: 1fr; }
   .detail { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 16px; }
-  .sync-table .table-head, .sync-table .table-row,
   .jobs-table .table-head, .jobs-table .table-row { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); }
-  .sync-table .table-row > :nth-child(n+4), .sync-table .table-head > :nth-child(n+4),
   .jobs-table .table-row > :nth-child(n+4), .jobs-table .table-head > :nth-child(n+4) { display: none; }
 }

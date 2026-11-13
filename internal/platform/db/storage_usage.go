@@ -20,7 +20,7 @@ func lockAccountStorageTx(ctx context.Context, tx *sql.Tx, user string) error {
 
 // accountStorageTx counts an account's retained payloads across all its
 // Spaces. Content stores use per-Space RLS contexts, so the inventory reads
-// as the service. Encrypted browser sync data is not counted.
+// as the service.
 func accountStorageTx(ctx context.Context, tx *sql.Tx, user string) (StorageUsageDimension, error) {
 	var previous sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT current_setting('app.rls_mode',true)`).Scan(&previous); err != nil {

@@ -16,7 +16,6 @@ DELETE /api/spaces/{spaceID}/nodes/{nodeID}
 DELETE /api/spaces/{spaceID}/notes/{noteID}
 DELETE /api/spaces/{spaceID}/notes/{noteID}/assets/{assetID}
 DELETE /api/spaces/{spaceID}/tasks/{taskID}
-DELETE /api/sync/vault
 DELETE /me/voice/transcripts/{transcriptID}
 DELETE /spaces/{spaceID}
 DELETE /spaces/{spaceID}/agents/{agentID}
@@ -35,7 +34,6 @@ DELETE /spaces/{spaceID}/nodes/{nodeID}
 DELETE /spaces/{spaceID}/notes/{noteID}
 DELETE /spaces/{spaceID}/notes/{noteID}/assets/{assetID}
 DELETE /spaces/{spaceID}/tasks/{taskID}
-DELETE /sync/vault
 DELETE /v1/me/voice/transcripts/{transcriptID}
 DELETE /v1/spaces/{spaceID}
 DELETE /v1/spaces/{spaceID}/agents/{agentID}
@@ -54,7 +52,6 @@ DELETE /v1/spaces/{spaceID}/nodes/{nodeID}
 DELETE /v1/spaces/{spaceID}/notes/{noteID}
 DELETE /v1/spaces/{spaceID}/notes/{noteID}/assets/{assetID}
 DELETE /v1/spaces/{spaceID}/tasks/{taskID}
-DELETE /v1/sync/vault
 GET /api/auth/google
 GET /api/auth/google/callback
 GET /api/auth/google/start
@@ -111,10 +108,6 @@ GET /api/spaces/{spaceID}/notes/{noteID}/assets
 GET /api/spaces/{spaceID}/notes/{noteID}/assets/{assetID}/download
 GET /api/spaces/{spaceID}/notes/{noteID}/backlinks
 GET /api/spaces/{spaceID}/tasks
-GET /api/sync/sessions
-GET /api/sync/usage
-GET /api/sync/vault
-GET /api/sync/ws
 GET /auth/google
 GET /auth/google/callback
 GET /auth/google/start
@@ -173,10 +166,6 @@ GET /spaces/{spaceID}/notes/{noteID}/assets
 GET /spaces/{spaceID}/notes/{noteID}/assets/{assetID}/download
 GET /spaces/{spaceID}/notes/{noteID}/backlinks
 GET /spaces/{spaceID}/tasks
-GET /sync/sessions
-GET /sync/usage
-GET /sync/vault
-GET /sync/ws
 GET /v1/auth/google
 GET /v1/auth/google/callback
 GET /v1/auth/google/start
@@ -233,10 +222,6 @@ GET /v1/spaces/{spaceID}/notes/{noteID}/assets
 GET /v1/spaces/{spaceID}/notes/{noteID}/assets/{assetID}/download
 GET /v1/spaces/{spaceID}/notes/{noteID}/backlinks
 GET /v1/spaces/{spaceID}/tasks
-GET /v1/sync/sessions
-GET /v1/sync/usage
-GET /v1/sync/vault
-GET /v1/sync/ws
 PATCH /api/me/voice/transcripts/{transcriptID}
 PATCH /api/spaces/{spaceID}
 PATCH /api/spaces/{spaceID}/calendar/events/{eventID}
@@ -325,10 +310,6 @@ POST /api/spaces/{spaceID}/read
 POST /api/spaces/{spaceID}/tasks
 POST /api/spaces/{spaceID}/tasks/{taskID}/move
 POST /api/spaces/{spaceID}/transfer
-POST /api/sync/sessions
-POST /api/sync/sessions/{sessionID}/remove
-POST /api/sync/ticket
-POST /api/sync/vault
 POST /auth/confirm-email
 POST /auth/confirm-email/sign-in
 POST /auth/google
@@ -393,10 +374,6 @@ POST /spaces/{spaceID}/read
 POST /spaces/{spaceID}/tasks
 POST /spaces/{spaceID}/tasks/{taskID}/move
 POST /spaces/{spaceID}/transfer
-POST /sync/sessions
-POST /sync/sessions/{sessionID}/remove
-POST /sync/ticket
-POST /sync/vault
 POST /v1/auth/confirm-email
 POST /v1/auth/confirm-email/sign-in
 POST /v1/auth/google
@@ -454,10 +431,6 @@ POST /v1/spaces/{spaceID}/read
 POST /v1/spaces/{spaceID}/tasks
 POST /v1/spaces/{spaceID}/tasks/{taskID}/move
 POST /v1/spaces/{spaceID}/transfer
-POST /v1/sync/sessions
-POST /v1/sync/sessions/{sessionID}/remove
-POST /v1/sync/ticket
-POST /v1/sync/vault
 PUT /api/devices/{deviceID}/devices/{targetID}/name
 PUT /api/devices/{deviceID}/policy
 PUT /api/me/avatar
@@ -476,8 +449,6 @@ PUT /api/spaces/{spaceID}/messages/{messageID}
 PUT /api/spaces/{spaceID}/messages/{messageID}/reactions/{emoji}
 PUT /api/spaces/{spaceID}/nodes/{nodeID}
 PUT /api/spaces/{spaceID}/notes/{noteID}/content
-PUT /api/sync/sessions/{sessionID}/name
-PUT /api/sync/vault/key
 PUT /devices/{deviceID}/devices/{targetID}/name
 PUT /devices/{deviceID}/policy
 PUT /me/avatar
@@ -496,8 +467,6 @@ PUT /spaces/{spaceID}/messages/{messageID}
 PUT /spaces/{spaceID}/messages/{messageID}/reactions/{emoji}
 PUT /spaces/{spaceID}/nodes/{nodeID}
 PUT /spaces/{spaceID}/notes/{noteID}/content
-PUT /sync/sessions/{sessionID}/name
-PUT /sync/vault/key
 PUT /v1/devices/{deviceID}/devices/{targetID}/name
 PUT /v1/devices/{deviceID}/policy
 PUT /v1/me/avatar
@@ -516,5 +485,3 @@ PUT /v1/spaces/{spaceID}/messages/{messageID}
 PUT /v1/spaces/{spaceID}/messages/{messageID}/reactions/{emoji}
 PUT /v1/spaces/{spaceID}/nodes/{nodeID}
 PUT /v1/spaces/{spaceID}/notes/{noteID}/content
-PUT /v1/sync/sessions/{sessionID}/name
-PUT /v1/sync/vault/key

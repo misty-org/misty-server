@@ -14,7 +14,7 @@ import (
 //   - Spaces it owns alone, the personal Space included, are marked for the
 //     Space purge (space_purge.go), which removes their notes, drawings,
 //     chats, Library and R2 objects;
-//   - every row in accountPurgeTables: sync vaults, voice transcripts, devices,
+//   - every row in accountPurgeTables: voice transcripts, devices,
 //     sessions, connections and settings.
 //
 // What stays, by design, is listed in accountPurgeKept. The purge test
@@ -36,8 +36,6 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"account_setup_keys", "user_id"},
 	{"email_outbox", "user_id"},
 	{"account_controls", "user_id"},
-	// Encrypted sync: every vault, with its records, blobs and devices.
-	{"sync_vaults", "user_id"},
 	{"voice_live_sessions", "owner_user_id"},
 	{"voice_transcripts", "owner_user_id"},
 	// Connections.

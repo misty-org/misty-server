@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"unicode"
@@ -18,7 +20,7 @@ var ErrRegistrationClosed = errors.New("registration_closed")
 // owner. Every later account comes from an invitation by an existing account (a
 // Space invitation to that email that is still open) or from the operator account
 // API, unless MISTY_OPEN_SIGNUP is on: anyone may then make an account, which starts
-// with nothing to use until the operator sets its limits (openSignupLimits).
+// with what MISTY_SIGNUP_LIMITS gives it, or nothing until the operator sets its limits (openSignupLimits).
 //
 // A self-hosted server can instead name who it's for with MISTY_ALLOWED_EMAILS: only
 // those emails may make an account or sign in, invited or not. Open signup ignores it,
@@ -77,13 +79,39 @@ func writeEmailNotAllowed(w http.ResponseWriter) {
 	writeJSON(w, http.StatusForbidden, map[string]string{"code": "email_not_allowed", "message": "This email isn't on this server's list. Ask whoever runs it to add you."})
 }
 
-// openSignupLimits holds an account made through open signup to nothing: it costs
-// the server nothing until the operator sets what it may use.
+// openSignupLimits sets what an account made through open signup may use. With no
+// MISTY_SIGNUP_LIMITS it holds the account to nothing, so it costs the server nothing until
+// the operator sets its limits. MISTY_SIGNUP_LIMITS is a limits object like the operator
+// API's, such as Misty Cloud's free plan:
+// {"storage_bytes":5000000000,"devices":null,"spaces":2}. A field it leaves out stays 0
+// for storage and devices, and unlimited for the rest.
 func openSignupLimits(ctx context.Context, store interface {
 	SetAccountLimits(context.Context, string, db.AccountLimits) error
 }, userID string) error {
+	limits, err := signupLimits()
+	if err != nil {
+		return err
+	}
+	return store.SetAccountLimits(ctx, userID, limits)
+}
+
+// signupLimits reads MISTY_SIGNUP_LIMITS onto the closed default.
+func signupLimits() (db.AccountLimits, error) {
 	var storage, devices int64
-	return store.SetAccountLimits(ctx, userID, db.AccountLimits{StorageBytes: &storage, Devices: &devices})
+	base := db.AccountLimits{StorageBytes: &storage, Devices: &devices}
+	raw := strings.TrimSpace(config.Getenv("MISTY_SIGNUP_LIMITS"))
+	if raw == "" {
+		return base, nil
+	}
+	var parsed operatorLimits
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return base, fmt.Errorf("MISTY_SIGNUP_LIMITS is not a limits object: %w", err)
+	}
+	limits, err := parsed.apply(base)
+	if err != nil {
+		return base, fmt.Errorf("MISTY_SIGNUP_LIMITS: %w", err)
+	}
+	return limits, nil
 }
 
 // registrationAllowed reports whether email may create an account now.

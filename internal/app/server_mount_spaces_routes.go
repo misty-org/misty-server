@@ -25,6 +25,7 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.Get(prefix+"/spaces/{spaceID}/item-state", api.SpacePersonalItems(s.Database))
 	s.Router.Patch(prefix+"/spaces/{spaceID}/item-state", api.SpacePersonalItems(s.Database))
 	s.Router.Get(prefix+"/spaces/{spaceID}/members", spaces.Members())
+	s.Router.Get(prefix+"/spaces/{spaceID}/boosts", spaces.SpaceBoosts())
 	s.Router.Get(prefix+"/spaces/{spaceID}/agents", spaces.SpaceAgents())
 	s.Router.Put(prefix+"/spaces/{spaceID}/agents/{agentID}", spaces.SpaceAgent())
 	s.Router.Delete(prefix+"/spaces/{spaceID}/agents/{agentID}", spaces.SpaceAgent())

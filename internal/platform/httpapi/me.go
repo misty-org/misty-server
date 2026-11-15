@@ -76,6 +76,10 @@ func GetMe(database *db.Database) http.HandlerFunc {
 		limits, _ := database.AccountLimitsFor(r.Context(), userID)
 		devicesAllowed := limits.Devices == nil || *limits.Devices > 0
 
+		// Space levels exist only where the operator configured them (Misty Cloud); the app
+		// shows Boosts only then.
+		levels, _ := db.SpaceLevelsConfigured()
+
 		writeJSON(w, http.StatusOK, map[string]any{
 			"id":              user.ID,
 			"username":        user.Username,
@@ -86,6 +90,7 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			"delete_at":       deleteAt,
 			"server_owner":    owner,
 			"devices_allowed": devicesAllowed,
+			"space_levels":    levels != nil,
 		})
 	}
 }

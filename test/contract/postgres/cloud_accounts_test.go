@@ -230,3 +230,61 @@ func TestInvitationOpensRegistrationForThatEmail(t *testing.T) {
 		t.Fatalf("invitation = %v %v", invited, err)
 	}
 }
+
+func TestSpacesLimitCountsOwnAndJoinedSpaces(t *testing.T) {
+	database := testkit.OpenDatabase(t)
+	ctx := context.Background()
+	member, _, err := database.CreateOperatorAccount(ctx, "free@example.com", AccountLimits{Spaces: limit(2)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, _, err := database.CreateOperatorAccount(ctx, "host@example.com", AccountLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every account starts in its own personal Space, which counts as one.
+	if spaces, err := database.ListSpaces(ctx, member.ID); err != nil || len(spaces) != 1 {
+		t.Fatalf("personal Space = %d %v", len(spaces), err)
+	}
+	invite := func(name string) string {
+		space, err := database.TestingCreateSpace(ctx, owner.ID, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		invitation, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return invitation.ID
+	}
+	if _, err := database.RespondToSpaceInvite(ctx, member.ID, invite("Team"), true); err != nil {
+		t.Fatalf("joining the second Space = %v", err)
+	}
+	// Owned and joined count together: both a third of its own and a third to join are refused.
+	if _, err := database.TestingCreateSpace(ctx, member.ID, "Another"); !errors.Is(err, ErrSpaceCountLimit) {
+		t.Fatalf("third own Space = %v", err)
+	}
+	third := invite("Other team")
+	if _, err := database.RespondToSpaceInvite(ctx, member.ID, third, true); !errors.Is(err, ErrSpaceCountLimit) {
+		t.Fatalf("joining a third Space = %v", err)
+	}
+	// Declining always works, and a higher limit lets the same invitation in.
+	if err := database.SetAccountLimits(ctx, member.ID, AccountLimits{Spaces: limit(5)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.RespondToSpaceInvite(ctx, member.ID, third, true); err != nil {
+		t.Fatalf("joining after the limit rose = %v", err)
+	}
+	limits, err := database.AccountLimitsFor(ctx, member.ID)
+	if err != nil || limits.Spaces == nil || *limits.Spaces != 5 {
+		t.Fatalf("limits = %+v %v", limits, err)
+	}
+	// Lowering the limit keeps every Space it belongs to; it only refuses a new one.
+	if err := database.SetAccountLimits(ctx, member.ID, AccountLimits{Spaces: limit(2)}); err != nil {
+		t.Fatal(err)
+	}
+	spaces, err := database.ListSpaces(ctx, member.ID)
+	if err != nil || len(spaces) != 3 {
+		t.Fatalf("spaces after lowering = %d %v", len(spaces), err)
+	}
+}

@@ -54,6 +54,9 @@ func (db *Database) AddSpaceAgent(ctx context.Context, userID, spaceID, agentID,
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
+		if err := requireSpaceAgentRoomTx(ctx, tx, spaceID, agentID, userID); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_agents(space_id,agent_id,owner_user_id,agent_name) VALUES($1,$2,$3,$4)
 			ON CONFLICT (space_id,owner_user_id,agent_id) DO UPDATE SET agent_name=EXCLUDED.agent_name`, spaceID, agentID, userID, name); err != nil {
 			return err

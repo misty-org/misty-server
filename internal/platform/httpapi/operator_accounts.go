@@ -91,6 +91,8 @@ func (o *OperatorAccounts) Mount(r chi.Router) {
 	r.Post("/accounts/{id}/resume", o.resume)
 	r.Post("/accounts/{id}/close", o.close)
 	r.Post("/accounts/{id}/setup-key", o.newSetupKey)
+	r.Get("/spaces/{spaceID}", o.space)
+	r.Put("/spaces/{spaceID}/boosts/{id}", o.setSpaceBoosts)
 }
 
 // list answers ?q= (a fragment of an email or username) or ?email= (one

@@ -61,7 +61,10 @@ func (db *Database) CreateNoteAssetUpload(ctx context.Context, userID, noteID, f
 		if err := prepareStorageReservationTx(ctx, tx, userID, out.SpaceID); err != nil {
 			return err
 		}
-		if err := RequireAccountStorageRoomTx(ctx, tx, userID, byteSize); err != nil {
+		if err := requireSpaceUploadSizeTx(ctx, tx, userID, out.SpaceID, byteSize); err != nil {
+			return err
+		}
+		if err := RequireStorageRoomTx(ctx, tx, userID, out.SpaceID, byteSize); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx,

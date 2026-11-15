@@ -61,13 +61,41 @@ func RequireAccountStorageRoomTx(ctx context.Context, tx *sql.Tx, userID string,
 	return nil
 }
 
+// requireSpaceRoomTx refuses one more Space for the account once it belongs to as many active
+// Spaces as its limit allows, its own and joined ones counted together. Spaces it already belongs
+// to stay; only a new one is refused. Callers hold the account's Space lock (lockAccountSpacesTx).
+func requireSpaceRoomTx(ctx context.Context, tx *sql.Tx, userID string) error {
+	return asServiceTx(ctx, tx, func() error {
+		limits, _, err := accountControlsTx(ctx, tx, userID)
+		if err != nil || limits.Spaces == nil {
+			return err
+		}
+		var belongs int64
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM space_members m
+			JOIN spaces s ON s.id=m.space_id AND s.lifecycle_state='active' WHERE m.user_id=$1`, userID).Scan(&belongs); err != nil {
+			return err
+		}
+		if belongs >= *limits.Spaces {
+			return ErrSpaceCountLimit
+		}
+		return nil
+	})
+}
+
+// lockAccountSpacesTx serializes everything that adds the account to a Space, so two at once
+// can't both pass its Spaces limit.
+func lockAccountSpacesTx(ctx context.Context, tx *sql.Tx, userID string) error {
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:member:"+userID)
+	return err
+}
+
 // requireSpaceSharingRoomTx refuses one more invitation once the owner's account is at a sharing
 // limit: the people one Space may hold (members and open invitations both count), or the number
 // of its Spaces that may be shared at all. A Space already shared never counts against itself.
 func requireSpaceSharingRoomTx(ctx context.Context, tx *sql.Tx, ownerID, spaceID string) error {
 	return asServiceTx(ctx, tx, func() error {
 		limits, _, err := accountControlsTx(ctx, tx, ownerID)
-		if err != nil || (limits.SpaceMembers == nil && limits.SharedSpaces == nil) {
+		if err != nil {
 			return err
 		}
 		const people = `(SELECT count(*) FROM space_members m WHERE m.space_id=s.id) +
@@ -79,6 +107,9 @@ func requireSpaceSharingRoomTx(ctx context.Context, tx *sql.Tx, ownerID, spaceID
 		}
 		if limits.SpaceMembers != nil && here >= *limits.SpaceMembers {
 			return ErrSpacePeopleLimit
+		}
+		if err := requireSpaceMembersRoomTx(ctx, tx, spaceID, here); err != nil {
+			return err
 		}
 		if limits.SharedSpaces == nil || here > 1 {
 			return nil

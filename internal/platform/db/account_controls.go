@@ -16,6 +16,10 @@ type AccountLimits struct {
 	SharedSpaces *int64 `json:"shared_spaces"`
 	// SpaceMembers is how many people, the owner included, one of its Spaces may hold.
 	SpaceMembers *int64 `json:"space_members"`
+	// Spaces is how many active Spaces the account may belong to, its own and joined ones together.
+	Spaces *int64 `json:"spaces"`
+	// UploadBytes is the largest file the account may add, past what a Space's level allows (Misty+'s).
+	UploadBytes *int64 `json:"upload_bytes"`
 }
 
 var (
@@ -35,11 +39,12 @@ func (db *Database) SetAccountLimits(ctx context.Context, userID string, limits 
 		if err := requireActiveAccountTx(ctx, tx, userID); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO account_controls(user_id,storage_bytes,devices,shared_spaces,space_members)
-			VALUES($1,$2,$3,$4,$5)
+		_, err := tx.ExecContext(ctx, `INSERT INTO account_controls(user_id,storage_bytes,devices,shared_spaces,space_members,spaces,upload_bytes)
+			VALUES($1,$2,$3,$4,$5,$6,$7)
 			ON CONFLICT(user_id) DO UPDATE SET storage_bytes=EXCLUDED.storage_bytes,devices=EXCLUDED.devices,
-			shared_spaces=EXCLUDED.shared_spaces,space_members=EXCLUDED.space_members,updated_at=now()`,
-			userID, limits.StorageBytes, limits.Devices, limits.SharedSpaces, limits.SpaceMembers)
+			shared_spaces=EXCLUDED.shared_spaces,space_members=EXCLUDED.space_members,spaces=EXCLUDED.spaces,
+			upload_bytes=EXCLUDED.upload_bytes,updated_at=now()`,
+			userID, limits.StorageBytes, limits.Devices, limits.SharedSpaces, limits.SpaceMembers, limits.Spaces, limits.UploadBytes)
 		return err
 	})
 }
@@ -57,10 +62,10 @@ func (db *Database) AccountLimitsFor(ctx context.Context, userID string) (Accoun
 
 func accountControlsTx(ctx context.Context, tx *sql.Tx, userID string) (AccountLimits, *time.Time, error) {
 	var limits AccountLimits
-	var storage, devices, sharedSpaces, spaceMembers sql.NullInt64
+	var storage, devices, sharedSpaces, spaceMembers, spaces, uploads sql.NullInt64
 	var suspended sql.NullTime
-	err := tx.QueryRowContext(ctx, `SELECT storage_bytes,devices,shared_spaces,space_members,suspended_at
-		FROM account_controls WHERE user_id=$1`, userID).Scan(&storage, &devices, &sharedSpaces, &spaceMembers, &suspended)
+	err := tx.QueryRowContext(ctx, `SELECT storage_bytes,devices,shared_spaces,space_members,spaces,upload_bytes,suspended_at
+		FROM account_controls WHERE user_id=$1`, userID).Scan(&storage, &devices, &sharedSpaces, &spaceMembers, &spaces, &uploads, &suspended)
 	if errors.Is(err, sql.ErrNoRows) {
 		return limits, nil, nil
 	}
@@ -70,6 +75,7 @@ func accountControlsTx(ctx context.Context, tx *sql.Tx, userID string) (AccountL
 	limits = AccountLimits{
 		StorageBytes: nullableInt(storage), Devices: nullableInt(devices),
 		SharedSpaces: nullableInt(sharedSpaces), SpaceMembers: nullableInt(spaceMembers),
+		Spaces: nullableInt(spaces), UploadBytes: nullableInt(uploads),
 	}
 	if suspended.Valid {
 		return limits, &suspended.Time, nil

@@ -31,6 +31,12 @@ func (db *Database) RespondToSpaceInvite(ctx context.Context, userID, inviteID s
 			_, err := tx.ExecContext(ctx, `UPDATE space_invitations SET revoked_at=NOW() WHERE id=$1`, inviteID)
 			return err
 		}
+		if err := lockAccountSpacesTx(ctx, tx, userID); err != nil {
+			return err
+		}
+		if err := requireSpaceRoomTx(ctx, tx, userID); err != nil {
+			return err
+		}
 		if err := addSpaceMembershipTx(ctx, tx, spaceID, userID, "member"); err != nil {
 			return err
 		}

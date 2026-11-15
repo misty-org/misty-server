@@ -55,6 +55,12 @@ func (db *Database) CreateSpace(ctx context.Context, userID, name, idempotencyKe
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:owner:"+userID); err != nil {
 			return err
 		}
+		if err := lockAccountSpacesTx(ctx, tx, userID); err != nil {
+			return err
+		}
+		if err := requireSpaceRoomTx(ctx, tx, userID); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO security_domains(id,kind,owner_user_id,space_id) VALUES($1,'space',$2,$3)`, result.Space.SecurityDomainID, userID, result.Space.ID); err != nil {
 			return err
 		}

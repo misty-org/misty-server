@@ -91,7 +91,10 @@ func (db *Database) CreateDrawingAssetUpload(
 		if err := prepareStorageReservationTx(ctx, tx, userID, out.SpaceID); err != nil {
 			return err
 		}
-		if err := RequireAccountStorageRoomTx(ctx, tx, userID, byteSize); err != nil {
+		if err := requireSpaceUploadSizeTx(ctx, tx, userID, out.SpaceID, byteSize); err != nil {
+			return err
+		}
+		if err := RequireStorageRoomTx(ctx, tx, userID, out.SpaceID, byteSize); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(

@@ -106,3 +106,22 @@ func TestRegistrationFirstAccountThenInvitationOnly(t *testing.T) {
 func (owner fakeOwner) IsServerOwner(_ context.Context, id string) (bool, error) {
 	return string(owner) == id, nil
 }
+
+func TestSignupLimitsComeFromTheEnvironment(t *testing.T) {
+	t.Setenv("MISTY_SIGNUP_LIMITS", "")
+	closed, err := signupLimits()
+	if err != nil || closed.StorageBytes == nil || *closed.StorageBytes != 0 || closed.Devices == nil || *closed.Devices != 0 || closed.Spaces != nil {
+		t.Fatalf("no setting = %+v %v", closed, err)
+	}
+	t.Setenv("MISTY_SIGNUP_LIMITS", `{"storage_bytes":5000000000,"devices":null,"spaces":2}`)
+	free, err := signupLimits()
+	if err != nil || free.StorageBytes == nil || *free.StorageBytes != 5_000_000_000 || free.Devices != nil || free.Spaces == nil || *free.Spaces != 2 {
+		t.Fatalf("free plan = %+v %v", free, err)
+	}
+	for _, bad := range []string{`{"storage":1}`, `{"spaces":-1}`, `not json`} {
+		t.Setenv("MISTY_SIGNUP_LIMITS", bad)
+		if _, err := signupLimits(); err == nil {
+			t.Fatalf("%s was accepted", bad)
+		}
+	}
+}

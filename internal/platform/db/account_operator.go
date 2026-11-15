@@ -91,15 +91,15 @@ func (db *Database) CreateOperatorAccount(ctx context.Context, email string, lim
 
 const operatorAccountColumns = `u.id,u.email,u.username,u.created_at,
 	u.id=(SELECT id FROM users ORDER BY created_at,id LIMIT 1),
-	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,c.shared_spaces,c.space_members
+	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,c.shared_spaces,c.space_members,c.spaces,c.upload_bytes
 	FROM users u LEFT JOIN account_controls c ON c.user_id=u.id`
 
 func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, error) {
 	var a OperatorAccount
 	var suspended, deleteAt, anchor sql.NullTime
-	var storage, devices, sharedSpaces, spaceMembers sql.NullInt64
+	var storage, devices, sharedSpaces, spaceMembers, spaces, uploads sql.NullInt64
 	if err := row.Scan(&a.ID, &a.Email, &a.Username, &a.CreatedAt, &a.Owner, &suspended, &deleteAt, &anchor,
-		&storage, &devices, &sharedSpaces, &spaceMembers); err != nil {
+		&storage, &devices, &sharedSpaces, &spaceMembers, &spaces, &uploads); err != nil {
 		return a, err
 	}
 	if deleteAt.Valid {
@@ -111,6 +111,7 @@ func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, 
 	a.Limits = AccountLimits{
 		StorageBytes: nullableInt(storage), Devices: nullableInt(devices),
 		SharedSpaces: nullableInt(sharedSpaces), SpaceMembers: nullableInt(spaceMembers),
+		Spaces: nullableInt(spaces), UploadBytes: nullableInt(uploads),
 	}
 	if suspended.Valid {
 		a.Suspended, a.SuspendedAt = true, &suspended.Time

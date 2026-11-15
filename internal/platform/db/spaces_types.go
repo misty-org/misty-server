@@ -21,6 +21,7 @@ var (
 	ErrSpaceForbidden        = errors.New("space permission denied")
 	ErrSpaceLimit            = errors.New("space limit reached")
 	ErrSpaceOwnershipLimit   = errors.New("space ownership limit reached")
+	ErrSpaceCountLimit       = errors.New("spaces limit reached") // making or joining one more Space past the account's limit
 	ErrSpacePeopleLimit      = errors.New("space member limit reached")
 	ErrSpaceConflict         = errors.New("space resource version conflict")
 	ErrSpaceInviteNotFound   = errors.New("space invitation not found")

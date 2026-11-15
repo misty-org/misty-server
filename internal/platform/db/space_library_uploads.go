@@ -152,7 +152,10 @@ func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, co
 		if err := prepareStorageReservationTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
-		if err := RequireAccountStorageRoomTx(ctx, tx, userID, byteSize); err != nil {
+		if err := requireSpaceUploadSizeTx(ctx, tx, userID, spaceID, byteSize); err != nil {
+			return err
+		}
+		if err := RequireStorageRoomTx(ctx, tx, userID, spaceID, byteSize); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `INSERT INTO space_library_uploads(id,space_id,security_domain_id,user_id,object_key,original_filename,purpose,client_declared_mime_type,requested_byte_size,client_sha256,state,upload_token_hash,expires_at,conversation_id)

@@ -31,11 +31,16 @@ func accountStorageTx(ctx context.Context, tx *sql.Tx, user string) (StorageUsag
 	}
 	defer tx.ExecContext(ctx, `SELECT set_config('app.rls_mode',$1,true)`, previous.String)
 	var objects, reserved, database int64
-	err := tx.QueryRowContext(ctx, `SELECT
- COALESCE((SELECT sum(logical_bytes) FROM space_storage_contributions WHERE user_id=$1 AND state IN ('active','recovery')),0),
- COALESCE((SELECT sum(reserved_bytes) FROM space_upload_reservations WHERE user_id=$1 AND state='active'),0)+COALESCE((SELECT sum(reserved_bytes) FROM space_rendition_reservations WHERE user_id=$1 AND state='active'),0),
- COALESCE((SELECT sum(octet_length(content::text)) FROM space_messages WHERE sender_user_id=$1),0)+
- COALESCE((SELECT sum(octet_length(title_projection)+octet_length(markdown_projection)+octet_length(plain_text_projection)+octet_length(shared_tags::text)) FROM space_notes WHERE creator_user_id=$1),0)`, user).Scan(&objects, &reserved, &database)
+	// A boosted Space (with at least the first level's Boosts from its members) keeps its
+	// files in its own storage, so they don't count against the people who added them.
+	err := tx.QueryRowContext(ctx, `WITH boosted AS (
+ SELECT b.space_id FROM space_boosts b JOIN space_members m ON m.space_id=b.space_id AND m.user_id=b.user_id
+ GROUP BY b.space_id HAVING sum(b.boosts)>=$2)
+ SELECT
+ COALESCE((SELECT sum(logical_bytes) FROM space_storage_contributions WHERE user_id=$1 AND state IN ('active','recovery') AND space_id NOT IN (SELECT space_id FROM boosted)),0),
+ COALESCE((SELECT sum(reserved_bytes) FROM space_upload_reservations WHERE user_id=$1 AND state='active' AND space_id NOT IN (SELECT space_id FROM boosted)),0)+COALESCE((SELECT sum(reserved_bytes) FROM space_rendition_reservations WHERE user_id=$1 AND state='active' AND space_id NOT IN (SELECT space_id FROM boosted)),0),
+ COALESCE((SELECT sum(octet_length(content::text)) FROM space_messages WHERE sender_user_id=$1 AND space_id NOT IN (SELECT space_id FROM boosted)),0)+
+ COALESCE((SELECT sum(octet_length(title_projection)+octet_length(markdown_projection)+octet_length(plain_text_projection)+octet_length(shared_tags::text)) FROM space_notes WHERE creator_user_id=$1 AND space_id NOT IN (SELECT space_id FROM boosted)),0)`, user, boostedSpacesThreshold()).Scan(&objects, &reserved, &database)
 	return StorageUsageDimension{UsedBytes: objects + database, ReservedBytes: reserved}, err
 }
 

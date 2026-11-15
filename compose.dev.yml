@@ -38,9 +38,9 @@ services:
     logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
     restart: "no"
     env_file:
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/cloudflare.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/cloudflare.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/journal.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/journal.env
         required: false
     environment:
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
@@ -75,25 +75,25 @@ services:
     logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
     restart: unless-stopped
     env_file:
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/runtime.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/runtime.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/database.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/database.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/storage.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/storage.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/observability.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/observability.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/mailjet.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/mailjet.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/google.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/google.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/documents.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/documents.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/journal.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/journal.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/spaces.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/spaces.env
         required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/crypto/services.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/services.env
         required: false
     environment:
       PORT: "8080"
@@ -149,7 +149,7 @@ services:
     restart: unless-stopped
 
     env_file:
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/cloudflare.env
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/cloudflare.env
         required: false
 
     environment:

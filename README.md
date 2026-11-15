@@ -29,7 +29,7 @@ cargo install --path . --locked
 misty setup server
 ```
 
-`misty setup server` creates `~/.misty/.env/server/` with development credentials and collaboration keys. Running it again keeps existing values. Keep these keys with your database and out of Git.
+`misty setup server` creates `.env/server/` in your Misty data folder (`~/.misty/dev/default` unless `~/.misty/misty.conf` names another) with development credentials and collaboration keys. Running it again keeps existing values. Keep these keys with your database and out of Git.
 
 ### Configure Cloudflare
 

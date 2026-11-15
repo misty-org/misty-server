@@ -41,11 +41,11 @@ func writeJournalSecrets(context.Context) error {
 // what the Worker needs goes to Cloudflare: never the private signing key.
 func deploy(ctx context.Context) error {
 	if os.Getenv("CLOUDFLARE_API_TOKEN") == "" {
-		return errors.New("CLOUDFLARE_API_TOKEN is required for the containerized Worker deployment.\nAdd a Workers Scripts:Edit API token to ~/.misty/.env/server/cloudflare.env.")
+		return errors.New("CLOUDFLARE_API_TOKEN is required for the containerized Worker deployment.\nAdd a Workers Scripts:Edit API token to cloudflare.env in the development .env/server folder (~/.misty/dev/default/.env/server unless misty.conf names another data folder).")
 	}
 	values, err := required("JOURNAL_COLLAB_TICKET_PUBLIC_KEY", "JOURNAL_COLLAB_CONTROL_SECRET", "JOURNAL_COLLAB_PROJECTION_SECRET")
 	if err != nil {
-		return errors.New("The Worker secrets are missing from ~/.misty/.env/server/crypto/journal.env.")
+		return errors.New("The Worker secrets are missing from crypto/journal.env in the development .env/server folder (~/.misty/dev/default/.env/server unless misty.conf names another data folder).")
 	}
 	origin := os.Getenv("MISTY_DEV_API_ORIGIN")
 	if origin == "" {

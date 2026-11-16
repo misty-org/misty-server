@@ -98,7 +98,7 @@ func TestIsTransferRequestOnlyMatchesObjectByteRoutes(t *testing.T) {
 			t.Fatalf("isTransferRequest(%q) = false, want true", path)
 		}
 	}
-	plain := []string{"/v1/spaces/space_1/tasks", "/v1/me", "/healthz"}
+	plain := []string{"/v1/spaces/space_1/tasks", "/v1/me", "/health"}
 	for _, path := range plain {
 		if IsTransferRequest(httptest.NewRequest(http.MethodGet, path, nil)) {
 			t.Fatalf("isTransferRequest(%q) = true, want false", path)

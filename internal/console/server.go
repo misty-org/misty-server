@@ -48,7 +48,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(requireHost, securityHeaders)
 	// Unauthenticated liveness probe used by `misty server up --gui` to reuse
 	// a running console instead of starting a second one.
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
 	r.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServerFS(assets)))

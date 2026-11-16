@@ -62,7 +62,7 @@ func TestValidateLoopbackRejectsRoutableAddresses(t *testing.T) {
 
 func TestRejectsNonLoopbackHostHeader(t *testing.T) {
 	handler := newConsole(t, "http://127.0.0.1:1")
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	req.Host = "attacker.example:7070"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -71,10 +71,10 @@ func TestRejectsNonLoopbackHostHeader(t *testing.T) {
 	}
 }
 
-func TestHealthzIsPublic(t *testing.T) {
-	rec := request(t, newConsole(t, "http://127.0.0.1:1"), "/healthz")
+func TestHealthIsPublic(t *testing.T) {
+	rec := request(t, newConsole(t, "http://127.0.0.1:1"), "/health")
 	if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
-		t.Fatalf("healthz: got %d %q", rec.Code, rec.Body.String())
+		t.Fatalf("health: got %d %q", rec.Code, rec.Body.String())
 	}
 }
 

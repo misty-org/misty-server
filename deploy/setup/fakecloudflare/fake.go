@@ -150,6 +150,11 @@ func (f *Fake) serveZone(w http.ResponseWriter, r *http.Request, parts []string)
 		reply(w, 200, records)
 	case len(parts) == 1 && parts[0] == "dns_records" && r.Method == "POST":
 		record := decode(r)
+		if name, _ := record["name"].(string); !f.inZone(name) {
+			// Cloudflare refuses a record outside the zone.
+			reply(w, http.StatusBadRequest, nil)
+			return
+		}
 		record["id"] = f.id()
 		f.DNS[record["id"].(string)] = record
 		reply(w, 200, record)
@@ -198,7 +203,12 @@ func (f *Fake) serveTunnels(w http.ResponseWriter, r *http.Request, parts []stri
 		f.Tunnels[tunnel["id"].(string)] = tunnel
 		reply(w, 200, tunnel)
 	case len(parts) == 2 && f.Tunnels[parts[0]] != nil && parts[1] == "configurations" && r.Method == "PUT":
-		f.Configs[parts[0]] = decode(r)["config"]
+		config := decode(r)["config"]
+		if !validIngress(config) {
+			reply(w, http.StatusBadRequest, nil)
+			return
+		}
+		f.Configs[parts[0]] = config
 		reply(w, 200, map[string]any{"tunnel_id": parts[0]})
 	case len(parts) == 2 && f.Tunnels[parts[0]] != nil && parts[1] == "token" && r.Method == "GET":
 		reply(w, 200, "fake-tunnel-token-"+parts[0])

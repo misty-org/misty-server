@@ -27,8 +27,8 @@ type dnsRecord struct {
 }
 
 // provisionTunnel finds or creates the named, remotely managed tunnel, routes
-// the hostname to the API and points DNS at it. It records the tunnel ID and
-// the connector token.
+// the hostname to the API (and any extra hostnames to their services) and
+// points DNS at it. It records the tunnel ID and the connector token.
 func provisionTunnel(ctx context.Context, cf *cloudflare, inputs Inputs, names Names, store *Store) error {
 	var zone struct {
 		Name    string `json:"name"`
@@ -42,8 +42,13 @@ func provisionTunnel(ctx context.Context, cf *cloudflare, inputs Inputs, names N
 	if zone.Account.ID != inputs.AccountID {
 		return errors.New("CLOUDFLARE_ZONE_ID belongs to another account than CLOUDFLARE_ACCOUNT_ID")
 	}
-	if inputs.Hostname != zone.Name && !hasSuffix(inputs.Hostname, "."+zone.Name) {
+	if !inZone(inputs.Hostname, zone.Name) {
 		return fmt.Errorf("MISTY_HOSTNAME %s is not in the zone %s", inputs.Hostname, zone.Name)
+	}
+	for _, rule := range inputs.ExtraIngress {
+		if !inZone(rule.Host, zone.Name) {
+			return fmt.Errorf("MISTY_TUNNEL_EXTRA_INGRESS host %s is not in the zone %s", rule.Host, zone.Name)
+		}
 	}
 
 	query := url.Values{"name": {names.Tunnel}, "is_deleted": {"false"}}
@@ -76,15 +81,23 @@ func provisionTunnel(ctx context.Context, cf *cloudflare, inputs Inputs, names N
 		return errors.New("Cloudflare returned a tunnel without an ID")
 	}
 
-	config := map[string]any{"config": map[string]any{"ingress": []map[string]any{
-		{"hostname": inputs.Hostname, "service": apiService},
-		{"service": "http_status:404"},
-	}}}
+	// The API's hostname first, then any extra ones, then the catch-all.
+	ingress := []map[string]any{{"hostname": inputs.Hostname, "service": apiService}}
+	for _, rule := range inputs.ExtraIngress {
+		ingress = append(ingress, map[string]any{"hostname": rule.Host, "service": rule.Service})
+	}
+	ingress = append(ingress, map[string]any{"service": "http_status:404"})
+	config := map[string]any{"config": map[string]any{"ingress": ingress}}
 	if err := cf.call(ctx, "PUT", cf.accountPath("cfd_tunnel/%s/configurations", current.ID), config, nil); err != nil {
 		return err
 	}
-	if err := ensureDNS(ctx, cf, inputs, current.ID); err != nil {
+	if err := ensureDNS(ctx, cf, inputs.ZoneID, inputs.Hostname, current.ID); err != nil {
 		return err
+	}
+	for _, rule := range inputs.ExtraIngress {
+		if err := ensureDNS(ctx, cf, inputs.ZoneID, rule.Host, current.ID); err != nil {
+			return err
+		}
 	}
 	var token string
 	if err := cf.call(ctx, "GET", cf.accountPath("cfd_tunnel/%s/token", current.ID), nil, &token); err != nil {
@@ -98,31 +111,35 @@ func provisionTunnel(ctx context.Context, cf *cloudflare, inputs Inputs, names N
 	return nil
 }
 
-// ensureDNS keeps one proxied CNAME from the hostname to the tunnel. A record
+// ensureDNS keeps one proxied CNAME from a hostname to the tunnel. A record
 // that points anywhere else is the operator's; setup stops instead of
 // replacing it.
-func ensureDNS(ctx context.Context, cf *cloudflare, inputs Inputs, tunnelID string) error {
+func ensureDNS(ctx context.Context, cf *cloudflare, zoneID, hostname, tunnelID string) error {
 	target := tunnelID + ".cfargotunnel.com"
 	var records []dnsRecord
-	query := url.Values{"name": {inputs.Hostname}}
-	if err := cf.call(ctx, "GET", "zones/"+inputs.ZoneID+"/dns_records?"+query.Encode(), nil, &records); err != nil {
+	query := url.Values{"name": {hostname}}
+	if err := cf.call(ctx, "GET", "zones/"+zoneID+"/dns_records?"+query.Encode(), nil, &records); err != nil {
 		return err
 	}
 	switch {
 	case len(records) == 0:
-		body := map[string]any{"type": "CNAME", "name": inputs.Hostname, "content": target, "proxied": true, "comment": "Misty tunnel"}
-		return cf.call(ctx, "POST", "zones/"+inputs.ZoneID+"/dns_records", body, nil)
+		body := map[string]any{"type": "CNAME", "name": hostname, "content": target, "proxied": true, "comment": "Misty tunnel"}
+		return cf.call(ctx, "POST", "zones/"+zoneID+"/dns_records", body, nil)
 	case len(records) > 1:
-		return fmt.Errorf("%s has %d DNS records; keep none or only the tunnel's CNAME", inputs.Hostname, len(records))
+		return fmt.Errorf("%s has %d DNS records; keep none or only the tunnel's CNAME", hostname, len(records))
 	}
 	record := records[0]
 	if record.Type != "CNAME" || record.Content != target {
-		return fmt.Errorf("%s already has a %s record for something else; remove it so Misty can route the hostname to its tunnel", inputs.Hostname, record.Type)
+		return fmt.Errorf("%s already has a %s record for something else; remove it so Misty can route the hostname to its tunnel", hostname, record.Type)
 	}
 	if !record.Proxied {
-		return cf.call(ctx, "PATCH", "zones/"+inputs.ZoneID+"/dns_records/"+record.ID, map[string]any{"proxied": true}, nil)
+		return cf.call(ctx, "PATCH", "zones/"+zoneID+"/dns_records/"+record.ID, map[string]any{"proxied": true}, nil)
 	}
 	return nil
+}
+
+func inZone(host, zone string) bool {
+	return host == zone || hasSuffix(host, "."+zone)
 }
 
 func hasSuffix(value, suffix string) bool {

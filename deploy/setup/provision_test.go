@@ -27,6 +27,12 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
+	return newHarnessWith(t, nil)
+}
+
+// newHarnessWith adds or replaces inputs on top of the defaults.
+func newHarnessWith(t *testing.T, extra map[string]string) *harness {
+	t.Helper()
 	fake := fakecloudflare.New("cf-token", testAccount, testZone, "misty.example")
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
@@ -35,6 +41,9 @@ func newHarness(t *testing.T) *harness {
 		"CLOUDFLARE_ACCOUNT_ID": testAccount, "CLOUDFLARE_ZONE_ID": testZone,
 		"GOOGLE_CLIENT_ID": "g", "GOOGLE_CLIENT_SECRET": "g",
 		"MISTY_CLOUDFLARE_API_URL": server.URL + "/client/v4",
+	}
+	for name, value := range extra {
+		values[name] = value
 	}
 	inputs, err := readInputs(func(name string) string { return values[name] })
 	if err != nil {

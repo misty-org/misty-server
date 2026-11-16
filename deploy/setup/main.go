@@ -140,7 +140,13 @@ func provisionCloudflare(ctx context.Context, inputs Inputs, store *Store) error
 }
 
 func inputsFingerprint(inputs Inputs) string {
-	sum := sha256.Sum256([]byte(strings.Join(append([]string{inputs.Hostname, inputs.AccountID, inputs.ZoneID, inputs.APIURL}, inputs.Origins...), "\n")))
+	parts := append([]string{inputs.Hostname, inputs.AccountID, inputs.ZoneID, inputs.APIURL}, inputs.Origins...)
+	// Extra hostnames join the fingerprint only when set, so a server without
+	// them keeps the fingerprint it already recorded.
+	for _, rule := range inputs.ExtraIngress {
+		parts = append(parts, "ingress "+rule.Host+"="+rule.Service)
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\n")))
 	return hex.EncodeToString(sum[:])
 }
 

@@ -114,6 +114,11 @@ docker compose up -d --build
 docker compose logs setup
 ```
 
+Compose also reads three optional variables from where it runs (the shell or a `.env` file beside `compose.yml`, not `misty.env`):
+
+- `MISTY_API_IMAGE` and `MISTY_TOOLS_IMAGE` run published images instead of building from source. Each push to `main` publishes `ghcr.io/misty-org/misty-server-api:<commit SHA>` and `ghcr.io/misty-org/misty-server-tools:<commit SHA>` (the full 40-character SHA), and each `v*` git tag publishes the same images tagged with its name, such as `v1.2.3`. Tags never move and there is no `latest`. Set both to the same commit, then run `docker compose up -d` without `--build`.
+- `MISTY_TUNNEL_EXTRA_INGRESS` publishes more hostnames through the server's tunnel, for services you run beside it on the `edge` network: a comma-separated list of `host=service`, such as `billing.example.com=http://billing:8091`. Each host must be in the same zone as `MISTY_HOSTNAME`; setup routes it before the tunnel's catch-all and keeps its proxied DNS record. Empty by default. Removing an entry stops routing it but leaves its DNS record for you to delete.
+
 The [self-hosting guide](https://docs.mistysys.com/self-hosting) lists every value and covers optional email, backups, secret rotation and the console.
 
 ## More

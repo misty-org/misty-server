@@ -17,9 +17,12 @@ x-config: &config
   logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
 
 # setup, migrate, backups, alerts, console and cloudflared run one small image
-# (deploy/setup/Dockerfile).
+# (deploy/setup/Dockerfile). MISTY_TOOLS_IMAGE and MISTY_API_IMAGE name
+# published images to run instead, such as
+# ghcr.io/misty-org/misty-server-tools:<commit SHA>; unset, Compose builds both
+# from this checkout.
 x-tools: &tools
-  image: ${COMPOSE_PROJECT_NAME}-tools:local
+  image: ${MISTY_TOOLS_IMAGE:-${COMPOSE_PROJECT_NAME}-tools:local}
   build:
     context: .
     dockerfile: deploy/setup/Dockerfile
@@ -39,12 +42,16 @@ services:
   # One-shot: generates missing secrets, refuses to start when the database
   # holds data its secrets no longer match, and provisions the tunnel, DNS,
   # R2 buckets and credentials, and the collaboration Worker.
+  # MISTY_TUNNEL_EXTRA_INGRESS (host=service, comma-separated) publishes more
+  # hostnames through the same tunnel, for services that run beside the
+  # server on the edge network. Set it where Compose runs, not in misty.env.
   setup:
     <<: [*tools, *config]
     command: ["init"]
     restart: "no"
     environment:
       MISTY_DATA_DIR: /var/lib/misty/pgdata
+      MISTY_TUNNEL_EXTRA_INGRESS: ${MISTY_TUNNEL_EXTRA_INGRESS:-}
     volumes:
       - secrets:/run/misty/secrets
       - pgdata:/var/lib/misty/pgdata:ro
@@ -88,7 +95,7 @@ services:
     networks: [database]
 
   api:
-    image: ${COMPOSE_PROJECT_NAME}-api:local
+    image: ${MISTY_API_IMAGE:-${COMPOSE_PROJECT_NAME}-api:local}
     build:
       context: .
       dockerfile: Dockerfile

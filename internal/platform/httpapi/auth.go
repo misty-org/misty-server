@@ -53,6 +53,12 @@ func Register(database *db.Database) http.HandlerFunc {
 			http.Error(w, "email already registered", http.StatusConflict)
 			return
 		}
+		// The owner's email comes in only through Google, which proves it is theirs, so
+		// nobody else can claim it with a password first.
+		if db.IsServerOwnerEmail(body.Email) {
+			writeOwnerUsesGoogle(w)
+			return
+		}
 		if allowed, err := registrationAllowed(r.Context(), database, body.Email); err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -60,7 +66,7 @@ func Register(database *db.Database) http.HandlerFunc {
 			writeRegistrationClosed(w)
 			return
 		}
-		// The server's owner, its first account, is never held back.
+		// The server's first account is never held back.
 		anyAccount, err := database.AnyAccount(r.Context())
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -98,6 +104,11 @@ func Register(database *db.Database) http.HandlerFunc {
 
 		writeAuthSession(w, r, database, user, http.StatusCreated)
 	}
+}
+
+// writeOwnerUsesGoogle refuses a password account for MISTY_OWNER_EMAIL.
+func writeOwnerUsesGoogle(w http.ResponseWriter) {
+	writeJSON(w, http.StatusConflict, map[string]string{"code": "use_google", "message": "This server's owner signs in with Google. Please use Continue with Google instead."})
 }
 
 // writeUseGoogle answers a password for an email that signs in with Google. It says so

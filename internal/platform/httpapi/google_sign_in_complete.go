@@ -171,7 +171,7 @@ func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *g
 				if holder, ok := s.store.(interface {
 					SetAccountLimits(context.Context, string, db.AccountLimits) error
 				}); ok && openSignup() {
-					// The server's owner, its first account, is never held back.
+					// The server's first account is never held back.
 					hold, err := gate.AnyAccount(context.Background())
 					if err != nil {
 						return nil, err

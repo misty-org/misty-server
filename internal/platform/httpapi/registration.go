@@ -16,8 +16,8 @@ import (
 // ErrRegistrationClosed refuses a new account the server did not invite.
 var ErrRegistrationClosed = errors.New("registration_closed")
 
-// On a fresh server the first account registers itself and is the server's
-// owner. Every later account comes from an invitation by an existing account (a
+// On a fresh server the first account registers itself. That doesn't make it the
+// server's owner: only MISTY_OWNER_EMAIL does (db.IsServerOwner). Every later account comes from an invitation by an existing account (a
 // Space invitation to that email that is still open) or from the operator account
 // API, unless MISTY_OPEN_SIGNUP is on: anyone may then make an account, which starts
 // with what MISTY_SIGNUP_LIMITS gives it, or nothing until the operator sets its limits (openSignupLimits).

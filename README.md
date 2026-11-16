@@ -97,7 +97,9 @@ The views are templ files in `internal/console`; run `make generate` after editi
 
 ## Accounts
 
-The first account to register on a fresh server owns it. Later accounts come from an open Space invitation to that email, or from the operator account API under `/operator/v1`, which is mounted only when `MISTY_OPERATOR_TOKEN` is set and takes it as a bearer token.
+The first account to register on a fresh server needs no invitation. Registering first doesn't make it the server's owner. The owner is the account that signs in with Google as `MISTY_OWNER_EMAIL` (set it in `misty.env`). Google sign-in proves the address, so that email can't register with a password, and a password account is never the owner. Without `MISTY_OWNER_EMAIL` the server has no owner. The owner sees the server's alerts in the app and is always let in past `MISTY_ALLOWED_EMAILS`.
+
+Later accounts come from an open Space invitation to that email, or from the operator account API under `/operator/v1`, which is mounted only when `MISTY_OPERATOR_TOKEN` is set and takes it as a bearer token.
 
 The API creates an account with limits on storage, shared Spaces and people per Space (unlimited unless set), plus whether the account is set up for use (`devices`: `0` means not yet, anything else means yes), and returns a single-use setup key with its sign-in link. Without Mailjet configured the server sends no email, so the caller passes the link on; the same link resets a forgotten password. The API also suspends and resumes accounts, and closes them: a closed account is read-only, then deleted with all its data after the given number of days unless it is resumed.
 

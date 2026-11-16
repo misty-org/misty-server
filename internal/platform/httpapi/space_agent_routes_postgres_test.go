@@ -289,15 +289,26 @@ func TestSpaceNoteContentRouteWritesThroughTheRoomPostgres(t *testing.T) {
 	if replaced := f.do(f.member, "PUT", content, map[string]string{"markdown": "# Ready"}); replaced.Code != http.StatusOK || !strings.Contains(replaced.Body.String(), digest("# Ready")) {
 		t.Fatalf("replace = %d %s", replaced.Code, replaced.Body.String())
 	}
-	commands, err := f.database.PendingNoteControlCommands(ctx, 50)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Read what is queued for this note rather than claiming a batch: a claim
+	// hands out one command per note, and other tests share the outbox.
 	seen := map[string]bool{}
-	for _, command := range commands {
-		if command.NoteID == note.ID {
-			seen[command.Command] = true
+	if err := f.database.SpaceTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT command FROM space_note_control_outbox
+			WHERE note_id=$1 AND delivered_at IS NULL AND abandoned_at IS NULL`, note.ID)
+		if err != nil {
+			return err
 		}
+		defer rows.Close()
+		for rows.Next() {
+			var command string
+			if err := rows.Scan(&command); err != nil {
+				return err
+			}
+			seen[command] = true
+		}
+		return rows.Err()
+	}); err != nil {
+		t.Fatal(err)
 	}
 	if !seen["bootstrap"] || !seen["replace_markdown"] {
 		t.Fatalf("commands = %v", seen)

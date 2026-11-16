@@ -65,33 +65,34 @@ func TestUserAvatarVersionBumps(t *testing.T) {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 
-	// Avatar bytes live in object storage (R2); Postgres tracks only the version.
-	version, err := database.GetUserAvatarVersion(user.ID)
-	if err != nil || version != 0 {
-		t.Fatalf("GetUserAvatarVersion() before upload = %d, %v; want 0, nil", version, err)
+	// Avatar bytes live in object storage (R2); Postgres tracks the version and the
+	// object's key. Before any upload the reference falls back to avatars/<user id>.
+	avatar, err := database.GetUserAvatarReference(user.ID)
+	if err != nil || avatar.Version != 0 || avatar.ObjectKey != "avatars/"+user.ID {
+		t.Fatalf("reference before upload = %#v, %v; want version 0 and the fallback key", avatar, err)
 	}
 
-	version, err = database.BumpUserAvatarVersion(user.ID)
-	if err != nil || version != 1 {
-		t.Fatalf("BumpUserAvatarVersion() = %d, %v; want 1, nil", version, err)
-	}
-	version, err = database.GetUserAvatarVersion(user.ID)
-	if err != nil || version != 1 {
-		t.Fatalf("GetUserAvatarVersion() = %d, %v; want 1, nil", version, err)
-	}
-	key := "avatars/avatar_12345678-1234-1234-1234-123456789abc"
-	if _, err := database.Conn.Exec(`UPDATE users SET avatar_object_key=$2 WHERE id=$1`, user.ID, key); err != nil {
-		t.Fatal(err)
-	}
-	avatar, err := database.GetUserAvatarReference(user.ID)
-	if err != nil || avatar.ObjectKey != key || avatar.Version != 1 {
-		t.Fatalf("native reference = %#v, %v", avatar, err)
-	}
-	if _, err := database.BumpUserAvatarVersion(user.ID); err != nil {
-		t.Fatal(err)
+	first := "avatars/avatar_12345678-1234-1234-1234-123456789abc"
+	version, err := database.BumpUserAvatarVersion(user.ID, first)
+	if err != nil || version <= 0 {
+		t.Fatalf("BumpUserAvatarVersion() = %d, %v; want a positive version", version, err)
 	}
 	avatar, err = database.GetUserAvatarReference(user.ID)
-	if err != nil || avatar.ObjectKey != "avatars/"+user.ID || avatar.Version != 2 {
-		t.Fatalf("rollback reference = %#v, %v", avatar, err)
+	if err != nil || avatar.Version != version || avatar.ObjectKey != first {
+		t.Fatalf("reference after upload = %#v, %v; want version %d and key %s", avatar, err, version, first)
+	}
+	if got, err := database.GetUserAvatarVersion(user.ID); err != nil || got != version {
+		t.Fatalf("GetUserAvatarVersion() = %d, %v; want %d", got, err, version)
+	}
+
+	// A new upload always moves the version forward, even within the same millisecond.
+	second := "avatars/avatar_87654321-4321-4321-4321-cba987654321"
+	next, err := database.BumpUserAvatarVersion(user.ID, second)
+	if err != nil || next <= version {
+		t.Fatalf("second BumpUserAvatarVersion() = %d, %v; want more than %d", next, err, version)
+	}
+	avatar, err = database.GetUserAvatarReference(user.ID)
+	if err != nil || avatar.Version != next || avatar.ObjectKey != second {
+		t.Fatalf("reference after second upload = %#v, %v; want version %d and key %s", avatar, err, next, second)
 	}
 }

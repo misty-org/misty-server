@@ -1,6 +1,8 @@
+DELETE /v1/me/avatar
 DELETE /v1/me/voice/transcripts/{transcriptID}
 DELETE /v1/spaces/{spaceID}
 DELETE /v1/spaces/{spaceID}/agents/{agentID}
+DELETE /v1/spaces/{spaceID}/avatar
 DELETE /v1/spaces/{spaceID}/calendar/events/{eventID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}
@@ -19,6 +21,7 @@ DELETE /v1/spaces/{spaceID}/tasks/{taskID}
 GET /health
 GET /operator/v1/accounts
 GET /operator/v1/accounts/{id}
+GET /operator/v1/spaces/{spaceID}
 GET /v1/auth/google
 GET /v1/auth/google/callback
 GET /v1/auth/google/start
@@ -43,6 +46,8 @@ GET /v1/spaces/{spaceID}/agent-activity
 GET /v1/spaces/{spaceID}/agent-artifacts
 GET /v1/spaces/{spaceID}/agents
 GET /v1/spaces/{spaceID}/attachments/{attachmentID}/download
+GET /v1/spaces/{spaceID}/avatar
+GET /v1/spaces/{spaceID}/boosts
 GET /v1/spaces/{spaceID}/calendar/events
 GET /v1/spaces/{spaceID}/conversations
 GET /v1/spaces/{spaceID}/conversations/{conversationID}/messages
@@ -94,6 +99,7 @@ POST /v1/auth/confirm-email/sign-in
 POST /v1/auth/google
 POST /v1/auth/google/complete
 POST /v1/auth/refresh
+POST /v1/internal/journal/drawing-activity
 POST /v1/internal/journal/note-projections
 POST /v1/login
 POST /v1/logout
@@ -108,6 +114,7 @@ POST /v1/register
 POST /v1/setup-keys/redeem
 POST /v1/space-invitations/{token}
 POST /v1/spaces
+POST /v1/spaces/invitations/{inviteID}/{action}
 POST /v1/spaces/{spaceID}/attachments/{attachmentID}/promote
 POST /v1/spaces/{spaceID}/calendar/events
 POST /v1/spaces/{spaceID}/conversations
@@ -141,11 +148,13 @@ POST /v1/spaces/{spaceID}/read
 POST /v1/spaces/{spaceID}/tasks
 POST /v1/spaces/{spaceID}/tasks/{taskID}/move
 POST /v1/spaces/{spaceID}/transfer
+PUT /operator/v1/spaces/{spaceID}/boosts/{id}
 PUT /v1/me/avatar
 PUT /v1/me/password
 PUT /v1/me/settings
 PUT /v1/me/username
 PUT /v1/spaces/{spaceID}/agents/{agentID}
+PUT /v1/spaces/{spaceID}/avatar
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}
 PUT /v1/spaces/{spaceID}/items/{kind}/{itemID}/visibility

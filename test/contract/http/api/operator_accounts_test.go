@@ -153,7 +153,9 @@ func TestSetupKeyResetsAForgottenPassword(t *testing.T) {
 	owner, _ := list["accounts"].([]any)[0].(map[string]any)
 	id, _ := owner["id"].(string)
 	rec, body := call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/setup-key", operatorToken, "")
-	if rec.Code != http.StatusOK || accountField(body, "owner") != true {
+	// Registering first doesn't make this password account the owner: only a Google
+	// account with MISTY_OWNER_EMAIL is.
+	if rec.Code != http.StatusOK || accountField(body, "owner") != false {
 		t.Fatalf("setup key = %d %v", rec.Code, body)
 	}
 	rec, redeemed := call(t, handler, http.MethodPost, "/v1/setup-keys/redeem", "", `{"setup_key":"`+issuedKey(t, body)+`"}`)

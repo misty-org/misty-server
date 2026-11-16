@@ -21,6 +21,8 @@ import {
   waitFor,
 } from "./runtime-harness";
 
+// It restarts the runtime twice, which takes seconds on its own and longer while
+// the commit hooks run every suite at once, so it gets more than the 5 s default.
 test("DrawingRoom saves, restarts, reconnects, and purges a scene", async () => {
   const persistence = await mkdtemp(path.join(os.tmpdir(), "misty-drawing-room-"));
   let runtime;
@@ -109,7 +111,7 @@ test("DrawingRoom saves, restarts, reconnects, and purges a scene", async () => 
     if (runtime) await runtime.dispose();
     await rm(persistence, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test("DrawingRoom starts empty and rejects note-only bootstrap", async () => {
   const runtime = createRuntime();

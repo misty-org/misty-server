@@ -118,7 +118,7 @@ On the first start the setup service generates one secret, `MISTY_SERVER_SECRET`
 Setup's other commands run with `docker compose run --rm setup <command>`:
 
 - `rotate NAME…` gives a key its next version. The old value stays valid in its `*_PREVIOUS` slot until `retire NAME…`. `SPACE_LINK_ENCRYPTION_KEY`, `JOURNAL_COLLAB_ROOM_SALT` and `MISTY_BACKUP_AGE_IDENTITY` protect stored data, so they never rotate.
-- `operator-token` prints the operator token, for a service that calls the operator API. `backup-key` prints the backup key.
+- `operator-token` prints the operator token, for a service that calls the operator API. Setup also writes it to `operator/token` in the secrets volume, which a service beside the server can mount and read. `backup-key` prints the backup key.
 - `adopt-root` is for a secrets volume made before `MISTY_SERVER_SECRET`, which stores each key on its own. Such a volume keeps working unchanged, so nobody is signed out. `adopt-root` moves its keys onto the root, keeping each old value valid in its previous slot, so sessions survive. Afterwards, `retire` each key it moved. It leaves the three data-bound keys alone unless you pass `--discard-data`, which makes shared links and older backups unreadable. Use that only on a server with no data you need.
 
 The API's `/health` reports the commit its image was built from. Published images have it built in. When you build on the server, pass it with `MISTY_SERVER_VERSION=$(git rev-parse HEAD) docker compose up -d --build`.

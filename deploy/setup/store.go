@@ -52,9 +52,11 @@ var privateFiles = map[string]string{
 }
 
 // sharedFiles are written to a file of their own as well, for programs that
-// read *_FILE paths.
+// read *_FILE paths and for services beside the server: a billing service's
+// setup job copies operator/token, the token for the operator API.
 var sharedFiles = map[string]string{
-	"DB_PASSWORD": "postgres/app-password",
+	"DB_PASSWORD":          "postgres/app-password",
+	"MISTY_OPERATOR_TOKEN": "operator/token",
 }
 
 // renderedValues are written into server.env on every save, for the API and

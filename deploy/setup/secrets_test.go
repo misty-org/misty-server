@@ -116,6 +116,7 @@ func TestServerEnvGivesTheAPIItsKeysAndNothingMore(t *testing.T) {
 	for name, file := range map[string]string{
 		"DB_MIGRATION_PASSWORD": "postgres/superuser-password", "MISTY_BACKUP_AGE_IDENTITY": "backup/identity",
 		"CLOUDFLARE_TUNNEL_TOKEN": "cloudflared/token", serverenv.RootName: "server-secret",
+		"MISTY_OPERATOR_TOKEN": "operator/token",
 	} {
 		data, _ := os.ReadFile(filepath.Join(dir, file))
 		if strings.TrimSpace(string(data)) != store.Get(name) {

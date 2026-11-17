@@ -1,9 +1,11 @@
 name: misty
 
 # The Misty server stack. Everything you configure is in
-# three files under ~/.misty/.env/server/ (MISTY_ENV_DIR names another folder);
-# every secret is generated into the secrets volume by the setup service, which
-# also provisions Cloudflare on each start.
+# three files under ~/.misty/.env/server/ (MISTY_ENV_DIR names another folder):
+# MISTY_HOSTNAME in misty.env, CLOUDFLARE_API_TOKEN in cloudflare.env and the
+# Google client in google.env. The setup service generates one root secret
+# into the secrets volume, derives every key from it, and provisions
+# Cloudflare on each start.
 # Data lives in the pgdata volume and in R2, and is removed only when the
 # whole stack is (docker compose down --volumes).
 
@@ -28,8 +30,9 @@ x-tools: &tools
     dockerfile: deploy/setup/Dockerfile
 
 # What the API and the console read besides the three files. The rest of their
-# configuration (secrets, R2, the Worker hosts) is the secrets volume's
-# server.env, loaded when each starts.
+# configuration (the API's share of the root secret, R2, the Worker host) is
+# the secrets volume's server.env, loaded when each starts; they derive their
+# keys from it.
 x-server-environment: &server-environment
   CLOUDFLARE_API_TOKEN: ""
   MISTY_ENVIRONMENT: production
@@ -39,9 +42,9 @@ x-server-environment: &server-environment
   DB_USER: misty_app
 
 services:
-  # One-shot: generates missing secrets, refuses to start when the database
-  # holds data its secrets no longer match, and provisions the tunnel, DNS,
-  # R2 buckets and credentials, and the collaboration Worker.
+  # One-shot: generates the root secret on the first start, refuses to start
+  # when the database holds data its secrets no longer match, and provisions
+  # the tunnel, DNS, R2 buckets and credentials, and the collaboration Worker.
   # MISTY_TUNNEL_EXTRA_INGRESS (host=service, comma-separated) publishes more
   # hostnames through the same tunnel, for services that run beside the
   # server on the edge network. Set it where Compose runs, not in misty.env.
@@ -99,6 +102,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # The version /health reports for an image built here, such as
+      # MISTY_SERVER_VERSION=$(git rev-parse HEAD) docker compose up -d --build.
+      # Published images have their commit built in.
+      args:
+        MISTY_SERVER_VERSION: ${MISTY_SERVER_VERSION:-development}
     <<: *config
     # The three files, and Mailjet if this server sends email.
     env_file:

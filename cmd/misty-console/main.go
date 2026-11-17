@@ -23,6 +23,10 @@ func main() {
 	handoff := flag.String("handoff", "", "file to write the launch URL to for `misty server up --gui`")
 	envSchema := flag.String("env-schema", "", "JSON settings schema written by the CLI for the Configuration page")
 	flag.Parse()
+	if err := config.ApplyServerDefaults(); err != nil {
+		fmt.Fprintf(os.Stderr, "misty-console: %v\n", err)
+		os.Exit(1)
+	}
 	serverDir, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "misty-console: %v\n", err)

@@ -67,10 +67,8 @@ func provisionR2(ctx context.Context, cf *cloudflare, inputs Inputs, names Names
 	if err := ensureBucketToken(ctx, cf, store, names.BackupToken, names.BackupBucket, permission, "MISTY_BACKUP_R2_ACCESS_KEY", "MISTY_BACKUP_R2_SECRET_KEY"); err != nil {
 		return err
 	}
-	endpoint := "https://" + inputs.AccountID + ".r2.cloudflarestorage.com"
-	store.Set("R2_ENDPOINT", endpoint)
-	store.Set("R2_BUCKET", names.LibraryBucket)
-	store.Set("MISTY_BACKUP_BUCKET", names.BackupBucket)
+	// The API and the backups find their buckets from the hostname.
+	store.Set("R2_ENDPOINT", "https://"+cf.account+".r2.cloudflarestorage.com")
 	return nil
 }
 

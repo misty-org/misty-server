@@ -105,7 +105,23 @@ The API creates an account with limits on storage, shared Spaces and people per 
 
 ## Self-hosting
 
-A server for real use runs from `compose.yml`, not the CLI. You write three env files under `~/.misty/.env/server/` (`MISTY_ENV_DIR` names another folder). On every start the setup service generates missing secrets and provisions the Cloudflare tunnel, DNS, R2 buckets and Worker, and the migrate service applies migrations. The secrets live only in the stack's `secrets` volume, so keep a copy off the server.
+A server for real use runs from `compose.yml`, not the CLI. You write three env files under `~/.misty/.env/server/` (`MISTY_ENV_DIR` names another folder):
+
+| File | Values |
+| --- | --- |
+| `misty.env` | `MISTY_HOSTNAME`, plus any optional settings such as `MISTY_OWNER_EMAIL` |
+| `cloudflare.env` | `CLOUDFLARE_API_TOKEN`. Setup finds the zone from `MISTY_HOSTNAME` and the account from the zone. `CLOUDFLARE_ZONE_ID` and `CLOUDFLARE_ACCOUNT_ID` are still read when set, and must match. |
+| `google.env` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+
+On the first start the setup service generates one secret, `MISTY_SERVER_SECRET`, into the stack's `secrets` volume. Every key comes from it: session signing, the operator and metrics tokens, the database passwords, the collaboration keys and the backup key. Each key is derived with HKDF-SHA256 under its own label and version. The API gets only its own share, `MISTY_API_SECRET`, and the collaboration Worker gets only the values it checks with. On every start setup also provisions the Cloudflare tunnel, DNS, R2 buckets and Worker, and the migrate service applies migrations. Everything else follows from the hostname or comes from Cloudflare, so the secrets volume is the one thing to keep a copy of off the server.
+
+Setup's other commands run with `docker compose run --rm setup <command>`:
+
+- `rotate NAME…` gives a key its next version. The old value stays valid in its `*_PREVIOUS` slot until `retire NAME…`. `SPACE_LINK_ENCRYPTION_KEY`, `JOURNAL_COLLAB_ROOM_SALT` and `MISTY_BACKUP_AGE_IDENTITY` protect stored data, so they never rotate.
+- `operator-token` prints the operator token, for a service that calls the operator API. `backup-key` prints the backup key.
+- `adopt-root` is for a secrets volume made before `MISTY_SERVER_SECRET`, which stores each key on its own. Such a volume keeps working unchanged, so nobody is signed out. `adopt-root` moves its keys onto the root, keeping each old value valid in its previous slot, so sessions survive. Afterwards, `retire` each key it moved. It leaves the three data-bound keys alone unless you pass `--discard-data`, which makes shared links and older backups unreadable. Use that only on a server with no data you need.
+
+The API's `/health` reports the commit its image was built from. Published images have it built in. When you build on the server, pass it with `MISTY_SERVER_VERSION=$(git rev-parse HEAD) docker compose up -d --build`.
 
 ```sh
 git clone https://github.com/misty-org/misty-server.git

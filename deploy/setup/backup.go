@@ -15,6 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
 // Backups are pg_dump custom-format dumps encrypted to the stack's age key and
@@ -27,7 +29,10 @@ const (
 )
 
 func backupClient(store *Store) (*s3.Client, string, error) {
-	bucket, endpoint := store.Get("MISTY_BACKUP_BUCKET"), store.Get("R2_ENDPOINT")
+	bucket, endpoint := resourceNames(config.Getenv("MISTY_HOSTNAME")).BackupBucket, store.Get("R2_ENDPOINT")
+	if strings.TrimSpace(config.Getenv("MISTY_HOSTNAME")) == "" {
+		bucket = ""
+	}
 	access, secret := store.Get("MISTY_BACKUP_R2_ACCESS_KEY"), store.Get("MISTY_BACKUP_R2_SECRET_KEY")
 	if bucket == "" || endpoint == "" || access == "" || secret == "" {
 		return nil, "", errors.New("the backup bucket is not provisioned yet; the setup service must run first")
@@ -222,15 +227,19 @@ func restoreBackup(ctx context.Context, name string) error {
 	return nil
 }
 
-func printBackupKey() error {
+func printBackupKey() error { return printSecret("MISTY_BACKUP_AGE_IDENTITY") }
+
+// printSecret prints one key, stored or derived, to keep a copy off the
+// server or hand it to a service the operator runs.
+func printSecret(name string) error {
 	store, err := openStore(secretsDir())
 	if err != nil {
 		return err
 	}
-	identity := store.Get("MISTY_BACKUP_AGE_IDENTITY")
-	if identity == "" {
-		return errors.New("the backup key is missing")
+	value := store.Get(name)
+	if value == "" {
+		return fmt.Errorf("%s is missing; start the stack once first", name)
 	}
-	fmt.Println(identity)
+	fmt.Println(value)
 	return nil
 }

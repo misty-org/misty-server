@@ -98,7 +98,7 @@ func (monitor *healthMonitor) evaluate(ctx context.Context) (HealthSnapshot, int
 	checks["public_api"] = PublicAPIConfigurationCheck()
 
 	overall, status := SummarizeHealth(checks)
-	version := strings.TrimSpace(config.Getenv("MISTY_SERVER_VERSION"))
+	version := strings.TrimSpace(serverVersion)
 	if version == "" {
 		version = "development"
 	}

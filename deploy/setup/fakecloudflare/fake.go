@@ -127,6 +127,14 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	switch {
+	case len(parts) == 1 && parts[0] == "zones" && r.Method == "GET":
+		// The token sees one zone; list it when the filters match.
+		zones := []map[string]any{}
+		query := r.URL.Query()
+		if (query.Get("name") == "" || query.Get("name") == f.ZoneName) && (query.Get("account.id") == "" || query.Get("account.id") == f.AccountID) {
+			zones = append(zones, f.zone())
+		}
+		reply(w, 200, zones)
 	case len(parts) >= 2 && parts[0] == "zones" && parts[1] == f.ZoneID:
 		f.serveZone(w, r, parts[2:])
 	case len(parts) >= 2 && parts[0] == "accounts" && parts[1] == f.AccountID:
@@ -136,10 +144,14 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (f *Fake) zone() map[string]any {
+	return map[string]any{"id": f.ZoneID, "name": f.ZoneName, "account": map[string]any{"id": f.AccountID}}
+}
+
 func (f *Fake) serveZone(w http.ResponseWriter, r *http.Request, parts []string) {
 	switch {
 	case len(parts) == 0 && r.Method == "GET":
-		reply(w, 200, map[string]any{"id": f.ZoneID, "name": f.ZoneName, "account": map[string]any{"id": f.AccountID}})
+		reply(w, 200, f.zone())
 	case len(parts) == 1 && parts[0] == "dns_records" && r.Method == "GET":
 		records := []map[string]any{}
 		for _, record := range f.DNS {

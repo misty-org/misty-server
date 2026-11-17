@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/misty-org/misty-server/deploy/setup/fakecloudflare"
+	"github.com/misty-org/misty-server/internal/platform/serverenv"
 )
 
 const (
@@ -36,9 +37,10 @@ func newHarnessWith(t *testing.T, extra map[string]string) *harness {
 	fake := fakecloudflare.New("cf-token", testAccount, testZone, "misty.example")
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
+	// cloudflare.env holds only the API token: setup finds the zone and
+	// the account.
 	values := map[string]string{
 		"MISTY_HOSTNAME": "cloud.misty.example", "CLOUDFLARE_API_TOKEN": "cf-token",
-		"CLOUDFLARE_ACCOUNT_ID": testAccount, "CLOUDFLARE_ZONE_ID": testZone,
 		"GOOGLE_CLIENT_ID": "g", "GOOGLE_CLIENT_SECRET": "g",
 		"MISTY_CLOUDFLARE_API_URL": server.URL + "/client/v4",
 	}
@@ -53,7 +55,7 @@ func newHarnessWith(t *testing.T, extra map[string]string) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := generateMissing(store); err != nil {
+	if _, err := ensureRoot(store); err != nil {
 		t.Fatal(err)
 	}
 	return &harness{fake: fake, inputs: inputs, store: store, bundles: writeBundles(t)}
@@ -86,13 +88,18 @@ func (h *harness) provision(t *testing.T) error {
 	cf := newCloudflare(h.inputs)
 	names := resourceNames(h.inputs.Hostname)
 	ctx := context.Background()
-	if err := provisionTunnel(ctx, cf, h.inputs, names, h.store); err != nil {
+	inputs := h.inputs
+	zone, err := resolveZone(ctx, cf, &inputs)
+	if err != nil {
 		return err
 	}
-	if err := provisionR2(ctx, cf, h.inputs, names, h.store); err != nil {
+	if err := provisionTunnel(ctx, cf, inputs, zone, names, h.store); err != nil {
 		return err
 	}
-	return provisionWorkers(ctx, cf, h.inputs, names, h.store, h.bundles)
+	if err := provisionR2(ctx, cf, inputs, names, h.store); err != nil {
+		return err
+	}
+	return provisionWorkers(ctx, cf, inputs, names, h.store, h.bundles)
 }
 
 func TestProvisionCreatesEverythingOnce(t *testing.T) {
@@ -133,8 +140,18 @@ func TestProvisionCreatesEverythingOnce(t *testing.T) {
 	if collab.MigrationTag != "v5" || !collab.Subdomain || !strings.Contains(stringify(collab.Metadata["bindings"]), "JOURNAL_COLLAB_TICKET_PUBLIC_KEY") {
 		t.Fatalf("collab worker %+v", collab.Metadata)
 	}
-	if strings.Contains(stringify(collab.Metadata), h.store.Get("JOURNAL_COLLAB_TICKET_PRIVATE_KEY")) {
-		t.Fatal("the private ticket key was sent to Cloudflare")
+	for _, name := range []string{"JOURNAL_COLLAB_TICKET_PRIVATE_KEY", serverenv.RootName, serverenv.APISecretName, "JOURNAL_COLLAB_ROOM_SALT", "MISTY_AUTH_SIGNING_KEY"} {
+		if strings.Contains(stringify(collab.Metadata), h.store.Get(name)) {
+			t.Fatalf("%s was sent to Cloudflare", name)
+		}
+	}
+	for _, name := range []string{"JOURNAL_COLLAB_CONTROL_SECRET", "JOURNAL_COLLAB_PROJECTION_SECRET", "JOURNAL_COLLAB_TICKET_PUBLIC_KEY"} {
+		if !strings.Contains(stringify(collab.Metadata["bindings"]), h.store.Get(name)) {
+			t.Fatalf("the Worker did not get the derived %s", name)
+		}
+	}
+	if h.store.Get("R2_ENDPOINT") != "https://"+testAccount+".r2.cloudflarestorage.com" {
+		t.Fatalf("R2 endpoint %s: the account comes from the zone", h.store.Get("R2_ENDPOINT"))
 	}
 	if !strings.Contains(stringify(collab.Metadata["bindings"]), "https://cloud.misty.example/v1") {
 		t.Fatal("collab worker does not call back to the API")
@@ -216,8 +233,28 @@ func TestForeignDNSRecordStopsSetup(t *testing.T) {
 func TestWrongZoneStopsSetup(t *testing.T) {
 	h := newHarness(t)
 	h.fake.ZoneName = "other.example"
-	if err := h.provision(t); err == nil || !strings.Contains(err.Error(), "not in the zone") {
+	if err := h.provision(t); err == nil || !strings.Contains(err.Error(), "no zone that holds") {
 		t.Fatalf("expected a zone error, got %v", err)
+	}
+	pinned := newHarnessWith(t, map[string]string{"CLOUDFLARE_ZONE_ID": testZone})
+	pinned.fake.ZoneName = "other.example"
+	if err := pinned.provision(t); err == nil || !strings.Contains(err.Error(), "not in the zone") {
+		t.Fatalf("expected a zone error, got %v", err)
+	}
+}
+
+func TestZoneAndAccountSetByTheOperatorMustMatch(t *testing.T) {
+	h := newHarnessWith(t, map[string]string{"CLOUDFLARE_ACCOUNT_ID": testAccount, "CLOUDFLARE_ZONE_ID": testZone})
+	if err := h.provision(t); err != nil {
+		t.Fatalf("the old cloudflare.env keys still work: %v", err)
+	}
+	other := newHarnessWith(t, map[string]string{"CLOUDFLARE_ACCOUNT_ID": "11111111111111111111111111111111", "CLOUDFLARE_ZONE_ID": testZone})
+	if err := other.provision(t); err == nil || !strings.Contains(err.Error(), "another account") {
+		t.Fatalf("expected an account mismatch, got %v", err)
+	}
+	filtered := newHarnessWith(t, map[string]string{"CLOUDFLARE_ACCOUNT_ID": "11111111111111111111111111111111"})
+	if err := filtered.provision(t); err == nil || !strings.Contains(err.Error(), "no zone that holds") {
+		t.Fatalf("an account without the zone must fail, got %v", err)
 	}
 }
 
@@ -235,6 +272,20 @@ func TestOutageAfterASuccessfulRunKeepsTheStackStarting(t *testing.T) {
 	fresh.fake.Fail = true
 	if err := provision(context.Background(), fresh.inputs, fresh.store); err == nil {
 		t.Fatal("a first run must fail while Cloudflare is down")
+	}
+}
+
+func TestDroppingTheZoneFromCloudflareEnvKeepsTheOutageFallback(t *testing.T) {
+	h := newHarnessWith(t, map[string]string{"CLOUDFLARE_ACCOUNT_ID": testAccount, "CLOUDFLARE_ZONE_ID": testZone})
+	t.Setenv("MISTY_WORKERS_DIR", h.bundles)
+	if err := provision(context.Background(), h.inputs, h.store); err != nil {
+		t.Fatal(err)
+	}
+	h.fake.Fail = true
+	tokenOnly := h.inputs
+	tokenOnly.AccountID, tokenOnly.ZoneID = "", ""
+	if err := provision(context.Background(), tokenOnly, h.store); err != nil {
+		t.Fatalf("the recorded zone and account stand in for the removed lines: %v", err)
 	}
 }
 

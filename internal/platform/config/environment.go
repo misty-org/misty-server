@@ -6,6 +6,8 @@ package config
 import (
 	"os"
 	"strings"
+
+	"github.com/misty-org/misty-server/internal/platform/serverenv"
 )
 
 const defaultPort = "8080"
@@ -34,4 +36,21 @@ func Getenv(name string) string {
 // LookupEnv reports whether an environment value is explicitly present.
 func LookupEnv(name string) (string, bool) {
 	return os.LookupEnv(name)
+}
+
+// ApplyServerDefaults fills in, for each value the environment leaves unset,
+// what a server stack works out for itself (serverenv.Defaults): its keys from
+// MISTY_API_SECRET, and its public URL and bucket from MISTY_HOSTNAME. The
+// server and the console call it once at startup, before reading anything.
+func ApplyServerDefaults() error {
+	values, err := serverenv.Defaults(os.Getenv)
+	if err != nil {
+		return err
+	}
+	for name, value := range values {
+		if err := os.Setenv(name, value); err != nil {
+			return err
+		}
+	}
+	return nil
 }

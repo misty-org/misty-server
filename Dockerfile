@@ -2,6 +2,8 @@
 # target platform, so an amd64 image builds at full speed on Apple Silicon.
 FROM --platform=$BUILDPLATFORM golang:1.25.12-bookworm@sha256:ea341baa9bd5ba6784f6d7161ace70544349a6242d54d34a0fbfd2c4d51c9d58 AS builder
 ARG TARGETOS TARGETARCH
+# The commit or release /health reports; the image workflow passes the commit.
+ARG MISTY_SERVER_VERSION=development
 ENV GOOSE_TAGS="no_clickhouse no_libsql no_mssql no_mysql no_sqlite3 no_vertica no_ydb"
 
 WORKDIR /src
@@ -18,7 +20,7 @@ COPY . .
 RUN /host/goose -dir internal/platform/db/migrations validate
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOMAXPROCS=2 CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -p 2 \
     -trimpath \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X github.com/misty-org/misty-server/internal/app.serverVersion=${MISTY_SERVER_VERSION}" \
     -o /out/misty-server ./cmd/misty-server
 
 FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818

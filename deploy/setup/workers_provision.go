@@ -8,7 +8,9 @@ import (
 )
 
 // provisionWorkers deploys the collaboration Worker and
-// records where the API reaches it.
+// records where the API reaches it. The Worker gets only the values it checks
+// with, each derived here: the ticket public key, never the private key, and
+// never the root or the API secret.
 func provisionWorkers(ctx context.Context, cf *cloudflare, inputs Inputs, names Names, store *Store, bundles string) error {
 	var account struct {
 		Subdomain string `json:"subdomain"`

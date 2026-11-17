@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -22,9 +23,60 @@ const (
 	databaseTimeout = 2 * time.Minute
 )
 
-func superuserDSN(store *Store) string {
+func superuserDSN(store *Store) string { return superuserDSNWith(store.Get("DB_MIGRATION_PASSWORD")) }
+
+func superuserDSNWith(password string) string {
 	return fmt.Sprintf("host=%s port=5432 user=%s password=%s dbname=%s sslmode=disable",
-		envOr("MISTY_DB_HOST", dbHost), dbSuperuser, store.Get("DB_MIGRATION_PASSWORD"), dbName)
+		envOr("MISTY_DB_HOST", dbHost), dbSuperuser, password, dbName)
+}
+
+// openSuperuser connects as the superuser. PostgreSQL keeps the password it
+// was created with, so after a rotation (or adopt-root) the current one fails
+// once: migrate then signs in with the previous one and moves the role onto
+// the current one.
+func openSuperuser(ctx context.Context, store *Store) (*sql.DB, error) {
+	database, err := sql.Open("postgres", superuserDSN(store))
+	if err != nil {
+		return nil, err
+	}
+	err = waitForDatabase(ctx, database)
+	previous := store.Get("DB_MIGRATION_PASSWORD_PREVIOUS")
+	if err == nil || !wrongPassword(err) || previous == "" {
+		if err != nil {
+			database.Close()
+			return nil, err
+		}
+		return database, nil
+	}
+	database.Close()
+	old, err := sql.Open("postgres", superuserDSNWith(previous))
+	if err != nil {
+		return nil, err
+	}
+	defer old.Close()
+	if err := waitForDatabase(ctx, old); err != nil {
+		return nil, err
+	}
+	statement := `ALTER ROLE ` + pq.QuoteIdentifier(dbSuperuser) + ` WITH PASSWORD ` + pq.QuoteLiteral(store.Get("DB_MIGRATION_PASSWORD"))
+	if _, err := old.ExecContext(ctx, statement); err != nil {
+		return nil, fmt.Errorf("move the superuser onto its new password: %w", err)
+	}
+	log.Printf("the database superuser now uses its new password; retire DB_MIGRATION_PASSWORD to drop the old one")
+	database, err = sql.Open("postgres", superuserDSN(store))
+	if err != nil {
+		return nil, err
+	}
+	if err := waitForDatabase(ctx, database); err != nil {
+		database.Close()
+		return nil, err
+	}
+	return database, nil
+}
+
+// wrongPassword reports PostgreSQL's invalid_password error.
+func wrongPassword(err error) bool {
+	var failure *pq.Error
+	return errors.As(err, &failure) && failure.Code == "28P01"
 }
 
 // runMigrate keeps the API's restricted role in step with the generated
@@ -38,14 +90,11 @@ func runMigrate(ctx context.Context) error {
 	if !store.Has("DB_MIGRATION_PASSWORD") || !store.Has("DB_PASSWORD") {
 		return fmt.Errorf("the database passwords are missing; the setup service must run first")
 	}
-	database, err := sql.Open("postgres", superuserDSN(store))
+	database, err := openSuperuser(ctx, store)
 	if err != nil {
 		return err
 	}
 	defer database.Close()
-	if err := waitForDatabase(ctx, database); err != nil {
-		return err
-	}
 	role := pq.QuoteIdentifier(dbAppRole)
 	password := pq.QuoteLiteral(store.Get("DB_PASSWORD"))
 	statements := []string{
@@ -90,7 +139,8 @@ func waitForDatabase(ctx context.Context, database *sql.DB) error {
 		if err == nil {
 			return nil
 		}
-		if time.Now().After(deadline) || ctx.Err() != nil {
+		// A wrong password does not get better by waiting.
+		if wrongPassword(err) || time.Now().After(deadline) || ctx.Err() != nil {
 			return fmt.Errorf("the database did not answer: %w", err)
 		}
 		time.Sleep(2 * time.Second)

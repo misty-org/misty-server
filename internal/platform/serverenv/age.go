@@ -1,4 +1,4 @@
-package main
+package serverenv
 
 import (
 	"errors"
@@ -11,7 +11,8 @@ import (
 // that `age -d -i identity` opens anywhere. The identity is 32 random bytes in
 // bech32 ("AGE-SECRET-KEY-1…"); the recipient is its X25519 public key ("age1…").
 
-func newAgeIdentity(scalar []byte) (string, error) {
+// AgeIdentity encodes a 32-byte X25519 scalar as an age identity.
+func AgeIdentity(scalar []byte) (string, error) {
 	if len(scalar) != curve25519.ScalarSize {
 		return "", errors.New("age identity needs 32 bytes")
 	}
@@ -22,7 +23,8 @@ func newAgeIdentity(scalar []byte) (string, error) {
 	return strings.ToUpper(encoded), nil
 }
 
-func ageRecipient(identity string) (string, error) {
+// AgeRecipient is the public recipient (age1…) of an age identity.
+func AgeRecipient(identity string) (string, error) {
 	hrp, scalar, err := bech32Decode(strings.ToLower(strings.TrimSpace(identity)))
 	if err != nil || hrp != "age-secret-key-" || len(scalar) != curve25519.ScalarSize {
 		return "", errors.New("must be an age X25519 identity")

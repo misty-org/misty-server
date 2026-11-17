@@ -7,24 +7,28 @@ import (
 	"strings"
 
 	"github.com/misty-org/misty-server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/serverenv"
 )
 
 // requiredInputs are the values the operator writes into the three files under
 // ~/.misty/.env/server/. Every one is required: Misty has no optional integrations. Setup
 // configures no mail provider, so a server it sets up sends no email.
+// Setup finds the Cloudflare zone from MISTY_HOSTNAME and the account from the
+// zone; CLOUDFLARE_ZONE_ID and CLOUDFLARE_ACCOUNT_ID, still read when set, pin
+// them.
 var requiredInputs = []struct{ File, Name string }{
 	{"misty.env", "MISTY_HOSTNAME"},
 	{"cloudflare.env", "CLOUDFLARE_API_TOKEN"},
-	{"cloudflare.env", "CLOUDFLARE_ACCOUNT_ID"},
-	{"cloudflare.env", "CLOUDFLARE_ZONE_ID"},
 	{"google.env", "GOOGLE_CLIENT_ID"},
 	{"google.env", "GOOGLE_CLIENT_SECRET"},
 }
 
 // Inputs are the operator's values that setup itself uses.
 type Inputs struct {
-	Hostname  string
-	Token     string
+	Hostname string
+	Token    string
+	// AccountID and ZoneID are the operator's, when set; provisioning fills
+	// them in from Cloudflare otherwise.
 	AccountID string
 	ZoneID    string
 	// APIURL is the Cloudflare API base. Only tests point it elsewhere.
@@ -70,8 +74,10 @@ func readInputs(getenv func(string) string) (Inputs, error) {
 	if err := validHostname("MISTY_HOSTNAME", inputs.Hostname); err != nil {
 		return Inputs{}, err
 	}
-	if !cloudflareID.MatchString(inputs.AccountID) || !cloudflareID.MatchString(inputs.ZoneID) {
-		return Inputs{}, fmt.Errorf("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ZONE_ID are 32 hexadecimal characters")
+	for _, id := range []string{inputs.AccountID, inputs.ZoneID} {
+		if id != "" && !cloudflareID.MatchString(id) {
+			return Inputs{}, fmt.Errorf("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ZONE_ID, when set, are 32 hexadecimal characters")
+		}
 	}
 	if strings.ContainsAny(inputs.Token, " \t\r\n\"\\") {
 		return Inputs{}, fmt.Errorf("CLOUDFLARE_API_TOKEN has an invalid format")
@@ -139,34 +145,10 @@ func validHostname(name, host string) error {
 	return nil
 }
 
-// Names derives every Cloudflare resource name from the hostname, so a second
-// run (or a rebuilt server with the same files) finds the same resources.
-type Names struct {
-	Tunnel, LibraryBucket, BackupBucket, LibraryToken, BackupToken, CollabWorker string
-}
+// Names are the Cloudflare resource names a hostname gets.
+type Names = serverenv.Names
 
-func resourceNames(hostname string) Names {
-	slug := strings.ReplaceAll(hostname, ".", "-")
-	// Worker and bucket names allow 63 characters; leave room for suffixes.
-	if len(slug) > 40 {
-		slug = strings.TrimRight(slug[:40], "-")
-	}
-	base := "misty-" + slug
-	return Names{
-		Tunnel:        base,
-		LibraryBucket: base + "-library",
-		BackupBucket:  base + "-backups",
-		LibraryToken:  base + " library",
-		BackupToken:   base + " backups",
-		CollabWorker:  base + "-collab",
-	}
-}
-
-// deriveConfig writes the values the API reads that follow from the hostname.
-func deriveConfig(store *Store, inputs Inputs) {
-	origin := "https://" + inputs.Hostname
-	store.Set("MISTY_PUBLIC_API_URL", origin+"/v1")
-}
+func resourceNames(hostname string) Names { return serverenv.ResourceNames(hostname) }
 
 func envOr(name, fallback string) string {
 	if value := strings.TrimSpace(config.Getenv(name)); value != "" {

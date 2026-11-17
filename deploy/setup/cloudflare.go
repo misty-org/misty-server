@@ -15,8 +15,9 @@ import (
 // cloudflare is a minimal client for the Cloudflare v4 API. Errors name the
 // request and Cloudflare's error codes, never the token or response bodies.
 type cloudflare struct {
-	base    string
-	token   string
+	base  string
+	token string
+	// account is set once resolveZone has found it.
 	account string
 	http    *http.Client
 }

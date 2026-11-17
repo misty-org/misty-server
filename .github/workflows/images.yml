@@ -74,6 +74,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          # The API reports the commit it was built from in /health.
+          build-args: |
+            MISTY_SERVER_VERSION=${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

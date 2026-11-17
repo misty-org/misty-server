@@ -16,7 +16,7 @@ func TestExtraIngressRoutesAndPointsDNS(t *testing.T) {
 	if len(fake.Tunnels) != 1 || len(fake.DNS) != 3 {
 		t.Fatalf("resources: tunnels=%d dns=%d", len(fake.Tunnels), len(fake.DNS))
 	}
-	tunnelID := h.store.Get("MISTY_CLOUDFLARE_TUNNEL_ID")
+	tunnelID := h.store.State[tunnelState]
 	want := []string{
 		"cloud.misty.example=" + apiService,
 		"billing.misty.example=http://billing:8091",

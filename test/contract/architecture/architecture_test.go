@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/misty-org/misty-server/internal/platform/serverenv"
 )
 
 func TestRepositoryLayout(t *testing.T) {
@@ -100,7 +102,11 @@ func TestEnvironmentAccessIsCentralized(t *testing.T) {
 
 // environmentContract is every environment variable the server reads. A
 // server's values come from ~/.misty/.env/server/ and the setup container;
-// no env file is committed.
+// no env file is committed. On a stack setup manages, the keys come from
+// MISTY_API_SECRET and MISTY_SERVER_KEY_VERSIONS, and MISTY_PUBLIC_API_URL and
+// R2_BUCKET from MISTY_HOSTNAME (config.ApplyServerDefaults); a value set
+// under its own name still wins. serverEnvironmentContract lists what the
+// server reads only through that derivation.
 const environmentContract = `
 CLOUDFLARE_API_TOKEN
 DB_CONN_MAX_IDLE_TIME
@@ -151,7 +157,6 @@ MISTY_R2_UPLOAD_URL_TTL
 MISTY_RECALL
 MISTY_RECALL_BACKLOG_CAP
 MISTY_RELEASE_CHANNEL
-MISTY_SERVER_VERSION
 MISTY_SIGNUP_LIMITS
 MISTY_SPACE_LEVELS
 MISTY_WEBSITE_URL
@@ -166,10 +171,17 @@ TRUSTED_PROXY_CIDRS
 TRUST_PROXY_HEADERS
 `
 
+// serverEnvironmentContract is read by serverenv.Defaults, through the
+// getenv it is given rather than config.Getenv.
+const serverEnvironmentContract = `
+MISTY_API_SECRET
+MISTY_SERVER_KEY_VERSIONS
+`
+
 func TestEnvironmentContractIsExplicit(t *testing.T) {
 	root := repositoryRoot(t)
 	documented := map[string]bool{}
-	for _, name := range strings.Fields(environmentContract) {
+	for _, name := range strings.Fields(environmentContract + serverEnvironmentContract) {
 		documented[name] = true
 	}
 
@@ -207,6 +219,23 @@ func TestEnvironmentContractIsExplicit(t *testing.T) {
 		if !documented[name] {
 			t.Errorf("environment variable %s is missing from the environment contract", name)
 		}
+	}
+}
+
+// Every key the API derives is one it reads, and the derivation's own
+// variables are the ones listed.
+func TestDerivedKeysAreInTheEnvironmentContract(t *testing.T) {
+	documented := map[string]bool{}
+	for _, name := range strings.Fields(environmentContract) {
+		documented[name] = true
+	}
+	for _, key := range serverenv.Keys {
+		if key.Scope == serverenv.FromAPISecret && !documented[key.Name] {
+			t.Errorf("the API derives %s but the environment contract does not list it", key.Name)
+		}
+	}
+	if strings.Join(strings.Fields(serverEnvironmentContract), " ") != serverenv.APISecretName+" "+serverenv.VersionsName {
+		t.Errorf("serverEnvironmentContract must list %s and %s", serverenv.APISecretName, serverenv.VersionsName)
 	}
 }
 

@@ -297,4 +297,172 @@ describe("collaboration ticket verification", () => {
     expect(claims.drawing_id).toBe("drawing_1");
     expect(claims.resource_type).toBe("drawing");
   });
+
+  it("accepts an image ticket in the matching image room", async () => {
+    const api = await issuer();
+    const token = await api.mint({
+      resource_type: "image",
+      resource_id: "item_1",
+      note_id: undefined,
+      image_id: "item_1",
+    });
+
+    const claims = await verifyTicket(token, {
+      ...verificationContext(api.publicKeyBase64),
+      resourceType: "image",
+    });
+
+    expect(claims.image_id).toBe("item_1");
+    expect(claims.resource_type).toBe("image");
+  });
+
+  it("rejects an image ticket whose image id is not its resource", async () => {
+    const api = await issuer();
+    const token = await api.mint({
+      resource_type: "image",
+      resource_id: "item_1",
+      note_id: undefined,
+      image_id: "item_2",
+    });
+
+    await expectRejection(
+      verifyTicket(token, {
+        ...verificationContext(api.publicKeyBase64),
+        resourceType: "image",
+      }),
+      "ticket_resource_invalid",
+    );
+  });
+
+  it("accepts a code ticket in the matching code room", async () => {
+    const api = await issuer();
+    const token = await api.mint({
+      resource_type: "code",
+      resource_id: "codesession_1",
+      note_id: undefined,
+      code_session_id: "codesession_1",
+    });
+
+    const claims = await verifyTicket(token, {
+      ...verificationContext(api.publicKeyBase64),
+      resourceType: "code",
+    });
+
+    expect(claims.code_session_id).toBe("codesession_1");
+    expect(claims.resource_type).toBe("code");
+  });
+
+  it("rejects a code ticket whose session is not its resource", async () => {
+    const api = await issuer();
+    const token = await api.mint({
+      resource_type: "code",
+      resource_id: "codesession_1",
+      note_id: undefined,
+      code_session_id: "codesession_2",
+    });
+
+    await expectRejection(
+      verifyTicket(token, {
+        ...verificationContext(api.publicKeyBase64),
+        resourceType: "code",
+      }),
+      "ticket_resource_invalid",
+    );
+  });
+
+  it("refuses a drawing ticket in a code room", async () => {
+    const api = await issuer();
+    const token = await api.mint({
+      resource_type: "drawing",
+      resource_id: "drawing_1",
+      note_id: undefined,
+      drawing_id: "drawing_1",
+    });
+
+    await expectRejection(
+      verifyTicket(token, {
+        ...verificationContext(api.publicKeyBase64),
+        resourceType: "code",
+      }),
+      "ticket_resource_mismatch",
+    );
+  });
+  const resourceClaim = (kind: "deck" | "workbook", id: string): Partial<TicketClaims> =>
+    kind === "deck" ? { deck_id: id } : { workbook_id: id };
+
+  for (const kind of ["deck", "workbook"] as const) {
+    const claim = kind === "deck" ? "deck_id" : "workbook_id";
+
+    it(`accepts a ${kind} ticket in the matching ${kind} room`, async () => {
+      const api = await issuer();
+      const token = await api.mint({
+        resource_type: kind,
+        resource_id: `${kind}_1`,
+        note_id: undefined,
+        ...resourceClaim(kind, `${kind}_1`),
+      });
+
+      const claims = await verifyTicket(token, {
+        ...verificationContext(api.publicKeyBase64),
+        resourceType: kind,
+      });
+
+      expect(kind === "deck" ? claims.deck_id : claims.workbook_id).toBe(`${kind}_1`);
+      expect(claims.resource_type).toBe(kind);
+    });
+
+    it(`rejects a ${kind} ticket whose ${claim} is not its resource`, async () => {
+      const api = await issuer();
+      const token = await api.mint({
+        resource_type: kind,
+        resource_id: `${kind}_1`,
+        note_id: undefined,
+        ...resourceClaim(kind, `${kind}_2`),
+      });
+
+      await expectRejection(
+        verifyTicket(token, {
+          ...verificationContext(api.publicKeyBase64),
+          resourceType: kind,
+        }),
+        "ticket_resource_invalid",
+      );
+    });
+
+    it(`refuses a drawing ticket in a ${kind} room`, async () => {
+      const api = await issuer();
+      const token = await api.mint({
+        resource_type: "drawing",
+        resource_id: "drawing_1",
+        note_id: undefined,
+        drawing_id: "drawing_1",
+      });
+
+      await expectRejection(
+        verifyTicket(token, {
+          ...verificationContext(api.publicKeyBase64),
+          resourceType: kind,
+        }),
+        "ticket_resource_mismatch",
+      );
+    });
+  }
+
+  it("refuses a deck ticket in a workbook room", async () => {
+    const api = await issuer();
+    const token = await api.mint({
+      resource_type: "deck",
+      resource_id: "deck_1",
+      note_id: undefined,
+      deck_id: "deck_1",
+    });
+
+    await expectRejection(
+      verifyTicket(token, {
+        ...verificationContext(api.publicKeyBase64),
+        resourceType: "workbook",
+      }),
+      "ticket_resource_mismatch",
+    );
+  });
 });

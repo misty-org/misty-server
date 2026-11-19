@@ -12,6 +12,10 @@
     "bindings": [
       { "name": "NOTE_ROOM", "class_name": "NoteRoom" },
       { "name": "DRAWING_ROOM", "class_name": "DrawingRoom" },
+      { "name": "IMAGE_ROOM", "class_name": "ImageRoom" },
+      { "name": "CODE_ROOM", "class_name": "CodeRoom" },
+      { "name": "DECK_ROOM", "class_name": "DeckRoom" },
+      { "name": "WORKBOOK_ROOM", "class_name": "WorkbookRoom" },
     ],
   },
 
@@ -21,6 +25,9 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["NoteRoom"] },
     { "tag": "v2", "new_sqlite_classes": ["DrawingRoom"] },
+    { "tag": "v3", "new_sqlite_classes": ["ImageRoom"] },
+    { "tag": "v4", "new_sqlite_classes": ["CodeRoom"] },
+    { "tag": "v5", "new_sqlite_classes": ["DeckRoom", "WorkbookRoom"] },
   ],
 
   "vars": {

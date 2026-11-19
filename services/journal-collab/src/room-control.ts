@@ -4,20 +4,33 @@ import { jsonResponse } from "./control-protocol";
 import { emptyDocumentBytes } from "./document-content";
 import { readDocumentSnapshot } from "./document-persistence";
 import { applyDrawingScene, readDrawingScene } from "./room-drawing-control";
+import {
+  getHistoryVersion,
+  listHistoryVersions,
+  restoreHistoryVersion,
+  setItemTitle,
+} from "./room-history-control";
 import { bootstrapNote, replaceNoteMarkdown } from "./room-note-control";
 import { PURGED_KEY, type RoomState } from "./room-state";
+import type { CollaborationResourceType } from "./ticket";
 
 /** Everything a control command may read or change in its room. */
 export interface RoomControlContext {
   readonly document: Y.Doc;
   readonly storage: DurableObjectStorage;
   readonly state: RoomState;
+  /** The kind of document the room holds. */
+  readonly resourceType: CollaborationResourceType;
+  /** Whether the room keeps earlier versions: docs, whiteboards, decks and workbooks. */
+  readonly keepsHistory: boolean;
   readonly supportsMarkdownBootstrap: boolean;
   readonly supportsDrawingScene: boolean;
   save(): Promise<void>;
   publishNoteProjection(): Promise<void>;
   disconnectSupersededSockets(): void;
   disconnectUsers(userIDs: string[] | null): void;
+  /** Closes every socket with this code, as a purge does with "resource_deleted". */
+  closeAllSockets(code: string): void;
 }
 
 /** Handles authenticated control commands from the Go API. */
@@ -38,6 +51,14 @@ export async function handleRoomControl(
       return bootstrapNote(context, payload);
     case "replace_markdown":
       return replaceNoteMarkdown(context, payload);
+    case "history_list":
+      return listHistoryVersions(context);
+    case "history_get":
+      return getHistoryVersion(context, payload);
+    case "history_restore":
+      return restoreHistoryVersion(context, payload);
+    case "title":
+      return setItemTitle(context, payload);
     case "acl":
       return setACLVersion(context, payload);
     case "disconnect": {
@@ -90,9 +111,10 @@ async function roomStatus(context: RoomControlContext): Promise<Response> {
 
 async function purgeRoom(context: RoomControlContext): Promise<Response> {
   // Keep only a tombstone. It blocks already-minted tickets and delayed
-  // callbacks without retaining any document content.
-  context.disconnectUsers(null);
+  // callbacks without retaining any document content. Open sockets close as
+  // deleted, so their clients stop rather than reconnect.
   context.state.purged = true;
+  context.closeAllSockets("resource_deleted");
   await context.storage.deleteAll();
   await context.storage.put(PURGED_KEY, true);
   context.state.aclVersion = 0;

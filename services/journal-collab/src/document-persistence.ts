@@ -102,6 +102,19 @@ export async function readDocumentSnapshot(
  * Non-update protocol messages return null.
  */
 export function projectedDocumentBytes(document: Y.Doc, message: Uint8Array): number | null {
+  return withProjectedDocument(document, message, (_projected, bytes) => bytes);
+}
+
+/**
+ * Applies an incoming Yjs update to a copy of the document and hands the copy and its compact
+ * size to `inspect`, before anything reaches the room. Non-update protocol messages, and
+ * malformed ones, return null.
+ */
+export function withProjectedDocument<T>(
+  document: Y.Doc,
+  message: Uint8Array,
+  inspect: (projected: Y.Doc, projectedBytes: number) => T,
+): T | null {
   try {
     const decoder = decoding.createDecoder(message);
     if (decoding.readVarUint(decoder) !== MESSAGE_SYNC) return null;
@@ -113,7 +126,7 @@ export function projectedDocumentBytes(document: Y.Doc, message: Uint8Array): nu
     try {
       Y.applyUpdate(projected, Y.encodeStateAsUpdate(document));
       Y.applyUpdate(projected, incomingUpdate);
-      return Y.encodeStateAsUpdate(projected).byteLength;
+      return inspect(projected, Y.encodeStateAsUpdate(projected).byteLength);
     } finally {
       projected.destroy();
     }
@@ -121,6 +134,19 @@ export function projectedDocumentBytes(document: Y.Doc, message: Uint8Array): nu
     // Let y-partyserver handle malformed protocol messages consistently.
     return null;
   }
+}
+
+/** The committed snapshot's manifest, or null before the first save. */
+export async function currentSnapshotManifest(
+  storage: DurableObjectStorage,
+): Promise<SnapshotManifest | null> {
+  const current = await storage.get<SnapshotManifest>(CURRENT_MANIFEST_KEY);
+  return isSnapshotManifest(current) ? current : null;
+}
+
+/** The committed snapshot's size: what the room stores for its document now. */
+export async function currentSnapshotBytes(storage: DurableObjectStorage): Promise<number> {
+  return (await currentSnapshotManifest(storage))?.byteLength ?? 0;
 }
 
 function manifestChunkKeys(manifest: SnapshotManifest): string[] {
@@ -204,7 +230,7 @@ function isSnapshotManifest(value: unknown): value is SnapshotManifest {
   );
 }
 
-async function sha256(value: Uint8Array): Promise<string> {
+export async function sha256(value: Uint8Array): Promise<string> {
   const input = new Uint8Array(value).buffer;
   const digest = await crypto.subtle.digest("SHA-256", input);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");

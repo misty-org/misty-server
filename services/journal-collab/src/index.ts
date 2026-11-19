@@ -1,9 +1,17 @@
 import { routePartykitRequest } from "partyserver";
 
-import { DrawingRoom, NoteRoom, type Env } from "./room";
+import {
+  CodeRoom,
+  DeckRoom,
+  DrawingRoom,
+  ImageRoom,
+  NoteRoom,
+  WorkbookRoom,
+  type Env,
+} from "./room";
 import { responseWithRequestID } from "./response";
 
-export { DrawingRoom, NoteRoom };
+export { CodeRoom, DeckRoom, DrawingRoom, ImageRoom, NoteRoom, WorkbookRoom };
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {

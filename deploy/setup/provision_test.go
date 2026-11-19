@@ -130,7 +130,7 @@ func TestProvisionCreatesEverythingOnce(t *testing.T) {
 		t.Fatal("library credentials do not match the token")
 	}
 	collab := fake.Scripts[names.CollabWorker]
-	if collab.MigrationTag != "v2" || !collab.Subdomain || !strings.Contains(stringify(collab.Metadata["bindings"]), "JOURNAL_COLLAB_TICKET_PUBLIC_KEY") {
+	if collab.MigrationTag != "v5" || !collab.Subdomain || !strings.Contains(stringify(collab.Metadata["bindings"]), "JOURNAL_COLLAB_TICKET_PUBLIC_KEY") {
 		t.Fatalf("collab worker %+v", collab.Metadata)
 	}
 	if strings.Contains(stringify(collab.Metadata), h.store.Get("JOURNAL_COLLAB_TICKET_PRIVATE_KEY")) {

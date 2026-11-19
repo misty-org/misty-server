@@ -34,6 +34,10 @@ export function createRuntime(persistence, options = {}) {
     durableObjects: {
       NOTE_ROOM: { className: "NoteRoom", useSQLite: true },
       DRAWING_ROOM: { className: "DrawingRoom", useSQLite: true },
+      IMAGE_ROOM: { className: "ImageRoom", useSQLite: true },
+      CODE_ROOM: { className: "CodeRoom", useSQLite: true },
+      DECK_ROOM: { className: "DeckRoom", useSQLite: true },
+      WORKBOOK_ROOM: { className: "WorkbookRoom", useSQLite: true },
     },
     durableObjectsPersist: persistence,
     bindings,
@@ -83,9 +87,15 @@ export async function waitFor(predicate) {
   throw new Error("runtime collaboration condition timed out");
 }
 
-export function mintTicket(room, userID, resourceType = "note") {
-  const resourceID =
-    resourceType === "drawing" ? "drawing-runtime" : "note-runtime";
+const resourceIDClaims = {
+  note: "note_id",
+  drawing: "drawing_id",
+  image: "image_id",
+  code: "code_session_id",
+};
+
+export function mintTicket(room, userID, resourceType = "note", role = "editor") {
+  const resourceID = `${resourceType}-runtime`;
   const header = base64Url(JSON.stringify({ alg: "EdDSA", typ: "JWT" }));
   const payload = base64Url(
     JSON.stringify({
@@ -96,11 +106,9 @@ export function mintTicket(room, userID, resourceType = "note") {
       space_id: "space-runtime",
       resource_type: resourceType,
       resource_id: resourceID,
-      ...(resourceType === "drawing"
-        ? { drawing_id: resourceID }
-        : { note_id: resourceID }),
+      [resourceIDClaims[resourceType]]: resourceID,
       room,
-      role: "editor",
+      role,
       acl_version: 1,
       exp: Math.floor(Date.now() / 1_000) + 60,
     }),

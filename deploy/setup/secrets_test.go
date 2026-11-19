@@ -167,7 +167,7 @@ func TestWranglerConfigsParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if collab.Config.CompatibilityDate == "" || len(collab.Config.DurableObjects.Bindings) != 2 || len(collab.Config.Migrations) != 2 || collab.Config.Vars["JOURNAL_COLLAB_ISSUER"] != "misty-api" {
+	if collab.Config.CompatibilityDate == "" || len(collab.Config.DurableObjects.Bindings) != 6 || len(collab.Config.Migrations) != 5 || collab.Config.Vars["JOURNAL_COLLAB_ISSUER"] != "misty-api" {
 		t.Fatalf("collab config %+v", collab.Config)
 	}
 	if len(collab.Modules) != 1 {

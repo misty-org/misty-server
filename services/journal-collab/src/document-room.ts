@@ -4,12 +4,15 @@ import type { Connection, ConnectionContext } from "partyserver";
 import { jsonResponse } from "./control-protocol";
 import { documentStatusMessage } from "./document-status";
 import { pushDrawingActivity } from "./document-drawing-activity";
+import { pushItemProjection } from "./document-item-projection";
 import { pushNoteProjection } from "./document-note-projection";
+import { deckSlideCount, workbookCellCount } from "./item-text";
 import { closeSocket, countSockets } from "./room-connections";
 import { admitSocket } from "./room-admission";
 import { exportDocumentUpdate } from "./room-document-export";
 import { logRoomEvent } from "./room-log";
-import { gateDocumentUpdate } from "./room-message-gate";
+import { readRoomLimits } from "./room-limits";
+import { gateDocumentUpdate, type GrowthLimit } from "./room-message-gate";
 import { PendingMarkdownLease } from "./room-pending-lease";
 import { loadRoomSnapshot, saveRoomSnapshot, type RoomSnapshotContext } from "./room-snapshot";
 import { bindControlResourceID, parseControlRequest } from "./room-control-request";
@@ -126,13 +129,13 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
       return;
     }
     if (typeof message !== "string") {
-      const gate = gateDocumentUpdate(this.document, message);
+      const gate = gateDocumentUpdate(this.document, message, await this.growthLimit());
       if (gate?.status === "blocked") {
         this.sendCustomMessage(
           connection,
-          documentStatusMessage("blocked", gate.projectedBytes),
+          documentStatusMessage("blocked", gate.projectedBytes, gate.code),
         );
-        this.log("document_limit_blocked", { projected_bytes: gate.projectedBytes });
+        this.log(gate.code ?? "document_limit_blocked", { projected_bytes: gate.projectedBytes });
         return;
       }
       if (gate?.status === "warning") {
@@ -143,6 +146,33 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
       }
     }
     await super.onMessage(connection, message);
+  }
+
+  /**
+   * The Space level's limit on what this room's document holds, when it has one: a deck's
+   * slides, a workbook's filled cells. The API's answers to the room's projections carry it.
+   */
+  private async growthLimit(): Promise<GrowthLimit | undefined> {
+    if (this.resourceType !== "deck" && this.resourceType !== "workbook") return undefined;
+    const limits = await readRoomLimits(this.ctx.storage);
+    if (this.resourceType === "deck") {
+      return limits.deckSlides === null
+        ? undefined
+        : { limit: limits.deckSlides, count: deckSlideCount, code: "slide_limit_reached" };
+    }
+    return limits.workbookCells === null
+      ? undefined
+      : { limit: limits.workbookCells, count: workbookCellCount, code: "cell_limit_reached" };
+  }
+
+  /** Docs, whiteboards, decks and workbooks keep earlier versions; image and code rooms don't. */
+  private keepsHistory(): boolean {
+    return (
+      this.resourceType === "note" ||
+      this.resourceType === "drawing" ||
+      this.resourceType === "deck" ||
+      this.resourceType === "workbook"
+    );
   }
 
   /**
@@ -211,13 +241,23 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
       document: this.document,
       storage: this.ctx.storage,
       state: this.state,
+      resourceType: this.resourceType,
+      keepsHistory: this.keepsHistory(),
       supportsMarkdownBootstrap: this.supportsMarkdownBootstrap,
       supportsDrawingScene: this.supportsDrawingScene,
       save: () => this.onSave(),
       publishNoteProjection: () => this.publishNoteProjection(),
       disconnectSupersededSockets: () => this.disconnectSupersededSockets(),
       disconnectUsers: (userIDs) => this.disconnectUsers(userIDs),
+      closeAllSockets: (code) => this.closeAllSockets(code),
     };
+  }
+
+  /** Closes every socket with one code, whoever it belongs to. */
+  private closeAllSockets(code: string): void {
+    for (const connection of this.getConnections()) {
+      this.close(connection, code);
+    }
   }
 
   /** Closes sockets whose authorization predates the current ACL version. */
@@ -292,8 +332,13 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
         ? () => this.publishNoteProjection()
         : undefined,
       publishDrawingActivity: this.supportsDrawingScene
-        ? () => pushDrawingActivity(this.ctx.storage, this.env)
+        ? () => pushDrawingActivity(this.ctx.storage, this.env, this.document)
         : undefined,
+      publishItemProjection:
+        this.resourceType === "deck" || this.resourceType === "workbook"
+          ? () => pushItemProjection(this.ctx.storage, this.env, this.document, this.resourceType as "deck" | "workbook")
+          : undefined,
+      keepsHistory: this.keepsHistory(),
       log: (event, details) => this.log(event, details),
     };
   }

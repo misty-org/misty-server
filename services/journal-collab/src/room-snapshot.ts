@@ -5,7 +5,9 @@ import {
   readDocumentSnapshot,
   writeDocumentSnapshot,
 } from "./document-persistence";
+import { maybeRecordHistory } from "./document-history";
 import { documentStatusMessage } from "./document-status";
+import { readRoomLimits } from "./room-limits";
 
 export interface RoomSnapshotContext {
   storage: DurableObjectStorage;
@@ -16,6 +18,10 @@ export interface RoomSnapshotContext {
   publishNoteProjection?: () => Promise<void>;
   /** Tells the API a drawing changed after a save, when the room is a drawing. */
   publishDrawingActivity?: () => Promise<void>;
+  /** Pushes a deck's or workbook's projection after a save. */
+  publishItemProjection?: () => Promise<void>;
+  /** Whether the room keeps earlier versions (document-history.ts). */
+  keepsHistory?: boolean;
   log(event: string, details: Record<string, unknown>): void;
 }
 
@@ -33,6 +39,16 @@ export async function loadRoomSnapshot(room: RoomSnapshotContext): Promise<void>
 /** Writes the whole document as one chunked snapshot and tells the room how it went. */
 export async function saveRoomSnapshot(room: RoomSnapshotContext): Promise<void> {
   const update = Y.encodeStateAsUpdate(room.document);
+  if (room.keepsHistory) {
+    // Before the new snapshot replaces it, the state saved last may become a version. A failure
+    // here never stops the save.
+    try {
+      const limits = await readRoomLimits(room.storage);
+      await maybeRecordHistory(room.storage, Date.now(), limits.historyDays);
+    } catch (historyError) {
+      room.log("history_record_failed", { error: String(historyError) });
+    }
+  }
   try {
     const manifest = await writeDocumentSnapshot(room.storage, update);
     room.broadcast(
@@ -53,6 +69,13 @@ export async function saveRoomSnapshot(room: RoomSnapshotContext): Promise<void>
         await room.publishDrawingActivity();
       } catch (activityError) {
         room.log("drawing_activity_failed", { error: String(activityError) });
+      }
+    }
+    if (room.publishItemProjection) {
+      try {
+        await room.publishItemProjection();
+      } catch (projectionError) {
+        room.log("item_projection_failed", { error: String(projectionError) });
       }
     }
   } catch (error) {

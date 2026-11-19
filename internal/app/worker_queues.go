@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/misty-org/misty-server/internal/platform/db"
 	"github.com/misty-org/misty-server/internal/platform/workqueue"
 )
 
@@ -37,10 +38,26 @@ func runNoteControlProcessing(ctx context.Context, server *Server) {
 	queues := map[string]func(context.Context) (int, error){
 		"note-control":    func(ctx context.Context) (int, error) { return server.Spaces.ProcessNoteControlCommands(ctx, 50) },
 		"drawing-control": func(ctx context.Context) (int, error) { return server.Spaces.ProcessDrawingControlCommands(ctx, 50) },
+		"code-session-control": func(ctx context.Context) (int, error) {
+			return server.Spaces.ProcessCodeSessionControlCommands(ctx, 50)
+		},
 		"drawing-purge": func(ctx context.Context) (int, error) {
 			n, err := server.Database.PurgeDeletedDrawings(ctx, 100)
 			return int(n), err
 		},
+	}
+	// Decks and workbooks: each kind's room commands, and its rows once their rooms are purged.
+	for _, item := range db.SpaceItemKinds() {
+		if !item.Shared {
+			continue
+		}
+		queues[item.ControlQueue] = func(ctx context.Context) (int, error) {
+			return server.Spaces.ProcessMadeItemControlCommands(ctx, item.Name, 50)
+		}
+		queues[item.PurgeQueue] = func(ctx context.Context) (int, error) {
+			n, err := server.Database.PurgeDeletedMadeItems(ctx, item.Name, 100)
+			return int(n), err
+		}
 	}
 	for kind, process := range queues {
 		workers.Add(1)

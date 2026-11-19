@@ -25,8 +25,11 @@ func spaceSearchText(r *http.Request) (string, bool) {
 	return text, text != "" && len([]rune(text)) <= db.SpaceSearchMaxQuery
 }
 
-// Search looks through notes and messages together, across the caller's Spaces
-// or the one named by space_id.
+// Search looks through notes, messages, drawings, decks and workbooks together,
+// across the caller's Spaces or the one named by space_id:
+// GET /search?q=&space_id=&kinds=note,message,drawing,deck,workbook&limit=.
+// Each result's kind is note|message|drawing|deck|workbook. Without kinds every
+// kind is searched.
 func (s *SpacesService) Search() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -38,22 +41,12 @@ func (s *SpacesService) Search() http.HandlerFunc {
 			writeSpaceError(w, db.ErrSpaceInvalid)
 			return
 		}
-		notes, messages := true, true
-		if kinds := strings.TrimSpace(r.URL.Query().Get("kinds")); kinds != "" {
-			notes, messages = false, false
-			for _, kind := range strings.Split(kinds, ",") {
-				switch strings.TrimSpace(kind) {
-				case "note":
-					notes = true
-				case "message":
-					messages = true
-				default:
-					writeSpaceError(w, db.ErrSpaceInvalid)
-					return
-				}
-			}
+		kinds, valid := spaceSearchKinds(r.URL.Query().Get("kinds"))
+		if !valid {
+			writeSpaceError(w, db.ErrSpaceInvalid)
+			return
 		}
-		hits, err := s.database.SearchSpaces(r.Context(), userID, text, strings.TrimSpace(r.URL.Query().Get("space_id")), notes, messages, spaceSearchLimit(r))
+		hits, err := s.database.SearchSpaceKinds(r.Context(), userID, text, strings.TrimSpace(r.URL.Query().Get("space_id")), kinds, spaceSearchLimit(r))
 		if err != nil {
 			writeSpaceError(w, err)
 			return
@@ -88,4 +81,32 @@ func (s *SpacesService) SearchMessages() http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"messages": messages, "count": len(messages)})
 	}
+}
+
+// spaceSearchKinds reads a search's kinds: "message" and every registered made kind, by its name
+// (note, drawing, deck, workbook) or its section (notes, drawings, decks, workbooks). Empty is
+// all of them; an unknown kind refuses the search.
+func spaceSearchKinds(raw string) (map[string]bool, bool) {
+	kinds := map[string]bool{}
+	all := strings.TrimSpace(raw) == ""
+	if all {
+		kinds["message"] = true
+		for _, kind := range db.SpaceItemKinds() {
+			kinds[kind.Name] = true
+		}
+		return kinds, true
+	}
+	for _, name := range strings.Split(raw, ",") {
+		name = strings.TrimSpace(name)
+		if name == "message" || name == "messages" {
+			kinds["message"] = true
+			continue
+		}
+		kind, ok := db.SpaceItemKindNamed(name)
+		if !ok {
+			return nil, false
+		}
+		kinds[kind.Name] = true
+	}
+	return kinds, true
 }

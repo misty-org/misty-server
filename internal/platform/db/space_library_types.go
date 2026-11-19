@@ -34,6 +34,8 @@ const (
 	UploadPurposeChatAttachment = spaces.UploadPurposeChatAttachment
 	UploadPurposeNoteAttachment = spaces.UploadPurposeNoteAttachment
 	UploadPurposeDrawingAsset   = spaces.UploadPurposeDrawingAsset
+	UploadPurposeDeckAsset      = spaces.UploadPurposeDeckAsset
+	UploadPurposeSharedFolder   = spaces.UploadPurposeSharedFolder
 )
 
 // Default per-purpose maximums. Deployments may lower these through
@@ -161,6 +163,7 @@ type CompleteLibraryUploadResult struct {
 	Attachment       *MessageAttachment `json:"attachment,omitempty"`
 	NoteAsset        *SpaceNoteAsset    `json:"note_asset,omitempty"`
 	DrawingAsset     *SpaceDrawingAsset `json:"drawing_asset,omitempty"`
+	DeckAsset        *SpaceDeckAsset    `json:"deck_asset,omitempty"`
 	DiscardObjectKey string             `json:"-"`
 	// RetiredObjectKeys are the replaced content's objects nothing uses any more.
 	RetiredObjectKeys []string `json:"-"`

@@ -33,6 +33,7 @@ func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 	s.Router.Post(prefix+"/auth/google/complete", deps.googleSignIn.Complete())
 	s.Router.Post(prefix+"/logout", deps.logout)
 	s.Router.Post(prefix+"/auth/refresh", api.RefreshSession(s.Database))
+	s.Router.Post(prefix+"/auth/web-handoff", api.RedeemWebHandoff(s.Database))
 }
 
 // mountPublicAccountRoutes registers the current-user routes and the server
@@ -41,6 +42,7 @@ func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/me", api.GetMe(s.Database))
 	s.Router.Put(prefix+"/me/password", api.ChangePassword(s.Database))
 	s.Router.Post(prefix+"/me/account-proof", api.AccountProof(s.Database))
+	s.Router.Post(prefix+"/me/web-handoff", api.WebHandoff(s.Database))
 	s.Router.Get(prefix+"/me/invite-code", api.MyInviteCode(s.Database))
 	s.Router.Get(prefix+"/invites/{code}", api.InviteByCode(s.Database))
 	s.Router.Get(prefix+"/server/alerts", api.ServerAlerts(s.Database))

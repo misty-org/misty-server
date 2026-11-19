@@ -43,10 +43,14 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 		deadline = `SELECT min(o.next_attempt_at) FROM space_note_control_outbox o WHERE ` + noteControlHead
 	case "drawing-control":
 		deadline = `SELECT min(next_attempt_at) FROM space_drawing_control_outbox WHERE delivered_at IS NULL`
+	case "code-session-control":
+		deadline = `SELECT min(next_attempt_at) FROM space_code_session_control_outbox WHERE delivered_at IS NULL`
 	case "drawing-purge":
 		deadline = `SELECT clock_timestamp() FROM space_drawings d WHERE d.lifecycle_state='deleting'
    AND EXISTS(SELECT 1 FROM space_drawing_control_outbox o WHERE o.drawing_id=d.id
    AND o.command='purge' AND o.delivered_at IS NOT NULL) LIMIT 1`
+	case "deck-control", "deck-purge", "workbook-control", "workbook-purge":
+		deadline = madeItemWorkerDeadline(queue)
 	case "account-deletion":
 		deadline = accountDeletionWorkerDeadline
 	case "rendition-reservations":
@@ -64,4 +68,21 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 	// Avoid duration overflow for rows deliberately scheduled far in the future.
 	delay := time.Duration(max(0, min(seconds.Float64, 365*24*3600)) * float64(time.Second))
 	return delay, true, nil
+}
+
+// madeItemWorkerDeadline is a shared kind's queue deadline, as drawing-control's and
+// drawing-purge's are: the next command retry, or now while a confirmed purge waits for its row.
+// Table names come from the registry.
+func madeItemWorkerDeadline(queue string) string {
+	kind, _ := spaceItemKindForQueue(queue)
+	if queue == kind.ControlQueue {
+		return `SELECT min(next_attempt_at) FROM ` + kind.ControlTable + ` WHERE delivered_at IS NULL`
+	}
+	assetsGone := ""
+	if kind.AssetTable != "" {
+		assetsGone = ` AND NOT EXISTS(SELECT 1 FROM ` + kind.AssetTable + ` a WHERE a.` + kind.ControlColumn + `=m.id AND a.lifecycle_state<>'deleted')`
+	}
+	return `SELECT clock_timestamp() FROM ` + kind.Table + ` m WHERE m.lifecycle_state='deleting'
+   AND EXISTS(SELECT 1 FROM ` + kind.ControlTable + ` o WHERE o.` + kind.ControlColumn + `=m.id
+   AND o.command='purge' AND o.delivered_at IS NOT NULL)` + assetsGone + ` LIMIT 1`
 }

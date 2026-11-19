@@ -88,7 +88,6 @@ func TestIsWebSocketRequestRequiresBothHeaders(t *testing.T) {
 
 func TestIsTransferRequestOnlyMatchesObjectByteRoutes(t *testing.T) {
 	transfers := []string{
-		"/v1/spaces/space_1/library/uploads/upload_1/content",
 		"/v1/spaces/space_1/library/items/item_1/download",
 		"/v1/spaces/space_1/library/items/item_1/preview",
 		"/v1/spaces/space_1/library/items/item_1/download",

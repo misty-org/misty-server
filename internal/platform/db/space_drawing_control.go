@@ -172,7 +172,7 @@ func (db *Database) PurgeDeletedDrawings(
 	}
 	var purged int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx,
+		ids, err := queryItemIDsTx(ctx, tx,
 			`DELETE FROM space_drawings WHERE id IN (
 			     SELECT d.id FROM space_drawings d
 			     WHERE d.lifecycle_state='deleting'
@@ -181,12 +181,13 @@ func (db *Database) PurgeDeletedDrawings(
 			           WHERE o.drawing_id=d.id
 			             AND o.command='purge'
 			             AND o.delivered_at IS NOT NULL)
-			     LIMIT $1)`, limit)
+			     LIMIT $1) RETURNING id`, limit)
 		if err != nil {
 			return err
 		}
-		purged, _ = result.RowsAffected()
-		return nil
+		purged = int64(len(ids))
+		// What the room stored stops counting with the row.
+		return releaseItemContentStorageTx(ctx, tx, ids)
 	})
 	return purged, err
 }

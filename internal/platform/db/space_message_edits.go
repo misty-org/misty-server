@@ -72,22 +72,24 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 		return nil, err
 	}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
+		if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
 		}
-		if conversationID != "" {
-			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
-				return err
-			}
-		}
 		var sender string
-		if err := tx.QueryRowContext(ctx, `SELECT sender_user_id FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 FOR UPDATE`, messageID, spaceID, conversationID).Scan(&sender); errors.Is(err, sql.ErrNoRows) {
+		var previous []byte
+		if err := tx.QueryRowContext(ctx, `SELECT sender_user_id,content FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 FOR UPDATE`, messageID, spaceID, conversationID).Scan(&sender, &previous); errors.Is(err, sql.ErrNoRows) {
 			return ErrSpaceNotFound
 		} else if err != nil {
 			return err
 		}
 		if sender != userID {
 			return ErrSpaceForbidden
+		}
+		// Role mentions the message already had stay valid, even for a role since deleted.
+		var previousSpans []MessageSpan
+		_ = json.Unmarshal(previous, &previousSpans)
+		if err := validateRoleMentionsTx(ctx, tx, userID, spaceID, content, previousSpans); err != nil {
+			return err
 		}
 		raw, _ := json.Marshal(content)
 		if _, err := tx.ExecContext(ctx, `UPDATE space_messages SET content=$1,file_node_ids=$2,edited_at=NOW() WHERE id=$3`, raw, pqStringArray(fileNodeIDs), messageID); err != nil {
@@ -118,7 +120,7 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 	}
 	out := &SpaceMessage{}
 	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
+		if err := requireSpaceChannelPermissionTx(ctx, tx, userID, spaceID, conversationID, PermissionMessagesRead); err != nil {
 			return err
 		}
 		if err := scanSpaceMessage(tx.QueryRowContext(ctx, `SELECT `+spaceMessageColumns+` FROM space_messages m LEFT JOIN users u ON u.id=m.sender_user_id WHERE m.id=$1 AND m.space_id=$2 AND COALESCE(m.conversation_id,'')=$3`, messageID, spaceID, conversationID), out); err != nil {
@@ -154,13 +156,8 @@ func (db *Database) setSpaceMessageReaction(ctx context.Context, userID, spaceID
 		return nil, err
 	}
 	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
+		if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
-		}
-		if conversationID != "" {
-			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
-				return err
-			}
 		}
 		var exists bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3)`, messageID, spaceID, conversationID).Scan(&exists); err != nil {
@@ -193,13 +190,8 @@ func (db *Database) setSpaceMessageReaction(ctx context.Context, userID, spaceID
 func (db *Database) spaceMessageByID(ctx context.Context, userID, spaceID, conversationID, messageID string) (*SpaceMessage, error) {
 	out := &SpaceMessage{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
+		if err := requireSpaceChannelPermissionTx(ctx, tx, userID, spaceID, conversationID, PermissionMessagesRead); err != nil {
 			return err
-		}
-		if conversationID != "" {
-			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
-				return err
-			}
 		}
 		if err := scanSpaceMessage(tx.QueryRowContext(ctx, `SELECT `+spaceMessageColumns+` FROM space_messages m LEFT JOIN users u ON u.id=m.sender_user_id WHERE m.id=$1 AND m.space_id=$2 AND COALESCE(m.conversation_id,'')=$3`, messageID, spaceID, conversationID), out); err != nil {
 			return err

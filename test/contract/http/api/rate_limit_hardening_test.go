@@ -173,6 +173,14 @@ func TestPublicBetaSensitiveRoutesHaveExplicitRateLimits(t *testing.T) {
 		{"/spaces/space_abcdefabcdefabcdef/drawings/drawing_abcdefabcdefabcdef/assets/uploads", 20},
 		{"/spaces/space_abcdefabcdefabcdef/notes/note_abcdefabcdefabcdef/assets/uploads/upload_abcdefabcdefabcdef/finalize", 30},
 		{"/spaces/space_abcdefabcdefabcdef/drawings/drawing_abcdefabcdefabcdef/assets/uploads/upload_abcdefabcdefabcdef/finalize", 30},
+		{"/spaces/space_abcdefabcdefabcdef/decks/deck_abcdefabcdefabcdef/collaboration-ticket", 30},
+		{"/spaces/space_abcdefabcdefabcdef/workbooks/workbook_abcdefabcdefabcdef/collaboration-ticket", 30},
+		{"/spaces/space_abcdefabcdefabcdef/decks/deck_abcdefabcdefabcdef/assets/uploads", 20},
+		{"/spaces/space_abcdefabcdefabcdef/decks/deck_abcdefabcdefabcdef/assets/uploads/upload_abcdefabcdefabcdef/finalize", 30},
+		{"/spaces/space_abcdefabcdefabcdef/decks", 60},
+		{"/spaces/space_abcdefabcdefabcdef/workbooks", 60},
+		{"/spaces/space_abcdefabcdefabcdef/decks/deck_abcdefabcdefabcdef/history/v_0123456789abcdef0123456789abcdef/restore", 10},
+		{"/spaces/space_abcdefabcdefabcdef/notes/note_abcdefabcdefabcdef/history/v_0123456789abcdef0123456789abcdef/restore", 10},
 	}
 	for _, item := range cases {
 		path := NormalizeRateLimitPath(item.path)

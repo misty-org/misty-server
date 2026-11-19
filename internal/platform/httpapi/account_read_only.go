@@ -23,10 +23,10 @@ import (
 // updates, collaboration rooms and Space files for reading, and read receipts.
 var readOnlyPosts = []*regexp.Regexp{
 	regexp.MustCompile(`^/(login|register|logout|setup-keys/redeem)$`),
-	regexp.MustCompile(`^/auth/(refresh|google|google/complete|confirm-email|confirm-email/sign-in)$`),
-	regexp.MustCompile(`^/me/(export|deletion|account-proof)$`),
+	regexp.MustCompile(`^/auth/(refresh|google|google/complete|confirm-email|confirm-email/sign-in|web-handoff)$`),
+	regexp.MustCompile(`^/me/(export|deletion|account-proof|web-handoff)$`),
 	regexp.MustCompile(`^/realtime/tickets?$`),
-	regexp.MustCompile(`^/spaces/[^/]+/(notes|drawings)/[^/]+/collaboration-ticket$`),
+	regexp.MustCompile(`^/spaces/[^/]+/(notes|drawings|decks|workbooks|library/items|code-sessions)/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/nodes/[^/]+/resolve$`),
 	regexp.MustCompile(`^/spaces/[^/]+/(conversations/[^/]+/)?read$`),
 }
@@ -70,7 +70,8 @@ func writeAccountClosing(w http.ResponseWriter, deleteAt time.Time) {
 }
 
 // collaborationRole is the role a collaboration ticket carries: a closing
-// account opens notes and drawings as a viewer, so their rooms take no edits.
+// account opens notes, drawings, decks and workbooks as a viewer, so their
+// rooms take no edits.
 func collaborationRole(userID, role string) string {
 	if _, closing := suspensions.Closing(context.Background(), userID); closing {
 		return "viewer"

@@ -1,11 +1,8 @@
 package api
 
 import (
-	"io"
-	"mime"
 	"net/http"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/misty-org/misty-server/internal/platform/db"
@@ -99,8 +96,8 @@ func (s *SpaceLibraryService) DeleteEditVersion() http.HandlerFunc {
 }
 
 func (s *SpaceLibraryService) WriteDownload(w http.ResponseWriter, r *http.Request, download *db.LibraryDownload) {
-	// Bandwidth is billed per byte by object storage and by the host, so the
-	// ceiling is checked before anything is streamed.
+	// Bandwidth is billed per byte by object storage, so the ceiling is
+	// checked before a download is signed.
 	if s.egress != nil && !s.egress.Allow(RateLimitIdentity(r), download.ByteSize) {
 		WriteQuotaExceeded(w)
 		return
@@ -109,39 +106,22 @@ func (s *SpaceLibraryService) WriteDownload(w http.ResponseWriter, r *http.Reque
 	if download.Rendition {
 		filename = libraryRenditionFilename(filename, download.MIMEType)
 	}
-	// Authorization already succeeded above. With direct transfer the VPS hands
-	// back a short-lived signed URL instead of streaming the bytes itself.
-	if s.DirectTransfersActive() {
-		descriptor, err := s.Presigner.PresignGet(r.Context(), download.ObjectKey, filename, s.Transfers.DownloadURLTTL)
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		w.Header().Set("Cache-Control", "private, no-store")
-		// An explicit marker, rather than the content type, tells the client this
-		// is a descriptor. A user's own uploaded .json file would otherwise be
-		// indistinguishable from a descriptor on the proxy path.
-		w.Header().Set(LibrarySignedDownloadHeader, "1")
-		writeJSON(w, http.StatusOK, descriptor)
+	// Authorization already succeeded above. The server hands back a
+	// short-lived signed URL; it never streams the bytes itself.
+	if !s.DirectTransfersActive() {
+		writeLibraryError(w, ErrLibraryDirectTransferUnavailable)
 		return
 	}
-	reader, metadata, err := s.Store.Open(r.Context(), download.ObjectKey)
+	descriptor, err := s.Presigner.PresignGet(r.Context(), download.ObjectKey, filename, s.Transfers.DownloadURLTTL)
 	if err != nil {
 		writeLibraryError(w, err)
 		return
 	}
-	defer reader.Close()
-	if metadata.ByteSize != download.ByteSize || metadata.SHA256 != download.SHA256 {
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "library_object_mismatch"})
-		return
-	}
-	w.Header().Set("Content-Type", download.MIMEType)
-	w.Header().Set("Content-Length", strconv.FormatInt(download.ByteSize, 10))
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": sanitizeLibraryFilename(filename)}))
 	w.Header().Set("Cache-Control", "private, no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, reader)
+	// An explicit marker, rather than the content type, tells the client this
+	// is a descriptor rather than a file of its own.
+	w.Header().Set(LibrarySignedDownloadHeader, "1")
+	writeJSON(w, http.StatusOK, descriptor)
 }
 
 // writeJournalAssetDownload always returns a signed R2 descriptor. Journal

@@ -30,6 +30,7 @@ func (db *Database) CreateSpace(ctx context.Context, userID, name, idempotencyKe
 	result := &CreateSpaceResult{Space: Space{
 		ID: "space_" + uuid.NewString(), SecurityDomainID: "sd_" + uuid.NewString(),
 		OwnerUserID: userID, Name: name, Role: "owner", MemberCount: 1,
+		Permissions: ownerPermissionList(),
 	}}
 	fingerprintDigest := sha256.Sum256([]byte(name))
 	fingerprint := hex.EncodeToString(fingerprintDigest[:])
@@ -75,6 +76,9 @@ func (db *Database) CreateSpace(ctx context.Context, userID, name, idempotencyKe
 			return err
 		}
 		if err := addSpaceMembershipTx(ctx, tx, result.Space.ID, userID, "owner"); err != nil {
+			return err
+		}
+		if err := ensureEveryoneRoleTx(ctx, tx, result.Space.ID); err != nil {
 			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, result.Space.ID, userID, "space.created", result.Space.ID, map[string]any{"name": name}); err != nil {

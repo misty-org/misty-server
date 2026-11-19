@@ -27,7 +27,7 @@ func newLibraryItemFilter(spaceID, state, userID, privateViewer string) *library
 	}
 	filter.where("(i.visibility='public' OR i.added_by_user_id=" + filter.add(privateViewer) + ")")
 	viewerPlaceholder := filter.add(userID)
-	filter.where("(i.audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members audience_member WHERE audience_member.conversation_id=i.audience_conversation_id AND audience_member.user_id=" + viewerPlaceholder + "))")
+	filter.where(resourceAudienceSQL("i", viewerPlaceholder))
 	return filter
 }
 

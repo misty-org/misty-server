@@ -81,7 +81,14 @@ func validateMessageWithReferences(content []MessageSpan, referenceCount int) er
 		case "text":
 			chars += len([]rune(span.Text))
 		case "mention":
-			if (span.UserID == "") == (span.AgentID == "") {
+			// Exactly one of a person, an agent or a role.
+			named := 0
+			for _, id := range []string{span.UserID, span.AgentID, span.RoleID} {
+				if id != "" {
+					named++
+				}
+			}
+			if named != 1 {
 				return ErrSpaceInvalid
 			}
 			chars += len([]rune(span.Label))

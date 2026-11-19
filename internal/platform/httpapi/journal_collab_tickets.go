@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func (c JournalCollabConfig) mintResourceTicketWithLifetime(
@@ -40,6 +41,14 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 		claims.NoteID = resource.ID
 	} else if resource.Type == "drawing" {
 		claims.DrawingID = resource.ID
+	} else if resource.Type == "image" {
+		claims.ImageID = resource.ID
+	} else if resource.Type == "code" {
+		claims.CodeSessionID = resource.ID
+	} else if resource.Type == db.SpaceItemDeck {
+		claims.DeckID = resource.ID
+	} else if resource.Type == db.SpaceItemWorkbook {
+		claims.WorkbookID = resource.ID
 	}
 	header, err := json.Marshal(map[string]string{"alg": "EdDSA", "typ": "JWT"})
 	if err != nil {
@@ -68,12 +77,12 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 func (c JournalCollabConfig) MintJournalExportTicket(
 	userID, spaceID, resourceType, resourceID string, aclVersion int64,
 ) (JournalTicket, error) {
-	party := "note-room"
-	if resourceType == "drawing" {
-		party = "drawing-room"
-	} else if resourceType != "note" {
+	// Every made kind's room exports its document: notes, drawings, decks, workbooks.
+	kind, ok := db.SpaceItemKindNamed(resourceType)
+	if !ok || kind.Name != resourceType {
 		return JournalTicket{}, errors.New("invalid export resource type")
 	}
+	party := kind.Party
 	return c.mintResourceTicketWithLifetime(
 		userID,
 		spaceID,

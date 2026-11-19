@@ -206,9 +206,15 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		}
 	}
 
+	// Making a channel takes channels.manage, which members don't hold by default.
+	rec = performConversationRequest(t, router, http.MethodPost, listPath, memberToken, map[string]any{"title": "Launch crew"})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST group chat (member) status = %d, body = %s, want 403", rec.Code, rec.Body)
+	}
+
 	// A group chat is public to the Space: everyone in it sees it without being
 	// named, and someone who joins later does too. Outsiders still don't.
-	rec = performConversationRequest(t, router, http.MethodPost, listPath, memberToken, map[string]any{"title": "Launch crew"})
+	rec = performConversationRequest(t, router, http.MethodPost, listPath, ownerToken, map[string]any{"title": "Launch crew"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST group chat status = %d, body = %s", rec.Code, rec.Body)
 	}

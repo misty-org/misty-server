@@ -33,8 +33,8 @@ func (s *SpacesService) SpaceAvatar() http.HandlerFunc {
 			}
 			serveAvatarObject(w, r, s.avatarStore, db.SpaceAvatarObjectKey(spaceID), version)
 		case http.MethodPut:
-			// Only the owner changes it; checked before anything is read or stored.
-			if err := s.database.RequireSpaceOwner(r.Context(), userID, spaceID); err != nil {
+			// Only who may manage the Space changes it; checked before anything is read or stored.
+			if err := s.database.RequireSpacePermission(r.Context(), userID, spaceID, db.PermissionSpaceRename); err != nil {
 				writeSpaceError(w, err)
 				return
 			}

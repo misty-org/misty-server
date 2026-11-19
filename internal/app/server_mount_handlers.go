@@ -108,7 +108,6 @@ func (s *Server) mountLibraryRoutes(prefix string, library *api.SpaceLibraryServ
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/library/facets", library.Facets())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/library/usage", library.Usage())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/uploads", library.InitiateUpload())
-	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/library/uploads/{uploadID}/content", library.UploadContent())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/uploads/{uploadID}/finalize", library.FinalizeUpload())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/uploads/{uploadID}/abort", library.AbortUpload())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/items/bulk", library.BulkItems())
@@ -126,4 +125,17 @@ func (s *Server) mountLibraryRoutes(prefix string, library *api.SpaceLibraryServ
 	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/library/items/{itemID}/versions/current", library.SelectEditVersion())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/items/{itemID}/versions/{editID}/render", library.RenderEditVersion())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/library/items/{itemID}/versions/{editID}", library.DeleteEditVersion())
+	s.mountSharedFolderRoutes(prefix, library)
+}
+
+// mountSharedFolderRoutes mounts a Space's shared folders beside its Library,
+// whose store, presigning and upload proxy route they share.
+func (s *Server) mountSharedFolderRoutes(prefix string, library *api.SpaceLibraryService) {
+	folders := prefix + "/spaces/{spaceID}/folders"
+	s.Router.MethodFunc(http.MethodGet, folders, library.SharedFolders())
+	s.Router.MethodFunc(http.MethodPost, folders, library.SharedFolders())
+	s.Router.MethodFunc(http.MethodDelete, folders+"/{folderID}", library.DeleteSharedFolder())
+	s.Router.MethodFunc(http.MethodPost, folders+"/{folderID}/diff", library.SharedFolderDiff())
+	s.Router.MethodFunc(http.MethodPost, folders+"/{folderID}/commit", library.SharedFolderCommit())
+	s.Router.MethodFunc(http.MethodGet, folders+"/{folderID}/manifest", library.SharedFolderManifest())
 }

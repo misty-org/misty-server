@@ -82,11 +82,11 @@ func noteAccessForTx(ctx context.Context, tx *sql.Tx, userID, noteID string) (No
 		return noteAccessDenied, nil
 	}
 	if audienceKind == SpaceAudienceConversation {
-		var participant bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_conversation_members WHERE conversation_id=$1 AND user_id=$2)`, audienceConversationID, userID).Scan(&participant); err != nil {
+		readable, err := conversationReadableTx(ctx, tx, userID, spaceID, audienceConversationID)
+		if err != nil {
 			return noteAccessDenied, err
 		}
-		if !participant {
+		if !readable {
 			return noteAccessDenied, nil
 		}
 	}
@@ -148,7 +148,8 @@ func noteEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, ev
 		}
 		return false, err
 	}
-	return true, nil
+	// A note in a channel the user can't read stays out of their stream.
+	return itemAudienceReadableTx(ctx, tx, userID, spaceID, "note", event.EntityID)
 }
 
 // recordNoteEventTx records a note.* Space event.
@@ -197,7 +198,17 @@ func (db *Database) CreateSpaceNote(ctx context.Context, creatorUserID, spaceID,
 }
 
 func (db *Database) CreateSpaceNoteWithAudience(ctx context.Context, creatorUserID, spaceID, title string, audience SpaceResourceAudience, markdown string) (*SpaceNote, error) {
+	return db.CreateSpaceNoteWithVisibility(ctx, creatorUserID, spaceID, title, audience, markdown, "")
+}
+
+// CreateSpaceNoteWithVisibility creates a note on a chosen layer from its first moment: "private"
+// keeps it its creator's alone (no member ever lists it or hears of it), "public" shares it, and
+// "" takes the Space's default.
+func (db *Database) CreateSpaceNoteWithVisibility(ctx context.Context, creatorUserID, spaceID, title string, audience SpaceResourceAudience, markdown, visibility string) (*SpaceNote, error) {
 	if creatorUserID == "" || spaceID == "" {
+		return nil, ErrSpaceInvalid
+	}
+	if visibility != "" && visibility != "public" && visibility != "private" {
 		return nil, ErrSpaceInvalid
 	}
 	// A body reaches the doc through the collaboration room's bootstrap, which takes only a
@@ -217,6 +228,10 @@ func (db *Database) CreateSpaceNoteWithAudience(ctx context.Context, creatorUser
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, creatorUserID); err != nil {
 			return err
 		}
+		// A full Space or account keeps its notes; it takes no new one.
+		if err := requireStorageNotFullTx(ctx, tx, creatorUserID, spaceID); err != nil {
+			return err
+		}
 		normalized, err := NormalizeResourceAudience(audience.Kind, audience.ConversationID)
 		if err != nil {
 			return err
@@ -225,10 +240,16 @@ func (db *Database) CreateSpaceNoteWithAudience(ctx context.Context, creatorUser
 			return err
 		}
 		note.AudienceKind, note.AudienceConversationID = normalized.Kind, normalized.ConversationID
-		if err := tx.QueryRowContext(ctx,
-			`INSERT INTO space_notes(id,space_id,creator_user_id,title_projection,audience_kind,audience_conversation_id) VALUES($1,$2,$3,$4,$5,NULLIF($6,''))
-			 RETURNING created_at,updated_at,visibility`,
-			note.ID, spaceID, creatorUserID, title, normalized.Kind, normalized.ConversationID).Scan(&note.CreatedAt, &note.UpdatedAt, &note.Visibility); err != nil {
+		insert := `INSERT INTO space_notes(id,space_id,creator_user_id,title_projection,audience_kind,audience_conversation_id) VALUES($1,$2,$3,$4,$5,NULLIF($6,''))
+			 RETURNING created_at,updated_at,visibility`
+		args := []any{note.ID, spaceID, creatorUserID, title, normalized.Kind, normalized.ConversationID}
+		if visibility != "" {
+			// An explicit layer is kept by the default trigger.
+			insert = `INSERT INTO space_notes(id,space_id,creator_user_id,title_projection,audience_kind,audience_conversation_id,visibility) VALUES($1,$2,$3,$4,$5,NULLIF($6,''),$7)
+			 RETURNING created_at,updated_at,visibility`
+			args = append(args, visibility)
+		}
+		if err := tx.QueryRowContext(ctx, insert, args...).Scan(&note.CreatedAt, &note.UpdatedAt, &note.Visibility); err != nil {
 			return err
 		}
 		if strings.TrimSpace(markdown) != "" {
@@ -260,14 +281,11 @@ func (db *Database) AccessibleSpaceNotes(ctx context.Context, userID, spaceID st
 			         JOIN space_notes source ON source.id=links.source_note_id
 			         WHERE links.target_note_id=n.id AND source.lifecycle_state='active'
 			           AND (source.visibility='public' OR source.creator_user_id=$3)
-			           AND (source.audience_kind='space' OR EXISTS(
-			               SELECT 1 FROM space_conversation_members cm
-			               WHERE cm.conversation_id=source.audience_conversation_id
-			                 AND cm.user_id=$1))) AS backlink_count
+			           AND (source.audience_kind='space' OR public.misty_can_read_space_conversation(source.audience_conversation_id,$1))) AS backlink_count
 			 FROM space_notes n
 			 WHERE n.space_id=$2 AND n.lifecycle_state='active'
 			   AND (n.visibility='public' OR n.creator_user_id=$3)
-			   AND (n.audience_kind='space' OR EXISTS(SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=n.audience_conversation_id AND cm.user_id=$1))
+			   AND (n.audience_kind='space' OR public.misty_can_read_space_conversation(n.audience_conversation_id,$1))
 			 ORDER BY n.updated_at DESC`, userID, spaceID, userID)
 		if err != nil {
 			return err

@@ -11,7 +11,26 @@ import (
 
 func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, event SpaceEvent, permissionCache map[string]bool) (bool, error) {
 	permission := ""
+	itemKind, isItemEvent := spaceItemKindForEvent(event.EventType)
 	switch {
+	case event.EventType == "conversation.removed":
+		// Only the one member who lost the channel hears that it's gone for them.
+		var payload struct {
+			UserID string `json:"user_id"`
+		}
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return false, err
+		}
+		return payload.UserID == userID, nil
+	case event.EventType == "item.visibility_changed":
+		// The item's id alone stays inside the channel it belongs to.
+		var payload struct {
+			Kind string `json:"kind"`
+		}
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return false, err
+		}
+		return itemAudienceReadableTx(ctx, tx, userID, event.SpaceID, payload.Kind, event.EntityID)
 	case strings.HasPrefix(event.EventType, "message."), strings.HasPrefix(event.EventType, "conversation."):
 		var payload struct {
 			ConversationID     string   `json:"conversation_id"`
@@ -35,17 +54,8 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 				return false, nil
 			}
 		} else if payload.ConversationID != "" {
-			var member bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-				SELECT 1 FROM space_conversation_members cm
-				JOIN space_conversations c ON c.id=cm.conversation_id
-				WHERE cm.conversation_id=$1 AND cm.user_id=$2 AND c.space_id=$3
-			)`, payload.ConversationID, userID, event.SpaceID).Scan(&member); err != nil {
-				return false, err
-			}
-			if !member {
-				return false, nil
-			}
+			// The channel's own messages.read decides; it can let in someone the Space-wide chat doesn't.
+			return conversationEventVisibleTx(ctx, tx, userID, event.SpaceID, payload.ConversationID, permissionCache)
 		}
 		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "node."):
@@ -56,26 +66,32 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 			return false, err
 		}
 		permission = PermissionLibraryView
-	case strings.HasPrefix(event.EventType, "drawing."):
-		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, event.SpaceID, "space_drawings", event.EntityID)
-		if err != nil || !visible {
-			return false, err
-		}
-		permission = PermissionMessagesRead
-	case strings.HasPrefix(event.EventType, "note."):
+	case isItemEvent && itemKind.Name == SpaceItemNote:
 		// Notes are private to their creator and explicit grantees, so a note
 		// event must never reach the whole Space the way other event families
 		// do. There is no Space permission that grants note visibility: the
 		// answer comes from the note's own ACL, evaluated now rather than when
 		// the event was recorded.
 		return noteEventVisibleToUserTx(ctx, tx, userID, event)
+	case isItemEvent:
+		// drawing., deck., workbook.: the item's audience and layer as they are now (someone
+		// else's private item reaches only them), then the Space's messages.read.
+		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, event.SpaceID, itemKind.Table, event.EntityID)
+		if err != nil || !visible {
+			return false, err
+		}
+		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "task."), strings.HasPrefix(event.EventType, "calendar."):
 		// The planner is the whole Space's: every member sees its changes.
 		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "agent."):
 		permission = PermissionStudioView
-	default:
+	case spaceWideEvent(event.EventType):
 		return true, nil
+	default:
+		// A family with no rule here reaches no one, so a new kind of item can never leak its
+		// private items to the whole Space by being forgotten in this switch.
+		return false, nil
 	}
 	key := event.SpaceID + "\x00" + permission
 	if allowed, ok := permissionCache[key]; ok {
@@ -89,6 +105,40 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 	return allowed, nil
 }
 
+// conversationEventVisibleTx: a conversation's events reach its participants
+// who can read it now, so a channel's overwrites hide its messages, reactions
+// and updates from whoever they keep out. The cache belongs to one recipient.
+func conversationEventVisibleTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID string, cache map[string]bool) (bool, error) {
+	key := spaceID + "\x00conversation\x00" + conversationID
+	if visible, ok := cache[key]; ok {
+		return visible, nil
+	}
+	visible, err := conversationReadableTx(ctx, tx, userID, spaceID, conversationID)
+	if err != nil {
+		return false, err
+	}
+	cache[key] = visible
+	return visible, nil
+}
+
+// conversationReadableTx: the user takes part in the conversation and holds
+// messages.read in it now. It is the Go form of conversationReadableSQL, for
+// conversations and for every resource scoped to one.
+func conversationReadableTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID string) (bool, error) {
+	participant, err := humanConversationParticipantTx(ctx, tx, userID, spaceID, conversationID)
+	if err != nil || !participant {
+		return false, err
+	}
+	permissions, _, err := channelPermissionsTx(ctx, tx, userID, spaceID, conversationID)
+	switch {
+	case errors.Is(err, ErrSpaceForbidden), errors.Is(err, ErrSpaceNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return permissions.Has(PermissionMessagesRead), nil
+}
+
 func humanConversationParticipantTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID string) (bool, error) {
 	var visible bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_conversation_members cm JOIN space_conversations c ON c.id=cm.conversation_id WHERE cm.conversation_id=$1 AND cm.user_id=$2 AND c.space_id=$3)`, conversationID, userID, spaceID).Scan(&visible)
@@ -96,10 +146,9 @@ func humanConversationParticipantTx(ctx context.Context, tx *sql.Tx, userID, spa
 }
 
 func resourceEntityAudienceVisibleTx(ctx context.Context, tx *sql.Tx, userID, spaceID, table, entityID string) (bool, error) {
-	// Table names are an internal closed set; values never come from requests.
-	switch table {
-	case "space_library_items", "space_drawings":
-	default:
+	// Table names are an internal closed set, Library items and the registry's made kinds;
+	// values never come from requests.
+	if _, made := spaceItemKindForTable(table); !made && table != "space_library_items" {
 		return false, ErrSpaceInvalid
 	}
 	owner := "creator_user_id"
@@ -124,7 +173,7 @@ func resourceEntityAudienceVisibleTx(ctx context.Context, tx *sql.Tx, userID, sp
 	if audienceKind == SpaceAudienceSpace {
 		return true, nil
 	}
-	return humanConversationParticipantTx(ctx, tx, userID, spaceID, conversationID)
+	return conversationReadableTx(ctx, tx, userID, spaceID, conversationID)
 }
 
 func (db *Database) CreateResolveTicket(ctx context.Context, userID, spaceID, nodeID, disposition, tokenHash string, expires time.Time) error {
@@ -155,4 +204,17 @@ func (db *Database) ConsumeResolveTicket(ctx context.Context, tokenHash string) 
 		return "", "", "", ErrSpaceForbidden
 	}
 	return userID, spaceID, nodeID, err
+}
+
+// spaceWideEventFamilies are the event families about the Space itself rather than one item in
+// it: its settings, members, roles and shared folders. Every member hears them.
+var spaceWideEventFamilies = []string{"space.", "member.", "owner.", "role.", "roles.", "folder."}
+
+func spaceWideEvent(eventType string) bool {
+	for _, family := range spaceWideEventFamilies {
+		if strings.HasPrefix(eventType, family) {
+			return true
+		}
+	}
+	return false
 }

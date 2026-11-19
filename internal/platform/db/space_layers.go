@@ -20,13 +20,19 @@ func validVisibility(visibility string) bool {
 	return visibility == VisibilityPublic || visibility == VisibilityPrivate
 }
 
-// visibilityTables maps an item kind to its table, owner column and id column.
-var visibilityTables = map[string][3]string{
-	"note":         {"space_notes", "creator_user_id", "id"},
-	"drawing":      {"space_drawings", "creator_user_id", "id"},
+// visibilityTables maps an item kind to its table, owner column and id column: every made kind
+// in the registry (notes, drawings, decks, workbooks), then the Space's other items.
+var visibilityTables = withSpaceItemVisibility(map[string][3]string{
 	"library_item": {"space_library_items", "added_by_user_id", "id"},
 	"node":         {"space_nodes", "uploader_user_id", "id"},
 	"agent":        {"space_agents", "owner_user_id", "agent_id"},
+})
+
+func withSpaceItemVisibility(others map[string][3]string) map[string][3]string {
+	for _, kind := range spaceItemKinds {
+		others[kind.Name] = [3]string{kind.Table, kind.OwnerColumn, "id"}
+	}
+	return others
 }
 
 // SetSpaceItemVisibility flips one item between public and private. Only its
@@ -107,8 +113,10 @@ func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string)
 			WHERE space_id=$1 AND source_kind='library_item' AND source_id IN (SELECT id FROM gone) AND state='active'`, spaceID, userID); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `DELETE FROM space_nodes WHERE space_id=$1 AND uploader_user_id=$2 AND visibility='private'`, spaceID, userID)
-	return err
+	if _, err := tx.ExecContext(ctx, `DELETE FROM space_nodes WHERE space_id=$1 AND uploader_user_id=$2 AND visibility='private'`, spaceID, userID); err != nil {
+		return err
+	}
+	return purgeMadeItemsOfMemberTx(ctx, tx, spaceID, userID)
 }
 
 // purgeSpaceMembersTx runs the purge for everyone in a Space being deleted.
@@ -139,25 +147,19 @@ func privateItemIDsTx(ctx context.Context, tx *sql.Tx, query, spaceID, userID st
 	return ids, rows.Err()
 }
 
-// revokeItemConnectionsTx moves one doc's or drawing's ACL version on and tells its room, which
-// drops every connection opened with an older ticket. Other kinds have no live room.
-func revokeItemConnectionsTx(ctx context.Context, tx *sql.Tx, kind, itemID string) error {
-	var table string
-	var enqueue func(context.Context, *sql.Tx, string, string, map[string]any) error
-	switch kind {
-	case "note":
-		table, enqueue = "space_notes", enqueueNoteControlTx
-	case "drawing":
-		table, enqueue = "space_drawings", enqueueDrawingControlTx
-	default:
+// revokeItemConnectionsTx moves one made item's ACL version on and tells its room, which drops
+// every connection opened with an older ticket. Other kinds have no live room.
+func revokeItemConnectionsTx(ctx context.Context, tx *sql.Tx, kindName, itemID string) error {
+	kind, ok := SpaceItemKindNamed(kindName)
+	if !ok || kind.Name != kindName {
 		return nil
 	}
 	var aclVersion int64
-	// The table name comes from the fixed switch above.
+	// The table name comes from the registry.
 	if err := tx.QueryRowContext(ctx,
-		`UPDATE `+table+` SET acl_version=acl_version+1 WHERE id=$1 RETURNING acl_version`,
+		`UPDATE `+kind.Table+` SET acl_version=acl_version+1 WHERE id=$1 RETURNING acl_version`,
 		itemID).Scan(&aclVersion); err != nil {
 		return err
 	}
-	return enqueue(ctx, tx, itemID, "acl", map[string]any{"acl_version": aclVersion})
+	return kind.enqueueControlTx(ctx, tx, itemID, "acl", map[string]any{"acl_version": aclVersion})
 }

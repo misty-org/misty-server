@@ -39,6 +39,8 @@ var costBearingRoutes = map[string]bool{
 	"/spaces/{spaceID}/drawings/{id}/assets/uploads":               true,
 	"/spaces/{spaceID}/notes/{id}/assets/uploads/{id}/finalize":    true,
 	"/spaces/{spaceID}/drawings/{id}/assets/uploads/{id}/finalize": true,
+	"/spaces/{spaceID}/decks/{id}/assets/uploads":                  true,
+	"/spaces/{spaceID}/decks/{id}/assets/uploads/{id}/finalize":    true,
 }
 
 func NormalizeRateLimitPath(path string) string {

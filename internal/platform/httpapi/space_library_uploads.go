@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -138,10 +137,11 @@ func (s *SpaceLibraryService) InitiateUpload() http.HandlerFunc {
 	}
 }
 
-// uploadTransfer describes how the client should move the bytes. With direct
-// transfer it is an absolute presigned R2 PUT that carries no Misty
-// credentials; otherwise it is the relative proxy route used in development.
+// UploadTransfer describes how the client moves the bytes: an absolute
+// presigned R2 PUT that carries no Misty credentials. File bytes never pass
+// through the server, so a store that can't sign refuses instead.
 func (s *SpaceLibraryService) UploadTransfer(ctx context.Context, upload *db.LibraryUpload, token string, expiresAt time.Time) (LibraryObjectUpload, error) {
+	_, _ = token, expiresAt
 	if s.DirectTransfersActive() {
 		metadata := LibraryObjectMetadata{
 			ByteSize: upload.RequestedByteSize,
@@ -156,12 +156,5 @@ func (s *SpaceLibraryService) UploadTransfer(ctx context.Context, upload *db.Lib
 			URL: signed.URL, Method: signed.Method, Headers: signed.Headers, ExpiresAt: signed.ExpiresAt,
 		}, nil
 	}
-	return LibraryObjectUpload{
-		URL:     fmt.Sprintf("/spaces/%s/library/uploads/%s/content", upload.SpaceID, upload.ID),
-		Method:  http.MethodPut,
-		Headers: map[string]string{LibraryUploadTokenHeader: token, "Content-Type": upload.ClientDeclaredMIMEType},
-		// The proxy route is bounded by the Misty upload reservation, not by a
-		// signature, so it keeps the reservation lifetime.
-		ExpiresAt: expiresAt,
-	}, nil
+	return LibraryObjectUpload{}, ErrLibraryDirectTransferUnavailable
 }

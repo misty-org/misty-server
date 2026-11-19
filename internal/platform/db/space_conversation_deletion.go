@@ -62,12 +62,14 @@ func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, mes
 			  AND NOT EXISTS(SELECT 1 FROM space_library_items i WHERE i.file_id=f.id AND i.lifecycle_state IN ('ready','recovery'))
 			  AND NOT EXISTS(SELECT 1 FROM space_message_attachments a WHERE a.file_id=f.id AND a.id<>$2 AND a.lifecycle_state IN ('ready','recovery'))
 			  AND NOT EXISTS(SELECT 1 FROM space_note_assets n WHERE n.file_id=f.id AND n.lifecycle_state IN ('ready','recovery'))
-			  AND NOT EXISTS(SELECT 1 FROM space_drawing_assets d WHERE d.file_id=f.id AND d.lifecycle_state IN ('ready','recovery'))`, item.fileID, item.id); err != nil {
+			  AND NOT EXISTS(SELECT 1 FROM space_drawing_assets d WHERE d.file_id=f.id AND d.lifecycle_state IN ('ready','recovery'))
+			  AND NOT EXISTS(SELECT 1 FROM space_deck_assets k WHERE k.file_id=f.id AND k.lifecycle_state IN ('ready','recovery'))`, item.fileID, item.id); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE library_blobs b SET lifecycle_state='deleted',deleted_at=NOW(),version=version+1,updated_at=NOW()
 			WHERE b.id=(SELECT blob_id FROM library_files WHERE id=$1)
-			  AND NOT EXISTS(SELECT 1 FROM library_files f WHERE f.blob_id=b.id AND f.lifecycle_state<>'deleted')`, item.fileID); err != nil {
+			  AND NOT EXISTS(SELECT 1 FROM library_files f WHERE f.blob_id=b.id AND f.lifecycle_state<>'deleted')
+			  AND NOT EXISTS(SELECT 1 FROM space_shared_folder_files ff WHERE ff.blob_key=b.r2_object_key)`, item.fileID); err != nil {
 			return err
 		}
 		released += item.bytes
@@ -124,7 +126,8 @@ func humanMemberIDsForConversationTx(ctx context.Context, tx *sql.Tx, conversati
 // an empty canonical row here would make a deleted chat remain in the sidebar.
 func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, spaceID, conversationID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
+		permissions, err := messagePermissionsTx(ctx, tx, userID, spaceID, conversationID)
+		if err != nil {
 			return err
 		}
 		var kind, creator string
@@ -136,16 +139,26 @@ func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, 
 			}
 			return err
 		}
-		role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
-		if err != nil {
-			return err
-		}
-		if kind != "standard" || role != "owner" {
+		if kind != "standard" || !permissions.Has(PermissionChannelsManage) {
 			return ErrSpaceForbidden
 		}
 		participantUserIDs, err := humanMemberIDsForConversationTx(ctx, tx, conversationID)
 		if err != nil {
 			return err
+		}
+		// Only those who could read a private channel hear that it's gone.
+		readers, err := channelReadersTx(ctx, tx, spaceID)
+		if err != nil {
+			return err
+		}
+		if channelReaders, ok := readers[conversationID]; ok {
+			readable := []string{}
+			for _, participantUserID := range participantUserIDs {
+				if channelReaders[participantUserID] {
+					readable = append(readable, participantUserID)
+				}
+			}
+			participantUserIDs = readable
 		}
 		ids, err := messageIDsForConversationTx(ctx, tx, spaceID, conversationID)
 		if err != nil {

@@ -283,7 +283,10 @@ func walkGoFiles(t *testing.T, root string, visit func(relative, absolute string
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "node_modules" || entry.Name() == "vendor") {
+		// `.claude` holds local agent worktrees: copies of the repository that git ignores and
+		// that aren't part of this checkout's source.
+		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == ".claude" ||
+			entry.Name() == "node_modules" || entry.Name() == "vendor") {
 			return filepath.SkipDir
 		}
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {

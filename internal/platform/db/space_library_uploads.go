@@ -9,29 +9,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// hasSpacePermissionTx answers from the member's effective Space-wide
+// permissions: the owner holds every one, everyone else what their roles give
+// (memberAccessTx). Channel overwrites don't apply here; see
+// requireSpaceChannelPermissionTx.
 func hasSpacePermissionTx(ctx context.Context, tx *sql.Tx, userID, spaceID, permission string) (bool, error) {
-	role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
+	access, err := memberAccessTx(ctx, tx, spaceID, userID)
 	if err != nil {
 		return false, err
 	}
-	// Owners can do everything; every other member can do everything except
-	// manage the Space itself. There are no roles or per-member overrides.
-	if role == "owner" {
-		return true, nil
-	}
-	return fixedMemberPermission(permission), nil
-}
-
-func fixedMemberPermission(permission string) bool {
-	switch permission {
-	case PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload,
-		PermissionLibraryView, PermissionLibraryUpload, PermissionLibraryAdd,
-		PermissionLibraryEdit, PermissionLibraryDownload, PermissionLibraryImport,
-		PermissionStorageViewOwn, PermissionStudioView, PermissionAskRun:
-		return true
-	default:
-		return false
-	}
+	return access.base.Has(permission), nil
 }
 
 func requireSpacePermissionTx(ctx context.Context, tx *sql.Tx, userID, spaceID, permission string) error {
@@ -115,15 +102,28 @@ func (db *Database) CreateLibraryReplacementUpload(ctx context.Context, userID, 
 	return db.createLibraryUpload(ctx, userID, spaceID, "", "library", filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt, nil, &replace)
 }
 
+// uploadObjectSizeAllowed is the bound on one uploaded object: its purpose's
+// cap, and never more than one object may hold.
+func uploadObjectSizeAllowed(purpose string, byteSize int64) bool {
+	return byteSize >= 1 && byteSize <= MaxUploadBytesForPurpose(purpose) && byteSize <= MaxSpaceStorageBytes
+}
+
 func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time, provenance *AgentArtifactProvenance, replace *LibraryItemVersion) (*LibraryUpload, error) {
 	permission, purposeKnown := UploadPurposePermission(purpose)
-	maxBytes := MaxUploadBytesForPurpose(purpose)
-	if !purposeKnown || byteSize < 1 || byteSize > maxBytes || byteSize > MaxSpaceStorageBytes || len(clientSHA) != 64 || filename == "" || objectKey == "" || tokenHash == "" {
+	if !purposeKnown || !uploadObjectSizeAllowed(purpose, byteSize) || len(clientSHA) != 64 || filename == "" || objectKey == "" || tokenHash == "" {
 		return nil, ErrLibraryInvalid
 	}
 	out := &LibraryUpload{ID: "upload_" + uuid.NewString(), SpaceID: spaceID, UserID: userID, ObjectKey: objectKey, OriginalFilename: filename, Purpose: purpose, ClientDeclaredMIMEType: declaredMIME, RequestedByteSize: byteSize, ClientSHA256: clientSHA, State: "initiated", UploadTokenHash: tokenHash, ExpiresAt: expiresAt, Version: 1}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, permission); err != nil {
+		if purpose == UploadPurposeChatAttachment && conversationID != "" {
+			// In a conversation the channel's own grant decides, overwrites included.
+			if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
+				return err
+			}
+			if err := requireSpaceChannelPermissionTx(ctx, tx, userID, spaceID, conversationID, permission); err != nil {
+				return err
+			}
+		} else if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, permission); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `SELECT security_domain_id FROM spaces WHERE id=$1 FOR SHARE`, spaceID).Scan(&out.SecurityDomainID); err != nil {
@@ -139,14 +139,9 @@ func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, co
 				return err
 			}
 		}
-		if purpose == "attachment" {
+		if purpose == "attachment" && conversationID == "" {
 			if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
 				return err
-			}
-			if conversationID != "" {
-				if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
-					return err
-				}
 			}
 		}
 		if err := prepareStorageReservationTx(ctx, tx, userID, spaceID); err != nil {

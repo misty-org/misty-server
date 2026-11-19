@@ -22,13 +22,11 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 	attachmentIDs = uniqueSpaceIDs(attachmentIDs)
 	agentMentions := []string{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
+		if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
 		}
-		if conversationID != "" {
-			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
-				return err
-			}
+		if err := validateRoleMentionsTx(ctx, tx, userID, spaceID, content, nil); err != nil {
+			return err
 		}
 		if clientNonce != "" {
 			// A retry of a send whose response was lost carries the same nonce: hand back the

@@ -20,12 +20,21 @@ func (s *SpaceLibraryService) transferPurposeEnabled(purpose UploadPurpose) bool
 	if purpose == UploadPurposeDrawingAsset {
 		return s.DrawingAssetsEnabled
 	}
+	if purpose == UploadPurposeDeckAsset {
+		return s.DeckAssetsEnabled
+	}
+	if purpose == UploadPurposeSharedFolder {
+		// Started by a shared folder's diff, sent straight to R2 and finished by
+		// the folder's commit.
+		return s.UploadsEnabled
+	}
 	return s.UploadPurposeEnabled(purpose)
 }
 
 func IsJournalAssetPurpose(purpose UploadPurpose) bool {
 	return purpose == UploadPurposeNoteAttachment ||
-		purpose == UploadPurposeDrawingAsset
+		purpose == UploadPurposeDrawingAsset ||
+		purpose == UploadPurposeDeckAsset
 }
 
 func NewSpaceLibraryService(database *db.Database, store LibraryObjectStore, uploadsEnabled bool, limits UploadLimits) (*SpaceLibraryService, error) {

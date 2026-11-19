@@ -1,6 +1,9 @@
 package spaces
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 const (
 	PermissionLibraryView        = "library.view"
@@ -21,7 +24,15 @@ const (
 	PermissionSpaceTransfer      = "space.transfer"
 	PermissionSpaceDelete        = "space.delete"
 	PermissionSpaceLeave         = "space.leave"
-	LibraryRecoveryWindow        = 30 * 24 * time.Hour
+
+	// Roles: administrator holds every permission but the owner's own, and
+	// ignores channel overwrites.
+	PermissionAdministrator  = "administrator"
+	PermissionRolesManage    = "roles.manage"
+	PermissionChannelsManage = "channels.manage"
+	PermissionMessagesManage = "messages.manage"
+	PermissionMembersRemove  = "members.remove"
+	LibraryRecoveryWindow    = 30 * 24 * time.Hour
 )
 
 const (
@@ -29,6 +40,10 @@ const (
 	UploadPurposeChatAttachment = "attachment"
 	UploadPurposeNoteAttachment = "note_attachment"
 	UploadPurposeDrawingAsset   = "drawing_attachment"
+	// UploadPurposeDeckAsset is an image a deck's slides show, bound to the deck.
+	UploadPurposeDeckAsset = "deck_attachment"
+	// UploadPurposeSharedFolder is one file's bytes in a shared Space folder.
+	UploadPurposeSharedFolder = "folder"
 )
 
 const (
@@ -36,6 +51,8 @@ const (
 	DefaultChatAttachmentMaxFileBytes = int64(10 << 20)
 	DefaultNoteAttachmentMaxFileBytes = int64(15 << 20)
 	DefaultDrawingAssetMaxFileBytes   = int64(15 << 20)
+	// DefaultDeckAssetMaxFileBytes matches a drawing's images.
+	DefaultDeckAssetMaxFileBytes = DefaultDrawingAssetMaxFileBytes
 )
 
 func MaxUploadBytesForPurpose(purpose string) int64 {
@@ -48,6 +65,12 @@ func MaxUploadBytesForPurpose(purpose string) int64 {
 		return DefaultNoteAttachmentMaxFileBytes
 	case UploadPurposeDrawingAsset:
 		return DefaultDrawingAssetMaxFileBytes
+	case UploadPurposeDeckAsset:
+		return DefaultDeckAssetMaxFileBytes
+	case UploadPurposeSharedFolder:
+		// No cap of its own: folder bytes count against the storage limits,
+		// and each object still keeps the per-object bound.
+		return math.MaxInt64
 	default:
 		return 0
 	}
@@ -68,6 +91,11 @@ func UploadPurposePermission(purpose string) (string, bool) {
 	case UploadPurposeDrawingAsset:
 		// Drawing assets authorize against the parent drawing.
 		return PermissionLibraryView, true
+	case UploadPurposeDeckAsset:
+		// Deck assets authorize against the parent deck.
+		return PermissionLibraryView, true
+	case UploadPurposeSharedFolder:
+		return PermissionLibraryUpload, true
 	default:
 		return "", false
 	}

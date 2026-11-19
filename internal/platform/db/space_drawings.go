@@ -92,6 +92,10 @@ func (db *Database) CreateSpaceDrawing(
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, creatorUserID); err != nil {
 			return err
 		}
+		// A full Space or account keeps its drawings; it takes no new one.
+		if err := requireStorageNotFullTx(ctx, tx, creatorUserID, spaceID); err != nil {
+			return err
+		}
 		if err := tx.QueryRowContext(ctx,
 			`INSERT INTO space_drawings(id,space_id,creator_user_id,title)
 			 VALUES($1,$2,$3,$4) RETURNING created_at,updated_at,visibility`,
@@ -195,7 +199,7 @@ func drawingAccessForTx(
 		return DrawingAccess{}, nil
 	}
 	if audienceKind == SpaceAudienceConversation {
-		visible, err := humanConversationParticipantTx(ctx, tx, userID, spaceID, conversationID)
+		visible, err := conversationReadableTx(ctx, tx, userID, spaceID, conversationID)
 		if err != nil || !visible {
 			return DrawingAccess{}, err
 		}

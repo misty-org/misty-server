@@ -289,29 +289,25 @@ func TestSpaceNoteContentRouteWritesThroughTheRoomPostgres(t *testing.T) {
 	if replaced := f.do(f.member, "PUT", content, map[string]string{"markdown": "# Ready"}); replaced.Code != http.StatusOK || !strings.Contains(replaced.Body.String(), digest("# Ready")) {
 		t.Fatalf("replace = %d %s", replaced.Code, replaced.Body.String())
 	}
-	// Read what is queued for this note rather than claiming a batch: a claim
-	// hands out one command per note, and other tests share the outbox.
-	seen := map[string]bool{}
-	if err := f.database.SpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT command FROM space_note_control_outbox
-			WHERE note_id=$1 AND delivered_at IS NULL AND abandoned_at IS NULL`, note.ID)
+	// A note's commands reach its room one at a time, oldest first: the bootstrap, and once it
+	// is delivered, the replacement.
+	for _, want := range []string{"bootstrap", "replace_markdown"} {
+		commands, err := f.database.PendingNoteControlCommands(ctx, 50)
 		if err != nil {
-			return err
+			t.Fatal(err)
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var command string
-			if err := rows.Scan(&command); err != nil {
-				return err
+		var head *db.NoteControlCommand
+		for index := range commands {
+			if commands[index].NoteID == note.ID {
+				head = &commands[index]
 			}
-			seen[command] = true
 		}
-		return rows.Err()
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if !seen["bootstrap"] || !seen["replace_markdown"] {
-		t.Fatalf("commands = %v", seen)
+		if head == nil || head.Command != want {
+			t.Fatalf("next command = %+v, want %s", head, want)
+		}
+		if err := f.database.MarkNoteControlDelivered(ctx, head.ID); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if applied, err := f.database.ApplySpaceNoteProjection(ctx, db.SpaceNoteProjection{NoteID: note.ID, Revision: 5, Title: "Launch", Markdown: "# Ready\n", PlainText: "Ready"}); err != nil || !applied {

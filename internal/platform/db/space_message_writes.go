@@ -8,17 +8,13 @@ import (
 
 func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, conversationID, messageID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
-			return err
-		}
-		if conversationID != "" {
-			if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
-				return err
-			}
-		}
-		role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
+		// Where the message lives decides: the Space-wide chat, or the channel with its overwrites.
+		permissions, err := messagePermissionsTx(ctx, tx, userID, spaceID, conversationID)
 		if err != nil {
 			return err
+		}
+		if !permissions.Has(PermissionMessagesRead) {
+			return ErrSpaceForbidden
 		}
 		var sender string
 		if err := tx.QueryRowContext(ctx, `SELECT sender_user_id FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 FOR UPDATE`, messageID, spaceID, conversationID).Scan(&sender); errors.Is(err, sql.ErrNoRows) {
@@ -26,7 +22,9 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 		} else if err != nil {
 			return err
 		}
-		if sender != userID && role != "owner" {
+		// Your own message takes messages.write to delete; anyone else's, messages.manage.
+		if sender == userID && !permissions.Has(PermissionMessagesWrite) ||
+			sender != userID && !permissions.Has(PermissionMessagesManage) {
 			return ErrSpaceForbidden
 		}
 		if err := cleanupSpaceMessagesTx(ctx, tx, spaceID, []string{messageID}); err != nil {

@@ -120,7 +120,8 @@ func (db *Database) ClaimExpiredLibraryRenditionPurge(ctx context.Context, lease
 				OR EXISTS(SELECT 1 FROM library_item_versions WHERE rendition_blob_id=$1 AND id<>$2 AND lifecycle_state<>'deleted')
 				OR EXISTS(SELECT 1 FROM library_derivatives WHERE derivative_blob_id=$1 AND lifecycle_state<>'deleted')
 				OR EXISTS(SELECT 1 FROM library_exports WHERE export_blob_id=$1 AND state<>'deleted')
-				OR EXISTS(SELECT 1 FROM library_legal_holds WHERE target_kind='blob' AND target_id=$1 AND active)`, out.BlobID, out.EditID).Scan(&shared); err != nil {
+				OR EXISTS(SELECT 1 FROM library_legal_holds WHERE target_kind='blob' AND target_id=$1 AND active)
+				OR EXISTS(SELECT 1 FROM space_shared_folder_files ff JOIN library_blobs b ON b.r2_object_key=ff.blob_key WHERE b.id=$1)`, out.BlobID, out.EditID).Scan(&shared); err != nil {
 				return err
 			}
 			if !shared {

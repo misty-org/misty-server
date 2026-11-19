@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/misty-org/misty-server/internal/spaces"
 )
 
 type SpaceActorRef struct {
@@ -31,6 +33,11 @@ type SpaceConversation struct {
 	CreatedByUserID string                         `json:"created_by_user_id"`
 	VisibleToSpace  bool                           `json:"visible_to_space"`
 	Participants    []SpaceConversationParticipant `json:"participants"`
+	// Overwrites are a standard channel's per-role changes to channel-scoped
+	// permissions; a DM has none.
+	Overwrites []SpaceConversationOverwrite `json:"overwrites"`
+	// Permissions are the caller's effective permissions in this conversation.
+	Permissions []string `json:"permissions"`
 	// UnreadCount is how many messages from others the caller hasn't read yet, capped at
 	// spaceUnreadCap. Only the conversation list fills it.
 	UnreadCount int64     `json:"unread_count"`
@@ -55,26 +62,53 @@ func privateMemberConversationTitle(left, right string) string {
 	return title
 }
 
+// requireSpaceConversationMemberTx checks that the caller can open a
+// conversation: a Space member, a participant unless the whole Space is in it,
+// and, in a standard channel, holding messages.read there. A channel they can't
+// read answers ErrSpaceNotFound; anything else they can't open, ErrSpaceForbidden.
 func requireSpaceConversationMemberTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID string) error {
-	var exists bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM space_conversations c
-		JOIN space_members sm ON sm.space_id=c.space_id
-		WHERE c.id=$1 AND c.space_id=$2 AND sm.user_id=$3
-		  AND (c.visible_to_space OR EXISTS(
-		      SELECT 1 FROM space_conversation_members cm
-		      WHERE cm.conversation_id=c.id AND cm.user_id=$3
-		  ))
-	)`, conversationID, spaceID, userID).Scan(&exists); err != nil {
-		return err
-	}
-	if !exists {
+	if conversationID == "" {
 		return ErrSpaceForbidden
 	}
-	return nil
+	return requireSpaceChannelPermissionTx(ctx, tx, userID, spaceID, conversationID, PermissionMessagesRead)
 }
 
 func loadSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, conversation *SpaceConversation) error {
+	return loadSpaceConversationParticipantsForTx(ctx, tx, conversation, nil)
+}
+
+// loadSpaceConversationParticipantsForTx lists who is in a conversation. In a
+// channel the whole Space is in, that's every member who can read it, so typing
+// and member lists stay inside a private channel. readers, when given, is
+// channelReadersTx's answer, so a list of channels loads it once.
+func loadSpaceConversationParticipantsForTx(ctx context.Context, tx *sql.Tx, conversation *SpaceConversation, readers map[string]map[string]bool) error {
+	if err := loadAllSpaceConversationParticipantsTx(ctx, tx, conversation); err != nil {
+		return err
+	}
+	if !conversation.VisibleToSpace || conversation.Kind != "standard" {
+		return nil
+	}
+	if readers == nil {
+		var err error
+		if readers, err = channelReadersTx(ctx, tx, conversation.SpaceID); err != nil {
+			return err
+		}
+	}
+	channelReaders, ok := readers[conversation.ID]
+	if !ok {
+		return nil
+	}
+	participants := []SpaceConversationParticipant{}
+	for _, participant := range conversation.Participants {
+		if channelReaders[participant.UserID] {
+			participants = append(participants, participant)
+		}
+	}
+	conversation.Participants = participants
+	return nil
+}
+
+func loadAllSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, conversation *SpaceConversation) error {
 	conversation.Participants = []SpaceConversationParticipant{}
 	query := `SELECT cm.user_id,u.username,u.email,cm.joined_at
 		FROM space_conversation_members cm JOIN users u ON u.id=cm.user_id
@@ -125,7 +159,10 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 	items := []SpaceConversation{}
 	var everyoneUnread int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
+		// A channel can let in someone the Space-wide chat doesn't, so membership is the
+		// gate here and each channel's messages.read decides whether it is listed.
+		access, err := memberAccessTx(ctx, tx, spaceID, userID)
+		if err != nil {
 			return err
 		}
 		unread, args := `0`, []any{spaceID, userID}
@@ -163,12 +200,27 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 		if err := rows.Close(); err != nil {
 			return err
 		}
+		readable := items[:0]
+		for _, item := range items {
+			if err := fillConversationAccessTx(ctx, tx, access, &item); err != nil {
+				return err
+			}
+			if item.Kind == "standard" && !slices.Contains(item.Permissions, PermissionMessagesRead) {
+				continue
+			}
+			readable = append(readable, item)
+		}
+		items = readable
+		readers, err := channelReadersTx(ctx, tx, spaceID)
+		if err != nil {
+			return err
+		}
 		for index := range items {
-			if err := loadSpaceConversationParticipantsTx(ctx, tx, &items[index]); err != nil {
+			if err := loadSpaceConversationParticipantsForTx(ctx, tx, &items[index], readers); err != nil {
 				return err
 			}
 		}
-		if !withUnread {
+		if !withUnread || !access.base.Has(PermissionMessagesRead) {
 			return nil
 		}
 		return tx.QueryRowContext(ctx, `SELECT count(*) FROM (SELECT 1 FROM space_messages m
@@ -185,9 +237,20 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 // (space_members_join_group_chats). Naming people adds nothing, though each named
 // person must still be in the Space. A private chat is a DM.
 func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef) (*SpaceConversation, error) {
+	return db.CreateSpaceConversationWithOverwrites(ctx, userID, spaceID, title, participantRefs, nil)
+}
+
+// CreateSpaceConversationWithOverwrites is CreateSpaceConversation for someone
+// with channels.manage, starting the channel with overwrites: everyone denied
+// messages.read and chosen roles allowed it makes a private channel.
+func (db *Database) CreateSpaceConversationWithOverwrites(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef, overwrites []SpaceConversationOverwrite) (*SpaceConversation, error) {
 	title, err := normalizeConversationTitle(title)
 	if err != nil {
 		return nil, err
+	}
+	normalized, ok := spaces.NormalizeOverwrites(domainOverwrites(overwrites))
+	if !ok {
+		return nil, ErrSpaceInvalid
 	}
 	participants := normalizeSpaceActorRefs(participantRefs)
 	out := &SpaceConversation{
@@ -195,7 +258,20 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 		Kind: "standard", CreatedByUserID: userID, VisibleToSpace: true,
 	}
 	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
+		if err := lockSpaceRolesTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
+		access, err := memberAccessTx(ctx, tx, spaceID, userID)
+		if err != nil {
+			return err
+		}
+		if !access.base.Has(PermissionChannelsManage) {
+			return ErrSpaceForbidden
+		}
+		if !access.owner && !spaces.OverwriteChangesHeld(access.base, nil, normalized) {
+			return ErrSpaceForbidden
+		}
+		if err := requireSpaceRoleIDsTx(ctx, tx, spaceID, normalized); err != nil {
 			return err
 		}
 		if err := validateSpaceActorRefsTx(ctx, tx, userID, spaceID, participants); err != nil {
@@ -210,10 +286,17 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 			SELECT $1,user_id FROM space_members WHERE space_id=$2`, out.ID, spaceID); err != nil {
 			return err
 		}
+		if err := insertConversationOverwritesTx(ctx, tx, out.ID, normalized); err != nil {
+			return err
+		}
+		// Delivered per reader: a channel created private reaches only who may read it.
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "conversation.created", out.ID, map[string]any{"conversation_id": out.ID, "title": title}); err != nil {
 			return err
 		}
-		return loadSpaceConversationParticipantsTx(ctx, tx, out)
+		if err := loadSpaceConversationParticipantsTx(ctx, tx, out); err != nil {
+			return err
+		}
+		return fillConversationAccessTx(ctx, tx, access, out)
 	})
 	return out, err
 }
@@ -274,7 +357,14 @@ func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceI
 			}
 		}
 		out.VisibleToSpace = false
-		return loadSpaceConversationParticipantsTx(ctx, tx, out)
+		if err := loadSpaceConversationParticipantsTx(ctx, tx, out); err != nil {
+			return err
+		}
+		access, err := memberAccessTx(ctx, tx, spaceID, userID)
+		if err != nil {
+			return err
+		}
+		return fillConversationAccessTx(ctx, tx, access, out)
 	})
 	return out, err
 }

@@ -34,6 +34,12 @@ type RealtimeClient struct {
 	// while viewingSpaceID is non-empty. Mutated only while holding
 	// RealtimeService.mu.
 	active bool
+	// place and itemID are where in Misty this client said it is (see cleanPresencePlace), and
+	// placeAt when that last changed, so a user's most recent place wins across connections.
+	// Mutated only while holding RealtimeService.mu.
+	place   string
+	itemID  string
+	placeAt time.Time
 	// lastTypingAt bounds typing frame processing for this socket.
 	lastTypingAt time.Time
 	typingScopes map[string]bool

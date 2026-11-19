@@ -89,6 +89,8 @@ func writeLibraryError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "version_conflict"})
 	case errors.Is(err, db.ErrLibraryUploadMismatch):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "upload_verification_failed"})
+	case errors.Is(err, ErrLibraryDirectTransferUnavailable):
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "library_direct_transfer_unavailable"})
 	default:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"code": "internal_error"})
 	}

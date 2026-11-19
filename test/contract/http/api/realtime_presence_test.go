@@ -207,3 +207,52 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 		t.Fatal("disconnected client must be removed from the viewers map")
 	}
 }
+
+// TestRealtimePresenceCarriesOnlyKnownPlaces checks that presence names where a member is in
+// Misty only from the fixed set of places, and a Lab notebook only when it is id-shaped, so
+// nothing a client makes up reaches the Space's other members.
+func TestRealtimePresenceCarriesOnlyKnownPlaces(t *testing.T) {
+	database := openPresenceTestDatabase(t)
+	ctx := context.Background()
+
+	owner, err := database.CreateUser(uniqueTestEmail("place-owner"), "password123")
+	if err != nil {
+		t.Fatalf("CreateUser(owner) error = %v", err)
+	}
+	space, err := database.TestingCreateSpace(ctx, owner.ID, "Places")
+	if err != nil {
+		t.Fatalf("CreateSpace(owner) error = %v", err)
+	}
+	service := NewRealtimeService(database, "")
+	client := newTestRealtimeClient(owner.ID)
+
+	service.SetViewingPlace(client, space.ID, true, "lab", "note_0123-abc")
+	msg := readPresenceMessage(t, client)
+	if len(msg.Viewers) != 1 || msg.Viewers[0].Place != "lab" || msg.Viewers[0].ItemID != "note_0123-abc" {
+		t.Fatalf("presence in a Lab notebook = %#v, want place lab and its id", msg)
+	}
+
+	service.SetViewingPlace(client, space.ID, true, "studio", "note_0123-abc")
+	msg = readPresenceMessage(t, client)
+	if msg.Viewers[0].Place != "studio" || msg.Viewers[0].ItemID != "" {
+		t.Fatalf("presence in the Studio = %#v, want place studio and no item", msg)
+	}
+
+	service.SetViewingPlace(client, space.ID, true, "studio", "lounge")
+	msg = readPresenceMessage(t, client)
+	if msg.Viewers[0].Place != "studio" || msg.Viewers[0].ItemID != "lounge" {
+		t.Fatalf("presence in the Studio's lounge = %#v, want place studio and its room", msg)
+	}
+
+	service.SetViewingPlace(client, space.ID, true, "my secret plans", "")
+	msg = readPresenceMessage(t, client)
+	if msg.Viewers[0].Place != "" || msg.Viewers[0].ItemID != "" {
+		t.Fatalf("presence with an unknown place = %#v, want no place", msg)
+	}
+
+	service.SetViewingPlace(client, space.ID, true, "lab", "not an id / ../x")
+	msg = readPresenceMessage(t, client)
+	if msg.Viewers[0].Place != "lab" || msg.Viewers[0].ItemID != "" {
+		t.Fatalf("presence with a malformed item = %#v, want place lab and no item", msg)
+	}
+}

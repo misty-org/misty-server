@@ -33,19 +33,13 @@ func (db *Database) SpaceAvatarVersion(ctx context.Context, userID, spaceID stri
 	return version, err
 }
 
-// RequireSpaceOwner checks that the user owns the Space, before its picture is stored.
-func (db *Database) RequireSpaceOwner(ctx context.Context, userID, spaceID string) error {
-	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		return requireSpaceOwnerTx(ctx, tx, spaceID, userID)
-	})
-}
-
-// SetSpaceAvatar records a new picture (picture true) or its removal, for the owner only, and
-// tells the Space's members so their apps show it. It returns the new version (0 once removed).
+// SetSpaceAvatar records a new picture (picture true) or its removal, for whoever holds
+// space.rename, and tells the Space's members so their apps show it. It returns the new
+// version (0 once removed).
 func (db *Database) SetSpaceAvatar(ctx context.Context, userID, spaceID string, picture bool) (int64, error) {
 	var version int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
+		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, userID, PermissionSpaceRename); err != nil {
 			return err
 		}
 		query := `UPDATE spaces SET avatar_version=0,updated_at=NOW() WHERE id=$1 RETURNING avatar_version`

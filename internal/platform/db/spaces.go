@@ -73,6 +73,13 @@ func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, err
 		if err := rows.Close(); err != nil {
 			return err
 		}
+		for index := range spaces {
+			permissions, err := spacePermissionListTx(ctx, tx, spaces[index].ID, userID)
+			if err != nil {
+				return err
+			}
+			spaces[index].Permissions = permissions
+		}
 		return nil
 	})
 	return spaces, err
@@ -92,7 +99,9 @@ func (db *Database) SpaceByID(ctx context.Context, userID, spaceID string) (*Spa
 			WHERE s.id=$1 AND m.user_id=$2 AND s.lifecycle_state='active'`, spaceID, userID).Scan(&out.ID, &out.SecurityDomainID, &out.OwnerUserID, &out.Name, &out.IsDefault, &out.Role, &out.MemberCount, &out.PendingCount, &out.IsShared, &out.AvatarVersion, &out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err
 		}
-		return nil
+		permissions, err := spacePermissionListTx(ctx, tx, spaceID, userID)
+		out.Permissions = permissions
+		return err
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound
@@ -109,7 +118,7 @@ func (db *Database) RenameSpace(ctx context.Context, userID, spaceID, name strin
 		return nil, err
 	}
 	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, userID); err != nil {
+		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, userID, PermissionSpaceRename); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE spaces SET name=$1,updated_at=NOW() WHERE id=$2`, name, spaceID); err != nil {
@@ -166,6 +175,12 @@ func (db *Database) DeleteSpace(ctx context.Context, userID, spaceID, confirmati
 		if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
+		if err := revokeMadeItemAccessForSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
+		if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
 		if err := revokeNoteAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
@@ -183,6 +198,10 @@ func (db *Database) SpaceMembers(ctx context.Context, userID, spaceID string) ([
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
+		roleIDs, err := spaceMemberRoleIDsTx(ctx, tx, spaceID)
+		if err != nil {
+			return err
+		}
 		rows, err := tx.QueryContext(ctx, `SELECT m.space_id,m.user_id,u.username,u.email,m.role,m.joined_at,m.read_message_seq,u.avatar_version
 			FROM space_members m
 			JOIN users u ON u.id=m.user_id
@@ -196,6 +215,10 @@ func (db *Database) SpaceMembers(ctx context.Context, userID, spaceID string) ([
 			var m SpaceMember
 			if err := rows.Scan(&m.SpaceID, &m.UserID, &m.Name, &m.Email, &m.Role, &m.JoinedAt, &m.ReadSeq, &m.AvatarVersion); err != nil {
 				return err
+			}
+			m.RoleIDs = roleIDs[m.UserID]
+			if m.RoleIDs == nil {
+				m.RoleIDs = []string{}
 			}
 			members = append(members, m)
 		}

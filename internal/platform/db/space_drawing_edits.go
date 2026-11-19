@@ -109,21 +109,5 @@ func (db *Database) DeleteSpaceDrawing(
 // updated time follows the edits people and agents make in the room. revision
 // only grows, so a late or repeated callback changes nothing.
 func (db *Database) ApplySpaceDrawingActivity(ctx context.Context, drawingID string, revision int64) (bool, error) {
-	if drawingID == "" || revision < 1 {
-		return false, ErrSpaceInvalid
-	}
-	applied := false
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx,
-			`UPDATE space_drawings SET collaboration_revision=$2,updated_at=NOW()
-			 WHERE id=$1 AND lifecycle_state='active' AND collaboration_revision<$2`,
-			drawingID, revision)
-		if err != nil {
-			return err
-		}
-		changed, _ := result.RowsAffected()
-		applied = changed > 0
-		return nil
-	})
-	return applied, err
+	return db.ApplySpaceDrawingActivityProjection(ctx, SpaceDrawingActivity{DrawingID: drawingID, Revision: revision})
 }

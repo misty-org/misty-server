@@ -42,6 +42,11 @@ func (s *Server) mountDrawingRoutes(prefix string, spaces *api.SpacesService) {
 		prefix+"/spaces/{spaceID}/drawings/{drawingID}/collaboration-ticket",
 		spaces.SpaceDrawingCollaborationTicket(),
 	)
+	// A library image's edit room, shared the same way as a drawing's scene.
+	s.Router.Post(
+		prefix+"/spaces/{spaceID}/library/items/{itemID}/collaboration-ticket",
+		spaces.SpaceLibraryImageCollaborationTicket(),
+	)
 	if s.Library == nil {
 		return
 	}

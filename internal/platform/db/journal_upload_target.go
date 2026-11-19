@@ -9,20 +9,25 @@ import (
 // ValidateJournalUploadTarget binds the immutable upload parent to the HTTP
 // route. A generic Library route cannot finalize a Journal asset with a broader
 // library.upload grant. The completion transaction rechecks current access too.
-func (db *Database) ValidateJournalUploadTarget(ctx context.Context, userID, spaceID, uploadID, noteID, drawingID string) error {
+func (db *Database) ValidateJournalUploadTarget(ctx context.Context, userID, spaceID, uploadID, noteID, drawingID string, deckID ...string) error {
+	routeDeck := ""
+	if len(deckID) > 0 {
+		routeDeck = deckID[0]
+	}
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		var purpose, storedNote, storedDrawing string
-		err := tx.QueryRowContext(ctx, `SELECT purpose,COALESCE(note_id,''),COALESCE(drawing_id,'')
-			FROM space_library_uploads WHERE id=$1 AND space_id=$2 AND user_id=$3`, uploadID, spaceID, userID).Scan(&purpose, &storedNote, &storedDrawing)
+		var purpose, storedNote, storedDrawing, storedDeck string
+		err := tx.QueryRowContext(ctx, `SELECT purpose,COALESCE(note_id,''),COALESCE(drawing_id,''),COALESCE(deck_id,'')
+			FROM space_library_uploads WHERE id=$1 AND space_id=$2 AND user_id=$3`, uploadID, spaceID, userID).Scan(&purpose, &storedNote, &storedDrawing, &storedDeck)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrLibraryNotFound
 		}
 		if err != nil {
 			return err
 		}
-		if noteID != storedNote || drawingID != storedDrawing ||
+		if noteID != storedNote || drawingID != storedDrawing || routeDeck != storedDeck ||
 			(noteID != "" && purpose != UploadPurposeNoteAttachment) ||
-			(drawingID != "" && purpose != UploadPurposeDrawingAsset) {
+			(drawingID != "" && purpose != UploadPurposeDrawingAsset) ||
+			(routeDeck != "" && purpose != UploadPurposeDeckAsset) {
 			return ErrLibraryNotFound
 		}
 		return requireJournalUploadAccessTx(ctx, tx, userID, uploadID, purpose)
@@ -49,6 +54,18 @@ func requireJournalUploadAccessTx(ctx context.Context, tx *sql.Tx, userID, uploa
 			return err
 		}
 		access, err := drawingAccessForTx(ctx, tx, userID, drawingID)
+		if err != nil {
+			return err
+		}
+		if !access.CanEdit {
+			return ErrLibraryNotFound
+		}
+	case UploadPurposeDeckAsset:
+		var deckID string
+		if err := tx.QueryRowContext(ctx, `SELECT deck_id FROM space_library_uploads WHERE id=$1`, uploadID).Scan(&deckID); err != nil {
+			return err
+		}
+		access, err := madeItemAccessForTx(ctx, tx, deckKind(), userID, deckID)
 		if err != nil {
 			return err
 		}

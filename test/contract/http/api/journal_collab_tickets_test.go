@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/misty-org/misty-server/internal/platform/db"
 	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
@@ -144,6 +145,55 @@ func TestDrawingTicketUsesDrawingRoomAndClaims(t *testing.T) {
 	}
 }
 
+func TestImageTicketUsesImageRoomAndClaims(t *testing.T) {
+	config := testCollabConfig(t)
+
+	ticket, err := config.MintImageTicket("user_1", "space_1", "item_1", "editor", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := decodeTicketClaims(t, ticket.Ticket)
+	if claims.ResourceType != "image" ||
+		claims.ResourceID != "item_1" ||
+		claims.ImageID != "item_1" ||
+		claims.NoteID != "" ||
+		claims.DrawingID != "" {
+		t.Fatalf("image claims = %#v", claims)
+	}
+	if !strings.Contains(ticket.URL, "/parties/image-room/") {
+		t.Fatalf("image ticket URL = %q", ticket.URL)
+	}
+	if config.ImageRoomID("item_1") == config.DrawingRoomID("item_1") {
+		t.Fatal("an image and a drawing with the same id share a room")
+	}
+}
+
+func TestCodeTicketUsesCodeRoomAndClaims(t *testing.T) {
+	config := testCollabConfig(t)
+
+	ticket, err := config.MintCodeTicket("user_1", "space_1", "codesession_1", "editor", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := decodeTicketClaims(t, ticket.Ticket)
+	if claims.ResourceType != "code" ||
+		claims.ResourceID != "codesession_1" ||
+		claims.CodeSessionID != "codesession_1" ||
+		claims.Role != "editor" ||
+		claims.NoteID != "" ||
+		claims.DrawingID != "" ||
+		claims.ImageID != "" {
+		t.Fatalf("code claims = %#v", claims)
+	}
+	if !strings.Contains(ticket.URL, "/parties/code-room/") || claims.Room != ticket.Room ||
+		ticket.Room != config.CodeRoomID("codesession_1") {
+		t.Fatalf("code ticket URL = %q room = %q", ticket.URL, ticket.Room)
+	}
+	if config.CodeRoomID("x_1") == config.DrawingRoomID("x_1") || config.CodeRoomID("x_1") == config.RoomID("x_1") {
+		t.Fatal("a code session shares a room with another resource of the same id")
+	}
+}
+
 // 60 seconds: long enough to open a socket, short enough that a
 // revoked user cannot sit on a usable ticket.
 func TestTicketExpiresInOneMinute(t *testing.T) {
@@ -243,5 +293,54 @@ func TestJournalCollabIsRequired(t *testing.T) {
 	t.Setenv("JOURNAL_COLLAB_ROOM_SALT", "")
 	if _, err := JournalCollabConfigFromEnv(); err == nil {
 		t.Fatal("a host without its keys was accepted")
+	}
+}
+
+func TestDeckAndWorkbookTicketsUseTheirRoomsAndClaims(t *testing.T) {
+	config := testCollabConfig(t)
+	for _, tc := range []struct {
+		kind, id, party string
+		claim           func(JournalTicketClaims) string
+	}{
+		{"deck", "deck_1", "deck-room", func(c JournalTicketClaims) string { return c.DeckID }},
+		{"workbook", "workbook_1", "workbook-room", func(c JournalTicketClaims) string { return c.WorkbookID }},
+	} {
+		kind, ok := db.SpaceItemKindNamed(tc.kind)
+		if !ok {
+			t.Fatalf("%s is not a registered kind", tc.kind)
+		}
+		ticket, err := config.MintItemTicket(kind, "user_1", "space_1", tc.id, "editor", 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		claims := decodeTicketClaims(t, ticket.Ticket)
+		if claims.ResourceType != tc.kind || claims.ResourceID != tc.id || tc.claim(claims) != tc.id ||
+			claims.ACLVersion != 3 || claims.Role != "editor" ||
+			claims.NoteID != "" || claims.DrawingID != "" || claims.ImageID != "" || claims.CodeSessionID != "" {
+			t.Fatalf("%s claims = %#v", tc.kind, claims)
+		}
+		if !strings.Contains(ticket.URL, "/parties/"+tc.party+"/") || claims.Room != ticket.Room ||
+			ticket.Room != config.ItemRoomID(tc.kind, tc.id) {
+			t.Fatalf("%s ticket URL = %q room = %q", tc.kind, ticket.URL, ticket.Room)
+		}
+		for _, other := range []string{"note", "drawing", "image", "code"} {
+			if config.ItemRoomID(tc.kind, "x_1") == config.ItemRoomID(other, "x_1") {
+				t.Fatalf("a %s shares a room with a %s of the same id", tc.kind, other)
+			}
+		}
+		export, err := config.MintJournalExportTicket("user_1", "space_1", tc.kind, tc.id, 3)
+		if err != nil {
+			t.Fatalf("%s export ticket: %v", tc.kind, err)
+		}
+		if exported := decodeTicketClaims(t, export.Ticket); exported.Role != "viewer" || tc.claim(exported) != tc.id ||
+			!strings.Contains(export.URL, "/parties/"+tc.party+"/") {
+			t.Fatalf("%s export claims = %#v", tc.kind, exported)
+		}
+	}
+	if config.ItemRoomID("note", "n_1") != config.RoomID("n_1") || config.ItemRoomID("drawing", "d_1") != config.DrawingRoomID("d_1") {
+		t.Fatal("ItemRoomID disagrees with the note and drawing rooms")
+	}
+	if _, err := config.MintJournalExportTicket("user_1", "space_1", "decks", "deck_1", 1); err == nil {
+		t.Fatal("a section name minted an export ticket")
 	}
 }

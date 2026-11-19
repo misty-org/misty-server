@@ -16,6 +16,10 @@ type SpaceNoteProjection struct {
 	Markdown        string
 	PlainText       string
 	OutgoingNoteIDs []string
+	// ContentBytes and HistoryBytes are the room's snapshot and kept versions, absent from rooms
+	// deployed before they counted toward storage.
+	ContentBytes *int64
+	HistoryBytes *int64
 }
 
 // ApplySpaceNoteProjection accepts only a newer room revision and rebuilds the
@@ -25,7 +29,9 @@ func (db *Database) ApplySpaceNoteProjection(ctx context.Context, projection Spa
 	projection.Title = strings.TrimSpace(projection.Title)
 	if projection.NoteID == "" || projection.Revision < 1 || projection.Title == "" ||
 		len([]rune(projection.Title)) > 500 || len([]rune(projection.Markdown)) > 100_000 ||
-		len([]rune(projection.PlainText)) > 100_000 || len(projection.OutgoingNoteIDs) > 500 {
+		len([]rune(projection.PlainText)) > 100_000 || len(projection.OutgoingNoteIDs) > 500 ||
+		(projection.ContentBytes != nil && (*projection.ContentBytes < 0 || *projection.ContentBytes > maxItemContentBytes)) ||
+		(projection.HistoryBytes != nil && (*projection.HistoryBytes < 0 || *projection.HistoryBytes > maxItemContentBytes)) {
 		return false, ErrSpaceInvalid
 	}
 	applied := false
@@ -44,6 +50,10 @@ func (db *Database) ApplySpaceNoteProjection(ctx context.Context, projection Spa
 			return err
 		}
 		applied = true
+		if err := applyNoteContentBytesTx(ctx, tx, spaceID, creatorUserID, projection.NoteID,
+			projection.ContentBytes, projection.HistoryBytes); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_note_links WHERE source_note_id=$1`, projection.NoteID); err != nil {
 			return err
 		}
@@ -84,10 +94,7 @@ func (db *Database) SpaceNoteBacklinks(ctx context.Context, userID, targetNoteID
 			FROM space_note_links links
 			JOIN space_notes source ON source.id=links.source_note_id
 			WHERE links.target_note_id=$1 AND source.lifecycle_state='active'
-			  AND (source.audience_kind='space' OR EXISTS(
-			      SELECT 1 FROM space_conversation_members cm
-			      WHERE cm.conversation_id=source.audience_conversation_id
-			        AND cm.user_id=$2))
+			  AND (source.audience_kind='space' OR public.misty_can_read_space_conversation(source.audience_conversation_id,$2))
 			ORDER BY source.updated_at DESC`, targetNoteID, userID)
 		if err != nil {
 			return err

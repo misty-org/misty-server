@@ -172,7 +172,7 @@ func retireLibraryItemDerivativesTx(ctx context.Context, tx *sql.Tx, condition, 
 }
 
 // retireLibraryFileIfUnusedTx marks a file deleted when no live item,
-// attachment, note or drawing asset still uses it, along with the file's own
+// attachment, note, drawing or deck asset still uses it, along with the file's own
 // derivatives, and returns the blobs that may now be unused.
 func retireLibraryFileIfUnusedTx(ctx context.Context, tx *sql.Tx, fileID string) ([]string, error) {
 	var blobID string
@@ -183,6 +183,7 @@ func retireLibraryFileIfUnusedTx(ctx context.Context, tx *sql.Tx, fileID string)
 		AND NOT EXISTS(SELECT 1 FROM space_message_attachments a WHERE a.file_id=f.id AND a.lifecycle_state<>'deleted')
 		AND NOT EXISTS(SELECT 1 FROM space_note_assets a WHERE a.file_id=f.id AND a.lifecycle_state<>'deleted')
 		AND NOT EXISTS(SELECT 1 FROM space_drawing_assets a WHERE a.file_id=f.id AND a.lifecycle_state<>'deleted')
+		AND NOT EXISTS(SELECT 1 FROM space_deck_assets a WHERE a.file_id=f.id AND a.lifecycle_state<>'deleted')
 		RETURNING f.blob_id`, fileID).Scan(&blobID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -231,6 +232,7 @@ func retireLibraryBlobsIfUnusedTx(ctx context.Context, tx *sql.Tx, blobIDs []str
 			AND NOT EXISTS(SELECT 1 FROM library_item_versions v WHERE v.rendition_blob_id=b.id AND v.lifecycle_state<>'deleted')
 			AND NOT EXISTS(SELECT 1 FROM library_derivatives d WHERE d.derivative_blob_id=b.id AND d.lifecycle_state<>'deleted')
 			AND NOT EXISTS(SELECT 1 FROM library_exports e WHERE e.export_blob_id=b.id AND e.state<>'deleted')
+			AND NOT EXISTS(SELECT 1 FROM space_shared_folder_files ff WHERE ff.blob_key=b.r2_object_key)
 			RETURNING b.r2_object_key`, blobID).Scan(&key)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue

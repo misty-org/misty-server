@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -13,55 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
-
-func (s *SpaceLibraryService) UploadContent() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID, uploadID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "uploadID")
-		tokenHash := security.HashToken(strings.TrimSpace(r.Header.Get(LibraryUploadTokenHeader)))
-		pending, err := s.database.LibraryUpload(r.Context(), userID, spaceID, uploadID)
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		if !s.transferPurposeEnabled(pending.Purpose) {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "library_uploads_disabled"})
-			return
-		}
-		// The proxy route exists only for the local development object store.
-		// Once direct transfer is on, large user bodies must never reach the VPS.
-		if s.DirectTransfersActive() || IsJournalAssetPurpose(pending.Purpose) {
-			writeJSON(w, http.StatusConflict, map[string]string{"code": "library_direct_transfer_required"})
-			return
-		}
-		upload, err := s.database.SetLibraryUploadState(r.Context(), userID, spaceID, uploadID, tokenHash, "initiated", "uploading")
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		if r.ContentLength != upload.RequestedByteSize {
-			s.rejectAndDelete(r.Context(), upload, tokenHash, "invalid", "content_length_mismatch")
-			writeLibraryError(w, db.ErrLibraryUploadMismatch)
-			return
-		}
-		metadata := LibraryObjectMetadata{ByteSize: upload.RequestedByteSize, SHA256: upload.ClientSHA256, MIMEType: upload.ClientDeclaredMIMEType}
-		if err := s.Store.Put(r.Context(), upload.ObjectKey, io.LimitReader(r.Body, upload.RequestedByteSize+1), metadata); err != nil {
-			s.rejectAndDelete(r.Context(), upload, tokenHash, "invalid", "object_write_failed")
-			writeLibraryError(w, err)
-			return
-		}
-		upload, err = s.database.SetLibraryUploadState(r.Context(), userID, spaceID, uploadID, tokenHash, "uploading", "uploaded_unverified")
-		if err != nil {
-			_ = s.Store.Delete(r.Context(), upload.ObjectKey)
-			writeLibraryError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, upload)
-	}
-}
 
 func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -84,8 +34,14 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			writeLibraryError(w, db.ErrLibraryForbidden)
 			return
 		}
+		// A shared folder's files become part of the folder when it commits,
+		// never a Library item or attachment of their own.
+		if upload.Purpose == UploadPurposeSharedFolder {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "folder_commit_required"})
+			return
+		}
 		if err := s.database.ValidateJournalUploadTarget(r.Context(), userID, spaceID, uploadID,
-			chi.URLParam(r, "noteID"), chi.URLParam(r, "drawingID")); err != nil {
+			chi.URLParam(r, "noteID"), chi.URLParam(r, "drawingID"), chi.URLParam(r, "deckID")); err != nil {
 			writeLibraryError(w, err)
 			return
 		}
@@ -98,10 +54,10 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, result)
 			return
 		}
-		// With direct transfer the client PUTs straight to R2, so the upload is
-		// still "initiated" here: the HEAD below is the only proof the bytes
-		// landed. The proxy path advances to "uploaded_unverified" first.
-		directPending := s.DirectTransfersActive() && upload.State == "initiated"
+		// The client PUTs straight to R2, so the upload is still "initiated"
+		// here: the HEAD below is the only proof the bytes landed. File bytes
+		// never pass through the server.
+		directPending := upload.State == "initiated"
 		if upload.State != "uploaded_unverified" && !directPending {
 			writeLibraryError(w, db.ErrLibraryConflict)
 			return

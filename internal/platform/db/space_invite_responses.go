@@ -98,13 +98,12 @@ func (db *Database) RespondToSpaceInviteToken(
 	return db.RespondToSpaceInvite(ctx, userID, inviteID, accept)
 }
 
+// RemoveSpaceMember takes members.remove, and only reaches members whose
+// highest role is below the caller's; nobody removes the owner.
 func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, memberID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireMemberRemovalTx(ctx, tx, ownerID, spaceID, memberID); err != nil {
 			return err
-		}
-		if ownerID == memberID {
-			return ErrSpaceInvalid
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_conversation_members cm USING space_conversations c WHERE cm.conversation_id=c.id AND c.space_id=$1 AND cm.user_id=$2`, spaceID, memberID); err != nil {
 			return err
@@ -128,6 +127,12 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 			return err
 		}
 		if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
+		if err := revokeMadeItemAccessForSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
+		if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		if _, err = recordSpaceEventTx(ctx, tx, spaceID, ownerID, "member.removed", memberID, map[string]any{}); err != nil {
@@ -163,6 +168,12 @@ func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) erro
 			return err
 		}
 		if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
+		if err := revokeMadeItemAccessForSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
+		if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "member.left", userID, map[string]any{}); err != nil {

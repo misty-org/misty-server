@@ -10,7 +10,15 @@ import (
 const (
 	JournalAssetKindNote    = "note_asset"
 	JournalAssetKindDrawing = "drawing_asset"
+	JournalAssetKindDeck    = "deck_asset"
 )
+
+// journalAssetTables are the asset tables the cleanup claims from, by contribution kind.
+var journalAssetTables = []struct{ kind, table string }{
+	{JournalAssetKindNote, "space_note_assets"},
+	{JournalAssetKindDrawing, "space_drawing_assets"},
+	{JournalAssetKindDeck, "space_deck_assets"},
+}
 
 // JournalAssetPurge is a claimed note/drawing asset cleanup. ObjectKey is
 // present only when this asset owns the last live file reference to the blob.
@@ -41,12 +49,7 @@ func (db *Database) ClaimExpiredJournalAssets(
 
 	claims := make([]JournalAssetPurge, 0, limit)
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		for _, source := range []struct {
-			kind, table string
-		}{
-			{JournalAssetKindNote, "space_note_assets"},
-			{JournalAssetKindDrawing, "space_drawing_assets"},
-		} {
+		for _, source := range journalAssetTables {
 			remaining := limit - len(claims)
 			if remaining == 0 {
 				break
@@ -177,6 +180,10 @@ func claimJournalAssetTx(
 			   AND NOT EXISTS (
 			       SELECT 1 FROM space_drawing_assets a
 			       WHERE a.file_id=f.id AND a.lifecycle_state='ready'
+			   )
+			   AND NOT EXISTS (
+			       SELECT 1 FROM space_deck_assets a
+			       WHERE a.file_id=f.id AND a.lifecycle_state='ready'
 			   )`,
 			fileID,
 		)
@@ -228,6 +235,10 @@ func claimJournalAssetTx(
 		   AND NOT EXISTS (
 		       SELECT 1 FROM library_exports e
 		       WHERE e.export_blob_id=b.id AND e.state<>'deleted'
+		   )
+		   AND NOT EXISTS (
+		       SELECT 1 FROM space_shared_folder_files ff
+		       WHERE ff.blob_key=b.r2_object_key
 		   )`,
 		claim.BlobID, fileID,
 	)
@@ -249,10 +260,13 @@ func (db *Database) CompleteJournalAssetPurge(
 	claim JournalAssetPurge,
 ) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		table := "space_note_assets"
-		if claim.Kind == JournalAssetKindDrawing {
-			table = "space_drawing_assets"
-		} else if claim.Kind != JournalAssetKindNote {
+		table := ""
+		for _, source := range journalAssetTables {
+			if source.kind == claim.Kind {
+				table = source.table
+			}
+		}
+		if table == "" {
 			return ErrLibraryInvalid
 		}
 		if claim.DeleteBlob {

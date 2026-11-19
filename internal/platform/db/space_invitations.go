@@ -43,10 +43,15 @@ func (db *Database) InviteToSpaceWithToken(
 		ExpiresAt:    time.Now().UTC().Add(7 * 24 * time.Hour),
 	}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, ownerID, PermissionSpaceInvite); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:owner:"+ownerID); err != nil {
+		// The inviter may not be the owner, but the sharing limits are the owner's.
+		var spaceOwnerID string
+		if err := tx.QueryRowContext(ctx, `SELECT owner_user_id FROM spaces WHERE id=$1`, spaceID).Scan(&spaceOwnerID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:owner:"+spaceOwnerID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:people:"+spaceID); err != nil {
@@ -71,7 +76,7 @@ func (db *Database) InviteToSpaceWithToken(
 		if already {
 			return ErrSpaceConflict
 		}
-		if err := requireSpaceSharingRoomTx(ctx, tx, ownerID, spaceID); err != nil {
+		if err := requireSpaceSharingRoomTx(ctx, tx, spaceOwnerID, spaceID); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `SELECT username FROM users WHERE id=$1`, ownerID).Scan(&out.InviterName); err != nil {
@@ -144,7 +149,7 @@ func (db *Database) PendingSpaceInvitations(
 ) ([]SpaceInvitation, error) {
 	items := []SpaceInvitation{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, ownerID, PermissionSpaceInvite); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.space_id,s.name,
@@ -182,7 +187,7 @@ func (db *Database) RefreshSpaceInvitation(
 	out := &SpaceInvitation{}
 	expiresAt := time.Now().UTC().Add(7 * 24 * time.Hour)
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, ownerID, PermissionSpaceInvite); err != nil {
 			return err
 		}
 		err := tx.QueryRowContext(ctx, `UPDATE space_invitations i
@@ -210,7 +215,7 @@ func (db *Database) RevokeSpaceInvitation(
 	ownerID, spaceID, inviteID string,
 ) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceOwnerTx(ctx, tx, spaceID, ownerID); err != nil {
+		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, ownerID, PermissionSpaceInvite); err != nil {
 			return err
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE space_invitations SET revoked_at=NOW()

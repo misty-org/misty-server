@@ -40,6 +40,9 @@ func (s *SpacesService) JournalNoteProjection() http.HandlerFunc {
 			Markdown        string   `json:"markdown"`
 			PlainText       string   `json:"plain_text"`
 			OutgoingNoteIDs []string `json:"outgoing_note_ids"`
+			// The room's snapshot and kept history, which count toward storage.
+			ContentBytes *int64 `json:"content_bytes"`
+			HistoryBytes *int64 `json:"history_bytes"`
 		}
 		if json.Unmarshal(body, &input) != nil {
 			writeSpaceError(w, db.ErrSpaceInvalid)
@@ -48,45 +51,46 @@ func (s *SpacesService) JournalNoteProjection() http.HandlerFunc {
 		applied, err := s.database.ApplySpaceNoteProjection(r.Context(), db.SpaceNoteProjection{
 			NoteID: input.NoteID, Revision: input.Revision, Title: input.Title,
 			Markdown: input.Markdown, PlainText: input.PlainText, OutgoingNoteIDs: input.OutgoingNoteIDs,
+			ContentBytes: input.ContentBytes, HistoryBytes: input.HistoryBytes,
 		})
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]bool{"applied": applied})
+		// The limits tell the room how long to keep its history.
+		s.writeRoomCallbackAnswer(w, r, db.SpaceItemNote, input.NoteID, applied)
 	}
 }
 
 // JournalDrawingActivity accepts the signed callback a drawing's collaboration
-// room sends after each save. It carries only the drawing's id and a revision.
+// room sends after each save: the drawing's id and a revision, and the plain
+// text of its text elements and its sizes. Never the scene.
 func (s *SpacesService) JournalDrawingActivity() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(io.LimitReader(r.Body, 4<<10+1))
-		if err != nil || len(body) > 4<<10 {
-			writeSpaceError(w, db.ErrSpaceInvalid)
-			return
-		}
-		timestamp := r.Header.Get("X-Misty-Timestamp")
-		issuedAt, parseErr := strconv.ParseInt(timestamp, 10, 64)
-		if parseErr != nil || time.Since(time.Unix(issuedAt, 0)).Abs() > 5*time.Minute ||
-			!s.JournalCollab.VerifyProjectionSignature(timestamp, body, r.Header.Get("X-Misty-Signature")) {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "unauthorized"})
+		body, ok := s.readRoomCallback(w, r, itemProjectionBodyLimit)
+		if !ok {
 			return
 		}
 		var input struct {
-			DrawingID string `json:"drawing_id"`
-			Revision  int64  `json:"revision"`
+			DrawingID    string  `json:"drawing_id"`
+			Revision     int64   `json:"revision"`
+			PlainText    *string `json:"plain_text"`
+			ContentBytes *int64  `json:"content_bytes"`
+			HistoryBytes *int64  `json:"history_bytes"`
 		}
 		if json.Unmarshal(body, &input) != nil {
 			writeSpaceError(w, db.ErrSpaceInvalid)
 			return
 		}
-		applied, err := s.database.ApplySpaceDrawingActivity(r.Context(), input.DrawingID, input.Revision)
+		applied, err := s.database.ApplySpaceDrawingActivityProjection(r.Context(), db.SpaceDrawingActivity{
+			DrawingID: input.DrawingID, Revision: input.Revision, PlainText: input.PlainText,
+			ContentBytes: input.ContentBytes, HistoryBytes: input.HistoryBytes,
+		})
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]bool{"applied": applied})
+		s.writeRoomCallbackAnswer(w, r, db.SpaceItemDrawing, input.DrawingID, applied)
 	}
 }
 

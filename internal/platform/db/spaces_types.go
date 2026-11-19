@@ -45,6 +45,8 @@ type Space struct {
 	AvatarVersion int64     `json:"avatar_version"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	// Permissions are the caller's effective Space-wide permissions.
+	Permissions []string `json:"permissions"`
 }
 
 type SpaceMember struct {
@@ -57,6 +59,8 @@ type SpaceMember struct {
 	ReadSeq  int64     `json:"read_message_seq"`
 	// AvatarVersion names the member's profile picture; 0 means they have none.
 	AvatarVersion int64 `json:"avatar_version"`
+	// RoleIDs are the member's roles besides everyone, highest first.
+	RoleIDs []string `json:"role_ids"`
 }
 
 type SpaceInvitation struct {
@@ -89,8 +93,10 @@ type MessageSpan struct {
 	Text    string `json:"text,omitempty"`
 	UserID  string `json:"user_id,omitempty"`
 	AgentID string `json:"agent_id,omitempty"`
-	Label   string `json:"label,omitempty"`
-	URL     string `json:"url,omitempty"`
+	// RoleID is an @role mention; the span stays as written if the role is deleted.
+	RoleID string `json:"role_id,omitempty"`
+	Label  string `json:"label,omitempty"`
+	URL    string `json:"url,omitempty"`
 }
 
 type SpaceMessage struct {

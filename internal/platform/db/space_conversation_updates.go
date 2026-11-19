@@ -7,8 +7,8 @@ import (
 )
 
 // UpdateSpaceConversation renames a group chat. Everyone in the Space is in a
-// group chat, so its members don't change, and a DM can't be changed at all. Only
-// the Space's owner may do this. This checks explicitly as well as through RLS so
+// group chat, so its members don't change, and a DM can't be changed at all. It
+// takes channels.manage in that channel. This checks explicitly as well as through RLS so
 // the behavior is identical (a clear ErrSpaceForbidden, not a silently-ignored
 // zero-row update) regardless of which role is connected, including in tests that
 // run as a superuser and would otherwise bypass RLS entirely.
@@ -19,7 +19,8 @@ func (db *Database) UpdateSpaceConversation(ctx context.Context, userID, spaceID
 	}
 	out := &SpaceConversation{ID: conversationID, SpaceID: spaceID, Title: title, Kind: "standard", VisibleToSpace: true}
 	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
+		access, err := memberAccessTx(ctx, tx, spaceID, userID)
+		if err != nil {
 			return err
 		}
 		var createdByUserID, conversationKind string
@@ -32,15 +33,14 @@ func (db *Database) UpdateSpaceConversation(ctx context.Context, userID, spaceID
 			}
 			return err
 		}
-		// Only the Space's owner renames or re-seats a conversation.
-		role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
+		permissions, _, err := channelPermissionsForTx(ctx, tx, access, userID, spaceID, conversationID)
 		if err != nil {
 			return err
 		}
-		if role != "owner" {
-			return ErrSpaceForbidden
+		if !permissions.Has(PermissionMessagesRead) {
+			return ErrSpaceNotFound
 		}
-		if conversationKind != "standard" {
+		if conversationKind != "standard" || !permissions.Has(PermissionChannelsManage) {
 			return ErrSpaceForbidden
 		}
 		out.CreatedByUserID = createdByUserID
@@ -60,7 +60,10 @@ func (db *Database) UpdateSpaceConversation(ctx context.Context, userID, spaceID
 		); err != nil {
 			return err
 		}
-		return loadSpaceConversationParticipantsTx(ctx, tx, out)
+		if err := loadSpaceConversationParticipantsTx(ctx, tx, out); err != nil {
+			return err
+		}
+		return fillConversationAccessTx(ctx, tx, access, out)
 	})
 	return out, err
 }
@@ -71,9 +74,7 @@ func (db *Database) SpaceConversationMessages(ctx context.Context, userID, space
 	}
 	items := []SpaceMessage{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
-			return err
-		}
+		// The channel's own messages.read decides, overwrites included.
 		if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
 		}

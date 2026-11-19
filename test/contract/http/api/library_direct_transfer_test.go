@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -93,22 +94,26 @@ func TestUploadTransferReturnsAbsoluteSignedPutWithoutMistyCredentials(t *testin
 	}
 }
 
-// A store that cannot sign keeps the relative proxy route, which is what
-// makes local development work without R2 credentials.
-func TestUploadTransferUsesTheProxyWhenTheStoreCannotSign(t *testing.T) {
+// File bytes never pass through the server: a store that cannot sign refuses
+// the transfer instead of falling back to a route on the server.
+func TestUploadTransferRefusesWhenTheStoreCannotSign(t *testing.T) {
 	service := &SpaceLibraryService{Store: NewMemoryLibraryObjectStore(), UploadLimits: DefaultUploadLimits()}
 	upload := &db.LibraryUpload{ID: "upload_1", SpaceID: "space_1", ObjectKey: "library/proxyfixture001", ClientDeclaredMIMEType: "text/plain"}
 
-	transfer, err := service.UploadTransfer(context.Background(), upload, "misty-upload-token", time.Now().Add(time.Hour))
-	if err != nil {
-		t.Fatal(err)
+	_, err := service.UploadTransfer(context.Background(), upload, "misty-upload-token", time.Now().Add(time.Hour))
+	if !errors.Is(err, ErrLibraryDirectTransferUnavailable) {
+		t.Fatalf("err = %v, want ErrLibraryDirectTransferUnavailable", err)
 	}
+}
 
-	if transfer.URL != "/spaces/space_1/library/uploads/upload_1/content" {
-		t.Fatalf("URL = %q, want the relative proxy route", transfer.URL)
-	}
-	if transfer.Headers[LibraryUploadTokenHeader] != "misty-upload-token" {
-		t.Fatal("proxy transfer must carry the Misty upload token")
+// Without a signing store a download is refused, never streamed by the server.
+func TestWriteDownloadRefusesWhenTheStoreCannotSign(t *testing.T) {
+	service := &SpaceLibraryService{Store: NewMemoryLibraryObjectStore(), UploadLimits: DefaultUploadLimits()}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/spaces/space_1/library/items/item_1/download", nil)
+	service.WriteDownload(recorder, request, &db.LibraryDownload{ObjectKey: "library/downloadfixture1", Filename: "a.txt", MIMEType: "text/plain", ByteSize: 1, SHA256: "0"})
+	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "library_direct_transfer_unavailable") {
+		t.Fatalf("unsigned download = %d %s", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -228,8 +233,7 @@ func TestJournalAssetPurposesNeverUseTheProxy(t *testing.T) {
 }
 
 // Direct transfer has no off switch: it is on exactly when the store can sign.
-// A development store that cannot sign transparently keeps the proxy route,
-// which is what lets local development work without R2 credentials.
+// A development store that cannot sign has no transfers at all.
 func TestDirectTransferFollowsStoreCapability(t *testing.T) {
 	signing, err := NewSpaceLibraryService(&db.Database{}, &S3LibraryObjectStore{Bucket: "misty", Presigner: &recordingPresigner{}}, true, DefaultUploadLimits())
 	if err != nil {

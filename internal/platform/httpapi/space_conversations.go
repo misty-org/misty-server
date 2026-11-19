@@ -25,13 +25,14 @@ func (s *SpacesService) Conversations() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Title        string             `json:"title"`
-			Participants []db.SpaceActorRef `json:"participants"`
+			Title        string                          `json:"title"`
+			Participants []db.SpaceActorRef              `json:"participants"`
+			Overwrites   []db.SpaceConversationOverwrite `json:"overwrites"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		item, err := s.database.CreateSpaceConversation(r.Context(), userID, spaceID, body.Title, body.Participants)
+		item, err := s.database.CreateSpaceConversationWithOverwrites(r.Context(), userID, spaceID, body.Title, body.Participants, body.Overwrites)
 		if err != nil {
 			writeSpaceError(w, err)
 			return

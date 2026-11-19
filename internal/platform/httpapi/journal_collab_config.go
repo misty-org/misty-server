@@ -12,6 +12,7 @@ import (
 	"time"
 
 	envconfig "github.com/misty-org/misty-server/internal/platform/config"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 // Journal collaboration tickets for notes and drawings.
@@ -143,6 +144,22 @@ func (c JournalCollabConfig) DrawingRoomID(drawingID string) string {
 	return c.resourceRoomID("drawing", drawingID)
 }
 
+// ImageRoomID derives the opaque room identifier for a library image's edit.
+func (c JournalCollabConfig) ImageRoomID(itemID string) string {
+	return c.resourceRoomID("image", itemID)
+}
+
+// CodeRoomID derives the opaque room identifier for a live code session.
+func (c JournalCollabConfig) CodeRoomID(sessionID string) string {
+	return c.resourceRoomID("code", sessionID)
+}
+
+// ItemRoomID derives the opaque room identifier for a made item of any registered kind: the
+// same as RoomID for a note and DrawingRoomID for a drawing.
+func (c JournalCollabConfig) ItemRoomID(kind, itemID string) string {
+	return c.resourceRoomID(kind, itemID)
+}
+
 func (c JournalCollabConfig) resourceRoomID(resourceType, resourceID string) string {
 	mac := hmac.New(sha256.New, c.roomSalt)
 	mac.Write([]byte(resourceType + "-room:" + resourceID))
@@ -200,10 +217,16 @@ type JournalTicketClaims struct {
 	ResourceID   string `json:"resource_id"`
 	NoteID       string `json:"note_id,omitempty"`
 	DrawingID    string `json:"drawing_id,omitempty"`
-	Room         string `json:"room"`
-	Role         string `json:"role"`
-	ACLVersion   int64  `json:"acl_version"`
-	Expires      int64  `json:"exp"`
+	ImageID      string `json:"image_id,omitempty"`
+	// CodeSessionID is the live code session a code room belongs to.
+	CodeSessionID string `json:"code_session_id,omitempty"`
+	// DeckID and WorkbookID name the deck or workbook a deck-room or workbook-room holds.
+	DeckID     string `json:"deck_id,omitempty"`
+	WorkbookID string `json:"workbook_id,omitempty"`
+	Room       string `json:"room"`
+	Role       string `json:"role"`
+	ACLVersion int64  `json:"acl_version"`
+	Expires    int64  `json:"exp"`
 }
 
 type collaborationResource struct {
@@ -236,6 +259,53 @@ func (c JournalCollabConfig) MintDrawingTicket(
 		userID,
 		spaceID,
 		collaborationResource{Type: "drawing", ID: drawingID, Party: "drawing-room"},
+		role,
+		aclVersion,
+	)
+}
+
+// MintImageTicket signs a single-use ticket for one ImageRoom connection: a library image
+// edited live. Callers must have rechecked the item's access immediately before.
+func (c JournalCollabConfig) MintImageTicket(
+	userID, spaceID, itemID, role string,
+	aclVersion int64,
+) (JournalTicket, error) {
+	return c.mintResourceTicket(
+		userID,
+		spaceID,
+		collaborationResource{Type: "image", ID: itemID, Party: "image-room"},
+		role,
+		aclVersion,
+	)
+}
+
+// MintCodeTicket signs a single-use ticket for one CodeRoom connection: a live code session.
+// Callers must have rechecked membership and that the session is open immediately before.
+func (c JournalCollabConfig) MintCodeTicket(
+	userID, spaceID, sessionID, role string,
+	aclVersion int64,
+) (JournalTicket, error) {
+	return c.mintResourceTicket(
+		userID,
+		spaceID,
+		collaborationResource{Type: "code", ID: sessionID, Party: "code-room"},
+		role,
+		aclVersion,
+	)
+}
+
+// MintItemTicket signs a single-use ticket for one connection to a made item's room: a deck in
+// its DeckRoom, a workbook in its WorkbookRoom. Callers must have rechecked the item's access
+// immediately before.
+func (c JournalCollabConfig) MintItemTicket(
+	kind db.SpaceItemKind,
+	userID, spaceID, itemID, role string,
+	aclVersion int64,
+) (JournalTicket, error) {
+	return c.mintResourceTicket(
+		userID,
+		spaceID,
+		collaborationResource{Type: kind.Name, ID: itemID, Party: kind.Party},
 		role,
 		aclVersion,
 	)

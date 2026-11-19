@@ -75,7 +75,7 @@ func (db *Database) PurgeExpiredNotes(ctx context.Context, limit int) (int64, er
 		// Only notes whose purge command actually reached the collaboration
 		// service are removed. Deleting the row first would strand the Durable
 		// Object with no record of what to clean up.
-		result, err := tx.ExecContext(ctx,
+		ids, err := queryItemIDsTx(ctx, tx,
 			`DELETE FROM space_notes WHERE id IN (
 			     SELECT n.id FROM space_notes n
 			     WHERE ((n.lifecycle_state=$1 AND n.purge_after<=NOW())
@@ -85,13 +85,14 @@ func (db *Database) PurgeExpiredNotes(ctx context.Context, limit int) (int64, er
 			       AND NOT EXISTS (
 			           SELECT 1 FROM space_note_assets a
 			           WHERE a.note_id=n.id AND a.lifecycle_state<>'deleted')
-			     LIMIT $3)`,
+			     LIMIT $3) RETURNING id`,
 			NoteLifecycleArchivedCreatorLeft, NoteLifecycleDeleting, limit)
 		if err != nil {
 			return err
 		}
-		purged, _ = result.RowsAffected()
-		return nil
+		purged = int64(len(ids))
+		// What the room stored stops counting with the row.
+		return releaseItemContentStorageTx(ctx, tx, ids)
 	})
 	return purged, err
 }

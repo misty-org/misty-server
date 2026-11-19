@@ -72,14 +72,13 @@ func (db *Database) MessageAttachmentDownload(ctx context.Context, userID, space
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
 			return ErrLibraryForbidden
 		}
+		// A file posted in a channel the caller can't read is as hidden as the message.
 		return tx.QueryRowContext(ctx, `SELECT b.r2_object_key,a.display_name,b.server_detected_mime_type,b.byte_size,b.sha256
 			FROM space_message_attachments a
 			JOIN library_files f ON f.id=a.file_id JOIN library_blobs b ON b.id=f.blob_id
 			LEFT JOIN space_messages m ON m.id=a.message_id
 			WHERE a.id=$1 AND a.space_id=$2 AND a.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'
-			  AND ((a.message_id IS NULL AND a.uploader_user_id=$3) OR m.conversation_id IS NULL OR EXISTS(
-				SELECT 1 FROM space_conversation_members cm WHERE cm.conversation_id=m.conversation_id AND cm.user_id=$3
-			  ))`, attachmentID, spaceID, userID).
+			  AND ((a.message_id IS NULL AND a.uploader_user_id=$3) OR `+spaceMessageVisibleTo("$3")+`)`, attachmentID, spaceID, userID).
 			Scan(&out.ObjectKey, &out.Filename, &out.MIMEType, &out.ByteSize, &out.SHA256)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -165,6 +164,12 @@ func loadCompletedLibraryUploadTx(ctx context.Context, tx *sql.Tx, upload *Libra
 			return err
 		}
 		result.DrawingAsset = asset
+	} else if upload.Purpose == UploadPurposeDeckAsset {
+		asset, err := loadDeckAssetForFileTx(ctx, tx, upload.FileID)
+		if err != nil {
+			return err
+		}
+		result.DeckAsset = asset
 	} else {
 		attachment := &MessageAttachment{}
 		if err := scanMessageAttachment(tx.QueryRowContext(ctx, `SELECT id,space_id,COALESCE(message_id,''),file_id,upload_id,uploader_user_id,display_name,COALESCE(promoted_item_id,''),lifecycle_state,created_at,deleted_at,recover_until FROM space_message_attachments WHERE upload_id=$1`, upload.ID), attachment); err != nil {

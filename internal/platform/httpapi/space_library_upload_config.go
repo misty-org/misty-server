@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -35,9 +36,11 @@ type SpaceLibraryService struct {
 	UploadLimits         UploadLimits
 	NoteAssetsEnabled    bool
 	DrawingAssetsEnabled bool
+	DeckAssetsEnabled    bool
 	Transfers            TransferTTLs
 	// presigner is non-nil only when the configured object store can sign R2
-	// operations. Local development leaves it nil and keeps the proxy route.
+	// operations. Without one (a development server without R2), transfers
+	// are refused: file bytes never pass through the server.
 	Presigner            LibraryObjectPresigner
 	reconciliationMu     sync.Mutex
 	reconciliationCursor string
@@ -91,6 +94,11 @@ func (s *SpaceLibraryService) ConfigureTransfers(ttls TransferTTLs) error {
 	return nil
 }
 
+// ErrLibraryDirectTransferUnavailable refuses a transfer when the store can't
+// sign R2 URLs: file bytes go straight between the app and R2, never through
+// the server, so there is nothing else to fall back to.
+var ErrLibraryDirectTransferUnavailable = errors.New("library direct transfer unavailable")
+
 // directTransfersActive reports whether signed URLs are in use. It is purely a
 // question of whether the store can sign; there is no off switch.
 func (s *SpaceLibraryService) DirectTransfersActive() bool {
@@ -106,6 +114,8 @@ const (
 	UploadPurposeChatAttachment UploadPurpose = db.UploadPurposeChatAttachment
 	UploadPurposeNoteAttachment UploadPurpose = db.UploadPurposeNoteAttachment
 	UploadPurposeDrawingAsset   UploadPurpose = db.UploadPurposeDrawingAsset
+	UploadPurposeDeckAsset      UploadPurpose = db.UploadPurposeDeckAsset
+	UploadPurposeSharedFolder   UploadPurpose = db.UploadPurposeSharedFolder
 )
 
 // UploadLimits holds the configured maximum file size for each upload purpose.
@@ -150,6 +160,9 @@ func (l UploadLimits) Max(purpose UploadPurpose) int64 {
 	case UploadPurposeNoteAttachment:
 		return l.NoteAttachment
 	case UploadPurposeDrawingAsset:
+		return l.DrawingAsset
+	case UploadPurposeDeckAsset:
+		// A deck's images take a drawing's limit.
 		return l.DrawingAsset
 	default:
 		return 0
@@ -199,6 +212,12 @@ func (s *SpaceLibraryService) UploadPurposeEnabled(purpose UploadPurpose) bool {
 	case UploadPurposeDrawingAsset:
 		// Drawing assets are bound to a drawing and must use its route.
 		return false
+	case UploadPurposeDeckAsset:
+		// Deck assets are bound to a deck and must use its route.
+		return false
+	case UploadPurposeSharedFolder:
+		// Folder files are started by a folder's diff route, never here.
+		return false
 	default:
 		return false
 	}
@@ -213,4 +232,9 @@ func (s *SpaceLibraryService) SetNoteAssetsEnabled(enabled bool) {
 // SetDrawingAssetsEnabled enables image references for Drawing routes.
 func (s *SpaceLibraryService) SetDrawingAssetsEnabled(enabled bool) {
 	s.DrawingAssetsEnabled = enabled
+}
+
+// SetDeckAssetsEnabled enables image references for deck routes.
+func (s *SpaceLibraryService) SetDeckAssetsEnabled(enabled bool) {
+	s.DeckAssetsEnabled = enabled
 }

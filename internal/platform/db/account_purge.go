@@ -13,7 +13,7 @@ import (
 //
 //   - Spaces it owns alone, the personal Space included, are marked for the
 //     Space purge (space_purge.go), which removes their notes, drawings,
-//     chats, Library and R2 objects;
+//     decks, workbooks, chats, Library, shared folders and R2 objects;
 //   - every row in accountPurgeTables: voice transcripts, sessions,
 //     connections and settings.
 //
@@ -64,6 +64,10 @@ var accountPurgeKept = map[string]string{
 	"space_notes.creator_user_id":                         "notes in those Spaces",
 	"space_note_assets.uploader_user_id":                  "files in those notes",
 	"space_drawings.creator_user_id":                      "drawings in those Spaces",
+	"space_decks.creator_user_id":                         "decks in those Spaces",
+	"space_deck_assets.uploader_user_id":                  "images in those decks",
+	"space_workbooks.creator_user_id":                     "workbooks in those Spaces",
+	"space_code_sessions.started_by_user_id":              "live code sessions in those Spaces",
 	"space_tasks.created_by_user_id":                      "tasks in those Spaces",
 	"space_calendar_events.created_by_user_id":            "events in those Spaces",
 	"space_drawing_assets.uploader_user_id":               "files in those drawings",
@@ -73,6 +77,7 @@ var accountPurgeKept = map[string]string{
 	"space_library_items.contributing_user_id":            "Library items in those Spaces",
 	"space_library_direct_references.created_by_user_id":  "Library links in those Spaces",
 	"space_library_uploads.user_id":                       "uploads that became those items",
+	"space_shared_folders.uploaded_by":                    "shared folders in those Spaces",
 	"space_storage_contributions.user_id":                 "the storage those items count against",
 	"space_upload_reservations.user_id":                   "reservations in those Spaces",
 	"space_rendition_reservations.user_id":                "reservations in those Spaces",

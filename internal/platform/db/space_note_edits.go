@@ -65,10 +65,7 @@ func (db *Database) SpaceNoteByID(ctx context.Context, userID, noteID string) (*
 			         JOIN space_notes source ON source.id=links.source_note_id
 			         WHERE links.target_note_id=space_notes.id AND source.lifecycle_state='active'
 			           AND (source.visibility='public' OR source.creator_user_id=$3)
-			           AND (source.audience_kind='space' OR EXISTS(
-			               SELECT 1 FROM space_conversation_members cm
-			               WHERE cm.conversation_id=source.audience_conversation_id
-			                 AND cm.user_id=$2)))
+			           AND (source.audience_kind='space' OR public.misty_can_read_space_conversation(source.audience_conversation_id,$2)))
 			 FROM space_notes WHERE id=$1`, noteID, userID, userID).Scan(
 			&note.ID, &note.SpaceID, &note.CreatorUserID, &note.TitleProjection,
 			&note.MarkdownProjection, &note.PlainTextProjection, &note.LifecycleState, &note.CollaborationRevision,

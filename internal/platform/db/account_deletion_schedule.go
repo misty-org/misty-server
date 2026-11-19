@@ -73,6 +73,12 @@ func (db *Database) ScheduleAccountDeletion(
 			if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 				return err
 			}
+			if err := revokeMadeItemAccessForSpaceTx(ctx, tx, spaceID); err != nil {
+				return err
+			}
+			if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx, `
 				DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`,
 				spaceID, userID,

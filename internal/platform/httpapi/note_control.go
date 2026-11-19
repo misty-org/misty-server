@@ -85,6 +85,17 @@ func (s *SpacesService) requestCollaborationControlCommand(
 	party, room, resourceID, command string,
 	payload []byte,
 ) (json.RawMessage, error) {
+	return s.requestCollaborationControlCommandWithLimit(ctx, party, room, resourceID, command, payload, collaborationControlResponseLimit)
+}
+
+// requestCollaborationControlCommandWithLimit is requestCollaborationControlCommand for a command
+// whose answer may be larger than the usual limit: a whole earlier version of a document.
+func (s *SpacesService) requestCollaborationControlCommandWithLimit(
+	ctx context.Context,
+	party, room, resourceID, command string,
+	payload []byte,
+	responseLimit int64,
+) (json.RawMessage, error) {
 	if !s.JournalCollab.Enabled {
 		return nil, ErrCollaborationUnconfigured
 	}
@@ -115,11 +126,11 @@ func (s *SpacesService) requestCollaborationControlCommand(
 		return nil, fmt.Errorf("send collaboration control command: %w", err)
 	}
 	defer response.Body.Close()
-	responseBody, readErr := io.ReadAll(io.LimitReader(response.Body, collaborationControlResponseLimit+1))
+	responseBody, readErr := io.ReadAll(io.LimitReader(response.Body, responseLimit+1))
 	if readErr != nil {
 		return nil, fmt.Errorf("read collaboration control response: %w", readErr)
 	}
-	if len(responseBody) > collaborationControlResponseLimit {
+	if int64(len(responseBody)) > responseLimit {
 		return nil, errors.New("collaboration control response is too large")
 	}
 	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {

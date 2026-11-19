@@ -82,6 +82,9 @@ func (s *SpacesService) createSpaceNote(w http.ResponseWriter, r *http.Request, 
 	var body struct {
 		Title    string `json:"title"`
 		Markdown string `json:"markdown"`
+		// "private" keeps a new note its creator's alone from its first moment; "public" or ""
+		// as the Space's default.
+		Visibility string `json:"visibility"`
 	}
 	if decodeNoteContent(w, r, &body) != nil {
 		return
@@ -90,8 +93,9 @@ func (s *SpacesService) createSpaceNote(w http.ResponseWriter, r *http.Request, 
 		writeSpaceError(w, db.ErrSpaceInvalid)
 		return
 	}
+	space := db.SpaceResourceAudience{Kind: db.SpaceAudienceSpace}
 	if strings.TrimSpace(body.Markdown) == "" {
-		note, err := s.database.CreateSpaceNote(r.Context(), userID, spaceID, body.Title)
+		note, err := s.database.CreateSpaceNoteWithVisibility(r.Context(), userID, spaceID, body.Title, space, "", body.Visibility)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
@@ -99,7 +103,7 @@ func (s *SpacesService) createSpaceNote(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusCreated, note)
 		return
 	}
-	note, err := s.database.CreateSpaceNoteWithAudience(r.Context(), userID, spaceID, body.Title, db.SpaceResourceAudience{Kind: db.SpaceAudienceSpace}, body.Markdown)
+	note, err := s.database.CreateSpaceNoteWithVisibility(r.Context(), userID, spaceID, body.Title, space, body.Markdown, body.Visibility)
 	if err != nil {
 		writeSpaceError(w, err)
 		return

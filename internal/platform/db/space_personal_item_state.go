@@ -13,7 +13,9 @@ type SpacePersonalItemState struct {
 	OpenedAt *time.Time `json:"opened_at,omitempty"`
 }
 
-var spaceItemKeyPattern = regexp.MustCompile(`^(note|drawing|task|file|chat):[A-Za-z0-9_-]{1,128}$`)
+// An item key names a made item of any registered kind (note, drawing, deck, workbook), a task,
+// a file or a chat.
+var spaceItemKeyPattern = regexp.MustCompile(`^(` + spaceItemKeyNames() + `|task|file|chat):[A-Za-z0-9_-]{1,128}$`)
 
 func ValidSpaceItemKey(key string) bool { return spaceItemKeyPattern.MatchString(key) }
 

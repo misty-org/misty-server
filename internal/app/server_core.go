@@ -65,6 +65,7 @@ func CreateServer() (*Server, error) {
 	s.Library.SetSubsystems(true, mediaProcessingEnabled, mediaProcessingEnabled, true)
 	s.Library.SetNoteAssetsEnabled(true)
 	s.Library.SetDrawingAssetsEnabled(true)
+	s.Library.SetDeckAssetsEnabled(true)
 	spaceKey, err := spaceLinkEncryptionKeyFromEnv()
 	if err != nil {
 		return nil, err

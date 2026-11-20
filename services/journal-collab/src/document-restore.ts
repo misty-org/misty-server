@@ -15,17 +15,6 @@ const KNOWN_SHAPES: Record<string, Shape> = {
   "misty:title": "text",
   "misty:markdown": "text",
   "misty:document": "map",
-  "drawing:elements": "map",
-  "drawing:scene": "map",
-  "drawing:files": "map",
-  "deck:meta": "map",
-  "deck:order": "array",
-  "deck:slides": "map",
-  "wb:meta": "map",
-  "wb:sheetOrder": "array",
-  "wb:sheets": "map",
-  "wb:charts": "map",
-  "wb:dashboard": "array",
 };
 
 /** A note's bookkeeping that must stay as it is now, or an editor would replay old markdown. */
@@ -71,12 +60,6 @@ function sameJSON(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function randomNonce(): number {
-  const bytes = new Uint32Array(1);
-  crypto.getRandomValues(bytes);
-  return (bytes[0]! & 0x7fffffff) || 1;
-}
-
 function restoreMap(target: Y.Map<unknown>, source: Y.Map<unknown>, keep: ReadonlySet<string> = new Set()): void {
   for (const key of Array.from(target.keys())) {
     if (!keep.has(key) && !source.has(key)) target.delete(key);
@@ -90,46 +73,11 @@ function restoreMap(target: Y.Map<unknown>, source: Y.Map<unknown>, keep: Readon
   }
 }
 
-/**
- * Excalidraw reconciles elements by version: an element only replaces what an editor holds when
- * its version is higher. So a restored element gets a version above both the old and the current
- * one, and an element the version didn't have is deleted the way Excalidraw deletes one.
- */
-function restoreDrawingElements(target: Y.Map<unknown>, source: Y.Map<unknown>, now: number): void {
-  const versionOf = (element: unknown) =>
-    typeof element === "object" && element !== null && Number.isInteger((element as { version?: unknown }).version)
-      ? Number((element as { version: number }).version)
-      : 0;
-  for (const [id, current] of Array.from(target.entries())) {
-    if (source.has(id) || typeof current !== "object" || current === null) continue;
-    if ((current as { isDeleted?: unknown }).isDeleted === true) continue;
-    target.set(id, {
-      ...(current as Record<string, unknown>),
-      isDeleted: true,
-      version: versionOf(current) + 1,
-      versionNonce: randomNonce(),
-      updated: now,
-    });
-  }
-  for (const [id, old] of source.entries()) {
-    const current = target.get(id);
-    if (typeof old !== "object" || old === null) continue;
-    if (sameJSON(old, current)) continue;
-    target.set(id, {
-      ...(old as Record<string, unknown>),
-      version: Math.max(versionOf(old), versionOf(current)) + 1,
-      versionNonce: randomNonce(),
-      updated: now,
-    });
-  }
-}
-
 /** Rewrites `target` to hold what the version `update` held. */
 export function restoreDocument(
   target: Y.Doc,
   update: Uint8Array,
   resourceType: CollaborationResourceType,
-  now = Date.now(),
 ): void {
   const source = new Y.Doc();
   try {
@@ -146,8 +94,7 @@ export function restoreDocument(
           case "map": {
             const into = target.getMap<unknown>(name);
             const from = source.getMap<unknown>(name);
-            if (resourceType === "drawing" && name === "drawing:elements") restoreDrawingElements(into, from, now);
-            else if (resourceType === "note" && name === "misty:document") restoreMap(into, from, NOTE_BOOKKEEPING);
+            if (resourceType === "note" && name === "misty:document") restoreMap(into, from, NOTE_BOOKKEEPING);
             else restoreMap(into, from);
             break;
           }

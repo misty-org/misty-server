@@ -70,12 +70,6 @@ func (db *Database) ScheduleAccountDeletion(
 			if err := handleNoteMembershipLossTx(ctx, tx, spaceID, userID); err != nil {
 				return err
 			}
-			if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
-				return err
-			}
-			if err := revokeMadeItemAccessForSpaceTx(ctx, tx, spaceID); err != nil {
-				return err
-			}
 			if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 				return err
 			}

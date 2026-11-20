@@ -33,14 +33,10 @@ const overflowRouteKey = "{overflow}"
 // path the limiter already computes.
 var costBearingRoutes = map[string]bool{
 	// Egress and storage operations bill per byte and per request.
-	"/spaces/{spaceID}/library/items/{id}/download":                true,
-	"/spaces/{spaceID}/attachments/{id}/download":                  true,
-	"/spaces/{spaceID}/notes/{id}/assets/uploads":                  true,
-	"/spaces/{spaceID}/drawings/{id}/assets/uploads":               true,
-	"/spaces/{spaceID}/notes/{id}/assets/uploads/{id}/finalize":    true,
-	"/spaces/{spaceID}/drawings/{id}/assets/uploads/{id}/finalize": true,
-	"/spaces/{spaceID}/decks/{id}/assets/uploads":                  true,
-	"/spaces/{spaceID}/decks/{id}/assets/uploads/{id}/finalize":    true,
+	"/spaces/{spaceID}/library/items/{id}/download":             true,
+	"/spaces/{spaceID}/attachments/{id}/download":               true,
+	"/spaces/{spaceID}/notes/{id}/assets/uploads":               true,
+	"/spaces/{spaceID}/notes/{id}/assets/uploads/{id}/finalize": true,
 }
 
 func NormalizeRateLimitPath(path string) string {

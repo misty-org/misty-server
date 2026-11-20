@@ -17,6 +17,7 @@ type Server struct {
 	Database      *db.Database
 	LibraryStore  api.LibraryObjectStore
 	Library       *api.SpaceLibraryService
+	Drive         *api.SpaceDriveService
 	Spaces        *api.SpacesService
 	Realtime      *api.RealtimeService
 	WebsiteURL    string
@@ -44,6 +45,10 @@ func CreateServer() (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.Drive, err = api.NewSpaceDriveService(s.Database, s.LibraryStore)
+	if err != nil {
+		return nil, fmt.Errorf("configure Space drive: %w", err)
+	}
 	s.Library, err = api.NewSpaceLibraryService(s.Database, s.LibraryStore, true, api.UploadLimitsFromEnv())
 	if err != nil {
 		return nil, fmt.Errorf("configure Space Library: %w", err)
@@ -62,10 +67,8 @@ func CreateServer() (*Server, error) {
 		s.Library.SetMetadataExtractor(extractor)
 		mediaProcessingEnabled = true
 	}
-	s.Library.SetSubsystems(true, mediaProcessingEnabled, mediaProcessingEnabled, true)
+	s.Library.SetSubsystems(true, mediaProcessingEnabled, true)
 	s.Library.SetNoteAssetsEnabled(true)
-	s.Library.SetDrawingAssetsEnabled(true)
-	s.Library.SetDeckAssetsEnabled(true)
 	spaceKey, err := spaceLinkEncryptionKeyFromEnv()
 	if err != nil {
 		return nil, err

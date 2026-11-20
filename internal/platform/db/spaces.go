@@ -54,7 +54,7 @@ func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, err
 			 EXISTS(SELECT 1 FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW() AND si.revoked_at IS NULL AND si.consumed_at IS NULL)),
 			s.avatar_version,s.created_at,s.updated_at
 			FROM spaces s JOIN space_members m ON m.space_id=s.id
-			WHERE m.user_id=$1 AND s.lifecycle_state='active' ORDER BY s.updated_at DESC`, userID)
+			WHERE m.user_id=$1 AND s.lifecycle_state='active' AND s.kind='space' ORDER BY s.updated_at DESC`, userID)
 		if err != nil {
 			return err
 		}
@@ -170,12 +170,6 @@ func (db *Database) DeleteSpace(ctx context.Context, userID, spaceID, confirmati
 			return err
 		}
 		if err := notifySpaceControlTx(ctx, tx, map[string]any{"type": "space.deleted", "space_id": spaceID, "user_ids": memberIDs}); err != nil {
-			return err
-		}
-		if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
-			return err
-		}
-		if err := revokeMadeItemAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {

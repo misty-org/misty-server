@@ -12,8 +12,8 @@ import (
 // attributed to. Everything else the account held goes:
 //
 //   - Spaces it owns alone, the personal Space included, are marked for the
-//     Space purge (space_purge.go), which removes their notes, drawings,
-//     decks, workbooks, chats, Library, shared folders and R2 objects;
+//     Space purge (space_purge.go), which removes their notes, chats,
+//     Library, drive and R2 objects;
 //   - every row in accountPurgeTables: voice transcripts, sessions,
 //     connections and settings.
 //
@@ -46,6 +46,7 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"space_conversation_members", "user_id"},
 	{"space_conversation_agents", "owner_user_id"},
 	{"space_thread_reads", "user_id"},
+	{"space_drive_in_use", "user_id"},
 	{"space_invitations", "invited_user_id"},
 	{"space_invitations", "invited_by_user_id"},
 	{"space_creation_requests", "user_id"},
@@ -65,27 +66,20 @@ var accountPurgeKept = map[string]string{
 	"space_conversations.created_by_user_id":              "chats in those Spaces",
 	"space_notes.creator_user_id":                         "notes in those Spaces",
 	"space_note_assets.uploader_user_id":                  "files in those notes",
-	"space_drawings.creator_user_id":                      "drawings in those Spaces",
-	"space_decks.creator_user_id":                         "decks in those Spaces",
-	"space_deck_assets.uploader_user_id":                  "images in those decks",
-	"space_workbooks.creator_user_id":                     "workbooks in those Spaces",
 	"space_code_sessions.started_by_user_id":              "live code sessions in those Spaces",
-	"space_tasks.created_by_user_id":                      "tasks in those Spaces",
-	"space_calendar_events.created_by_user_id":            "events in those Spaces",
 	"space_apps.installed_by":                             "apps installed in those Spaces",
-	"space_drawing_assets.uploader_user_id":               "files in those drawings",
 	"space_nodes.uploader_user_id":                        "files in those Spaces",
 	"space_item_aliases.created_by_user_id":               "links in those Spaces",
 	"space_library_items.added_by_user_id":                "Library items in those Spaces",
 	"space_library_items.contributing_user_id":            "Library items in those Spaces",
 	"space_library_direct_references.created_by_user_id":  "Library links in those Spaces",
 	"space_library_uploads.user_id":                       "uploads that became those items",
-	"space_shared_folders.uploaded_by":                    "shared folders in those Spaces",
+	"space_drive_items.modified_by":                       "files in those Spaces' drives",
+	"space_drive_items.trashed_by":                        "files in those Spaces' trash",
 	"space_storage_contributions.user_id":                 "the storage those items count against",
 	"space_upload_reservations.user_id":                   "reservations in those Spaces",
 	"space_rendition_reservations.user_id":                "reservations in those Spaces",
 	"library_files.uploader_user_id":                      "files of those items",
-	"library_item_versions.created_by_user_id":            "edits of those items",
 	"library_exports.requested_by_user_id":                "exports of those Spaces",
 	"library_legal_holds.created_by_user_id":              "holds on those Spaces",
 	"space_events.actor_user_id":                          "activity in those Spaces, kept seven days",
@@ -112,10 +106,6 @@ func purgeAccountDataTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM space_members m USING spaces s
 		WHERE m.space_id=s.id AND m.user_id=$1 AND s.owner_user_id<>$1`, userID); err != nil {
-		return err
-	}
-	// Tasks in Spaces other people still use stay, with nobody assigned.
-	if _, err := tx.ExecContext(ctx, `UPDATE space_tasks SET assignee_user_id=NULL WHERE assignee_user_id=$1`, userID); err != nil {
 		return err
 	}
 	for _, target := range accountPurgeTables {

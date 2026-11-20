@@ -9,20 +9,17 @@ import (
 
 func TestSearchKindsTakeEveryMadeKindByNameOrSection(t *testing.T) {
 	all, ok := spaceSearchKinds("")
-	if !ok {
-		t.Fatal("an empty kinds list was refused")
+	if !ok || !all["message"] || !all["note"] {
+		t.Fatalf("searching everything = %v %v", all, ok)
 	}
-	for _, kind := range []string{"message", "note", "drawing", "deck", "workbook"} {
-		if !all[kind] {
-			t.Errorf("searching everything leaves out %s", kind)
-		}
-	}
-	picked, ok := spaceSearchKinds("note, drawing,decks,workbook")
-	if !ok || !picked["note"] || !picked["drawing"] || !picked["deck"] || !picked["workbook"] || picked["message"] {
+	picked, ok := spaceSearchKinds("notes, message")
+	if !ok || !picked["note"] || !picked["message"] {
 		t.Fatalf("picked kinds = %v %v", picked, ok)
 	}
-	if _, ok := spaceSearchKinds("note,secrets"); ok {
-		t.Fatal("an unknown kind was accepted")
+	for _, removed := range []string{"note,secrets", "drawing", "decks", "workbook"} {
+		if _, ok := spaceSearchKinds(removed); ok {
+			t.Fatalf("%q was accepted", removed)
+		}
 	}
 }
 
@@ -49,22 +46,5 @@ func TestHistoryWindowFollowsTheLevel(t *testing.T) {
 		if itemHistoryVersionPattern.MatchString(id) {
 			t.Errorf("version id %q accepted", id)
 		}
-	}
-}
-
-func TestMadeItemRoutesServeOnlySharedKinds(t *testing.T) {
-	for _, name := range []string{"deck", "workbook", "decks"} {
-		if _, ok := madeItemKind(name); !ok {
-			t.Errorf("%s is not served", name)
-		}
-	}
-	for _, name := range []string{"note", "drawing", "image", ""} {
-		if _, ok := madeItemKind(name); ok {
-			t.Errorf("%s is served by the shared made-item routes", name)
-		}
-	}
-	deck, _ := madeItemKind("deck")
-	if madeItemParam(deck) != "deckID" {
-		t.Fatalf("deck route parameter = %q", madeItemParam(deck))
 	}
 }

@@ -56,7 +56,7 @@ func (s *SpaceLibraryService) SpaceNoteAssets() http.HandlerFunc {
 		maxBytes := s.UploadLimits.Max(UploadPurposeNoteAttachment)
 		if maxBytes < 1 || body.ByteSize < 1 || body.ByteSize > maxBytes ||
 			!librarySHA256Pattern.MatchString(body.SHA256) || body.Filename == "" ||
-			!SupportedDrawingAssetMIME(body.MIMEType) {
+			!SupportedNoteAssetMIME(body.MIMEType) {
 			writeLibraryError(w, db.ErrLibraryInvalid)
 			return
 		}

@@ -119,6 +119,17 @@ func TestRolesMigrationSeedsTheDefaultEveryoneGrant(t *testing.T) {
 	for _, item := range strings.Split(string(seed[1]), ",") {
 		seeded = append(seeded, strings.Trim(strings.TrimSpace(item), "'"))
 	}
+	// Later migrations add to every existing everyone role what new Spaces start with.
+	for _, later := range []string{"20271225000000_space_drive.sql"} {
+		raw, err := os.ReadFile("../../../internal/platform/db/migrations/" + later)
+		if err != nil {
+			t.Fatal(err)
+		}
+		up, _, _ := strings.Cut(string(raw), "-- +goose Down")
+		for _, added := range regexp.MustCompile(`array_append\(permissions, '([a-z_.]+)'\)[^;]*WHERE is_default`).FindAllStringSubmatch(up, -1) {
+			seeded = append(seeded, added[1])
+		}
+	}
 	if !reflect.DeepEqual(seeded, spaces.DefaultEveryonePermissions()) {
 		t.Fatalf("migration seeds %v, want %v", seeded, spaces.DefaultEveryonePermissions())
 	}

@@ -7,27 +7,21 @@ import { isRecord } from "./control-protocol";
 export interface RoomLimits {
   /** Days the room keeps earlier versions. */
   historyDays: number | null;
-  /** Slides one deck may hold. */
-  deckSlides: number | null;
-  /** Filled cells one workbook may hold. */
-  workbookCells: number | null;
 }
 
 const LIMITS_KEY = "room:limits";
 
-const UNLIMITED: RoomLimits = { historyDays: null, deckSlides: null, workbookCells: null };
+const UNLIMITED: RoomLimits = { historyDays: null };
 
 function positiveLimit(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
 }
 
-/** Reads the limits out of a callback's answer: `{ applied, limits: { history_days, ... } }`. */
+/** Reads the limits out of a callback's answer: `{ applied, limits: { history_days } }`. */
 export function parseRoomLimits(answer: unknown): RoomLimits | null {
   if (!isRecord(answer) || !isRecord(answer.limits)) return null;
   return {
     historyDays: positiveLimit(answer.limits.history_days),
-    deckSlides: positiveLimit(answer.limits.deck_slides),
-    workbookCells: positiveLimit(answer.limits.workbook_cells),
   };
 }
 
@@ -42,7 +36,5 @@ export async function readRoomLimits(storage: DurableObjectStorage): Promise<Roo
   if (!isRecord(stored)) return UNLIMITED;
   return {
     historyDays: positiveLimit(stored.historyDays),
-    deckSlides: positiveLimit(stored.deckSlides),
-    workbookCells: positiveLimit(stored.workbookCells),
   };
 }

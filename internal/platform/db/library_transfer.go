@@ -9,16 +9,14 @@ import (
 )
 
 type LibraryTransferItem struct {
-	ItemID              string
-	SecurityDomainID    string
-	ObjectKey           string
-	Filename            string
-	MIMEType            string
-	ByteSize            int64
-	SHA256              string
-	IntrinsicMetadata   json.RawMessage
-	Rendition           bool
-	RenditionDefinition json.RawMessage
+	ItemID            string
+	SecurityDomainID  string
+	ObjectKey         string
+	Filename          string
+	MIMEType          string
+	ByteSize          int64
+	SHA256            string
+	IntrinsicMetadata json.RawMessage
 }
 
 func (db *Database) LibraryTransferItems(ctx context.Context, userID, spaceID string, itemIDs []string) ([]LibraryTransferItem, error) {
@@ -36,10 +34,8 @@ func (db *Database) LibraryTransferItems(ctx context.Context, userID, spaceID st
 				return err
 			}
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT i.id,f.security_domain_id,COALESCE(rb.r2_object_key,b.r2_object_key),i.display_name,COALESCE(rb.server_detected_mime_type,b.server_detected_mime_type),COALESCE(rb.byte_size,b.byte_size),COALESCE(rb.sha256,b.sha256),f.intrinsic_metadata,(rb.id IS NOT NULL),COALESCE(v.edit_definition,'{}'::jsonb)
+		rows, err := tx.QueryContext(ctx, `SELECT i.id,f.security_domain_id,b.r2_object_key,i.display_name,b.server_detected_mime_type,b.byte_size,b.sha256,f.intrinsic_metadata
 			FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id
-			LEFT JOIN library_item_versions v ON v.id=i.current_edit_version_id AND v.lifecycle_state='ready' AND v.rendition_state='ready'
-			LEFT JOIN library_blobs rb ON rb.id=v.rendition_blob_id AND rb.lifecycle_state='ready'
 			WHERE i.space_id=$1 AND i.id=ANY($2) AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'
 			ORDER BY array_position($2::text[],i.id)`, spaceID, pq.Array(itemIDs))
 		if err != nil {
@@ -48,7 +44,7 @@ func (db *Database) LibraryTransferItems(ctx context.Context, userID, spaceID st
 		defer rows.Close()
 		for rows.Next() {
 			var item LibraryTransferItem
-			if err := rows.Scan(&item.ItemID, &item.SecurityDomainID, &item.ObjectKey, &item.Filename, &item.MIMEType, &item.ByteSize, &item.SHA256, &item.IntrinsicMetadata, &item.Rendition, &item.RenditionDefinition); err != nil {
+			if err := rows.Scan(&item.ItemID, &item.SecurityDomainID, &item.ObjectKey, &item.Filename, &item.MIMEType, &item.ByteSize, &item.SHA256, &item.IntrinsicMetadata); err != nil {
 				return err
 			}
 			items = append(items, item)

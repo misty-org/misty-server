@@ -3,12 +3,10 @@ import * as Y from "yjs";
 import { jsonResponse } from "./control-protocol";
 import { emptyDocumentBytes } from "./document-content";
 import { readDocumentSnapshot } from "./document-persistence";
-import { applyDrawingScene, readDrawingScene } from "./room-drawing-control";
 import {
   getHistoryVersion,
   listHistoryVersions,
   restoreHistoryVersion,
-  setItemTitle,
 } from "./room-history-control";
 import { bootstrapNote, replaceNoteMarkdown } from "./room-note-control";
 import { PURGED_KEY, type RoomState } from "./room-state";
@@ -21,10 +19,9 @@ export interface RoomControlContext {
   readonly state: RoomState;
   /** The kind of document the room holds. */
   readonly resourceType: CollaborationResourceType;
-  /** Whether the room keeps earlier versions: docs, whiteboards, decks and workbooks. */
+  /** Whether the room keeps earlier versions: docs. */
   readonly keepsHistory: boolean;
   readonly supportsMarkdownBootstrap: boolean;
-  readonly supportsDrawingScene: boolean;
   save(): Promise<void>;
   publishNoteProjection(): Promise<void>;
   disconnectSupersededSockets(): void;
@@ -43,10 +40,6 @@ export async function handleRoomControl(
     return jsonResponse({ code: "resource_deleted" }, 410);
   }
   switch (command) {
-    case "drawing_scene_read":
-      return readDrawingScene(context, payload);
-    case "drawing_scene_apply":
-      return applyDrawingScene(context, payload);
     case "bootstrap":
       return bootstrapNote(context, payload);
     case "replace_markdown":
@@ -57,8 +50,6 @@ export async function handleRoomControl(
       return getHistoryVersion(context, payload);
     case "history_restore":
       return restoreHistoryVersion(context, payload);
-    case "title":
-      return setItemTitle(context, payload);
     case "acl":
       return setACLVersion(context, payload);
     case "disconnect": {

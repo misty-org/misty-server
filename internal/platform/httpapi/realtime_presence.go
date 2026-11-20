@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// handleClientMessage processes viewing and ephemeral typing declarations
-// sent by a connected client.
+// handleClientMessage processes viewing, ephemeral typing and agent status declarations sent by a
+// connected client.
 func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []byte) {
 	var msg struct {
 		Type           string        `json:"type"`
@@ -19,6 +19,7 @@ func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []
 		Place          string        `json:"place"`
 		ItemID         string        `json:"item_id"`
 		Agents         []agentStatus `json:"agents"`
+		Idle           bool          `json:"idle"`
 	}
 	if json.Unmarshal(payload, &msg) != nil {
 		return
@@ -29,6 +30,8 @@ func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []
 		s.broadcastTyping(client, msg.SpaceID, msg.ConversationID, msg.Active)
 	} else if msg.Type == "agents" {
 		s.broadcastAgents(client, msg.SpaceID, msg.Agents)
+	} else if msg.Type == "activity" {
+		s.setIdle(client, msg.Idle)
 	}
 }
 

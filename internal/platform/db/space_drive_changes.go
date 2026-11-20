@@ -1,0 +1,460 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// Creating and changing drive items. Each runs in one transaction under the
+// Space's drive lock: the item is locked, the version its sender names (if
+// any) and the name are checked, the change applied, the version bumped and
+// every row the change touched stamped with the next sequence numbers, and the
+// Space's members told to read the changes. The last write wins: a write to a
+// trashed item, or into a trashed folder, brings it back first, and a save over
+// content its sender never saw keeps that content as a trashed copy.
+
+// DriveCreateInput is one new item. ID is optional: a client-made id makes a
+// retry after a lost answer safe. A file names its content by digest and
+// size, and, when its bytes were just uploaded, the upload that carried them.
+type DriveCreateInput struct {
+	UserID, SpaceID string
+	Device          DriveDevice
+	ID              string
+	ParentID        *string
+	Name, Kind      string
+	SHA256          string
+	Size, MTimeMS   int64
+	UploadID        string
+}
+
+// DriveWriteResult is a changed item. Created is false when a create was a
+// retry of one already made. Revived says the write brought the item, or the
+// folder it went into, back out of the trash first. Replaced is the trashed
+// copy a save kept of the content it replaced, when its sender hadn't seen
+// it. DeleteObjectKeys are objects nothing names any more (an upload whose
+// content another blob already held), which the caller deletes; RetireKeys are
+// blobs the change stopped naming, for RetireDriveBlobs.
+type DriveWriteResult struct {
+	Item             DriveItem
+	Created          bool
+	Revived          bool
+	Replaced         *DriveItem
+	DeleteObjectKeys []string
+	RetireKeys       []string
+}
+
+// driveParentTx readies a folder new or moved items go into: a live folder of
+// the Space, brought back first (with the trashed folders it is in) when it
+// is in the trash. It returns the last sequence number the revival stamped,
+// 0 when it was live.
+func driveParentTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID *string) (int64, error) {
+	if parentID == nil {
+		return 0, nil
+	}
+	parent, err := liveDriveItemTx(ctx, tx, spaceID, *parentID, false)
+	if errors.Is(err, ErrDriveNotFound) {
+		return 0, ErrDriveParentMissing
+	}
+	if err != nil {
+		return 0, err
+	}
+	if parent.Kind != DriveKindFolder {
+		return 0, ErrDriveParentNotFolder
+	}
+	return reviveDriveItemTx(ctx, tx, spaceID, parent)
+}
+
+// driveNullable passes an optional id to SQL: NULL when there is none.
+func driveNullable(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func sameParent(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+// CreateDriveItem adds a file or folder. A folder it goes into that is in the
+// trash comes back first (Revived). A name already taken in the folder is
+// refused (name_taken) with the item that holds it: the sender writes into
+// that file, or uses that folder.
+func (db *Database) CreateDriveItem(ctx context.Context, in DriveCreateInput) (*DriveWriteResult, error) {
+	if !ValidDriveDevice(in.Device) {
+		return nil, ErrLibraryInvalid
+	}
+	switch in.Kind {
+	case driveKindFile:
+		if !validDriveContent(in.SHA256, in.Size) {
+			return nil, ErrLibraryInvalid
+		}
+	case DriveKindFolder:
+		if in.SHA256 != "" || in.Size != 0 || in.MTimeMS != 0 || in.UploadID != "" {
+			return nil, ErrLibraryInvalid
+		}
+	default:
+		return nil, ErrLibraryInvalid
+	}
+	if in.ID != "" && !ValidDriveItemID(in.ID) {
+		return nil, ErrLibraryInvalid
+	}
+	result := &DriveWriteResult{Created: true, DeleteObjectKeys: []string{}}
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireDriveWriteTx(ctx, tx, in.UserID, in.SpaceID); err != nil {
+			return err
+		}
+		if err := lockDriveTx(ctx, tx, in.SpaceID); err != nil {
+			return err
+		}
+		name, err := normalizeDriveNameTx(ctx, tx, in.Name)
+		if err != nil {
+			return err
+		}
+		id := in.ID
+		if id == "" {
+			id = "drv_" + uuid.NewString()
+		} else if retried, err := driveCreateRetryTx(ctx, tx, in, name); err != nil || retried != nil {
+			if retried != nil {
+				result.Item, result.Created = *retried, false
+			}
+			return err
+		}
+		revivedSeq, err := driveParentTx(ctx, tx, in.SpaceID, in.ParentID)
+		if err != nil {
+			return err
+		}
+		result.Revived = revivedSeq > 0
+		holder, err := driveNameHolderTx(ctx, tx, in.SpaceID, in.ParentID, name, "")
+		if err != nil {
+			return err
+		}
+		if holder != nil {
+			return DriveConflictError{Code: "name_taken", Item: *holder}
+		}
+		var blobKey any
+		var sha any
+		if in.Kind == driveKindFile {
+			key, held, discard, err := resolveDriveContentTx(ctx, tx, in.UserID, in.SpaceID, driveContent{sha: in.SHA256, size: in.Size, uploadID: in.UploadID})
+			if err != nil {
+				return err
+			}
+			result.DeleteObjectKeys = append(result.DeleteObjectKeys, discard...)
+			if err := requireDriveRoomTx(ctx, tx, in.UserID, in.SpaceID, "", in.Size, held); err != nil {
+				return err
+			}
+			if key != "" {
+				blobKey = key
+			}
+			sha = in.SHA256
+		}
+		seq, err := nextDriveSeqsTx(ctx, tx, in.SpaceID, 1)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_drive_items(id,space_id,parent_id,name,kind,sha256,byte_size,mtime_ms,blob_key,seq,modified_by)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			id, in.SpaceID, driveNullable(in.ParentID), name, in.Kind, sha, in.Size, in.MTimeMS, blobKey, seq, in.UserID); err != nil {
+			return err
+		}
+		if in.Kind == driveKindFile {
+			if err := setDriveContributionTx(ctx, tx, in.SpaceID, id, in.UserID, in.Size); err != nil {
+				return err
+			}
+		}
+		if err := recordDriveChangedTx(ctx, tx, in.SpaceID, in.UserID, id, seq); err != nil {
+			return err
+		}
+		result.Item, err = driveItemTx(ctx, tx, in.SpaceID, id, false)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// driveCreateRetryTx answers a create that names an id already in use: the
+// same item again (same Space, parent, name, kind and content) is a retry
+// whose first answer was lost; anything else, an id from another Space
+// included, is ErrDriveIDTaken.
+func driveCreateRetryTx(ctx context.Context, tx *sql.Tx, in DriveCreateInput, name string) (*DriveItem, error) {
+	var spaceID string
+	err := tx.QueryRowContext(ctx, `SELECT space_id FROM space_drive_items WHERE id=$1`, in.ID).Scan(&spaceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if spaceID != in.SpaceID {
+		return nil, ErrDriveIDTaken
+	}
+	item, err := driveItemTx(ctx, tx, in.SpaceID, in.ID, false)
+	if err != nil {
+		return nil, err
+	}
+	sha := ""
+	if item.SHA256 != nil {
+		sha = *item.SHA256
+	}
+	if item.Deleted || !sameParent(item.ParentID, in.ParentID) || item.Name != name || item.Kind != in.Kind || sha != in.SHA256 {
+		return nil, ErrDriveIDTaken
+	}
+	return &item, nil
+}
+
+// DrivePatchInput is one change to an item: any of a new name, a new parent
+// (MoveParent, with ParentID nil for the root), new content (Content) and a
+// new mtime. IfMatch, when above 0, is a precondition on the item's version;
+// 0 applies the change whatever the version. BaseVersion is the version the
+// sender's copy came from (0 when it doesn't know); a save whose sender saw
+// the content as it is now never needs to keep it. Replace lets a new name or
+// parent take a name a live item holds, trashing that item first.
+type DrivePatchInput struct {
+	UserID, SpaceID, ItemID string
+	Device                  DriveDevice
+	IfMatch                 int64
+	BaseVersion             int64
+	Name                    *string
+	MoveParent              bool
+	ParentID                *string
+	Content                 bool
+	SHA256                  string
+	Size                    int64
+	UploadID                string
+	MTimeMS                 *int64
+	Replace                 bool
+}
+
+// driveReplacedNameTx is the name of the trashed copy of content a save
+// replaced, "Report (replaced 2026-11-20 1405).pdf" in UTC, numbered on
+// when another item of the folder, live or trashed, already has it.
+func driveReplacedNameTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID *string, name string, at time.Time) (string, error) {
+	label := "replaced " + at.UTC().Format("2006-01-02 1504")
+	parent := ""
+	if parentID != nil {
+		parent = *parentID
+	}
+	for n := 1; ; n++ {
+		candidate := driveLabeledName(name, driveKindFile, label, n)
+		var used bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_drive_items
+			WHERE space_id=$1 AND COALESCE(parent_id,'')=$2 AND lower(name)=lower($3::text) AND deleted_at IS NULL)`,
+			spaceID, parent, candidate).Scan(&used); err != nil {
+			return "", err
+		}
+		if !used {
+			return candidate, nil
+		}
+	}
+}
+
+// keepReplacedDriveContentTx keeps a file's current content as a new trashed
+// copy in the same folder before a save replaces it: the same blob (no bytes
+// are copied), its digest, size and mtime, who last changed it and when, and
+// replaced_of naming the item. The bytes counted for the item move to the
+// copy, against whoever they counted against, so the trash's 30 days count
+// them as they count any trashed file and its purge frees them. It returns
+// the copy. The caller holds the drive lock and the item's row.
+func keepReplacedDriveContentTx(ctx context.Context, tx *sql.Tx, spaceID, userID string, item DriveItem) (DriveItem, error) {
+	name, err := driveReplacedNameTx(ctx, tx, spaceID, item.ParentID, item.Name, time.Now())
+	if err != nil {
+		return DriveItem{}, err
+	}
+	seq, err := nextDriveSeqsTx(ctx, tx, spaceID, 1)
+	if err != nil {
+		return DriveItem{}, err
+	}
+	id := "drv_" + uuid.NewString()
+	var blobKey any
+	if item.BlobKey != "" {
+		blobKey = item.BlobKey
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO space_drive_items(id,space_id,parent_id,name,kind,sha256,byte_size,mtime_ms,blob_key,seq,
+			modified_by,modified_at,trashed_at,trashed_by,trash_hold,replaced_of)
+		VALUES($1,$2,$3,$4,'file',$5,$6,$7,$8,$9,$10,$11,NOW(),$12,FALSE,$13)`,
+		id, spaceID, driveNullable(item.ParentID), name, *item.SHA256, item.Size, item.MTimeMS, blobKey, seq,
+		item.ModifiedBy, item.ModifiedAt, userID, item.ID); err != nil {
+		return DriveItem{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE space_storage_contributions SET source_id=$3,updated_at=NOW()
+		WHERE space_id=$1 AND source_kind='drive' AND source_id=$2 AND state IN ('active','recovery')`, spaceID, item.ID, id); err != nil {
+		return DriveItem{}, err
+	}
+	return driveItemTx(ctx, tx, spaceID, id, false)
+}
+
+// PatchDriveItem renames, moves or changes the content of an item. The last
+// write wins: without IfMatch it applies whatever the version. A trashed item,
+// or one in a trashed folder, comes back first (Revived), and so does a
+// trashed folder it moves into. New content over content its sender never saw
+// (BaseVersion missing or older than the item's version) keeps that content as
+// a trashed copy first (Replaced): only a change of content counts, so a
+// rename, move or trash since the base version doesn't. A purged item is
+// ErrDriveNotFound.
+func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*DriveWriteResult, error) {
+	if !ValidDriveDevice(in.Device) || in.IfMatch < 0 || in.BaseVersion < 0 ||
+		(in.Name == nil && !in.MoveParent && !in.Content && in.MTimeMS == nil) {
+		return nil, ErrLibraryInvalid
+	}
+	result := &DriveWriteResult{Created: false, DeleteObjectKeys: []string{}, RetireKeys: []string{}}
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireDriveWriteTx(ctx, tx, in.UserID, in.SpaceID); err != nil {
+			return err
+		}
+		if err := lockDriveTx(ctx, tx, in.SpaceID); err != nil {
+			return err
+		}
+		item, err := liveDriveItemTx(ctx, tx, in.SpaceID, in.ItemID, true)
+		if err != nil {
+			return err
+		}
+		if in.IfMatch > 0 && item.Version != in.IfMatch {
+			return DriveConflictError{Code: "version_conflict", Item: item}
+		}
+		if item.Kind == DriveKindFolder && (in.Content || in.MTimeMS != nil) {
+			return ErrLibraryInvalid
+		}
+		// What the sender saw: the version its copy came from, or the one it
+		// made the change against.
+		seen := in.BaseVersion
+		if seen == 0 {
+			seen = in.IfMatch
+		}
+		seenCurrent := seen >= item.ContentVersion
+		revivedSeq, err := reviveDriveItemTx(ctx, tx, in.SpaceID, item)
+		if err != nil {
+			return err
+		}
+		if revivedSeq > 0 {
+			result.Revived = true
+			if item, err = liveDriveItemTx(ctx, tx, in.SpaceID, item.ID, true); err != nil {
+				return err
+			}
+		}
+		name, parentID := item.Name, item.ParentID
+		if in.Name != nil {
+			if name, err = normalizeDriveNameTx(ctx, tx, *in.Name); err != nil {
+				return err
+			}
+		}
+		if in.MoveParent && !sameParent(in.ParentID, item.ParentID) {
+			if in.ParentID != nil {
+				if *in.ParentID == item.ID {
+					return ErrDriveInvalidMove
+				}
+				ancestors, err := driveAncestorsTx(ctx, tx, *in.ParentID)
+				if err != nil {
+					return err
+				}
+				for _, ancestor := range ancestors {
+					if ancestor.ID == item.ID {
+						return ErrDriveInvalidMove
+					}
+				}
+			}
+			parentRevived, err := driveParentTx(ctx, tx, in.SpaceID, in.ParentID)
+			if err != nil {
+				return err
+			}
+			result.Revived = result.Revived || parentRevived > 0
+			parentID = in.ParentID
+		}
+		if name != item.Name || !sameParent(parentID, item.ParentID) {
+			holder, err := driveNameHolderTx(ctx, tx, in.SpaceID, parentID, name, item.ID)
+			if err != nil {
+				return err
+			}
+			if holder != nil {
+				if !in.Replace {
+					return DriveConflictError{Code: "name_taken", Item: *holder}
+				}
+				// The item holding the name goes to the trash first, unless
+				// anyone has it open, the asking computer included.
+				if _, err := liveDriveItemTx(ctx, tx, in.SpaceID, holder.ID, true); err != nil {
+					return err
+				}
+				if _, err := trashDriveItemTx(ctx, tx, in.SpaceID, in.UserID, holder.ID, "", "", false); err != nil {
+					return err
+				}
+			}
+		}
+		sha, size, blobKey, mtime := "", item.Size, item.BlobKey, item.MTimeMS
+		if item.SHA256 != nil {
+			sha = *item.SHA256
+		}
+		if in.MTimeMS != nil {
+			mtime = *in.MTimeMS
+		}
+		contentChanged, newContent := false, false
+		if in.Content {
+			key, held, discard, err := resolveDriveContentTx(ctx, tx, in.UserID, in.SpaceID, driveContent{sha: in.SHA256, size: in.Size, uploadID: in.UploadID})
+			if err != nil {
+				return err
+			}
+			result.DeleteObjectKeys = append(result.DeleteObjectKeys, discard...)
+			// Content the sender never saw is kept, not lost. An empty file
+			// has nothing to keep.
+			keep := !seenCurrent && in.SHA256 != sha && item.Size > 0
+			counted := item.ID
+			if keep {
+				// The replaced bytes stay counted, on the copy.
+				counted = ""
+			}
+			if err := requireDriveRoomTx(ctx, tx, in.UserID, in.SpaceID, counted, in.Size, held); err != nil {
+				return err
+			}
+			if keep {
+				replaced, err := keepReplacedDriveContentTx(ctx, tx, in.SpaceID, in.UserID, item)
+				if err != nil {
+					return err
+				}
+				result.Replaced = &replaced
+			} else if item.BlobKey != "" && item.BlobKey != key {
+				result.RetireKeys = append(result.RetireKeys, item.BlobKey)
+			}
+			newContent = in.SHA256 != sha
+			sha, size, blobKey, contentChanged = in.SHA256, in.Size, key, true
+		}
+		seq, err := nextDriveSeqsTx(ctx, tx, in.SpaceID, 1)
+		if err != nil {
+			return err
+		}
+		var shaValue, keyValue any
+		if item.Kind == driveKindFile {
+			shaValue = sha
+		}
+		if blobKey != "" {
+			keyValue = blobKey
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE space_drive_items SET name=$2,parent_id=$3,sha256=$4,byte_size=$5,mtime_ms=$6,blob_key=$7,
+			version=version+1,content_version=CASE WHEN $10 THEN version+1 ELSE content_version END,
+			seq=$8,modified_by=$9,modified_at=NOW() WHERE id=$1`,
+			item.ID, name, driveNullable(parentID), shaValue, size, mtime, keyValue, seq, in.UserID, newContent); err != nil {
+			return err
+		}
+		if contentChanged {
+			// New content counts against whoever wrote it.
+			if err := setDriveContributionTx(ctx, tx, in.SpaceID, item.ID, in.UserID, size); err != nil {
+				return err
+			}
+		}
+		if err := recordDriveChangedTx(ctx, tx, in.SpaceID, in.UserID, item.ID, seq); err != nil {
+			return err
+		}
+		result.Item, err = driveItemTx(ctx, tx, in.SpaceID, item.ID, false)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}

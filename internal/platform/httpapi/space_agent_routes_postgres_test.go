@@ -70,8 +70,6 @@ func newSpaceRouteFixture(t *testing.T) *spaceRouteFixture {
 	f.router.Post("/spaces/{spaceID}/notes", service.SpaceNotes())
 	f.router.Put("/spaces/{spaceID}/notes/{noteID}/content", service.SpaceNoteContent())
 	f.router.Get("/spaces/{spaceID}/messages/search", service.SearchMessages())
-	f.router.Get("/spaces/{spaceID}/drawings/{drawingID}/scene", service.SpaceDrawingScene())
-	f.router.Post("/spaces/{spaceID}/drawings/{drawingID}/scene", service.SpaceDrawingScene())
 	return f
 }
 
@@ -331,82 +329,5 @@ func TestSpaceNoteContentRouteWritesThroughTheRoomPostgres(t *testing.T) {
 	}
 	if wrong := f.do(f.member, "PUT", "/spaces/"+elsewhere.ID+"/notes/"+note.ID+"/content", map[string]string{"markdown": "x"}); wrong.Code != http.StatusNotFound {
 		t.Fatalf("wrong Space = %d", wrong.Code)
-	}
-}
-
-type sceneTransport func(*http.Request) (*http.Response, error)
-
-func (f sceneTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
-func TestSpaceDrawingSceneRoutePostgres(t *testing.T) {
-	f := newSpaceRouteFixture(t)
-	drawing, err := f.database.CreateSpaceDrawing(t.Context(), f.owner, f.space.ID, "Floor plan")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var sent []NoteControlEnvelope
-	status, answer := http.StatusOK, `{"ok":true,"revision":3}`
-	previous := NoteControlHTTPClient
-	t.Cleanup(func() { NoteControlHTTPClient = previous })
-	NoteControlHTTPClient = &http.Client{Transport: sceneTransport(func(r *http.Request) (*http.Response, error) {
-		raw, _ := io.ReadAll(r.Body)
-		var envelope NoteControlEnvelope
-		if err := json.Unmarshal(raw, &envelope); err != nil {
-			t.Fatal(err)
-		}
-		sent = append(sent, envelope)
-		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(answer))}, nil
-	})}
-	path := "/spaces/" + f.space.ID + "/drawings/" + drawing.ID + "/scene"
-
-	read := f.do(f.member, "GET", path+"?include_deleted=true", nil)
-	if read.Code != http.StatusOK || !strings.Contains(read.Body.String(), `"revision":3`) || !strings.Contains(read.Body.String(), `"Floor plan"`) {
-		t.Fatalf("read = %d %s", read.Code, read.Body.String())
-	}
-	if last := sent[len(sent)-1]; last.Command != "drawing_scene_read" || last.ResourceID != drawing.ID || !strings.Contains(string(last.Payload), `"include_deleted":true`) {
-		t.Fatalf("read sent %+v", last)
-	}
-
-	change := map[string]any{"mode": "merge", "elements": []map[string]any{{"id": "a", "type": "text", "text": "Hi"}}}
-	applied := f.do(f.member, "POST", path, change, "Idempotency-Key", "call-1")
-	if applied.Code != http.StatusOK {
-		t.Fatalf("apply = %d %s", applied.Code, applied.Body.String())
-	}
-	first := sent[len(sent)-1]
-	if first.Command != "drawing_scene_apply" || !strings.Contains(string(first.Payload), `"client:`) || !strings.Contains(string(first.Payload), `"mode":"merge"`) {
-		t.Fatalf("apply sent %+v", first)
-	}
-	f.do(f.member, "POST", path, change, "Idempotency-Key", "call-1")
-	if again := sent[len(sent)-1]; string(again.Payload) != string(first.Payload) {
-		t.Fatalf("a retry must carry the same request id: %s then %s", first.Payload, again.Payload)
-	}
-
-	sentBefore := len(sent)
-	if refused := f.do(f.member, "POST", path, map[string]any{"request_id": "chosen"}); refused.Code != http.StatusBadRequest {
-		t.Fatalf("a client's request_id = %d", refused.Code)
-	}
-	if stranger := f.do(f.stranger, "POST", path, change); stranger.Code != http.StatusNotFound {
-		t.Fatalf("stranger = %d", stranger.Code)
-	}
-	if len(sent) != sentBefore {
-		t.Fatal("a refused change reached the room")
-	}
-
-	for _, room := range []struct {
-		status int
-		answer string
-		want   int
-		code   string
-	}{
-		{http.StatusConflict, `{"code":"drawing_conflict","content_hash":"x"}`, http.StatusConflict, "drawing_conflict"},
-		{http.StatusRequestEntityTooLarge, `{"code":"document_too_large"}`, http.StatusRequestEntityTooLarge, "document_too_large"},
-		{http.StatusBadRequest, `{"code":"invalid_drawing_scene"}`, http.StatusBadRequest, "invalid_request"},
-		{http.StatusBadGateway, `upstream`, http.StatusInternalServerError, "internal_error"},
-	} {
-		status, answer = room.status, room.answer
-		got := f.do(f.member, "POST", path, change)
-		if got.Code != room.want || !strings.Contains(got.Body.String(), room.code) {
-			t.Errorf("room %d = %d %s", room.status, got.Code, got.Body.String())
-		}
 	}
 }

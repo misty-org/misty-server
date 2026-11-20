@@ -9,7 +9,7 @@ import { readRoomLimits } from "./room-limits";
 
 /**
  * The history commands the Go API sends after checking the caller may read the item (list, get)
- * or edit it (restore), and the rename it sends when a deck or workbook is renamed.
+ * or edit it (restore).
  */
 
 const VERSION_ID = /^[A-Za-z0-9_-]{1,64}$/u;
@@ -80,7 +80,7 @@ export async function restoreHistoryVersion(
   const rehearsal = new Y.Doc();
   try {
     Y.applyUpdate(rehearsal, Y.encodeStateAsUpdate(context.document));
-    restoreDocument(rehearsal, version.update, context.resourceType, now);
+    restoreDocument(rehearsal, version.update, context.resourceType);
     if (Y.encodeStateAsUpdate(rehearsal).byteLength > MAX_DOCUMENT_BYTES) {
       return jsonResponse({ code: "document_too_large" }, 413);
     }
@@ -90,25 +90,7 @@ export async function restoreHistoryVersion(
 
   const limits = await readRoomLimits(context.storage);
   await recordHistoryNow(context.storage, Y.encodeStateAsUpdate(context.document), now, limits.historyDays);
-  restoreDocument(context.document, version.update, context.resourceType, now);
+  restoreDocument(context.document, version.update, context.resourceType);
   await context.save();
   return jsonResponse({ ok: true, restored: id });
-}
-
-/** Sets a deck's or workbook's title in its document, after a rename through the API. */
-export async function setItemTitle(
-  context: RoomControlContext,
-  payload: Record<string, unknown>,
-): Promise<Response> {
-  const metaName =
-    context.resourceType === "deck" ? "deck:meta" : context.resourceType === "workbook" ? "wb:meta" : null;
-  if (!metaName) return jsonResponse({ code: "unknown_command" }, 400);
-  const title = typeof payload.title === "string" ? payload.title.trim() : "";
-  if (!title || [...title].length > 200) return jsonResponse({ code: "invalid_title" }, 400);
-  const meta = context.document.getMap<unknown>(metaName);
-  if (meta.get("title") !== title) {
-    context.document.transact(() => meta.set("title", title), "misty:title-control");
-    await context.save();
-  }
-  return jsonResponse({ ok: true });
 }

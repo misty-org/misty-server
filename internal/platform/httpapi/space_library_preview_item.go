@@ -23,8 +23,7 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 			return
 		}
 		spaceID, itemID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "itemID")
-		original := r.URL.Query().Get("version") == "original"
-		source, err := s.database.LibraryItemPreviewSource(r.Context(), userID, spaceID, itemID, original)
+		source, err := s.database.LibraryItemPreviewSource(r.Context(), userID, spaceID, itemID)
 		if err != nil {
 			writeLibraryError(w, err)
 			return
@@ -67,7 +66,7 @@ func (s *SpaceLibraryService) PreviewItem() http.HandlerFunc {
 				writeLibraryError(w, putErr)
 				return
 			}
-			completed, completeErr := s.database.CompleteLibraryPreview(r.Context(), userID, spaceID, itemID, source.SourceIdentity, objectKey, rendered.MIMEType, rendered.ByteSize, rendered.SHA256, original)
+			completed, completeErr := s.database.CompleteLibraryPreview(r.Context(), userID, spaceID, itemID, source.SourceIdentity, objectKey, rendered.MIMEType, rendered.ByteSize, rendered.SHA256)
 			if completeErr != nil {
 				_ = s.Store.Delete(r.Context(), objectKey)
 				writeLibraryError(w, completeErr)

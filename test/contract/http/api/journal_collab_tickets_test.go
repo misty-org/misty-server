@@ -121,53 +121,6 @@ func TestTicketClaimsMatchTheWorkerContract(t *testing.T) {
 	}
 }
 
-func TestDrawingTicketUsesDrawingRoomAndClaims(t *testing.T) {
-	config := testCollabConfig(t)
-
-	ticket, err := config.MintDrawingTicket(
-		"user_1", "space_1", "drawing_1", "editor", 2,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	claims := decodeTicketClaims(t, ticket.Ticket)
-	if claims.ResourceType != "drawing" ||
-		claims.ResourceID != "drawing_1" ||
-		claims.DrawingID != "drawing_1" ||
-		claims.NoteID != "" {
-		t.Fatalf("drawing claims = %#v", claims)
-	}
-	if !strings.Contains(ticket.URL, "/parties/drawing-room/") {
-		t.Fatalf("drawing ticket URL = %q", ticket.URL)
-	}
-	if config.DrawingRoomID("drawing_1") == config.RoomID("drawing_1") {
-		t.Fatal("a note and drawing with the same id share a room")
-	}
-}
-
-func TestImageTicketUsesImageRoomAndClaims(t *testing.T) {
-	config := testCollabConfig(t)
-
-	ticket, err := config.MintImageTicket("user_1", "space_1", "item_1", "editor", 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	claims := decodeTicketClaims(t, ticket.Ticket)
-	if claims.ResourceType != "image" ||
-		claims.ResourceID != "item_1" ||
-		claims.ImageID != "item_1" ||
-		claims.NoteID != "" ||
-		claims.DrawingID != "" {
-		t.Fatalf("image claims = %#v", claims)
-	}
-	if !strings.Contains(ticket.URL, "/parties/image-room/") {
-		t.Fatalf("image ticket URL = %q", ticket.URL)
-	}
-	if config.ImageRoomID("item_1") == config.DrawingRoomID("item_1") {
-		t.Fatal("an image and a drawing with the same id share a room")
-	}
-}
-
 func TestCodeTicketUsesCodeRoomAndClaims(t *testing.T) {
 	config := testCollabConfig(t)
 
@@ -180,16 +133,14 @@ func TestCodeTicketUsesCodeRoomAndClaims(t *testing.T) {
 		claims.ResourceID != "codesession_1" ||
 		claims.CodeSessionID != "codesession_1" ||
 		claims.Role != "editor" ||
-		claims.NoteID != "" ||
-		claims.DrawingID != "" ||
-		claims.ImageID != "" {
+		claims.NoteID != "" {
 		t.Fatalf("code claims = %#v", claims)
 	}
 	if !strings.Contains(ticket.URL, "/parties/code-room/") || claims.Room != ticket.Room ||
 		ticket.Room != config.CodeRoomID("codesession_1") {
 		t.Fatalf("code ticket URL = %q room = %q", ticket.URL, ticket.Room)
 	}
-	if config.CodeRoomID("x_1") == config.DrawingRoomID("x_1") || config.CodeRoomID("x_1") == config.RoomID("x_1") {
+	if config.CodeRoomID("x_1") == config.RoomID("x_1") {
 		t.Fatal("a code session shares a room with another resource of the same id")
 	}
 }
@@ -214,14 +165,14 @@ func TestTicketExpiresInOneMinute(t *testing.T) {
 func TestExportTicketIsViewerOnlySingleUseAndShortLived(t *testing.T) {
 	config := testCollabConfig(t)
 	ticket, err := config.MintJournalExportTicket(
-		"user_1", "space_1", "drawing", "drawing_1", 8,
+		"user_1", "space_1", "note", "note_1", 8,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	claims := decodeTicketClaims(t, ticket.Ticket)
-	if claims.Role != "viewer" || claims.ResourceType != "drawing" ||
-		claims.ResourceID != "drawing_1" || claims.ACLVersion != 8 ||
+	if claims.Role != "viewer" || claims.ResourceType != "note" ||
+		claims.ResourceID != "note_1" || claims.NoteID != "note_1" || claims.ACLVersion != 8 ||
 		claims.JTI == "" {
 		t.Fatalf("export claims = %#v", claims)
 	}
@@ -280,7 +231,7 @@ func TestJournalCollabConfigUsesTheOperatorsHost(t *testing.T) {
 
 func TestJournalCollabIsRequired(t *testing.T) {
 	testCollabConfig(t)
-	// Every server saves notes and drawings through the Worker.
+	// Every server saves notes through the Worker.
 	t.Setenv("PARTYKIT_HOST", "")
 	if _, err := JournalCollabConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "PARTYKIT_HOST") {
 		t.Fatalf("no host = %v; want a startup error", err)
@@ -296,51 +247,29 @@ func TestJournalCollabIsRequired(t *testing.T) {
 	}
 }
 
-func TestDeckAndWorkbookTicketsUseTheirRoomsAndClaims(t *testing.T) {
+// Misty's own Space apps are gone: their kinds mint no tickets, and the registry's one kind still
+// reaches its own room.
+func TestItemTicketsFollowTheRegistry(t *testing.T) {
 	config := testCollabConfig(t)
-	for _, tc := range []struct {
-		kind, id, party string
-		claim           func(JournalTicketClaims) string
-	}{
-		{"deck", "deck_1", "deck-room", func(c JournalTicketClaims) string { return c.DeckID }},
-		{"workbook", "workbook_1", "workbook-room", func(c JournalTicketClaims) string { return c.WorkbookID }},
-	} {
-		kind, ok := db.SpaceItemKindNamed(tc.kind)
-		if !ok {
-			t.Fatalf("%s is not a registered kind", tc.kind)
-		}
-		ticket, err := config.MintItemTicket(kind, "user_1", "space_1", tc.id, "editor", 3)
-		if err != nil {
-			t.Fatal(err)
-		}
-		claims := decodeTicketClaims(t, ticket.Ticket)
-		if claims.ResourceType != tc.kind || claims.ResourceID != tc.id || tc.claim(claims) != tc.id ||
-			claims.ACLVersion != 3 || claims.Role != "editor" ||
-			claims.NoteID != "" || claims.DrawingID != "" || claims.ImageID != "" || claims.CodeSessionID != "" {
-			t.Fatalf("%s claims = %#v", tc.kind, claims)
-		}
-		if !strings.Contains(ticket.URL, "/parties/"+tc.party+"/") || claims.Room != ticket.Room ||
-			ticket.Room != config.ItemRoomID(tc.kind, tc.id) {
-			t.Fatalf("%s ticket URL = %q room = %q", tc.kind, ticket.URL, ticket.Room)
-		}
-		for _, other := range []string{"note", "drawing", "image", "code"} {
-			if config.ItemRoomID(tc.kind, "x_1") == config.ItemRoomID(other, "x_1") {
-				t.Fatalf("a %s shares a room with a %s of the same id", tc.kind, other)
-			}
-		}
-		export, err := config.MintJournalExportTicket("user_1", "space_1", tc.kind, tc.id, 3)
-		if err != nil {
-			t.Fatalf("%s export ticket: %v", tc.kind, err)
-		}
-		if exported := decodeTicketClaims(t, export.Ticket); exported.Role != "viewer" || tc.claim(exported) != tc.id ||
-			!strings.Contains(export.URL, "/parties/"+tc.party+"/") {
-			t.Fatalf("%s export claims = %#v", tc.kind, exported)
+	note, ok := db.SpaceItemKindNamed("note")
+	if !ok {
+		t.Fatal("note is not a registered kind")
+	}
+	ticket, err := config.MintItemTicket(note, "user_1", "space_1", "note_1", "editor", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := decodeTicketClaims(t, ticket.Ticket)
+	if claims.ResourceType != "note" || claims.NoteID != "note_1" || claims.Room != config.RoomID("note_1") ||
+		!strings.Contains(ticket.URL, "/parties/note-room/") || config.ItemRoomID("note", "note_1") != config.RoomID("note_1") {
+		t.Fatalf("note item ticket = %#v %q", claims, ticket.URL)
+	}
+	for _, removed := range []string{"drawing", "image", "deck", "workbook"} {
+		if _, err := config.MintJournalExportTicket("user_1", "space_1", removed, removed+"_1", 1); err == nil {
+			t.Fatalf("a %s export ticket was minted", removed)
 		}
 	}
-	if config.ItemRoomID("note", "n_1") != config.RoomID("n_1") || config.ItemRoomID("drawing", "d_1") != config.DrawingRoomID("d_1") {
-		t.Fatal("ItemRoomID disagrees with the note and drawing rooms")
-	}
-	if _, err := config.MintJournalExportTicket("user_1", "space_1", "decks", "deck_1", 1); err == nil {
+	if _, err := config.MintJournalExportTicket("user_1", "space_1", "notes", "note_1", 1); err == nil {
 		t.Fatal("a section name minted an export ticket")
 	}
 }

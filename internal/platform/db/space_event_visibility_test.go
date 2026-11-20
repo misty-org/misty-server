@@ -14,7 +14,9 @@ func TestSpaceEventFamiliesWithoutAnItemRule(t *testing.T) {
 		"owner.transferred": true,
 		"role.created":      true,
 		"roles.reordered":   true,
-		"folder.updated":    true,
+		"drive.changed":     true,
+		"drive.in_use":      true,
+		"folder.updated":    false,
 		"widget.created":    false,
 		"sheet.updated":     false,
 		"":                  false,
@@ -28,3 +30,4 @@ func TestSpaceEventFamiliesWithoutAnItemRule(t *testing.T) {
 		}
 	}
 }
+

@@ -22,11 +22,10 @@ type workerEventHub struct {
 
 func workerQueue(kind string) bool {
 	switch kind {
-	case "library-ai", "library-edit", "note-control", "drawing-control", "drawing-purge", "code-session-control", "abuse-blocks", "abuse-retention", "account-deletion", "rendition-reservations":
+	case "library-ai", "note-control", "code-session-control", "abuse-blocks", "abuse-retention", "account-deletion", "rendition-reservations":
 		return true
 	}
-	_, made := spaceItemKindForQueue(kind)
-	return made
+	return false
 }
 
 type workerDialer struct{}

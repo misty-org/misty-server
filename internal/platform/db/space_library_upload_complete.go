@@ -42,9 +42,7 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 		if errors.Is(err, sql.ErrNoRows) {
 			blobID = "blob_" + uuid.NewString()
 			scanStatus := "clean"
-			if upload.Purpose == UploadPurposeNoteAttachment ||
-				upload.Purpose == UploadPurposeDrawingAsset ||
-				upload.Purpose == UploadPurposeDeckAsset {
+			if upload.Purpose == UploadPurposeNoteAttachment {
 				scanStatus = "skipped"
 			}
 			if _, err = tx.ExecContext(ctx, `INSERT INTO library_blobs(id,security_domain_id,r2_object_key,sha256,byte_size,client_declared_mime_type,server_detected_mime_type,scan_status,processing_status,lifecycle_state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'ready','ready')`, blobID, upload.SecurityDomainID, upload.ObjectKey, verifiedSHA, verifiedSize, upload.ClientDeclaredMIMEType, detectedMIME, scanStatus); err != nil {
@@ -113,52 +111,6 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 				return err
 			}
 			result.NoteAsset, sourceID, sourceKind = asset, asset.ID, "note_asset"
-		} else if upload.Purpose == UploadPurposeDrawingAsset {
-			// Excalidraw keeps only this stable asset identity in the shared
-			// Yjs document. Image bytes stay in R2.
-			var drawingID, excalidrawFileID string
-			if err := tx.QueryRowContext(
-				ctx,
-				`SELECT COALESCE(drawing_id,''),COALESCE(drawing_file_id,'')
-				 FROM space_library_uploads WHERE id=$1`,
-				upload.ID,
-			).Scan(&drawingID, &excalidrawFileID); err != nil {
-				return err
-			}
-			if drawingID == "" || excalidrawFileID == "" {
-				return ErrLibraryInvalid
-			}
-			asset := &SpaceDrawingAsset{
-				ID: "drawingasset_" + uuid.NewString(), DrawingID: drawingID,
-				FileID: file.ID, UploaderUserID: userID,
-				ExcalidrawFileID: excalidrawFileID,
-				DisplayName:      upload.OriginalFilename,
-				LifecycleState:   "ready",
-				MIMEType:         detectedMIME,
-				ByteSize:         verifiedSize,
-				SHA256:           verifiedSHA,
-			}
-			if err := tx.QueryRowContext(
-				ctx,
-				`INSERT INTO space_drawing_assets(
-				     id,drawing_id,file_id,uploader_user_id,
-				     excalidraw_file_id,display_name
-				 ) VALUES($1,$2,$3,$4,$5,$6)
-				 RETURNING created_at`,
-				asset.ID, drawingID, file.ID, userID,
-				excalidrawFileID, upload.OriginalFilename,
-			).Scan(&asset.CreatedAt); err != nil {
-				return err
-			}
-			result.DrawingAsset, sourceID, sourceKind =
-				asset, asset.ID, "drawing_asset"
-		} else if upload.Purpose == UploadPurposeDeckAsset {
-			// A slide keeps only this asset's id; the image stays in R2.
-			asset, err := insertDeckAssetTx(ctx, tx, upload, file, userID, detectedMIME, verifiedSHA, verifiedSize)
-			if err != nil {
-				return err
-			}
-			result.DeckAsset, sourceID, sourceKind = asset, asset.ID, "deck_asset"
 		} else {
 			attachment := &MessageAttachment{ID: "attachment_" + uuid.NewString(), SpaceID: spaceID, FileID: file.ID, UploadID: upload.ID, UploaderUserID: userID, DisplayName: upload.OriginalFilename, LifecycleState: "ready"}
 			if err := tx.QueryRowContext(ctx, `INSERT INTO space_message_attachments(id,space_id,file_id,upload_id,uploader_user_id,display_name) VALUES($1,$2,$3,$4,$5,$6) RETURNING created_at`, attachment.ID, spaceID, file.ID, upload.ID, userID, upload.OriginalFilename).Scan(&attachment.CreatedAt); err != nil {

@@ -115,6 +115,10 @@ services:
       - ${MISTY_ENV_DIR:-~/.misty/.env/server}/google.env
       - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/mailjet.env
         required: false
+      # LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET turn on calls in DMs (the livekit
+      # service below). Without them the app shows no call buttons.
+      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/livekit.env
+        required: false
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-ec", "set -a; . /run/misty/secrets/server.env; set +a; exec /usr/local/bin/misty-server"]
     environment:
@@ -137,6 +141,31 @@ services:
       timeout: 5s
       retries: 3
     networks: [edge, database]
+
+  # LiveKit carries calls in DMs, only with `docker compose --profile calls up`. The server only
+  # mints room tokens; calls are end-to-end encrypted between the people's computers, so neither
+  # the server nor LiveKit can hear or see them. Media needs the UDP range reachable from outside.
+  livekit:
+    image: livekit/livekit-server:v1.8.4
+    profiles: [calls]
+    command: ["--node-ip", "${LIVEKIT_NODE_IP:-127.0.0.1}"]
+    env_file:
+      - ${MISTY_ENV_DIR:-~/.misty/.env/server}/livekit.env
+    # livekit.env also holds LIVEKIT_KEYS="<api key>: <api secret>", the same pair the server signs with.
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          port_range_start: 50000
+          port_range_end: 50100
+          use_external_ip: false
+    ports:
+      - "${LIVEKIT_HOST_PORT:-7880}:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    restart: unless-stopped
+    networks: [edge]
 
   # Publishes the API at https://MISTY_HOSTNAME through the tunnel setup made.
   cloudflared:

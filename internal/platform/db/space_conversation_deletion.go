@@ -61,15 +61,13 @@ func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, mes
 			WHERE f.id=$1
 			  AND NOT EXISTS(SELECT 1 FROM space_library_items i WHERE i.file_id=f.id AND i.lifecycle_state IN ('ready','recovery'))
 			  AND NOT EXISTS(SELECT 1 FROM space_message_attachments a WHERE a.file_id=f.id AND a.id<>$2 AND a.lifecycle_state IN ('ready','recovery'))
-			  AND NOT EXISTS(SELECT 1 FROM space_note_assets n WHERE n.file_id=f.id AND n.lifecycle_state IN ('ready','recovery'))
-			  AND NOT EXISTS(SELECT 1 FROM space_drawing_assets d WHERE d.file_id=f.id AND d.lifecycle_state IN ('ready','recovery'))
-			  AND NOT EXISTS(SELECT 1 FROM space_deck_assets k WHERE k.file_id=f.id AND k.lifecycle_state IN ('ready','recovery'))`, item.fileID, item.id); err != nil {
+			  AND NOT EXISTS(SELECT 1 FROM space_note_assets n WHERE n.file_id=f.id AND n.lifecycle_state IN ('ready','recovery'))`, item.fileID, item.id); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE library_blobs b SET lifecycle_state='deleted',deleted_at=NOW(),version=version+1,updated_at=NOW()
 			WHERE b.id=(SELECT blob_id FROM library_files WHERE id=$1)
 			  AND NOT EXISTS(SELECT 1 FROM library_files f WHERE f.blob_id=b.id AND f.lifecycle_state<>'deleted')
-			  AND NOT EXISTS(SELECT 1 FROM space_shared_folder_files ff WHERE ff.blob_key=b.r2_object_key)`, item.fileID); err != nil {
+			  AND NOT EXISTS(SELECT 1 FROM space_drive_items di WHERE di.blob_key=b.r2_object_key)`, item.fileID); err != nil {
 			return err
 		}
 		released += item.bytes

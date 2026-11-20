@@ -12,13 +12,7 @@
  */
 
 export type DocumentRole = "creator" | "editor" | "viewer";
-export type CollaborationResourceType =
-  | "note"
-  | "drawing"
-  | "image"
-  | "code"
-  | "deck"
-  | "workbook";
+export type CollaborationResourceType = "note" | "code" | "app";
 
 export interface TicketClaims {
   iss: string;
@@ -29,15 +23,8 @@ export interface TicketClaims {
   resource_type: CollaborationResourceType;
   resource_id: string;
   note_id?: string;
-  drawing_id?: string;
-  /** The Space library item an image room edits. */
-  image_id?: string;
   /** The live code session a code room belongs to. */
   code_session_id?: string;
-  /** The deck a deck room holds. */
-  deck_id?: string;
-  /** The workbook a workbook room holds. */
-  workbook_id?: string;
   room: string;
   role: DocumentRole;
   acl_version: number;
@@ -71,14 +58,7 @@ const VALID_ROLES: ReadonlySet<string> = new Set([
   "editor",
   "viewer",
 ]);
-const VALID_RESOURCE_TYPES: ReadonlySet<string> = new Set([
-  "note",
-  "drawing",
-  "image",
-  "code",
-  "deck",
-  "workbook",
-]);
+const VALID_RESOURCE_TYPES: ReadonlySet<string> = new Set(["note", "code", "app"]);
 
 function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -150,14 +130,11 @@ function decodeClaims(payloadSegment: string): TicketClaims {
   if (
     (claims.resource_type === "note" &&
       claims.note_id !== claims.resource_id) ||
-    (claims.resource_type === "drawing" &&
-      claims.drawing_id !== claims.resource_id) ||
-    (claims.resource_type === "image" && claims.image_id !== claims.resource_id) ||
     (claims.resource_type === "code" &&
       claims.code_session_id !== claims.resource_id) ||
-    (claims.resource_type === "deck" && claims.deck_id !== claims.resource_id) ||
-    (claims.resource_type === "workbook" &&
-      claims.workbook_id !== claims.resource_id)
+    // An app's live document is kept to its Space: its id starts with the Space the ticket is for.
+    (claims.resource_type === "app" &&
+      !claims.resource_id.startsWith(`${claims.space_id}:`))
   ) {
     throw new TicketError("ticket_resource_invalid");
   }

@@ -51,9 +51,6 @@ func TestSpaceItemKindRegistryIsConsistent(t *testing.T) {
 				t.Errorf("%s: %q is not a plain SQL identifier", kind.Name, name)
 			}
 		}
-		if kind.Shared && (kind.PurgeQueue == "" || kind.CountColumn == "" || !identifier.MatchString(kind.CountColumn)) {
-			t.Errorf("%s is shared but lacks a purge queue or count column", kind.Name)
-		}
 		if kind.EventFamily != kind.Name+"." || kind.Party != kind.Name+"-room" || !strings.HasPrefix(kind.IDPrefix, kind.Name) {
 			t.Errorf("%s's family, room or id prefix doesn't follow its name", kind.Name)
 		}
@@ -67,14 +64,18 @@ func TestSpaceItemKindRegistryIsConsistent(t *testing.T) {
 			t.Errorf("%s has no personal item key", kind.Name)
 		}
 	}
-	for _, name := range []string{"deck", "workbook", "note", "drawing"} {
-		if _, ok := SpaceItemKindNamed(name); !ok {
-			t.Errorf("%s is not registered", name)
+	if _, ok := SpaceItemKindNamed("note"); !ok {
+		t.Error("note is not registered")
+	}
+	// Misty ships no Space apps of its own: whiteboards, decks and workbooks are gone.
+	for _, name := range []string{"deck", "workbook", "drawing"} {
+		if _, ok := SpaceItemKindNamed(name); ok {
+			t.Errorf("%s is still registered", name)
 		}
 	}
-	for _, queue := range SpaceItemWorkerQueues() {
-		if !workerQueue(queue) {
-			t.Errorf("worker queue %s is not known to the worker hub", queue)
+	for _, kind := range SpaceItemKinds() {
+		if !workerQueue(kind.ControlQueue) {
+			t.Errorf("worker queue %s is not known to the worker hub", kind.ControlQueue)
 		}
 	}
 }

@@ -35,11 +35,6 @@ func TestWorkerNotificationsCommitRollbackIsolationAndReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stopAI()
-	edit, stopEdit, err := database.SubscribeWorkerEvents(ctx, "library-edit")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stopEdit()
 	peerDB := &Database{}
 	defer peerDB.Stop()
 	peer, stopPeer, err := peerDB.SubscribeWorkerEvents(ctx, "library-ai")
@@ -64,7 +59,6 @@ func TestWorkerNotificationsCommitRollbackIsolationAndReconnect(t *testing.T) {
 	}
 	workerWake(t, ai)
 	workerWake(t, peer)
-	workerQuiet(t, edit)
 	if _, err = database.Conn.Exec(`UPDATE library_processing_jobs SET updated_at=now() WHERE id='job'`); err != nil {
 		t.Fatal(err)
 	}
@@ -82,45 +76,16 @@ func TestWorkerNotificationsCommitRollbackIsolationAndReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	workerWake(t, ai)
-	workerWake(t, edit)
 	workerWake(t, peer)
 }
 
-func TestWorkerDeadlinesAndClaimEligibility(t *testing.T) {
+func TestWorkerDeadlinesOnEmptyQueues(t *testing.T) {
 	database := workerTestDatabase(t)
 	ctx := context.Background()
-	for _, queue := range []string{"library-edit", "note-control", "drawing-control", "drawing-purge"} {
+	for _, queue := range []string{"note-control", "code-session-control"} {
 		if _, pending, err := database.NextWorkerDelay(ctx, queue); err != nil || pending {
 			t.Fatal("empty queue", queue, pending, err)
 		}
-	}
-	_, err := database.Conn.Exec(`INSERT INTO library_processing_jobs(id,job_kind,target_id,available_at) VALUES
- ('edit','edit','edit',now()+interval '1 hour')`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	delay, pending, err := database.NextWorkerDelay(ctx, "library-edit")
-	if err != nil || !pending || delay < 59*time.Minute || delay > time.Hour {
-		t.Fatal("edit", delay, pending, err)
-	}
-	if _, err = database.Conn.Exec(`UPDATE library_blobs SET lifecycle_state='missing'; UPDATE library_processing_jobs SET available_at=now()`); err != nil {
-		t.Fatal(err)
-	}
-	if _, pending, err := database.NextWorkerDelay(ctx, "library-edit"); err != nil || pending {
-		t.Fatal("unavailable source must sleep", pending, err)
-	}
-	if job, err := database.ClaimLibraryRenditionJob(ctx, "worker", time.Minute); err != nil || job != nil {
-		t.Fatal("claim and plan disagree", job, err)
-	}
-	if _, err = database.Conn.Exec(`UPDATE library_blobs SET lifecycle_state='ready'`); err != nil {
-		t.Fatal(err)
-	}
-	if job, err := database.ClaimLibraryRenditionJob(ctx, "worker", time.Minute); err != nil || job == nil {
-		t.Fatal("edit claim", job, err)
-	}
-	delay, pending, err = database.NextWorkerDelay(ctx, "library-edit")
-	if err != nil || !pending || delay < 50*time.Second {
-		t.Fatal("lease deadline", delay, pending, err)
 	}
 }
 

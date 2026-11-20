@@ -25,6 +25,10 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 		if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
 		}
+		// A one-to-one DM takes messages only while its two people are friends.
+		if err := requireDirectWritableTx(ctx, tx, userID, spaceID); err != nil {
+			return err
+		}
 		if err := validateRoleMentionsTx(ctx, tx, userID, spaceID, content, nil); err != nil {
 			return err
 		}

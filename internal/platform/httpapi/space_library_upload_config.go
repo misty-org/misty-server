@@ -25,19 +25,16 @@ type SpaceLibraryService struct {
 	database *db.Database
 	Store    LibraryObjectStore
 	// egress bounds bytes served per account and across the deployment.
-	egress               *EgressGuard
-	UploadsEnabled       bool
-	AttachmentsEnabled   bool
-	previewsEnabled      bool
-	editingEnabled       bool
-	mediaProcessor       LibraryMediaProcessor
-	metadataExtractor    LibraryMetadataExtractor
-	exportsEnabled       bool
-	UploadLimits         UploadLimits
-	NoteAssetsEnabled    bool
-	DrawingAssetsEnabled bool
-	DeckAssetsEnabled    bool
-	Transfers            TransferTTLs
+	egress             *EgressGuard
+	UploadsEnabled     bool
+	AttachmentsEnabled bool
+	previewsEnabled    bool
+	mediaProcessor     LibraryMediaProcessor
+	metadataExtractor  LibraryMetadataExtractor
+	exportsEnabled     bool
+	UploadLimits       UploadLimits
+	NoteAssetsEnabled  bool
+	Transfers          TransferTTLs
 	// presigner is non-nil only when the configured object store can sign R2
 	// operations. Without one (a development server without R2), transfers
 	// are refused: file bytes never pass through the server.
@@ -113,9 +110,7 @@ const (
 	UploadPurposeLibrary        UploadPurpose = db.UploadPurposeLibrary
 	UploadPurposeChatAttachment UploadPurpose = db.UploadPurposeChatAttachment
 	UploadPurposeNoteAttachment UploadPurpose = db.UploadPurposeNoteAttachment
-	UploadPurposeDrawingAsset   UploadPurpose = db.UploadPurposeDrawingAsset
-	UploadPurposeDeckAsset      UploadPurpose = db.UploadPurposeDeckAsset
-	UploadPurposeSharedFolder   UploadPurpose = db.UploadPurposeSharedFolder
+	UploadPurposeDrive          UploadPurpose = db.UploadPurposeDrive
 )
 
 // UploadLimits holds the configured maximum file size for each upload purpose.
@@ -123,17 +118,15 @@ type UploadLimits struct {
 	Library        int64
 	ChatAttachment int64
 	NoteAttachment int64
-	DrawingAsset   int64
 }
 
 // DefaultUploadLimits matches the beta product decision: 100 MB Library files,
-// 15 MB Journal note/drawing assets, and 10 MB chat attachments.
+// 15 MB note assets, and 10 MB chat attachments.
 func DefaultUploadLimits() UploadLimits {
 	return UploadLimits{
 		Library:        db.DefaultLibraryMaxFileBytes,
 		ChatAttachment: db.DefaultChatAttachmentMaxFileBytes,
 		NoteAttachment: db.DefaultNoteAttachmentMaxFileBytes,
-		DrawingAsset:   db.DefaultDrawingAssetMaxFileBytes,
 	}
 }
 
@@ -145,7 +138,6 @@ func UploadLimitsFromEnv() UploadLimits {
 	limits.Library = positiveEnvBytes("MISTY_LIBRARY_MAX_FILE_BYTES", limits.Library)
 	limits.ChatAttachment = positiveEnvBytes("MISTY_CHAT_ATTACHMENT_MAX_FILE_BYTES", limits.ChatAttachment)
 	limits.NoteAttachment = positiveEnvBytes("MISTY_NOTE_ATTACHMENT_MAX_FILE_BYTES", limits.NoteAttachment)
-	limits.DrawingAsset = positiveEnvBytes("MISTY_DRAWING_ASSET_MAX_FILE_BYTES", limits.DrawingAsset)
 	return limits
 }
 
@@ -159,11 +151,6 @@ func (l UploadLimits) Max(purpose UploadPurpose) int64 {
 		return l.ChatAttachment
 	case UploadPurposeNoteAttachment:
 		return l.NoteAttachment
-	case UploadPurposeDrawingAsset:
-		return l.DrawingAsset
-	case UploadPurposeDeckAsset:
-		// A deck's images take a drawing's limit.
-		return l.DrawingAsset
 	default:
 		return 0
 	}
@@ -177,7 +164,6 @@ func (l UploadLimits) Validate() error {
 		{UploadPurposeLibrary, l.Library},
 		{UploadPurposeChatAttachment, l.ChatAttachment},
 		{UploadPurposeNoteAttachment, l.NoteAttachment},
-		{UploadPurposeDrawingAsset, l.DrawingAsset},
 	} {
 		ceiling := db.MaxUploadBytesForPurpose(limit.purpose)
 		if limit.value < 1 || limit.value > ceiling {
@@ -187,10 +173,9 @@ func (l UploadLimits) Validate() error {
 	return nil
 }
 
-func (s *SpaceLibraryService) SetSubsystems(attachmentsEnabled, previewsEnabled, editingEnabled, exportsEnabled bool) {
+func (s *SpaceLibraryService) SetSubsystems(attachmentsEnabled, previewsEnabled, exportsEnabled bool) {
 	s.AttachmentsEnabled = attachmentsEnabled
 	s.previewsEnabled = previewsEnabled
-	s.editingEnabled = editingEnabled
 	s.exportsEnabled = exportsEnabled
 }
 
@@ -209,14 +194,8 @@ func (s *SpaceLibraryService) UploadPurposeEnabled(purpose UploadPurpose) bool {
 		// routes can check. The generic Library upload endpoint must never
 		// accept this purpose.
 		return false
-	case UploadPurposeDrawingAsset:
-		// Drawing assets are bound to a drawing and must use its route.
-		return false
-	case UploadPurposeDeckAsset:
-		// Deck assets are bound to a deck and must use its route.
-		return false
-	case UploadPurposeSharedFolder:
-		// Folder files are started by a folder's diff route, never here.
+	case UploadPurposeDrive:
+		// Drive files are started by the drive's upload route, never here.
 		return false
 	default:
 		return false
@@ -227,14 +206,4 @@ func (s *SpaceLibraryService) UploadPurposeEnabled(purpose UploadPurpose) bool {
 // routes, which perform the parent-note permission check themselves.
 func (s *SpaceLibraryService) SetNoteAssetsEnabled(enabled bool) {
 	s.NoteAssetsEnabled = enabled
-}
-
-// SetDrawingAssetsEnabled enables image references for Drawing routes.
-func (s *SpaceLibraryService) SetDrawingAssetsEnabled(enabled bool) {
-	s.DrawingAssetsEnabled = enabled
-}
-
-// SetDeckAssetsEnabled enables image references for deck routes.
-func (s *SpaceLibraryService) SetDeckAssetsEnabled(enabled bool) {
-	s.DeckAssetsEnabled = enabled
 }

@@ -21,7 +21,7 @@ func validVisibility(visibility string) bool {
 }
 
 // visibilityTables maps an item kind to its table, owner column and id column: every made kind
-// in the registry (notes, drawings, decks, workbooks), then the Space's other items.
+// in the registry (notes), then the Space's other items.
 var visibilityTables = withSpaceItemVisibility(map[string][3]string{
 	"library_item": {"space_library_items", "added_by_user_id", "id"},
 	"node":         {"space_nodes", "uploader_user_id", "id"},
@@ -56,7 +56,7 @@ func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID,
 		if n, _ := result.RowsAffected(); n == 0 {
 			return ErrSpaceNotFound
 		}
-		// A doc or drawing made private stops being open for the others now: their tickets and
+		// A doc made private stops being open for the others now: their tickets and
 		// live connections end, and only those who may still see it reconnect.
 		if err := revokeItemConnectionsTx(ctx, tx, kind, itemID); err != nil {
 			return err
@@ -67,7 +67,7 @@ func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID,
 }
 
 // purgeSpaceMemberTx deletes everything of one person's in a Space, in the
-// transaction that takes them out of it: their private notes, drawings, files
+// transaction that takes them out of it: their private notes, files
 // and links, and (through the membership's cascades) their agents' listings.
 // Their public items stay with the Space.
 func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
@@ -90,21 +90,6 @@ func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string)
 			return err
 		}
 	}
-	drawings, err := privateItemIDsTx(ctx, tx, `SELECT id FROM space_drawings WHERE space_id=$1 AND creator_user_id=$2 AND visibility='private' AND lifecycle_state='active'`, spaceID, userID)
-	if err != nil {
-		return err
-	}
-	for _, drawingID := range drawings {
-		if _, err := tx.ExecContext(ctx, `UPDATE space_drawings SET lifecycle_state='deleting',acl_version=acl_version+1,updated_at=NOW() WHERE id=$1`, drawingID); err != nil {
-			return err
-		}
-		if err := recordDrawingEventTx(ctx, tx, spaceID, userID, "drawing.deleted", drawingID); err != nil {
-			return err
-		}
-		if err := enqueueDrawingControlTx(ctx, tx, drawingID, "purge", nil); err != nil {
-			return err
-		}
-	}
 	// Library files skip the 30-day trash: the person chose to leave.
 	if _, err := tx.ExecContext(ctx, `WITH gone AS (
 			UPDATE space_library_items SET lifecycle_state='trash',trashed_at=NOW(),recover_until=NOW(),version=version+1,updated_at=NOW()
@@ -116,7 +101,7 @@ func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM space_nodes WHERE space_id=$1 AND uploader_user_id=$2 AND visibility='private'`, spaceID, userID); err != nil {
 		return err
 	}
-	return purgeMadeItemsOfMemberTx(ctx, tx, spaceID, userID)
+	return nil
 }
 
 // purgeSpaceMembersTx runs the purge for everyone in a Space being deleted.

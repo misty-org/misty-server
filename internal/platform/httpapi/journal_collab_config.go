@@ -15,7 +15,7 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// Journal collaboration tickets for notes and drawings.
+// Journal collaboration tickets for notes and live code sessions.
 //
 // A ticket is the only thing the Cloudflare Worker trusts. It is signed with an
 // Ed25519 private key that never leaves this server, so a compromise of the
@@ -34,7 +34,7 @@ const (
 var ErrCollaborationUnconfigured = errors.New("journal collaboration is not configured")
 
 // JournalCollabConfig holds everything needed to talk to the shared note and
-// drawing collaboration service. It is only usable once every field validates.
+// collaboration service. It is only usable once every field validates.
 // The zero value is unconfigured and refuses every ticket.
 type JournalCollabConfig struct {
 	Enabled                  bool
@@ -50,7 +50,7 @@ type JournalCollabConfig struct {
 
 // JournalCollabConfigFromEnv reads the collaboration configuration.
 //
-// Notes and drawings are saved through the collaboration Worker, so every
+// Notes are saved through the collaboration Worker, so every
 // server needs it: PARTYKIT_HOST and every key must be present and valid, or
 // startup fails. The setup container deploys the Worker and writes them.
 func JournalCollabConfigFromEnv() (JournalCollabConfig, error) {
@@ -61,7 +61,7 @@ func JournalCollabConfigFromEnv() (JournalCollabConfig, error) {
 		Audience: journalTicketAudience,
 	}
 	if config.Host == "" {
-		return JournalCollabConfig{}, errors.New("PARTYKIT_HOST is required: notes and drawings are saved through the collaboration Worker")
+		return JournalCollabConfig{}, errors.New("PARTYKIT_HOST is required: notes are saved through the collaboration Worker")
 	}
 	if strings.Contains(config.Host, "/") || strings.Contains(config.Host, ":") {
 		return JournalCollabConfig{}, errors.New("PARTYKIT_HOST must be a bare hostname")
@@ -139,23 +139,13 @@ func (c JournalCollabConfig) RoomID(noteID string) string {
 	return c.resourceRoomID("note", noteID)
 }
 
-// DrawingRoomID derives the opaque room identifier for a drawing.
-func (c JournalCollabConfig) DrawingRoomID(drawingID string) string {
-	return c.resourceRoomID("drawing", drawingID)
-}
-
-// ImageRoomID derives the opaque room identifier for a library image's edit.
-func (c JournalCollabConfig) ImageRoomID(itemID string) string {
-	return c.resourceRoomID("image", itemID)
-}
-
 // CodeRoomID derives the opaque room identifier for a live code session.
 func (c JournalCollabConfig) CodeRoomID(sessionID string) string {
 	return c.resourceRoomID("code", sessionID)
 }
 
 // ItemRoomID derives the opaque room identifier for a made item of any registered kind: the
-// same as RoomID for a note and DrawingRoomID for a drawing.
+// same as RoomID for a note.
 func (c JournalCollabConfig) ItemRoomID(kind, itemID string) string {
 	return c.resourceRoomID(kind, itemID)
 }
@@ -216,17 +206,12 @@ type JournalTicketClaims struct {
 	ResourceType string `json:"resource_type"`
 	ResourceID   string `json:"resource_id"`
 	NoteID       string `json:"note_id,omitempty"`
-	DrawingID    string `json:"drawing_id,omitempty"`
-	ImageID      string `json:"image_id,omitempty"`
 	// CodeSessionID is the live code session a code room belongs to.
 	CodeSessionID string `json:"code_session_id,omitempty"`
-	// DeckID and WorkbookID name the deck or workbook a deck-room or workbook-room holds.
-	DeckID     string `json:"deck_id,omitempty"`
-	WorkbookID string `json:"workbook_id,omitempty"`
-	Room       string `json:"room"`
-	Role       string `json:"role"`
-	ACLVersion int64  `json:"acl_version"`
-	Expires    int64  `json:"exp"`
+	Room          string `json:"room"`
+	Role          string `json:"role"`
+	ACLVersion    int64  `json:"acl_version"`
+	Expires       int64  `json:"exp"`
 }
 
 type collaborationResource struct {
@@ -250,35 +235,6 @@ func (c JournalCollabConfig) MintNoteTicket(userID, spaceID, noteID, role string
 	)
 }
 
-// MintDrawingTicket signs a single-use ticket for one DrawingRoom connection.
-func (c JournalCollabConfig) MintDrawingTicket(
-	userID, spaceID, drawingID, role string,
-	aclVersion int64,
-) (JournalTicket, error) {
-	return c.mintResourceTicket(
-		userID,
-		spaceID,
-		collaborationResource{Type: "drawing", ID: drawingID, Party: "drawing-room"},
-		role,
-		aclVersion,
-	)
-}
-
-// MintImageTicket signs a single-use ticket for one ImageRoom connection: a library image
-// edited live. Callers must have rechecked the item's access immediately before.
-func (c JournalCollabConfig) MintImageTicket(
-	userID, spaceID, itemID, role string,
-	aclVersion int64,
-) (JournalTicket, error) {
-	return c.mintResourceTicket(
-		userID,
-		spaceID,
-		collaborationResource{Type: "image", ID: itemID, Party: "image-room"},
-		role,
-		aclVersion,
-	)
-}
-
 // MintCodeTicket signs a single-use ticket for one CodeRoom connection: a live code session.
 // Callers must have rechecked membership and that the session is open immediately before.
 func (c JournalCollabConfig) MintCodeTicket(
@@ -294,9 +250,21 @@ func (c JournalCollabConfig) MintCodeTicket(
 	)
 }
 
-// MintItemTicket signs a single-use ticket for one connection to a made item's room: a deck in
-// its DeckRoom, a workbook in its WorkbookRoom. Callers must have rechecked the item's access
-// immediately before.
+// MintAppRoomTicket signs a single-use ticket for one connection to an app's live document (the SDK's
+// `room()`): a plain authenticated Yjs room, kept apart per Space and per app by its resource id. Callers
+// must have rechecked the app's room access immediately before.
+func (c JournalCollabConfig) MintAppRoomTicket(userID, spaceID, appID, roomID string) (JournalTicket, error) {
+	return c.mintResourceTicket(
+		userID,
+		spaceID,
+		collaborationResource{Type: "app", ID: spaceID + ":" + appID + ":" + roomID, Party: "app-room"},
+		"editor",
+		1,
+	)
+}
+
+// MintItemTicket signs a single-use ticket for one connection to the room of an item of any
+// registered kind. Callers must have rechecked the item's access immediately before.
 func (c JournalCollabConfig) MintItemTicket(
 	kind db.SpaceItemKind,
 	userID, spaceID, itemID, role string,

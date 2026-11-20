@@ -39,16 +39,8 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 	}
 	if resource.Type == "note" {
 		claims.NoteID = resource.ID
-	} else if resource.Type == "drawing" {
-		claims.DrawingID = resource.ID
-	} else if resource.Type == "image" {
-		claims.ImageID = resource.ID
 	} else if resource.Type == "code" {
 		claims.CodeSessionID = resource.ID
-	} else if resource.Type == db.SpaceItemDeck {
-		claims.DeckID = resource.ID
-	} else if resource.Type == db.SpaceItemWorkbook {
-		claims.WorkbookID = resource.ID
 	}
 	header, err := json.Marshal(map[string]string{"alg": "EdDSA", "typ": "JWT"})
 	if err != nil {
@@ -77,7 +69,7 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 func (c JournalCollabConfig) MintJournalExportTicket(
 	userID, spaceID, resourceType, resourceID string, aclVersion int64,
 ) (JournalTicket, error) {
-	// Every made kind's room exports its document: notes, drawings, decks, workbooks.
+	// Every made kind's room exports its document.
 	kind, ok := db.SpaceItemKindNamed(resourceType)
 	if !ok || kind.Name != resourceType {
 		return JournalTicket{}, errors.New("invalid export resource type")

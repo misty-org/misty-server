@@ -24,11 +24,7 @@ func (s *SpaceLibraryService) copyLibraryItem(ctx context.Context, userID, sourc
 	}
 	tokenHash := security.HashToken(token)
 	objectKey := "library/" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	filename := source.Filename
-	if source.Rendition {
-		filename = libraryRenditionFilename(filename, source.MIMEType)
-	}
-	upload, err := s.database.CreateLibraryUpload(ctx, userID, destinationSpaceID, "library", filename, source.MIMEType, source.ByteSize, source.SHA256, objectKey, tokenHash, time.Now().Add(libraryUploadLifetime).UTC())
+	upload, err := s.database.CreateLibraryUpload(ctx, userID, destinationSpaceID, "library", source.Filename, source.MIMEType, source.ByteSize, source.SHA256, objectKey, tokenHash, time.Now().Add(libraryUploadLifetime).UTC())
 	if err != nil {
 		return nil, err
 	}
@@ -50,11 +46,7 @@ func (s *SpaceLibraryService) copyLibraryItem(ctx context.Context, userID, sourc
 		s.rejectAndDelete(ctx, upload, tokenHash, "invalid", "import_state_failed")
 		return nil, err
 	}
-	intrinsicMetadata := source.IntrinsicMetadata
-	if source.Rendition {
-		intrinsicMetadata = libraryRenditionIntrinsicMetadata(source)
-	}
-	completed, err := s.database.CompleteLibraryUpload(ctx, userID, destinationSpaceID, upload.ID, tokenHash, source.ByteSize, source.SHA256, source.MIMEType, intrinsicMetadata)
+	completed, err := s.database.CompleteLibraryUpload(ctx, userID, destinationSpaceID, upload.ID, tokenHash, source.ByteSize, source.SHA256, source.MIMEType, source.IntrinsicMetadata)
 	if err != nil {
 		s.rejectAndDelete(ctx, upload, tokenHash, "invalid", "import_finalize_failed")
 		return nil, err

@@ -88,9 +88,6 @@ func (f *libraryItemFilter) applyUtilityFilter(utility, userID, sortExpression, 
 		f.where("EXISTS(SELECT 1 FROM space_library_item_views item_view WHERE item_view.space_id=i.space_id AND item_view.space_library_item_id=i.id AND item_view.user_id=" + recentViewerPlaceholder + ")")
 		sortExpression = "(SELECT item_view.last_viewed_at FROM space_library_item_views item_view WHERE item_view.space_id=i.space_id AND item_view.space_library_item_id=i.id AND item_view.user_id=" + recentViewerPlaceholder + ")"
 		subquerySortExpression = "(SELECT item_view.last_viewed_at FROM space_library_item_views item_view WHERE item_view.space_id=cursor_item.space_id AND item_view.space_library_item_id=cursor_item.id AND item_view.user_id=" + recentViewerPlaceholder + ")"
-	case "recently-edited":
-		f.where("i.current_edit_version_id IS NOT NULL")
-		sortExpression, subquerySortExpression = "i.updated_at", "cursor_item.updated_at"
 	case "recently-shared":
 		f.where("EXISTS(SELECT 1 FROM space_message_library_references message_reference WHERE message_reference.space_id=i.space_id AND message_reference.space_library_item_id=i.id)")
 	case "recently-saved":
@@ -130,7 +127,7 @@ func (f *libraryItemFilter) applyDateAndCursorFilters(query LibraryItemQuery, so
 // buildLibraryItemsStatement appends the page limit to the arguments and returns the listing query.
 func buildLibraryItemsStatement(filter *libraryItemFilter, limit int, sortExpression, sortDirection string) string {
 	filter.args = append(filter.args, limit)
-	return `SELECT i.id,i.space_id,i.file_id,i.contributing_user_id,i.display_name,i.caption,i.tags,i.favorite,i.hidden,i.date_override,COALESCE(i.location_override,'null'::jsonb),i.contributor_information,COALESCE(i.current_edit_version_id,''),i.added_by_user_id,i.lifecycle_state,i.added_at,i.trashed_at,i.recover_until,i.version,i.updated_at,i.visibility,
+	return `SELECT i.id,i.space_id,i.file_id,i.contributing_user_id,i.display_name,i.caption,i.tags,i.favorite,i.hidden,i.date_override,COALESCE(i.location_override,'null'::jsonb),i.contributor_information,i.added_by_user_id,i.lifecycle_state,i.added_at,i.trashed_at,i.recover_until,i.version,i.updated_at,i.visibility,
 			f.id,f.blob_id,f.security_domain_id,f.uploader_user_id,f.original_filename,f.intrinsic_metadata,f.lifecycle_state,f.original_uploaded_at,f.version
 			FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id
 			WHERE ` + strings.Join(filter.conditions, " AND ") + ` ORDER BY ` + sortExpression + ` ` + sortDirection + `,i.id ` + sortDirection + ` LIMIT $` + strconv.Itoa(len(filter.args))

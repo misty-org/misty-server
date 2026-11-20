@@ -17,7 +17,7 @@ func handleNoteMembershipLossTx(ctx context.Context, tx *sql.Tx, spaceID, _ stri
 }
 
 // revokeNoteAccessForSpaceTx invalidates every outstanding ticket and socket for
-// a Space's notes, as revokeDrawingAccessForSpaceTx does for its drawings.
+// a Space's notes.
 func revokeNoteAccessForSpaceTx(ctx context.Context, tx *sql.Tx, spaceID string) error {
 	rows, err := tx.QueryContext(ctx,
 		`UPDATE space_notes SET acl_version=acl_version+1
@@ -202,4 +202,22 @@ func (db *Database) NoteControlBacklog(ctx context.Context) (int64, error) {
 			Scan(&backlog)
 	})
 	return backlog, err
+}
+
+// queryItemIDsTx runs a query whose rows are single ids.
+func queryItemIDsTx(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

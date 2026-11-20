@@ -55,7 +55,7 @@ func replaceLibraryItemFileTx(ctx context.Context, tx *sql.Tx, userID, spaceID, 
 		return "", nil, err
 	}
 	var newVersion int64
-	if err := tx.QueryRowContext(ctx, `UPDATE space_library_items SET file_id=$1,current_edit_version_id=NULL,version=version+1,updated_at=NOW() WHERE id=$2 RETURNING version`, newFileID, itemID).Scan(&newVersion); err != nil {
+	if err := tx.QueryRowContext(ctx, `UPDATE space_library_items SET file_id=$1,version=version+1,updated_at=NOW() WHERE id=$2 RETURNING version`, newFileID, itemID).Scan(&newVersion); err != nil {
 		return "", nil, err
 	}
 	// The item's contribution covered the old file and its previews; the

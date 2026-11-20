@@ -28,7 +28,7 @@ func (s *SpacesService) deleteStoredObjects(ctx context.Context, keys []string) 
 
 // PurgeDeletedSpaces removes deleted Spaces whose recovery window ended: an
 // owner's deleted Space after 30 days, a deleted account's Spaces at once.
-// A Space waits until its notes' and drawings' rooms confirm their purge.
+// A Space waits until its notes' and code sessions' rooms confirm their purge.
 func (s *SpacesService) PurgeDeletedSpaces(ctx context.Context, limit int) (int, error) {
 	ids, err := s.database.DueSpacePurges(ctx, limit)
 	if err != nil {

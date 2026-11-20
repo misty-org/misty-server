@@ -355,7 +355,7 @@ func TestWranglerConfigsParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if collab.Config.CompatibilityDate == "" || len(collab.Config.DurableObjects.Bindings) != 6 || len(collab.Config.Migrations) != 5 || collab.Config.Vars["JOURNAL_COLLAB_ISSUER"] != "misty-api" {
+	if collab.Config.CompatibilityDate == "" || len(collab.Config.DurableObjects.Bindings) != 2 || len(collab.Config.Migrations) != 6 || collab.Config.Vars["JOURNAL_COLLAB_ISSUER"] != "misty-api" {
 		t.Fatalf("collab config %+v", collab.Config)
 	}
 	if len(collab.Modules) != 1 {
@@ -369,13 +369,13 @@ func TestWranglerConfigsParse(t *testing.T) {
 }
 
 func TestPendingMigrations(t *testing.T) {
-	all := []map[string]any{{"tag": "v1", "new_sqlite_classes": []any{"NoteRoom"}}, {"tag": "v2", "new_sqlite_classes": []any{"DrawingRoom"}}}
+	all := []map[string]any{{"tag": "v1", "new_sqlite_classes": []any{"NoteRoom"}}, {"tag": "v2", "deleted_classes": []any{"DrawingRoom"}}}
 	fresh, _ := pendingMigrations(all, "")
 	if fresh["new_tag"] != "v2" || len(fresh["steps"].([]map[string]any)) != 2 || fresh["old_tag"] != nil {
 		t.Fatalf("fresh %v", fresh)
 	}
 	upgrade, _ := pendingMigrations(all, "v1")
-	if upgrade["old_tag"] != "v1" || len(upgrade["steps"].([]map[string]any)) != 1 {
+	if upgrade["old_tag"] != "v1" || len(upgrade["steps"].([]map[string]any)) != 1 || upgrade["steps"].([]map[string]any)[0]["deleted_classes"] == nil {
 		t.Fatalf("upgrade %v", upgrade)
 	}
 	if current, _ := pendingMigrations(all, "v2"); current != nil {

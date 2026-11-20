@@ -7,9 +7,8 @@ import (
 
 // The Space purge removes a deleted Space for good once its recovery window
 // ends: an owner's delete waits 30 days, a deleted account's Spaces go at
-// once. Notes, drawings, decks, workbooks and live code sessions live in
-// collaboration rooms, so each first gets a purge command (the note-control,
-// drawing-control, deck-control, workbook-control and code-session-control
+// once. Notes and live code sessions live in collaboration rooms, so each
+// first gets a purge command (the note-control and code-session-control
 // workers deliver them).
 // When every room has confirmed, the caller deletes the Space's stored
 // objects (SpacePurgeObjectKeys) and then its rows (DeleteSpaceData): the
@@ -40,7 +39,7 @@ func (db *Database) DueSpacePurges(ctx context.Context, limit int) ([]string, er
 	return ids, err
 }
 
-// BeginSpacePurge queues a room purge for every note, drawing, deck, workbook and code session
+// BeginSpacePurge queues a room purge for every note and code session
 // in the Space that lacks one, and reports how many rooms have not confirmed yet.
 func (db *Database) BeginSpacePurge(ctx context.Context, spaceID string) (int, error) {
 	waiting := 0
@@ -58,36 +57,16 @@ func (db *Database) BeginSpacePurge(ctx context.Context, spaceID string) (int, e
 				return err
 			}
 		}
-		drawings, err := spacePurgeIDsTx(ctx, tx, `SELECT d.id FROM space_drawings d WHERE d.space_id=$1
-			AND NOT EXISTS(SELECT 1 FROM space_drawing_control_outbox o WHERE o.drawing_id=d.id AND o.command='purge')`, spaceID)
-		if err != nil {
-			return err
-		}
-		for _, id := range drawings {
-			if _, err := tx.ExecContext(ctx, `UPDATE space_drawings SET lifecycle_state='deleting',acl_version=acl_version+1,updated_at=NOW() WHERE id=$1`, id); err != nil {
-				return err
-			}
-			if err := enqueueDrawingControlTx(ctx, tx, id, "purge", nil); err != nil {
-				return err
-			}
-		}
 		codeRooms, err := beginCodeSessionSpacePurgeTx(ctx, tx, spaceID)
 		if err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `SELECT
 			(SELECT count(*) FROM space_notes n WHERE n.space_id=$1 AND NOT EXISTS(SELECT 1 FROM space_note_control_outbox o
-			  WHERE o.note_id=n.id AND o.command='purge' AND o.delivered_at IS NOT NULL))+
-			(SELECT count(*) FROM space_drawings d WHERE d.space_id=$1 AND NOT EXISTS(SELECT 1 FROM space_drawing_control_outbox o
-			  WHERE o.drawing_id=d.id AND o.command='purge' AND o.delivered_at IS NOT NULL))`, spaceID).Scan(&waiting); err != nil {
+			  WHERE o.note_id=n.id AND o.command='purge' AND o.delivered_at IS NOT NULL))`, spaceID).Scan(&waiting); err != nil {
 			return err
 		}
 		waiting += codeRooms
-		madeRooms, err := beginMadeItemSpacePurgeTx(ctx, tx, spaceID)
-		if err != nil {
-			return err
-		}
-		waiting += madeRooms
 		return nil
 	})
 	return waiting, err
@@ -111,7 +90,7 @@ func spacePurgeIDsTx(ctx context.Context, tx *sql.Tx, query, spaceID string) ([]
 }
 
 // SpacePurgeObjectKeys lists every stored object of a deleted Space: its
-// Library's blobs (files, previews, renditions, exports, shared folder files),
+// Library's blobs (files, previews, renditions, exports, drive files),
 // pending uploads and its picture.
 func (db *Database) SpacePurgeObjectKeys(ctx context.Context, spaceID string) ([]string, error) {
 	keys := []string{}
@@ -143,9 +122,9 @@ func (db *Database) DeleteSpaceData(ctx context.Context, spaceID string) error {
 		if _, err := tx.ExecContext(ctx, `SET CONSTRAINTS security_domains_space_fk, spaces_security_domain_fk DEFERRED`); err != nil {
 			return err
 		}
-		// Shared folders name Library blobs, so they go before the blobs do
-		// (their files and pending uploads with them).
-		if _, err := tx.ExecContext(ctx, `DELETE FROM space_shared_folders WHERE space_id=$1`, spaceID); err != nil {
+		// Drive items name Library blobs, so they go before the blobs do
+		// (their in-use marks with them).
+		if _, err := tx.ExecContext(ctx, `DELETE FROM space_drive_items WHERE space_id=$1`, spaceID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM spaces WHERE id=$1`, spaceID); err != nil {

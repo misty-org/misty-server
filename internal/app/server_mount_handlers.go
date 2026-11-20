@@ -120,22 +120,4 @@ func (s *Server) mountLibraryRoutes(prefix string, library *api.SpaceLibraryServ
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/items/{itemID}/restore", library.RestoreItem())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/attachments/{attachmentID}/download", library.DownloadAttachment())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/attachments/{attachmentID}/promote", library.PromoteAttachment())
-	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/library/items/{itemID}/versions", library.EditVersions())
-	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/items/{itemID}/versions", library.EditVersions())
-	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/library/items/{itemID}/versions/current", library.SelectEditVersion())
-	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/items/{itemID}/versions/{editID}/render", library.RenderEditVersion())
-	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/library/items/{itemID}/versions/{editID}", library.DeleteEditVersion())
-	s.mountSharedFolderRoutes(prefix, library)
-}
-
-// mountSharedFolderRoutes mounts a Space's shared folders beside its Library,
-// whose store, presigning and upload proxy route they share.
-func (s *Server) mountSharedFolderRoutes(prefix string, library *api.SpaceLibraryService) {
-	folders := prefix + "/spaces/{spaceID}/folders"
-	s.Router.MethodFunc(http.MethodGet, folders, library.SharedFolders())
-	s.Router.MethodFunc(http.MethodPost, folders, library.SharedFolders())
-	s.Router.MethodFunc(http.MethodDelete, folders+"/{folderID}", library.DeleteSharedFolder())
-	s.Router.MethodFunc(http.MethodPost, folders+"/{folderID}/diff", library.SharedFolderDiff())
-	s.Router.MethodFunc(http.MethodPost, folders+"/{folderID}/commit", library.SharedFolderCommit())
-	s.Router.MethodFunc(http.MethodGet, folders+"/{folderID}/manifest", library.SharedFolderManifest())
 }

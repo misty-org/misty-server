@@ -8,19 +8,15 @@ import (
 )
 
 const (
-	JournalAssetKindNote    = "note_asset"
-	JournalAssetKindDrawing = "drawing_asset"
-	JournalAssetKindDeck    = "deck_asset"
+	JournalAssetKindNote = "note_asset"
 )
 
 // journalAssetTables are the asset tables the cleanup claims from, by contribution kind.
 var journalAssetTables = []struct{ kind, table string }{
 	{JournalAssetKindNote, "space_note_assets"},
-	{JournalAssetKindDrawing, "space_drawing_assets"},
-	{JournalAssetKindDeck, "space_deck_assets"},
 }
 
-// JournalAssetPurge is a claimed note/drawing asset cleanup. ObjectKey is
+// JournalAssetPurge is a claimed note asset cleanup. ObjectKey is
 // present only when this asset owns the last live file reference to the blob.
 // Shared, deduplicated blobs are deliberately retained.
 type JournalAssetPurge struct {
@@ -176,14 +172,6 @@ func claimJournalAssetTx(
 			   AND NOT EXISTS (
 			       SELECT 1 FROM space_note_assets a
 			       WHERE a.file_id=f.id AND a.lifecycle_state='ready'
-			   )
-			   AND NOT EXISTS (
-			       SELECT 1 FROM space_drawing_assets a
-			       WHERE a.file_id=f.id AND a.lifecycle_state='ready'
-			   )
-			   AND NOT EXISTS (
-			       SELECT 1 FROM space_deck_assets a
-			       WHERE a.file_id=f.id AND a.lifecycle_state='ready'
 			   )`,
 			fileID,
 		)
@@ -225,10 +213,6 @@ func claimJournalAssetTx(
 		         AND f.lifecycle_state NOT IN ('purging','deleted')
 		   )
 		   AND NOT EXISTS (
-		       SELECT 1 FROM library_item_versions v
-		       WHERE v.rendition_blob_id=b.id AND v.lifecycle_state<>'deleted'
-		   )
-		   AND NOT EXISTS (
 		       SELECT 1 FROM library_derivatives d
 		       WHERE d.derivative_blob_id=b.id AND d.lifecycle_state<>'deleted'
 		   )
@@ -237,8 +221,8 @@ func claimJournalAssetTx(
 		       WHERE e.export_blob_id=b.id AND e.state<>'deleted'
 		   )
 		   AND NOT EXISTS (
-		       SELECT 1 FROM space_shared_folder_files ff
-		       WHERE ff.blob_key=b.r2_object_key
+		       SELECT 1 FROM space_drive_items di
+		       WHERE di.blob_key=b.r2_object_key
 		   )`,
 		claim.BlobID, fileID,
 	)

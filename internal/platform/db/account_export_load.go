@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"time"
 )
 
@@ -59,7 +58,7 @@ func loadExportSpaces(
 	})
 }
 
-// loadExportJournal lists the notes, drawings, decks and workbooks the user created that they
+// loadExportJournal lists the notes the user created that they
 // can still see. Each is downloaded from its room as a raw Yjs update.
 func loadExportJournal(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
@@ -77,19 +76,6 @@ func loadExportJournal(
 			      WHERE cm.conversation_id=n.audience_conversation_id
 			        AND cm.user_id=$1
 			  ))
-			UNION ALL
-			SELECT 'drawing',id,space_id,title,acl_version,created_at,updated_at
-			FROM space_drawings d
-			WHERE creator_user_id=$1 AND lifecycle_state='active'
-			  AND EXISTS(
-			      SELECT 1 FROM space_members m
-			      WHERE m.space_id=d.space_id AND m.user_id=$1
-			  )
-			  AND (d.audience_kind='space' OR EXISTS(
-			      SELECT 1 FROM space_conversation_members cm
-			      WHERE cm.conversation_id=d.audience_conversation_id
-			        AND cm.user_id=$1
-			  ))`+exportMadeItemsSQL()+`
 			ORDER BY created_at`, userID, func(rows *sql.Rows) error {
 		var item AccountExportJournal
 		if err := rows.Scan(
@@ -120,36 +106,6 @@ func loadExportAssets(
 			  AND (n.audience_kind='space' OR EXISTS(
 			      SELECT 1 FROM space_conversation_members cm
 			      WHERE cm.conversation_id=n.audience_conversation_id
-			        AND cm.user_id=$1
-			  ))
-			UNION ALL
-			SELECT 'drawing',a.id,a.drawing_id,a.display_name,b.r2_object_key,
-			       COALESCE(b.server_detected_mime_type,b.client_declared_mime_type),
-			       b.byte_size,b.sha256,a.created_at
-			FROM space_drawing_assets a
-			JOIN space_drawings d ON d.id=a.drawing_id
-			JOIN library_files f ON f.id=a.file_id
-			JOIN library_blobs b ON b.id=f.blob_id
-			WHERE d.creator_user_id=$1 AND a.lifecycle_state='ready'
-			  AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'
-			  AND (d.audience_kind='space' OR EXISTS(
-			      SELECT 1 FROM space_conversation_members cm
-			      WHERE cm.conversation_id=d.audience_conversation_id
-			        AND cm.user_id=$1
-			  ))
-			UNION ALL
-			SELECT 'deck',a.id,a.deck_id,a.display_name,b.r2_object_key,
-			       COALESCE(b.server_detected_mime_type,b.client_declared_mime_type),
-			       b.byte_size,b.sha256,a.created_at
-			FROM space_deck_assets a
-			JOIN space_decks d ON d.id=a.deck_id
-			JOIN library_files f ON f.id=a.file_id
-			JOIN library_blobs b ON b.id=f.blob_id
-			WHERE d.creator_user_id=$1 AND a.lifecycle_state='ready' AND d.lifecycle_state='active'
-			  AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'
-			  AND (d.audience_kind='space' OR EXISTS(
-			      SELECT 1 FROM space_conversation_members cm
-			      WHERE cm.conversation_id=d.audience_conversation_id
 			        AND cm.user_id=$1
 			  ))
 			UNION ALL
@@ -258,24 +214,4 @@ func loadExportConnections(
 		})
 		return nil
 	})
-}
-
-// exportMadeItemsSQL adds every shared made kind (decks, workbooks) to the journal export, with
-// the same rule as drawings: the user's own, active, in a Space they belong to, and in a
-// conversation they're still in. Table names come from the registry.
-func exportMadeItemsSQL() string {
-	var query strings.Builder
-	for _, kind := range sharedSpaceItemKinds() {
-		query.WriteString(`
-			UNION ALL
-			SELECT '` + kind.Name + `',id,space_id,title,acl_version,created_at,updated_at
-			FROM ` + kind.Table + ` m
-			WHERE creator_user_id=$1 AND lifecycle_state='active'
-			  AND EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=m.space_id AND sm.user_id=$1)
-			  AND (m.audience_kind='space' OR EXISTS(
-			      SELECT 1 FROM space_conversation_members cm
-			      WHERE cm.conversation_id=m.audience_conversation_id AND cm.user_id=$1
-			  ))`)
-	}
-	return query.String()
 }

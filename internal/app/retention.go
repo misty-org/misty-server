@@ -94,9 +94,16 @@ func retentionTasks(server *Server) []retentionTask {
 			return server.Spaces.PurgeDeletedSpaces(ctx, 25)
 		}})
 	}
+	if server.Drive != nil {
+		tasks = append(tasks,
+			// The drives' trash empties after 30 days, except what is held there.
+			retentionTask{"drive-trash", 25, func(ctx context.Context) (int, error) { return server.Drive.PurgeExpiredTrash(ctx, 25) }},
+			// Tombstones leave the change feed after 90 days, moving each Space's horizon.
+			retentionTask{"drive-tombstones", 1000, func(ctx context.Context) (int, error) { return server.Drive.PruneTombstones(ctx, 1000) }},
+		)
+	}
 	if server.Library != nil {
 		tasks = append(tasks,
-			retentionTask{"renditions", 20, func(ctx context.Context) (int, error) { return server.Library.PurgeExpiredRenditions(ctx, 20) }},
 			// Trashed items past their recovery window go for good and free their bytes.
 			retentionTask{"library-trash", 25, func(ctx context.Context) (int, error) { return server.Library.PurgeExpiredTrash(ctx, 25) }},
 			// Object storage offers no change stream; the inventory comparison is

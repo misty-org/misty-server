@@ -133,7 +133,7 @@ func (db *Database) SearchSpaceMessages(ctx context.Context, userID, spaceID, te
 	return items, err
 }
 
-// SpaceSearchHit is one note, message, drawing, deck or workbook that matched a search across
+// SpaceSearchHit is one note or message that matched a search across
 // Spaces.
 type SpaceSearchHit struct {
 	Kind      string
@@ -152,9 +152,7 @@ func (db *Database) SearchSpaces(ctx context.Context, userID, text, spaceID stri
 	return db.SearchSpaceKinds(ctx, userID, text, spaceID, map[string]bool{"note": notes, "message": messages}, limit)
 }
 
-// SearchSpaceKinds is SearchSpaces over any set of kinds: "message" and the registry's made kinds
-// (note, drawing, deck, workbook). Drawings, decks and workbooks match on their title and the
-// plain text their rooms project, with the same audience and layer rules as their lists.
+// SearchSpaceKinds is SearchSpaces over any set of kinds: "message" and "note".
 func (db *Database) SearchSpaceKinds(ctx context.Context, userID, text, spaceID string, kinds map[string]bool, limit int) ([]SpaceSearchHit, error) {
 	notes, messages := kinds[SpaceItemNote], kinds["message"]
 	hits := []SpaceSearchHit{}
@@ -185,7 +183,7 @@ func (db *Database) SearchSpaceKinds(ctx context.Context, userID, text, spaceID 
 					ts_rank_cd(m.search_tsv,q),m.created_at
 				FROM space_messages m JOIN mine ON mine.id=m.space_id LEFT JOIN space_conversations c ON c.id=m.conversation_id
 				CROSS JOIN to_tsquery('simple',$2) q
-				WHERE $6 AND m.search_tsv @@ q AND `+spaceMessageVisibleTo("$1")+madeItemSearchSQL(kinds)+`
+				WHERE $6 AND m.search_tsv @@ q AND `+spaceMessageVisibleTo("$1")+`
 			) found ORDER BY score DESC,moment DESC,id LIMIT $7`,
 			userID, query, spaceID, userID, notes, messages, limit)
 		if err != nil {
@@ -224,25 +222,4 @@ func spaceSearchMessageText(raw string) string {
 		}
 	}
 	return strings.TrimSpace(text.String())
-}
-
-// madeItemSearchSQL adds a branch to SearchSpaceKinds' union for every requested made kind with
-// a search_tsv column (drawings, decks, workbooks). Table names come from the registry; the
-// placeholders are the union's: $1 the caller, $2 the query, $4 the caller again.
-func madeItemSearchSQL(kinds map[string]bool) string {
-	var query strings.Builder
-	for _, kind := range spaceItemKinds {
-		if kind.Name == SpaceItemNote || !kinds[kind.Name] {
-			continue
-		}
-		query.WriteString(`
-				UNION ALL
-				SELECT '` + kind.Name + `',i.id,i.title,i.plain_text_projection,i.space_id,mine.name,
-					ts_rank_cd(i.search_tsv,q),i.updated_at
-				FROM ` + kind.Table + ` i JOIN mine ON mine.id=i.space_id CROSS JOIN to_tsquery('simple',$2) q
-				WHERE i.lifecycle_state='active' AND i.search_tsv @@ q
-				  AND (i.visibility='public' OR i.creator_user_id=$4)
-				  AND (i.audience_kind='space' OR public.misty_can_read_space_conversation(i.audience_conversation_id,$1))`)
-	}
-	return query.String()
 }

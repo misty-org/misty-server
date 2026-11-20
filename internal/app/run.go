@@ -21,6 +21,10 @@ func Run() {
 		panic(err)
 	}
 	defer server.Database.Stop()
+	// Once: DMs that still live inside Spaces move into DMs of their own.
+	if err := server.Database.MigrateSpaceDirectMessages(context.Background()); err != nil {
+		log.Printf("moving DMs out of Spaces: %v", err)
+	}
 	if err := server.MountHandlers(); err != nil {
 		panic(err)
 	}
@@ -42,7 +46,6 @@ func Run() {
 		}),
 		WorkerFunc(func(ctx context.Context) { runLifecycleQueues(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runRetention(ctx, server) }),
-		WorkerFunc(func(ctx context.Context) { runLibraryRenditionProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { email.Run(ctx, server.Database) }),
 	)

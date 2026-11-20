@@ -21,15 +21,14 @@ import (
 //
 //	{"thresholds":[2,7,14],"storage_bytes_per_boost":5000000000,"levels":[
 //	  {"members":10,"upload_bytes":26214400,"agents":3},
-//	  {"members":25,"storage_bytes":25000000000,"upload_bytes":104857600,"agents":10,"custom_icon":true,
-//	   "history_days":30,"deck_slides":200,"workbook_cells":100000},
+//	  {"members":25,"storage_bytes":25000000000,"upload_bytes":104857600,"agents":10,"custom_icon":true,"history_days":30},
 //	  ...]}
 //
 // Only Boosts from people still in the Space count. A Space whose Boosts lapse drops a level
 // and keeps everything; what's over a limit stays, and nothing new that needs room goes in.
 
 var (
-	// ErrSpaceAppLimit refuses one more installed app, or one more stored key of an app, past a fixed bound.
+	// ErrSpaceAppLimit refuses one more installed app past a fixed bound.
 	ErrSpaceAppLimit = errors.New("space app limit reached")
 	// ErrSpaceAgentLimit refuses one more agent in a Space at its level's agent limit.
 	ErrSpaceAgentLimit = errors.New("space agent limit reached")
@@ -47,11 +46,8 @@ type SpaceLevelLimits struct {
 	Agents       *int64 `json:"agents"`
 	CustomIcon   bool   `json:"custom_icon"`
 	InviteLink   bool   `json:"invite_link"`
-	// HistoryDays is how long a doc's, whiteboard's, deck's or workbook's earlier versions are
-	// kept; DeckSlides and WorkbookCells cap one deck's slides and one workbook's filled cells.
-	HistoryDays   *int64 `json:"history_days"`
-	DeckSlides    *int64 `json:"deck_slides"`
-	WorkbookCells *int64 `json:"workbook_cells"`
+	// HistoryDays is how long a doc's earlier versions are kept.
+	HistoryDays *int64 `json:"history_days"`
 }
 
 // SpaceLevelConfig is MISTY_SPACE_LEVELS, read.
@@ -120,12 +116,8 @@ func (c SpaceLevelConfig) validate() error {
 		return errors.New("storage_bytes_per_boost must be at least 0")
 	}
 	for _, level := range c.Levels {
-		for name, limit := range map[string]*int64{
-			"history_days": level.HistoryDays, "deck_slides": level.DeckSlides, "workbook_cells": level.WorkbookCells,
-		} {
-			if limit != nil && *limit < 1 {
-				return fmt.Errorf("%s must be at least 1, or null for unlimited", name)
-			}
+		if level.HistoryDays != nil && *level.HistoryDays < 1 {
+			return errors.New("history_days must be at least 1, or null for unlimited")
 		}
 	}
 	return nil

@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
@@ -17,24 +18,32 @@ func (s *SpaceLibraryService) transferPurposeEnabled(purpose UploadPurpose) bool
 	if purpose == UploadPurposeNoteAttachment {
 		return s.NoteAssetsEnabled
 	}
-	if purpose == UploadPurposeDrawingAsset {
-		return s.DrawingAssetsEnabled
-	}
-	if purpose == UploadPurposeDeckAsset {
-		return s.DeckAssetsEnabled
-	}
-	if purpose == UploadPurposeSharedFolder {
-		// Started by a shared folder's diff, sent straight to R2 and finished by
-		// the folder's commit.
-		return s.UploadsEnabled
+	if purpose == UploadPurposeDrive {
+		// Started, sent straight to R2 and finished by the drive's own routes.
+		return false
 	}
 	return s.UploadPurposeEnabled(purpose)
 }
 
 func IsJournalAssetPurpose(purpose UploadPurpose) bool {
-	return purpose == UploadPurposeNoteAttachment ||
-		purpose == UploadPurposeDrawingAsset ||
-		purpose == UploadPurposeDeckAsset
+	return purpose == UploadPurposeNoteAttachment
+}
+
+// noteAssetMIMETypes are the passive raster formats a note's images may be.
+var noteAssetMIMETypes = map[string]bool{
+	"image/avif":               true,
+	"image/bmp":                true,
+	"image/gif":                true,
+	"image/jpeg":               true,
+	"image/png":                true,
+	"image/webp":               true,
+	"image/x-icon":             true,
+	"image/vnd.microsoft.icon": true,
+}
+
+func SupportedNoteAssetMIME(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(strings.Split(value, ";")[0]))
+	return noteAssetMIMETypes[value]
 }
 
 func NewSpaceLibraryService(database *db.Database, store LibraryObjectStore, uploadsEnabled bool, limits UploadLimits) (*SpaceLibraryService, error) {

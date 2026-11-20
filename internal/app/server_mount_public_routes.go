@@ -69,6 +69,9 @@ func (s *Server) mountPublicFeatureRoutes(prefix string, deps *mountDeps) {
 	if s.Library != nil {
 		s.mountLibraryRoutes(prefix, s.Library)
 	}
+	if s.Drive != nil {
+		s.mountDriveRoutes(prefix, s.Drive)
+	}
 }
 
 // mountOperationalRoutes registers the unversioned metrics and operator endpoints.

@@ -33,11 +33,8 @@ export function createRuntime(persistence, options = {}) {
     compatibilityFlags: ["nodejs_compat"],
     durableObjects: {
       NOTE_ROOM: { className: "NoteRoom", useSQLite: true },
-      DRAWING_ROOM: { className: "DrawingRoom", useSQLite: true },
-      IMAGE_ROOM: { className: "ImageRoom", useSQLite: true },
       CODE_ROOM: { className: "CodeRoom", useSQLite: true },
-      DECK_ROOM: { className: "DeckRoom", useSQLite: true },
-      WORKBOOK_ROOM: { className: "WorkbookRoom", useSQLite: true },
+      APP_ROOM: { className: "AppRoom", useSQLite: true },
     },
     durableObjectsPersist: persistence,
     bindings,
@@ -89,8 +86,6 @@ export async function waitFor(predicate) {
 
 const resourceIDClaims = {
   note: "note_id",
-  drawing: "drawing_id",
-  image: "image_id",
   code: "code_session_id",
 };
 

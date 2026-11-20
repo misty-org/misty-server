@@ -6,9 +6,17 @@ import (
 	"errors"
 )
 
-// A made item's earlier versions live in its collaboration room, which keeps snapshots as it is
+// An item's earlier versions live in its collaboration room, which keeps snapshots as it is
 // edited. Reading them needs what reading the item needs, and restoring one what editing it
 // needs; the API checks both here before asking the room.
+
+// MadeItemAccess is the capability set one caller has on one item.
+type MadeItemAccess struct {
+	CanView   bool
+	CanEdit   bool
+	CanDelete bool
+	Role      string
+}
 
 // SpaceItemAccess resolves one caller's access to an item of any registered kind in one Space.
 // An item in another Space, missing, or not visible to the caller is ErrSpaceNotFound.
@@ -29,22 +37,15 @@ func (db *Database) SpaceItemAccess(ctx context.Context, kindName, userID, space
 		if err != nil {
 			return err
 		}
-		switch kind.Name {
-		case SpaceItemNote:
-			noteAccess, err := noteAccessForTx(ctx, tx, userID, itemID)
-			if err != nil {
-				return err
-			}
-			access = MadeItemAccess{CanView: noteAccess.CanView, CanEdit: noteAccess.CanEdit,
-				CanDelete: noteAccess.CanDelete, Role: noteAccess.Role}
-		case SpaceItemDrawing:
-			access, err = drawingAccessForTx(ctx, tx, userID, itemID)
-		default:
-			access, err = madeItemAccessForTx(ctx, tx, kind, userID, itemID)
+		if kind.Name != SpaceItemNote {
+			return ErrSpaceNotFound
 		}
+		noteAccess, err := noteAccessForTx(ctx, tx, userID, itemID)
 		if err != nil {
 			return err
 		}
+		access = MadeItemAccess{CanView: noteAccess.CanView, CanEdit: noteAccess.CanEdit,
+			CanDelete: noteAccess.CanDelete, Role: noteAccess.Role}
 		if !access.CanView {
 			return ErrSpaceNotFound
 		}

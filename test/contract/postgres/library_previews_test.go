@@ -19,14 +19,14 @@ func TestLibraryPreviewDerivativeAuthorizationAndReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID, false)
+	source, err := database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID)
 	if err != nil || source.SourceIdentity == "" || source.PreviewObjectKey != "" {
 		t.Fatalf("preview source = %#v, %v", source, err)
 	}
-	if _, err := database.LibraryItemPreviewSource(ctx, outsider.ID, spaceID, item.ID, false); err == nil {
+	if _, err := database.LibraryItemPreviewSource(ctx, outsider.ID, spaceID, item.ID); err == nil {
 		t.Fatal("outsider received a preview source")
 	}
-	if _, err := database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID, false); !errors.Is(err, ErrLibraryConflict) {
+	if _, err := database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID); !errors.Is(err, ErrLibraryConflict) {
 		t.Fatalf("concurrent preview source error = %v, want ErrLibraryConflict", err)
 	}
 	reserved, err := database.OwnerStorageUsage(ctx, owner.ID)
@@ -40,12 +40,12 @@ func TestLibraryPreviewDerivativeAuthorizationAndReuse(t *testing.T) {
 	if err != nil || released.ReservedBytes != baseline.ReservedBytes {
 		t.Fatalf("released preview reservation usage = %#v, %v", released, err)
 	}
-	source, err = database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID, false)
+	source, err = database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sha := strings.Repeat("a", 64)
-	completed, err := database.CompleteLibraryPreview(ctx, owner.ID, spaceID, item.ID, source.SourceIdentity, "library/preview-object-123456", "image/jpeg", 64_000, sha, false)
+	completed, err := database.CompleteLibraryPreview(ctx, owner.ID, spaceID, item.ID, source.SourceIdentity, "library/preview-object-123456", "image/jpeg", 64_000, sha)
 	if err != nil || completed.ObjectKey != "library/preview-object-123456" {
 		t.Fatalf("complete preview = %#v, %v", completed, err)
 	}
@@ -53,7 +53,7 @@ func TestLibraryPreviewDerivativeAuthorizationAndReuse(t *testing.T) {
 	if err != nil || settled.ReservedBytes != baseline.ReservedBytes || settled.UsedBytes != baseline.UsedBytes+64_000 {
 		t.Fatalf("settled preview usage = %#v, %v", settled, err)
 	}
-	source, err = database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID, false)
+	source, err = database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID)
 	if err != nil || source.PreviewObjectKey != completed.ObjectKey || source.PreviewBytes != 64_000 || source.PreviewSHA256 != sha {
 		t.Fatalf("reused preview source = %#v, %v", source, err)
 	}
@@ -62,7 +62,7 @@ func TestLibraryPreviewDerivativeAuthorizationAndReuse(t *testing.T) {
 	if err != nil || selectedKey != repairedKey {
 		t.Fatalf("replace missing preview = %q, %v", selectedKey, err)
 	}
-	source, err = database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID, false)
+	source, err = database.LibraryItemPreviewSource(ctx, owner.ID, spaceID, item.ID)
 	if err != nil || source.PreviewObjectKey != repairedKey || source.PreviewBytes != 64_000 || source.PreviewSHA256 != sha {
 		t.Fatalf("repaired preview source = %#v, %v", source, err)
 	}

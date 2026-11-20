@@ -1,10 +1,7 @@
 export interface Env {
   NOTE_ROOM: DurableObjectNamespace;
-  DRAWING_ROOM: DurableObjectNamespace;
-  IMAGE_ROOM: DurableObjectNamespace;
   CODE_ROOM: DurableObjectNamespace;
-  DECK_ROOM: DurableObjectNamespace;
-  WORKBOOK_ROOM: DurableObjectNamespace;
+  APP_ROOM: DurableObjectNamespace;
   JOURNAL_COLLAB_TICKET_PUBLIC_KEY: string;
   JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS?: string;
   JOURNAL_COLLAB_CONTROL_SECRET: string;

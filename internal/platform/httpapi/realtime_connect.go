@@ -75,6 +75,7 @@ func (s *RealtimeService) register(client *RealtimeClient) {
 	}
 	s.clientsByUser[client.UserID][client] = struct{}{}
 	s.Mu.Unlock()
+	go s.PublishStatus(client.UserID)
 }
 
 func (s *RealtimeService) Unregister(client *RealtimeClient) {
@@ -96,6 +97,7 @@ func (s *RealtimeService) Unregister(client *RealtimeClient) {
 	if previousSpaceID != "" {
 		s.broadcastPresence(previousSpaceID)
 	}
+	go s.PublishStatus(client.UserID)
 }
 
 // removeViewerLocked removes client from spaceID's viewer set. Callers must

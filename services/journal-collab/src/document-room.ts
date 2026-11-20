@@ -3,16 +3,12 @@ import type { Connection, ConnectionContext } from "partyserver";
 
 import { jsonResponse } from "./control-protocol";
 import { documentStatusMessage } from "./document-status";
-import { pushDrawingActivity } from "./document-drawing-activity";
-import { pushItemProjection } from "./document-item-projection";
 import { pushNoteProjection } from "./document-note-projection";
-import { deckSlideCount, workbookCellCount } from "./item-text";
 import { closeSocket, countSockets } from "./room-connections";
 import { admitSocket } from "./room-admission";
 import { exportDocumentUpdate } from "./room-document-export";
 import { logRoomEvent } from "./room-log";
-import { readRoomLimits } from "./room-limits";
-import { gateDocumentUpdate, type GrowthLimit } from "./room-message-gate";
+import { gateDocumentUpdate } from "./room-message-gate";
 import { PendingMarkdownLease } from "./room-pending-lease";
 import { loadRoomSnapshot, saveRoomSnapshot, type RoomSnapshotContext } from "./room-snapshot";
 import { bindControlResourceID, parseControlRequest } from "./room-control-request";
@@ -43,7 +39,6 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
   protected abstract readonly resourceType: CollaborationResourceType;
   protected readonly supportsMarkdownBootstrap: boolean = false;
   protected readonly supportsNoteProjection: boolean = false;
-  protected readonly supportsDrawingScene: boolean = false;
   /**
    * Persist shortly after edits stop rather than on every keystroke. A single
    * burst of typing is one write instead of hundreds.
@@ -129,13 +124,13 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
       return;
     }
     if (typeof message !== "string") {
-      const gate = gateDocumentUpdate(this.document, message, await this.growthLimit());
+      const gate = gateDocumentUpdate(this.document, message);
       if (gate?.status === "blocked") {
         this.sendCustomMessage(
           connection,
-          documentStatusMessage("blocked", gate.projectedBytes, gate.code),
+          documentStatusMessage("blocked", gate.projectedBytes),
         );
-        this.log(gate.code ?? "document_limit_blocked", { projected_bytes: gate.projectedBytes });
+        this.log("document_limit_blocked", { projected_bytes: gate.projectedBytes });
         return;
       }
       if (gate?.status === "warning") {
@@ -148,31 +143,9 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
     await super.onMessage(connection, message);
   }
 
-  /**
-   * The Space level's limit on what this room's document holds, when it has one: a deck's
-   * slides, a workbook's filled cells. The API's answers to the room's projections carry it.
-   */
-  private async growthLimit(): Promise<GrowthLimit | undefined> {
-    if (this.resourceType !== "deck" && this.resourceType !== "workbook") return undefined;
-    const limits = await readRoomLimits(this.ctx.storage);
-    if (this.resourceType === "deck") {
-      return limits.deckSlides === null
-        ? undefined
-        : { limit: limits.deckSlides, count: deckSlideCount, code: "slide_limit_reached" };
-    }
-    return limits.workbookCells === null
-      ? undefined
-      : { limit: limits.workbookCells, count: workbookCellCount, code: "cell_limit_reached" };
-  }
-
-  /** Docs, whiteboards, decks and workbooks keep earlier versions; image and code rooms don't. */
+  /** Docs keep earlier versions; code rooms don't. */
   private keepsHistory(): boolean {
-    return (
-      this.resourceType === "note" ||
-      this.resourceType === "drawing" ||
-      this.resourceType === "deck" ||
-      this.resourceType === "workbook"
-    );
+    return this.resourceType === "note";
   }
 
   /**
@@ -244,7 +217,6 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
       resourceType: this.resourceType,
       keepsHistory: this.keepsHistory(),
       supportsMarkdownBootstrap: this.supportsMarkdownBootstrap,
-      supportsDrawingScene: this.supportsDrawingScene,
       save: () => this.onSave(),
       publishNoteProjection: () => this.publishNoteProjection(),
       disconnectSupersededSockets: () => this.disconnectSupersededSockets(),
@@ -331,13 +303,6 @@ export abstract class PersistentDocumentRoom extends YServer<Env> {
       publishNoteProjection: this.supportsNoteProjection
         ? () => this.publishNoteProjection()
         : undefined,
-      publishDrawingActivity: this.supportsDrawingScene
-        ? () => pushDrawingActivity(this.ctx.storage, this.env, this.document)
-        : undefined,
-      publishItemProjection:
-        this.resourceType === "deck" || this.resourceType === "workbook"
-          ? () => pushItemProjection(this.ctx.storage, this.env, this.document, this.resourceType as "deck" | "workbook")
-          : undefined,
       keepsHistory: this.keepsHistory(),
       log: (event, details) => this.log(event, details),
     };

@@ -14,7 +14,7 @@ import (
 // decides by method: GET, HEAD and OPTIONS read, and so do the few POST routes
 // listed here and PUT /me/password. Writes that arrive another way are refused where they land:
 // agent runs in the database (db.ErrAccountClosing), agent
-// tool calls in the MCP server, and note and drawing rooms through a viewer
+// tool calls in the MCP server, and note rooms through a viewer
 // ticket.
 
 // readOnlyPosts are the POST routes a closing account may still use, after the
@@ -26,7 +26,7 @@ var readOnlyPosts = []*regexp.Regexp{
 	regexp.MustCompile(`^/auth/(refresh|google|google/complete|confirm-email|confirm-email/sign-in|web-handoff)$`),
 	regexp.MustCompile(`^/me/(export|deletion|account-proof|web-handoff)$`),
 	regexp.MustCompile(`^/realtime/tickets?$`),
-	regexp.MustCompile(`^/spaces/[^/]+/(notes|drawings|decks|workbooks|library/items|code-sessions)/[^/]+/collaboration-ticket$`),
+	regexp.MustCompile(`^/spaces/[^/]+/(notes|code-sessions)/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/nodes/[^/]+/resolve$`),
 	regexp.MustCompile(`^/spaces/[^/]+/(conversations/[^/]+/)?read$`),
 }
@@ -70,7 +70,7 @@ func writeAccountClosing(w http.ResponseWriter, deleteAt time.Time) {
 }
 
 // collaborationRole is the role a collaboration ticket carries: a closing
-// account opens notes, drawings, decks and workbooks as a viewer, so their
+// account opens notes and code sessions as a viewer, so their
 // rooms take no edits.
 func collaborationRole(userID, role string) string {
 	if _, closing := suspensions.Closing(context.Background(), userID); closing {

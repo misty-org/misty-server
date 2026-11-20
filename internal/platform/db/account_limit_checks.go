@@ -71,8 +71,9 @@ func requireSpaceRoomTx(ctx context.Context, tx *sql.Tx, userID string) error {
 			return err
 		}
 		var belongs int64
+		// Direct messages are not Spaces the person chose to be in, so they never count.
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM space_members m
-			JOIN spaces s ON s.id=m.space_id AND s.lifecycle_state='active' WHERE m.user_id=$1`, userID).Scan(&belongs); err != nil {
+			JOIN spaces s ON s.id=m.space_id AND s.lifecycle_state='active' AND s.kind='space' WHERE m.user_id=$1`, userID).Scan(&belongs); err != nil {
 			return err
 		}
 		if belongs >= *limits.Spaces {
@@ -116,7 +117,7 @@ func requireSpaceSharingRoomTx(ctx context.Context, tx *sql.Tx, ownerID, spaceID
 		}
 		var shared int64
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM spaces s
-			WHERE s.owner_user_id=$1 AND s.lifecycle_state='active' AND s.id<>$2 AND `+people+` > 1`,
+			WHERE s.owner_user_id=$1 AND s.lifecycle_state='active' AND s.kind='space' AND s.id<>$2 AND `+people+` > 1`,
 			ownerID, spaceID).Scan(&shared); err != nil {
 			return err
 		}

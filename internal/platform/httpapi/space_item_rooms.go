@@ -1,14 +1,10 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,12 +12,9 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// A made item's room and the API talk both ways. The API sends signed control commands (ACL
-// changes, renames, purges, and the history commands below); the room posts a signed projection
-// after each save, and the answer carries back the limits the room enforces.
-
-// itemProjectionBodyLimit bounds a room's projection: 100k characters of plain text, escaped.
-const itemProjectionBodyLimit = 512 * 1024
+// An item's room and the API talk both ways. The API sends signed control commands (ACL
+// changes, purges, and the history commands below); the room posts a signed projection after
+// each save, and the answer carries back the limits the room keeps to.
 
 // itemHistoryResponseLimit bounds one earlier version, base64-encoded in JSON: an 8 MiB snapshot
 // is about 11 MiB.
@@ -29,70 +22,8 @@ const itemHistoryResponseLimit = 12 << 20
 
 var itemHistoryVersionPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
-// ProcessMadeItemControlCommands delivers a bounded batch from one shared kind's outbox to its
-// rooms. Failed commands stay queued with backoff; a command the room refuses for good (one
-// reaching a room already purged) is settled, not retried.
-func (s *SpacesService) ProcessMadeItemControlCommands(ctx context.Context, kindName string, limit int) (int, error) {
-	kind, ok := madeItemKind(kindName)
-	if !ok {
-		return 0, fmt.Errorf("unknown made item kind %q", kindName)
-	}
-	commands, err := s.database.PendingMadeItemControlCommands(ctx, kind.Name, limit)
-	if err != nil {
-		return 0, err
-	}
-	delivered := 0
-	var processingErrors []error
-	for _, command := range commands {
-		err := s.deliverCollaborationControlCommand(ctx, kind.Party, s.JournalCollab.ItemRoomID(kind.Name, command.ItemID),
-			command.ItemID, command.Command, command.Payload)
-		if err != nil {
-			mark := s.database.MarkMadeItemControlFailed
-			var refused *collaborationControlRefusal
-			if errors.As(err, &refused) &&
-				(refused.status == http.StatusBadRequest || refused.status == http.StatusGone) {
-				mark = s.database.AbandonMadeItemControlCommand
-			}
-			if markErr := mark(ctx, kind.Name, command.ID, err.Error()); markErr != nil {
-				processingErrors = append(processingErrors,
-					fmt.Errorf("record failed %s command %s: %w", kind.Name, command.ID, markErr))
-			}
-			continue
-		}
-		if err := s.database.MarkMadeItemControlDelivered(ctx, kind.Name, command.ID); err != nil {
-			processingErrors = append(processingErrors,
-				fmt.Errorf("complete %s command %s: %w", kind.Name, command.ID, err))
-			continue
-		}
-		delivered++
-	}
-	return delivered, errors.Join(processingErrors...)
-}
-
-// readRoomCallback reads and verifies a signed callback from the collaboration Worker. It writes
-// the refusal itself and reports whether the body may be used.
-func (s *SpacesService) readRoomCallback(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, bool) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return nil, false
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
-	if err != nil || int64(len(body)) > limit {
-		writeSpaceError(w, db.ErrSpaceInvalid)
-		return nil, false
-	}
-	timestamp := r.Header.Get("X-Misty-Timestamp")
-	issuedAt, parseErr := strconv.ParseInt(timestamp, 10, 64)
-	if parseErr != nil || time.Since(time.Unix(issuedAt, 0)).Abs() > 5*time.Minute ||
-		!s.JournalCollab.VerifyProjectionSignature(timestamp, body, r.Header.Get("X-Misty-Signature")) {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "unauthorized"})
-		return nil, false
-	}
-	return body, true
-}
-
 // writeRoomCallbackAnswer answers a room's callback with whether it applied and the limits the
-// room keeps to: history_days for its history, deck_slides or workbook_cells for its growth.
+// room keeps to: history_days for its history.
 func (s *SpacesService) writeRoomCallbackAnswer(w http.ResponseWriter, r *http.Request, kindName, itemID string, applied bool) {
 	limits, err := s.database.SpaceItemLimitsForItem(r.Context(), kindName, itemID)
 	if err != nil {
@@ -100,46 +31,6 @@ func (s *SpacesService) writeRoomCallbackAnswer(w http.ResponseWriter, r *http.R
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"applied": applied, "limits": limits})
-}
-
-// JournalMadeItemProjection accepts the signed projection a deck's or workbook's room posts after
-// each save: its title, plain text (at most 100k characters), snapshot and history sizes, and
-// slide or cell count.
-func (s *SpacesService) JournalMadeItemProjection(kindName string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		kind, known := madeItemKind(kindName)
-		body, ok := s.readRoomCallback(w, r, itemProjectionBodyLimit)
-		if !ok {
-			return
-		}
-		if !known {
-			writeSpaceError(w, db.ErrSpaceNotFound)
-			return
-		}
-		var input struct {
-			ItemID       string `json:"item_id"`
-			Revision     int64  `json:"revision"`
-			Title        string `json:"title"`
-			PlainText    string `json:"plain_text"`
-			ContentBytes int64  `json:"content_bytes"`
-			HistoryBytes int64  `json:"history_bytes"`
-			Count        int64  `json:"count"`
-		}
-		if json.Unmarshal(body, &input) != nil {
-			writeSpaceError(w, db.ErrSpaceInvalid)
-			return
-		}
-		applied, err := s.database.ApplySpaceMadeItemProjection(r.Context(), db.SpaceMadeItemProjection{
-			Kind: kind.Name, ItemID: input.ItemID, Revision: input.Revision, Title: input.Title,
-			PlainText: input.PlainText, ContentBytes: input.ContentBytes, HistoryBytes: input.HistoryBytes,
-			Count: input.Count,
-		})
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		s.writeRoomCallbackAnswer(w, r, kind.Name, input.ItemID, applied)
-	}
 }
 
 // itemHistoryVersion is one earlier version as the room lists it.
@@ -222,7 +113,7 @@ func (s *SpacesService) itemHistoryVersions(r *http.Request, kind db.SpaceItemKi
 }
 
 // SpaceItemHistory lists an item's earlier versions, newest first:
-// GET /spaces/{space}/{notes|drawings|decks|workbooks}/{id}/history → {versions:[{id,created_at,content_bytes}]}.
+// GET /spaces/{space}/notes/{id}/history → {versions:[{id,created_at,content_bytes}]}.
 // Anyone who can read the item may.
 func (s *SpacesService) SpaceItemHistory(kindName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

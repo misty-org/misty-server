@@ -280,7 +280,7 @@ func codeSessionByIDTx(
 }
 
 // revokeCodeSessionAccessForSpaceTx runs with every membership loss, as
-// revokeDrawingAccessForSpaceTx does for drawings: each open session's room drops the sockets
+// revokeNoteAccessForSpaceTx does for notes: each open session's room drops the sockets
 // minted before, and the members still there reconnect with fresh tickets.
 func revokeCodeSessionAccessForSpaceTx(ctx context.Context, tx *sql.Tx, spaceID string) error {
 	rows, err := tx.QueryContext(ctx,

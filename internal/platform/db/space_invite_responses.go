@@ -31,6 +31,9 @@ func (db *Database) RespondToSpaceInvite(ctx context.Context, userID, inviteID s
 			_, err := tx.ExecContext(ctx, `UPDATE space_invitations SET revoked_at=NOW() WHERE id=$1`, inviteID)
 			return err
 		}
+		if err := requireShareableSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
 		if err := lockAccountSpacesTx(ctx, tx, userID); err != nil {
 			return err
 		}
@@ -105,6 +108,9 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 		if err := requireMemberRemovalTx(ctx, tx, ownerID, spaceID, memberID); err != nil {
 			return err
 		}
+		if err := requireShareableSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_conversation_members cm USING space_conversations c WHERE cm.conversation_id=c.id AND c.space_id=$1 AND cm.user_id=$2`, spaceID, memberID); err != nil {
 			return err
 		}
@@ -126,12 +132,6 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 		if err := handleNoteMembershipLossTx(ctx, tx, spaceID, memberID); err != nil {
 			return err
 		}
-		if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
-			return err
-		}
-		if err := revokeMadeItemAccessForSpaceTx(ctx, tx, spaceID); err != nil {
-			return err
-		}
 		if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
@@ -151,6 +151,10 @@ func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) erro
 		if role == "owner" {
 			return ErrSpaceInvalid
 		}
+		// A group DM is left through /dms, which hands it on when its starter leaves.
+		if err := requireShareableSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_conversation_members cm USING space_conversations c WHERE cm.conversation_id=c.id AND c.space_id=$1 AND cm.user_id=$2`, spaceID, userID); err != nil {
 			return err
 		}
@@ -165,12 +169,6 @@ func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) erro
 		// Agents continue account-wide; destination tools recheck content access.
 
 		if err := handleNoteMembershipLossTx(ctx, tx, spaceID, userID); err != nil {
-			return err
-		}
-		if err := revokeDrawingAccessForSpaceTx(ctx, tx, spaceID); err != nil {
-			return err
-		}
-		if err := revokeMadeItemAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {

@@ -46,6 +46,10 @@ func (db *Database) InviteToSpaceWithToken(
 		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, ownerID, PermissionSpaceInvite); err != nil {
 			return err
 		}
+		// A Personal stays its owner's alone, and a DM's people change only through /dms.
+		if err := requireShareableSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		}
 		// The inviter may not be the owner, but the sharing limits are the owner's.
 		var spaceOwnerID string
 		if err := tx.QueryRowContext(ctx, `SELECT owner_user_id FROM spaces WHERE id=$1`, spaceID).Scan(&spaceOwnerID); err != nil {

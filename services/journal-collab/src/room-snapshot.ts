@@ -16,10 +16,6 @@ export interface RoomSnapshotContext {
   broadcast(message: string): void;
   /** Pushes the note projection after a save, when the room supports it. */
   publishNoteProjection?: () => Promise<void>;
-  /** Tells the API a drawing changed after a save, when the room is a drawing. */
-  publishDrawingActivity?: () => Promise<void>;
-  /** Pushes a deck's or workbook's projection after a save. */
-  publishItemProjection?: () => Promise<void>;
   /** Whether the room keeps earlier versions (document-history.ts). */
   keepsHistory?: boolean;
   log(event: string, details: Record<string, unknown>): void;
@@ -62,20 +58,6 @@ export async function saveRoomSnapshot(room: RoomSnapshotContext): Promise<void>
         await room.publishNoteProjection();
       } catch (projectionError) {
         room.log("note_projection_failed", { error: String(projectionError) });
-      }
-    }
-    if (room.publishDrawingActivity) {
-      try {
-        await room.publishDrawingActivity();
-      } catch (activityError) {
-        room.log("drawing_activity_failed", { error: String(activityError) });
-      }
-    }
-    if (room.publishItemProjection) {
-      try {
-        await room.publishItemProjection();
-      } catch (projectionError) {
-        room.log("item_projection_failed", { error: String(projectionError) });
       }
     }
   } catch (error) {

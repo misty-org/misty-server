@@ -7,8 +7,8 @@ import {
 } from "./document-persistence";
 
 /**
- * A room's earlier versions: whole-document snapshots kept beside the current one, so a doc,
- * whiteboard, deck or workbook can be looked back on and restored.
+ * A room's earlier versions: whole-document snapshots kept beside the current one, so a doc can
+ * be looked back on and restored.
  *
  * - While the document is edited, a version is kept every ten minutes: on a save at least ten
  *   minutes after the last version, the state saved before it becomes one. So the state a burst

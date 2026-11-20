@@ -9,23 +9,15 @@ import (
 
 func TestLibraryObjectReconciliationTracksInterruptedAndReadyObjects(t *testing.T) {
 	fixture := newNoteFixture(t, "object-reconciliation")
-	drawing, err := fixture.database.CreateSpaceDrawing(
-		fixture.ctx, fixture.creator, fixture.spaceID, "Reconciliation drawing",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	const (
-		fileID    = "reconciliationfile"
 		objectKey = "library/reconciliationobject"
 		byteSize  = int64(4096)
 		tokenHash = "reconciliation-token"
 	)
-	upload, err := fixture.database.CreateDrawingAssetUpload(
+	upload, err := fixture.database.CreateNoteAssetUpload(
 		fixture.ctx,
 		fixture.creator,
-		drawing.ID,
-		fileID,
+		fixture.note.ID,
 		"reconciliation.png",
 		"image/png",
 		byteSize,
@@ -83,7 +75,7 @@ func TestLibraryObjectReconciliationTracksInterruptedAndReadyObjects(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if completed.DrawingAsset == nil {
+	if completed.NoteAsset == nil {
 		t.Fatalf("completed upload = %#v", completed)
 	}
 	expected, err = fixture.database.LibraryObjectExpectations(

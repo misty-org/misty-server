@@ -24,7 +24,14 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 	err = chi.Walk(server.Router, func(method, path string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		normalized := strings.TrimPrefix(path, "/v1/")
 		normalized = "/" + strings.TrimLeft(normalized, "/")
-		for _, retired := range []string{"/stripe/webhook", "/billing", "/me/referral", "/internal/voice/live/settle", "/apps", "/me/apps", "/app-runtime", "/me/routines", "/me/routine-runs", "/automations", "/waitlist", "/activepieces", "/capabilities", "/me/sdk-targets", "/me/sdk-runs", "/me/capability-approvals", "/me/agent-approvals", "/me/agent-invocations", "/mcp/connections", "/studio", "/self-host", "/internal/self-host", "/billing/self-host-entitlement", "/ai/inbound-channels", "/sync", "/devices", "/auth/handoff", "/instance", "/me/device", "/me/telemetry"} {
+		for _, retired := range []string{"/stripe/webhook", "/billing", "/me/referral", "/internal/voice/live/settle", "/apps", "/me/apps", "/app-runtime", "/me/routines", "/me/routine-runs", "/automations", "/waitlist", "/activepieces", "/capabilities", "/me/sdk-targets", "/me/sdk-runs", "/me/capability-approvals", "/me/agent-approvals", "/me/agent-invocations", "/mcp/connections", "/studio", "/self-host", "/internal/self-host", "/billing/self-host-entitlement", "/ai/inbound-channels", "/sync", "/devices", "/auth/handoff", "/instance", "/me/device", "/me/telemetry",
+			// Misty's own Space apps (Planner, Calendar, Whiteboards, Slides, Data, the Media
+			// editors) and the per-app storage the SDK no longer has.
+			"/spaces/{spaceID}/tasks", "/spaces/{spaceID}/calendar", "/spaces/{spaceID}/drawings",
+			"/spaces/{spaceID}/decks", "/spaces/{spaceID}/workbooks",
+			"/internal/journal/drawing-activity", "/internal/journal/deck-projections", "/internal/journal/workbook-projections",
+			"/spaces/{spaceID}/library/items/{itemID}/versions", "/spaces/{spaceID}/library/items/{itemID}/collaboration-ticket",
+			"/spaces/{spaceID}/apps/{appID}/storage"} {
 			if normalized == retired || strings.HasPrefix(normalized, retired+"/") {
 				t.Errorf("retired route remains: %s %s", method, path)
 			}

@@ -26,6 +26,12 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			writeLibraryError(w, err)
 			return
 		}
+		// A drive file's bytes become a drive item through the drive's routes,
+		// never a Library item or attachment of their own.
+		if upload.Purpose == UploadPurposeDrive {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "drive_item_required"})
+			return
+		}
 		if !s.transferPurposeEnabled(upload.Purpose) {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "library_uploads_disabled"})
 			return
@@ -34,14 +40,8 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			writeLibraryError(w, db.ErrLibraryForbidden)
 			return
 		}
-		// A shared folder's files become part of the folder when it commits,
-		// never a Library item or attachment of their own.
-		if upload.Purpose == UploadPurposeSharedFolder {
-			writeJSON(w, http.StatusConflict, map[string]string{"code": "folder_commit_required"})
-			return
-		}
 		if err := s.database.ValidateJournalUploadTarget(r.Context(), userID, spaceID, uploadID,
-			chi.URLParam(r, "noteID"), chi.URLParam(r, "drawingID"), chi.URLParam(r, "deckID")); err != nil {
+			chi.URLParam(r, "noteID")); err != nil {
 			writeLibraryError(w, err)
 			return
 		}
@@ -93,7 +93,7 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 		// finalization; the database records the resulting blob as "skipped",
 		// never falsely as malware-scanned clean.
 		if IsJournalAssetPurpose(upload.Purpose) &&
-			!SupportedDrawingAssetMIME(upload.ClientDeclaredMIMEType) {
+			!SupportedNoteAssetMIME(upload.ClientDeclaredMIMEType) {
 			s.rejectAndDelete(
 				r.Context(), upload, tokenHash, "invalid", "unsupported_journal_asset_mime",
 			)

@@ -51,11 +51,6 @@ func TestPrivateChannelItemsAreHiddenFromMembersWithoutRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSpaceNoteWithVisibility(crew) error = %v", err)
 	}
-	drawing, err := f.database.CreateSpaceDrawing(f.ctx, f.owner.ID, f.space.ID, "Crew map")
-	if err != nil {
-		t.Fatal(err)
-	}
-	exec(t, f.database, `UPDATE space_drawings SET audience_kind='conversation',audience_conversation_id=$1,visibility='public' WHERE id=$2`, channel.ID, drawing.ID)
 	item := createTestImage(t, f.database, f.owner.ID, f.space.ID, "crew.jpg", "c")
 	exec(t, f.database, `UPDATE space_library_items SET audience_kind='conversation',audience_conversation_id=$1,visibility='public' WHERE id=$2`, channel.ID, item.ID)
 
@@ -68,15 +63,6 @@ func TestPrivateChannelItemsAreHiddenFromMembersWithoutRead(t *testing.T) {
 	}
 	if hits, err := f.database.SearchSpaceNotes(f.ctx, f.rest.ID, f.space.ID, "Crew plans", 20); err != nil || containsNote(hits, note.ID) {
 		t.Fatalf("SearchSpaceNotes(rest) = %#v, %v, want no hit", hits, err)
-	}
-	drawings, err := f.database.AccessibleSpaceDrawings(f.ctx, f.rest.ID, f.space.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, listed := range drawings {
-		if listed.ID == drawing.ID {
-			t.Fatal("a non-reader lists the private channel's drawing")
-		}
 	}
 	if _, err := f.database.LibraryItem(f.ctx, f.rest.ID, f.space.ID, item.ID); err == nil {
 		t.Fatal("a non-reader opened the private channel's Library item")

@@ -2,59 +2,13 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"math"
 	"net/http"
 	"path/filepath"
 	"strings"
 
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
-
-func libraryRenditionIntrinsicMetadata(source db.LibraryTransferItem) json.RawMessage {
-	metadata := map[string]any{}
-	_ = json.Unmarshal(source.IntrinsicMetadata, &metadata)
-	metadata["byte_size"] = source.ByteSize
-	metadata["server_detected_mime_type"] = source.MIMEType
-	metadata["edited_from_item_id"] = source.ItemID
-	var definition db.LibraryEditDefinition
-	if json.Unmarshal(source.RenditionDefinition, &definition) == nil {
-		width, widthOK := metadataNumber(metadata["width"])
-		height, heightOK := metadataNumber(metadata["height"])
-		if widthOK && heightOK {
-			if definition.Crop != nil {
-				width *= definition.Crop.Width
-				height *= definition.Crop.Height
-			}
-			if definition.Rotation == 90 || definition.Rotation == 270 {
-				width, height = height, width
-			}
-			metadata["width"], metadata["height"] = int64(math.Round(width)), int64(math.Round(height))
-		}
-		if definition.Trim != nil {
-			metadata["duration"] = definition.Trim.End - definition.Trim.Start
-		}
-		metadata["edit_definition"] = definition
-	}
-	raw, err := json.Marshal(metadata)
-	if err != nil {
-		return json.RawMessage(`{}`)
-	}
-	return raw
-}
-
-func metadataNumber(value any) (float64, bool) {
-	switch typed := value.(type) {
-	case float64:
-		return typed, true
-	case json.Number:
-		parsed, err := typed.Float64()
-		return parsed, err == nil
-	default:
-		return 0, false
-	}
-}
 
 func (s *SpaceLibraryService) rejectAndDelete(ctx context.Context, upload *db.LibraryUpload, tokenHash, state, code string) {
 	_ = s.database.RejectLibraryUpload(ctx, upload.UserID, upload.SpaceID, upload.ID, tokenHash, state, code)

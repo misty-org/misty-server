@@ -77,6 +77,7 @@ var allPermissions = []string{
 	PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload, PermissionMessagesManage,
 	PermissionLibraryView, PermissionLibraryUpload, PermissionLibraryAdd, PermissionLibraryEdit,
 	PermissionLibraryDownload, PermissionLibraryImport, PermissionStorageViewOwn, PermissionStudioView,
+	PermissionDriveWrite, PermissionDrivePurge,
 	PermissionAskRun, PermissionIntegrationsManage, PermissionAppsManage, PermissionChannelsManage, PermissionRolesManage,
 	PermissionMembersRemove, PermissionSpaceInvite, PermissionSpaceRename, PermissionSpaceLeave,
 	PermissionSpaceTransfer, PermissionSpaceDelete,
@@ -88,12 +89,14 @@ var channelPermissions = []string{
 }
 
 // defaultEveryonePermissions is what every member could do before roles
-// existed; a new Space's everyone role starts with it.
+// existed, plus changing the Space's drive; a new Space's everyone role starts
+// with it.
 var defaultEveryonePermissions = []string{
 	PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload,
 	PermissionLibraryView, PermissionLibraryUpload, PermissionLibraryAdd,
 	PermissionLibraryEdit, PermissionLibraryDownload, PermissionLibraryImport,
 	PermissionStorageViewOwn, PermissionStudioView, PermissionAskRun,
+	PermissionDriveWrite,
 }
 
 func AllPermissions() []string { return append([]string(nil), allPermissions...) }

@@ -73,15 +73,3 @@ func prepareStorageReservationTx(ctx context.Context, tx *sql.Tx, userID, spaceI
 	_, err := tx.ExecContext(ctx, `INSERT INTO space_storage_usage(space_id) VALUES($1) ON CONFLICT DO NOTHING`, spaceID)
 	return err
 }
-
-// renditionReserveBytes is how much a rendition reserves while it renders:
-// the requested ceiling, else the source size with a 1 MB floor.
-func renditionReserveBytes(ctx context.Context, tx *sql.Tx, userID string, requested, source int64) (int64, error) {
-	if err := lockAccountStorageTx(ctx, tx, userID); err != nil {
-		return 0, err
-	}
-	if requested > 0 {
-		return requested, nil
-	}
-	return max(int64(1_000_000), source), nil
-}

@@ -73,7 +73,7 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 	base := "/spaces/" + space.ID + "/code-sessions"
 	send := func(token, method, target string, body any, want int) map[string]any {
 		t.Helper()
-		return plannerJSON(t, performConversationRequest(t, router, method, target, token, body), want)
+		return routeJSON(t, performConversationRequest(t, router, method, target, token, body), want)
 	}
 	repoKey := "github.com/misty-org/demo:" + codeSessionTestCommit
 	start := map[string]any{

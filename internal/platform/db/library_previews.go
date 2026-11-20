@@ -31,7 +31,7 @@ type CompleteLibraryPreviewResult struct {
 	DiscardObjectKey string
 }
 
-func (db *Database) LibraryItemPreviewSource(ctx context.Context, userID, spaceID, itemID string, original bool) (*LibraryPreviewSource, error) {
+func (db *Database) LibraryItemPreviewSource(ctx context.Context, userID, spaceID, itemID string) (*LibraryPreviewSource, error) {
 	out := &LibraryPreviewSource{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryView); err != nil {
@@ -41,15 +41,7 @@ func (db *Database) LibraryItemPreviewSource(ctx context.Context, userID, spaceI
 			return err
 		}
 		var contributingUserID string
-		if original {
-			if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,b.id,b.r2_object_key,b.server_detected_mime_type,b.byte_size,b.sha256,i.contributing_user_id FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'`, itemID, spaceID).Scan(&out.FileID, &out.SecurityDomainID, &out.SourceIdentity, &out.ObjectKey, &out.MIMEType, &out.ByteSize, &out.SHA256, &contributingUserID); err != nil {
-				return err
-			}
-		} else if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,COALESCE(rb.id,b.id),COALESCE(rb.r2_object_key,b.r2_object_key),COALESCE(rb.server_detected_mime_type,b.server_detected_mime_type),COALESCE(rb.byte_size,b.byte_size),COALESCE(rb.sha256,b.sha256),i.contributing_user_id
-			FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id
-			LEFT JOIN library_item_versions v ON v.id=i.current_edit_version_id AND v.lifecycle_state='ready' AND v.rendition_state='ready'
-			LEFT JOIN library_blobs rb ON rb.id=v.rendition_blob_id AND rb.lifecycle_state='ready'
-			WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'`, itemID, spaceID).Scan(&out.FileID, &out.SecurityDomainID, &out.SourceIdentity, &out.ObjectKey, &out.MIMEType, &out.ByteSize, &out.SHA256, &contributingUserID); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,b.id,b.r2_object_key,b.server_detected_mime_type,b.byte_size,b.sha256,i.contributing_user_id FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'`, itemID, spaceID).Scan(&out.FileID, &out.SecurityDomainID, &out.SourceIdentity, &out.ObjectKey, &out.MIMEType, &out.ByteSize, &out.SHA256, &contributingUserID); err != nil {
 			return err
 		}
 		err := tx.QueryRowContext(ctx, `SELECT pb.r2_object_key,pb.server_detected_mime_type,pb.byte_size,pb.sha256 FROM library_derivatives d JOIN library_blobs pb ON pb.id=d.derivative_blob_id AND pb.lifecycle_state='ready' WHERE d.space_library_item_id=$1 AND d.source_file_id=$2 AND d.kind='image_preview' AND d.lifecycle_state='ready' AND d.metadata->>'source_identity'=$3 ORDER BY d.created_at DESC LIMIT 1`, itemID, out.FileID, out.SourceIdentity).Scan(&out.PreviewObjectKey, &out.PreviewMIME, &out.PreviewBytes, &out.PreviewSHA256)
@@ -119,7 +111,7 @@ func (db *Database) ReleaseLibraryPreviewReservation(ctx context.Context, userID
 	})
 }
 
-func (db *Database) CompleteLibraryPreview(ctx context.Context, userID, spaceID, itemID, sourceIdentity, objectKey, mimeType string, byteSize int64, sha string, original bool) (*CompleteLibraryPreviewResult, error) {
+func (db *Database) CompleteLibraryPreview(ctx context.Context, userID, spaceID, itemID, sourceIdentity, objectKey, mimeType string, byteSize int64, sha string) (*CompleteLibraryPreviewResult, error) {
 	if itemID == "" || sourceIdentity == "" || objectKey == "" || mimeType != "image/jpeg" || byteSize < 1 || byteSize > 25_000_000 || len(sha) != 64 {
 		return nil, ErrLibraryInvalid
 	}
@@ -132,11 +124,7 @@ func (db *Database) CompleteLibraryPreview(ctx context.Context, userID, spaceID,
 			return err
 		}
 		var fileID, domainID, currentIdentity string
-		if original {
-			if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,b.id FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready'`, itemID, spaceID).Scan(&fileID, &domainID, &currentIdentity); err != nil {
-				return err
-			}
-		} else if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,COALESCE(rb.id,b.id) FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id LEFT JOIN library_item_versions v ON v.id=i.current_edit_version_id AND v.lifecycle_state='ready' AND v.rendition_state='ready' LEFT JOIN library_blobs rb ON rb.id=v.rendition_blob_id AND rb.lifecycle_state='ready' WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready'`, itemID, spaceID).Scan(&fileID, &domainID, &currentIdentity); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT f.id,f.security_domain_id,b.id FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready'`, itemID, spaceID).Scan(&fileID, &domainID, &currentIdentity); err != nil {
 			return err
 		}
 		if currentIdentity != sourceIdentity {
@@ -254,4 +242,46 @@ func (db *Database) ReplaceMissingLibraryPreviewDeduplicationObject(ctx context.
 		return "", ErrLibraryNotFound
 	}
 	return selectedKey, err
+}
+
+// ReleaseExpiredLibraryRenditionReservations returns the storage held for
+// previews whose generation ran past its reservation.
+func (db *Database) ReleaseExpiredLibraryRenditionReservations(ctx context.Context, limit int) (int, error) {
+	if limit < 1 || limit > 1000 {
+		limit = 100
+	}
+	releasedCount := 0
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT id,space_id,reserved_bytes FROM space_rendition_reservations WHERE state='active' AND expires_at<=NOW() ORDER BY expires_at FOR UPDATE SKIP LOCKED LIMIT $1`, limit)
+		if err != nil {
+			return err
+		}
+		type expired struct {
+			id, spaceID string
+			bytes       int64
+		}
+		var values []expired
+		for rows.Next() {
+			var value expired
+			if err := rows.Scan(&value.id, &value.spaceID, &value.bytes); err != nil {
+				rows.Close()
+				return err
+			}
+			values = append(values, value)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, value := range values {
+			if _, err := tx.ExecContext(ctx, `UPDATE space_rendition_reservations SET state='released',updated_at=NOW() WHERE id=$1`, value.id); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE space_storage_usage SET reserved_bytes=GREATEST(0,reserved_bytes-$1),version=version+1,updated_at=NOW() WHERE space_id=$2`, value.bytes, value.spaceID); err != nil {
+				return err
+			}
+			releasedCount++
+		}
+		return nil
+	})
+	return releasedCount, err
 }

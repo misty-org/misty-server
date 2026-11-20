@@ -38,6 +38,7 @@ func (l operatorLimits) apply(base db.AccountLimits) (db.AccountLimits, error) {
 		"storage_bytes": &base.StorageBytes, "devices": &base.Devices,
 		"shared_spaces": &base.SharedSpaces, "space_members": &base.SpaceMembers,
 		"spaces": &base.Spaces, "upload_bytes": &base.UploadBytes,
+		"friend_requests_per_day": &base.FriendRequestsPerDay,
 	}
 	for name, raw := range l.fields {
 		target, known := targets[name]
@@ -45,7 +46,7 @@ func (l operatorLimits) apply(base db.AccountLimits) (db.AccountLimits, error) {
 			continue
 		}
 		if !known {
-			return base, operatorInvalid("unknown limit " + strconv.Quote(name) + "; limits are storage_bytes, devices, shared_spaces, space_members, spaces and upload_bytes")
+			return base, operatorInvalid("unknown limit " + strconv.Quote(name) + "; limits are storage_bytes, devices, shared_spaces, space_members, spaces, upload_bytes and friend_requests_per_day")
 		}
 		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 			*target = nil

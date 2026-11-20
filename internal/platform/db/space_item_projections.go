@@ -4,16 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
-// What a made item's room reports after each save: its title and plain text for search, the size
-// of its snapshot and kept history for storage, and for decks and workbooks their slide or cell
-// count for the level's limit. The room is the only place that sees the document, so these are
-// the server's only view of it.
+// What an item's room reports after each save: the size of its snapshot and kept history, for
+// storage. The room is the only place that sees the document, so this is the server's only view
+// of it.
 
 // itemContentSourceKind is the storage contribution a made item's room content counts as.
 const itemContentSourceKind = "item_content"
@@ -22,22 +20,10 @@ const itemContentSourceKind = "item_content"
 // its history a bounded number of those.
 const maxItemContentBytes = int64(1) << 40
 
-// SpaceItemLimits are the limits of a Space's level that a made item's room enforces or reports
-// against. Nil is unlimited.
+// SpaceItemLimits are the limits of a Space's level that an item's room keeps to. Nil is
+// unlimited.
 type SpaceItemLimits struct {
-	HistoryDays   *int64 `json:"history_days"`
-	DeckSlides    *int64 `json:"deck_slides"`
-	WorkbookCells *int64 `json:"workbook_cells"`
-}
-
-func (l SpaceItemLimits) countLimit(kind SpaceItemKind) *int64 {
-	switch kind.Name {
-	case SpaceItemDeck:
-		return l.DeckSlides
-	case SpaceItemWorkbook:
-		return l.WorkbookCells
-	}
-	return nil
+	HistoryDays *int64 `json:"history_days"`
 }
 
 // spaceItemLimitsTx reads the Space level's item limits: all unlimited without levels.
@@ -46,11 +32,7 @@ func spaceItemLimitsTx(ctx context.Context, tx *sql.Tx, spaceID string) (SpaceIt
 	if err != nil || level == nil {
 		return SpaceItemLimits{}, err
 	}
-	return SpaceItemLimits{
-		HistoryDays:   level.Limits.HistoryDays,
-		DeckSlides:    level.Limits.DeckSlides,
-		WorkbookCells: level.Limits.WorkbookCells,
-	}, nil
+	return SpaceItemLimits{HistoryDays: level.Limits.HistoryDays}, nil
 }
 
 // SpaceItemLimitsForItem reads the limits that apply to one item, for its room's callback
@@ -135,105 +117,6 @@ func releaseItemContentStorageTx(ctx context.Context, tx *sql.Tx, itemIDs []stri
 	})
 }
 
-// SpaceMadeItemProjection is what a deck's or workbook's room posts after a save.
-type SpaceMadeItemProjection struct {
-	Kind         string
-	ItemID       string
-	Revision     int64
-	Title        string
-	PlainText    string
-	ContentBytes int64
-	HistoryBytes int64
-	// Count is the deck's slides or the workbook's filled cells.
-	Count int64
-}
-
-// ApplySpaceMadeItemProjection accepts only a newer room revision, so a late or repeated callback
-// changes nothing.
-func (db *Database) ApplySpaceMadeItemProjection(ctx context.Context, projection SpaceMadeItemProjection) (bool, error) {
-	kind, err := madeItemKind(projection.Kind)
-	if err != nil {
-		return false, err
-	}
-	projection.ItemID = strings.TrimSpace(projection.ItemID)
-	projection.Title = truncateRunes(strings.TrimSpace(projection.Title), 200)
-	if projection.ItemID == "" || projection.Revision < 1 || len([]rune(projection.PlainText)) > 100_000 ||
-		projection.ContentBytes < 0 || projection.HistoryBytes < 0 || projection.Count < 0 ||
-		projection.Count > 1<<31-1 || projection.ContentBytes+projection.HistoryBytes > maxItemContentBytes {
-		return false, ErrSpaceInvalid
-	}
-	applied := false
-	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		var spaceID, creatorUserID string
-		err := tx.QueryRowContext(ctx, `UPDATE `+kind.Table+`
-			SET title=COALESCE(NULLIF($1,''),title),plain_text_projection=$2,content_bytes=$3,history_bytes=$4,
-			    `+kind.CountColumn+`=$5,collaboration_revision=$6,updated_at=NOW()
-			WHERE id=$7 AND lifecycle_state='active' AND collaboration_revision<$6
-			RETURNING space_id,creator_user_id`,
-			projection.Title, projection.PlainText, projection.ContentBytes, projection.HistoryBytes,
-			projection.Count, projection.Revision, projection.ItemID).Scan(&spaceID, &creatorUserID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		applied = true
-		if err := setItemContentStorageTx(ctx, tx, spaceID, creatorUserID, projection.ItemID,
-			projection.ContentBytes+projection.HistoryBytes); err != nil {
-			return err
-		}
-		return recordMadeItemEventTx(ctx, tx, kind, spaceID, creatorUserID, "updated", projection.ItemID)
-	})
-	return applied, err
-}
-
-// SpaceDrawingActivity is what a drawing's room posts after a save. The projection fields are
-// absent from rooms deployed before drawings were searchable.
-type SpaceDrawingActivity struct {
-	DrawingID    string
-	Revision     int64
-	PlainText    *string
-	ContentBytes *int64
-	HistoryBytes *int64
-}
-
-// ApplySpaceDrawingActivityProjection records a drawing's save: its updated time, and when the
-// room sent them, its text for search and its size for storage.
-func (db *Database) ApplySpaceDrawingActivityProjection(ctx context.Context, activity SpaceDrawingActivity) (bool, error) {
-	if activity.DrawingID == "" || activity.Revision < 1 ||
-		(activity.PlainText != nil && len([]rune(*activity.PlainText)) > 100_000) ||
-		(activity.ContentBytes != nil && (*activity.ContentBytes < 0 || *activity.ContentBytes > maxItemContentBytes)) ||
-		(activity.HistoryBytes != nil && (*activity.HistoryBytes < 0 || *activity.HistoryBytes > maxItemContentBytes)) {
-		return false, ErrSpaceInvalid
-	}
-	applied := false
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		var spaceID, creatorUserID string
-		var contentBytes, historyBytes int64
-		err := tx.QueryRowContext(ctx,
-			`UPDATE space_drawings SET collaboration_revision=$2,updated_at=NOW(),
-			        plain_text_projection=COALESCE($3,plain_text_projection),
-			        content_bytes=COALESCE($4,content_bytes),history_bytes=COALESCE($5,history_bytes)
-			 WHERE id=$1 AND lifecycle_state='active' AND collaboration_revision<$2
-			 RETURNING space_id,creator_user_id,content_bytes,history_bytes`,
-			activity.DrawingID, activity.Revision, activity.PlainText, activity.ContentBytes, activity.HistoryBytes,
-		).Scan(&spaceID, &creatorUserID, &contentBytes, &historyBytes)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		applied = true
-		if activity.ContentBytes == nil && activity.HistoryBytes == nil {
-			return nil
-		}
-		return setItemContentStorageTx(ctx, tx, spaceID, creatorUserID, activity.DrawingID, contentBytes+historyBytes)
-	})
-	return applied, err
-}
-
 // applyNoteContentBytesTx records a note's room size after its projection was applied.
 func applyNoteContentBytesTx(ctx context.Context, tx *sql.Tx, spaceID, creatorUserID, noteID string, contentBytes, historyBytes *int64) error {
 	if contentBytes == nil && historyBytes == nil {
@@ -246,12 +129,4 @@ func applyNoteContentBytesTx(ctx context.Context, tx *sql.Tx, spaceID, creatorUs
 		return err
 	}
 	return setItemContentStorageTx(ctx, tx, spaceID, creatorUserID, noteID, content+history)
-}
-
-func truncateRunes(value string, limit int) string {
-	runes := []rune(value)
-	if len(runes) <= limit {
-		return value
-	}
-	return string(runes[:limit])
 }

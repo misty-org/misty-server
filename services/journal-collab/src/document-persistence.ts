@@ -3,7 +3,7 @@ import * as Y from "yjs";
 
 /** Durable Object values are capped at 128 KiB; leave room for metadata. */
 export const DOCUMENT_CHUNK_BYTES = 96 * 1024;
-/** Public-beta ceiling for the compact Yjs state of one note or drawing. */
+/** Public-beta ceiling for the compact Yjs state of one document. */
 export const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 export const DOCUMENT_WARNING_BYTES = Math.floor(MAX_DOCUMENT_BYTES * 0.8);
 

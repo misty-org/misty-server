@@ -44,6 +44,10 @@ var allowedCORSRequestHeaders = []string{
 	"X-Misty-CSRF",
 	"X-Misty-Release-Channel",
 	"X-Misty-Library-Upload-Token",
+	// The Space drive: the version a change is made against, and the computer it comes from.
+	"If-Match",
+	"X-Misty-Device",
+	"X-Misty-Device-Name",
 }
 
 func productionEnvironment() bool {

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,9 +13,26 @@ import (
 	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// A Space's apps over the routes the host calls: a mod installs, moves and removes an app, an app keeps
-// small JSON per Space, removing it drops that storage, and outsiders reach none of it.
-func TestSpaceAppRoutesInstallStoreAndRemove(t *testing.T) {
+// routeJSON checks a route's status and decodes its JSON body (empty for a body-less answer).
+func routeJSON(t *testing.T, response *httptest.ResponseRecorder, want int) map[string]any {
+	t.Helper()
+	if response.Code != want {
+		t.Fatalf("status = %d, want %d: %s", response.Code, want, response.Body.String())
+	}
+	out := map[string]any{}
+	if response.Body.Len() == 0 {
+		return out
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// A Space's apps over the routes the host calls: a mod installs, moves and removes an app, the pinned
+// source of an app outside the catalog comes back as it went in, and outsiders reach none of it.
+// Every app is a third party's: Misty ships none, so no app id is reserved.
+func TestSpaceAppRoutesInstallAndRemove(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := context.Background()
 	spaces, err := NewSpacesService(database, base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
@@ -25,10 +43,6 @@ func TestSpaceAppRoutesInstallStoreAndRemove(t *testing.T) {
 	router.Get("/spaces/{spaceID}/apps", spaces.SpaceApps())
 	router.Put("/spaces/{spaceID}/apps/{appID}", spaces.SpaceApp())
 	router.Delete("/spaces/{spaceID}/apps/{appID}", spaces.SpaceApp())
-	router.Get("/spaces/{spaceID}/apps/{appID}/storage", spaces.SpaceAppStorage())
-	router.Get("/spaces/{spaceID}/apps/{appID}/storage/{key}", spaces.SpaceAppStorageKey())
-	router.Put("/spaces/{spaceID}/apps/{appID}/storage/{key}", spaces.SpaceAppStorageKey())
-	router.Delete("/spaces/{spaceID}/apps/{appID}/storage/{key}", spaces.SpaceAppStorageKey())
 
 	owner, err := database.CreateUser(uniqueTestEmail("apps-owner"), "password123")
 	if err != nil {
@@ -49,60 +63,73 @@ func TestSpaceAppRoutesInstallStoreAndRemove(t *testing.T) {
 		return performConversationRequest(t, router, method, target, token, body)
 	}
 
-	plannerJSON(t, call(http.MethodPut, base+"/demo", map[string]any{"version": "1.0.0", "permissions": []string{"records", "members", "records"}}), http.StatusOK)
-	plannerJSON(t, call(http.MethodPut, base+"/Bad_Id", map[string]any{"version": "1", "permissions": []string{}}), http.StatusBadRequest)
-	plannerJSON(t, call(http.MethodPut, base+"/demo", map[string]any{"version": "1", "permissions": []string{"root"}}), http.StatusBadRequest)
+	routeJSON(t, call(http.MethodPut, base+"/demo", map[string]any{"version": "1.0.0", "permissions": []string{"files", "members", "files"}}), http.StatusOK)
+	routeJSON(t, call(http.MethodPut, base+"/Bad_Id", map[string]any{"version": "1", "permissions": []string{}}), http.StatusBadRequest)
+	routeJSON(t, call(http.MethodPut, base+"/demo", map[string]any{"version": "1", "permissions": []string{"root"}}), http.StatusBadRequest)
+	// Per-app records are gone with the SDK's store.
+	routeJSON(t, call(http.MethodPut, base+"/demo", map[string]any{"version": "1", "permissions": []string{"records"}}), http.StatusBadRequest)
 
 	appNamed := func(id string) map[string]any {
-		for _, item := range plannerJSON(t, call(http.MethodGet, base, nil), http.StatusOK)["apps"].([]any) {
+		for _, item := range routeJSON(t, call(http.MethodGet, base, nil), http.StatusOK)["apps"].([]any) {
 			if app := item.(map[string]any); app["app_id"] == id {
 				return app
 			}
 		}
 		return nil
 	}
-	// Misty's own apps are built in: they are never recorded, and can't be installed.
-	plannerJSON(t, call(http.MethodPut, base+"/docs", map[string]any{"version": "1", "permissions": []string{}}), http.StatusBadRequest)
-	if appNamed("docs") != nil {
-		t.Fatal("a built-in app should not be recorded as installed")
-	}
 	app := appNamed("demo")
 	if app == nil || app["app_id"] != "demo" || app["version"] != "1.0.0" || len(app["permissions"].([]any)) != 2 {
 		t.Fatalf("installed app = %v", app)
 	}
+	if _, has := app["source"]; has {
+		t.Fatalf("a catalog app carries a source: %v", app)
+	}
+
+	// No id is Misty's own any more: "docs" is an app like any other.
+	routeJSON(t, call(http.MethodPut, base+"/docs", map[string]any{"version": "1", "permissions": []string{}}), http.StatusOK)
+	if appNamed("docs") == nil {
+		t.Fatal("docs was not recorded as installed")
+	}
 
 	// An app moves to a new version in place.
-	plannerJSON(t, call(http.MethodPut, base+"/demo", map[string]any{"version": "1.1.0", "permissions": []string{"records"}}), http.StatusOK)
+	routeJSON(t, call(http.MethodPut, base+"/demo", map[string]any{"version": "1.1.0", "permissions": []string{"rooms"}}), http.StatusOK)
 	if got := appNamed("demo"); got == nil || got["version"] != "1.1.0" {
 		t.Fatalf("app after update = %v", got)
 	}
 
-	key := base + "/demo/storage/view%20mode"
-	plannerJSON(t, call(http.MethodPut, key, map[string]any{"value": map[string]any{"layout": "board"}}), http.StatusOK)
-	got := plannerJSON(t, call(http.MethodGet, key, nil), http.StatusOK)
-	if got["key"] != "view mode" || got["value"].(map[string]any)["layout"] != "board" {
-		t.Fatalf("stored = %v", got)
+	// An app outside the reviewed catalog keeps its pinned build, as given, for every member.
+	source := map[string]any{
+		"repo": "maker/pinned", "listed": false, "manifest_from": "basic",
+		"entry": map[string]any{"id": "pinned", "name": "Pinned", "version": "0.3.0", "sha256": "abc123", "permissions": []any{"files"}},
 	}
-	plannerJSON(t, call(http.MethodPut, base+"/demo/storage/other", map[string]any{"value": 3}), http.StatusOK)
-	values := plannerJSON(t, call(http.MethodGet, base+"/demo/storage?prefix=view", nil), http.StatusOK)["values"].([]any)
-	if len(values) != 1 {
-		t.Fatalf("prefix list = %v", values)
+	installed := routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "0.3.0", "permissions": []string{"files"}, "source": source}), http.StatusOK)
+	if got, _ := installed["source"].(map[string]any); got == nil || got["repo"] != "maker/pinned" || got["listed"] != false {
+		t.Fatalf("install response source = %v", installed["source"])
 	}
-	// Storage of an app that isn't installed isn't there.
-	plannerJSON(t, call(http.MethodGet, base+"/other/storage/x", nil), http.StatusNotFound)
-	plannerJSON(t, call(http.MethodPut, base+"/other/storage/x", map[string]any{"value": 1}), http.StatusNotFound)
+	listed := appNamed("pinned")
+	got, _ := listed["source"].(map[string]any)
+	entry, _ := got["entry"].(map[string]any)
+	if got == nil || got["manifest_from"] != "basic" || entry == nil || entry["sha256"] != "abc123" {
+		t.Fatalf("listed source = %v", listed["source"])
+	}
+	// Moving it to a catalog build drops the source.
+	routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "1.0.0", "permissions": []string{}}), http.StatusOK)
+	if _, has := appNamed("pinned")["source"]; has {
+		t.Fatal("source kept after a reinstall without one")
+	}
+	// A source must be a JSON object under 64 KiB.
+	routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "1", "permissions": []string{}, "source": []any{1}}), http.StatusBadRequest)
+	routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "1", "permissions": []string{}, "source": "maker/pinned"}), http.StatusBadRequest)
+	routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "1", "permissions": []string{},
+		"source": map[string]any{"repo": strings.Repeat("x", 64<<10)}}), http.StatusBadRequest)
 
 	// People outside the Space reach nothing, and cannot install.
 	for _, request := range []struct{ method, path string }{
 		{http.MethodGet, base}, {http.MethodPut, base + "/other"}, {http.MethodDelete, base + "/demo"},
-		{http.MethodGet, key}, {http.MethodPut, key},
 	} {
 		body := any(nil)
 		if request.method == http.MethodPut {
 			body = map[string]any{"version": "1", "permissions": []string{}}
-			if strings.Contains(request.path, "/storage/") {
-				body = map[string]any{"value": 1}
-			}
 		}
 		response := performConversationRequest(t, router, request.method, request.path, outsiderToken, body)
 		if response.Code != http.StatusForbidden {
@@ -110,9 +137,9 @@ func TestSpaceAppRoutesInstallStoreAndRemove(t *testing.T) {
 		}
 	}
 
-	// Removing the app drops its storage; reinstalling starts empty.
-	plannerJSON(t, call(http.MethodDelete, base+"/demo", nil), http.StatusNoContent)
-	plannerJSON(t, call(http.MethodDelete, base+"/demo", nil), http.StatusNotFound)
-	plannerJSON(t, call(http.MethodPut, base+"/demo", map[string]any{"version": "1.1.0", "permissions": []string{}}), http.StatusOK)
-	plannerJSON(t, call(http.MethodGet, key, nil), http.StatusNotFound)
+	routeJSON(t, call(http.MethodDelete, base+"/demo", nil), http.StatusNoContent)
+	routeJSON(t, call(http.MethodDelete, base+"/demo", nil), http.StatusNotFound)
+	if appNamed("demo") != nil {
+		t.Fatal("removed app still listed")
+	}
 }

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -109,96 +108,6 @@ func (s *SpacesService) createSpaceNote(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	writeJSON(w, http.StatusCreated, noteWriteResult(note, body.Title, body.Markdown, "create"))
-}
-
-// drawingSceneBodyLimit matches what one drawing change could always carry.
-const drawingSceneBodyLimit = 256 << 10
-
-// SpaceDrawingScene reads a drawing's live scene from its collaboration room, or
-// applies a change to it. People draw over the room's socket; this is the same
-// room's control command for a client that wants the scene as data.
-func (s *SpacesService) SpaceDrawingScene() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		drawing, err := s.database.SpaceDrawingByID(r.Context(), userID, chi.URLParam(r, "drawingID"))
-		if err == nil && drawing.SpaceID != chi.URLParam(r, "spaceID") {
-			err = db.ErrSpaceNotFound
-		}
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		command, payload := "drawing_scene_read", mustRawJSON(map[string]any{"include_deleted": r.URL.Query().Get("include_deleted") == "true"})
-		if r.Method == http.MethodPost {
-			access, accessErr := s.database.DrawingAccessFor(r.Context(), userID, drawing.ID)
-			if accessErr == nil && !access.CanEdit {
-				accessErr = db.ErrSpaceForbidden
-			}
-			if accessErr != nil {
-				writeSpaceError(w, accessErr)
-				return
-			}
-			var change map[string]json.RawMessage
-			if err := decodeStrictJSONWithLimit(w, r, &change, drawingSceneBodyLimit); err != nil || !validDrawingSceneChange(change) {
-				rejectInvalidJSON(w)
-				return
-			}
-			if key := strings.TrimSpace(r.Header.Get("Idempotency-Key")); key != "" {
-				change["request_id"] = mustRawJSON(drawingSceneRequestID(userID, key))
-			}
-			command, payload = "drawing_scene_apply", mustRawJSON(change)
-		}
-		result, err := s.requestCollaborationControlCommand(r.Context(), "drawing-room", s.JournalCollab.DrawingRoomID(drawing.ID), drawing.ID, command, payload)
-		if err != nil {
-			writeDrawingSceneError(w, err)
-			return
-		}
-		var response map[string]any
-		if err := json.Unmarshal(result, &response); err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		response["drawing"] = drawing
-		writeJSON(w, http.StatusOK, response)
-	}
-}
-
-// validDrawingSceneChange holds to the fields a scene change can have, so the
-// room's own fields, such as request_id, can't be set from outside.
-func validDrawingSceneChange(change map[string]json.RawMessage) bool {
-	for field := range change {
-		switch field {
-		case "base_hash", "mode", "elements", "delete_element_ids", "scene":
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-func drawingSceneRequestID(userID, key string) string {
-	digest := sha256.Sum256([]byte(userID + "\n" + key))
-	return "client:" + hex.EncodeToString(digest[:])
-}
-
-// writeDrawingSceneError names the room's answers a client can act on.
-func writeDrawingSceneError(w http.ResponseWriter, err error) {
-	text := err.Error()
-	switch {
-	case errors.Is(err, ErrCollaborationUnconfigured):
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "collaboration_unconfigured"})
-	case strings.Contains(text, "drawing_conflict"):
-		writeJSON(w, http.StatusConflict, map[string]string{"code": "drawing_conflict"})
-	case strings.Contains(text, "document_too_large"):
-		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"code": "document_too_large"})
-	case strings.HasPrefix(text, "collaboration service returned 400"):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_request"})
-	default:
-		writeSpaceError(w, err)
-	}
 }
 
 func noteWriteResult(note *db.SpaceNote, title, markdown, operation string) json.RawMessage {

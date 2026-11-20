@@ -95,7 +95,7 @@ func (s *SpacesService) accountExportManifest(ctx context.Context, userID string
 	}
 	documents := make([]accountExportDocument, 0, len(export.Journal))
 	for _, resource := range export.Journal {
-		// Without a collaboration service, note and drawing bodies are in
+		// Without a collaboration service, note bodies are in
 		// the export's own projections; there is no room to download from.
 		if !s.JournalCollab.Enabled {
 			break

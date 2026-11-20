@@ -42,7 +42,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 	}
 
 	exec(t, database, `INSERT INTO space_notes(id,space_id,creator_user_id,visibility) VALUES('note-1',$1,$2,'private')`, personal.ID, alice.ID)
-	exec(t, database, `INSERT INTO space_drawings(id,space_id,creator_user_id,visibility) VALUES('drawing-1',$1,$2,'private')`, personal.ID, alice.ID)
 	exec(t, database, `INSERT INTO voice_transcripts(id,owner_user_id,source,turns) VALUES($1,$2,'{}','[]')`, uuid.New(), alice.ID)
 	exec(t, database, `INSERT INTO space_agents(space_id,agent_id,owner_user_id,agent_name) VALUES($1,'agent-1',$2,'Writer')`, club.ID, alice.ID)
 
@@ -90,7 +89,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 		`SELECT count(*) FROM security_domains WHERE id=$1`:              {personal.SecurityDomainID},
 		`SELECT count(*) FROM space_members WHERE user_id=$1`:            {alice.ID},
 		`SELECT count(*) FROM space_notes WHERE id=$1`:                   {"note-1"},
-		`SELECT count(*) FROM space_drawings WHERE id=$1`:                {"drawing-1"},
 	}
 	for query, args := range gone {
 		if n := count(t, database, query, args...); n != 0 {
@@ -184,11 +182,10 @@ func purgeSpaces(t *testing.T, database *Database, ctx context.Context, personal
 	for _, id := range ids {
 		if waiting, err := database.BeginSpacePurge(ctx, id); err != nil {
 			t.Fatal(err)
-		} else if id == personalID && waiting != 2 {
-			t.Fatalf("the personal Space's note and drawing rooms = %d, want 2 waiting", waiting)
+		} else if id == personalID && waiting != 1 {
+			t.Fatalf("the personal Space's note rooms = %d, want 1 waiting", waiting)
 		}
 		exec(t, database, `UPDATE space_note_control_outbox SET delivered_at=now() WHERE command='purge'`)
-		exec(t, database, `UPDATE space_drawing_control_outbox SET delivered_at=now() WHERE command='purge'`)
 		if waiting, err := database.BeginSpacePurge(ctx, id); err != nil || waiting != 0 {
 			t.Fatalf("waiting rooms = %d %v", waiting, err)
 		}

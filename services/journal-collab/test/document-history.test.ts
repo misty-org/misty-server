@@ -94,48 +94,25 @@ describe("history storage", () => {
 describe("history restore", () => {
   it("rewrites every top-level type to the version, as one new change", () => {
     const doc = new Y.Doc();
-    doc.getMap<unknown>("deck:meta").set("title", "Old title");
-    doc.getArray<string>("deck:order").push(["s1"]);
-    const notes = new Y.Text();
-    notes.insert(0, "Old notes");
-    const slide = new Y.Map<unknown>();
-    slide.set("notes", notes);
-    doc.getMap<unknown>("deck:slides").set("s1", slide);
+    doc.getText("misty:title").insert(0, "Old title");
+    doc.getText("misty:markdown").insert(0, "Old body");
     const version = Y.encodeStateAsUpdate(doc);
 
-    doc.getMap<unknown>("deck:meta").set("title", "New title");
-    doc.getArray<string>("deck:order").push(["s2"]);
-    doc.getMap<unknown>("deck:slides").delete("s1");
+    const title = doc.getText("misty:title");
+    title.delete(0, title.length);
+    title.insert(0, "New title");
+    doc.getText("misty:markdown").insert(0, "New ");
 
     const peer = new Y.Doc();
     Y.applyUpdate(peer, Y.encodeStateAsUpdate(doc));
     const before = Y.encodeStateVector(doc);
-    restoreDocument(doc, version, "deck");
+    restoreDocument(doc, version, "note");
     Y.applyUpdate(peer, Y.encodeStateAsUpdate(doc, before));
 
     for (const copy of [doc, peer]) {
-      expect(copy.getMap<unknown>("deck:meta").get("title")).toBe("Old title");
-      expect(copy.getArray<string>("deck:order").toArray()).toEqual(["s1"]);
-      const restoredSlide = copy.getMap<unknown>("deck:slides").get("s1") as Y.Map<unknown>;
-      expect((restoredSlide.get("notes") as Y.Text).toString()).toBe("Old notes");
+      expect(copy.getText("misty:title").toString()).toBe("Old title");
+      expect(copy.getText("misty:markdown").toString()).toBe("Old body");
     }
-  });
-
-  it("restores a drawing's elements above every version an editor holds", () => {
-    const doc = new Y.Doc();
-    const elements = doc.getMap<Record<string, unknown>>("drawing:elements");
-    elements.set("a", { id: "a", type: "text", text: "Before", version: 3 });
-    const version = Y.encodeStateAsUpdate(doc);
-    elements.set("a", { id: "a", type: "text", text: "After", version: 7 });
-    elements.set("b", { id: "b", type: "rectangle", version: 2 });
-
-    restoreDocument(doc, version, "drawing");
-    const a = elements.get("a")!;
-    const b = elements.get("b")!;
-    expect(a.text).toBe("Before");
-    expect(Number(a.version)).toBeGreaterThan(7);
-    expect(b.isDeleted).toBe(true);
-    expect(Number(b.version)).toBeGreaterThan(2);
   });
 
   it("keeps a note's markdown bookkeeping as it is now", () => {

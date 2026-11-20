@@ -62,38 +62,6 @@ func (s *SpacesService) JournalNoteProjection() http.HandlerFunc {
 	}
 }
 
-// JournalDrawingActivity accepts the signed callback a drawing's collaboration
-// room sends after each save: the drawing's id and a revision, and the plain
-// text of its text elements and its sizes. Never the scene.
-func (s *SpacesService) JournalDrawingActivity() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		body, ok := s.readRoomCallback(w, r, itemProjectionBodyLimit)
-		if !ok {
-			return
-		}
-		var input struct {
-			DrawingID    string  `json:"drawing_id"`
-			Revision     int64   `json:"revision"`
-			PlainText    *string `json:"plain_text"`
-			ContentBytes *int64  `json:"content_bytes"`
-			HistoryBytes *int64  `json:"history_bytes"`
-		}
-		if json.Unmarshal(body, &input) != nil {
-			writeSpaceError(w, db.ErrSpaceInvalid)
-			return
-		}
-		applied, err := s.database.ApplySpaceDrawingActivityProjection(r.Context(), db.SpaceDrawingActivity{
-			DrawingID: input.DrawingID, Revision: input.Revision, PlainText: input.PlainText,
-			ContentBytes: input.ContentBytes, HistoryBytes: input.HistoryBytes,
-		})
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		s.writeRoomCallbackAnswer(w, r, db.SpaceItemDrawing, input.DrawingID, applied)
-	}
-}
-
 // SpaceNotes handles membership-wide native Space notes.
 func (s *SpacesService) SpaceNotes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

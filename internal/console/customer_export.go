@@ -18,7 +18,7 @@ import (
 )
 
 // AccountExportManifest is what the operator API answers for an account's
-// export: its data, and short-lived links to each note, drawing and file.
+// export: its data, and short-lived links to each note and file.
 type AccountExportManifest struct {
 	AccountData json.RawMessage         `json:"account_data"`
 	Documents   []AccountExportDocument `json:"documents"`

@@ -21,12 +21,10 @@ func (db *Database) LibraryItemDownload(ctx context.Context, userID, spaceID, it
 		if err := requireLibraryItemAudienceTx(ctx, tx, userID, spaceID, itemID); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(rb.r2_object_key,b.r2_object_key),i.display_name,COALESCE(rb.server_detected_mime_type,b.server_detected_mime_type),COALESCE(rb.byte_size,b.byte_size),COALESCE(rb.sha256,b.sha256),(rb.id IS NOT NULL)
+		if err := tx.QueryRowContext(ctx, `SELECT b.r2_object_key,i.display_name,b.server_detected_mime_type,b.byte_size,b.sha256
 			FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id
-			LEFT JOIN library_item_versions v ON v.id=i.current_edit_version_id AND v.lifecycle_state='ready' AND v.rendition_state='ready'
-			LEFT JOIN library_blobs rb ON rb.id=v.rendition_blob_id AND rb.lifecycle_state='ready'
 			WHERE i.id=$1 AND i.space_id=$2 AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'`, itemID, spaceID).
-			Scan(&out.ObjectKey, &out.Filename, &out.MIMEType, &out.ByteSize, &out.SHA256, &out.Rendition); err != nil {
+			Scan(&out.ObjectKey, &out.Filename, &out.MIMEType, &out.ByteSize, &out.SHA256); err != nil {
 			return err
 		}
 		return recordLibraryItemViewTx(ctx, tx, userID, spaceID, itemID)
@@ -99,14 +97,10 @@ func (db *Database) ExplicitLibraryItemDownload(ctx context.Context, userID, spa
 		if err := requireLibraryItemAudienceTx(ctx, tx, userID, spaceID, itemID); err != nil {
 			return err
 		}
-		return tx.QueryRowContext(ctx, `SELECT COALESCE(rb.r2_object_key,b.r2_object_key),i.display_name,
-			COALESCE(rb.server_detected_mime_type,b.server_detected_mime_type),COALESCE(rb.byte_size,b.byte_size),
-			COALESCE(rb.sha256,b.sha256),(rb.id IS NOT NULL)
+		return tx.QueryRowContext(ctx, `SELECT b.r2_object_key,i.display_name,b.server_detected_mime_type,b.byte_size,b.sha256
 			FROM space_library_items i JOIN library_files f ON f.id=i.file_id JOIN library_blobs b ON b.id=f.blob_id
-			LEFT JOIN library_item_versions v ON v.id=i.current_edit_version_id AND v.lifecycle_state='ready' AND v.rendition_state='ready'
-			LEFT JOIN library_blobs rb ON rb.id=v.rendition_blob_id AND rb.lifecycle_state='ready'
 			WHERE i.id=$1 AND i.space_id=$2 AND i.hidden=FALSE AND i.lifecycle_state='ready' AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'`, itemID, spaceID).
-			Scan(&out.ObjectKey, &out.Filename, &out.MIMEType, &out.ByteSize, &out.SHA256, &out.Rendition)
+			Scan(&out.ObjectKey, &out.Filename, &out.MIMEType, &out.ByteSize, &out.SHA256)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrLibraryNotFound
@@ -114,7 +108,7 @@ func (db *Database) ExplicitLibraryItemDownload(ctx context.Context, userID, spa
 	return out, err
 }
 
-const libraryItemSelect = `SELECT i.id,i.space_id,i.file_id,i.contributing_user_id,i.display_name,i.caption,i.tags,i.favorite,i.hidden,i.date_override,COALESCE(i.location_override,'null'::jsonb),i.contributor_information,COALESCE(i.current_edit_version_id,''),i.added_by_user_id,i.lifecycle_state,i.added_at,i.trashed_at,i.recover_until,i.version,i.updated_at,i.visibility,
+const libraryItemSelect = `SELECT i.id,i.space_id,i.file_id,i.contributing_user_id,i.display_name,i.caption,i.tags,i.favorite,i.hidden,i.date_override,COALESCE(i.location_override,'null'::jsonb),i.contributor_information,i.added_by_user_id,i.lifecycle_state,i.added_at,i.trashed_at,i.recover_until,i.version,i.updated_at,i.visibility,
 	f.id,f.blob_id,f.security_domain_id,f.uploader_user_id,f.original_filename,f.intrinsic_metadata,f.lifecycle_state,f.original_uploaded_at,f.version FROM space_library_items i JOIN library_files f ON f.id=i.file_id`
 
 func loadCompletedLibraryUploadTx(ctx context.Context, tx *sql.Tx, upload *LibraryUpload, result *CompleteLibraryUploadResult) error {
@@ -146,30 +140,6 @@ func loadCompletedLibraryUploadTx(ctx context.Context, tx *sql.Tx, upload *Libra
 			return err
 		}
 		result.NoteAsset = asset
-	} else if upload.Purpose == UploadPurposeDrawingAsset {
-		asset := &SpaceDrawingAsset{}
-		if err := scanSpaceDrawingAsset(tx.QueryRowContext(
-			ctx,
-			`SELECT a.id,a.drawing_id,a.file_id,a.uploader_user_id,
-			        a.excalidraw_file_id,a.display_name,a.lifecycle_state,
-			        a.created_at,
-			        COALESCE(b.server_detected_mime_type,b.client_declared_mime_type),
-			        b.byte_size,b.sha256
-			 FROM space_drawing_assets a
-			 JOIN library_files f ON f.id=a.file_id
-			 JOIN library_blobs b ON b.id=f.blob_id
-			 WHERE a.file_id=$1`,
-			upload.FileID,
-		), asset); err != nil {
-			return err
-		}
-		result.DrawingAsset = asset
-	} else if upload.Purpose == UploadPurposeDeckAsset {
-		asset, err := loadDeckAssetForFileTx(ctx, tx, upload.FileID)
-		if err != nil {
-			return err
-		}
-		result.DeckAsset = asset
 	} else {
 		attachment := &MessageAttachment{}
 		if err := scanMessageAttachment(tx.QueryRowContext(ctx, `SELECT id,space_id,COALESCE(message_id,''),file_id,upload_id,uploader_user_id,display_name,COALESCE(promoted_item_id,''),lifecycle_state,created_at,deleted_at,recover_until FROM space_message_attachments WHERE upload_id=$1`, upload.ID), attachment); err != nil {
@@ -223,7 +193,6 @@ func libraryAuditRequiresRealtime(action string) bool {
 		"library.album.",
 		"library.album_folder.",
 		"library.asset_stack.",
-		"library.edit.",
 		"library.intelligence.",
 		"library.memory.",
 		"library.duplicates.",
@@ -271,7 +240,7 @@ func scanLibraryFile(scanner interface{ Scan(...any) error }, out *LibraryFile) 
 
 func scanSpaceLibraryItem(scanner interface{ Scan(...any) error }, out *SpaceLibraryItem) error {
 	var tags []byte
-	err := scanner.Scan(&out.ID, &out.SpaceID, &out.FileID, &out.ContributingUserID, &out.DisplayName, &out.Caption, &tags, &out.Favorite, &out.Hidden, &out.DateOverride, &out.LocationOverride, &out.ContributorInformation, &out.CurrentEditVersionID, &out.AddedByUserID, &out.LifecycleState, &out.AddedAt, &out.TrashedAt, &out.RecoverUntil, &out.Version, &out.UpdatedAt, &out.Visibility,
+	err := scanner.Scan(&out.ID, &out.SpaceID, &out.FileID, &out.ContributingUserID, &out.DisplayName, &out.Caption, &tags, &out.Favorite, &out.Hidden, &out.DateOverride, &out.LocationOverride, &out.ContributorInformation, &out.AddedByUserID, &out.LifecycleState, &out.AddedAt, &out.TrashedAt, &out.RecoverUntil, &out.Version, &out.UpdatedAt, &out.Visibility,
 		&out.File.ID, &out.File.BlobID, &out.File.SecurityDomainID, &out.File.UploaderUserID, &out.File.OriginalFilename, &out.File.IntrinsicMetadata, &out.File.LifecycleState, &out.File.OriginalUploadedAt, &out.File.Version)
 	if err == nil {
 		_ = json.Unmarshal(tags, &out.Tags)

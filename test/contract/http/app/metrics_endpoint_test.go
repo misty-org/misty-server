@@ -42,7 +42,7 @@ func TestMetricsEndpointThroughTheRealRouter(t *testing.T) {
 		`route="/v1/spaces/{spaceID}/notes"`,
 		"misty_realtime_connections",
 		"misty_note_control_backlog",
-		"misty_library_jobs_pending_rendition",
+		"misty_library_jobs_pending_ai",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("scrape missing %q", want)

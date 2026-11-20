@@ -11,11 +11,6 @@ import (
 func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	fixture := newNoteFixture(t, "account-export")
 	createTestSpace(t, fixture.database, fixture.ctx, fixture.creator, "Creator Home")
-	if _, err := fixture.database.CreateSpaceDrawing(
-		fixture.ctx, fixture.creator, fixture.spaceID, "Exported drawing",
-	); err != nil {
-		t.Fatal(err)
-	}
 	if _, _, err := fixture.database.TestingCreateSpaceMessage(
 		fixture.ctx,
 		fixture.creator,
@@ -58,7 +53,7 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	}
 	// The fixture Space, "Creator Home" and the personal Space from sign-up.
 	if export.FormatVersion != 3 || len(export.Spaces) != 3 ||
-		len(export.Journal) != 2 || len(export.Messages) != 1 ||
+		len(export.Journal) != 1 || export.Journal[0].Kind != "note" || len(export.Messages) != 1 ||
 		len(export.Assets) != 1 || export.Assets[0].Kind != "library" ||
 		len(export.Agents) != 1 || export.Agents[0].Name != "Writer" || export.Agents[0].SpaceID != fixture.spaceID {
 		t.Fatalf("portable export = %#v", export)

@@ -60,6 +60,9 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "node."):
 		permission = PermissionMessagesRead
+	case strings.HasPrefix(event.EventType, "direct."):
+		// A DM's own changes (people added or leaving) reach the people in it.
+		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "library."):
 		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, event.SpaceID, "space_library_items", event.EntityID)
 		if err != nil || !visible {
@@ -74,15 +77,12 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 		// the event was recorded.
 		return noteEventVisibleToUserTx(ctx, tx, userID, event)
 	case isItemEvent:
-		// drawing., deck., workbook.: the item's audience and layer as they are now (someone
+		// Any other registered kind: the item's audience and layer as they are now (someone
 		// else's private item reaches only them), then the Space's messages.read.
 		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, event.SpaceID, itemKind.Table, event.EntityID)
 		if err != nil || !visible {
 			return false, err
 		}
-		permission = PermissionMessagesRead
-	case strings.HasPrefix(event.EventType, "task."), strings.HasPrefix(event.EventType, "calendar."):
-		// The planner is the whole Space's: every member sees its changes.
 		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "agent."):
 		permission = PermissionStudioView
@@ -159,7 +159,7 @@ func resourceEntityAudienceVisibleTx(ctx context.Context, tx *sql.Tx, userID, sp
 	var private bool
 	err := tx.QueryRowContext(ctx, `SELECT audience_kind,COALESCE(audience_conversation_id,''),visibility='private' AND `+owner+`<>$3 FROM `+table+` WHERE id=$1 AND space_id=$2`, entityID, spaceID, userID).Scan(&audienceKind, &conversationID, &private)
 	if errors.Is(err, sql.ErrNoRows) {
-		// Some event families use upload/source IDs, and connected-calendar rows
+		// Some event families use upload or source IDs, whose rows
 		// do not live in the native table. They are Space-wide by definition.
 		return true, nil
 	}
@@ -207,8 +207,9 @@ func (db *Database) ConsumeResolveTicket(ctx context.Context, tokenHash string) 
 }
 
 // spaceWideEventFamilies are the event families about the Space itself rather than one item in
-// it: its settings, members, roles and shared folders. Every member hears them.
-var spaceWideEventFamilies = []string{"space.", "member.", "owner.", "role.", "roles.", "folder."}
+// it: its settings, members, roles and drive, which every member reads whole. Every member
+// hears them.
+var spaceWideEventFamilies = []string{"space.", "member.", "owner.", "role.", "roles.", "drive."}
 
 func spaceWideEvent(eventType string) bool {
 	for _, family := range spaceWideEventFamilies {

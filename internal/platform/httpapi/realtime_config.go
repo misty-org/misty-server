@@ -47,6 +47,9 @@ type RealtimeClient struct {
 	// this client's agents was last said to be doing, to log only changes.
 	lastAgentsAt time.Time
 	agentStates  map[string]string
+	// idle is whether this computer has had no input for a while (it says so with "activity").
+	// Mutated only while holding RealtimeService.mu.
+	idle bool
 }
 
 type RealtimeService struct {
@@ -58,9 +61,11 @@ type RealtimeService struct {
 	clientsByUser map[string]map[*RealtimeClient]struct{}
 	// viewers maps a space ID to the set of clients currently viewing that
 	// space's chat, for the "active users" presence capsule. Guarded by mu.
-	Viewers   map[string]map[*RealtimeClient]struct{}
-	closed    chan struct{}
-	closeOnce sync.Once
+	Viewers map[string]map[*RealtimeClient]struct{}
+	// lastStatus is each account's status as it was last sent, so only changes go out. Guarded by mu.
+	lastStatus map[string]string
+	closed     chan struct{}
+	closeOnce  sync.Once
 }
 
 func NewRealtimeService(database *db.Database, dsn string) *RealtimeService {
@@ -70,6 +75,7 @@ func NewRealtimeService(database *db.Database, dsn string) *RealtimeService {
 		clients:       map[*RealtimeClient]struct{}{},
 		clientsByUser: map[string]map[*RealtimeClient]struct{}{},
 		Viewers:       map[string]map[*RealtimeClient]struct{}{},
+		lastStatus:    map[string]string{},
 		closed:        make(chan struct{}),
 	}
 }

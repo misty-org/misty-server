@@ -304,3 +304,13 @@ func (db *Database) AccessibleSpaceNotes(ctx context.Context, userID, spaceID st
 	})
 	return notes, err
 }
+
+// requireStorageNotFullTx refuses a new item in a Space, or for an account, whose storage is
+// already full. What's there stays readable and editable; only adding more is refused, the
+// same way an upload is.
+func requireStorageNotFullTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) error {
+	if err := prepareStorageReservationTx(ctx, tx, userID, spaceID); err != nil {
+		return err
+	}
+	return RequireStorageRoomTx(ctx, tx, userID, spaceID, 1)
+}

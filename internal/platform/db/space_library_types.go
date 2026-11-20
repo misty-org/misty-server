@@ -33,9 +33,7 @@ const (
 	UploadPurposeLibrary        = spaces.UploadPurposeLibrary
 	UploadPurposeChatAttachment = spaces.UploadPurposeChatAttachment
 	UploadPurposeNoteAttachment = spaces.UploadPurposeNoteAttachment
-	UploadPurposeDrawingAsset   = spaces.UploadPurposeDrawingAsset
-	UploadPurposeDeckAsset      = spaces.UploadPurposeDeckAsset
-	UploadPurposeSharedFolder   = spaces.UploadPurposeSharedFolder
+	UploadPurposeDrive          = spaces.UploadPurposeDrive
 )
 
 // Default per-purpose maximums. Deployments may lower these through
@@ -44,7 +42,6 @@ const (
 	DefaultLibraryMaxFileBytes        = spaces.DefaultLibraryMaxFileBytes
 	DefaultChatAttachmentMaxFileBytes = spaces.DefaultChatAttachmentMaxFileBytes
 	DefaultNoteAttachmentMaxFileBytes = spaces.DefaultNoteAttachmentMaxFileBytes
-	DefaultDrawingAssetMaxFileBytes   = spaces.DefaultDrawingAssetMaxFileBytes
 )
 
 // MaxUploadBytesForPurpose is the hard database ceiling for a purpose. An
@@ -128,7 +125,6 @@ type SpaceLibraryItem struct {
 	DateOverride           *time.Time      `json:"date_override,omitempty"`
 	LocationOverride       json.RawMessage `json:"location_override,omitempty"`
 	ContributorInformation json.RawMessage `json:"contributor_information"`
-	CurrentEditVersionID   string          `json:"current_edit_version_id,omitempty"`
 	AddedByUserID          string          `json:"added_by_user_id"`
 	LifecycleState         string          `json:"lifecycle_state"`
 	AddedAt                time.Time       `json:"added_at"`
@@ -162,8 +158,6 @@ type CompleteLibraryUploadResult struct {
 	Item             *SpaceLibraryItem  `json:"item,omitempty"`
 	Attachment       *MessageAttachment `json:"attachment,omitempty"`
 	NoteAsset        *SpaceNoteAsset    `json:"note_asset,omitempty"`
-	DrawingAsset     *SpaceDrawingAsset `json:"drawing_asset,omitempty"`
-	DeckAsset        *SpaceDeckAsset    `json:"deck_asset,omitempty"`
 	DiscardObjectKey string             `json:"-"`
 	// RetiredObjectKeys are the replaced content's objects nothing uses any more.
 	RetiredObjectKeys []string `json:"-"`
@@ -175,7 +169,6 @@ type LibraryDownload struct {
 	MIMEType  string
 	ByteSize  int64
 	SHA256    string
-	Rendition bool
 }
 
 type ExpiredLibraryUpload struct {

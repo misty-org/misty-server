@@ -25,17 +25,6 @@ func TestWorkerControlDeadlines(t *testing.T) {
 	checkWorkerDelay(t, database, "note-control", true, 59*time.Minute, time.Hour)
 	workerExec(t, database, `UPDATE space_note_control_outbox SET delivered_at=now()`)
 	checkWorkerDelay(t, database, "note-control", false, 0, 0)
-	workerExec(t, database, `INSERT INTO space_drawings VALUES('drawing','deleting');
- INSERT INTO space_drawing_control_outbox VALUES('command','drawing','purge',now()+interval '1 hour',NULL)`)
-	checkWorkerDelay(t, database, "drawing-control", true, 59*time.Minute, time.Hour)
-	checkWorkerDelay(t, database, "drawing-purge", false, 0, 0)
-	workerExec(t, database, `UPDATE space_drawing_control_outbox SET delivered_at=now()`)
-	checkWorkerDelay(t, database, "drawing-control", false, 0, 0)
-	checkWorkerDelay(t, database, "drawing-purge", true, 0, 0)
-	if n, err := database.PurgeDeletedDrawings(context.Background(), 1); err != nil || n != 1 {
-		t.Fatal(n, err)
-	}
-	checkWorkerDelay(t, database, "drawing-purge", false, 0, 0)
 }
 func TestWorkerSocialDeadlinesNeverReplayUnknownSends(t *testing.T) {
 	database := workerTestDatabase(t)

@@ -171,9 +171,6 @@ func TestUploadLimitsAreEnforcedPerPurpose(t *testing.T) {
 	if limits.Max(UploadPurposeChatAttachment) != 10<<20 {
 		t.Fatalf("chat limit = %d, want 10MB", limits.Max(UploadPurposeChatAttachment))
 	}
-	if limits.Max(UploadPurposeDrawingAsset) != 15<<20 {
-		t.Fatalf("drawing asset limit = %d, want 15MB", limits.Max(UploadPurposeDrawingAsset))
-	}
 	// An unknown purpose must be rejected, not silently given a default.
 	if limits.Max("avatar") != 0 {
 		t.Fatalf("unknown purpose limit = %d, want 0", limits.Max("avatar"))
@@ -198,16 +195,13 @@ func TestUploadLimitsRejectValuesAboveDatabaseCeiling(t *testing.T) {
 func TestUploadPurposeEnabledRejectsJournalAssetsOnGenericEndpoint(t *testing.T) {
 	service := &SpaceLibraryService{
 		UploadsEnabled: true, AttachmentsEnabled: true,
-		NoteAssetsEnabled: true, DrawingAssetsEnabled: true,
+		NoteAssetsEnabled: true,
 	}
 
 	// Note assets authorize against the parent note, so the Space-wide Library
 	// upload endpoint must never accept them even when the feature is on.
 	if service.UploadPurposeEnabled(UploadPurposeNoteAttachment) {
 		t.Fatal("generic Library upload endpoint accepted the note_attachment purpose")
-	}
-	if service.UploadPurposeEnabled(UploadPurposeDrawingAsset) {
-		t.Fatal("generic Library upload endpoint accepted the drawing_attachment purpose")
 	}
 	if !service.UploadPurposeEnabled(UploadPurposeLibrary) || !service.UploadPurposeEnabled(UploadPurposeChatAttachment) {
 		t.Fatal("library and chat attachment purposes should be enabled")
@@ -217,10 +211,10 @@ func TestUploadPurposeEnabledRejectsJournalAssetsOnGenericEndpoint(t *testing.T)
 	}
 }
 
-func TestDrawingAssetMIMEAllowlistRejectsActiveAndGenericContent(t *testing.T) {
+func TestNoteAssetMIMEAllowlistRejectsActiveAndGenericContent(t *testing.T) {
 	for _, allowed := range []string{"image/png", "image/jpeg", "IMAGE/WEBP"} {
-		if !SupportedDrawingAssetMIME(allowed) {
-			t.Fatalf("safe drawing MIME %q was rejected", allowed)
+		if !SupportedNoteAssetMIME(allowed) {
+			t.Fatalf("safe note MIME %q was rejected", allowed)
 		}
 	}
 	for _, rejected := range []string{
@@ -228,8 +222,8 @@ func TestDrawingAssetMIMEAllowlistRejectsActiveAndGenericContent(t *testing.T) {
 		"text/html",
 		"application/octet-stream",
 	} {
-		if SupportedDrawingAssetMIME(rejected) {
-			t.Fatalf("unsafe drawing MIME %q was accepted", rejected)
+		if SupportedNoteAssetMIME(rejected) {
+			t.Fatalf("unsafe note MIME %q was accepted", rejected)
 		}
 	}
 }
@@ -242,7 +236,7 @@ func TestJournalAssetMIMEAllowlistIsRasterOnly(t *testing.T) {
 		"application/octet-stream",
 		"video/mp4",
 	} {
-		if SupportedDrawingAssetMIME(rejected) {
+		if SupportedNoteAssetMIME(rejected) {
 			t.Fatalf("active or non-image Journal MIME %q was accepted", rejected)
 		}
 	}

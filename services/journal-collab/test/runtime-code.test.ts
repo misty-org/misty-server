@@ -90,12 +90,11 @@ test("CodeRoom shares files between editors, persists them, and closes as delete
         "// shared\nexport const answer = 1;\n",
     );
 
-    // The code room has no note or drawing commands.
+    // The code room has no note commands.
     const restartedRoom = await roomStub(runtime, "CODE_ROOM", roomName);
     for (const [command, payload] of [
       ["bootstrap", { title: "Not a note", markdown: "ignored" }],
       ["replace_markdown", { title: "Not a note", markdown: "ignored" }],
-      ["drawing_scene_read", {}],
     ]) {
       const response = await controlResponse(restartedRoom, command, payload);
       assert.equal(response.status, 400);
@@ -131,7 +130,7 @@ test("CodeRoom admits only code tickets", async () => {
   try {
     const runtimeUrl = await runtime.ready;
     const roomName = "runtime-code-wrong-ticket";
-    provider = providerFor(runtimeUrl, roomName, new Y.Doc(), mintTicket(roomName, "dev-a", "drawing"), "code-room");
+    provider = providerFor(runtimeUrl, roomName, new Y.Doc(), mintTicket(roomName, "dev-a", "note"), "code-room");
     const closes = closeEvents(provider);
     await waitFor(() =>
       closes.some((event) => event.code === 1008 && event.reason === "ticket_resource_mismatch"),

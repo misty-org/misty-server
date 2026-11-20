@@ -77,7 +77,7 @@ func (s *Server) registerDomainGauges(registry *metrics.Registry) {
 	)
 
 	definitions := map[string]string{}
-	for _, kind := range []string{"ai", "rendition"} {
+	for _, kind := range []string{"ai"} {
 		definitions["misty_library_jobs_pending_"+kind] = "Library " + kind + " jobs queued, leased, or running."
 	}
 	registry.WatchGauges(definitions, func(ctx context.Context) (map[string]float64, error) {

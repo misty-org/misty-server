@@ -25,10 +25,10 @@ func spaceSearchText(r *http.Request) (string, bool) {
 	return text, text != "" && len([]rune(text)) <= db.SpaceSearchMaxQuery
 }
 
-// Search looks through notes, messages, drawings, decks and workbooks together,
+// Search looks through notes and messages together,
 // across the caller's Spaces or the one named by space_id:
-// GET /search?q=&space_id=&kinds=note,message,drawing,deck,workbook&limit=.
-// Each result's kind is note|message|drawing|deck|workbook. Without kinds every
+// GET /search?q=&space_id=&kinds=note,message&limit=.
+// Each result's kind is note|message. Without kinds every
 // kind is searched.
 func (s *SpacesService) Search() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +84,7 @@ func (s *SpacesService) SearchMessages() http.HandlerFunc {
 }
 
 // spaceSearchKinds reads a search's kinds: "message" and every registered made kind, by its name
-// (note, drawing, deck, workbook) or its section (notes, drawings, decks, workbooks). Empty is
+// (note) or its section (notes). Empty is
 // all of them; an unknown kind refuses the search.
 func spaceSearchKinds(raw string) (map[string]bool, bool) {
 	kinds := map[string]bool{}

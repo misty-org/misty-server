@@ -150,6 +150,12 @@ func writeSpaceError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "spaces_limit_reached"})
 	case errors.Is(err, db.ErrSpaceOwnershipLimit):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "space_ownership_limit_reached"})
+	case errors.Is(err, db.ErrSpaceNotShareable):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "space_not_shareable"})
+	case errors.Is(err, db.ErrFriendRequestLimit):
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"code": "friend_request_limit_reached"})
+	case errors.Is(err, db.ErrNotFriends):
+		writeJSON(w, http.StatusForbidden, map[string]string{"code": "not_friends"})
 	case errors.Is(err, db.ErrDefaultSpaceProtected):
 		writeJSON(w, http.StatusConflict, map[string]string{"code": "default_space_protected"})
 	case errors.Is(err, db.ErrSpacePeopleLimit):

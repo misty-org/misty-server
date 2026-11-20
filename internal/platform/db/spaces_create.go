@@ -118,7 +118,7 @@ func (db *Database) SpacePeople(ctx context.Context, userID string) ([]SpacePers
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.email
 			FROM space_members mine
-			JOIN spaces s ON s.id=mine.space_id AND s.lifecycle_state='active'
+			JOIN spaces s ON s.id=mine.space_id AND s.lifecycle_state='active' AND s.kind='space'
 			JOIN space_members other ON other.space_id=mine.space_id AND other.user_id<>mine.user_id
 			JOIN users u ON u.id=other.user_id
 			WHERE mine.user_id=$1

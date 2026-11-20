@@ -156,12 +156,12 @@ func TestJournalAssetDownloadReturnsVerifiedR2Descriptor(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(
 		http.MethodGet,
-		"/spaces/space_1/drawings/drawing_1/assets/asset_1/download",
+		"/spaces/space_1/notes/note_1/assets/asset_1/download",
 		nil,
 	)
 	download := &db.LibraryDownload{
-		ObjectKey: "library/drawingfixture01",
-		Filename:  "drawing.png",
+		ObjectKey: "library/notefixture0001",
+		Filename:  "note.png",
 		MIMEType:  "image/png",
 		ByteSize:  2048,
 		SHA256:    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -219,13 +219,8 @@ func TestJournalAssetDownloadNeverFallsBackToServerBytes(t *testing.T) {
 }
 
 func TestJournalAssetPurposesNeverUseTheProxy(t *testing.T) {
-	for _, purpose := range []UploadPurpose{
-		UploadPurposeNoteAttachment,
-		UploadPurposeDrawingAsset,
-	} {
-		if !IsJournalAssetPurpose(purpose) {
-			t.Fatalf("%q was not recognized as a Journal asset purpose", purpose)
-		}
+	if !IsJournalAssetPurpose(UploadPurposeNoteAttachment) {
+		t.Fatal("note_attachment was not recognized as a Journal asset purpose")
 	}
 	if IsJournalAssetPurpose(UploadPurposeLibrary) {
 		t.Fatal("Library upload was treated as a Journal asset")

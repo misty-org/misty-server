@@ -14,7 +14,7 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// CleanupExpiredJournalAssets removes note/drawing asset references after the
+// CleanupExpiredJournalAssets removes note asset references after the
 // collaboration undo window. Deduplicated blobs are deleted from R2 only when
 // the database atomically confirms that no other live reference remains.
 func (s *SpaceLibraryService) CleanupExpiredJournalAssets(

@@ -11,11 +11,8 @@
   "durable_objects": {
     "bindings": [
       { "name": "NOTE_ROOM", "class_name": "NoteRoom" },
-      { "name": "DRAWING_ROOM", "class_name": "DrawingRoom" },
-      { "name": "IMAGE_ROOM", "class_name": "ImageRoom" },
       { "name": "CODE_ROOM", "class_name": "CodeRoom" },
-      { "name": "DECK_ROOM", "class_name": "DeckRoom" },
-      { "name": "WORKBOOK_ROOM", "class_name": "WorkbookRoom" },
+      { "name": "APP_ROOM", "class_name": "AppRoom" },
     ],
   },
 
@@ -28,6 +25,11 @@
     { "tag": "v3", "new_sqlite_classes": ["ImageRoom"] },
     { "tag": "v4", "new_sqlite_classes": ["CodeRoom"] },
     { "tag": "v5", "new_sqlite_classes": ["DeckRoom", "WorkbookRoom"] },
+    // Misty no longer has its own Space apps: whiteboards, image edits, decks and workbooks
+    // are gone, with their rooms' storage.
+    { "tag": "v6", "deleted_classes": ["DrawingRoom", "ImageRoom", "DeckRoom", "WorkbookRoom"] },
+    // Apps' live documents (the SDK's `room()`).
+    { "tag": "v7", "new_sqlite_classes": ["AppRoom"] },
   ],
 
   "vars": {

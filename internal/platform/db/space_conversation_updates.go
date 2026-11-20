@@ -80,7 +80,7 @@ func (db *Database) SpaceConversationMessages(ctx context.Context, userID, space
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT `+spaceMessageColumns+` FROM space_messages m
 			LEFT JOIN users u ON u.id=m.sender_user_id
-			WHERE m.space_id=$1 AND m.conversation_id=$2 AND ($3=0 OR m.seq<$3) ORDER BY m.seq DESC LIMIT $4`, spaceID, conversationID, before, limit)
+			WHERE m.space_id=$1 AND m.conversation_id=$2 AND m.thread_root_id IS NULL AND ($3=0 OR m.seq<$3) ORDER BY m.seq DESC LIMIT $4`, spaceID, conversationID, before, limit)
 		if err != nil {
 			return err
 		}
@@ -104,7 +104,7 @@ func (db *Database) SpaceConversationMessages(ctx context.Context, userID, space
 				return err
 			}
 		}
-		return nil
+		return loadThreadSummariesTx(ctx, tx, items)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound

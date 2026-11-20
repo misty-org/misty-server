@@ -5,6 +5,8 @@ DELETE /v1/spaces/{spaceID}/agents/{agentID}
 DELETE /v1/spaces/{spaceID}/avatar
 DELETE /v1/spaces/{spaceID}/calendar/events/{eventID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}
+DELETE /v1/spaces/{spaceID}/conversations/{conversationID}/agents/{agentID}
+DELETE /v1/spaces/{spaceID}/conversations/{conversationID}/members/me
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}
 DELETE /v1/spaces/{spaceID}/decks/{deckID}
@@ -86,6 +88,7 @@ GET /v1/spaces/{spaceID}/members
 GET /v1/spaces/{spaceID}/members/{userID}/avatar
 GET /v1/spaces/{spaceID}/messages
 GET /v1/spaces/{spaceID}/messages/search
+GET /v1/spaces/{spaceID}/messages/{messageID}/replies
 GET /v1/spaces/{spaceID}/nodes
 GET /v1/spaces/{spaceID}/notes
 GET /v1/spaces/{spaceID}/notes/{noteID}
@@ -96,6 +99,7 @@ GET /v1/spaces/{spaceID}/notes/{noteID}/history
 GET /v1/spaces/{spaceID}/notes/{noteID}/history/{versionID}
 GET /v1/spaces/{spaceID}/roles
 GET /v1/spaces/{spaceID}/tasks
+GET /v1/spaces/{spaceID}/threads
 GET /v1/spaces/{spaceID}/workbooks
 GET /v1/spaces/{spaceID}/workbooks/{workbookID}
 GET /v1/spaces/{spaceID}/workbooks/{workbookID}/history
@@ -153,6 +157,7 @@ POST /v1/spaces/{spaceID}/code-sessions/{sessionID}/collaboration-ticket
 POST /v1/spaces/{spaceID}/code-sessions/{sessionID}/end
 POST /v1/spaces/{spaceID}/conversations
 POST /v1/spaces/{spaceID}/conversations/dm
+POST /v1/spaces/{spaceID}/conversations/{conversationID}/members
 POST /v1/spaces/{spaceID}/conversations/{conversationID}/messages
 POST /v1/spaces/{spaceID}/conversations/{conversationID}/read
 POST /v1/spaces/{spaceID}/decks
@@ -183,6 +188,7 @@ POST /v1/spaces/{spaceID}/library/uploads
 POST /v1/spaces/{spaceID}/library/uploads/{uploadID}/abort
 POST /v1/spaces/{spaceID}/library/uploads/{uploadID}/finalize
 POST /v1/spaces/{spaceID}/messages
+POST /v1/spaces/{spaceID}/messages/{messageID}/thread/read
 POST /v1/spaces/{spaceID}/nodes/{nodeID}/resolve
 POST /v1/spaces/{spaceID}/notes
 POST /v1/spaces/{spaceID}/notes/{noteID}/assets/uploads
@@ -204,6 +210,7 @@ PUT /v1/me/settings
 PUT /v1/me/username
 PUT /v1/spaces/{spaceID}/agents/{agentID}
 PUT /v1/spaces/{spaceID}/avatar
+PUT /v1/spaces/{spaceID}/conversations/{conversationID}/agents/{agentID}
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/overwrites

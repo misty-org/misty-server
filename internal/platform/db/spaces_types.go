@@ -116,6 +116,11 @@ type SpaceMessage struct {
 	Attachments         []MessageAttachment    `json:"attachments"`
 	Reactions           []SpaceMessageReaction `json:"reactions"`
 	ReplyToMessageID    string                 `json:"reply_to_message_id,omitempty"`
+	// ThreadRootID is set on a reply made in a thread's panel; such a reply is not in the channel's own list.
+	ThreadRootID string `json:"thread_root_id,omitempty"`
+	// ReplyCount and LastReplyAt are on a thread's root message.
+	ReplyCount  int        `json:"reply_count,omitempty"`
+	LastReplyAt *time.Time `json:"last_reply_at,omitempty"`
 	EditedAt            *time.Time             `json:"edited_at,omitempty"`
 	CreatedAt           time.Time              `json:"created_at"`
 }

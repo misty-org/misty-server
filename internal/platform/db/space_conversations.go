@@ -14,13 +14,16 @@ import (
 )
 
 type SpaceActorRef struct {
-	Kind   string `json:"kind"`
-	UserID string `json:"user_id,omitempty"`
+	Kind    string `json:"kind"`
+	UserID  string `json:"user_id,omitempty"`
+	AgentID string `json:"agent_id,omitempty"`
 }
 
 type SpaceConversationParticipant struct {
 	SpaceActorRef
-	Name     string    `json:"name"`
+	// OwnerUserID is the person an agent participant belongs to; only they can ask it to act.
+	OwnerUserID string    `json:"owner_user_id,omitempty"`
+	Name        string    `json:"name"`
 	Email    string    `json:"email,omitempty"`
 	JoinedAt time.Time `json:"joined_at"`
 }
@@ -100,7 +103,7 @@ func loadSpaceConversationParticipantsForTx(ctx context.Context, tx *sql.Tx, con
 	}
 	participants := []SpaceConversationParticipant{}
 	for _, participant := range conversation.Participants {
-		if channelReaders[participant.UserID] {
+		if participant.Kind == "agent" || channelReaders[participant.UserID] {
 			participants = append(participants, participant)
 		}
 	}
@@ -136,7 +139,10 @@ func loadAllSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, con
 		}
 		conversation.Participants = append(conversation.Participants, participant)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return loadConversationAgentParticipantsTx(ctx, tx, conversation)
 }
 
 // spaceUnreadCap bounds an unread count: past it the app shows "99+", and counting stops there.
@@ -169,7 +175,7 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 		if withUnread {
 			args = append(args, spaceUnreadCap)
 			unread = `(SELECT count(*) FROM (SELECT 1 FROM space_messages m
-				WHERE m.space_id=c.space_id AND m.conversation_id=c.id AND m.sender_user_id<>$2
+				WHERE m.space_id=c.space_id AND m.conversation_id=c.id AND m.sender_user_id<>$2 AND m.thread_root_id IS NULL
 				  AND m.seq>COALESCE((SELECT r.read_message_seq FROM space_conversation_reads r
 				      WHERE r.conversation_id=c.id AND r.user_id=$2),0)
 				  AND (cm.joined_at IS NULL OR m.created_at>=cm.joined_at)
@@ -225,7 +231,7 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 		}
 		return tx.QueryRowContext(ctx, `SELECT count(*) FROM (SELECT 1 FROM space_messages m
 			JOIN space_members sm ON sm.space_id=m.space_id AND sm.user_id=$2
-			WHERE m.space_id=$1 AND m.conversation_id IS NULL AND m.sender_user_id<>$2
+			WHERE m.space_id=$1 AND m.conversation_id IS NULL AND m.sender_user_id<>$2 AND m.thread_root_id IS NULL
 			  AND m.seq>sm.read_message_seq AND m.created_at>=sm.joined_at
 			LIMIT $3) unread`, spaceID, userID, spaceUnreadCap).Scan(&everyoneUnread)
 	})

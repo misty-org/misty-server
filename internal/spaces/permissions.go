@@ -19,6 +19,8 @@ const (
 	PermissionStudioView         = "studio.view"
 	PermissionAskRun             = "ask.run"
 	PermissionIntegrationsManage = "integrations.manage"
+	// PermissionAppsManage lets a member install and remove the Space's apps: a Space's mods.
+	PermissionAppsManage = "apps.manage"
 	PermissionSpaceInvite        = "space.invite"
 	PermissionSpaceRename        = "space.rename"
 	PermissionSpaceTransfer      = "space.transfer"

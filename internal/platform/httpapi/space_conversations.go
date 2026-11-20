@@ -49,12 +49,24 @@ func (s *SpacesService) DirectConversation() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			UserID string `json:"user_id"`
+			UserID  string   `json:"user_id"`
+			UserIDs []string `json:"user_ids"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		item, err := s.database.DirectMemberConversation(r.Context(), userID, chi.URLParam(r, "spaceID"), body.UserID)
+		// One other person is the one-to-one DM, found or made; two or more make a group DM.
+		var item *db.SpaceConversation
+		var err error
+		if len(body.UserIDs) > 1 {
+			item, err = s.database.CreateGroupDirectConversation(r.Context(), userID, chi.URLParam(r, "spaceID"), body.UserIDs)
+		} else {
+			target := body.UserID
+			if len(body.UserIDs) == 1 {
+				target = body.UserIDs[0]
+			}
+			item, err = s.database.DirectMemberConversation(r.Context(), userID, chi.URLParam(r, "spaceID"), target)
+		}
 		if err != nil {
 			writeSpaceError(w, err)
 			return
@@ -125,6 +137,7 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 			AttachmentIDs    []string         `json:"attachment_ids"`
 			LibraryItemIDs   []string         `json:"library_item_ids"`
 			ReplyToMessageID string           `json:"reply_to_message_id"`
+			ThreadRootID     string           `json:"thread_root_id"`
 			ClientNonce      string           `json:"client_nonce"`
 			InputModality    string           `json:"input_modality"`
 		}
@@ -132,7 +145,13 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 			return
 		}
 		// An @mention runs on the sender's own computer, which posts the reply as an ordinary message.
-		message, _, err := s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+		var message *db.SpaceMessage
+		var err error
+		if body.ThreadRootID != "" {
+			message, _, err = s.database.CreateSpaceThreadReplyWithClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ThreadRootID, body.ClientNonce)
+		} else {
+			message, _, err = s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+		}
 		if err != nil {
 			writeSpaceError(w, err)
 			return

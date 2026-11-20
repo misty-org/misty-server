@@ -29,6 +29,8 @@ import (
 // and keeps everything; what's over a limit stays, and nothing new that needs room goes in.
 
 var (
+	// ErrSpaceAppLimit refuses one more installed app, or one more stored key of an app, past a fixed bound.
+	ErrSpaceAppLimit = errors.New("space app limit reached")
 	// ErrSpaceAgentLimit refuses one more agent in a Space at its level's agent limit.
 	ErrSpaceAgentLimit = errors.New("space agent limit reached")
 	// ErrSpaceUploadLimit refuses a file larger than the Space's level allows.

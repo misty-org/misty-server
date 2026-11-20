@@ -33,6 +33,7 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 			AttachmentIDs    []string         `json:"attachment_ids"`
 			LibraryItemIDs   []string         `json:"library_item_ids"`
 			ReplyToMessageID string           `json:"reply_to_message_id"`
+			ThreadRootID     string           `json:"thread_root_id"`
 			ClientNonce      string           `json:"client_nonce"`
 			InputModality    string           `json:"input_modality"`
 		}
@@ -40,7 +41,13 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 			return
 		}
 		// An @mention runs on the sender's own computer, which posts the reply as an ordinary message.
-		message, _, err := s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+		var message *db.SpaceMessage
+		var err error
+		if body.ThreadRootID != "" {
+			message, _, err = s.database.CreateSpaceThreadReplyWithClientNonce(r.Context(), userID, spaceID, "", body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ThreadRootID, body.ClientNonce)
+		} else {
+			message, _, err = s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+		}
 		if err != nil {
 			writeSpaceError(w, err)
 			return

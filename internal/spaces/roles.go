@@ -77,7 +77,7 @@ var allPermissions = []string{
 	PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload, PermissionMessagesManage,
 	PermissionLibraryView, PermissionLibraryUpload, PermissionLibraryAdd, PermissionLibraryEdit,
 	PermissionLibraryDownload, PermissionLibraryImport, PermissionStorageViewOwn, PermissionStudioView,
-	PermissionAskRun, PermissionIntegrationsManage, PermissionChannelsManage, PermissionRolesManage,
+	PermissionAskRun, PermissionIntegrationsManage, PermissionAppsManage, PermissionChannelsManage, PermissionRolesManage,
 	PermissionMembersRemove, PermissionSpaceInvite, PermissionSpaceRename, PermissionSpaceLeave,
 	PermissionSpaceTransfer, PermissionSpaceDelete,
 }

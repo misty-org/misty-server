@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID, clientNonce string) (*SpaceMessage, []string, error) {
+func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID, threadRootID, clientNonce string) (*SpaceMessage, []string, error) {
 	if err := validateMessageWithReferences(content, len(fileNodeIDs)+len(attachmentIDs)+len(libraryItemIDs)); err != nil {
 		return nil, nil, err
 	}
@@ -18,7 +18,7 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 	if len(clientNonce) > 128 {
 		return nil, nil, ErrSpaceInvalid
 	}
-	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), ClientNonce: clientNonce, SpaceID: spaceID, ConversationID: conversationID, SenderUserID: userID, SenderKind: "person", Content: content, FileNodeIDs: fileNodeIDs, LibraryItemIDs: uniqueSpaceIDs(libraryItemIDs), Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID}
+	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), ClientNonce: clientNonce, SpaceID: spaceID, ConversationID: conversationID, SenderUserID: userID, SenderKind: "person", Content: content, FileNodeIDs: fileNodeIDs, LibraryItemIDs: uniqueSpaceIDs(libraryItemIDs), Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID, ThreadRootID: threadRootID}
 	attachmentIDs = uniqueSpaceIDs(attachmentIDs)
 	agentMentions := []string{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -59,6 +59,13 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 				return ErrSpaceInvalid
 			}
 		}
+		if threadRootID != "" {
+			// A thread hangs from a message of this conversation that is not itself a thread reply.
+			var exists bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 AND thread_root_id IS NULL)`, threadRootID, spaceID, conversationID).Scan(&exists); err != nil || !exists {
+				return ErrSpaceInvalid
+			}
+		}
 		if replyToMessageID != "" {
 			var exists bool
 			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3)`, replyToMessageID, spaceID, conversationID).Scan(&exists); err != nil || !exists {
@@ -96,25 +103,33 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 				}
 			}
 			if span.AgentID != "" {
-				var listed bool
-				if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_agents WHERE space_id=$1 AND agent_id=$2 AND (visibility='public' OR owner_user_id=$3))`, spaceID, span.AgentID, userID).Scan(&listed); err != nil || !listed {
-					return ErrSpaceInvalid
+				if err := requireConversationAgentMentionTx(ctx, tx, userID, spaceID, conversationID, span.AgentID); err != nil {
+					return err
 				}
 				agentMentions = append(agentMentions, span.AgentID)
 			}
 		}
 		raw, _ := json.Marshal(content)
-		if err := tx.QueryRowContext(ctx, `INSERT INTO space_messages(id,space_id,conversation_id,sender_user_id,content,file_node_ids,reply_to_message_id,expires_at,client_nonce)
-			VALUES($1,$2,NULLIF($3,''),$4,$5,$6,NULLIF($7,''),NULL,NULLIF($8,'')) RETURNING seq,created_at`, out.ID, spaceID, conversationID, userID, raw, pqStringArray(fileNodeIDs), replyToMessageID, clientNonce).Scan(&out.Seq, &out.CreatedAt); err != nil {
+		if err := tx.QueryRowContext(ctx, `INSERT INTO space_messages(id,space_id,conversation_id,sender_user_id,content,file_node_ids,reply_to_message_id,thread_root_id,expires_at,client_nonce)
+			VALUES($1,$2,NULLIF($3,''),$4,$5,$6,NULLIF($7,''),NULLIF($9,''),NULL,NULLIF($8,'')) RETURNING seq,created_at`, out.ID, spaceID, conversationID, userID, raw, pqStringArray(fileNodeIDs), replyToMessageID, clientNonce, threadRootID).Scan(&out.Seq, &out.CreatedAt); err != nil {
 			return err
 		}
 		if conversationID != "" {
 			if _, err := tx.ExecContext(ctx, `UPDATE space_conversations SET updated_at=NOW() WHERE id=$1`, conversationID); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_reads(conversation_id,user_id,read_message_seq)
-				VALUES($1,$2,$3) ON CONFLICT(conversation_id,user_id) DO UPDATE
-				SET read_message_seq=GREATEST(space_conversation_reads.read_message_seq,excluded.read_message_seq),updated_at=NOW()`, conversationID, userID, out.Seq); err != nil {
+			// Sending reads the channel up to the new message, but a thread reply says nothing
+			// about the channel's own messages.
+			if threadRootID == "" {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_reads(conversation_id,user_id,read_message_seq)
+					VALUES($1,$2,$3) ON CONFLICT(conversation_id,user_id) DO UPDATE
+					SET read_message_seq=GREATEST(space_conversation_reads.read_message_seq,excluded.read_message_seq),updated_at=NOW()`, conversationID, userID, out.Seq); err != nil {
+					return err
+				}
+			}
+		}
+		if threadRootID != "" {
+			if err := followThreadTx(ctx, tx, userID, threadRootID, out.Seq); err != nil {
 				return err
 			}
 		}
@@ -191,9 +206,14 @@ func pqStringArray(values []string) string {
 func scanSpaceMessage(scanner interface{ Scan(...any) error }, out *SpaceMessage) error {
 	var raw []byte
 	var files string
-	if err := scanner.Scan(&out.Seq, &out.ID, &out.SpaceID, &out.ConversationID, &out.SenderUserID, &out.SenderName, &out.SenderAvatarVersion, &raw, &files, &out.EditedAt, &out.CreatedAt, &out.ReplyToMessageID); err != nil {
+	if err := scanner.Scan(&out.Seq, &out.ID, &out.SpaceID, &out.ConversationID, &out.SenderUserID, &out.SenderName, &out.SenderAvatarVersion, &raw, &files, &out.EditedAt, &out.CreatedAt, &out.ReplyToMessageID, &out.ThreadRootID); err != nil {
 		return err
 	}
+	return decodeScannedSpaceMessage(out, raw, files)
+}
+
+// decodeScannedSpaceMessage finishes a message whose columns were scanned: its sender, content and files.
+func decodeScannedSpaceMessage(out *SpaceMessage, raw []byte, files string) error {
 	out.SenderKind = "person"
 	out.Sender = SpaceMessageSender{Kind: out.SenderKind, UserID: out.SenderUserID, DisplayName: out.SenderName, AvatarVersion: out.SenderAvatarVersion}
 	if err := json.Unmarshal(raw, &out.Content); err != nil {
@@ -211,7 +231,7 @@ func parsePGTextArray(raw string) []string {
 	return strings.Split(strings.TrimSuffix(strings.TrimPrefix(raw, "{"), "}"), ",")
 }
 
-const spaceMessageColumns = `m.seq,m.id,m.space_id,COALESCE(m.conversation_id,''),m.sender_user_id,COALESCE(u.username,'System'),COALESCE(u.avatar_version,0),m.content,m.file_node_ids::text,m.edited_at,m.created_at,COALESCE(m.reply_to_message_id,'')`
+const spaceMessageColumns = `m.seq,m.id,m.space_id,COALESCE(m.conversation_id,''),m.sender_user_id,COALESCE(u.username,'System'),COALESCE(u.avatar_version,0),m.content,m.file_node_ids::text,m.edited_at,m.created_at,COALESCE(m.reply_to_message_id,''),COALESCE(m.thread_root_id,'')`
 
 func (db *Database) SpaceMessages(ctx context.Context, userID, spaceID string, before int64, limit int) ([]SpaceMessage, error) {
 	if limit < 1 || limit > 100 {
@@ -224,7 +244,7 @@ func (db *Database) SpaceMessages(ctx context.Context, userID, spaceID string, b
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT `+spaceMessageColumns+` FROM space_messages m
 			LEFT JOIN users u ON u.id=m.sender_user_id
-			WHERE m.space_id=$1 AND m.conversation_id IS NULL AND ($2=0 OR m.seq<$2) ORDER BY m.seq DESC LIMIT $3`, spaceID, before, limit)
+			WHERE m.space_id=$1 AND m.conversation_id IS NULL AND m.thread_root_id IS NULL AND ($2=0 OR m.seq<$2) ORDER BY m.seq DESC LIMIT $3`, spaceID, before, limit)
 		if err != nil {
 			return err
 		}
@@ -248,7 +268,7 @@ func (db *Database) SpaceMessages(ctx context.Context, userID, spaceID string, b
 				return err
 			}
 		}
-		return nil
+		return loadThreadSummariesTx(ctx, tx, items)
 	})
 	return items, err
 }

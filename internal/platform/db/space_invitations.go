@@ -105,10 +105,24 @@ func (db *Database) InviteToSpaceWithToken(
 		if out.InvitedUserID != nil {
 			invitedUserID = *out.InvitedUserID
 		}
-		_, err = recordSpaceEventTx(ctx, tx, spaceID, ownerID, "member.invited", invitedUserID, map[string]any{"invite_id": out.ID})
-		return err
+		if _, err = recordSpaceEventTx(ctx, tx, spaceID, ownerID, "member.invited", invitedUserID, map[string]any{"invite_id": out.ID}); err != nil {
+			return err
+		}
+		// The Space's events reach only its members, so the person invited hears of it here.
+		return notifyInviteeTx(ctx, tx, spaceID, invitedUserID)
 	})
 	return out, err
+}
+
+// notifyInviteeTx tells someone with an account that an invitation to them came or went, so
+// their app reads its invitations again. It keeps their connection, since they lost nothing.
+func notifyInviteeTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
+	if userID == "" {
+		return nil
+	}
+	return notifySpaceControlTx(ctx, tx, map[string]any{
+		"type": "invitation.changed", "space_id": spaceID, "user_ids": []string{userID}, "keep_connection": true,
+	})
 }
 
 func (db *Database) IncomingSpaceInvites(ctx context.Context, userID string) ([]SpaceInvitation, error) {
@@ -222,15 +236,18 @@ func (db *Database) RevokeSpaceInvitation(
 		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, ownerID, PermissionSpaceInvite); err != nil {
 			return err
 		}
-		result, err := tx.ExecContext(ctx, `UPDATE space_invitations SET revoked_at=NOW()
-			WHERE id=$1 AND space_id=$2 AND revoked_at IS NULL AND consumed_at IS NULL`,
-			inviteID, spaceID)
+		var invitedUserID string
+		err := tx.QueryRowContext(ctx, `UPDATE space_invitations i SET revoked_at=NOW()
+			WHERE i.id=$1 AND i.space_id=$2 AND i.revoked_at IS NULL AND i.consumed_at IS NULL
+			RETURNING COALESCE(i.invited_user_id,
+			  (SELECT u.id FROM users u WHERE lower(u.email)=lower(i.invited_email)), '')`,
+			inviteID, spaceID).Scan(&invitedUserID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrSpaceInviteNotFound
+		}
 		if err != nil {
 			return err
 		}
-		if changed, _ := result.RowsAffected(); changed == 0 {
-			return ErrSpaceInviteNotFound
-		}
-		return nil
+		return notifyInviteeTx(ctx, tx, spaceID, invitedUserID)
 	})
 }

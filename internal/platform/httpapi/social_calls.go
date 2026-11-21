@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -103,7 +104,13 @@ func (s *SocialService) CallToken() http.HandlerFunc {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "calls_unavailable"})
 			return
 		}
-		room := chi.URLParam(r, "room")
+		// The room's name has colons (`dm:<id>`, `space:<id>:voice:<channel>`), which the app
+		// escapes in the path; the router hands the segment over still escaped.
+		room, err := url.PathUnescape(chi.URLParam(r, "room"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_room"})
+			return
+		}
 		allowed, err := s.database.CanJoinCall(r.Context(), userID, room)
 		if err != nil {
 			writeSpaceError(w, err)
@@ -124,8 +131,11 @@ func (s *SocialService) CallToken() http.HandlerFunc {
 			"sub": userID,
 			"nbf": now.Add(-10 * time.Second).Unix(),
 			"exp": now.Add(10 * time.Minute).Unix(),
+			// canUpdateOwnMetadata lets each computer put its public call key on itself (attributes),
+			// which is how the people in a call seal the call's key to one another.
 			"video": map[string]any{
 				"room": room, "roomJoin": true, "canPublish": true, "canSubscribe": true, "canPublishData": true,
+				"canUpdateOwnMetadata": true,
 			},
 		}
 		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(s.liveKitSecret))

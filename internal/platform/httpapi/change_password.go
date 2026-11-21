@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/misty-org/misty-server/internal/accounts"
@@ -40,14 +39,17 @@ func ChangePassword(database *db.Database) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if err := checkNewPasswordBreached(r.Context(), body.NewPassword); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		user, err := database.GetUserByID(userID)
 		if err != nil || user == nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		if blocked, retryAfter := loginFailures.Blocked(user.Email, time.Now()); blocked {
-			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(retryAfter)))
-			http.Error(w, "too many attempts; try again later", http.StatusTooManyRequests)
+		failures := passwordFailureCaps(r, user.Email)
+		if lockedOut(w, r, database, failures, "too many attempts; try again later") {
 			return
 		}
 		// Other sessions end with the change; this request's own stays.
@@ -59,13 +61,13 @@ func ChangePassword(database *db.Database) http.HandlerFunc {
 		}
 		switch {
 		case err == nil:
-			loginFailures.Succeed(user.Email)
+			clearFailures(r, database, failures)
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		case errors.Is(err, db.ErrWrongCurrentPassword):
-			loginFailures.Fail(user.Email, time.Now())
+			recordFailure(r, database, failures)
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		case errors.Is(err, db.ErrPasswordResetTokenInvalid):
-			loginFailures.Fail(user.Email, time.Now())
+			recordFailure(r, database, failures)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "password_reset_expired", "message": "This sign-in can no longer reset the password. Ask for a new sign-in link."})
 		case errors.Is(err, db.ErrNoPasswordAccount):
 			http.Error(w, "this account has no Misty password", http.StatusConflict)

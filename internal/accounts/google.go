@@ -34,7 +34,7 @@ func (db Store) GoogleUser(email, subject string) (*User, error) {
 		// constraint. An email move must never merge two Misty accounts.
 		if storedEmail != email {
 			err = db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
-				_, err := tx.ExecContext(context.Background(), `UPDATE users SET email=$2 WHERE id=$1`, id, email)
+				_, err := tx.ExecContext(context.Background(), `UPDATE users SET email=$2, email_verified_at=now() WHERE id=$1`, id, email)
 				return err
 			})
 			if err != nil {
@@ -55,7 +55,7 @@ func (db Store) GoogleUser(email, subject string) (*User, error) {
 	}
 	username := DefaultUsernameForEmail(email)
 	for attempt := 0; attempt < 3; attempt++ {
-		user, err := db.createIdentity(username, email, "", "google", subject)
+		user, err := db.createIdentity(username, email, "", "google", subject, true)
 		if err == nil {
 			return user, nil
 		}

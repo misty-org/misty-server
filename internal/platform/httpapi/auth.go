@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +35,10 @@ func Register(database *db.Database) http.HandlerFunc {
 			return
 		}
 		if err := accounts.ValidateNewPassword(body.Password); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := checkNewPasswordBreached(r.Context(), body.Password); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -135,9 +138,8 @@ func Login(database *db.Database) http.HandlerFunc {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		if blocked, retryAfter := loginFailures.Blocked(body.Email, time.Now()); blocked {
-			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(retryAfter)))
-			http.Error(w, "too many sign-in attempts; try again later", http.StatusTooManyRequests)
+		failures := passwordFailureCaps(r, body.Email)
+		if lockedOut(w, r, database, failures, "too many sign-in attempts; try again later") {
 			return
 		}
 
@@ -156,16 +158,19 @@ func Login(database *db.Database) http.HandlerFunc {
 		if user == nil {
 			// pendingSignIn spent the same bcrypt work as a real check, so response
 			// time does not reveal which email addresses have password accounts.
-			loginFailures.Fail(body.Email, time.Now())
+			recordFailure(r, database, failures)
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
 		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(body.Password)) != nil {
-			loginFailures.Fail(body.Email, time.Now())
+			recordFailure(r, database, failures)
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
-		loginFailures.Succeed(body.Email)
+		clearFailures(r, database, failures)
+		// Hashes made at an older cost are remade at the current one while the password is
+		// at hand. A failure leaves the old hash, which still works.
+		database.UpgradePasswordHash(user.ID, hash, body.Password)
 		// After the password, so a stranger can't use this to learn who's on the list.
 		if allowed, err := signInAllowed(r.Context(), database, user); err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -183,13 +188,13 @@ func Login(database *db.Database) http.HandlerFunc {
 	}
 }
 
-// unknownAccountHash is a bcrypt hash of a random value at the default cost,
+// unknownAccountHash is a bcrypt hash of a random value at the cost real passwords use,
 // compared against when no password account matches the email.
 var unknownAccountHash = sync.OnceValue(func() []byte {
 	secret, _ := security.GenerateSecureToken()
-	hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(secret), accounts.PasswordCost)
 	if err != nil {
-		return []byte("$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinval")
+		return []byte("$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinval")
 	}
 	return hash
 })

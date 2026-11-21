@@ -177,6 +177,22 @@ func (s *Server) setCustomerLimits(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
+// releaseEmail frees an unconfirmed password account's email for its real owner. The audit
+// log keeps the address it held.
+func (s *Server) releaseEmail(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		http.NotFound(w, r)
+		return
+	}
+	email, err := s.db.ConsoleReleaseEmail(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		s.renderCustomerAction(w, r, "", err)
+		return
+	}
+	s.audit(r, "Released the email of", email, "")
+	s.renderCustomerAction(w, r, "Released "+email+"; its owner can sign up with it now", nil)
+}
+
 func (s *Server) revokeSessions(w http.ResponseWriter, r *http.Request) {
 	s.customerAction("Revoked sessions for", "Signed out everywhere", func(ctx context.Context, id string) error {
 		_, err := s.db.ConsoleRevokeSessions(ctx, id)

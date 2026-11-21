@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -59,22 +58,20 @@ func RedeemSetupKey(database *db.Database) http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		failureKey := "setup-key:" + ClientIPFromRequest(r)
-		if blocked, retryAfter := loginFailures.Blocked(failureKey, time.Now()); blocked {
-			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(retryAfter)))
-			http.Error(w, "too many sign-in attempts; try again later", http.StatusTooManyRequests)
+		failures := setupKeyFailureCaps(r)
+		if lockedOut(w, r, database, failures, "too many sign-in attempts; try again later") {
 			return
 		}
 		key, ok := NormalizeSetupKey(body.SetupKey)
 		if !ok {
-			loginFailures.Fail(failureKey, time.Now())
+			recordFailure(r, database, failures)
 			writeSetupKeyInvalid(w)
 			return
 		}
 		user, err := database.RedeemSetupKey(r.Context(), security.HashToken(key))
 		switch {
 		case errors.Is(err, db.ErrSetupKeyInvalid):
-			loginFailures.Fail(failureKey, time.Now())
+			recordFailure(r, database, failures)
 			writeSetupKeyInvalid(w)
 			return
 		case errors.Is(err, db.ErrAccountSuspended):
@@ -84,7 +81,7 @@ func RedeemSetupKey(database *db.Database) http.HandlerFunc {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		loginFailures.Succeed(failureKey)
+		clearFailures(r, database, failures)
 		var extra map[string]any
 		if user.Provider == "misty" {
 			if reset, err := security.GenerateSecureToken(); err == nil {

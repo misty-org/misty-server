@@ -41,6 +41,11 @@ func (db *Database) GetUserByEmail(email string) (*User, string, error) {
 	return db.accountStore().GetUserByEmail(email)
 }
 func (db *Database) GetUserByID(id string) (*User, error) { return db.accountStore().GetUserByID(id) }
+
+// UpgradePasswordHash remakes an old-cost hash at accounts.PasswordCost after a sign-in.
+func (db *Database) UpgradePasswordHash(id, hash, password string) {
+	db.accountStore().UpgradePasswordHash(id, hash, password)
+}
 func (db *Database) ChangePassword(id, current, next, keepSessionHash string) error {
 	return db.accountStore().ChangePassword(id, current, next, keepSessionHash)
 }

@@ -10,5 +10,5 @@ func (db Store) CreatePasswordlessUser(username, email string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	return db.createIdentity(normalized, email, "", "misty", "")
+	return db.createIdentity(normalized, email, "", "misty", "", true)
 }

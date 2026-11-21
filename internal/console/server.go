@@ -63,6 +63,7 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/services/{service}/{action}", s.requirePage("services", s.serviceAction))
 		r.Get("/logs/{service}/logs", s.serviceLogs)
 		r.Post("/customers/{id}/revoke-sessions", s.revokeSessions)
+		r.Post("/customers/{id}/release-email", s.releaseEmail)
 		r.Post("/customers/{id}/limits", s.setCustomerLimits)
 		r.Post("/customers/{id}/suspend", s.customerAction("Suspended", "Suspended; signed out everywhere", s.operator.suspend))
 		r.Post("/customers/{id}/resume", s.customerAction("Resumed", "Resumed", s.operator.resume))

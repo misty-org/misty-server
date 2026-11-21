@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/misty-org/misty-server/internal/accounts"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -37,7 +38,7 @@ func (db *Database) GrantPasswordReset(ctx context.Context, userID, hashedToken 
 // stays). The grant is used up; an expired or unknown one is
 // ErrPasswordResetTokenInvalid.
 func (db *Database) ResetPassword(ctx context.Context, userID, hashedToken, newPassword, keepSessionHash string, now time.Time) error {
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), accounts.PasswordCost)
 	if err != nil {
 		return err
 	}

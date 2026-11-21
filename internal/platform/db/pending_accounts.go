@@ -36,7 +36,7 @@ func (db *Database) QueuePendingAccount(ctx context.Context, account PendingAcco
 	if err != nil {
 		return err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(account.Password), accounts.PasswordCost)
 	if err != nil {
 		return err
 	}

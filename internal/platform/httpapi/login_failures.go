@@ -1,80 +1,91 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"sync"
+	"log"
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/misty-org/misty-server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// Login is limited per address by the API limiter, which leaves one account
-// open to guessing spread across many addresses. This bounds failed attempts
-// per email address instead. A success clears the count.
+// Login is limited per address by the API limiter. On top of that, failed passwords are
+// counted twice: for the email from one address, which stops one caller guessing, and for
+// the email from every address together, which bounds guessing spread across many. The
+// first is low and the second higher, so a stranger who knows someone's email can't lock
+// them out from a single address. A success clears both. Counts live in the database
+// (db.LoginFailuresBlocked), so restarts and other instances see the same ones.
 const (
-	loginFailureLimit   = 10
-	loginFailureWindow  = 15 * time.Minute
-	loginFailureMaxKeys = 50000
+	loginFailureWindow       = 15 * time.Minute
+	loginFailureLimit        = 10
+	loginFailureAccountLimit = 30
 )
 
-type loginFailureTracker struct {
-	mu       sync.Mutex
-	failures map[string][]time.Time
+type loginFailureStore interface {
+	LoginFailuresBlocked(ctx context.Context, caps []db.LoginFailureCap, window time.Duration) (bool, time.Duration, error)
+	RecordLoginFailure(ctx context.Context, keys []string, window time.Duration) error
+	ClearLoginFailures(ctx context.Context, keys []string) error
 }
 
-var loginFailures = &loginFailureTracker{failures: map[string][]time.Time{}}
-
-func loginFailureKey(email string) string {
-	sum := sha256.Sum256([]byte(accounts.NormalizeEmail(email)))
-	return hex.EncodeToString(sum[:16])
+// failureKey is what a count is stored under: a hash, so the table never holds an email
+// or an address.
+func failureKey(kind, value string) string {
+	sum := sha256.Sum256([]byte(kind + "\n" + value))
+	return hex.EncodeToString(sum[:])
 }
 
-func (t *loginFailureTracker) recent(key string, now time.Time) []time.Time {
-	cutoff := now.Add(-loginFailureWindow)
-	live := t.failures[key][:0]
-	for _, at := range t.failures[key] {
-		if at.After(cutoff) {
-			live = append(live, at)
-		}
+// passwordFailureCaps are the counts a wrong password for email adds to.
+func passwordFailureCaps(r *http.Request, email string) []db.LoginFailureCap {
+	address := accounts.NormalizeEmail(email)
+	return []db.LoginFailureCap{
+		{Key: failureKey("password-from", address+"\n"+ClientIPFromRequest(r)), Limit: loginFailureLimit},
+		{Key: failureKey("password", address), Limit: loginFailureAccountLimit},
 	}
-	if len(live) == 0 {
-		delete(t.failures, key)
-		return nil
-	}
-	t.failures[key] = live
-	return live
 }
 
-// Blocked reports whether the address has used up its failures, and when the
-// oldest one expires.
-func (t *loginFailureTracker) Blocked(email string, now time.Time) (bool, time.Duration) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	live := t.recent(loginFailureKey(email), now)
-	if len(live) < loginFailureLimit {
-		return false, 0
-	}
-	return true, live[0].Add(loginFailureWindow).Sub(now)
+// setupKeyFailureCaps count wrong setup keys from one address.
+func setupKeyFailureCaps(r *http.Request) []db.LoginFailureCap {
+	return []db.LoginFailureCap{{Key: failureKey("setup-key", ClientIPFromRequest(r)), Limit: loginFailureLimit}}
 }
 
-func (t *loginFailureTracker) Fail(email string, now time.Time) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	key := loginFailureKey(email)
-	if _, tracked := t.failures[key]; !tracked && len(t.failures) >= loginFailureMaxKeys {
-		for other := range t.failures {
-			t.recent(other, now)
-		}
-		if len(t.failures) >= loginFailureMaxKeys {
-			return
-		}
+func failureKeys(caps []db.LoginFailureCap) []string {
+	keys := make([]string, len(caps))
+	for i, limit := range caps {
+		keys[i] = limit.Key
 	}
-	t.failures[key] = append(t.recent(key, now), now)
+	return keys
 }
 
-func (t *loginFailureTracker) Succeed(email string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	delete(t.failures, loginFailureKey(email))
+// lockedOut answers 429 when a cap is full, and 503 when the counts can't be read, since
+// a lockout that can't be checked must not let guesses through. It reports whether it
+// answered.
+func lockedOut(w http.ResponseWriter, r *http.Request, store loginFailureStore, caps []db.LoginFailureCap, message string) bool {
+	blocked, retryAfter, err := store.LoginFailuresBlocked(r.Context(), caps, loginFailureWindow)
+	if err != nil {
+		log.Printf("sign-in failures not read: %v", err)
+		http.Error(w, "authentication unavailable", http.StatusServiceUnavailable)
+		return true
+	}
+	if !blocked {
+		return false
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(retryAfter)))
+	http.Error(w, message, http.StatusTooManyRequests)
+	return true
+}
+
+func recordFailure(r *http.Request, store loginFailureStore, caps []db.LoginFailureCap) {
+	if err := store.RecordLoginFailure(r.Context(), failureKeys(caps), loginFailureWindow); err != nil {
+		log.Printf("sign-in failure not recorded: %v", err)
+	}
+}
+
+func clearFailures(r *http.Request, store loginFailureStore, caps []db.LoginFailureCap) {
+	if err := store.ClearLoginFailures(r.Context(), failureKeys(caps)); err != nil {
+		log.Printf("sign-in failures not cleared: %v", err)
+	}
 }

@@ -43,11 +43,34 @@ func (db Store) CreateUserWithUsername(username, email, password string) (*User,
 }
 
 func (db Store) createUser(username, email, password string) (*User, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), PasswordCost)
 	if err != nil {
 		return nil, err
 	}
-	return db.createIdentity(username, email, string(hash), "misty", "")
+	return db.createIdentity(username, email, string(hash), "misty", "", false)
+}
+
+// UpgradePasswordHash remakes a password account's hash at PasswordCost when hash, the one
+// the password was just checked against, was made at a lower cost. It changes nothing if the
+// hash was replaced meanwhile, and a failure is only logged: the old hash still works.
+func (db Store) UpgradePasswordHash(id, hash, password string) {
+	cost, err := bcrypt.Cost([]byte(hash))
+	if err != nil || cost >= PasswordCost {
+		return
+	}
+	upgraded, err := bcrypt.GenerateFromPassword([]byte(password), PasswordCost)
+	if err != nil {
+		log.Println("Failed to upgrade password hash:", err)
+		return
+	}
+	err = db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(context.Background(),
+			`UPDATE users SET password_hash=$1 WHERE id=$2 AND password_hash=$3 AND provider='misty'`, string(upgraded), id, hash)
+		return err
+	})
+	if err != nil {
+		log.Println("Failed to upgrade password hash:", err)
+	}
 }
 
 // CreateConfirmedUser makes the password account whose email was just confirmed, from
@@ -55,7 +78,7 @@ func (db Store) createUser(username, email, password string) (*User, error) {
 // suffix, which the person can change in settings.
 func (db Store) CreateConfirmedUser(username, email, hash string) (*User, error) {
 	for attempt := 0; attempt < 3; attempt++ {
-		user, err := db.createIdentity(username, email, hash, "misty", "")
+		user, err := db.createIdentity(username, email, hash, "misty", "", true)
 		if !errors.Is(err, ErrUsernameTaken) {
 			return user, err
 		}
@@ -64,7 +87,11 @@ func (db Store) CreateConfirmedUser(username, email, hash string) (*User, error)
 	return nil, ErrUsernameTaken
 }
 
-func (db Store) createIdentity(username, email, hash, provider, subject string) (*User, error) {
+// createIdentity makes an account. verified says its email was proven: by a confirmation
+// link, by Google, or by the operator who made it. A password account made with no
+// confirmation (a server that sends no email, or the server's first account) is not, and an
+// operator can release its email (Database.ConsoleReleaseEmail) for its real owner.
+func (db Store) createIdentity(username, email, hash, provider, subject string, verified bool) (*User, error) {
 	normalizedEmail := NormalizeEmail(email)
 
 	id := uuid.New().String()
@@ -74,8 +101,9 @@ func (db Store) createIdentity(username, email, hash, provider, subject string) 
 	err := db.Transaction(context.Background(), RegistrationScope(id, licenseID, normalizedEmail), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(
 			context.Background(),
-			`INSERT INTO users (id, license_id, username, email, password_hash, provider, provider_subject) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7,''))`,
-			id, licenseID, username, normalizedEmail, hash, provider, subject,
+			`INSERT INTO users (id, license_id, username, email, password_hash, provider, provider_subject, email_verified_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7,''), CASE WHEN $8 THEN now() END)`,
+			id, licenseID, username, normalizedEmail, hash, provider, subject, verified,
 		)
 		if err != nil {
 			return err
@@ -280,7 +308,7 @@ func (db Store) ChangePassword(id, current, next, keepSessionHash string) error 
 		if hash != "" && bcrypt.CompareHashAndPassword([]byte(hash), []byte(current)) != nil {
 			return ErrWrongCurrentPassword
 		}
-		updated, err := bcrypt.GenerateFromPassword([]byte(next), bcrypt.DefaultCost)
+		updated, err := bcrypt.GenerateFromPassword([]byte(next), PasswordCost)
 		if err != nil {
 			return err
 		}

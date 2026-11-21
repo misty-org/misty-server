@@ -9,7 +9,11 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrInvalidUsername = errors.New("username must be 3-30 lowercase letters, numbers, or underscores")
+// PasswordCost is the bcrypt cost every password hash is made at. A hash made at a lower
+// cost is remade at this one when its person next signs in (Store.UpgradePasswordHash).
+const PasswordCost = 12
+
+var ErrInvalidUsername =errors.New("username must be 3-30 lowercase letters, numbers, or underscores")
 var ErrInvalidPassword = errors.New("password must be at least 8 characters and at most 72 bytes, with a lowercase letter and a special character")
 
 // ValidateNewPassword is the rule for a password someone chooses: at least 8

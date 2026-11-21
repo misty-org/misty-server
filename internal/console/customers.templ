@@ -78,7 +78,20 @@ templ customerDetail(v customerDetailView) {
 			}
 			@sectionLabel("Account")
 			<p class="muted">{ plural(v.Console.Sessions, "active session", "active sessions") }</p>
+			if v.Console.Unconfirmed {
+				<p class="muted">Email not confirmed: this account signed up with a password and never proved the address is theirs. If its real owner can't sign up, release it.</p>
+			}
 			<div class="actions">
+				if v.Console.Unconfirmed {
+					<button
+						class="button"
+						hx-post={ v.actionPath("release-email") }
+						hx-target="#customer-detail"
+						hx-swap="outerHTML"
+						hx-confirm={ "Release " + v.Account.Email + "? Its owner can then sign up with it. This account keeps its data under a placeholder address, but nobody can sign in to it again. You can close it afterwards." }
+						hx-disabled-elt="this"
+					>Release email</button>
+				}
 				if v.CanChange {
 					if v.Account.Suspended {
 						<button class="button" hx-post={ v.actionPath("resume") } hx-target="#customer-detail" hx-swap="outerHTML" hx-disabled-elt="this">Resume</button>

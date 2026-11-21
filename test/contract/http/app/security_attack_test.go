@@ -117,8 +117,9 @@ func TestAttackWeakPasswordsAreRefused(t *testing.T) {
 func TestAttackPasswordGuessingIsCappedPerAccount(t *testing.T) {
 	server := attackServer(t)
 	registerAttackUser(t, server, "guess_victim", "198.51.100.20:4000")
-	// Guesses spread across addresses, so the per-address limit never trips.
-	for attempt := 0; attempt < 10; attempt++ {
+	// Guesses spread across addresses, so neither the per-address limit nor the count for the
+	// email from one address trips: only the count for the email from every address does.
+	for attempt := 0; attempt < 30; attempt++ {
 		guesser := &attackClient{t: t, server: server, address: "203.0.113." + string(rune('1'+attempt%9)) + ":5000"}
 		response := guesser.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail("guess_victim"), "password": "wrong guess"}, nil)
 		if response.Code != http.StatusUnauthorized {
@@ -129,13 +130,36 @@ func TestAttackPasswordGuessingIsCappedPerAccount(t *testing.T) {
 	late := &attackClient{t: t, server: server, address: "203.0.113.200:5000"}
 	response := late.do(http.MethodPost, "/v1/login", map[string]string{"email": strings.ToUpper(attackEmail("guess_victim")), "password": "correct horse battery staple"}, nil)
 	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") == "" {
-		t.Fatalf("eleventh attempt: status %d", response.Code)
+		t.Fatalf("attempt after the cap: status %d", response.Code)
 	}
 	// Another account is unaffected.
 	registerAttackUser(t, server, "guess_bystander", "198.51.100.21:4000")
 	response = late.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail("guess_bystander"), "password": "correct horse battery staple"}, nil)
 	if response.Code != http.StatusOK {
 		t.Fatalf("bystander login: status %d %s", response.Code, response.Body.String())
+	}
+}
+
+// One address that knows someone's email can't lock them out: its own guesses stop, the
+// person's sign-in from elsewhere doesn't.
+func TestAttackOneAddressCantLockAnAccountOut(t *testing.T) {
+	server := attackServer(t)
+	registerAttackUser(t, server, "lockout_victim", "198.51.100.40:4000")
+	guesser := &attackClient{t: t, server: server, address: "203.0.113.50:5000"}
+	for attempt := 0; attempt < 10; attempt++ {
+		response := guesser.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail("lockout_victim"), "password": "wrong guess"}, nil)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("guess %d: status %d", attempt, response.Code)
+		}
+	}
+	response := guesser.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail("lockout_victim"), "password": "wrong guess"}, nil)
+	if response.Code != http.StatusTooManyRequests {
+		t.Fatalf("guesser after its cap: status %d", response.Code)
+	}
+	owner := &attackClient{t: t, server: server, address: "198.51.100.41:4000"}
+	response = owner.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail("lockout_victim"), "password": "correct horse battery staple"}, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("owner from another address: status %d %s", response.Code, response.Body.String())
 	}
 }
 

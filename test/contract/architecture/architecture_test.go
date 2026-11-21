@@ -109,6 +109,7 @@ func TestEnvironmentAccessIsCentralized(t *testing.T) {
 // server reads only through that derivation.
 const environmentContract = `
 CLOUDFLARE_API_TOKEN
+LIVEKIT_ADMIN_URL
 LIVEKIT_API_KEY
 LIVEKIT_API_SECRET
 LIVEKIT_URL

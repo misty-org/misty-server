@@ -35,4 +35,6 @@ func (s *Server) mountSocialRoutes(prefix string, social *api.SocialService) {
 	s.Router.Put(prefix+"/me/call-keys/{keyID}", social.CallKey())
 	s.Router.Get(prefix+"/calls/config", social.CallConfig())
 	s.Router.Post(prefix+"/calls/{room}/token", social.CallToken())
+	// LiveKit's webhooks, signed with the API secret: who joins and leaves each call.
+	s.Router.Post(prefix+"/calls/livekit-events", s.LiveKitRooms.Webhook())
 }

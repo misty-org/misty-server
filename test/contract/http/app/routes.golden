@@ -117,6 +117,7 @@ POST /v1/auth/google
 POST /v1/auth/google/complete
 POST /v1/auth/refresh
 POST /v1/auth/web-handoff
+POST /v1/calls/livekit-events
 POST /v1/calls/{room}/token
 POST /v1/dms
 POST /v1/dms/{dmID}/call

@@ -23,6 +23,8 @@ type Server struct {
 	HealthMonitor *healthMonitor
 	Metrics       *metrics.Registry
 	Suspensions   *api.SuspensionGuard
+	// LiveKitRooms ends calls left with one person; nil while calls aren't set up.
+	LiveKitRooms *api.LiveKitRoomWatcher
 }
 
 func CreateServer() (*Server, error) {
@@ -36,9 +38,10 @@ func CreateServer() (*Server, error) {
 	}
 
 	s := &Server{
-		Router:     chi.NewRouter(),
-		Database:   &db.Database{},
-		WebsiteURL: websiteURL,
+		Router:       chi.NewRouter(),
+		Database:     &db.Database{},
+		WebsiteURL:   websiteURL,
+		LiveKitRooms: api.NewLiveKitRoomWatcher(),
 	}
 	s.LibraryStore, err = LibraryStoreFromEnv()
 	if err != nil {

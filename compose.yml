@@ -124,6 +124,9 @@ services:
     environment:
       <<: *server-environment
       PORT: "8080"
+      # The API reaches LiveKit's admin API on the Docker network, to end calls left with one
+      # person. It is used only while calls are on (MISTY_CALLS=1 and the calls profile).
+      LIVEKIT_ADMIN_URL: http://livekit:7880
     volumes:
       - secrets:/run/misty/secrets:ro
     ports:
@@ -158,9 +161,19 @@ services:
     environment:
       LIVEKIT_CONFIG: |
         port: 7880
-        # At most 8 people in any call, whatever asked for the room.
+        # At most 8 people in any call, whatever asked for the room. An empty room closes after 30
+        # seconds, and 20 after its last person leaves; the API ends a room left with one person
+        # after five minutes.
         room:
           max_participants: 8
+          empty_timeout: 30
+          departure_timeout: 20
+        # Tells the API who joins and leaves each room, so it ends a call the moment it has had one
+        # person in it for five minutes.
+        webhook:
+          api_key: misty
+          urls:
+            - http://api:8080/v1/calls/livekit-events
         rtc:
           tcp_port: 7881
           port_range_start: 50000

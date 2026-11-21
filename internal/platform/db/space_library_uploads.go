@@ -48,8 +48,7 @@ func (db *Database) SpaceStorageUsage(ctx context.Context, userID, spaceID strin
 			if _, err := tx.ExecContext(ctx, `WITH actual AS (
 				SELECT
 					COALESCE((SELECT sum(logical_bytes) FROM space_storage_contributions WHERE space_id=$1 AND state IN ('active','recovery')),0) used,
-					COALESCE((SELECT sum(reserved_bytes) FROM space_upload_reservations WHERE space_id=$1 AND state='active'),0)
-					+ COALESCE((SELECT sum(reserved_bytes) FROM space_rendition_reservations WHERE space_id=$1 AND state='active'),0) reserved
+					COALESCE((SELECT sum(reserved_bytes) FROM space_upload_reservations WHERE space_id=$1 AND state='active'),0) reserved
 			)
 			UPDATE space_storage_usage u
 			SET used_bytes=actual.used,reserved_bytes=actual.reserved,version=u.version+1,updated_at=NOW()
@@ -81,25 +80,10 @@ func (db *Database) CreateLibraryUpload(ctx context.Context, userID, spaceID, pu
 	return db.CreateLibraryUploadForConversation(ctx, userID, spaceID, "", purpose, filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt)
 }
 
+// CreateLibraryUploadForConversation starts a chat attachment's upload in one
+// conversation ("" for the Space's own chat), or another purpose's upload.
 func (db *Database) CreateLibraryUploadForConversation(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time) (*LibraryUpload, error) {
-	return db.CreateLibraryUploadWithProvenance(ctx, userID, spaceID, conversationID, purpose, filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt, nil)
-}
-
-// CreateLibraryUploadWithProvenance starts an upload. With provenance, the
-// uploader's agent made the file and it becomes a Space item of the agent's
-// Space when it finishes.
-func (db *Database) CreateLibraryUploadWithProvenance(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time, provenance *AgentArtifactProvenance) (*LibraryUpload, error) {
-	return db.createLibraryUpload(ctx, userID, spaceID, conversationID, purpose, filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt, provenance, nil)
-}
-
-// CreateLibraryReplacementUpload starts an upload that, when it finishes,
-// becomes the new content of an existing Library item instead of a new item.
-// The item must still be at the version the caller started from.
-func (db *Database) CreateLibraryReplacementUpload(ctx context.Context, userID, spaceID, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time, replace LibraryItemVersion) (*LibraryUpload, error) {
-	if replace.ID == "" || replace.Version < 1 {
-		return nil, ErrLibraryInvalid
-	}
-	return db.createLibraryUpload(ctx, userID, spaceID, "", "library", filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt, nil, &replace)
+	return db.createLibraryUpload(ctx, userID, spaceID, conversationID, purpose, filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt)
 }
 
 // uploadObjectSizeAllowed is the bound on one uploaded object: its purpose's
@@ -108,7 +92,7 @@ func uploadObjectSizeAllowed(purpose string, byteSize int64) bool {
 	return byteSize >= 1 && byteSize <= MaxUploadBytesForPurpose(purpose) && byteSize <= MaxSpaceStorageBytes
 }
 
-func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time, provenance *AgentArtifactProvenance, replace *LibraryItemVersion) (*LibraryUpload, error) {
+func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time) (*LibraryUpload, error) {
 	permission, purposeKnown := UploadPurposePermission(purpose)
 	if !purposeKnown || !uploadObjectSizeAllowed(purpose, byteSize) || len(clientSHA) != 64 || filename == "" || objectKey == "" || tokenHash == "" {
 		return nil, ErrLibraryInvalid
@@ -129,17 +113,7 @@ func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, co
 		if err := tx.QueryRowContext(ctx, `SELECT security_domain_id FROM spaces WHERE id=$1 FOR SHARE`, spaceID).Scan(&out.SecurityDomainID); err != nil {
 			return err
 		}
-		if provenance != nil {
-			if err := requireAgentArtifactUploadTx(ctx, tx, userID, spaceID, purpose, provenance); err != nil {
-				return err
-			}
-		}
-		if replace != nil {
-			if _, err := requireLibraryItemVersionTx(ctx, tx, userID, spaceID, *replace, false); err != nil {
-				return err
-			}
-		}
-		if purpose == "attachment" && conversationID == "" {
+		if purpose == UploadPurposeChatAttachment && conversationID == "" {
 			if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
 				return err
 			}
@@ -159,17 +133,6 @@ func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, co
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_upload_reservations(upload_id,space_id,user_id,reserved_bytes,state,expires_at) VALUES($1,$2,$3,$4,'active',$5)`, out.ID, spaceID, userID, byteSize, expiresAt); err != nil {
 			return err
-		}
-		if provenance != nil {
-			if _, err := tx.ExecContext(ctx, `UPDATE space_library_uploads SET agent_id=$2,agent_conversation_id=NULLIF($3,''),agent_run_id=NULLIF($4,''),agent_artifact_kind=$5 WHERE id=$1`,
-				out.ID, provenance.AgentID, provenance.ConversationID, provenance.RunID, provenance.Kind); err != nil {
-				return err
-			}
-		}
-		if replace != nil {
-			if _, err := tx.ExecContext(ctx, `UPDATE space_library_uploads SET replace_item_id=$2,replace_item_version=$3 WHERE id=$1`, out.ID, replace.ID, replace.Version); err != nil {
-				return err
-			}
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE space_storage_usage SET reserved_bytes=reserved_bytes+$1,version=version+1,updated_at=NOW() WHERE space_id=$2`, byteSize, spaceID); err != nil {
 			return err
@@ -200,18 +163,10 @@ func (db *Database) LibraryUpload(ctx context.Context, userID, spaceID, uploadID
 func (db *Database) LibraryUploadDeduplicationObjectKey(ctx context.Context, userID, spaceID, uploadID string) (string, error) {
 	var objectKey string
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		canUploadLibrary, err := hasSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryUpload)
-		if err != nil {
-			return err
-		}
-		canUploadAttachment, err := hasSpacePermissionTx(ctx, tx, userID, spaceID, PermissionAttachmentUpload)
-		if err != nil {
-			return err
-		}
-		if !canUploadLibrary && !canUploadAttachment {
+		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return ErrLibraryForbidden
 		}
-		err = tx.QueryRowContext(ctx, `SELECT b.r2_object_key
+		err := tx.QueryRowContext(ctx, `SELECT b.r2_object_key
 			FROM space_library_uploads u
 			JOIN library_blobs b ON b.security_domain_id=u.security_domain_id AND b.sha256=u.client_sha256 AND b.byte_size=u.requested_byte_size AND b.lifecycle_state='ready'
 			WHERE u.id=$1 AND u.space_id=$2 AND u.user_id=$3 AND u.state='uploaded_unverified' AND b.r2_object_key<>u.object_key

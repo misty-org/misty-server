@@ -21,7 +21,7 @@ func TestConcurrentLibraryFinalizationIsIdempotent(t *testing.T) {
 	spaceID := createTestSpace(t, database, ctx, owner.ID, "Concurrent finalize").ID
 	digest := strings.Repeat("c", 64)
 	upload, err := database.CreateLibraryUpload(
-		ctx, owner.ID, spaceID, "library", "same.png", "image/png",
+		ctx, owner.ID, spaceID, "attachment", "same.png", "image/png",
 		128, digest, "library/concurrent", "concurrent-token",
 		time.Now().Add(time.Hour),
 	)
@@ -57,29 +57,29 @@ func TestConcurrentLibraryFinalizationIsIdempotent(t *testing.T) {
 		if finalizeErr != nil {
 			t.Fatalf("finalization %d: %v", index, finalizeErr)
 		}
-		if results[index] == nil || results[index].Item == nil {
+		if results[index] == nil || results[index].Attachment == nil {
 			t.Fatalf("finalization %d result = %#v", index, results[index])
 		}
 	}
-	if results[0].Item.ID != results[1].Item.ID {
-		t.Fatalf("concurrent finalization created two items: %s and %s",
-			results[0].Item.ID, results[1].Item.ID)
+	if results[0].Attachment.ID != results[1].Attachment.ID {
+		t.Fatalf("concurrent finalization created two attachments: %s and %s",
+			results[0].Attachment.ID, results[1].Attachment.ID)
 	}
 	var items, contributions int
 	if err := database.Conn.QueryRowContext(
-		ctx, `SELECT COUNT(*) FROM space_library_items WHERE file_id=$1`,
+		ctx, `SELECT COUNT(*) FROM space_message_attachments WHERE file_id=$1`,
 		results[0].File.ID,
 	).Scan(&items); err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Conn.QueryRowContext(
 		ctx, `SELECT COUNT(*) FROM space_storage_contributions WHERE source_id=$1`,
-		results[0].Item.ID,
+		results[0].Attachment.ID,
 	).Scan(&contributions); err != nil {
 		t.Fatal(err)
 	}
 	if items != 1 || contributions != 1 {
-		t.Fatalf("items=%d contributions=%d, want exactly one of each", items, contributions)
+		t.Fatalf("attachments=%d contributions=%d, want exactly one of each", items, contributions)
 	}
 	usage, err := database.SpaceStorageUsage(ctx, owner.ID, spaceID)
 	if err != nil {

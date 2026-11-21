@@ -55,7 +55,7 @@ func TestBroadcastAgentsReachesOnlyTheSpacesOtherMembers(t *testing.T) {
 
 	for _, client := range []*RealtimeClient{member, memberLaptop, other} {
 		select {
-		case raw := <-client.Send:
+		case raw := <-nextAgents(client):
 			var got struct {
 				Type    string        `json:"type"`
 				SpaceID string        `json:"space_id"`
@@ -75,7 +75,7 @@ func TestBroadcastAgentsReachesOnlyTheSpacesOtherMembers(t *testing.T) {
 			t.Fatal("a member's device heard nothing")
 		}
 	}
-	if len(sender.Send)+len(senderPhone.Send)+len(stranger.Send) != 0 {
+	if agentsHeard(sender)+agentsHeard(senderPhone)+agentsHeard(stranger) != 0 {
 		t.Fatal("the sender or someone outside the Space heard the status")
 	}
 
@@ -88,7 +88,47 @@ func TestBroadcastAgentsReachesOnlyTheSpacesOtherMembers(t *testing.T) {
 	// Someone outside the Space reaches nobody.
 	stranger.lastAgentsAt = time.Time{}
 	s.broadcastAgents(stranger, f.space.ID, []agentStatus{{ID: "x", Name: "Spy", State: "working", Doing: "web"}})
-	if len(member.Send)+len(memberLaptop.Send)+len(other.Send)+len(sender.Send) != 0 {
+	if agentsHeard(member)+agentsHeard(memberLaptop)+agentsHeard(other)+agentsHeard(sender) != 0 {
 		t.Fatal("a stranger's status was delivered")
+	}
+}
+
+// The other messages a connection hears (a person's status, sent as they connect) aren't agent
+// statuses; these helpers look at the "agents" ones only.
+func isAgents(raw []byte) bool {
+	var envelope struct {
+		Type string `json:"type"`
+	}
+	return json.Unmarshal(raw, &envelope) == nil && envelope.Type == "agents"
+}
+
+// nextAgents hands over the client's next agents message waiting now, if any.
+func nextAgents(client *RealtimeClient) <-chan []byte {
+	out := make(chan []byte, 1)
+	for {
+		select {
+		case raw := <-client.Send:
+			if isAgents(raw) {
+				out <- raw
+				return out
+			}
+		default:
+			return out
+		}
+	}
+}
+
+// agentsHeard drains the client's waiting messages and counts the agents ones.
+func agentsHeard(client *RealtimeClient) int {
+	count := 0
+	for {
+		select {
+		case raw := <-client.Send:
+			if isAgents(raw) {
+				count++
+			}
+		default:
+			return count
+		}
 	}
 }

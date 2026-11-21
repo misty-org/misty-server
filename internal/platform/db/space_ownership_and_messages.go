@@ -32,9 +32,7 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 			return ErrSpaceInvalid
 		}
 		var activeReservations int
-		if err := tx.QueryRowContext(ctx, `SELECT
-			(SELECT count(*) FROM space_upload_reservations WHERE space_id=$1 AND state='active')+
-			(SELECT count(*) FROM space_rendition_reservations WHERE space_id=$1 AND state='active')`, spaceID).Scan(&activeReservations); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM space_upload_reservations WHERE space_id=$1 AND state='active'`, spaceID).Scan(&activeReservations); err != nil {
 			return err
 		}
 		if activeReservations > 0 {
@@ -107,16 +105,16 @@ func validateMessageWithReferences(content []MessageSpan, referenceCount int) er
 	return nil
 }
 
-func (db *Database) CreateSpaceMessageWithReferencesAndClientNonce(ctx context.Context, userID, spaceID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID, clientNonce string) (*SpaceMessage, []string, error) {
-	return db.createSpaceMessageWithReferences(ctx, userID, spaceID, "", content, fileNodeIDs, attachmentIDs, libraryItemIDs, replyToMessageID, "", clientNonce)
+func (db *Database) CreateSpaceMessageWithReferencesAndClientNonce(ctx context.Context, userID, spaceID string, content []MessageSpan, fileNodeIDs, attachmentIDs []string, replyToMessageID, clientNonce string) (*SpaceMessage, []string, error) {
+	return db.createSpaceMessageWithReferences(ctx, userID, spaceID, "", content, fileNodeIDs, attachmentIDs, replyToMessageID, "", clientNonce)
 }
 
-func (db *Database) CreateSpaceConversationMessageWithReferencesAndClientNonce(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID, clientNonce string) (*SpaceMessage, []string, error) {
-	return db.createSpaceMessageWithReferences(ctx, userID, spaceID, conversationID, content, fileNodeIDs, attachmentIDs, libraryItemIDs, replyToMessageID, "", clientNonce)
+func (db *Database) CreateSpaceConversationMessageWithReferencesAndClientNonce(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs []string, replyToMessageID, clientNonce string) (*SpaceMessage, []string, error) {
+	return db.createSpaceMessageWithReferences(ctx, userID, spaceID, conversationID, content, fileNodeIDs, attachmentIDs, replyToMessageID, "", clientNonce)
 }
 
 // CreateSpaceThreadReplyWithClientNonce posts a reply in a thread's panel, in the conversation the thread is
 // in ("" for the Space's Everyone chat).
-func (db *Database) CreateSpaceThreadReplyWithClientNonce(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, threadRootID, clientNonce string) (*SpaceMessage, []string, error) {
-	return db.createSpaceMessageWithReferences(ctx, userID, spaceID, conversationID, content, fileNodeIDs, attachmentIDs, libraryItemIDs, "", threadRootID, clientNonce)
+func (db *Database) CreateSpaceThreadReplyWithClientNonce(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs []string, threadRootID, clientNonce string) (*SpaceMessage, []string, error) {
+	return db.createSpaceMessageWithReferences(ctx, userID, spaceID, conversationID, content, fileNodeIDs, attachmentIDs, "", threadRootID, clientNonce)
 }

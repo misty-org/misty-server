@@ -14,7 +14,7 @@ func (m *Registry) RecordWorkerWake(queue, reason string) {
 	}
 	switch queue {
 	case "library-ai", "note-control", "code-session-control",
-		"social", "abuse-blocks", "abuse-retention", "account-deletion", "rendition-reservations", "retention":
+		"social", "abuse-blocks", "abuse-retention", "account-deletion", "retention":
 	default:
 		return
 	}

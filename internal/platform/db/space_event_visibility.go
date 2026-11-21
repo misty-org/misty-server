@@ -64,11 +64,9 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 		// A DM's own changes (people added or leaving) reach the people in it.
 		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "library."):
-		visible, err := resourceEntityAudienceVisibleTx(ctx, tx, userID, event.SpaceID, "space_library_items", event.EntityID)
-		if err != nil || !visible {
-			return false, err
-		}
-		permission = PermissionLibraryView
+		// An upload's progress (a chat attachment's, a note image's) is its
+		// uploader's alone.
+		return event.ActorUserID != "" && event.ActorUserID == userID, nil
 	case isItemEvent && itemKind.Name == SpaceItemNote:
 		// Notes are private to their creator and explicit grantees, so a note
 		// event must never reach the whole Space the way other event families
@@ -146,15 +144,12 @@ func humanConversationParticipantTx(ctx context.Context, tx *sql.Tx, userID, spa
 }
 
 func resourceEntityAudienceVisibleTx(ctx context.Context, tx *sql.Tx, userID, spaceID, table, entityID string) (bool, error) {
-	// Table names are an internal closed set, Library items and the registry's made kinds;
-	// values never come from requests.
-	if _, made := spaceItemKindForTable(table); !made && table != "space_library_items" {
+	// Table names are an internal closed set, the registry's made kinds; values
+	// never come from requests.
+	if _, made := spaceItemKindForTable(table); !made {
 		return false, ErrSpaceInvalid
 	}
 	owner := "creator_user_id"
-	if table == "space_library_items" {
-		owner = "added_by_user_id"
-	}
 	var audienceKind, conversationID string
 	var private bool
 	err := tx.QueryRowContext(ctx, `SELECT audience_kind,COALESCE(audience_conversation_id,''),visibility='private' AND `+owner+`<>$3 FROM `+table+` WHERE id=$1 AND space_id=$2`, entityID, spaceID, userID).Scan(&audienceKind, &conversationID, &private)

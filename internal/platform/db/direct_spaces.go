@@ -310,6 +310,10 @@ func (db *Database) LeaveDirect(ctx context.Context, userID, spaceID string) err
 		if err := purgeSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
+		// The leaver goes first, so the DM never has two owners at once.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`, spaceID, userID); err != nil {
+			return err
+		}
 		if role == "owner" {
 			if _, err := tx.ExecContext(ctx, `UPDATE space_members SET role='owner' WHERE space_id=$1 AND user_id=$2`, spaceID, next); err != nil {
 				return err
@@ -317,9 +321,6 @@ func (db *Database) LeaveDirect(ctx context.Context, userID, spaceID string) err
 			if _, err := tx.ExecContext(ctx, `UPDATE spaces SET owner_user_id=$2,updated_at=NOW() WHERE id=$1`, spaceID, next); err != nil {
 				return err
 			}
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`, spaceID, userID); err != nil {
-			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "direct.updated", spaceID, map[string]any{}); err != nil {
 			return err

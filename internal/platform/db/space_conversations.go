@@ -24,15 +24,17 @@ type SpaceConversationParticipant struct {
 	// OwnerUserID is the person an agent participant belongs to; only they can ask it to act.
 	OwnerUserID string    `json:"owner_user_id,omitempty"`
 	Name        string    `json:"name"`
-	Email    string    `json:"email,omitempty"`
-	JoinedAt time.Time `json:"joined_at"`
+	Email       string    `json:"email,omitempty"`
+	JoinedAt    time.Time `json:"joined_at"`
 }
 
 type SpaceConversation struct {
-	ID              string                         `json:"id"`
-	SpaceID         string                         `json:"space_id"`
-	Title           string                         `json:"title"`
-	Kind            string                         `json:"kind"`
+	ID      string `json:"id"`
+	SpaceID string `json:"space_id"`
+	Title   string `json:"title"`
+	Kind    string `json:"kind"`
+	// Voice is a standard channel people drop into for a call rather than write in.
+	Voice           bool                           `json:"voice"`
 	CreatedByUserID string                         `json:"created_by_user_id"`
 	VisibleToSpace  bool                           `json:"visible_to_space"`
 	Participants    []SpaceConversationParticipant `json:"participants"`
@@ -181,7 +183,7 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 				  AND (cm.joined_at IS NULL OR m.created_at>=cm.joined_at)
 				LIMIT $3) unread)`
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT c.id,c.space_id,c.title,c.kind,c.created_by_user_id,
+		rows, err := tx.QueryContext(ctx, `SELECT c.id,c.space_id,c.title,c.kind,c.voice,c.created_by_user_id,
 			c.visible_to_space,c.created_at,c.updated_at,`+unread+`
 			FROM space_conversations c
 			LEFT JOIN space_conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$2
@@ -192,7 +194,7 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 		}
 		for rows.Next() {
 			var item SpaceConversation
-			if err := rows.Scan(&item.ID, &item.SpaceID, &item.Title, &item.Kind, &item.CreatedByUserID,
+			if err := rows.Scan(&item.ID, &item.SpaceID, &item.Title, &item.Kind, &item.Voice, &item.CreatedByUserID,
 				&item.VisibleToSpace, &item.CreatedAt, &item.UpdatedAt, &item.UnreadCount); err != nil {
 				rows.Close()
 				return err
@@ -250,6 +252,16 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 // with channels.manage, starting the channel with overwrites: everyone denied
 // messages.read and chosen roles allowed it makes a private channel.
 func (db *Database) CreateSpaceConversationWithOverwrites(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef, overwrites []SpaceConversationOverwrite) (*SpaceConversation, error) {
+	return db.createSpaceChannel(ctx, userID, spaceID, title, participantRefs, overwrites, false)
+}
+
+// CreateSpaceVoiceChannel makes a voice channel: a standard channel, under the same channels.manage
+// and overwrites, that people drop into for a call.
+func (db *Database) CreateSpaceVoiceChannel(ctx context.Context, userID, spaceID, title string, overwrites []SpaceConversationOverwrite) (*SpaceConversation, error) {
+	return db.createSpaceChannel(ctx, userID, spaceID, title, nil, overwrites, true)
+}
+
+func (db *Database) createSpaceChannel(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef, overwrites []SpaceConversationOverwrite, voice bool) (*SpaceConversation, error) {
 	title, err := normalizeConversationTitle(title)
 	if err != nil {
 		return nil, err
@@ -261,7 +273,7 @@ func (db *Database) CreateSpaceConversationWithOverwrites(ctx context.Context, u
 	participants := normalizeSpaceActorRefs(participantRefs)
 	out := &SpaceConversation{
 		ID: "space_conversation_" + uuid.NewString(), SpaceID: spaceID, Title: title,
-		Kind: "standard", CreatedByUserID: userID, VisibleToSpace: true,
+		Kind: "standard", Voice: voice, CreatedByUserID: userID, VisibleToSpace: true,
 	}
 	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := lockSpaceRolesTx(ctx, tx, spaceID); err != nil {
@@ -283,8 +295,8 @@ func (db *Database) CreateSpaceConversationWithOverwrites(ctx context.Context, u
 		if err := validateSpaceActorRefsTx(ctx, tx, userID, spaceID, participants); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,created_by_user_id,visible_to_space)
-			VALUES($1,$2,$3,$4,TRUE) RETURNING created_at,updated_at`, out.ID, spaceID, title, userID).
+		if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,created_by_user_id,visible_to_space,voice)
+			VALUES($1,$2,$3,$4,TRUE,$5) RETURNING created_at,updated_at`, out.ID, spaceID, title, userID, voice).
 			Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err
 		}

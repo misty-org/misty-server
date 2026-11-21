@@ -75,8 +75,7 @@ func permissionSetOf(values []string) PermissionSet {
 var allPermissions = []string{
 	PermissionAdministrator,
 	PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload, PermissionMessagesManage,
-	PermissionLibraryView, PermissionLibraryUpload, PermissionLibraryAdd, PermissionLibraryEdit,
-	PermissionLibraryDownload, PermissionLibraryImport, PermissionStorageViewOwn, PermissionStudioView,
+	PermissionStorageViewOwn, PermissionStudioView,
 	PermissionDriveWrite, PermissionDrivePurge,
 	PermissionAskRun, PermissionIntegrationsManage, PermissionAppsManage, PermissionChannelsManage, PermissionRolesManage,
 	PermissionMembersRemove, PermissionSpaceInvite, PermissionSpaceRename, PermissionSpaceLeave,
@@ -93,8 +92,6 @@ var channelPermissions = []string{
 // with it.
 var defaultEveryonePermissions = []string{
 	PermissionMessagesRead, PermissionMessagesWrite, PermissionAttachmentUpload,
-	PermissionLibraryView, PermissionLibraryUpload, PermissionLibraryAdd,
-	PermissionLibraryEdit, PermissionLibraryDownload, PermissionLibraryImport,
 	PermissionStorageViewOwn, PermissionStudioView, PermissionAskRun,
 	PermissionDriveWrite,
 }
@@ -328,6 +325,9 @@ func NormalizeRoleColor(color string) (string, bool) {
 func NormalizeRolePermissions(permissions []string) ([]string, bool) {
 	set := PermissionSet{}
 	for _, permission := range permissions {
+		if IsRetiredPermission(permission) {
+			continue
+		}
 		if !IsAssignablePermission(permission) {
 			return nil, false
 		}

@@ -34,7 +34,7 @@ type LibraryObjectMetadata struct {
 }
 
 // LibraryObjectStore keeps permanent objects under the library/ and avatars/
-// prefixes. The bucket is shared (Library items, Agent attachments, user
+// prefixes. The bucket is shared (drive files, chat attachments, user
 // avatars), so lifecycle rules must exclude these permanent prefixes.
 type LibraryObjectStore interface {
 	Health(context.Context) error

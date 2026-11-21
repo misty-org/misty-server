@@ -22,7 +22,7 @@ func libraryR2Configured() bool {
 	return false
 }
 
-// LibraryStoreFromEnv opens the R2 bucket for Library items, attachments and
+// LibraryStoreFromEnv opens the R2 bucket for drive files, attachments, note images and
 // avatars. A development server without R2 keeps them in memory.
 func LibraryStoreFromEnv() (api.LibraryObjectStore, error) {
 	if !libraryR2Configured() && !productionEnvironment() {

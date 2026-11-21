@@ -1,20 +1,11 @@
 package spaces
 
-import (
-	"math"
-	"time"
-)
+import "math"
 
 const (
-	PermissionLibraryView        = "library.view"
 	PermissionMessagesRead       = "messages.read"
 	PermissionMessagesWrite      = "messages.write"
-	PermissionLibraryUpload      = "library.upload"
 	PermissionAttachmentUpload   = "attachments.upload"
-	PermissionLibraryAdd         = "library.add"
-	PermissionLibraryEdit        = "library.edit"
-	PermissionLibraryDownload    = "library.download"
-	PermissionLibraryImport      = "library.import"
 	PermissionStorageViewOwn     = "storage.view_own_usage"
 	PermissionStudioView         = "studio.view"
 	PermissionAskRun             = "ask.run"
@@ -39,11 +30,19 @@ const (
 	PermissionChannelsManage = "channels.manage"
 	PermissionMessagesManage = "messages.manage"
 	PermissionMembersRemove  = "members.remove"
-	LibraryRecoveryWindow    = 30 * 24 * time.Hour
 )
 
+// retiredPermissions gated a Space's Library items, which are gone. A role
+// that still names one (an older app saving it) has it dropped, not refused.
+var retiredPermissions = map[string]bool{
+	"library.view": true, "library.upload": true, "library.add": true,
+	"library.edit": true, "library.download": true, "library.import": true,
+}
+
+// IsRetiredPermission names a permission Misty no longer has.
+func IsRetiredPermission(permission string) bool { return retiredPermissions[permission] }
+
 const (
-	UploadPurposeLibrary        = "library"
 	UploadPurposeChatAttachment = "attachment"
 	UploadPurposeNoteAttachment = "note_attachment"
 	// UploadPurposeDrive is one file's bytes in the Space's drive.
@@ -51,15 +50,12 @@ const (
 )
 
 const (
-	DefaultLibraryMaxFileBytes        = int64(100 << 20)
 	DefaultChatAttachmentMaxFileBytes = int64(10 << 20)
 	DefaultNoteAttachmentMaxFileBytes = int64(15 << 20)
 )
 
 func MaxUploadBytesForPurpose(purpose string) int64 {
 	switch purpose {
-	case UploadPurposeLibrary:
-		return DefaultLibraryMaxFileBytes
 	case UploadPurposeChatAttachment:
 		return DefaultChatAttachmentMaxFileBytes
 	case UploadPurposeNoteAttachment:
@@ -73,18 +69,13 @@ func MaxUploadBytesForPurpose(purpose string) int64 {
 	}
 }
 
-// UploadPurposePermission maps a purpose to the Space permission it requires.
-
+// UploadPurposePermission maps a purpose to the Space permission the generic
+// upload route requires. Note assets have none: they authorize against the
+// parent note, through the note routes only.
 func UploadPurposePermission(purpose string) (string, bool) {
 	switch purpose {
-	case UploadPurposeLibrary:
-		return PermissionLibraryUpload, true
 	case UploadPurposeChatAttachment:
 		return PermissionAttachmentUpload, true
-	case UploadPurposeNoteAttachment:
-		// Note assets authorize against the parent note, not a Space-wide
-		// permission. Callers must check note edit access before reaching here.
-		return PermissionLibraryView, true
 	case UploadPurposeDrive:
 		return PermissionDriveWrite, true
 	default:

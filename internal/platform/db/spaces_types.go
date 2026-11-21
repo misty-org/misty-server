@@ -112,7 +112,6 @@ type SpaceMessage struct {
 	Sender              SpaceMessageSender     `json:"sender"`
 	Content             []MessageSpan          `json:"content"`
 	FileNodeIDs         []string               `json:"file_node_ids"`
-	LibraryItemIDs      []string               `json:"library_item_ids"`
 	Attachments         []MessageAttachment    `json:"attachments"`
 	Reactions           []SpaceMessageReaction `json:"reactions"`
 	ReplyToMessageID    string                 `json:"reply_to_message_id,omitempty"`

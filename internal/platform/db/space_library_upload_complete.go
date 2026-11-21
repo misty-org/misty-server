@@ -13,7 +13,6 @@ import (
 
 func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, uploadID, tokenHash string, verifiedSize int64, verifiedSHA, detectedMIME string, intrinsic json.RawMessage) (*CompleteLibraryUploadResult, error) {
 	result := &CompleteLibraryUploadResult{}
-	replacedItemID := ""
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		upload := &result.Upload
 		if err := scanLibraryUpload(tx.QueryRowContext(ctx, `SELECT id,space_id,security_domain_id,user_id,object_key,original_filename,purpose,client_declared_mime_type,requested_byte_size,client_sha256,verified_byte_size,COALESCE(verified_sha256,''),COALESCE(detected_mime_type,''),state,COALESCE(file_id,''),upload_token_hash,COALESCE(error_code,''),expires_at,version,created_at,updated_at FROM space_library_uploads WHERE id=$1 AND space_id=$2 AND user_id=$3 FOR UPDATE`, uploadID, spaceID, userID), upload); err != nil {
@@ -30,6 +29,11 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 		}
 		if upload.State != "uploaded_unverified" && upload.State != "quarantined" && upload.State != "scanning" && upload.State != "processing" {
 			return ErrLibraryConflict
+		}
+		// Only attachments and note assets finish here; a drive file becomes a
+		// drive item through the drive's own routes.
+		if upload.Purpose != UploadPurposeChatAttachment && upload.Purpose != UploadPurposeNoteAttachment {
+			return ErrLibraryInvalid
 		}
 		if verifiedSize != upload.RequestedByteSize || verifiedSHA != upload.ClientSHA256 || verifiedSize < 1 || detectedMIME == "" {
 			return ErrLibraryUploadMismatch
@@ -58,45 +62,12 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 		if len(file.IntrinsicMetadata) == 0 {
 			file.IntrinsicMetadata = json.RawMessage(`{}`)
 		}
-		var extracted struct {
-			CaptureTimestamp string          `json:"capture_timestamp"`
-			EmbeddedLocation json.RawMessage `json:"embedded_location"`
-		}
-		_ = json.Unmarshal(file.IntrinsicMetadata, &extracted)
-		var captureAt, intrinsicLocation any
-		if parsed, parseErr := time.Parse(time.RFC3339Nano, extracted.CaptureTimestamp); parseErr == nil {
-			captureAt = parsed
-		}
-		if len(extracted.EmbeddedLocation) > 2 && json.Valid(extracted.EmbeddedLocation) {
-			intrinsicLocation = extracted.EmbeddedLocation
-		}
-		if err := tx.QueryRowContext(ctx, `INSERT INTO library_files(id,blob_id,security_domain_id,uploader_user_id,original_filename,intrinsic_metadata,intrinsic_capture_at,intrinsic_location,lifecycle_state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'ready') RETURNING original_uploaded_at`, file.ID, blobID, upload.SecurityDomainID, userID, upload.OriginalFilename, file.IntrinsicMetadata, captureAt, intrinsicLocation).Scan(&file.OriginalUploadedAt); err != nil {
+		if err := tx.QueryRowContext(ctx, `INSERT INTO library_files(id,blob_id,security_domain_id,uploader_user_id,original_filename,intrinsic_metadata,lifecycle_state) VALUES($1,$2,$3,$4,$5,$6,'ready') RETURNING original_uploaded_at`, file.ID, blobID, upload.SecurityDomainID, userID, upload.OriginalFilename, file.IntrinsicMetadata).Scan(&file.OriginalUploadedAt); err != nil {
 			return err
 		}
 		sourceID, sourceKind := "", ""
-		// An upload that replaces an item's content keeps that item.
-		replaced, retiredKeys, err := replaceLibraryItemFileTx(ctx, tx, userID, spaceID, upload.ID, file.ID)
-		if err != nil {
-			return err
-		}
-		if replaced != "" {
-			replacedItemID, result.RetiredObjectKeys = replaced, retiredKeys
-			sourceID, sourceKind = replaced, "library_item"
-		} else if upload.Purpose == "library" {
-			item := &SpaceLibraryItem{ID: "item_" + uuid.NewString(), SpaceID: spaceID, FileID: file.ID, ContributingUserID: userID, DisplayName: upload.OriginalFilename, AddedByUserID: userID, LifecycleState: "ready", Version: 1, File: *file}
-			item.Tags, item.LocationOverride, item.ContributorInformation = []string{}, json.RawMessage(`null`), json.RawMessage(`{}`)
-			if err := tx.QueryRowContext(ctx, `INSERT INTO space_library_items(id,space_id,file_id,contributing_user_id,display_name,added_by_user_id) VALUES($1,$2,$3,$4,$5,$4) RETURNING added_at,updated_at`, item.ID, spaceID, file.ID, userID, upload.OriginalFilename).Scan(&item.AddedAt, &item.UpdatedAt); err != nil {
-				return err
-			}
-			if err := insertDefaultAliasTx(ctx, tx, spaceID, "library_item", item.ID, userID); err != nil {
-				return err
-			}
-			if err := recordAgentArtifactTx(ctx, tx, upload.ID, item.ID, spaceID, userID); err != nil {
-				return err
-			}
-			result.Item, sourceID, sourceKind = item, item.ID, "library_item"
-		} else if upload.Purpose == UploadPurposeNoteAttachment {
-			// A note asset is deliberately not a Library item and not a message
+		if upload.Purpose == UploadPurposeNoteAttachment {
+			// A note asset is deliberately not a message
 			// attachment: it is reachable only through its parent note's ACL.
 			var noteID string
 			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(note_id,'') FROM space_library_uploads WHERE id=$1`, upload.ID).Scan(&noteID); err != nil {
@@ -143,49 +114,5 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrLibraryNotFound
 	}
-	if err == nil && replacedItemID != "" {
-		result.Item, err = db.LibraryItem(ctx, userID, spaceID, replacedItemID)
-	}
 	return result, err
-}
-
-type LibraryItemQuery struct {
-	After      string
-	Limit      int
-	Collection string
-	Search     string
-	Sort       string
-	Direction  string
-	MediaType  string
-	Utility    string
-	Visibility string
-	AlbumID    string
-	Favorite   bool
-	DateFrom   *time.Time
-	DateTo     *time.Time
-}
-
-type LibraryItemVersion struct {
-	ID      string `json:"id"`
-	Version int64  `json:"version"`
-}
-
-type BulkLibraryItemOperation struct {
-	Action           string
-	Items            []LibraryItemVersion
-	AlbumID          string
-	Tags             []string
-	DateOverride     *time.Time
-	LocationOverride json.RawMessage
-}
-
-type parsedLibrarySearch struct {
-	Text      string
-	Tags      []string
-	MediaType string
-	Album     string
-	Favorite  *bool
-	Hidden    *bool
-	DateFrom  *time.Time
-	DateTo    *time.Time
 }

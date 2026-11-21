@@ -109,24 +109,6 @@ func loadExportAssets(
 			        AND cm.user_id=$1
 			  ))
 			UNION ALL
-			SELECT 'library',i.id,i.space_id,i.display_name,b.r2_object_key,
-			       COALESCE(b.server_detected_mime_type,b.client_declared_mime_type),
-			       b.byte_size,b.sha256,i.added_at
-			FROM space_library_items i
-			JOIN library_files f ON f.id=i.file_id
-			JOIN library_blobs b ON b.id=f.blob_id
-			WHERE f.uploader_user_id=$1 AND i.lifecycle_state='ready'
-			  AND f.lifecycle_state='ready' AND b.lifecycle_state='ready'
-			  AND EXISTS(
-			      SELECT 1 FROM space_members m
-			      WHERE m.space_id=i.space_id AND m.user_id=$1
-			  )
-			  AND (i.audience_kind='space' OR EXISTS(
-			      SELECT 1 FROM space_conversation_members cm
-			      WHERE cm.conversation_id=i.audience_conversation_id
-			        AND cm.user_id=$1
-			  ))
-			UNION ALL
 			SELECT 'message_attachment',a.id,COALESCE(a.message_id,a.space_id),
 			       a.display_name,b.r2_object_key,
 			       COALESCE(b.server_detected_mime_type,b.client_declared_mime_type),

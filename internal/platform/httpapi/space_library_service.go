@@ -46,7 +46,7 @@ func SupportedNoteAssetMIME(value string) bool {
 	return noteAssetMIMETypes[value]
 }
 
-func NewSpaceLibraryService(database *db.Database, store LibraryObjectStore, uploadsEnabled bool, limits UploadLimits) (*SpaceLibraryService, error) {
+func NewSpaceLibraryService(database *db.Database, store LibraryObjectStore, limits UploadLimits) (*SpaceLibraryService, error) {
 	if database == nil || store == nil {
 		return nil, errors.New("Library database and permanent object store are required")
 	}
@@ -54,7 +54,7 @@ func NewSpaceLibraryService(database *db.Database, store LibraryObjectStore, upl
 		return nil, err
 	}
 	service := &SpaceLibraryService{
-		database: database, Store: store, UploadsEnabled: uploadsEnabled, UploadLimits: limits,
+		database: database, Store: store, UploadLimits: limits,
 		egress: NewEgressGuard(EgressBudgetFromEnv()),
 	}
 	if err := service.ConfigureTransfers(TransferTTLsFromEnv()); err != nil {

@@ -2,8 +2,8 @@ package api
 
 import "encoding/json"
 
-// What the desktop sends back after transcribing a file or writing a Note on
-// its own models, and what it writes the Note from.
+// What the desktop sends back after writing a Note on its own models, and
+// what it writes the Note from.
 
 type voiceTurnResult struct {
 	Speaker  string  `json:"speaker"`
@@ -11,13 +11,6 @@ type voiceTurnResult struct {
 	Start    float64 `json:"start"`
 	End      float64 `json:"end"`
 	Text     string  `json:"text"`
-}
-
-type diarizedResult struct {
-	Text              string            `json:"text"`
-	Language          string            `json:"language"`
-	DurationInSeconds *float64          `json:"durationInSeconds"`
-	Turns             []voiceTurnResult `json:"turns"`
 }
 
 type voiceActionItem struct {

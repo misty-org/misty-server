@@ -53,33 +53,10 @@ func validateResourceAudienceTx(ctx context.Context, tx *sql.Tx, userID, spaceID
 	return nil
 }
 
-// requireLibraryItemAudienceTx closes the gap created by service-role database
-// connections: permission to use Library does not imply access to an item that
-// belongs to a private conversation, or to someone else's private item.
-func requireLibraryItemAudienceTx(ctx context.Context, tx *sql.Tx, userID, spaceID, itemID string) error {
-	var allowed bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-		SELECT 1 FROM space_library_items item
-		WHERE item.id=$1 AND item.space_id=$2
-		  AND (item.visibility='public' OR item.added_by_user_id=$4) AND (
-			item.audience_kind='space' OR public.misty_can_read_space_conversation(item.audience_conversation_id,$3)
-		)
-	)`, itemID, spaceID, userID, userID).Scan(&allowed)
-	if err != nil {
-		return err
-	}
-	if !allowed {
-		return ErrLibraryNotFound
-	}
-	return nil
-}
-
 // audienceTables are the item kinds (as item.visibility_changed names them)
 // that can be scoped to a conversation, and their tables: every made kind in the
-// registry, and Library items.
-var audienceTables = withSpaceItemAudiences(map[string]string{
-	"library_item": "space_library_items",
-})
+// registry.
+var audienceTables = withSpaceItemAudiences(map[string]string{})
 
 func withSpaceItemAudiences(others map[string]string) map[string]string {
 	for _, kind := range spaceItemKinds {

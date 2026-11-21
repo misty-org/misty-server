@@ -48,10 +48,6 @@ func TestNoteAssetUploadEnforcesTheNoteLimit(t *testing.T) {
 	if _, err := noteAssetUpload(t, fixture, fixture.creator, DefaultNoteAttachmentMaxFileBytes+1, "overlimit"); !errors.Is(err, ErrLibraryInvalid) {
 		t.Fatalf("upload one byte over the limit = %v, want ErrLibraryInvalid", err)
 	}
-	// The larger Library ceiling must not apply to a note asset.
-	if _, err := noteAssetUpload(t, fixture, fixture.creator, DefaultLibraryMaxFileBytes, "librarysize"); !errors.Is(err, ErrLibraryInvalid) {
-		t.Fatalf("upload at the Library limit = %v, want ErrLibraryInvalid", err)
-	}
 }
 
 // The upload row must record its note so finalization creates a note asset

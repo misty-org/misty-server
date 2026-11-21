@@ -10,15 +10,15 @@ import (
 	"github.com/google/uuid"
 )
 
-func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs, libraryItemIDs []string, replyToMessageID, threadRootID, clientNonce string) (*SpaceMessage, []string, error) {
-	if err := validateMessageWithReferences(content, len(fileNodeIDs)+len(attachmentIDs)+len(libraryItemIDs)); err != nil {
+func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs []string, replyToMessageID, threadRootID, clientNonce string) (*SpaceMessage, []string, error) {
+	if err := validateMessageWithReferences(content, len(fileNodeIDs)+len(attachmentIDs)); err != nil {
 		return nil, nil, err
 	}
 	clientNonce = strings.TrimSpace(clientNonce)
 	if len(clientNonce) > 128 {
 		return nil, nil, ErrSpaceInvalid
 	}
-	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), ClientNonce: clientNonce, SpaceID: spaceID, ConversationID: conversationID, SenderUserID: userID, SenderKind: "person", Content: content, FileNodeIDs: fileNodeIDs, LibraryItemIDs: uniqueSpaceIDs(libraryItemIDs), Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID, ThreadRootID: threadRootID}
+	out := &SpaceMessage{ID: "msg_" + uuid.NewString(), ClientNonce: clientNonce, SpaceID: spaceID, ConversationID: conversationID, SenderUserID: userID, SenderKind: "person", Content: content, FileNodeIDs: fileNodeIDs, Attachments: []MessageAttachment{}, Reactions: []SpaceMessageReaction{}, ReplyToMessageID: replyToMessageID, ThreadRootID: threadRootID}
 	attachmentIDs = uniqueSpaceIDs(attachmentIDs)
 	agentMentions := []string{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -52,11 +52,6 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 				return nil
 			}
 		}
-		if len(out.LibraryItemIDs) > 0 {
-			if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryView); err != nil {
-				return err
-			}
-		}
 		for _, nodeID := range fileNodeIDs {
 			var ok bool
 			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_nodes WHERE id=$1 AND space_id=$2 AND kind='link')`, nodeID, spaceID).Scan(&ok); err != nil || !ok {
@@ -76,15 +71,9 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 				return ErrSpaceInvalid
 			}
 		}
-		for _, itemID := range out.LibraryItemIDs {
-			var exists bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_library_items WHERE id=$1 AND space_id=$2 AND lifecycle_state='ready')`, itemID, spaceID).Scan(&exists); err != nil || !exists {
-				return ErrSpaceInvalid
-			}
-		}
 		for _, attachmentID := range attachmentIDs {
 			var attachment MessageAttachment
-			if err := scanMessageAttachment(tx.QueryRowContext(ctx, `SELECT a.id,a.space_id,COALESCE(a.message_id,''),a.file_id,a.upload_id,a.uploader_user_id,a.display_name,COALESCE(a.promoted_item_id,''),a.lifecycle_state,a.created_at,a.deleted_at,a.recover_until
+			if err := scanMessageAttachment(tx.QueryRowContext(ctx, `SELECT a.id,a.space_id,COALESCE(a.message_id,''),a.file_id,a.upload_id,a.uploader_user_id,a.display_name,a.lifecycle_state,a.created_at,a.deleted_at,a.recover_until
 				FROM space_message_attachments a JOIN space_library_uploads u ON u.id=a.upload_id
 				WHERE a.id=$1 AND a.space_id=$2 AND a.uploader_user_id=$3 AND a.message_id IS NULL AND a.lifecycle_state='ready'
 				  AND (u.conversation_id IS NULL OR u.conversation_id=NULLIF($4,''))
@@ -139,18 +128,6 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 		}
 		for _, attachmentID := range attachmentIDs {
 			if _, err := tx.ExecContext(ctx, `UPDATE space_message_attachments SET message_id=$1 WHERE id=$2`, out.ID, attachmentID); err != nil {
-				return err
-			}
-		}
-		for _, itemID := range out.LibraryItemIDs {
-			var referenceAllowed bool
-			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_library_items WHERE id=$1 AND space_id=$2 AND lifecycle_state='ready' AND hidden=FALSE)`, itemID, spaceID).Scan(&referenceAllowed); err != nil {
-				return err
-			}
-			if !referenceAllowed {
-				return ErrLibraryNotFound
-			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO space_message_library_references(message_id,space_id,space_library_item_id,created_by_user_id) VALUES($1,$2,$3,$4)`, out.ID, spaceID, itemID, userID); err != nil {
 				return err
 			}
 		}

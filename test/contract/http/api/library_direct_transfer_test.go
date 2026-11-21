@@ -110,7 +110,7 @@ func TestUploadTransferRefusesWhenTheStoreCannotSign(t *testing.T) {
 func TestWriteDownloadRefusesWhenTheStoreCannotSign(t *testing.T) {
 	service := &SpaceLibraryService{Store: NewMemoryLibraryObjectStore(), UploadLimits: DefaultUploadLimits()}
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/spaces/space_1/library/items/item_1/download", nil)
+	request := httptest.NewRequest(http.MethodGet, "/spaces/space_1/attachments/attachment_1/download", nil)
 	service.WriteDownload(recorder, request, &db.LibraryDownload{ObjectKey: "library/downloadfixture1", Filename: "a.txt", MIMEType: "text/plain", ByteSize: 1, SHA256: "0"})
 	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "library_direct_transfer_unavailable") {
 		t.Fatalf("unsigned download = %d %s", recorder.Code, recorder.Body.String())
@@ -121,7 +121,7 @@ func TestWriteDownloadReturnsSignedDescriptorInsteadOfBytes(t *testing.T) {
 	presigner := &stubPresigner{}
 	service := directTransferService(t, presigner)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/spaces/space_1/library/items/item_1/download", nil)
+	request := httptest.NewRequest(http.MethodGet, "/spaces/space_1/attachments/attachment_1/download", nil)
 	download := &db.LibraryDownload{
 		ObjectKey: "library/downloadfixture1", Filename: "quarterly report.pdf",
 		MIMEType: "application/pdf", ByteSize: 4096, SHA256: "0",
@@ -222,15 +222,15 @@ func TestJournalAssetPurposesNeverUseTheProxy(t *testing.T) {
 	if !IsJournalAssetPurpose(UploadPurposeNoteAttachment) {
 		t.Fatal("note_attachment was not recognized as a Journal asset purpose")
 	}
-	if IsJournalAssetPurpose(UploadPurposeLibrary) {
-		t.Fatal("Library upload was treated as a Journal asset")
+	if IsJournalAssetPurpose(UploadPurposeChatAttachment) {
+		t.Fatal("a chat attachment was treated as a Journal asset")
 	}
 }
 
 // Direct transfer has no off switch: it is on exactly when the store can sign.
 // A development store that cannot sign has no transfers at all.
 func TestDirectTransferFollowsStoreCapability(t *testing.T) {
-	signing, err := NewSpaceLibraryService(&db.Database{}, &S3LibraryObjectStore{Bucket: "misty", Presigner: &recordingPresigner{}}, true, DefaultUploadLimits())
+	signing, err := NewSpaceLibraryService(&db.Database{}, &S3LibraryObjectStore{Bucket: "misty", Presigner: &recordingPresigner{}}, DefaultUploadLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestDirectTransferFollowsStoreCapability(t *testing.T) {
 		t.Fatal("a signing store did not enable direct transfer")
 	}
 
-	local, err := NewSpaceLibraryService(&db.Database{}, NewMemoryLibraryObjectStore(), true, DefaultUploadLimits())
+	local, err := NewSpaceLibraryService(&db.Database{}, NewMemoryLibraryObjectStore(), DefaultUploadLimits())
 	if err != nil {
 		t.Fatal(err)
 	}

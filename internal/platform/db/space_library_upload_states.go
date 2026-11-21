@@ -12,8 +12,10 @@ import (
 // absent and that the upload's new object exists with the reserved metadata.
 func (db *Database) ReplaceMissingLibraryUploadDeduplicationObject(ctx context.Context, userID, spaceID, uploadID, missingKey string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryUpload); err != nil {
-			return err
+		// The upload is the caller's own, started by a route that checked its
+		// purpose's permission.
+		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
+			return ErrLibraryForbidden
 		}
 		var domainID, sha, uploadKey, state string
 		var byteSize int64
@@ -159,8 +161,7 @@ func (db *Database) ReconcileLibraryStorageUsage(ctx context.Context, limit int)
 		), actual AS (
 			SELECT c.space_id,
 				COALESCE((SELECT sum(logical_bytes) FROM space_storage_contributions sc WHERE sc.space_id=c.space_id AND sc.state IN ('active','recovery')),0) used,
-				COALESCE((SELECT sum(reserved_bytes) FROM space_upload_reservations sr WHERE sr.space_id=c.space_id AND sr.state='active'),0)
-				+ COALESCE((SELECT sum(reserved_bytes) FROM space_rendition_reservations rr WHERE rr.space_id=c.space_id AND rr.state='active'),0) reserved
+				COALESCE((SELECT sum(reserved_bytes) FROM space_upload_reservations sr WHERE sr.space_id=c.space_id AND sr.state='active'),0) reserved
 			FROM candidates c
 		)
 		UPDATE space_storage_usage u SET used_bytes=a.used,reserved_bytes=a.reserved,version=u.version+1,updated_at=NOW()
@@ -173,56 +174,4 @@ func (db *Database) ReconcileLibraryStorageUsage(ctx context.Context, limit int)
 		return nil
 	})
 	return updated, err
-}
-
-func (db *Database) TrashLibraryItem(ctx context.Context, userID, spaceID, itemID string) (*SpaceLibraryItem, error) {
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryEdit); err != nil {
-			return err
-		}
-		if err := requireLibraryItemAudienceTx(ctx, tx, userID, spaceID, itemID); err != nil {
-			return err
-		}
-		result, err := tx.ExecContext(ctx, `UPDATE space_library_items SET lifecycle_state='trash',trashed_at=NOW(),recover_until=NOW()+$1::interval,version=version+1,updated_at=NOW() WHERE id=$2 AND space_id=$3 AND lifecycle_state='ready'`, "30 days", itemID, spaceID)
-		if err != nil {
-			return err
-		}
-		if count, _ := result.RowsAffected(); count == 0 {
-			return ErrLibraryNotFound
-		}
-		if _, err = tx.ExecContext(ctx, `UPDATE space_storage_contributions SET state='recovery',updated_at=NOW() WHERE space_id=$1 AND source_kind='library_item' AND source_id=$2 AND state='active'`, spaceID, itemID); err != nil {
-			return err
-		}
-		return insertLibraryAuditTx(ctx, tx, spaceID, "", userID, "library.item.trashed", "library_item", itemID, "success", map[string]any{})
-	})
-	if err != nil {
-		return nil, err
-	}
-	return db.LibraryItem(ctx, userID, spaceID, itemID)
-}
-
-func (db *Database) RestoreLibraryItem(ctx context.Context, userID, spaceID, itemID string) (*SpaceLibraryItem, error) {
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionLibraryEdit); err != nil {
-			return err
-		}
-		if err := requireLibraryItemAudienceTx(ctx, tx, userID, spaceID, itemID); err != nil {
-			return err
-		}
-		result, err := tx.ExecContext(ctx, `UPDATE space_library_items SET lifecycle_state='ready',trashed_at=NULL,recover_until=NULL,version=version+1,updated_at=NOW() WHERE id=$1 AND space_id=$2 AND lifecycle_state='trash' AND recover_until>NOW()`, itemID, spaceID)
-		if err != nil {
-			return err
-		}
-		if count, _ := result.RowsAffected(); count == 0 {
-			return ErrLibraryNotFound
-		}
-		if _, err = tx.ExecContext(ctx, `UPDATE space_storage_contributions SET state='active',updated_at=NOW() WHERE space_id=$1 AND source_kind='library_item' AND source_id=$2 AND state='recovery'`, spaceID, itemID); err != nil {
-			return err
-		}
-		return insertLibraryAuditTx(ctx, tx, spaceID, "", userID, "library.item.restored", "library_item", itemID, "success", map[string]any{})
-	})
-	if err != nil {
-		return nil, err
-	}
-	return db.LibraryItem(ctx, userID, spaceID, itemID)
 }

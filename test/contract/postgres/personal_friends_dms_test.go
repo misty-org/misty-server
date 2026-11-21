@@ -129,7 +129,7 @@ func TestDirectMessagesNeedFriendsAndEndWithTheFriendship(t *testing.T) {
 	if err != nil || again.ID != dm.ID {
 		t.Fatalf("OpenDirect(other way) = %#v, %v; want the same DM %s", again, err, dm.ID)
 	}
-	if _, _, err := database.CreateSpaceMessageWithReferencesAndClientNonce(ctx, ben.ID, dm.ID, []MessageSpan{{Type: "text", Text: "hey"}}, nil, nil, nil, "", ""); err != nil {
+	if _, _, err := database.CreateSpaceMessageWithReferencesAndClientNonce(ctx, ben.ID, dm.ID, []MessageSpan{{Type: "text", Text: "hey"}}, nil, nil, "", ""); err != nil {
 		t.Fatalf("message in the DM error = %v", err)
 	}
 	// A DM is never one of the person's Spaces.
@@ -222,7 +222,7 @@ func TestSpaceDirectMessagesMoveWithTheirMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, text := range []string{"first", "second"} {
-		if _, _, err := database.CreateSpaceConversationMessageWithReferencesAndClientNonce(ctx, ana.ID, space.ID, old.ID, []MessageSpan{{Type: "text", Text: text}}, nil, nil, nil, "", ""); err != nil {
+		if _, _, err := database.CreateSpaceConversationMessageWithReferencesAndClientNonce(ctx, ana.ID, space.ID, old.ID, []MessageSpan{{Type: "text", Text: text}}, nil, nil, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -241,7 +241,7 @@ func TestSpaceDirectMessagesMoveWithTheirMessages(t *testing.T) {
 	if err != nil || len(messages) != 2 {
 		t.Fatalf("moved messages = %#v, %v; want both", messages, err)
 	}
-	if _, _, err := database.CreateSpaceMessageWithReferencesAndClientNonce(ctx, ben.ID, listed[0].ID, []MessageSpan{{Type: "text", Text: "hi"}}, nil, nil, nil, "", ""); !errors.Is(err, ErrNotFriends) {
+	if _, _, err := database.CreateSpaceMessageWithReferencesAndClientNonce(ctx, ben.ID, listed[0].ID, []MessageSpan{{Type: "text", Text: "hi"}}, nil, nil, "", ""); !errors.Is(err, ErrNotFriends) {
 		t.Fatalf("message in a read-only DM error = %v, want ErrNotFriends", err)
 	}
 	// Running it again moves nothing twice.

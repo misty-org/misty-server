@@ -6,7 +6,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	. "github.com/misty-org/misty-server/internal/platform/db"
 )
@@ -146,42 +145,5 @@ func TestMentionsNameAgentsListedInTheSpace(t *testing.T) {
 	}
 	if _, _, err := f.database.TestingCreateSpaceMessage(ctx, f.bob.ID, f.space.ID, mention(bobAgentID), nil); err != nil {
 		t.Fatalf("mention of your own private agent = %v", err)
-	}
-}
-
-func TestAgentArtifactsSaveToSpacesTheAgentIsIn(t *testing.T) {
-	f := newSpaceAgentFixture(t)
-	ctx := context.Background()
-	digest := strings.Repeat("a", 64)
-	provenance := &AgentArtifactProvenance{AgentID: bobAgentID, ConversationID: "conversation_private", RunID: "run_private", Kind: "download"}
-	elsewhere := createTestSpace(t, f.database, ctx, f.bob.ID, "Side project")
-	if _, err := f.database.CreateLibraryUploadWithProvenance(ctx, f.bob.ID, elsewhere.ID, "", "library",
-		"report.pdf", "application/pdf", 32, digest, "library/elsewhere", "elsewhere-token", time.Now().Add(time.Hour), provenance); !errors.Is(err, ErrLibraryForbidden) {
-		t.Fatalf("saving an artifact outside the agent's Space = %v", err)
-	}
-	if _, err := f.database.CreateLibraryUploadWithProvenance(ctx, f.alice.ID, f.space.ID, "", "library",
-		"report.pdf", "application/pdf", 32, digest, "library/notmine", "notmine-token", time.Now().Add(time.Hour), provenance); !errors.Is(err, ErrLibraryForbidden) {
-		t.Fatalf("saving an artifact for someone else's agent = %v", err)
-	}
-	upload, err := f.database.CreateLibraryUploadWithProvenance(ctx, f.bob.ID, f.space.ID, "", "library",
-		"report.pdf", "application/pdf", 32, digest, "library/agentartifact", "artifact-token", time.Now().Add(time.Hour), provenance)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.database.SetLibraryUploadState(ctx, f.bob.ID, f.space.ID, upload.ID, "artifact-token", "initiated", "uploaded_unverified"); err != nil {
-		t.Fatal(err)
-	}
-	done, err := f.database.CompleteLibraryUpload(ctx, f.bob.ID, f.space.ID, upload.ID, "artifact-token", 32, digest, "application/pdf", nil)
-	if err != nil || done.Item == nil {
-		t.Fatalf("finished upload = %#v, %v", done, err)
-	}
-
-	mine, err := f.database.SpaceAgentArtifacts(ctx, f.bob.ID, f.space.ID, "", 0)
-	if err != nil || len(mine) != 1 || mine[0].ItemID != done.Item.ID || mine[0].AgentName != "Researcher" || mine[0].Kind != "download" || mine[0].ConversationID != "conversation_private" {
-		t.Fatalf("owner's view = %#v, %v", mine, err)
-	}
-	theirs, err := f.database.SpaceAgentArtifacts(ctx, f.alice.ID, f.space.ID, bobAgentID, 0)
-	if err != nil || len(theirs) != 1 || theirs[0].OwnerName != f.bob.Username || theirs[0].ConversationID != "" || theirs[0].RunID != "" {
-		t.Fatalf("another member's view = %#v, %v, want the item without Bob's private conversation", theirs, err)
 	}
 }

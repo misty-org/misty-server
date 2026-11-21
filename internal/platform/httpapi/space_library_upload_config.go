@@ -26,12 +26,7 @@ type SpaceLibraryService struct {
 	Store    LibraryObjectStore
 	// egress bounds bytes served per account and across the deployment.
 	egress             *EgressGuard
-	UploadsEnabled     bool
 	AttachmentsEnabled bool
-	previewsEnabled    bool
-	mediaProcessor     LibraryMediaProcessor
-	metadataExtractor  LibraryMetadataExtractor
-	exportsEnabled     bool
 	UploadLimits       UploadLimits
 	NoteAssetsEnabled  bool
 	Transfers          TransferTTLs
@@ -107,7 +102,6 @@ func (s *SpaceLibraryService) DirectTransfersActive() bool {
 type UploadPurpose = string
 
 const (
-	UploadPurposeLibrary        UploadPurpose = db.UploadPurposeLibrary
 	UploadPurposeChatAttachment UploadPurpose = db.UploadPurposeChatAttachment
 	UploadPurposeNoteAttachment UploadPurpose = db.UploadPurposeNoteAttachment
 	UploadPurposeDrive          UploadPurpose = db.UploadPurposeDrive
@@ -115,16 +109,14 @@ const (
 
 // UploadLimits holds the configured maximum file size for each upload purpose.
 type UploadLimits struct {
-	Library        int64
 	ChatAttachment int64
 	NoteAttachment int64
 }
 
-// DefaultUploadLimits matches the beta product decision: 100 MB Library files,
-// 15 MB note assets, and 10 MB chat attachments.
+// DefaultUploadLimits matches the beta product decision: 15 MB note assets
+// and 10 MB chat attachments.
 func DefaultUploadLimits() UploadLimits {
 	return UploadLimits{
-		Library:        db.DefaultLibraryMaxFileBytes,
 		ChatAttachment: db.DefaultChatAttachmentMaxFileBytes,
 		NoteAttachment: db.DefaultNoteAttachmentMaxFileBytes,
 	}
@@ -135,7 +127,6 @@ func DefaultUploadLimits() UploadLimits {
 // validate() at service construction rather than silently clamped.
 func UploadLimitsFromEnv() UploadLimits {
 	limits := DefaultUploadLimits()
-	limits.Library = positiveEnvBytes("MISTY_LIBRARY_MAX_FILE_BYTES", limits.Library)
 	limits.ChatAttachment = positiveEnvBytes("MISTY_CHAT_ATTACHMENT_MAX_FILE_BYTES", limits.ChatAttachment)
 	limits.NoteAttachment = positiveEnvBytes("MISTY_NOTE_ATTACHMENT_MAX_FILE_BYTES", limits.NoteAttachment)
 	return limits
@@ -145,8 +136,6 @@ func UploadLimitsFromEnv() UploadLimits {
 // unknown. A 0 result must be treated as "reject".
 func (l UploadLimits) Max(purpose UploadPurpose) int64 {
 	switch purpose {
-	case UploadPurposeLibrary:
-		return l.Library
 	case UploadPurposeChatAttachment:
 		return l.ChatAttachment
 	case UploadPurposeNoteAttachment:
@@ -161,7 +150,6 @@ func (l UploadLimits) Validate() error {
 		purpose UploadPurpose
 		value   int64
 	}{
-		{UploadPurposeLibrary, l.Library},
 		{UploadPurposeChatAttachment, l.ChatAttachment},
 		{UploadPurposeNoteAttachment, l.NoteAttachment},
 	} {
@@ -173,25 +161,18 @@ func (l UploadLimits) Validate() error {
 	return nil
 }
 
-func (s *SpaceLibraryService) SetSubsystems(attachmentsEnabled, previewsEnabled, exportsEnabled bool) {
-	s.AttachmentsEnabled = attachmentsEnabled
-	s.previewsEnabled = previewsEnabled
-	s.exportsEnabled = exportsEnabled
-}
-
-func (s *SpaceLibraryService) SetMetadataExtractor(extractor LibraryMetadataExtractor) {
-	s.metadataExtractor = extractor
+// SetAttachmentsEnabled turns on chat attachment uploads.
+func (s *SpaceLibraryService) SetAttachmentsEnabled(enabled bool) {
+	s.AttachmentsEnabled = enabled
 }
 
 func (s *SpaceLibraryService) UploadPurposeEnabled(purpose UploadPurpose) bool {
 	switch purpose {
-	case UploadPurposeLibrary:
-		return s.UploadsEnabled
 	case UploadPurposeChatAttachment:
 		return s.AttachmentsEnabled
 	case UploadPurposeNoteAttachment:
 		// Note assets authorize against the parent note, which only the note
-		// routes can check. The generic Library upload endpoint must never
+		// routes can check. The generic upload endpoint must never
 		// accept this purpose.
 		return false
 	case UploadPurposeDrive:

@@ -130,6 +130,27 @@ func TestRolesMigrationSeedsTheDefaultEveryoneGrant(t *testing.T) {
 			seeded = append(seeded, added[1])
 		}
 	}
+	// And take out of every role what Misty no longer has.
+	for _, later := range []string{"20280125000000_remove_library_items.sql"} {
+		raw, err := os.ReadFile("../../../internal/platform/db/migrations/" + later)
+		if err != nil {
+			t.Fatal(err)
+		}
+		up, _, _ := strings.Cut(string(raw), "-- +goose Down")
+		removed := map[string]bool{}
+		for _, list := range regexp.MustCompile(`WHERE p NOT IN \(([^)]*)\)`).FindAllStringSubmatch(up, -1) {
+			for _, item := range strings.Split(list[1], ",") {
+				removed[strings.Trim(strings.TrimSpace(item), "'")] = true
+			}
+		}
+		kept := []string{}
+		for _, permission := range seeded {
+			if !removed[permission] {
+				kept = append(kept, permission)
+			}
+		}
+		seeded = kept
+	}
 	if !reflect.DeepEqual(seeded, spaces.DefaultEveryonePermissions()) {
 		t.Fatalf("migration seeds %v, want %v", seeded, spaces.DefaultEveryonePermissions())
 	}
@@ -199,7 +220,7 @@ func TestPrivateChannelIsInvisibleToThoseWithoutRead(t *testing.T) {
 		cursor = events[len(events)-1].ID
 	}
 	content := []MessageSpan{{Type: "text", Text: "launch codes"}}
-	message, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.crew.ID, f.space.ID, channel.ID, content, nil, nil, nil, "")
+	message, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.crew.ID, f.space.ID, channel.ID, content, nil, nil, "")
 	if err != nil {
 		t.Fatalf("crew posting in the private channel error = %v", err)
 	}
@@ -211,7 +232,7 @@ func TestPrivateChannelIsInvisibleToThoseWithoutRead(t *testing.T) {
 	if _, err := f.database.SpaceConversationMessages(f.ctx, f.rest.ID, f.space.ID, channel.ID, 0, 20); !errors.Is(err, ErrSpaceNotFound) {
 		t.Fatalf("SpaceConversationMessages(rest) error = %v, want ErrSpaceNotFound", err)
 	}
-	if _, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.rest.ID, f.space.ID, channel.ID, content, nil, nil, nil, ""); !errors.Is(err, ErrSpaceNotFound) {
+	if _, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.rest.ID, f.space.ID, channel.ID, content, nil, nil, ""); !errors.Is(err, ErrSpaceNotFound) {
 		t.Fatalf("posting into a hidden channel error = %v, want ErrSpaceNotFound", err)
 	}
 	if hits, err := f.database.SearchSpaceMessages(f.ctx, f.rest.ID, f.space.ID, "launch", 20); err != nil || len(hits) != 0 {
@@ -261,7 +282,7 @@ func TestReadOnlyChannelAndModeratorDeletes(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := []MessageSpan{{Type: "text", Text: "hello"}}
-	posted, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.rest.ID, f.space.ID, channel.ID, content, nil, nil, nil, "")
+	posted, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.rest.ID, f.space.ID, channel.ID, content, nil, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,10 +297,10 @@ func TestReadOnlyChannelAndModeratorDeletes(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.rest.ID, f.space.ID, channel.ID, content, nil, nil, nil, ""); !errors.Is(err, ErrSpaceForbidden) {
+	if _, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.rest.ID, f.space.ID, channel.ID, content, nil, nil, ""); !errors.Is(err, ErrSpaceForbidden) {
 		t.Fatalf("posting in a read-only channel error = %v, want ErrSpaceForbidden", err)
 	}
-	if _, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.owner.ID, f.space.ID, channel.ID, content, nil, nil, nil, ""); err != nil {
+	if _, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.owner.ID, f.space.ID, channel.ID, content, nil, nil, ""); err != nil {
 		t.Fatalf("the owner posting in a read-only channel error = %v", err)
 	}
 	listed, err := f.database.SpaceConversations(f.ctx, f.rest.ID, f.space.ID)

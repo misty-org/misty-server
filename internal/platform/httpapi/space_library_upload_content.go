@@ -27,7 +27,7 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			return
 		}
 		// A drive file's bytes become a drive item through the drive's routes,
-		// never a Library item or attachment of their own.
+		// never an attachment of their own.
 		if upload.Purpose == UploadPurposeDrive {
 			writeJSON(w, http.StatusConflict, map[string]string{"code": "drive_item_required"})
 			return
@@ -129,11 +129,6 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 		if result.DiscardObjectKey != "" {
 			_ = s.Store.Delete(r.Context(), result.DiscardObjectKey)
 		}
-		// Replaced content nothing uses any more; the orphan sweep collects
-		// any object this misses.
-		for _, key := range result.RetiredObjectKeys {
-			_ = s.Store.Delete(r.Context(), key)
-		}
 		writeJSON(w, http.StatusOK, result)
 	}
 }
@@ -172,27 +167,5 @@ func (s *SpaceLibraryService) AbortUpload() http.HandlerFunc {
 			}
 		}
 		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
-func (s *SpaceLibraryService) DownloadItem() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		spaceID, itemID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "itemID")
-		var download *db.LibraryDownload
-		var err error
-		if r.URL.Query().Get("version") == "original" {
-			download, err = s.database.LibraryOriginalItemDownload(r.Context(), userID, spaceID, itemID)
-		} else {
-			download, err = s.database.LibraryItemDownload(r.Context(), userID, spaceID, itemID)
-		}
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		s.WriteDownload(w, r, download)
 	}
 }

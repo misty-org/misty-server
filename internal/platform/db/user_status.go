@@ -158,9 +158,12 @@ func (db *Database) MarkAccountNoticeSeen(ctx context.Context, userID, noticeID 
 }
 
 // CanJoinCall says whether the person may join a call room. A room is "dm:<dm id>", open to that
-// DM's people while the DM may take messages; Space voice channels ("space:<id>:voice:<channel>")
-// are not open yet.
+// DM's people while the DM may take messages, or "space:<space id>:voice:<channel id>", open to
+// whoever may read that voice channel.
 func (db *Database) CanJoinCall(ctx context.Context, userID, room string) (bool, error) {
+	if spaceID, channelID, ok := voiceRoomParts(room); ok {
+		return db.canJoinVoiceChannel(ctx, userID, spaceID, channelID)
+	}
 	if !strings.HasPrefix(room, "dm:") {
 		return false, nil
 	}
@@ -207,4 +210,36 @@ func (db *Database) DirectMemberIDs(ctx context.Context, userID, spaceID string)
 		return rows.Err()
 	})
 	return out, err
+}
+
+// voiceRoomParts splits "space:<space id>:voice:<channel id>".
+func voiceRoomParts(room string) (spaceID, channelID string, ok bool) {
+	rest, found := strings.CutPrefix(room, "space:")
+	if !found {
+		return "", "", false
+	}
+	spaceID, channelID, found = strings.Cut(rest, ":voice:")
+	if !found || spaceID == "" || channelID == "" || strings.Contains(channelID, ":") {
+		return "", "", false
+	}
+	return spaceID, channelID, true
+}
+
+// canJoinVoiceChannel: the channel is one of the Space's voice channels and the person may read it.
+func (db *Database) canJoinVoiceChannel(ctx context.Context, userID, spaceID, channelID string) (bool, error) {
+	allowed := false
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		var voice bool
+		err := tx.QueryRowContext(ctx, `SELECT voice FROM space_conversations WHERE id=$1 AND space_id=$2`,
+			channelID, spaceID).Scan(&voice)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil || !voice {
+			return err
+		}
+		allowed, err = conversationReadableTx(ctx, tx, userID, spaceID, channelID)
+		return err
+	})
+	return allowed, err
 }

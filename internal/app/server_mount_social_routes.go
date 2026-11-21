@@ -31,6 +31,8 @@ func (s *Server) mountSocialRoutes(prefix string, social *api.SocialService) {
 	s.Router.Post(prefix+"/dms/{dmID}/members", social.DirectMembers())
 	s.Router.Delete(prefix+"/dms/{dmID}/members/me", social.LeaveDirect())
 	s.Router.Post(prefix+"/dms/{dmID}/call", social.DirectCall())
+	s.Router.Get(prefix+"/dms/{dmID}/call-keys", social.DirectCallKeys())
+	s.Router.Put(prefix+"/me/call-keys/{keyID}", social.CallKey())
 	s.Router.Get(prefix+"/calls/config", social.CallConfig())
 	s.Router.Post(prefix+"/calls/{room}/token", social.CallToken())
 }

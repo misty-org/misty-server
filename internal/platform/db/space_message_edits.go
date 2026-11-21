@@ -10,25 +10,9 @@ import (
 )
 
 func loadSpaceMessageReferencesTx(ctx context.Context, tx *sql.Tx, message *SpaceMessage, userID string) error {
-	message.LibraryItemIDs = []string{}
 	message.Attachments = []MessageAttachment{}
 	message.Reactions = []SpaceMessageReaction{}
-	rows, err := tx.QueryContext(ctx, `SELECT space_library_item_id FROM space_message_library_references WHERE message_id=$1 ORDER BY created_at`, message.ID)
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		message.LibraryItemIDs = append(message.LibraryItemIDs, id)
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	rows, err = tx.QueryContext(ctx, `SELECT id,space_id,COALESCE(message_id,''),file_id,upload_id,uploader_user_id,display_name,COALESCE(promoted_item_id,''),lifecycle_state,created_at,deleted_at,recover_until FROM space_message_attachments WHERE message_id=$1 AND lifecycle_state='ready' ORDER BY created_at`, message.ID)
+	rows, err := tx.QueryContext(ctx, `SELECT id,space_id,COALESCE(message_id,''),file_id,upload_id,uploader_user_id,display_name,lifecycle_state,created_at,deleted_at,recover_until FROM space_message_attachments WHERE message_id=$1 AND lifecycle_state='ready' ORDER BY created_at`, message.ID)
 	if err != nil {
 		return err
 	}

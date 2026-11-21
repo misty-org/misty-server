@@ -63,7 +63,7 @@ func moveSpaceDirectTx(ctx context.Context, tx *sql.Tx, conversationID string) e
 	}
 	people := []string{}
 	rows, err := tx.QueryContext(ctx, `SELECT cm.user_id FROM space_conversation_members cm JOIN users u ON u.id=cm.user_id AND u.lifecycle_state='active'
-		WHERE cm.conversation_id=$1 AND cm.actor_kind='person' AND cm.user_id IS NOT NULL ORDER BY cm.joined_at,cm.user_id`, conversationID)
+		WHERE cm.conversation_id=$1 ORDER BY cm.joined_at,cm.user_id`, conversationID)
 	if err != nil {
 		return err
 	}
@@ -138,24 +138,6 @@ func moveSpaceDirectTx(ctx context.Context, tx *sql.Tx, conversationID string) e
 		return err
 	}
 	attachments.Close()
-	libraryRows, err := tx.QueryContext(ctx, `SELECT r.message_id FROM space_message_library_references r JOIN space_messages m ON m.id=r.message_id
-		WHERE m.conversation_id=$1`, conversationID)
-	if err != nil {
-		return err
-	}
-	for libraryRows.Next() {
-		var messageID string
-		if err := libraryRows.Scan(&messageID); err != nil {
-			libraryRows.Close()
-			return err
-		}
-		notes[messageID] = append(notes[messageID], "a file from Files")
-	}
-	if err := libraryRows.Err(); err != nil {
-		libraryRows.Close()
-		return err
-	}
-	libraryRows.Close()
 	for messageID, names := range notes {
 		var raw []byte
 		if err := tx.QueryRowContext(ctx, `SELECT content FROM space_messages WHERE id=$1`, messageID).Scan(&raw); err != nil {
@@ -180,9 +162,6 @@ func moveSpaceDirectTx(ctx context.Context, tx *sql.Tx, conversationID string) e
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE space_message_attachments SET message_id=NULL WHERE message_id IN (SELECT id FROM space_messages WHERE conversation_id=$1)`, conversationID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM space_message_library_references WHERE message_id IN (SELECT id FROM space_messages WHERE conversation_id=$1)`, conversationID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE space_message_reactions SET space_id=$2 WHERE message_id IN (SELECT id FROM space_messages WHERE conversation_id=$1)`, conversationID, target); err != nil {

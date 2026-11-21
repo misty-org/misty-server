@@ -41,7 +41,7 @@ func TestChannelPermissionsApplyEveryoneThenDenyThenAllow(t *testing.T) {
 			t.Errorf("outsider holds %s in a private channel", permission)
 		}
 	}
-	if !outsider.Has(PermissionLibraryView) {
+	if !outsider.Has(PermissionStudioView) {
 		t.Error("an overwrite changed a permission that isn't channel-scoped")
 	}
 	crew := ChannelPermissions(base, "everyone", []string{"crew"}, private)
@@ -151,8 +151,13 @@ func TestNormalizeRolesAndOverwrites(t *testing.T) {
 	if !ok || !reflect.DeepEqual(permissions, []string{PermissionMessagesRead, PermissionMessagesWrite}) {
 		t.Errorf("NormalizeRolePermissions = %v, %v", permissions, ok)
 	}
+	// An older app still sends the Library's retired permissions; they are dropped.
+	permissions, ok = NormalizeRolePermissions([]string{"library.view", PermissionMessagesRead, "library.upload"})
+	if !ok || !reflect.DeepEqual(permissions, []string{PermissionMessagesRead}) {
+		t.Errorf("NormalizeRolePermissions with retired permissions = %v, %v", permissions, ok)
+	}
 	for _, bad := range [][]Overwrite{
-		{{RoleID: "a", Allow: []string{PermissionLibraryView}}},
+		{{RoleID: "a", Allow: []string{PermissionStudioView}}},
 		{{RoleID: "a", Allow: []string{PermissionMessagesRead}, Deny: []string{PermissionMessagesRead}}},
 		{{RoleID: "a", Allow: []string{PermissionMessagesRead}}, {RoleID: "a", Deny: []string{PermissionMessagesWrite}}},
 		{{RoleID: " ", Allow: []string{PermissionMessagesRead}}},

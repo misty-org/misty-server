@@ -77,14 +77,6 @@ func (s *SpaceLibraryService) InitiateUpload() http.HandlerFunc {
 			SHA256         string `json:"sha256"`
 			Purpose        string `json:"purpose"`
 			ConversationID string `json:"conversation_id"`
-			// Agent marks a file the caller's agent made; it is saved to the
-			// agent's Space with this provenance.
-			Agent *db.AgentArtifactProvenance `json:"agent"`
-			// ReplaceItemID makes the upload the new content of that item
-			// (the photo editor's Save) rather than a new item. The item must
-			// still be at ReplaceItemVersion, or the server answers 409.
-			ReplaceItemID      string `json:"replace_item_id"`
-			ReplaceItemVersion int64  `json:"replace_item_version"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -101,12 +93,6 @@ func (s *SpaceLibraryService) InitiateUpload() http.HandlerFunc {
 			writeLibraryError(w, db.ErrLibraryInvalid)
 			return
 		}
-		body.ReplaceItemID = strings.TrimSpace(body.ReplaceItemID)
-		replacing := body.ReplaceItemID != "" || body.ReplaceItemVersion != 0
-		if replacing && (body.Purpose != "library" || body.ReplaceItemID == "" || body.ReplaceItemVersion < 1 || body.Agent != nil || body.ConversationID != "") {
-			writeLibraryError(w, db.ErrLibraryInvalid)
-			return
-		}
 		token, err := security.GenerateSecureToken()
 		if err != nil {
 			writeLibraryError(w, err)
@@ -114,12 +100,7 @@ func (s *SpaceLibraryService) InitiateUpload() http.HandlerFunc {
 		}
 		objectKey := "library/" + strings.ReplaceAll(uuid.NewString(), "-", "")
 		expiresAt := time.Now().Add(libraryUploadLifetime).UTC()
-		var upload *db.LibraryUpload
-		if replacing {
-			upload, err = s.database.CreateLibraryReplacementUpload(r.Context(), userID, chi.URLParam(r, "spaceID"), body.Filename, body.MIMEType, body.ByteSize, body.SHA256, objectKey, security.HashToken(token), expiresAt, db.LibraryItemVersion{ID: body.ReplaceItemID, Version: body.ReplaceItemVersion})
-		} else {
-			upload, err = s.database.CreateLibraryUploadWithProvenance(r.Context(), userID, chi.URLParam(r, "spaceID"), body.ConversationID, body.Purpose, body.Filename, body.MIMEType, body.ByteSize, body.SHA256, objectKey, security.HashToken(token), expiresAt, body.Agent)
-		}
+		upload, err := s.database.CreateLibraryUploadForConversation(r.Context(), userID, chi.URLParam(r, "spaceID"), body.ConversationID, body.Purpose, body.Filename, body.MIMEType, body.ByteSize, body.SHA256, objectKey, security.HashToken(token), expiresAt)
 		if err != nil {
 			writeLibraryError(w, err)
 			return

@@ -162,8 +162,9 @@ func TestPresignGetForcesSafeAttachmentDisposition(t *testing.T) {
 func TestUploadLimitsAreEnforcedPerPurpose(t *testing.T) {
 	limits := DefaultUploadLimits()
 
-	if limits.Max(UploadPurposeLibrary) != 100<<20 {
-		t.Fatalf("library limit = %d, want 100MB", limits.Max(UploadPurposeLibrary))
+	// Library items are gone, and their purpose with them.
+	if limits.Max("library") != 0 {
+		t.Fatalf("library limit = %d, want 0", limits.Max("library"))
 	}
 	if limits.Max(UploadPurposeNoteAttachment) != 15<<20 {
 		t.Fatalf("note limit = %d, want 15MB", limits.Max(UploadPurposeNoteAttachment))
@@ -186,15 +187,15 @@ func TestUploadLimitsRejectValuesAboveDatabaseCeiling(t *testing.T) {
 	}
 
 	limits = DefaultUploadLimits()
-	limits.Library = 0
+	limits.NoteAttachment = 0
 	if err := limits.Validate(); err == nil {
-		t.Fatal("validate() accepted a zero Library limit")
+		t.Fatal("validate() accepted a zero note limit")
 	}
 }
 
 func TestUploadPurposeEnabledRejectsJournalAssetsOnGenericEndpoint(t *testing.T) {
 	service := &SpaceLibraryService{
-		UploadsEnabled: true, AttachmentsEnabled: true,
+		AttachmentsEnabled: true,
 		NoteAssetsEnabled: true,
 	}
 
@@ -203,8 +204,11 @@ func TestUploadPurposeEnabledRejectsJournalAssetsOnGenericEndpoint(t *testing.T)
 	if service.UploadPurposeEnabled(UploadPurposeNoteAttachment) {
 		t.Fatal("generic Library upload endpoint accepted the note_attachment purpose")
 	}
-	if !service.UploadPurposeEnabled(UploadPurposeLibrary) || !service.UploadPurposeEnabled(UploadPurposeChatAttachment) {
-		t.Fatal("library and chat attachment purposes should be enabled")
+	if !service.UploadPurposeEnabled(UploadPurposeChatAttachment) {
+		t.Fatal("the chat attachment purpose should be enabled")
+	}
+	if service.UploadPurposeEnabled("library") {
+		t.Fatal("the retired Library purpose was accepted")
 	}
 	if service.UploadPurposeEnabled("avatar") {
 		t.Fatal("unknown purpose accepted")

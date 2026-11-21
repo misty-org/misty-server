@@ -96,6 +96,18 @@ func readInputs(getenv func(string) string) (Inputs, error) {
 		return Inputs{}, err
 	}
 	inputs.ExtraIngress = extra
+	// With calls on, LiveKit's signalling is published beside the API through the same tunnel (TLS at
+	// Cloudflare); its media goes straight to the server over UDP.
+	if serverenv.CallsOn(getenv) {
+		host := serverenv.CallsHostname(inputs.Hostname)
+		taken := false
+		for _, rule := range inputs.ExtraIngress {
+			taken = taken || rule.Host == host
+		}
+		if !taken {
+			inputs.ExtraIngress = append(inputs.ExtraIngress, IngressRule{Host: host, Service: "http://livekit:7880"})
+		}
+	}
 	return inputs, nil
 }
 

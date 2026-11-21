@@ -97,6 +97,7 @@ func (s *RealtimeService) Unregister(client *RealtimeClient) {
 	if previousSpaceID != "" {
 		s.broadcastPresence(previousSpaceID)
 	}
+	go s.leaveVoice(client)
 	go s.PublishStatus(client.UserID)
 }
 

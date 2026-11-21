@@ -44,8 +44,8 @@ func NewSpacesService(database *db.Database, encryptionKey string) (*SpacesServi
 	return &SpacesService{database: database, aead: aead, keyVer: 1}, nil
 }
 
-// SetLibraryProvider installs the Library service that voice transcription
-// reads files through.
+// SetLibraryProvider installs the upload service whose signer the account
+// export uses for its file downloads.
 func (s *SpacesService) SetLibraryProvider(library *SpaceLibraryService) {
 	s.library = library
 }

@@ -30,11 +30,18 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 			"/spaces/{spaceID}/tasks", "/spaces/{spaceID}/calendar", "/spaces/{spaceID}/drawings",
 			"/spaces/{spaceID}/decks", "/spaces/{spaceID}/workbooks",
 			"/internal/journal/drawing-activity", "/internal/journal/deck-projections", "/internal/journal/workbook-projections",
-			"/spaces/{spaceID}/library/items/{itemID}/versions", "/spaces/{spaceID}/library/items/{itemID}/collaboration-ticket",
+			// The Space's Library items, gone with its Media: the drive holds a Space's files.
+			"/spaces/{spaceID}/library/items", "/spaces/{spaceID}/library/facets",
+			"/spaces/{spaceID}/attachments/{attachmentID}/promote", "/spaces/{spaceID}/agent-artifacts",
+			"/me/voice/transcribe",
 			"/spaces/{spaceID}/apps/{appID}/storage"} {
 			if normalized == retired || strings.HasPrefix(normalized, retired+"/") {
 				t.Errorf("retired route remains: %s %s", method, path)
 			}
+		}
+		// The Library's item list; its uploads and usage stay for chat attachments.
+		if normalized == "/spaces/{spaceID}/library" {
+			t.Errorf("retired route remains: %s %s", method, path)
 		}
 		if strings.Contains(path, "/routine-agent") || strings.Contains(path, "/routine-wait") || strings.Contains(path, "/automation-rules") {
 			t.Errorf("retired automation route remains: %s", path)

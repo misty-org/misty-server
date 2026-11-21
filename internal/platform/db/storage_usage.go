@@ -38,7 +38,7 @@ func accountStorageTx(ctx context.Context, tx *sql.Tx, user string) (StorageUsag
  GROUP BY b.space_id HAVING sum(b.boosts)>=$2)
  SELECT
  COALESCE((SELECT sum(logical_bytes) FROM space_storage_contributions WHERE user_id=$1 AND state IN ('active','recovery') AND space_id NOT IN (SELECT space_id FROM boosted)),0),
- COALESCE((SELECT sum(reserved_bytes) FROM space_upload_reservations WHERE user_id=$1 AND state='active' AND space_id NOT IN (SELECT space_id FROM boosted)),0)+COALESCE((SELECT sum(reserved_bytes) FROM space_rendition_reservations WHERE user_id=$1 AND state='active' AND space_id NOT IN (SELECT space_id FROM boosted)),0),
+ COALESCE((SELECT sum(reserved_bytes) FROM space_upload_reservations WHERE user_id=$1 AND state='active' AND space_id NOT IN (SELECT space_id FROM boosted)),0),
  COALESCE((SELECT sum(octet_length(content::text)) FROM space_messages WHERE sender_user_id=$1 AND space_id NOT IN (SELECT space_id FROM boosted)),0)+
  COALESCE((SELECT sum(octet_length(title_projection)+octet_length(markdown_projection)+octet_length(plain_text_projection)+octet_length(shared_tags::text)) FROM space_notes WHERE creator_user_id=$1 AND space_id NOT IN (SELECT space_id FROM boosted)),0)`, user, boostedSpacesThreshold()).Scan(&objects, &reserved, &database)
 	return StorageUsageDimension{UsedBytes: objects + database, ReservedBytes: reserved}, err

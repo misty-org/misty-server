@@ -20,7 +20,7 @@ type reservedQuota struct {
 
 // reserveQuotaBytes reserves exactly total bytes for one user in one Space.
 //
-// Per-file limits are now purpose-specific (100 MB for Library), which is far
+// Per-file limits are purpose-specific (10 MB for a chat attachment), far
 // below the multi-gigabyte owner storage pool. Quota tests therefore fill the
 // pool with several legal uploads instead of one oversized upload.
 func reserveQuotaBytes(t *testing.T, database *Database, ctx context.Context, userID, spaceID, keyPrefix string, total int64) []reservedQuota {
@@ -29,7 +29,7 @@ func reserveQuotaBytes(t *testing.T, database *Database, ctx context.Context, us
 		return nil
 	}
 	digest := strings.Repeat("d", 64)
-	chunk := DefaultLibraryMaxFileBytes
+	chunk := DefaultChatAttachmentMaxFileBytes
 	reservations := []reservedQuota{}
 	for index := 0; total > 0; index++ {
 		size := chunk
@@ -37,7 +37,7 @@ func reserveQuotaBytes(t *testing.T, database *Database, ctx context.Context, us
 			size = total
 		}
 		token := fmt.Sprintf("%s-token-%d", keyPrefix, index)
-		upload, err := database.CreateLibraryUpload(ctx, userID, spaceID, UploadPurposeLibrary,
+		upload, err := database.CreateLibraryUpload(ctx, userID, spaceID, UploadPurposeChatAttachment,
 			fmt.Sprintf("%s-%d.bin", keyPrefix, index), "application/octet-stream", size, digest,
 			fmt.Sprintf("library/%s-%d", keyPrefix, index), token, time.Now().Add(time.Hour))
 		if err != nil {

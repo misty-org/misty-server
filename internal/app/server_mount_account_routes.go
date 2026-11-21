@@ -10,5 +10,4 @@ func (s *Server) mountAccountRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.Patch(prefix+"/me/voice/transcripts/{transcriptID}", spaces.VoiceTranscript())
 	s.Router.Delete(prefix+"/me/voice/transcripts/{transcriptID}", spaces.VoiceTranscript())
 	s.Router.Post(prefix+"/me/voice/transcripts/{transcriptID}/notes", spaces.VoiceTranscriptNotes())
-	s.Router.Post(prefix+"/me/voice/transcribe", spaces.VoiceTranscribeLibraryItem())
 }

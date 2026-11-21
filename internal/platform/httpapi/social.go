@@ -1,13 +1,10 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/misty-org/misty-server/internal/platform/config"
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
@@ -275,54 +272,6 @@ func (s *SocialService) LeaveDirect() http.HandlerFunc {
 	}
 }
 
-// DirectCall rings or stops ringing a DM's other people: {state: "ringing"|"ended", video}. Only
-// the call's room and who is calling travel; the call itself goes through LiveKit.
-func (s *SocialService) DirectCall() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		var body struct {
-			State string `json:"state"`
-			Video bool   `json:"video"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		if body.State != "ringing" && body.State != "ended" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_request"})
-			return
-		}
-		dmID := chi.URLParam(r, "dmID")
-		allowed, err := s.database.CanJoinCall(r.Context(), userID, "dm:"+dmID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if !allowed {
-			writeJSON(w, http.StatusForbidden, map[string]string{"code": "forbidden"})
-			return
-		}
-		members, err := s.database.DirectMemberIDs(r.Context(), userID, dmID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		others := []string{}
-		for _, id := range members {
-			if id != userID {
-				others = append(others, id)
-			}
-		}
-		payload, _ := json.Marshal(map[string]any{"type": "call", "dm_id": dmID, "room": "dm:" + dmID, "from": userID, "state": body.State, "video": body.Video})
-		if s.realtime != nil {
-			s.realtime.SendToUsers(others, payload)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
 // Status reads (GET) or sets (PUT) the caller's chosen status and custom line.
 func (s *SocialService) Status() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -400,63 +349,6 @@ func (s *SocialService) Notices() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"notices": notices})
-	}
-}
-
-// CallConfig tells the app whether calls are on, and where LiveKit is.
-func (s *SocialService) CallConfig() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := authenticatedUser(w, r, s.database); !ok {
-			return
-		}
-		enabled := s.liveKitURL != "" && s.liveKitKey != "" && s.liveKitSecret != ""
-		out := map[string]any{"enabled": enabled, "max_people": 8}
-		if enabled {
-			out["url"] = s.liveKitURL
-		}
-		writeJSON(w, http.StatusOK, out)
-	}
-}
-
-// CallToken mints a LiveKit token for one room, after checking the caller may join it by the
-// room's kind ("dm:<dm id>" today; "space:<id>:voice:<channel>" later). Media and the call's
-// end-to-end key never pass through this server.
-func (s *SocialService) CallToken() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		if s.liveKitKey == "" || s.liveKitSecret == "" || s.liveKitURL == "" {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "calls_unavailable"})
-			return
-		}
-		room := chi.URLParam(r, "room")
-		allowed, err := s.database.CanJoinCall(r.Context(), userID, room)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if !allowed {
-			writeJSON(w, http.StatusForbidden, map[string]string{"code": "forbidden"})
-			return
-		}
-		now := time.Now()
-		claims := jwt.MapClaims{
-			"iss": s.liveKitKey,
-			"sub": userID,
-			"nbf": now.Add(-10 * time.Second).Unix(),
-			"exp": now.Add(10 * time.Minute).Unix(),
-			"video": map[string]any{
-				"room": room, "roomJoin": true, "canPublish": true, "canSubscribe": true, "canPublishData": true,
-			},
-		}
-		token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(s.liveKitSecret))
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"token": token, "url": s.liveKitURL, "room": room})
 	}
 }
 

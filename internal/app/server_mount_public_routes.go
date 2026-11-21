@@ -63,7 +63,7 @@ func (s *Server) mountPublicProfileRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/me/space-people", api.SpacePeople(s.Database))
 }
 
-// mountPublicFeatureRoutes mounts the Spaces and Library route trees.
+// mountPublicFeatureRoutes mounts the Spaces, upload and drive route trees.
 func (s *Server) mountPublicFeatureRoutes(prefix string, deps *mountDeps) {
 	s.mountSpacesRoutes(prefix, s.Spaces, s.Realtime)
 	if s.Library != nil {

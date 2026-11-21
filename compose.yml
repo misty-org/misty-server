@@ -115,8 +115,8 @@ services:
       - ${MISTY_ENV_DIR:-~/.misty/.env/server}/google.env
       - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/mailjet.env
         required: false
-      # LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET turn on calls in DMs (the livekit
-      # service below). Without them the app shows no call buttons.
+      # Calls follow MISTY_CALLS=1: the API works out LIVEKIT_URL, LIVEKIT_API_KEY and
+      # LIVEKIT_API_SECRET itself. A development stack can set them here instead.
       - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/livekit.env
         required: false
     restart: unless-stopped
@@ -142,27 +142,41 @@ services:
       retries: 3
     networks: [edge, database]
 
-  # LiveKit carries calls in DMs, only with `docker compose --profile calls up`. The server only
-  # mints room tokens; calls are end-to-end encrypted between the people's computers, so neither
-  # the server nor LiveKit can hear or see them. Media needs the UDP range reachable from outside.
+  # LiveKit carries calls (DMs and Space voice channels), only with MISTY_CALLS=1 in misty.env and
+  # `docker compose --profile calls up`. The server only mints room tokens; calls are end-to-end
+  # encrypted between the people's computers, so neither the server nor LiveKit can hear or see them.
+  # Its signalling is published at MISTY_HOSTNAME's calls sibling through the tunnel (setup adds the
+  # route); media goes straight to this machine, so open UDP 3478 and 50000-50100 and TCP 7881.
   livekit:
     image: livekit/livekit-server:v1.8.4
     profiles: [calls]
-    command: ["--node-ip", "${LIVEKIT_NODE_IP:-127.0.0.1}"]
-    env_file:
-      - ${MISTY_ENV_DIR:-~/.misty/.env/server}/livekit.env
-    # livekit.env also holds LIVEKIT_KEYS="<api key>: <api secret>", the same pair the server signs with.
+    # The same secret the API signs tokens with, derived from the root by setup (livekit/api-secret).
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - 'export LIVEKIT_KEYS="misty: $$(cat /run/misty/secrets/livekit/api-secret)"; exec /livekit-server'
     environment:
       LIVEKIT_CONFIG: |
         port: 7880
+        # At most 8 people in any call, whatever asked for the room.
+        room:
+          max_participants: 8
         rtc:
           tcp_port: 7881
           port_range_start: 50000
           port_range_end: 50100
-          use_external_ip: false
+          # Finds this machine's public address itself (STUN), so people on other networks reach it.
+          use_external_ip: true
+        # TURN over UDP for people behind strict networks; it needs no certificate.
+        turn:
+          enabled: true
+          udp_port: 3478
+    volumes:
+      - secrets:/run/misty/secrets:ro
     ports:
       - "${LIVEKIT_HOST_PORT:-7880}:7880"
       - "7881:7881"
+      - "3478:3478/udp"
       - "50000-50100:50000-50100/udp"
     restart: unless-stopped
     networks: [edge]

@@ -12,7 +12,7 @@ func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, mes
 		return nil
 	}
 
-	rows, err := tx.QueryContext(ctx, `SELECT a.id,a.file_id,a.upload_id,COALESCE(a.promoted_item_id,''),
+	rows, err := tx.QueryContext(ctx, `SELECT a.id,a.file_id,a.upload_id,
 		COALESCE(c.logical_bytes,0)
 		FROM space_message_attachments a
 		LEFT JOIN space_storage_contributions c ON c.space_id=a.space_id AND c.source_kind='attachment'
@@ -22,13 +22,13 @@ func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, mes
 		return err
 	}
 	type attachmentCleanup struct {
-		id, fileID, uploadID, promotedItemID string
-		bytes                                int64
+		id, fileID, uploadID string
+		bytes                int64
 	}
 	items := []attachmentCleanup{}
 	for rows.Next() {
 		var item attachmentCleanup
-		if err := rows.Scan(&item.id, &item.fileID, &item.uploadID, &item.promotedItemID, &item.bytes); err != nil {
+		if err := rows.Scan(&item.id, &item.fileID, &item.uploadID, &item.bytes); err != nil {
 			rows.Close()
 			return err
 		}
@@ -40,10 +40,6 @@ func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, mes
 
 	var released int64
 	for _, item := range items {
-		if item.promotedItemID != "" {
-			// Promotion deliberately transfers retention to the Library.
-			continue
-		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_item_aliases WHERE space_id=$1 AND target_kind='attachment' AND target_id=$2`, spaceID, item.id); err != nil {
 			return err
 		}
@@ -59,7 +55,6 @@ func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, mes
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE library_files f SET lifecycle_state='deleted',deleted_at=NOW(),version=version+1,updated_at=NOW()
 			WHERE f.id=$1
-			  AND NOT EXISTS(SELECT 1 FROM space_library_items i WHERE i.file_id=f.id AND i.lifecycle_state IN ('ready','recovery'))
 			  AND NOT EXISTS(SELECT 1 FROM space_message_attachments a WHERE a.file_id=f.id AND a.id<>$2 AND a.lifecycle_state IN ('ready','recovery'))
 			  AND NOT EXISTS(SELECT 1 FROM space_note_assets n WHERE n.file_id=f.id AND n.lifecycle_state IN ('ready','recovery'))`, item.fileID, item.id); err != nil {
 			return err

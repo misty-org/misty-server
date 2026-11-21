@@ -117,3 +117,28 @@ func TestAPIRateLimiterSharesOneBudgetAcrossSpaces(t *testing.T) {
 		}
 	}
 }
+
+// Friend requests get their own small burst budget, under the default for writes, so a burst
+// can't spray usernames before the daily cap applies.
+func TestFriendRequestsHaveTheirOwnBurstLimit(t *testing.T) {
+	limiter := NewAPIRateLimiter()
+	limiter.Now = func() time.Time { return time.Unix(0, 0) }
+	policy, ok := limiter.RoutePolicies["POST /friends/requests"]
+	if !ok || policy.Limit != 10 || policy.Window != time.Minute {
+		t.Fatalf("friend request policy = %+v, %v; want 10 a minute", policy, ok)
+	}
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	for index := 0; index <= policy.Limit; index++ {
+		request := httptest.NewRequest(http.MethodPost, "/v1/friends/requests", nil)
+		request.RemoteAddr = "203.0.113.20:1234"
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		want := http.StatusOK
+		if index == policy.Limit {
+			want = http.StatusTooManyRequests
+		}
+		if recorder.Code != want {
+			t.Fatalf("request %d status=%d, want %d", index, recorder.Code, want)
+		}
+	}
+}

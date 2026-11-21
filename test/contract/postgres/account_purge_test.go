@@ -78,13 +78,13 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 	}
 	purgeSpaces(t, database, ctx, personal.ID)
 
-	// Studio is Bob's now; the personal Space and its Library are gone.
+	// Studio is Bob's now; the personal Space and its files are gone.
 	if owner := text(t, database, `SELECT owner_user_id FROM spaces WHERE id=$1`, studio.ID); owner != bob.ID {
 		t.Fatalf("Studio's owner = %v", owner)
 	}
 	gone := map[string][]any{
 		`SELECT count(*) FROM spaces WHERE id=$1`:                        {personal.ID},
-		`SELECT count(*) FROM space_library_items WHERE id=$1`:           {photo.ID},
+		`SELECT count(*) FROM space_message_attachments WHERE id=$1`:     {photo.ID},
 		`SELECT count(*) FROM library_blobs WHERE security_domain_id=$1`: {personal.SecurityDomainID},
 		`SELECT count(*) FROM security_domains WHERE id=$1`:              {personal.SecurityDomainID},
 		`SELECT count(*) FROM space_members WHERE user_id=$1`:            {alice.ID},

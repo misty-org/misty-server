@@ -51,8 +51,6 @@ func TestPrivateChannelItemsAreHiddenFromMembersWithoutRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSpaceNoteWithVisibility(crew) error = %v", err)
 	}
-	item := createTestImage(t, f.database, f.owner.ID, f.space.ID, "crew.jpg", "c")
-	exec(t, f.database, `UPDATE space_library_items SET audience_kind='conversation',audience_conversation_id=$1,visibility='public' WHERE id=$2`, channel.ID, item.ID)
 
 	notes, err := f.database.AccessibleSpaceNotes(f.ctx, f.rest.ID, f.space.ID)
 	if err != nil || containsNote(notes, note.ID) {
@@ -63,21 +61,6 @@ func TestPrivateChannelItemsAreHiddenFromMembersWithoutRead(t *testing.T) {
 	}
 	if hits, err := f.database.SearchSpaceNotes(f.ctx, f.rest.ID, f.space.ID, "Crew plans", 20); err != nil || containsNote(hits, note.ID) {
 		t.Fatalf("SearchSpaceNotes(rest) = %#v, %v, want no hit", hits, err)
-	}
-	if _, err := f.database.LibraryItem(f.ctx, f.rest.ID, f.space.ID, item.ID); err == nil {
-		t.Fatal("a non-reader opened the private channel's Library item")
-	}
-	if _, err := f.database.LibraryItem(f.ctx, f.crew.ID, f.space.ID, item.ID); err != nil {
-		t.Fatalf("LibraryItem(crew) error = %v", err)
-	}
-	items, err := f.database.LibraryItems(f.ctx, f.rest.ID, f.space.ID, LibraryItemQuery{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, listed := range items {
-		if listed.ID == item.ID {
-			t.Fatal("a non-reader lists the private channel's Library item")
-		}
 	}
 	events, _, err := f.database.SpaceEventsAfter(f.ctx, f.rest.ID, cursor, 1000)
 	if err != nil {
@@ -95,7 +78,7 @@ func TestMentioningANonReaderInAPrivateChannelReachesNobodyElse(t *testing.T) {
 	channel := f.privateChannel(t)
 	cursor := f.lastEventID(t, f.rest.ID)
 	content := []MessageSpan{{Type: "text", Text: "ping "}, {Type: "mention", UserID: f.rest.ID, Label: "rest"}}
-	message, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.crew.ID, f.space.ID, channel.ID, content, nil, nil, nil, "")
+	message, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(f.ctx, f.crew.ID, f.space.ID, channel.ID, content, nil, nil, "")
 	if err != nil {
 		t.Fatalf("posting a mention error = %v", err)
 	}
@@ -188,42 +171,6 @@ func roleIDsOf(t *testing.T, f rolesFixture, userID string) []string {
 func containsNote(notes []SpaceNote, noteID string) bool {
 	for _, note := range notes {
 		if note.ID == noteID {
-			return true
-		}
-	}
-	return false
-}
-
-func TestLibraryCountsLeaveOutItemsInChannelsTheMemberCantRead(t *testing.T) {
-	f := newRolesFixture(t, "roles-facets")
-	channel := f.privateChannel(t)
-	shared := createTestImage(t, f.database, f.owner.ID, f.space.ID, "shared.jpg", "5")
-	hidden := createTestImage(t, f.database, f.owner.ID, f.space.ID, "crew.jpg", "6")
-	exec(t, f.database, `UPDATE space_library_items SET visibility='public',tags='["everyone"]'::jsonb WHERE id=$1`, shared.ID)
-	exec(t, f.database, `UPDATE space_library_items SET audience_kind='conversation',audience_conversation_id=$1,visibility='public',tags='["crew"]'::jsonb WHERE id=$2`, channel.ID, hidden.ID)
-
-	rest, err := f.database.LibraryFacets(f.ctx, f.rest.ID, f.space.ID, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	crew, err := f.database.LibraryFacets(f.ctx, f.crew.ID, f.space.ID, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if crew.Total != rest.Total+1 {
-		t.Fatalf("totals: crew %d, rest %d; want the private channel's item counted only for the crew", crew.Total, rest.Total)
-	}
-	if facetHas(rest.Tags, "crew") || !facetHas(rest.Tags, "everyone") {
-		t.Fatalf("rest tags = %#v, want everyone's tag and not the crew's", rest.Tags)
-	}
-	if !facetHas(crew.Tags, "crew") {
-		t.Fatalf("crew tags = %#v, want the crew's tag", crew.Tags)
-	}
-}
-
-func facetHas(facets []LibrarySearchFacet, value string) bool {
-	for _, facet := range facets {
-		if facet.Value == value {
 			return true
 		}
 	}

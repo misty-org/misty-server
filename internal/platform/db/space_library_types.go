@@ -11,26 +11,18 @@ import (
 )
 
 const (
-	PermissionLibraryView      = spaces.PermissionLibraryView
 	PermissionMessagesRead     = spaces.PermissionMessagesRead
 	PermissionMessagesWrite    = spaces.PermissionMessagesWrite
-	PermissionLibraryUpload    = spaces.PermissionLibraryUpload
 	PermissionAttachmentUpload = spaces.PermissionAttachmentUpload
-	PermissionLibraryAdd       = spaces.PermissionLibraryAdd
-	PermissionLibraryEdit      = spaces.PermissionLibraryEdit
-	PermissionLibraryDownload  = spaces.PermissionLibraryDownload
-	PermissionLibraryImport    = spaces.PermissionLibraryImport
 	PermissionStorageViewOwn   = spaces.PermissionStorageViewOwn
 	PermissionStudioView       = spaces.PermissionStudioView
 	PermissionAskRun           = spaces.PermissionAskRun
-	LibraryRecoveryWindow      = spaces.LibraryRecoveryWindow
 )
 
 // Upload purposes decide which Space permission an upload needs and which
 // maximum file size applies. The database enforces the maximum independently of
 // the API service so a misconfigured service cannot widen the limit.
 const (
-	UploadPurposeLibrary        = spaces.UploadPurposeLibrary
 	UploadPurposeChatAttachment = spaces.UploadPurposeChatAttachment
 	UploadPurposeNoteAttachment = spaces.UploadPurposeNoteAttachment
 	UploadPurposeDrive          = spaces.UploadPurposeDrive
@@ -39,7 +31,6 @@ const (
 // Default per-purpose maximums. Deployments may lower these through
 // configuration, but never above the ceiling enforced here.
 const (
-	DefaultLibraryMaxFileBytes        = spaces.DefaultLibraryMaxFileBytes
 	DefaultChatAttachmentMaxFileBytes = spaces.DefaultChatAttachmentMaxFileBytes
 	DefaultNoteAttachmentMaxFileBytes = spaces.DefaultNoteAttachmentMaxFileBytes
 )
@@ -112,31 +103,6 @@ type LibraryFile struct {
 	Version            int64           `json:"version"`
 }
 
-type SpaceLibraryItem struct {
-	ID                     string          `json:"id"`
-	SpaceID                string          `json:"space_id"`
-	FileID                 string          `json:"file_id"`
-	ContributingUserID     string          `json:"contributing_user_id"`
-	DisplayName            string          `json:"display_name"`
-	Caption                string          `json:"caption"`
-	Tags                   []string        `json:"tags"`
-	Favorite               bool            `json:"favorite"`
-	Hidden                 bool            `json:"hidden"`
-	DateOverride           *time.Time      `json:"date_override,omitempty"`
-	LocationOverride       json.RawMessage `json:"location_override,omitempty"`
-	ContributorInformation json.RawMessage `json:"contributor_information"`
-	AddedByUserID          string          `json:"added_by_user_id"`
-	LifecycleState         string          `json:"lifecycle_state"`
-	AddedAt                time.Time       `json:"added_at"`
-	TrashedAt              *time.Time      `json:"trashed_at,omitempty"`
-	RecoverUntil           *time.Time      `json:"recover_until,omitempty"`
-	Version                int64           `json:"version"`
-	UpdatedAt              time.Time       `json:"updated_at"`
-	// Visibility is "public" or "private": a private file opens only for whoever added it.
-	Visibility string      `json:"visibility"`
-	File       LibraryFile `json:"file"`
-}
-
 type MessageAttachment struct {
 	ID             string     `json:"id"`
 	SpaceID        string     `json:"space_id"`
@@ -145,7 +111,6 @@ type MessageAttachment struct {
 	UploadID       string     `json:"upload_id"`
 	UploaderUserID string     `json:"uploader_user_id"`
 	DisplayName    string     `json:"display_name"`
-	PromotedItemID string     `json:"promoted_item_id,omitempty"`
 	LifecycleState string     `json:"lifecycle_state"`
 	CreatedAt      time.Time  `json:"created_at"`
 	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
@@ -155,12 +120,9 @@ type MessageAttachment struct {
 type CompleteLibraryUploadResult struct {
 	Upload           LibraryUpload      `json:"upload"`
 	File             LibraryFile        `json:"file"`
-	Item             *SpaceLibraryItem  `json:"item,omitempty"`
 	Attachment       *MessageAttachment `json:"attachment,omitempty"`
 	NoteAsset        *SpaceNoteAsset    `json:"note_asset,omitempty"`
 	DiscardObjectKey string             `json:"-"`
-	// RetiredObjectKeys are the replaced content's objects nothing uses any more.
-	RetiredObjectKeys []string `json:"-"`
 }
 
 type LibraryDownload struct {

@@ -20,8 +20,6 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 		deadline = `SELECT min(next_attempt_at) FROM space_code_session_control_outbox WHERE delivered_at IS NULL`
 	case "account-deletion":
 		deadline = accountDeletionWorkerDeadline
-	case "rendition-reservations":
-		deadline = renditionReservationWorkerDeadline
 	default:
 		return 0, false, errors.New("unknown worker queue")
 	}

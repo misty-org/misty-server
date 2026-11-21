@@ -104,8 +104,6 @@ func retentionTasks(server *Server) []retentionTask {
 	}
 	if server.Library != nil {
 		tasks = append(tasks,
-			// Trashed items past their recovery window go for good and free their bytes.
-			retentionTask{"library-trash", 25, func(ctx context.Context) (int, error) { return server.Library.PurgeExpiredTrash(ctx, 25) }},
 			// Object storage offers no change stream; the inventory comparison is
 			// the budgeted exception. It runs once per pass, not drained.
 			retentionTask{"library-objects", 0, func(ctx context.Context) (int, error) {

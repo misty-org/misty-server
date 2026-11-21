@@ -11,6 +11,9 @@ import (
 // handleClientMessage processes viewing, ephemeral typing and agent status declarations sent by a
 // connected client.
 func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []byte) {
+	if s.handleVoiceMessage(client, payload) {
+		return
+	}
 	var msg struct {
 		Type           string        `json:"type"`
 		SpaceID        string        `json:"space_id"`
@@ -115,7 +118,10 @@ func (s *RealtimeService) broadcastTyping(client *RealtimeClient, spaceID, conve
 
 // presencePlaces are the parts of Misty a viewer can say they are in. Anything else is dropped,
 // so presence never carries free text.
-var presencePlaces = map[string]bool{"": true, "studio": true, "lab": true}
+var presencePlaces = map[string]bool{"": true, "studio": true, "lab": true, "app": true}
+
+// presenceAppID is the shape of the app a viewer has open, as `space_apps` names it.
+var presenceAppID = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 
 // presenceItemID is the shape of the one item the Lab may name: a notebook's doc id.
 var presenceItemID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
@@ -128,13 +134,14 @@ var presenceRooms = map[string]bool{
 }
 
 // cleanPresencePlace keeps a known place, and an item only where that place names one: an
-// id-shaped notebook in the Lab, or one of the Studio's rooms.
+// id-shaped notebook in the Lab, an app's id, or one of the Studio's rooms.
 func cleanPresencePlace(place, itemID string) (string, string) {
 	if !presencePlaces[place] {
 		place = ""
 	}
 	switch {
 	case place == "lab" && presenceItemID.MatchString(itemID):
+	case place == "app" && presenceAppID.MatchString(itemID):
 	case place == "studio" && presenceRooms[itemID]:
 	default:
 		itemID = ""

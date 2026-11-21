@@ -31,7 +31,6 @@ func TestTablesHaveRowLevelSecurityEnabled(t *testing.T) {
 		"space_nodes",
 		"space_integrations",
 		"space_agents",
-		"space_agent_artifacts",
 		"space_provider_credentials",
 		"cloud_connections",
 		"space_events",

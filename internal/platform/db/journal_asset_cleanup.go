@@ -162,10 +162,6 @@ func claimJournalAssetTx(
 			       WHERE h.active AND h.target_kind='file' AND h.target_id=f.id
 			   )
 			   AND NOT EXISTS (
-			       SELECT 1 FROM space_library_items i
-			       WHERE i.file_id=f.id AND i.lifecycle_state<>'deleted'
-			   )
-			   AND NOT EXISTS (
 			       SELECT 1 FROM space_message_attachments a
 			       WHERE a.file_id=f.id AND a.lifecycle_state<>'deleted'
 			   )

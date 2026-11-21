@@ -8,11 +8,12 @@ import (
 	"time"
 )
 
-func createTestImage(t *testing.T, database *Database, userID, spaceID, filename, digestCharacter string) *SpaceLibraryItem {
+// createTestImage uploads a small image as a chat attachment, not yet posted.
+func createTestImage(t *testing.T, database *Database, userID, spaceID, filename, digestCharacter string) *MessageAttachment {
 	t.Helper()
 	digest := strings.Repeat(digestCharacter, 64)
 	token := "image-token-" + digestCharacter
-	upload, err := database.CreateLibraryUpload(context.Background(), userID, spaceID, "library", filename, "image/jpeg", 128, digest, "library/image-"+digestCharacter, token, time.Now().Add(time.Hour))
+	upload, err := database.CreateLibraryUpload(context.Background(), userID, spaceID, UploadPurposeChatAttachment, filename, "image/jpeg", 128, digest, "library/image-"+digestCharacter, token, time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,8 +21,8 @@ func createTestImage(t *testing.T, database *Database, userID, spaceID, filename
 		t.Fatal(err)
 	}
 	result, err := database.CompleteLibraryUpload(context.Background(), userID, spaceID, upload.ID, token, 128, digest, "image/jpeg", nil)
-	if err != nil || result.Item == nil {
+	if err != nil || result.Attachment == nil {
 		t.Fatalf("complete image = %#v, %v", result, err)
 	}
-	return result.Item
+	return result.Attachment
 }

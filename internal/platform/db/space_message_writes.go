@@ -16,8 +16,8 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 		if !permissions.Has(PermissionMessagesRead) {
 			return ErrSpaceForbidden
 		}
-		var sender string
-		if err := tx.QueryRowContext(ctx, `SELECT sender_user_id FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 FOR UPDATE`, messageID, spaceID, conversationID).Scan(&sender); errors.Is(err, sql.ErrNoRows) {
+		var sender, threadRootID string
+		if err := tx.QueryRowContext(ctx, `SELECT sender_user_id,COALESCE(thread_root_id,'') FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 FOR UPDATE`, messageID, spaceID, conversationID).Scan(&sender, &threadRootID); errors.Is(err, sql.ErrNoRows) {
 			return ErrSpaceNotFound
 		} else if err != nil {
 			return err
@@ -31,9 +31,13 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 			return err
 		}
 		// Recorded after the cleanup, which removes the message's own events: everyone who could
-		// see the message takes it off their screen. Only ids travel, never what it said.
-		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "message.deleted", messageID,
-			map[string]any{"message_id": messageID, "conversation_id": conversationID})
+		// see the message takes it off their screen, and a thread reply lowers its root's count. Only
+		// ids travel, never what it said.
+		payload := map[string]any{"message_id": messageID, "conversation_id": conversationID}
+		if threadRootID != "" {
+			payload["thread_root_id"] = threadRootID
+		}
+		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "message.deleted", messageID, payload)
 		return err
 	})
 }

@@ -109,7 +109,7 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 	// Uploads: level 1 allows 2000 bytes a file, and the Space's own 5100 bytes of storage.
 	upload := func(size int64) error {
 		key := strings.Repeat("a", 64)
-		_, err := database.CreateLibraryUpload(ctx, friend.ID, space.ID, "library", "f.bin", "application/octet-stream", size,
+		_, err := database.CreateLibraryUpload(ctx, friend.ID, space.ID, "attachment", "f.bin", "application/octet-stream", size,
 			key, "objects/"+time.Now().Format("150405.000000000"), "token-"+time.Now().Format("150405.000000000"), time.Now().Add(time.Hour))
 		return err
 	}

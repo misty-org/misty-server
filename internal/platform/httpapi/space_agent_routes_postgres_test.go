@@ -171,7 +171,7 @@ func TestSpaceSearchRoutesShowOnlyWhatThePersonCanSeePostgres(t *testing.T) {
 			}
 			return message.ID
 		}
-		message, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(ctx, sender, f.space.ID, conversationID, content, nil, nil, nil, "")
+		message, _, err := f.database.TestingCreateSpaceConversationMessageWithReferences(ctx, sender, f.space.ID, conversationID, content, nil, nil, "")
 		if err != nil {
 			t.Fatal(err)
 		}

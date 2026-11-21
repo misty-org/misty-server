@@ -29,8 +29,8 @@ type SpaceNoteAsset struct {
 //
 // This exists separately from CreateLibraryUpload because the authorization
 // question is different: not "may this user upload to this Space" but "may this
-// user edit this note". A Space member with library.upload but no note grant
-// must be rejected here.
+// user edit this note". A Space member who may attach files but has no note
+// grant must be rejected here.
 func (db *Database) CreateNoteAssetUpload(ctx context.Context, userID, noteID, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time) (*LibraryUpload, error) {
 	maxBytes := MaxUploadBytesForPurpose(UploadPurposeNoteAttachment)
 	if byteSize < 1 || byteSize > maxBytes || len(clientSHA) != 64 || filename == "" || objectKey == "" || tokenHash == "" {

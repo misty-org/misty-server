@@ -74,8 +74,12 @@ func (s *RealtimeService) Statuses(ctx context.Context, userIDs []string) ([]Acc
 }
 
 // PublishStatus sends the account's status to its audience (friends and people it shares a Space
-// with) and to its own other connections, when it changed since it was last sent.
+// with), when it changed since it was last sent.
 func (s *RealtimeService) PublishStatus(userID string) {
+	// A realtime service made without a database (some tests) has no statuses to publish.
+	if s.database == nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	chosen, err := s.database.ChosenStatuses(ctx, []string{userID})
@@ -109,7 +113,8 @@ func (s *RealtimeService) PublishStatus(userID string) {
 	if err != nil {
 		return
 	}
-	s.SendToUsers(append(audience, userID), payload)
+	// The person's own computers read their status on load; only others are told.
+	s.SendToUsers(audience, payload)
 }
 
 // SendToUsers delivers one message to every connection of these accounts.

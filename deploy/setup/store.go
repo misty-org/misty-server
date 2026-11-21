@@ -57,6 +57,8 @@ var privateFiles = map[string]string{
 var sharedFiles = map[string]string{
 	"DB_PASSWORD":          "postgres/app-password",
 	"MISTY_OPERATOR_TOKEN": "operator/token",
+	// The livekit service checks call tokens with the same secret the API signs them with.
+	"LIVEKIT_API_SECRET": "livekit/api-secret",
 }
 
 // renderedValues are written into server.env on every save, for the API and

@@ -26,11 +26,6 @@ func runLifecycleQueues(ctx context.Context, server *Server) {
 			return closed + processed + purged, errors.Join(closeErr, err)
 		}
 	}
-	if server.Library != nil {
-		queues["rendition-reservations"] = func(ctx context.Context) (int, error) {
-			return server.Database.ReleaseExpiredLibraryRenditionReservations(ctx, 100)
-		}
-	}
 	var workers sync.WaitGroup
 	for kind, process := range queues {
 		workers.Add(1)

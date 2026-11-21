@@ -50,6 +50,14 @@ type RealtimeClient struct {
 	// idle is whether this computer has had no input for a while (it says so with "activity").
 	// Mutated only while holding RealtimeService.mu.
 	idle bool
+	// voiceSpaceID and voiceChannelID are the Space voice channel this computer is in, and voiceKeyID
+	// its call key's id there (realtime_voice.go); voiceWindowAt and voiceFrames bound its voice
+	// messages per second. Mutated only while holding RealtimeService.mu.
+	voiceSpaceID   string
+	voiceChannelID string
+	voiceKeyID     string
+	voiceWindowAt  time.Time
+	voiceFrames    int
 }
 
 type RealtimeService struct {

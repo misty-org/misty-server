@@ -28,14 +28,16 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Content          []db.MessageSpan `json:"content"`
-			FileNodeIDs      []string         `json:"file_node_ids"`
-			AttachmentIDs    []string         `json:"attachment_ids"`
-			LibraryItemIDs   []string         `json:"library_item_ids"`
-			ReplyToMessageID string           `json:"reply_to_message_id"`
-			ThreadRootID     string           `json:"thread_root_id"`
-			ClientNonce      string           `json:"client_nonce"`
-			InputModality    string           `json:"input_modality"`
+			Content       []db.MessageSpan `json:"content"`
+			FileNodeIDs   []string         `json:"file_node_ids"`
+			AttachmentIDs []string         `json:"attachment_ids"`
+			// An older app may still send Library items; they are gone, so
+			// the field is read and ignored.
+			LibraryItemIDs   []string `json:"library_item_ids"`
+			ReplyToMessageID string   `json:"reply_to_message_id"`
+			ThreadRootID     string   `json:"thread_root_id"`
+			ClientNonce      string   `json:"client_nonce"`
+			InputModality    string   `json:"input_modality"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -44,9 +46,9 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 		var message *db.SpaceMessage
 		var err error
 		if body.ThreadRootID != "" {
-			message, _, err = s.database.CreateSpaceThreadReplyWithClientNonce(r.Context(), userID, spaceID, "", body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ThreadRootID, body.ClientNonce)
+			message, _, err = s.database.CreateSpaceThreadReplyWithClientNonce(r.Context(), userID, spaceID, "", body.Content, body.FileNodeIDs, body.AttachmentIDs, body.ThreadRootID, body.ClientNonce)
 		} else {
-			message, _, err = s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+			message, _, err = s.database.CreateSpaceMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.ReplyToMessageID, body.ClientNonce)
 		}
 		if err != nil {
 			writeSpaceError(w, err)

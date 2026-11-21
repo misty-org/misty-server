@@ -6,10 +6,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-func (s *SpaceLibraryService) SetMediaProcessor(processor LibraryMediaProcessor) {
-	s.mediaProcessor = processor
-}
-
 func (s *SpaceLibraryService) WriteDownload(w http.ResponseWriter, r *http.Request, download *db.LibraryDownload) {
 	// Bandwidth is billed per byte by object storage, so the ceiling is
 	// checked before a download is signed.

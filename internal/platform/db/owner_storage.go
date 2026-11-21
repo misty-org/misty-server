@@ -52,12 +52,9 @@ func (db *Database) OwnerStorageUsage(ctx context.Context, userID string) (*Owne
 				WHERE c.space_id=s.id AND c.user_id=$1 AND c.state IN ('active','recovery')),0),
 			COALESCE((SELECT sum(r.reserved_bytes) FROM space_upload_reservations r
 				WHERE r.space_id=s.id AND r.user_id=$1 AND r.state='active'),0)
-			+ COALESCE((SELECT sum(r.reserved_bytes) FROM space_rendition_reservations r
-				WHERE r.space_id=s.id AND r.user_id=$1 AND r.state='active'),0)
 			FROM spaces s WHERE s.lifecycle_state='active' AND (
 				EXISTS(SELECT 1 FROM space_storage_contributions c WHERE c.space_id=s.id AND c.user_id=$1 AND c.state IN ('active','recovery')) OR
-				EXISTS(SELECT 1 FROM space_upload_reservations r WHERE r.space_id=s.id AND r.user_id=$1 AND r.state='active') OR
-				EXISTS(SELECT 1 FROM space_rendition_reservations r WHERE r.space_id=s.id AND r.user_id=$1 AND r.state='active'))
+				EXISTS(SELECT 1 FROM space_upload_reservations r WHERE r.space_id=s.id AND r.user_id=$1 AND r.state='active'))
 			ORDER BY s.created_at`, userID)
 		if err != nil {
 			return err

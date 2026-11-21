@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os/exec"
 
 	"github.com/misty-org/misty-server/internal/platform/db"
 	api "github.com/misty-org/misty-server/internal/platform/httpapi"
@@ -49,25 +48,11 @@ func CreateServer() (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configure Space drive: %w", err)
 	}
-	s.Library, err = api.NewSpaceLibraryService(s.Database, s.LibraryStore, true, api.UploadLimitsFromEnv())
+	s.Library, err = api.NewSpaceLibraryService(s.Database, s.LibraryStore, api.UploadLimitsFromEnv())
 	if err != nil {
-		return nil, fmt.Errorf("configure Space Library: %w", err)
+		return nil, fmt.Errorf("configure Space uploads: %w", err)
 	}
-	mediaProcessingEnabled := false
-	if mediaProcessorBin, lookupErr := exec.LookPath("ffmpeg"); lookupErr == nil {
-		processor, processorErr := api.NewFFmpegLibraryMediaProcessor(mediaProcessorBin)
-		if processorErr != nil {
-			return nil, fmt.Errorf("configure Library media processor: %w", processorErr)
-		}
-		s.Library.SetMediaProcessor(processor)
-		extractor, extractorErr := api.NewFFprobeLibraryMetadataExtractor(mediaProcessorBin)
-		if extractorErr != nil {
-			return nil, fmt.Errorf("configure Library metadata extractor: %w", extractorErr)
-		}
-		s.Library.SetMetadataExtractor(extractor)
-		mediaProcessingEnabled = true
-	}
-	s.Library.SetSubsystems(true, mediaProcessingEnabled, true)
+	s.Library.SetAttachmentsEnabled(true)
 	s.Library.SetNoteAssetsEnabled(true)
 	spaceKey, err := spaceLinkEncryptionKeyFromEnv()
 	if err != nil {

@@ -25,7 +25,7 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	}
 	digest := strings.Repeat("d", 64)
 	upload, err := fixture.database.CreateLibraryUpload(
-		fixture.ctx, fixture.creator, fixture.spaceID, "library",
+		fixture.ctx, fixture.creator, fixture.spaceID, "attachment",
 		"portable-file.png", "image/png", 32, digest,
 		"library/portableexport", "portable-token", time.Now().Add(time.Hour),
 	)
@@ -54,7 +54,7 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	// The fixture Space, "Creator Home" and the personal Space from sign-up.
 	if export.FormatVersion != 3 || len(export.Spaces) != 3 ||
 		len(export.Journal) != 1 || export.Journal[0].Kind != "note" || len(export.Messages) != 1 ||
-		len(export.Assets) != 1 || export.Assets[0].Kind != "library" ||
+		len(export.Assets) != 1 || export.Assets[0].Kind != "message_attachment" ||
 		len(export.Agents) != 1 || export.Agents[0].Name != "Writer" || export.Agents[0].SpaceID != fixture.spaceID {
 		t.Fatalf("portable export = %#v", export)
 	}

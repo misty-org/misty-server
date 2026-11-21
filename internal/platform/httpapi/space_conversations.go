@@ -28,11 +28,19 @@ func (s *SpacesService) Conversations() http.HandlerFunc {
 			Title        string                          `json:"title"`
 			Participants []db.SpaceActorRef              `json:"participants"`
 			Overwrites   []db.SpaceConversationOverwrite `json:"overwrites"`
+			// Voice makes a voice channel, people dropping into a call instead of writing.
+			Voice bool `json:"voice"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		item, err := s.database.CreateSpaceConversationWithOverwrites(r.Context(), userID, spaceID, body.Title, body.Participants, body.Overwrites)
+		var item *db.SpaceConversation
+		var err error
+		if body.Voice {
+			item, err = s.database.CreateSpaceVoiceChannel(r.Context(), userID, spaceID, body.Title, body.Overwrites)
+		} else {
+			item, err = s.database.CreateSpaceConversationWithOverwrites(r.Context(), userID, spaceID, body.Title, body.Participants, body.Overwrites)
+		}
 		if err != nil {
 			writeSpaceError(w, err)
 			return
@@ -132,14 +140,16 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Content          []db.MessageSpan `json:"content"`
-			FileNodeIDs      []string         `json:"file_node_ids"`
-			AttachmentIDs    []string         `json:"attachment_ids"`
-			LibraryItemIDs   []string         `json:"library_item_ids"`
-			ReplyToMessageID string           `json:"reply_to_message_id"`
-			ThreadRootID     string           `json:"thread_root_id"`
-			ClientNonce      string           `json:"client_nonce"`
-			InputModality    string           `json:"input_modality"`
+			Content       []db.MessageSpan `json:"content"`
+			FileNodeIDs   []string         `json:"file_node_ids"`
+			AttachmentIDs []string         `json:"attachment_ids"`
+			// An older app may still send Library items; they are gone, so
+			// the field is read and ignored.
+			LibraryItemIDs   []string `json:"library_item_ids"`
+			ReplyToMessageID string   `json:"reply_to_message_id"`
+			ThreadRootID     string   `json:"thread_root_id"`
+			ClientNonce      string   `json:"client_nonce"`
+			InputModality    string   `json:"input_modality"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -148,9 +158,9 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 		var message *db.SpaceMessage
 		var err error
 		if body.ThreadRootID != "" {
-			message, _, err = s.database.CreateSpaceThreadReplyWithClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ThreadRootID, body.ClientNonce)
+			message, _, err = s.database.CreateSpaceThreadReplyWithClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.ThreadRootID, body.ClientNonce)
 		} else {
-			message, _, err = s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.LibraryItemIDs, body.ReplyToMessageID, body.ClientNonce)
+			message, _, err = s.database.CreateSpaceConversationMessageWithReferencesAndClientNonce(r.Context(), userID, spaceID, conversationID, body.Content, body.FileNodeIDs, body.AttachmentIDs, body.ReplyToMessageID, body.ClientNonce)
 		}
 		if err != nil {
 			writeSpaceError(w, err)

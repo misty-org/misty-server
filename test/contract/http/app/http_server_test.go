@@ -88,9 +88,9 @@ func TestIsWebSocketRequestRequiresBothHeaders(t *testing.T) {
 
 func TestIsTransferRequestOnlyMatchesObjectByteRoutes(t *testing.T) {
 	transfers := []string{
-		"/v1/spaces/space_1/library/items/item_1/download",
-		"/v1/spaces/space_1/library/items/item_1/preview",
-		"/v1/spaces/space_1/library/items/item_1/download",
+		"/v1/spaces/space_1/attachments/attachment_1/download",
+		"/v1/spaces/space_1/drive/items/item_1/content",
+		"/v1/spaces/space_1/notes/note_1/assets/asset_1/download",
 	}
 	for _, path := range transfers {
 		if !IsTransferRequest(httptest.NewRequest(http.MethodGet, path, nil)) {

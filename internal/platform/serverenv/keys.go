@@ -87,6 +87,9 @@ var Keys = []Key{
 	{Name: "DB_PASSWORD", Purpose: "database-app-password", Format: Hex},
 	{Name: "DB_MIGRATION_PASSWORD", Purpose: "database-superuser-password", Format: Hex, Scope: FromRoot, Previous: "DB_MIGRATION_PASSWORD_PREVIOUS"},
 	{Name: "MISTY_BACKUP_AGE_IDENTITY", Purpose: "backup-age-identity", Format: AgeKey, Scope: FromRoot},
+	// LiveKit's API secret: the API signs call tokens with it and LiveKit checks them (setup writes it
+	// to livekit/api-secret for the livekit service).
+	{Name: "LIVEKIT_API_SECRET", Purpose: "livekit-api-secret", Format: Hex},
 }
 
 // apiSecretPurpose labels the API's share of the root.

@@ -23,7 +23,6 @@ func validVisibility(visibility string) bool {
 // visibilityTables maps an item kind to its table, owner column and id column: every made kind
 // in the registry (notes), then the Space's other items.
 var visibilityTables = withSpaceItemVisibility(map[string][3]string{
-	"library_item": {"space_library_items", "added_by_user_id", "id"},
 	"node":         {"space_nodes", "uploader_user_id", "id"},
 	"agent":        {"space_agents", "owner_user_id", "agent_id"},
 })
@@ -89,14 +88,6 @@ func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string)
 		if err := enqueueNoteControlTx(ctx, tx, noteID, "purge", nil); err != nil {
 			return err
 		}
-	}
-	// Library files skip the 30-day trash: the person chose to leave.
-	if _, err := tx.ExecContext(ctx, `WITH gone AS (
-			UPDATE space_library_items SET lifecycle_state='trash',trashed_at=NOW(),recover_until=NOW(),version=version+1,updated_at=NOW()
-			WHERE space_id=$1 AND added_by_user_id=$2 AND visibility='private' AND lifecycle_state='ready' RETURNING id)
-		UPDATE space_storage_contributions SET state='recovery',updated_at=NOW()
-			WHERE space_id=$1 AND source_kind='library_item' AND source_id IN (SELECT id FROM gone) AND state='active'`, spaceID, userID); err != nil {
-		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM space_nodes WHERE space_id=$1 AND uploader_user_id=$2 AND visibility='private'`, spaceID, userID); err != nil {
 		return err

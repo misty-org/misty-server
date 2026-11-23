@@ -16,12 +16,8 @@ import (
 
 const maxAvatarPNGBytes = 5 << 20
 
-// avatarObjectKey is where a user's avatar PNG lived before each upload had its own key; account
-// deletion still clears it for pictures uploaded then.
 func avatarObjectKey(userID string) string { return "avatars/" + userID }
 
-// newAvatarObjectKey names one upload's object: the person's id and a random suffix, flat, as the
-// store's keys are.
 func newAvatarObjectKey(userID string) (string, error) {
 	suffix := make([]byte, 8)
 	if _, err := rand.Read(suffix); err != nil {
@@ -83,8 +79,6 @@ func UserAvatar(database *db.Database, store LibraryObjectStore) http.HandlerFun
 				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
-			// The person's Spaces show the new picture without a reload; a failure here only
-			// delays that until their next load.
 			_ = database.AnnounceMemberAvatar(r.Context(), userID, version)
 			writeJSON(w, http.StatusOK, map[string]any{"avatar_version": version})
 		case http.MethodDelete:
@@ -101,8 +95,6 @@ func UserAvatar(database *db.Database, store LibraryObjectStore) http.HandlerFun
 	}
 }
 
-// serveAvatarObject streams a user's avatar PNG from the object store (R2).
-// The version supplies the ETag; a missing object is a 404.
 func serveAvatarObject(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -125,7 +117,6 @@ func serveAvatarObject(
 	}
 	defer reader.Close()
 	setAvatarHeaders(w, version)
-	// The version is the ETag, so an app that has this picture is told so without the bytes.
 	if r.Header.Get("If-None-Match") == w.Header().Get("ETag") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -151,8 +142,6 @@ func ReadAvatarPNG(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 
 func setAvatarHeaders(w http.ResponseWriter, version int64) {
 	w.Header().Set("Content-Type", "image/png")
-	// Checked every time: a picture's URL stays the same across uploads, so a cache that kept it
-	// for minutes would show the old one after a change.
 	w.Header().Set("Cache-Control", "private, no-cache")
 	w.Header().Set("ETag", `"avatar-`+strconv.FormatInt(version, 10)+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")

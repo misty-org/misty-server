@@ -50,7 +50,6 @@ func TestClosingEmailsSayWhereToKeepTheAccount(t *testing.T) {
 	if subject, text, _ = closingEmail(true, deleteAt, keep); subject != "Your Misty account will be deleted on November 30" || !strings.Contains(text, "in 3 days") {
 		t.Fatalf("warning = %q\n%s", subject, text)
 	}
-	// A server with no page to send people to names who can help, and nothing about billing.
 	_, text, body = closingEmail(false, deleteAt, "")
 	if !strings.Contains(text, "contact whoever runs your server") || strings.Contains(body, "<a href") {
 		t.Fatalf("no keep link:\n%s", text)

@@ -14,9 +14,6 @@ const voiceNotesMaxOutput = 4000
 
 var voiceNoteModes = map[string]string{"notes": "Notes", "summary": "Summary", "actions": "Action items", "chapters": "Chapters"}
 
-// VoiceTranscriptNotes turns a transcript (plus what the person typed while
-// listening) into a Note in their own Space: notes, a summary, action items
-// or chapters. The transcript is attached at the end of the Note.
 func (s *SpacesService) VoiceTranscriptNotes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, ok := authenticatedUser(w, r, s.database)
@@ -24,13 +21,12 @@ func (s *SpacesService) VoiceTranscriptNotes() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Mode      string `json:"mode"`
-			UserNotes string `json:"user_notes"`
-			Template  string `json:"template"`
-			NoteID    string `json:"note_id"`
-			Language  string `json:"language"`
-			// A desktop writes the Note on its own model and sends it.
-			Result *voiceNotesResult `json:"result"`
+			Mode      string            `json:"mode"`
+			UserNotes string            `json:"user_notes"`
+			Template  string            `json:"template"`
+			NoteID    string            `json:"note_id"`
+			Language  string            `json:"language"`
+			Result    *voiceNotesResult `json:"result"`
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
 		if decodeStrictJSON(w, r, &body) != nil || voiceNoteModes[body.Mode] == "" || len(body.UserNotes) > 40_000 || len(body.Template) > 8_000 || len(body.NoteID) > 200 {
@@ -43,7 +39,6 @@ func (s *SpacesService) VoiceTranscriptNotes() http.HandlerFunc {
 			return
 		}
 		if body.Result == nil {
-			// First the transcript the desktop writes from, then the Note it wrote.
 			writeJSON(w, http.StatusOK, map[string]any{"on_device": true, "input": voiceNotesInput(transcript, body.Mode, body.UserNotes, body.Template, body.Language)})
 			return
 		}
@@ -65,8 +60,6 @@ type voiceNoteWritten struct {
 	Chapters    []voiceChapter    `json:"chapters"`
 }
 
-// writeVoiceNote saves the Note the desktop wrote: over noteID when given,
-// otherwise as a new Note in the person's own Space.
 func (s *SpacesService) writeVoiceNote(ctx context.Context, user string, transcript db.VoiceTranscript, mode, noteID string, result voiceNotesResult) (voiceNoteWritten, error) {
 	var err error
 	markdown := voiceNoteMarkdown(transcript, mode, result)
@@ -88,7 +81,6 @@ func (s *SpacesService) writeVoiceNote(ctx context.Context, user string, transcr
 	return voiceNoteWritten{NoteID: noteID, SpaceID: spaceID, Title: title, Markdown: result.Markdown, ActionItems: result.ActionItems, Chapters: result.Chapters}, nil
 }
 
-// voiceNotesInput is what a Note is written from: the transcript with speaker names.
 func voiceNotesInput(transcript db.VoiceTranscript, mode, userNotes, template, language string) voiceNotesRequest {
 	turns := make([]voiceTurnResult, 0, len(transcript.Turns))
 	for _, turn := range transcript.Turns {
@@ -104,8 +96,6 @@ func voiceNotesInput(transcript db.VoiceTranscript, mode, userNotes, template, l
 	}
 }
 
-// voiceNoteMarkdown is the Note body: the generated part, then the
-// transcript with speaker names, so the source is always one scroll away.
 func voiceNoteMarkdown(transcript db.VoiceTranscript, mode string, result voiceNotesResult) string {
 	var b strings.Builder
 	b.WriteString(strings.TrimSpace(result.Markdown))
@@ -131,7 +121,6 @@ func voiceNoteMarkdown(transcript db.VoiceTranscript, mode string, result voiceN
 		fmt.Fprintf(&b, "**%s** (%s): %s\n\n", name, clockTime(turn.Start), strings.TrimSpace(turn.Text))
 	}
 	out := strings.TrimSpace(b.String())
-	// Notes hold up to 100,000 characters; keep the generated part whole.
 	if runes := []rune(out); len(runes) > 99_000 {
 		out = string(runes[:99_000]) + "\n\n…"
 	}

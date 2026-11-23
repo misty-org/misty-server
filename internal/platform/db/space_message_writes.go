@@ -8,7 +8,6 @@ import (
 
 func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, conversationID, messageID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		// Where the message lives decides: the Space-wide chat, or the channel with its overwrites.
 		permissions, err := messagePermissionsTx(ctx, tx, userID, spaceID, conversationID)
 		if err != nil {
 			return err
@@ -22,7 +21,6 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 		} else if err != nil {
 			return err
 		}
-		// Your own message takes messages.write to delete; anyone else's, messages.manage.
 		if sender == userID && !permissions.Has(PermissionMessagesWrite) ||
 			sender != userID && !permissions.Has(PermissionMessagesManage) {
 			return ErrSpaceForbidden
@@ -30,9 +28,6 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 		if err := cleanupSpaceMessagesTx(ctx, tx, spaceID, []string{messageID}); err != nil {
 			return err
 		}
-		// Recorded after the cleanup, which removes the message's own events: everyone who could
-		// see the message takes it off their screen, and a thread reply lowers its root's count. Only
-		// ids travel, never what it said.
 		payload := map[string]any{"message_id": messageID, "conversation_id": conversationID}
 		if threadRootID != "" {
 			payload["thread_root_id"] = threadRootID

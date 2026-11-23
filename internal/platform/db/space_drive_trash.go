@@ -10,20 +10,8 @@ import (
 	"github.com/lib/pq"
 )
 
-// The drive's trash. Nothing in a drive is ever deleted at once: a delete is a
-// trash move, which keeps the item (and a folder's contents, hidden with it)
-// and its blob. The trash empties itself after 30 days, except what is held
-// there (what an agent trashed); deleting for good is drive.purge's and only
-// of what is already in the trash. A purged item leaves a tombstone in the
-// change feed, so no stale copy can bring it back unnoticed.
-
 const driveRetireBatch = 32
 
-// TrashDriveItem moves an item to the trash. Deletes are last-write-wins
-// like every other change: ifMatch 0 trashes whatever version the item is at,
-// and a version named and stale is refused (version_conflict). held keeps it
-// there until a person deletes it. It is refused with DriveInUseError while
-// the item, or anything in a folder, is open on another computer.
 func (db *Database) TrashDriveItem(ctx context.Context, userID, spaceID, itemID string, device DriveDevice, ifMatch int64, held bool) (*DriveWriteResult, error) {
 	if !ValidDriveDevice(device) || ifMatch < 0 {
 		return nil, ErrLibraryInvalid
@@ -66,11 +54,6 @@ func (db *Database) TrashDriveItem(ctx context.Context, userID, spaceID, itemID 
 	return result, nil
 }
 
-// trashDriveItemTx moves one live item to the trash, refused with
-// DriveInUseError while it, or anything in a folder, is open on a computer
-// other than the one asking (exceptUserID and exceptDeviceID; empty ids leave
-// no one out). It returns the sequence number it stamped. The caller holds the
-// drive lock and has checked the item is live.
 func trashDriveItemTx(ctx context.Context, tx *sql.Tx, spaceID, userID, itemID, exceptUserID, exceptDeviceID string, held bool) (int64, error) {
 	subtree, err := driveSubtreeTx(ctx, tx, itemID)
 	if err != nil {
@@ -92,15 +75,10 @@ func trashDriveItemTx(ctx context.Context, tx *sql.Tx, spaceID, userID, itemID, 
 	return seq, err
 }
 
-// driveRestoredName is the name an item comes back under when a live sibling
-// took its name meanwhile: "Name (restored).ext", then "Name (restored 2).ext".
 func driveRestoredName(name, kind string, n int) string {
 	return driveLabeledName(name, kind, "restored", n)
 }
 
-// driveLabeledName adds a label in brackets before a file's extension (a
-// folder has none): "Name (label).ext", then "Name (label 2).ext", shortening
-// the name to stay within 255 bytes.
 func driveLabeledName(name, kind, label string, n int) string {
 	base, ext := name, ""
 	if kind == driveKindFile {
@@ -119,7 +97,6 @@ func driveLabeledName(name, kind, label string, n int) string {
 	return base + suffix + ext
 }
 
-// restoreOneDriveItemTx takes one item out of the trash under a free name.
 func restoreOneDriveItemTx(ctx context.Context, tx *sql.Tx, spaceID string, item DriveItem) (int64, error) {
 	name := item.Name
 	for n := 1; ; n++ {
@@ -141,11 +118,6 @@ func restoreOneDriveItemTx(ctx context.Context, tx *sql.Tx, spaceID string, item
 	return seq, err
 }
 
-// reviveDriveItemTx takes an item and the trashed folders it is in out of the
-// trash, the topmost folder first so each comes back into a live folder, each
-// under a free name and stamped with the next sequence number. It returns the
-// last number stamped, 0 when nothing was in the trash. The caller holds the
-// drive lock.
 func reviveDriveItemTx(ctx context.Context, tx *sql.Tx, spaceID string, item DriveItem) (int64, error) {
 	ancestors, err := driveAncestorsTx(ctx, tx, item.ID)
 	if err != nil {
@@ -173,9 +145,6 @@ func reviveDriveItemTx(ctx context.Context, tx *sql.Tx, spaceID string, item Dri
 	return seq, nil
 }
 
-// RestoreDriveItem takes an item out of the trash. A trashed folder it is in
-// comes back with it, so it is never restored into the trash. ifMatch 0
-// restores whatever version the item is at.
 func (db *Database) RestoreDriveItem(ctx context.Context, userID, spaceID, itemID string, device DriveDevice, ifMatch int64) (*DriveWriteResult, error) {
 	if !ValidDriveDevice(device) || ifMatch < 0 {
 		return nil, ErrLibraryInvalid
@@ -213,10 +182,6 @@ func (db *Database) RestoreDriveItem(ctx context.Context, userID, spaceID, itemI
 	return result, nil
 }
 
-// purgeDriveSubtreeTx deletes an item and everything under it for good: each
-// becomes a tombstone with the next sequence numbers, their bytes stop
-// counting and their marks go. It returns the blobs they named, for
-// RetireDriveBlobs once the transaction commits. The caller holds the drive lock.
 func purgeDriveSubtreeTx(ctx context.Context, tx *sql.Tx, spaceID, userID, rootID string) ([]string, error) {
 	subtree, err := driveSubtreeTx(ctx, tx, rootID)
 	if err != nil {
@@ -281,8 +246,6 @@ func purgeDriveSubtreeTx(ctx context.Context, tx *sql.Tx, spaceID, userID, rootI
 		map[string]any{"items": len(ids), "released_bytes": released})
 }
 
-// PurgeDriveItem deletes a trashed item and everything under it for good.
-// It needs drive.purge, and refuses an item that isn't in the trash.
 func (db *Database) PurgeDriveItem(ctx context.Context, userID, spaceID, itemID string, device DriveDevice) ([]string, error) {
 	if !ValidDriveDevice(device) {
 		return nil, ErrLibraryInvalid
@@ -308,9 +271,6 @@ func (db *Database) PurgeDriveItem(ctx context.Context, userID, spaceID, itemID 
 	return retire, err
 }
 
-// driveExpiredTrashCondition picks trashed items past the trash's 30 days that
-// aren't held and hold nothing held: what an agent trashed stays even inside
-// a folder someone else trashed.
 const driveExpiredTrashCondition = `i.trashed_at IS NOT NULL AND i.trashed_at<=NOW()-$1::interval AND i.deleted_at IS NULL AND NOT i.trash_hold
 	AND NOT EXISTS (
 		WITH RECURSIVE sub(id,depth) AS (
@@ -319,9 +279,6 @@ const driveExpiredTrashCondition = `i.trashed_at IS NOT NULL AND i.trashed_at<=N
 			SELECT c.id,sub.depth+1 FROM space_drive_items c JOIN sub ON c.parent_id=sub.id WHERE sub.depth<4096)
 		SELECT 1 FROM sub JOIN space_drive_items d ON d.id=sub.id WHERE d.id<>i.id AND d.trash_hold AND d.deleted_at IS NULL)`
 
-// PurgeExpiredDriveTrash empties what the trash has kept for 30 days, one
-// item (and its contents) per transaction, and returns how many items it
-// purged and the blobs they named, for RetireDriveBlobs.
 func (db *Database) PurgeExpiredDriveTrash(ctx context.Context, limit int) (int, []string, error) {
 	if limit < 1 || limit > 100 {
 		limit = 25
@@ -350,8 +307,6 @@ func (db *Database) PurgeExpiredDriveTrash(ctx context.Context, limit int) (int,
 	}
 	purged, retire := 0, []string{}
 	for _, item := range candidates {
-		// The drive lock comes before the item's, as in every other change,
-		// so the item is checked again once both are held.
 		err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 			if err := lockDriveTx(ctx, tx, item.spaceID); err != nil {
 				return err
@@ -376,9 +331,6 @@ func (db *Database) PurgeExpiredDriveTrash(ctx context.Context, limit int) (int,
 	return purged, retire, nil
 }
 
-// PruneDriveTombstones removes tombstones older than 90 days and moves each
-// Space's tombstone horizon up past them: a client whose cursor is older
-// than the horizon may have missed a purge, so it starts over.
 func (db *Database) PruneDriveTombstones(ctx context.Context, limit int) (int, error) {
 	if limit < 1 || limit > 10000 {
 		limit = 1000
@@ -434,10 +386,6 @@ func (db *Database) PruneDriveTombstones(ctx context.Context, limit int) (int, e
 	return pruned, nil
 }
 
-// RetireDriveBlobs retires the blobs drive items stopped naming when nothing
-// else uses them, and returns their objects for deletion. It runs after the
-// change commits, a few blobs per transaction, since each blob takes its
-// deduplication lock.
 func (db *Database) RetireDriveBlobs(ctx context.Context, keys []string) ([]string, error) {
 	retired := []string{}
 	for start := 0; start < len(keys); start += driveRetireBatch {

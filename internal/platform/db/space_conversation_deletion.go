@@ -114,9 +114,6 @@ func humanMemberIDsForConversationTx(ctx context.Context, tx *sql.Tx, conversati
 	return ids, rows.Err()
 }
 
-// DeleteOrClearSpaceConversation permanently closes a conversation and removes
-// its history. Direct Agent conversations are recreated on demand, so keeping
-// an empty canonical row here would make a deleted chat remain in the sidebar.
 func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, spaceID, conversationID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		permissions, err := messagePermissionsTx(ctx, tx, userID, spaceID, conversationID)
@@ -139,7 +136,6 @@ func (db *Database) DeleteOrClearSpaceConversation(ctx context.Context, userID, 
 		if err != nil {
 			return err
 		}
-		// Only those who could read a private channel hear that it's gone.
 		readers, err := channelReadersTx(ctx, tx, spaceID)
 		if err != nil {
 			return err

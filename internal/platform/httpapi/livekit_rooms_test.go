@@ -15,13 +15,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// fakeLiveKit answers RoomService's ListRooms and ListParticipants from its rooms and records
-// DeleteRoom calls, checking every call carries an admin token signed with the shared secret.
 type fakeLiveKit struct {
 	secret string
 
-	mu sync.Mutex
-	// rooms lists each room's participant sids, by name; sids are "RM_<name>".
+	mu          sync.Mutex
 	rooms       map[string][]string
 	deleted     []string
 	failDeletes bool
@@ -75,7 +72,6 @@ func (f *fakeLiveKit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"rooms": rooms})
 	case "/twirp/livekit.RoomService/ListParticipants":
-		// LiveKit holds roomAdmin to the token's own room.
 		if video["roomAdmin"] != true || video["room"] != body.Room {
 			http.Error(w, "permission denied", http.StatusUnauthorized)
 			return
@@ -102,7 +98,6 @@ func (f *fakeLiveKit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// fakeTimers stands in for time.AfterFunc: nothing fires until the test says so.
 type fakeTimers struct {
 	mu      sync.Mutex
 	pending []*fakeTimer
@@ -126,7 +121,6 @@ func (t *fakeTimers) after(d time.Duration, f func()) func() {
 	}
 }
 
-// running lists the durations of the timers still running.
 func (t *fakeTimers) running() []time.Duration {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -139,7 +133,6 @@ func (t *fakeTimers) running() []time.Duration {
 	return out
 }
 
-// fire runs every timer still running, as if its time had come.
 func (t *fakeTimers) fire() {
 	t.mu.Lock()
 	due := []*fakeTimer{}
@@ -176,7 +169,6 @@ func newLiveKitHarness(t *testing.T) *liveKitHarness {
 	return h
 }
 
-// send delivers one webhook signed the way LiveKit signs them, and returns the status.
 func (h *liveKitHarness) send(event, room, participant string) int {
 	h.t.Helper()
 	payload := map[string]any{"event": event, "room": map[string]any{"sid": "RM_" + room, "name": room}}
@@ -235,15 +227,12 @@ func TestLiveKitWebhookRunsTheAloneTimerFromJoinsAndLeaves(t *testing.T) {
 
 	h.send("room_started", "dm:1", "")
 	h.send("participant_joined", "dm:1", "PA")
-	// One person: the five minutes start now.
 	h.wantTimers(5 * time.Minute)
 
 	h.send("participant_joined", "dm:1", "PB")
-	// Two people: no timer.
 	h.wantTimers()
 
 	h.send("participant_left", "dm:1", "PB")
-	// Alone again: the five minutes start over.
 	h.wantTimers(5 * time.Minute)
 
 	h.timers.fire()
@@ -281,7 +270,6 @@ func TestLiveKitWebhookIgnoresAJoinArrivingAfterItsLeave(t *testing.T) {
 	h.send("participant_joined", "dm:1", "PA")
 	h.send("participant_left", "dm:1", "PB")
 	h.send("participant_joined", "dm:1", "PB")
-	// PB has gone already; PA is alone and the timer runs on.
 	h.wantTimers(5 * time.Minute)
 }
 
@@ -302,14 +290,12 @@ func TestLiveKitSweepPicksUpRoomsAfterARestart(t *testing.T) {
 	h.fake.setRoom("space:s1:voice:general", "PB", "PC")
 
 	h.sweep()
-	// Only the lone room has a timer, starting from the sweep that found it.
 	h.wantTimers(5 * time.Minute)
 	h.timers.fire()
 	if got := h.fake.takeDeleted(); len(got) != 1 || got[0] != "dm:alone" {
 		t.Fatalf("deleted %v, want [dm:alone]", got)
 	}
 
-	// The voice room's people came from LiveKit, so a webhook for one leaving counts.
 	h.send("participant_left", "space:s1:voice:general", "PC")
 	h.wantTimers(5 * time.Minute)
 }
@@ -319,10 +305,8 @@ func TestLiveKitSweepCorrectsAMissedLeave(t *testing.T) {
 	h.fake.setRoom("dm:1", "PA")
 	h.send("participant_joined", "dm:1", "PA")
 	h.send("participant_joined", "dm:1", "PB")
-	// PB's leave never arrives: LiveKit lists one person, the watcher thinks two.
 	h.sweep()
 	h.wantTimers()
-	// The second sweep in a row that disagrees reads the room's people again.
 	h.sweep()
 	h.wantTimers(5 * time.Minute)
 }
@@ -332,7 +316,6 @@ func TestLiveKitSweepDropsRoomsLiveKitClosed(t *testing.T) {
 	h.send("participant_joined", "dm:1", "PA")
 	h.wantTimers(5 * time.Minute)
 
-	// Just heard about: kept, in case LiveKit lists it a moment late.
 	h.sweep()
 	h.wantTimers(5 * time.Minute)
 

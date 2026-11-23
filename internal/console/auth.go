@@ -11,14 +11,10 @@ import (
 
 const sessionCookie = "misty_console_session"
 
-// session is one browser that exchanged the launch token for a cookie.
 type session struct {
 	csrf string
 }
 
-// authenticator exchanges the one-time launch token printed at startup for a
-// session cookie. Only hashes are kept in memory, and restarting the console
-// invalidates every session.
 type authenticator struct {
 	launchHash string
 	mu         sync.Mutex
@@ -39,8 +35,6 @@ func (a *authenticator) launchTokenValid(token string) bool {
 	return subtle.ConstantTimeCompare([]byte(security.HashToken(token)), []byte(a.launchHash)) == 1
 }
 
-// startSession sets a fresh session cookie. The launch token stays valid so
-// `misty server up --gui` can reopen the page in another browser window.
 func (a *authenticator) startSession(w http.ResponseWriter) error {
 	id, err := security.GenerateSecureToken()
 	if err != nil {
@@ -74,8 +68,6 @@ func (a *authenticator) sessionFor(r *http.Request) (session, bool) {
 	return s, ok
 }
 
-// requireHost blocks DNS-rebinding: a hostile page that points its own
-// hostname at 127.0.0.1 still sends that hostname in the Host header.
 func requireHost(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host, _, err := net.SplitHostPort(r.Host)
@@ -91,9 +83,6 @@ func requireHost(next http.Handler) http.Handler {
 	})
 }
 
-// requireSession redirects a valid ?token= launch link to a cookie session
-// and rejects everything else without one. Mutating requests must also carry
-// the session's CSRF token, which htmx sends from the page's hx-headers.
 func (a *authenticator) requireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if token := r.URL.Query().Get("token"); token != "" {
@@ -129,8 +118,6 @@ func (a *authenticator) requireSession(next http.Handler) http.Handler {
 	})
 }
 
-// securityHeaders keeps the console same-origin only: no framing, no
-// third-party scripts, and no inline script execution.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()

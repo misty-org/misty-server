@@ -51,7 +51,6 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The fixture Space, "Creator Home" and the personal Space from sign-up.
 	if export.FormatVersion != 3 || len(export.Spaces) != 3 ||
 		len(export.Journal) != 1 || export.Journal[0].Kind != "note" || len(export.Messages) != 1 ||
 		len(export.Assets) != 1 || export.Assets[0].Kind != "message_attachment" ||

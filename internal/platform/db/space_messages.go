@@ -25,7 +25,6 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 		if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
 		}
-		// A one-to-one DM takes messages only while its two people are friends.
 		if err := requireDirectWritableTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
@@ -33,9 +32,6 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 			return err
 		}
 		if clientNonce != "" {
-			// A retry of a send whose response was lost carries the same nonce: hand back the
-			// message the first try made. The lock makes two tries in flight at once wait for
-			// each other instead of both posting.
 			if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:message-nonce:"+userID+":"+clientNonce); err != nil {
 				return err
 			}
@@ -59,7 +55,6 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 			}
 		}
 		if threadRootID != "" {
-			// A thread hangs from a message of this conversation that is not itself a thread reply.
 			var exists bool
 			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 AND thread_root_id IS NULL)`, threadRootID, spaceID, conversationID).Scan(&exists); err != nil || !exists {
 				return ErrSpaceInvalid
@@ -111,8 +106,6 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 			if _, err := tx.ExecContext(ctx, `UPDATE space_conversations SET updated_at=NOW() WHERE id=$1`, conversationID); err != nil {
 				return err
 			}
-			// Sending reads the channel up to the new message, but a thread reply says nothing
-			// about the channel's own messages.
 			if threadRootID == "" {
 				if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_reads(conversation_id,user_id,read_message_seq)
 					VALUES($1,$2,$3) ON CONFLICT(conversation_id,user_id) DO UPDATE
@@ -143,7 +136,6 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 	return out, agentMentions, err
 }
 
-// spaceMessageByClientNonceTx finds the message a person already sent with this nonce, or nil.
 func spaceMessageByClientNonceTx(ctx context.Context, tx *sql.Tx, userID, clientNonce string) (*SpaceMessage, error) {
 	item := &SpaceMessage{}
 	err := scanSpaceMessage(tx.QueryRowContext(ctx, `SELECT `+spaceMessageColumns+` FROM space_messages m
@@ -174,9 +166,6 @@ func uniqueSpaceIDs(values []string) []string {
 	return out
 }
 
-// pqStringArray intentionally returns a PostgreSQL array literal without
-// importing pq into the public data model. IDs are server-generated and cannot
-// contain quotes, commas, or braces.
 func pqStringArray(values []string) string {
 	if len(values) == 0 {
 		return "{}"
@@ -193,7 +182,6 @@ func scanSpaceMessage(scanner interface{ Scan(...any) error }, out *SpaceMessage
 	return decodeScannedSpaceMessage(out, raw, files)
 }
 
-// decodeScannedSpaceMessage finishes a message whose columns were scanned: its sender, content and files.
 func decodeScannedSpaceMessage(out *SpaceMessage, raw []byte, files string) error {
 	out.SenderKind = "person"
 	out.Sender = SpaceMessageSender{Kind: out.SenderKind, UserID: out.SenderUserID, DisplayName: out.SenderName, AvatarVersion: out.SenderAvatarVersion}

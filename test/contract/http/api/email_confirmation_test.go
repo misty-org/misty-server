@@ -16,8 +16,6 @@ import (
 	"github.com/misty-org/misty-server/test/testkit"
 )
 
-// confirmationServer mounts sign-up and sign-in on a server that already has an
-// account, so nobody signing up here is its owner.
 func confirmationServer(t *testing.T) (http.Handler, *db.Database) {
 	t.Helper()
 	t.Setenv("MISTY_PUBLIC_API_URL", "https://cloud.misty.example/v1")
@@ -55,7 +53,6 @@ func passwordSignIn(t *testing.T, handler http.Handler, address, password string
 	return call(t, handler, http.MethodPost, "/v1/login", "", `{"email":"`+address+`","password":"`+password+`"}`)
 }
 
-// confirm presses the button on the website's page and says what it was told.
 func confirm(t *testing.T, handler http.Handler, token string) string {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/v1/auth/confirm-email", strings.NewReader(url.Values{"token": {token}}.Encode()))
@@ -72,7 +69,6 @@ func confirm(t *testing.T, handler http.Handler, token string) string {
 	return target
 }
 
-// sentToken reads the token out of the link in the newest email to an address.
 func sentToken(t *testing.T, database *db.Database, address string) string {
 	t.Helper()
 	var link string
@@ -124,7 +120,6 @@ func TestSignUpMakesNoAccountUntilTheEmailIsConfirmed(t *testing.T) {
 	if err != nil || user == nil {
 		t.Fatalf("account = %v, %v", user, err)
 	}
-	// Open signup holds the account to nothing, as it does without confirmation.
 	limits, err := database.AccountLimitsFor(context.Background(), user.ID)
 	if err != nil || limits.Devices == nil || *limits.Devices != 0 {
 		t.Fatalf("limits = %+v, %v", limits, err)
@@ -146,7 +141,6 @@ func TestAStrangersSignUpNeverHoldsAnEmail(t *testing.T) {
 	signUp(t, handler, stranger, address, "the strangers password")
 	first := sentToken(t, database, address)
 
-	// A second sign-up right away sends nothing and changes nothing.
 	if rec := signUp(t, handler, owner, address, strongPassword); rec.Code != http.StatusAccepted {
 		t.Fatalf("repeat sign-up = %d", rec.Code)
 	}
@@ -154,7 +148,6 @@ func TestAStrangersSignUpNeverHoldsAnEmail(t *testing.T) {
 		t.Fatal("a repeat within the wait sent another email")
 	}
 
-	// Later, the owner's sign-up replaces the stranger's, password and link alike.
 	allowNextEmail(t, database, address)
 	if rec := signUp(t, handler, owner, address, strongPassword); rec.Code != http.StatusAccepted {
 		t.Fatalf("owner's sign-up = %d", rec.Code)
@@ -333,7 +326,6 @@ func TestAPasswordForAGoogleEmailSaysToUseGoogle(t *testing.T) {
 	if up.Code != http.StatusConflict || !strings.Contains(up.Body.String(), "use_google") {
 		t.Fatalf("sign-up = %d %s", up.Code, up.Body)
 	}
-	// An email nobody has still answers like a wrong password.
 	if rec, _ := passwordSignIn(t, handler, "nobody-"+address, strongPassword); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("unknown email = %d", rec.Code)
 	}

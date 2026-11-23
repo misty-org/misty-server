@@ -11,14 +11,10 @@ const (
 	JournalAssetKindNote = "note_asset"
 )
 
-// journalAssetTables are the asset tables the cleanup claims from, by contribution kind.
 var journalAssetTables = []struct{ kind, table string }{
 	{JournalAssetKindNote, "space_note_assets"},
 }
 
-// JournalAssetPurge is a claimed note asset cleanup. ObjectKey is
-// present only when this asset owns the last live file reference to the blob.
-// Shared, deduplicated blobs are deliberately retained.
 type JournalAssetPurge struct {
 	Kind       string
 	AssetID    string
@@ -28,9 +24,6 @@ type JournalAssetPurge struct {
 	DeleteBlob bool
 }
 
-// ClaimExpiredJournalAssets moves old, unreferenced Journal assets into a
-// retryable deleting state. It releases logical quota and only claims an R2
-// object when no other live file or direct blob reference exists.
 func (db *Database) ClaimExpiredJournalAssets(
 	ctx context.Context,
 	safetyWindow time.Duration,
@@ -233,8 +226,6 @@ func claimJournalAssetTx(
 	return claim, nil
 }
 
-// CompleteJournalAssetPurge finalizes database lifecycle state after the
-// caller has deleted ObjectKey from R2 (or when the blob was shared).
 func (db *Database) CompleteJournalAssetPurge(
 	ctx context.Context,
 	claim JournalAssetPurge,

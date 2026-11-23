@@ -7,19 +7,13 @@ import (
 	"time"
 )
 
-// Operator console queries. They run in service RLS scope because the console
-// administers every account; the console process is loopback-only and never
-// mounted on the public API.
-
 type ConsoleAccount struct {
-	ID        string
-	Email     string
-	Username  string
-	State     string
-	CreatedAt time.Time
-	Sessions  int
-	// Unconfirmed is a password account whose email was never proven, so its email may be
-	// released (ConsoleReleaseEmail).
+	ID          string
+	Email       string
+	Username    string
+	State       string
+	CreatedAt   time.Time
+	Sessions    int
 	Unconfirmed bool
 }
 
@@ -42,15 +36,8 @@ func scanConsoleAccount(row interface{ Scan(...any) error }, a *ConsoleAccount) 
 	return row.Scan(&a.ID, &a.Email, &a.Username, &a.State, &a.CreatedAt, &a.Sessions, &a.Unconfirmed)
 }
 
-// ErrEmailConfirmed means the account's email was proven, so it isn't the console's to release.
 var ErrEmailConfirmed = errors.New("this account's email is confirmed, so it can't be released")
 
-// ConsoleReleaseEmail frees the email of a password account that never proved it, so the
-// address's real owner can make an account with it (on a server that sends no email, anyone
-// can sign up with any address). The account and everything in it stay, under a placeholder
-// address nobody can sign in with: its password, sessions, reset grants and setup keys go, so
-// whoever made it can't reach it again. The operator may close it afterwards. It returns the
-// email released.
 func (db *Database) ConsoleReleaseEmail(ctx context.Context, userID string) (string, error) {
 	var email string
 	err := db.consoleTx(ctx, func(tx *sql.Tx) error {
@@ -93,7 +80,6 @@ func (db *Database) ConsoleAccountDetail(ctx context.Context, userID string) (Co
 	return d, err
 }
 
-// ConsoleRevokeSessions signs the account out everywhere.
 func (db *Database) ConsoleRevokeSessions(ctx context.Context, userID string) (int64, error) {
 	var revoked int64
 	err := db.consoleTx(ctx, func(tx *sql.Tx) error {

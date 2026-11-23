@@ -15,8 +15,6 @@ import (
 	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// A half-configured deployment must fail at startup rather than at connect
-// time, and must never quietly downgrade to local-only notes.
 func TestJournalCollabConfigRequiresEverySecret(t *testing.T) {
 	base := func(t *testing.T) {
 		t.Helper()
@@ -114,17 +112,12 @@ func TestServiceSignaturesCoverTimestampAndBody(t *testing.T) {
 	if signature == "" {
 		t.Fatal("control signature is empty")
 	}
-	// Projection uses its own secret, so a control signature must not verify
-	// as a projection one even though the payload is identical.
 	if config.VerifyProjectionSignature(timestamp, body, signature) {
-		// Both secrets are the same value in this fixture, so equality here is
-		// expected; the separation is proven by the distinct-secret case below.
 		t.Log("fixture reuses one secret for both directions")
 	}
 	if !config.VerifyProjectionSignature(timestamp, body, config.SignControlRequest(timestamp, body)) {
 		t.Fatal("projection verification rejected a correctly signed payload")
 	}
-	// A changed body or timestamp must invalidate the signature.
 	if config.VerifyProjectionSignature(timestamp, []byte(`{"note_id":"note_2"}`), signature) {
 		t.Fatal("signature verified against a different body")
 	}

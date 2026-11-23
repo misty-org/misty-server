@@ -54,22 +54,17 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 		base64.RawURLEncoding.EncodeToString(payload)
 	signature := ed25519.Sign(c.PrivateKey, []byte(signingInput))
 	return JournalTicket{
-		Ticket: signingInput + "." + base64.RawURLEncoding.EncodeToString(signature),
-		Room:   room,
-		// The party segment is the kebab-cased Durable Object binding name.
+		Ticket:    signingInput + "." + base64.RawURLEncoding.EncodeToString(signature),
+		Room:      room,
 		URL:       fmt.Sprintf("%s/parties/%s/%s", c.websocketOrigin(), resource.Party, room),
 		Role:      role,
 		ExpiresAt: expiresAt,
 	}, nil
 }
 
-// MintJournalExportTicket creates a longer-lived, single-use viewer ticket for
-// the account export client. It can read exactly one raw Yjs update and cannot
-// submit edits.
 func (c JournalCollabConfig) MintJournalExportTicket(
 	userID, spaceID, resourceType, resourceID string, aclVersion int64,
 ) (JournalTicket, error) {
-	// Every made kind's room exports its document.
 	kind, ok := db.SpaceItemKindNamed(resourceType)
 	if !ok || kind.Name != resourceType {
 		return JournalTicket{}, errors.New("invalid export resource type")
@@ -87,7 +82,6 @@ func (c JournalCollabConfig) MintJournalExportTicket(
 	)
 }
 
-// SetJournalCollab installs the shared Journal collaboration configuration.
 func (s *SpacesService) SetJournalCollab(config JournalCollabConfig) {
 	s.JournalCollab = config
 }

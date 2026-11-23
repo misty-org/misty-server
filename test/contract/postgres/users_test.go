@@ -65,8 +65,6 @@ func TestUserAvatarVersionBumps(t *testing.T) {
 		t.Fatalf("CreateUser() error = %v", err)
 	}
 
-	// Avatar bytes live in object storage (R2); Postgres tracks the version and the
-	// object's key. Before any upload the reference falls back to avatars/<user id>.
 	avatar, err := database.GetUserAvatarReference(user.ID)
 	if err != nil || avatar.Version != 0 || avatar.ObjectKey != "avatars/"+user.ID {
 		t.Fatalf("reference before upload = %#v, %v; want version 0 and the fallback key", avatar, err)
@@ -85,7 +83,6 @@ func TestUserAvatarVersionBumps(t *testing.T) {
 		t.Fatalf("GetUserAvatarVersion() = %d, %v; want %d", got, err, version)
 	}
 
-	// A new upload always moves the version forward, even within the same millisecond.
 	second := "avatars/avatar_87654321-4321-4321-4321-cba987654321"
 	next, err := database.BumpUserAvatarVersion(user.ID, second)
 	if err != nil || next <= version {

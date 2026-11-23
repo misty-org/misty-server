@@ -9,9 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// LibraryReconciliationReport contains counts only. Object keys, filenames,
-// user IDs, and checksums are intentionally excluded so this can be logged and
-// exported to monitoring without leaking user data.
 type LibraryReconciliationReport struct {
 	ExpiredUploads           int
 	InventoryObjectsChecked  int
@@ -21,9 +18,6 @@ type LibraryReconciliationReport struct {
 	InterruptedFinalizations int
 }
 
-// ReconcileLibraryObjects heals safe object-store drift and reports drift that
-// needs restoration or a normal client retry. It never downloads an object
-// body and never guesses how to finalize an upload.
 func (s *SpaceLibraryService) ReconcileLibraryObjects(
 	ctx context.Context, orphanGrace time.Duration, limit int,
 ) (LibraryReconciliationReport, error) {

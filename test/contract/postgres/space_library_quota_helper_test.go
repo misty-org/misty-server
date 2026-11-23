@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// reservedQuota tracks uploads created only to occupy quota so a test can
-// release them again.
 type reservedQuota struct {
 	spaceID  string
 	userID   string
@@ -18,11 +16,6 @@ type reservedQuota struct {
 	token    string
 }
 
-// reserveQuotaBytes reserves exactly total bytes for one user in one Space.
-//
-// Per-file limits are purpose-specific (10 MB for a chat attachment), far
-// below the multi-gigabyte owner storage pool. Quota tests therefore fill the
-// pool with several legal uploads instead of one oversized upload.
 func reserveQuotaBytes(t *testing.T, database *Database, ctx context.Context, userID, spaceID, keyPrefix string, total int64) []reservedQuota {
 	t.Helper()
 	if total < 1 {
@@ -49,7 +42,6 @@ func reserveQuotaBytes(t *testing.T, database *Database, ctx context.Context, us
 	return reservations
 }
 
-// releaseQuota rejects every reservation so the pool returns to zero.
 func releaseQuota(t *testing.T, database *Database, ctx context.Context, reservations []reservedQuota) {
 	t.Helper()
 	for _, reservation := range reservations {

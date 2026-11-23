@@ -6,14 +6,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// In-use marks over HTTP: a computer marks a drive item it has open (and
-// whether it edits it there), renews the mark while the file stays open and
-// clears it on close. Before a trash move it can ask the others whether they
-// have the item open; they answer by marking it.
-
-// DriveInUseMarks is GET /spaces/{spaceID}/drive/in-use: every unexpired
-// in-use mark in the Space, so each computer shows who else has a file open.
-// It is fetched again after each drive.in_use event.
 func (s *SpaceDriveService) DriveInUseMarks() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -30,7 +22,6 @@ func (s *SpaceDriveService) DriveInUseMarks() http.HandlerFunc {
 	}
 }
 
-// MarkDriveInUse is PUT /spaces/{spaceID}/drive/items/{itemID}/in-use {editing}.
 func (s *SpaceDriveService) MarkDriveInUse() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -56,7 +47,6 @@ func (s *SpaceDriveService) MarkDriveInUse() http.HandlerFunc {
 	}
 }
 
-// ClearDriveInUse is DELETE /spaces/{spaceID}/drive/items/{itemID}/in-use.
 func (s *SpaceDriveService) ClearDriveInUse() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -75,8 +65,6 @@ func (s *SpaceDriveService) ClearDriveInUse() http.HandlerFunc {
 	}
 }
 
-// CheckDriveInUse is POST /spaces/{spaceID}/drive/items/{itemID}/check-in-use:
-// it sends drive.in_use_check and says how long to wait for the answers.
 func (s *SpaceDriveService) CheckDriveInUse() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

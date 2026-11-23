@@ -180,7 +180,7 @@ func (db *Database) CompleteAccountDeletion(
 			    password_hash=CASE WHEN provider='google' THEN '' ELSE $3 END,
 			    provider_subject=NULL,
 			    email_updates_enabled=FALSE,analytics_enabled=FALSE,
-			    error_reporting_enabled=FALSE,avatar_version=0,
+			    error_reporting_enabled=FALSE,avatar_version=0,banner_version=0,
 			    lifecycle_state='deleted',anonymized_at=NOW()
 			WHERE id=$4 AND lifecycle_state='pending_deletion'`,
 			"deleted_"+suffix, "deleted+"+suffix+"@misty.invalid",

@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-// SpaceNoteProjection is the searchable, non-canonical view emitted by the
-// serialized collaboration room after it persists a Yjs snapshot.
 type SpaceNoteProjection struct {
 	NoteID          string
 	Revision        int64
@@ -16,14 +14,10 @@ type SpaceNoteProjection struct {
 	Markdown        string
 	PlainText       string
 	OutgoingNoteIDs []string
-	// ContentBytes and HistoryBytes are the room's snapshot and kept versions, absent from rooms
-	// deployed before they counted toward storage.
-	ContentBytes *int64
-	HistoryBytes *int64
+	ContentBytes    *int64
+	HistoryBytes    *int64
 }
 
-// ApplySpaceNoteProjection accepts only a newer room revision and rebuilds the
-// outgoing-link set in the same transaction as title/search projections.
 func (db *Database) ApplySpaceNoteProjection(ctx context.Context, projection SpaceNoteProjection) (bool, error) {
 	projection.NoteID = strings.TrimSpace(projection.NoteID)
 	projection.Title = strings.TrimSpace(projection.Title)
@@ -82,7 +76,6 @@ type SpaceNoteBacklink struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-// SpaceNoteBacklinks returns only source notes the caller can currently see.
 func (db *Database) SpaceNoteBacklinks(ctx context.Context, userID, targetNoteID string) ([]SpaceNoteBacklink, error) {
 	links := []SpaceNoteBacklink{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {

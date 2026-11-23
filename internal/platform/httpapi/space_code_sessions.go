@@ -9,7 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// codeSessionTicket is what the app needs to open a live session's code room.
 type codeSessionTicket struct {
 	Ticket    string    `json:"ticket"`
 	Room      string    `json:"room"`
@@ -18,11 +17,8 @@ type codeSessionTicket struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
-// codeSessionRole is every member's role in a code room: everyone edits. A closing account
-// still joins as a viewer (collaborationRole), so the room takes no edits from it.
 const codeSessionRole = "editor"
 
-// SpaceCodeSessions lists a Space's open live code sessions, and starts one. Any member may.
 func (s *SpacesService) SpaceCodeSessions() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -62,8 +58,6 @@ func (s *SpacesService) SpaceCodeSessions() http.HandlerFunc {
 	}
 }
 
-// SpaceCodeSession reads one session, ended ones too. A session of another Space, or one the
-// caller is not a member for, answers the same as a missing one.
 func (s *SpacesService) SpaceCodeSession() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -81,8 +75,6 @@ func (s *SpacesService) SpaceCodeSession() http.HandlerFunc {
 	}
 }
 
-// EndSpaceCodeSession ends a session with its outcome. Only the member who started it may.
-// Its room then closes every socket as deleted and drops its state, through the outbox.
 func (s *SpacesService) EndSpaceCodeSession() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -106,8 +98,6 @@ func (s *SpacesService) EndSpaceCodeSession() http.HandlerFunc {
 	}
 }
 
-// SpaceCodeSessionCollaborationTicket mints a short-lived credential for the session's code
-// room after rechecking membership and that the session is still open.
 func (s *SpacesService) SpaceCodeSessionCollaborationTicket() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

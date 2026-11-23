@@ -17,7 +17,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// stubPresigner records what the service asked to sign without contacting R2.
 type stubPresigner struct {
 	putKey, getKey   string
 	putTTL, getTTL   time.Duration
@@ -84,8 +83,6 @@ func TestUploadTransferReturnsAbsoluteSignedPutWithoutMistyCredentials(t *testin
 	if presigner.putTTL != 15*time.Minute {
 		t.Fatalf("upload TTL = %s, want 15m", presigner.putTTL)
 	}
-	// The absolute R2 URL must never carry a Misty upload token: the client
-	// sends it with no cookies and no Misty authorization header.
 	if _, leaked := transfer.Headers[LibraryUploadTokenHeader]; leaked {
 		t.Fatalf("signed transfer leaked the Misty upload token: %#v", transfer.Headers)
 	}
@@ -94,8 +91,6 @@ func TestUploadTransferReturnsAbsoluteSignedPutWithoutMistyCredentials(t *testin
 	}
 }
 
-// File bytes never pass through the server: a store that cannot sign refuses
-// the transfer instead of falling back to a route on the server.
 func TestUploadTransferRefusesWhenTheStoreCannotSign(t *testing.T) {
 	service := &SpaceLibraryService{Store: NewMemoryLibraryObjectStore(), UploadLimits: DefaultUploadLimits()}
 	upload := &db.LibraryUpload{ID: "upload_1", SpaceID: "space_1", ObjectKey: "library/proxyfixture001", ClientDeclaredMIMEType: "text/plain"}
@@ -106,7 +101,6 @@ func TestUploadTransferRefusesWhenTheStoreCannotSign(t *testing.T) {
 	}
 }
 
-// Without a signing store a download is refused, never streamed by the server.
 func TestWriteDownloadRefusesWhenTheStoreCannotSign(t *testing.T) {
 	service := &SpaceLibraryService{Store: NewMemoryLibraryObjectStore(), UploadLimits: DefaultUploadLimits()}
 	recorder := httptest.NewRecorder()
@@ -227,8 +221,6 @@ func TestJournalAssetPurposesNeverUseTheProxy(t *testing.T) {
 	}
 }
 
-// Direct transfer has no off switch: it is on exactly when the store can sign.
-// A development store that cannot sign has no transfers at all.
 func TestDirectTransferFollowsStoreCapability(t *testing.T) {
 	signing, err := NewSpaceLibraryService(&db.Database{}, &S3LibraryObjectStore{Bucket: "misty", Presigner: &recordingPresigner{}}, DefaultUploadLimits())
 	if err != nil {
@@ -247,8 +239,6 @@ func TestDirectTransferFollowsStoreCapability(t *testing.T) {
 	}
 }
 
-// The TTLs remain tunable, but an unbounded lifetime is still rejected, since
-// a long-lived signed URL is effectively a public one.
 func TestTransferTTLsMustStayBounded(t *testing.T) {
 	service := &SpaceLibraryService{Store: NewMemoryLibraryObjectStore(), UploadLimits: DefaultUploadLimits()}
 

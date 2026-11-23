@@ -28,21 +28,18 @@ func (s *SpacesService) Messages() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Content       []db.MessageSpan `json:"content"`
-			FileNodeIDs   []string         `json:"file_node_ids"`
-			AttachmentIDs []string         `json:"attachment_ids"`
-			// An older app may still send Library items; they are gone, so
-			// the field is read and ignored.
-			LibraryItemIDs   []string `json:"library_item_ids"`
-			ReplyToMessageID string   `json:"reply_to_message_id"`
-			ThreadRootID     string   `json:"thread_root_id"`
-			ClientNonce      string   `json:"client_nonce"`
-			InputModality    string   `json:"input_modality"`
+			Content          []db.MessageSpan `json:"content"`
+			FileNodeIDs      []string         `json:"file_node_ids"`
+			AttachmentIDs    []string         `json:"attachment_ids"`
+			LibraryItemIDs   []string         `json:"library_item_ids"`
+			ReplyToMessageID string           `json:"reply_to_message_id"`
+			ThreadRootID     string           `json:"thread_root_id"`
+			ClientNonce      string           `json:"client_nonce"`
+			InputModality    string           `json:"input_modality"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		// An @mention runs on the sender's own computer, which posts the reply as an ordinary message.
 		var message *db.SpaceMessage
 		var err error
 		if body.ThreadRootID != "" {

@@ -11,10 +11,6 @@ import (
 	"github.com/misty-org/misty-server/internal/accounts"
 )
 
-// suspensionRefresh is how stale the suspended and closing lists may get.
-// Suspend, close and resume through the operator API on this instance apply at
-// once; another instance picks them up within this long. Suspending also ends
-// every session, so no access token outlives security.AccessTokenTTL anyway.
 const suspensionRefresh = 15 * time.Second
 
 type suspendedAccountStore interface {
@@ -22,9 +18,6 @@ type suspendedAccountStore interface {
 	ClosingAccounts(context.Context) (map[string]time.Time, error)
 }
 
-// SuspensionGuard refuses every request of a suspended account with 403
-// account_suspended, and every change from a closing account with 403
-// account_closing (account_read_only.go). Either way the data is untouched.
 type SuspensionGuard struct {
 	store   suspendedAccountStore
 	now     func() time.Time
@@ -34,19 +27,14 @@ type SuspensionGuard struct {
 	loaded  time.Time
 }
 
-// suspensions is the process's guard; MCP runtime calls and collaboration
-// tickets consult it too.
 var suspensions *SuspensionGuard
 
-// NewSuspensionGuard makes the process's guard.
 func NewSuspensionGuard(store suspendedAccountStore) *SuspensionGuard {
 	guard := &SuspensionGuard{store: store, now: time.Now, ids: map[string]bool{}, closing: map[string]time.Time{}}
 	suspensions = guard
 	return guard
 }
 
-// reload refreshes both lists when they are stale. A failed reload keeps the
-// last ones. The caller holds g.mu.
 func (g *SuspensionGuard) reload(ctx context.Context) {
 	if g.now().Sub(g.loaded) <= suspensionRefresh {
 		return
@@ -68,7 +56,6 @@ func (g *SuspensionGuard) reload(ctx context.Context) {
 	g.loaded = g.now()
 }
 
-// Suspended reports whether the account is suspended.
 func (g *SuspensionGuard) Suspended(ctx context.Context, userID string) bool {
 	if g == nil || userID == "" {
 		return false
@@ -79,8 +66,6 @@ func (g *SuspensionGuard) Suspended(ctx context.Context, userID string) bool {
 	return g.ids[userID]
 }
 
-// Closing reports when a closing account is deleted, and whether it is
-// closing at all.
 func (g *SuspensionGuard) Closing(ctx context.Context, userID string) (time.Time, bool) {
 	if g == nil || userID == "" {
 		return time.Time{}, false
@@ -92,8 +77,6 @@ func (g *SuspensionGuard) Closing(ctx context.Context, userID string) (time.Time
 	return at, ok
 }
 
-// Mark applies a suspend or resume this instance just made. Resuming also
-// ends closing.
 func (g *SuspensionGuard) Mark(userID string, suspended bool) {
 	if g == nil {
 		return
@@ -108,7 +91,6 @@ func (g *SuspensionGuard) Mark(userID string, suspended bool) {
 	}
 }
 
-// MarkClosing applies a close this instance just made.
 func (g *SuspensionGuard) MarkClosing(userID string, deleteAt time.Time) {
 	if g == nil {
 		return
@@ -118,9 +100,6 @@ func (g *SuspensionGuard) MarkClosing(userID string, deleteAt time.Time) {
 	g.closing[userID] = deleteAt.UTC()
 }
 
-// Middleware refuses a signed-in request from a suspended account, and a
-// change from a closing one. Signing out still works, so the app can clear
-// its session; a closing account also reads, refreshes and exports.
 func (g *SuspensionGuard) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/logout") {
@@ -148,10 +127,6 @@ func writeAccountSuspended(w http.ResponseWriter) {
 	writeJSON(w, http.StatusForbidden, map[string]string{"code": "account_suspended", "message": accountSuspendedMessage})
 }
 
-// writeSuspendedSignIn refuses a session to someone who has just shown they hold a suspended
-// account, and answers with a proof of it (account_proof.go). A suspension from a failed payment
-// is lifted by paying, and they can't reach account settings to do that, so the proof is what lets
-// the website open their card page. It is good for minutes and opens nothing on this server.
 func writeSuspendedSignIn(w http.ResponseWriter, userID string) {
 	body := map[string]string{"code": "account_suspended", "message": accountSuspendedMessage}
 	if proof, err := newAccountProof(userID, time.Now()); err == nil {

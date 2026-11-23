@@ -47,8 +47,6 @@ func (db *Database) RespondToSpaceInvite(ctx context.Context, userID, inviteID s
 			SET invited_user_id=$1,consumed_at=NOW() WHERE id=$2`, userID, inviteID); err != nil {
 			return err
 		}
-		// Rejoining the same Space inside the retention window restores the
-		// notes archived when this user left.
 		if err := handleNoteMembershipRestoreTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
@@ -101,8 +99,6 @@ func (db *Database) RespondToSpaceInviteToken(
 	return db.RespondToSpaceInvite(ctx, userID, inviteID, accept)
 }
 
-// RemoveSpaceMember takes members.remove, and only reaches members whose
-// highest role is below the caller's; nobody removes the owner.
 func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, memberID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireMemberRemovalTx(ctx, tx, ownerID, spaceID, memberID); err != nil {
@@ -114,7 +110,6 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_conversation_members cm USING space_conversations c WHERE cm.conversation_id=c.id AND c.space_id=$1 AND cm.user_id=$2`, spaceID, memberID); err != nil {
 			return err
 		}
-		// Everything of theirs in the Space goes in the same transaction.
 		if err := purgeSpaceMemberTx(ctx, tx, spaceID, memberID); err != nil {
 			return err
 		}
@@ -125,10 +120,7 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 		if n, _ := result.RowsAffected(); n == 0 {
 			return ErrSpaceNotFound
 		}
-		// Agents continue account-wide; destination tools recheck content access.
 
-		// Same transaction as the membership delete: a note must never remain
-		// reachable by someone who is no longer a member, not even briefly.
 		if err := handleNoteMembershipLossTx(ctx, tx, spaceID, memberID); err != nil {
 			return err
 		}
@@ -151,22 +143,18 @@ func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) erro
 		if role == "owner" {
 			return ErrSpaceInvalid
 		}
-		// A group DM is left through /dms, which hands it on when its starter leaves.
 		if err := requireShareableSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_conversation_members cm USING space_conversations c WHERE cm.conversation_id=c.id AND c.space_id=$1 AND cm.user_id=$2`, spaceID, userID); err != nil {
 			return err
 		}
-		// Everything of theirs in the Space goes in the same transaction:
-		// memory, private items, integration picks.
 		if err := purgeSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`, spaceID, userID); err != nil {
 			return err
 		}
-		// Agents continue account-wide; destination tools recheck content access.
 
 		if err := handleNoteMembershipLossTx(ctx, tx, spaceID, userID); err != nil {
 			return err

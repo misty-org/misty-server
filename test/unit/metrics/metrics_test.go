@@ -30,8 +30,6 @@ func scrape(t *testing.T, registry *Registry, token string) string {
 	return recorder.Body.String()
 }
 
-// Tier 1: the Go runtime collectors are what reveal a goroutine leak, which is
-// invisible from outside the process.
 func TestRuntimeMetricsArePresent(t *testing.T) {
 	body := scrape(t, New(), "secret-token")
 
@@ -42,9 +40,6 @@ func TestRuntimeMetricsArePresent(t *testing.T) {
 	}
 }
 
-// Tier 2: labels must be the route template, never the concrete URL. Labelling
-// by raw path would mint a new time series per Space id and blow up the metrics
-// store within a day.
 func TestRequestsAreLabelledByRoutePatternNotRawPath(t *testing.T) {
 	registry := New()
 	router := chi.NewRouter()
@@ -69,8 +64,6 @@ func TestRequestsAreLabelledByRoutePatternNotRawPath(t *testing.T) {
 	}
 }
 
-// Unmatched paths share one bucket, so a scanner probing random URLs cannot
-// inflate cardinality at will.
 func TestUnmatchedRequestsShareOneLabel(t *testing.T) {
 	registry := New()
 	router := chi.NewRouter()
@@ -108,14 +101,11 @@ func TestStatusIsRecordedAsAClass(t *testing.T) {
 	if !strings.Contains(body, `status="5xx"`) || !strings.Contains(body, `status="2xx"`) {
 		t.Fatalf("status classes missing:\n%s", body)
 	}
-	// A handler that writes no header still counts as 200, matching what
-	// net/http actually sends.
 	if strings.Contains(body, `status="0xx"`) {
 		t.Fatal("a handler that never wrote a header was recorded as 0xx")
 	}
 }
 
-// hijackableRecorder reports whether the wrapped writer preserved Hijacker.
 type hijackableRecorder struct {
 	*httptest.ResponseRecorder
 	hijacked bool
@@ -126,10 +116,6 @@ func (r *hijackableRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return nil, nil, errors.New("test hijack")
 }
 
-// The realtime endpoint upgrades to a WebSocket, which needs to take over the
-// connection. A ResponseWriter wrapper that drops http.Hijacker would break
-// every realtime connection while leaving ordinary requests working, which is
-// exactly the kind of bug that reaches production.
 func TestMiddlewarePreservesHijackerForWebSocketUpgrades(t *testing.T) {
 	registry := New()
 	var sawHijacker bool
@@ -145,8 +131,6 @@ func TestMiddlewarePreservesHijackerForWebSocketUpgrades(t *testing.T) {
 	}
 }
 
-// The endpoint names every route and its traffic volume, so it must not be
-// reachable without the token.
 func TestMetricsRequireTheBearerToken(t *testing.T) {
 	registry := New()
 	handler := registry.Handler("secret-token")
@@ -166,8 +150,6 @@ func TestMetricsRequireTheBearerToken(t *testing.T) {
 		}
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, request)
-		// 404 rather than 401: an unauthenticated caller should not learn that
-		// a metrics endpoint exists here at all.
 		if recorder.Code != http.StatusNotFound {
 			t.Fatalf("%s: status = %d, want 404", name, recorder.Code)
 		}
@@ -190,8 +172,6 @@ func TestUnconfiguredTokenRefusesEveryRequest(t *testing.T) {
 	}
 }
 
-// Tier 3: domain gauges are refreshed by the sampler, never during a scrape, so
-// a slow query cannot turn monitoring into load on the system being monitored.
 func TestDomainGaugesAreSampledOutsideTheScrape(t *testing.T) {
 	registry := New()
 	reads := make(chan struct{}, 8)
@@ -220,8 +200,6 @@ func TestDomainGaugesAreSampledOutsideTheScrape(t *testing.T) {
 	}
 }
 
-// A failing sample must leave the previous value in place and surface as a
-// failure counter, rather than silently reporting zero.
 func TestFailedSampleDoesNotReportZero(t *testing.T) {
 	registry := New()
 	fail := make(chan bool, 1)

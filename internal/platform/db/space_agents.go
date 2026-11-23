@@ -8,9 +8,6 @@ import (
 	"unicode/utf8"
 )
 
-// SpaceAgent lists an agent in a Space, under the person who owns it. The agent
-// lives on that person's computer: the Space keeps its id and name and nothing
-// else, and only its owner can ask it to act.
 type SpaceAgent struct {
 	SpaceID     string    `json:"space_id"`
 	SpaceName   string    `json:"space_name"`
@@ -19,15 +16,11 @@ type SpaceAgent struct {
 	OwnerUserID string    `json:"owner_user_id"`
 	OwnerName   string    `json:"owner_name"`
 	AddedAt     time.Time `json:"added_at"`
-	// Visibility is "public" or "private": a private agent is invisible to the
-	// rest of the Space and can't be @mentioned there.
-	Visibility string `json:"visibility"`
+	Visibility  string    `json:"visibility"`
 }
 
 const spaceAgentColumns = `m.space_id,s.name,m.agent_id,m.agent_name,m.owner_user_id,COALESCE(u.username,''),m.added_at,m.visibility`
 
-// Only agents in active Spaces are visible. The owner is always a member:
-// a listing cascades from space_members.
 const spaceAgentJoins = ` FROM space_agents m
 	JOIN spaces s ON s.id=m.space_id AND s.lifecycle_state='active'
 	LEFT JOIN users u ON u.id=m.owner_user_id`
@@ -41,9 +34,6 @@ const (
 	maxSpaceAgentNameLength = 80
 )
 
-// AddSpaceAgent lists one of the caller's agents in a Space they belong to, or
-// updates its name if it's already there. The id and name come from the
-// caller's computer and mean nothing to the server beyond this listing.
 func (db *Database) AddSpaceAgent(ctx context.Context, userID, spaceID, agentID, name string) (*SpaceAgent, error) {
 	agentID, name = strings.TrimSpace(agentID), strings.TrimSpace(name)
 	if agentID == "" || len(agentID) > maxSpaceAgentIDLength || name == "" || utf8.RuneCountInString(name) > maxSpaceAgentNameLength {
@@ -73,8 +63,6 @@ func (db *Database) AddSpaceAgent(ctx context.Context, userID, spaceID, agentID,
 	return out, nil
 }
 
-// RemoveSpaceAgent takes an agent out of a Space. Its owner or the Space's
-// owner may do it.
 func (db *Database) RemoveSpaceAgent(ctx context.Context, userID, spaceID, agentID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		role, err := requireSpaceMemberTx(ctx, tx, spaceID, userID)
@@ -96,8 +84,6 @@ func (db *Database) RemoveSpaceAgent(ctx context.Context, userID, spaceID, agent
 	})
 }
 
-// SpaceAgents lists the agents in one Space, or in every Space the caller
-// belongs to when spaceID is empty.
 func (db *Database) SpaceAgents(ctx context.Context, userID, spaceID string) ([]SpaceAgent, error) {
 	items := []SpaceAgent{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {

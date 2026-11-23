@@ -95,12 +95,15 @@ func (s *SpacesService) ProcessAccountDeletions(
 	for _, request := range requests {
 		status, processErr := s.revokeAccountProviders(ctx, request.UserID)
 		if processErr == nil && s.avatarStore != nil {
-			// The current picture's own key, and the fixed one pictures had before uploads got
-			// their own.
 			keys := []string{avatarObjectKey(request.UserID)}
 			if avatar, err := s.database.GetUserAvatarReference(request.UserID); err == nil &&
 				avatar.ObjectKey != keys[0] {
 				keys = append(keys, avatar.ObjectKey)
+			}
+			keys = append(keys, bannerObjectKey(request.UserID))
+			if banner, err := s.database.GetUserBannerReference(request.UserID); err == nil &&
+				banner.ObjectKey != bannerObjectKey(request.UserID) {
+				keys = append(keys, banner.ObjectKey)
 			}
 			for _, key := range keys {
 				if err := s.avatarStore.Delete(ctx, key); err != nil &&
@@ -136,7 +139,6 @@ func (s *SpacesService) PurgeDueAccountDeletions(
 	}
 	completed := 0
 	for _, request := range requests {
-		// The Spaces it owned are purged after this.
 		err := s.database.CompleteAccountDeletion(ctx, request.ID)
 		if err != nil {
 			_ = s.database.RecordAccountDeletionFailure(ctx, request.ID, "purge_failed")
@@ -145,7 +147,6 @@ func (s *SpacesService) PurgeDueAccountDeletions(
 		completed++
 	}
 	if completed > 0 {
-		// A deleted account's Spaces are due at once.
 		if _, err := s.PurgeDeletedSpaces(ctx, 25); err != nil {
 			return completed, err
 		}

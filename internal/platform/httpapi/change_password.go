@@ -10,10 +10,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// ChangePassword replaces the signed-in person's password (PUT /me/password).
-// Wrong attempts count toward the same lockout as sign-in. reset_token, from a
-// setup key's sign-in, stands in for the current password: that is how a
-// forgotten password is reset.
 func ChangePassword(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := accounts.AuthenticatedUser(w, r)
@@ -23,14 +19,11 @@ func ChangePassword(database *db.Database) http.HandlerFunc {
 		var body struct {
 			CurrentPassword string `json:"current_password"`
 			NewPassword     string `json:"new_password"`
-			// ResetToken: password_reset_token from POST /setup-keys/redeem.
-			ResetToken string `json:"reset_token"`
+			ResetToken      string `json:"reset_token"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		// current_password may be empty only for the first password of an
-		// account a setup key signed in (it has none yet); the store checks.
 		if body.NewPassword == "" {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
@@ -52,7 +45,6 @@ func ChangePassword(database *db.Database) http.HandlerFunc {
 		if lockedOut(w, r, database, failures, "too many attempts; try again later") {
 			return
 		}
-		// Other sessions end with the change; this request's own stays.
 		keep := security.HashToken(accounts.SessionID(r))
 		if body.ResetToken != "" {
 			err = database.ResetPassword(r.Context(), userID, security.HashToken(body.ResetToken), body.NewPassword, keep, time.Now())

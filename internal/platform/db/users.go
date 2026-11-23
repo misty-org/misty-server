@@ -7,8 +7,6 @@ import (
 	"github.com/misty-org/misty-server/internal/accounts"
 )
 
-// Compatibility facade for existing HTTP/tool callers. Account behavior and SQL
-// live in accounts; this adapter only supplies the shared RLS transaction.
 func (db *Database) accountStore() accounts.Store {
 	return accounts.Store{Transaction: db.WithRLSContext, CreateIdentity: func(tx *sql.Tx, id, user string) error {
 		return createLicenseTx(tx, id, user)
@@ -30,6 +28,7 @@ func (db *Database) GoogleUser(email, subject string) (*User, error) {
 type User = accounts.User
 type UserSettings = accounts.UserSettings
 type UserAvatarReference = accounts.UserAvatarReference
+type UserBannerReference = accounts.UserBannerReference
 
 func (db *Database) CreateUser(email, password string) (*User, error) {
 	return db.accountStore().CreateUser(email, password)
@@ -42,7 +41,6 @@ func (db *Database) GetUserByEmail(email string) (*User, string, error) {
 }
 func (db *Database) GetUserByID(id string) (*User, error) { return db.accountStore().GetUserByID(id) }
 
-// UpgradePasswordHash remakes an old-cost hash at accounts.PasswordCost after a sign-in.
 func (db *Database) UpgradePasswordHash(id, hash, password string) {
 	db.accountStore().UpgradePasswordHash(id, hash, password)
 }
@@ -62,6 +60,15 @@ func (db *Database) GetUserAvatarVersion(id string) (int64, error) {
 func (db *Database) GetUserAvatarReference(id string) (UserAvatarReference, error) {
 	return db.accountStore().GetUserAvatarReference(id)
 }
+func (db *Database) BumpUserBannerVersion(id, objectKey string) (int64, error) {
+	return db.accountStore().BumpUserBannerVersion(id, objectKey)
+}
+func (db *Database) RemoveUserBanner(id string) error {
+	return db.accountStore().RemoveUserBanner(id)
+}
+func (db *Database) GetUserBannerReference(id string) (UserBannerReference, error) {
+	return db.accountStore().GetUserBannerReference(id)
+}
 func (db *Database) SetUsername(id, username string) (string, error) {
 	return db.accountStore().SetUsername(id, username)
 }
@@ -76,8 +83,6 @@ func TestingNormalizeUsername(username string) (string, error) {
 	return accounts.NormalizeUsername(username)
 }
 
-// AnyAccount reports whether any account exists, deleted ones included, so a
-// server stays closed to self sign-up after its first account.
 func (db *Database) AnyAccount(ctx context.Context) (bool, error) {
 	var exists bool
 	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {

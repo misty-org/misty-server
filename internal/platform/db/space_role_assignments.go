@@ -9,8 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/spaces"
 )
 
-// ReorderSpaceRoles puts every role but everyone in a new order, top first.
-// Below the owner, only roles under the caller's highest one may move.
 func (db *Database) ReorderSpaceRoles(ctx context.Context, userID, spaceID string, roleIDs []string) ([]SpaceRole, error) {
 	var out []SpaceRole
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -49,7 +47,6 @@ func (db *Database) ReorderSpaceRoles(ctx context.Context, userID, spaceID strin
 			if before[roleID] == position {
 				continue
 			}
-			// space_roles_position_key is deferred, so positions may pass through each other.
 			if _, err := tx.ExecContext(ctx, `UPDATE space_roles SET position=$2,updated_at=NOW() WHERE id=$1`, roleID, position); err != nil {
 				return err
 			}
@@ -66,9 +63,6 @@ func (db *Database) ReorderSpaceRoles(ctx context.Context, userID, spaceID strin
 	return out, nil
 }
 
-// SetSpaceMemberRoles gives a member exactly roleIDs, as far as the caller may:
-// roles at or above the caller's highest one are neither added nor removed, and
-// stay as they were.
 func (db *Database) SetSpaceMemberRoles(ctx context.Context, userID, spaceID, memberID string, roleIDs []string) (*SpaceMember, error) {
 	desired := map[string]bool{}
 	for _, roleID := range roleIDs {
@@ -128,8 +122,6 @@ func (db *Database) SetSpaceMemberRoles(ctx context.Context, userID, spaceID, me
 	return out, nil
 }
 
-// applyMemberRolesTx adds and removes the roles the caller may assign, and
-// reports whether anything changed.
 func applyMemberRolesTx(ctx context.Context, tx *sql.Tx, access *memberAccess, spaceID, memberID string, held []string, desired map[string]bool, positions map[string]int) (bool, error) {
 	current := map[string]bool{}
 	for _, roleID := range held {
@@ -157,8 +149,6 @@ func applyMemberRolesTx(ctx context.Context, tx *sql.Tx, access *memberAccess, s
 	return changed, nil
 }
 
-// spaceMemberRoleIDsTx maps each member of a Space to the roles they hold
-// besides everyone, highest first.
 func spaceMemberRoleIDsTx(ctx context.Context, tx *sql.Tx, spaceID string) (map[string][]string, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT mr.user_id,mr.role_id FROM space_member_roles mr
 		JOIN space_roles r ON r.id=mr.role_id
@@ -178,7 +168,6 @@ func spaceMemberRoleIDsTx(ctx context.Context, tx *sql.Tx, spaceID string) (map[
 	return out, rows.Err()
 }
 
-// spaceMemberTx loads one member as SpaceMembers lists them.
 func spaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, memberID string) (*SpaceMember, error) {
 	out := &SpaceMember{}
 	err := tx.QueryRowContext(ctx, `SELECT m.space_id,m.user_id,u.username,u.email,m.role,m.joined_at,m.read_message_seq,u.avatar_version
@@ -202,9 +191,6 @@ func spaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, memberID string) (*
 	return out, nil
 }
 
-// requireMemberRemovalTx checks that the caller may remove memberID: they hold
-// members.remove and the member's highest role is below theirs. Nobody removes
-// the owner, or themselves (they leave instead).
 func requireMemberRemovalTx(ctx context.Context, tx *sql.Tx, actorID, spaceID, memberID string) error {
 	access, err := memberAccessTx(ctx, tx, spaceID, actorID)
 	if err != nil {

@@ -38,7 +38,6 @@ func TestUpdateSpaceConversationRestrictedToCreator(t *testing.T) {
 		t.Fatalf("CreateSpaceConversation() error = %v", err)
 	}
 
-	// Members can read and write messages, but only the Space's owner renames.
 	if _, err := database.UpdateSpaceConversation(ctx, member.ID, space.ID, conversation.ID, "Hijacked name"); !errors.Is(err, ErrSpaceForbidden) {
 		t.Fatalf("UpdateSpaceConversation(member) error = %v, want ErrSpaceForbidden", err)
 	}
@@ -54,7 +53,6 @@ func TestUpdateSpaceConversationRestrictedToCreator(t *testing.T) {
 		t.Fatalf("SpaceConversations(another member) = %#v, %v", everyone, err)
 	}
 
-	// A DM can't be changed, by anyone: not its participants and not the Space's owner.
 	dm, err := database.DirectMemberConversation(ctx, member.ID, space.ID, outsider.ID)
 	if err != nil {
 		t.Fatal(err)

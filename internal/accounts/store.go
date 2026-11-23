@@ -6,9 +6,6 @@ import (
 	"strings"
 )
 
-// Store owns account persistence and its RLS scopes. The shared PostgreSQL
-// adapter supplies transaction handling and legacy identity initialization;
-// neither knows account registration, profile, or session behavior.
 type Store struct {
 	Transaction    func(context.Context, map[string]string, func(*sql.Tx) error) error
 	CreateIdentity func(*sql.Tx, string, string) error

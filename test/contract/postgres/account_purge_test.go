@@ -13,10 +13,6 @@ import (
 	"github.com/misty-org/misty-server/test/testkit"
 )
 
-// TestClosedAccountPurgeLeavesOnlyAttribution closes a populated account,
-// runs every step of its deletion and checks Privacy §10: the account's own
-// data is gone, a Space other people use is handed over, and only the
-// attribution on content they keep still names the deleted user.
 func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 	database := testkit.OpenDatabase(t)
 	ctx := context.Background()
@@ -31,7 +27,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 	personal := personalSpace(t, database, ctx, alice.ID)
 	photo := createTestImage(t, database, alice.ID, personal.ID, "photo.jpg", "a")
 
-	// Alice owns Studio, which Bob uses; she is a member of Bob's Club.
 	studio := createTestSpace(t, database, ctx, alice.ID, "Studio")
 	join(t, database, ctx, alice.ID, studio.ID, bob)
 	club := createTestSpace(t, database, ctx, bob.ID, "Club")
@@ -54,8 +49,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 		}
 	}
 
-	// Closed, and not yet due; then with its date already here. The server
-	// sends no email, so nothing else is waited for.
 	if _, err := database.CloseAccount(ctx, alice.ID, time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +71,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 	}
 	purgeSpaces(t, database, ctx, personal.ID)
 
-	// Studio is Bob's now; the personal Space and its files are gone.
 	if owner := text(t, database, `SELECT owner_user_id FROM spaces WHERE id=$1`, studio.ID); owner != bob.ID {
 		t.Fatalf("Studio's owner = %v", owner)
 	}
@@ -103,8 +95,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 		t.Fatalf("users row = %q %q %v", email, state, err)
 	}
 
-	// Every column that references users is empty for Alice, unless it is
-	// attribution the purge keeps on purpose.
 	rows, err := database.Conn.Query(`SELECT c.conrelid::regclass::text, a.attname FROM pg_constraint c
 		JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=ANY(c.conkey)
 		WHERE c.contype='f' AND c.confrelid='users'::regclass ORDER BY 1,2`)
@@ -144,7 +134,6 @@ func TestClosedAccountPurgeLeavesOnlyAttribution(t *testing.T) {
 	}
 }
 
-// TestOperatorCreateRefusesAnEmailBeingDeleted answers 409, not 500.
 func TestOperatorCreateRefusesAnEmailBeingDeleted(t *testing.T) {
 	database := testkit.OpenDatabase(t)
 	ctx := context.Background()
@@ -171,8 +160,6 @@ func join(t *testing.T, database *Database, ctx context.Context, ownerID, spaceI
 	}
 }
 
-// purgeSpaces runs the Space purge, confirming each room purge as the
-// collaboration service would.
 func purgeSpaces(t *testing.T, database *Database, ctx context.Context, personalID string) {
 	t.Helper()
 	ids, err := database.DueSpacePurges(ctx, 100)

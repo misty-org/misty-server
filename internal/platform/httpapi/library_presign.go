@@ -16,9 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// PresignedTransfer is a short-lived, absolute URL the desktop client uses to
-// move bytes directly to or from R2. The client must send exactly the returned
-// headers: any extra header breaks the signature.
 type PresignedTransfer struct {
 	URL       string            `json:"url"`
 	Method    string            `json:"method"`
@@ -26,8 +23,6 @@ type PresignedTransfer struct {
 	ExpiresAt time.Time         `json:"expires_at"`
 }
 
-// PresignedDownload is the descriptor returned instead of streaming object
-// bytes through the VPS.
 type PresignedDownload struct {
 	URL       string    `json:"url"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -37,17 +32,12 @@ type PresignedDownload struct {
 	SHA256    string    `json:"sha256,omitempty"`
 }
 
-// LibraryObjectPresigner is the optional capability that lets the server hand
-// signed R2 operations to the client. The local and in-memory development
-// stores intentionally do not implement it, so development keeps using the
-// relative proxy transfer route.
 type LibraryObjectPresigner interface {
 	PresignPut(ctx context.Context, key string, metadata LibraryObjectMetadata, ttl time.Duration) (PresignedTransfer, error)
 	PresignGet(ctx context.Context, key, filename string, ttl time.Duration) (PresignedDownload, error)
 }
 
 const (
-	// Bounds keep a misconfigured TTL from minting long-lived public URLs.
 	minPresignTTL = 30 * time.Second
 	maxPresignTTL = 60 * time.Minute
 )
@@ -59,9 +49,6 @@ func validatePresignTTL(ttl time.Duration) (time.Duration, error) {
 	return ttl, nil
 }
 
-// safeContentDisposition builds an attachment disposition that cannot inject
-// header content or leak a path. Non-ASCII names fall back to the RFC 5987
-// encoded form alongside a sanitized ASCII name.
 func safeContentDisposition(filename string) string {
 	filename = sanitizeLibraryFilename(filename)
 	if filename == "" {
@@ -79,10 +66,6 @@ func safeContentDisposition(filename string) string {
 	return fmt.Sprintf("attachment; filename=%q; filename*=%s", ascii, mime.FormatMediaType("UTF-8''"+url.PathEscape(filename), nil))
 }
 
-// PresignPut signs a single PUT for one exact object key. The signature covers
-// the content type, the exact byte length, the SHA-256 checksum, and the
-// server-owned checksum metadata, so a client cannot upload different bytes,
-// a different size, or a different key than the server authorized.
 func (s *S3LibraryObjectStore) PresignPut(ctx context.Context, key string, metadata LibraryObjectMetadata, ttl time.Duration) (PresignedTransfer, error) {
 	if err := validateLibraryObject(key, metadata); err != nil {
 		return PresignedTransfer{}, err
@@ -107,10 +90,6 @@ func (s *S3LibraryObjectStore) PresignPut(ctx context.Context, key string, metad
 	if err != nil {
 		return PresignedTransfer{}, mapLibraryS3Error(err)
 	}
-	// Return only headers the presigner kept as signed headers. The AWS signer
-	// may hoist checksum constraints into the URL query instead of requiring a
-	// request header; sending that hoisted value as a header can make R2 reject
-	// the browser preflight or the signed PUT.
 	headers := map[string]string{}
 	addPresignedTransferHeader(headers, presigned.SignedHeader, "Content-Type", metadata.MIMEType)
 	addPresignedTransferHeader(headers, presigned.SignedHeader, "x-amz-checksum-sha256", encodedChecksum)
@@ -139,9 +118,6 @@ func presignedTransferHeaderSigned(signed http.Header, name string) bool {
 	return false
 }
 
-// PresignGet signs a single GET for one exact object key with a safe
-// attachment disposition, so the browser or Tauri client cannot be tricked into
-// rendering an uploaded file inline.
 func (s *S3LibraryObjectStore) PresignGet(ctx context.Context, key, filename string, ttl time.Duration) (PresignedDownload, error) {
 	if !libraryObjectKeyPattern.MatchString(key) {
 		return PresignedDownload{}, ErrLibraryObjectNotFound

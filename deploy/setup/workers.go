@@ -14,10 +14,6 @@ import (
 	"sort"
 )
 
-// The Workers ship prebuilt in the setup image (wrangler's dry-run bundle and
-// its wrangler.jsonc), so setup uploads them through the API with no Node or
-// wrangler at run time.
-
 type wranglerConfig struct {
 	CompatibilityDate  string            `json:"compatibility_date"`
 	CompatibilityFlags []string          `json:"compatibility_flags"`
@@ -90,7 +86,6 @@ func hasModule(bundle workerBundle, name string) bool {
 	return false
 }
 
-// workerDeploy is one Worker with the values this server gives it.
 type workerDeploy struct {
 	Name    string
 	Bundle  workerBundle
@@ -98,8 +93,6 @@ type workerDeploy struct {
 	Secrets map[string]string
 }
 
-// metadata builds the upload metadata. migrationTag is the tag the deployed
-// script already has ("" for a new script).
 func (w workerDeploy) metadata(migrationTag string) (map[string]any, error) {
 	config := w.Bundle.Config
 	var bindings []map[string]any
@@ -138,8 +131,6 @@ func (w workerDeploy) metadata(migrationTag string) (map[string]any, error) {
 	return metadata, nil
 }
 
-// pendingMigrations returns the Durable Object migration steps after the
-// deployed tag, or nil when the script is current.
 func pendingMigrations(all []map[string]any, deployed string) (map[string]any, error) {
 	if len(all) == 0 {
 		return nil, nil
@@ -176,8 +167,6 @@ func pendingMigrations(all []map[string]any, deployed string) (map[string]any, e
 	return out, nil
 }
 
-// fingerprint changes whenever the code, configuration or a secret changes,
-// so setup uploads only then.
 func (w workerDeploy) fingerprint() string {
 	hash := sha256.New()
 	metadata, _ := w.metadata("")
@@ -199,7 +188,6 @@ func sortedKeys(values map[string]string) []string {
 	return keys
 }
 
-// deployWorker uploads the script when it changed and keeps it on workers.dev.
 func deployWorker(ctx context.Context, cf *cloudflare, store *Store, worker workerDeploy) error {
 	var scripts []struct {
 		ID           string `json:"id"`

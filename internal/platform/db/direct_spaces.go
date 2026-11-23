@@ -9,27 +9,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// maxDirectPeople is how many people one group DM holds, its starter included.
 const maxDirectPeople = 10
 
-// directSpaceName is what a DM Space is called underneath; people see the others' names instead.
 const directSpaceName = "Direct message"
 
-// DirectConversation is a DM: a Space of kind 'direct' whose "everyone" chat is the conversation.
-// Its id is the Space's id, so the Space chat routes read and write its messages.
 type DirectConversation struct {
-	ID string `json:"id"`
-	// Kind is "direct" for two people, "group" for three to ten.
-	Kind    string   `json:"kind"`
-	Members []Person `json:"members"`
-	// UnreadCount is messages from others the caller hasn't read, up to 100.
+	ID            string     `json:"id"`
+	Kind          string     `json:"kind"`
+	Members       []Person   `json:"members"`
 	UnreadCount   int        `json:"unread_count"`
 	LastMessageAt *time.Time `json:"last_message_at,omitempty"`
-	// ReadOnly is a one-to-one DM whose two people are no longer friends (one moved from a Space):
-	// its history stays, and it opens again once they are friends.
-	ReadOnly  bool      `json:"read_only"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ReadOnly      bool       `json:"read_only"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 func directPairKey(a, b string) string {
@@ -37,7 +29,6 @@ func directPairKey(a, b string) string {
 	return low + ":" + high
 }
 
-// requireFriendsTx refuses unless the two are friends and neither blocked the other.
 func requireFriendsTx(ctx context.Context, tx *sql.Tx, userID, otherID string) error {
 	if userID == otherID {
 		return ErrSpaceInvalid
@@ -57,8 +48,6 @@ func requireFriendsTx(ctx context.Context, tx *sql.Tx, userID, otherID string) e
 	return nil
 }
 
-// createDirectSpaceTx makes the Space behind a DM: owned by its starter, with every person as a
-// member. It never counts against Space limits and never shows among anyone's Spaces.
 func createDirectSpaceTx(ctx context.Context, tx *sql.Tx, starterID string, otherIDs []string, pairKey string) (string, error) {
 	spaceID := "space_" + uuid.NewString()
 	domainID := "sd_" + uuid.NewString()
@@ -89,8 +78,6 @@ func createDirectSpaceTx(ctx context.Context, tx *sql.Tx, starterID string, othe
 	return spaceID, nil
 }
 
-// retireDirectSpaceTx deletes a DM for everyone in it: they lose it now, and the purge worker
-// removes its messages and files on its next pass.
 func retireDirectSpaceTx(ctx context.Context, tx *sql.Tx, spaceID, actorID string) error {
 	rows, err := tx.QueryContext(ctx, `SELECT user_id FROM space_members WHERE space_id=$1`, spaceID)
 	if err != nil {
@@ -129,7 +116,6 @@ func retireDirectSpaceTx(ctx context.Context, tx *sql.Tx, spaceID, actorID strin
 	return err
 }
 
-// deletePairDirectTx deletes the two people's one-to-one DM, if they have one.
 func deletePairDirectTx(ctx context.Context, tx *sql.Tx, actorID, otherID string) error {
 	var spaceID string
 	err := tx.QueryRowContext(ctx, `SELECT id FROM spaces WHERE kind='direct' AND direct_key=$1 AND lifecycle_state='active' FOR UPDATE`, directPairKey(actorID, otherID)).Scan(&spaceID)
@@ -142,8 +128,6 @@ func deletePairDirectTx(ctx context.Context, tx *sql.Tx, actorID, otherID string
 	return retireDirectSpaceTx(ctx, tx, spaceID, actorID)
 }
 
-// requireDirectMemberTx returns the DM's pair key ("" for a group) once the caller is one of its
-// people; anyone else gets not found.
 func requireDirectMemberTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) (string, string, error) {
 	var pairKey, role string
 	err := tx.QueryRowContext(ctx, `SELECT COALESCE(s.direct_key,''),m.role FROM spaces s JOIN space_members m ON m.space_id=s.id AND m.user_id=$2
@@ -154,7 +138,6 @@ func requireDirectMemberTx(ctx context.Context, tx *sql.Tx, userID, spaceID stri
 	return pairKey, role, err
 }
 
-// OpenDirect finds or starts the one-to-one DM between the caller and a friend.
 func (db *Database) OpenDirect(ctx context.Context, userID, otherID string) (*DirectConversation, error) {
 	var spaceID string
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -164,7 +147,6 @@ func (db *Database) OpenDirect(ctx context.Context, userID, otherID string) (*Di
 		}
 		err := tx.QueryRowContext(ctx, `SELECT id FROM spaces WHERE kind='direct' AND direct_key=$1 AND lifecycle_state='active'`, key).Scan(&spaceID)
 		if err == nil {
-			// An existing DM opens for either of them, even one that is read-only now.
 			return nil
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -182,7 +164,6 @@ func (db *Database) OpenDirect(ctx context.Context, userID, otherID string) (*Di
 	return db.Direct(ctx, userID, spaceID)
 }
 
-// CreateGroupDirect starts a group DM with two to nine of the caller's friends.
 func (db *Database) CreateGroupDirect(ctx context.Context, userID string, otherIDs []string) (*DirectConversation, error) {
 	others := uniqueSpaceIDs(otherIDs)
 	for index, id := range others {
@@ -211,8 +192,6 @@ func (db *Database) CreateGroupDirect(ctx context.Context, userID string, otherI
 	return db.Direct(ctx, userID, spaceID)
 }
 
-// AddDirectMembers adds the caller's friends to a group DM. Adding people to a one-to-one DM starts
-// a new group with both of its people and the new ones, as before; the one-to-one stays.
 func (db *Database) AddDirectMembers(ctx context.Context, userID, spaceID string, otherIDs []string) (*DirectConversation, error) {
 	adding := uniqueSpaceIDs(otherIDs)
 	if len(adding) == 0 {
@@ -287,8 +266,6 @@ func (db *Database) AddDirectMembers(ctx context.Context, userID, spaceID string
 	return db.Direct(ctx, userID, resultID)
 }
 
-// LeaveDirect takes the caller out of a group DM. When its starter leaves, the person who has been
-// in it longest takes it over; when the last person leaves, it is deleted.
 func (db *Database) LeaveDirect(ctx context.Context, userID, spaceID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		pairKey, role, err := requireDirectMemberTx(ctx, tx, userID, spaceID)
@@ -296,7 +273,6 @@ func (db *Database) LeaveDirect(ctx context.Context, userID, spaceID string) err
 			return err
 		}
 		if pairKey != "" {
-			// A one-to-one DM isn't left, only deleted.
 			return ErrSpaceInvalid
 		}
 		var next string
@@ -310,7 +286,6 @@ func (db *Database) LeaveDirect(ctx context.Context, userID, spaceID string) err
 		if err := purgeSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
-		// The leaver goes first, so the DM never has two owners at once.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`, spaceID, userID); err != nil {
 			return err
 		}
@@ -329,8 +304,6 @@ func (db *Database) LeaveDirect(ctx context.Context, userID, spaceID string) err
 	})
 }
 
-// DeleteDirect deletes a one-to-one DM and everything in it, for both people. A group DM is left
-// instead.
 func (db *Database) DeleteDirect(ctx context.Context, userID, spaceID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		pairKey, _, err := requireDirectMemberTx(ctx, tx, userID, spaceID)
@@ -344,7 +317,6 @@ func (db *Database) DeleteDirect(ctx context.Context, userID, spaceID string) er
 	})
 }
 
-// Directs lists the caller's DMs, the most recently active first.
 func (db *Database) Directs(ctx context.Context, userID string) ([]DirectConversation, error) {
 	items := []DirectConversation{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -380,7 +352,6 @@ func (db *Database) Directs(ctx context.Context, userID string) ([]DirectConvers
 	return items, err
 }
 
-// Direct returns one of the caller's DMs.
 func (db *Database) Direct(ctx context.Context, userID, spaceID string) (*DirectConversation, error) {
 	var out *DirectConversation
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -457,8 +428,6 @@ func directTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) (*DirectC
 	return out, nil
 }
 
-// requireDirectWritableTx refuses a message in a one-to-one DM whose two people aren't friends.
-// Anything that isn't a DM passes.
 func requireDirectWritableTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) error {
 	var pairKey string
 	err := tx.QueryRowContext(ctx, `SELECT COALESCE(direct_key,'') FROM spaces WHERE id=$1 AND kind='direct'`, spaceID).Scan(&pairKey)

@@ -9,7 +9,6 @@ import (
 func TestCleanAgentStatusesKeepsOnlyFixedCodesAndClaimPaths(t *testing.T) {
 	clean := cleanAgentStatuses([]agentStatus{
 		{ID: "a1", Name: " Researcher ", State: "working", Doing: "browser", Files: []string{"notes.md", "src/auth.rs", "line one\nline two", "/Users/me/key.pem", "../up.txt", "src//x.rs", "C:\\x.rs"}},
-		// A model's words can't ride in as a state or a kind of work.
 		{ID: "a2", Name: "Writer", State: "working", Doing: "Summarising the quarterly report"},
 		{ID: "a3", Name: "Writer", State: "thinking hard", Doing: ""},
 		{ID: "", Name: "Nameless", State: "resting", Doing: ""},
@@ -36,8 +35,6 @@ func TestCleanAgentStatusesCapsHowManyAreSent(t *testing.T) {
 	}
 }
 
-// One member's agent statuses reach every device of the Space's other members, never the sender's
-// own devices or anyone outside the Space, and a status from someone outside reaches no one.
 func TestBroadcastAgentsReachesOnlyTheSpacesOtherMembers(t *testing.T) {
 	f := newSpaceRouteFixture(t)
 	s := NewRealtimeService(f.database, "")
@@ -79,13 +76,11 @@ func TestBroadcastAgentsReachesOnlyTheSpacesOtherMembers(t *testing.T) {
 		t.Fatal("the sender or someone outside the Space heard the status")
 	}
 
-	// The working agent's change is logged, once.
 	lines, err := f.database.ListAgentActivity(t.Context(), f.member, f.space.ID, 10)
 	if err != nil || len(lines) != 1 {
 		t.Fatalf("activity = %+v, %v", lines, err)
 	}
 
-	// Someone outside the Space reaches nobody.
 	stranger.lastAgentsAt = time.Time{}
 	s.broadcastAgents(stranger, f.space.ID, []agentStatus{{ID: "x", Name: "Spy", State: "working", Doing: "web"}})
 	if agentsHeard(member)+agentsHeard(memberLaptop)+agentsHeard(other)+agentsHeard(sender) != 0 {
@@ -93,8 +88,6 @@ func TestBroadcastAgentsReachesOnlyTheSpacesOtherMembers(t *testing.T) {
 	}
 }
 
-// The other messages a connection hears (a person's status, sent as they connect) aren't agent
-// statuses; these helpers look at the "agents" ones only.
 func isAgents(raw []byte) bool {
 	var envelope struct {
 		Type string `json:"type"`
@@ -102,7 +95,6 @@ func isAgents(raw []byte) bool {
 	return json.Unmarshal(raw, &envelope) == nil && envelope.Type == "agents"
 }
 
-// nextAgents hands over the client's next agents message waiting now, if any.
 func nextAgents(client *RealtimeClient) <-chan []byte {
 	out := make(chan []byte, 1)
 	for {
@@ -118,7 +110,6 @@ func nextAgents(client *RealtimeClient) <-chan []byte {
 	}
 }
 
-// agentsHeard drains the client's waiting messages and counts the agents ones.
 func agentsHeard(client *RealtimeClient) int {
 	count := 0
 	for {

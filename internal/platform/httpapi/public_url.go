@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// ValidatePublicURL accepts an absolute https URL, or http on localhost for
-// development: the rule for every address the server sends people to.
 func ValidatePublicURL(rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {

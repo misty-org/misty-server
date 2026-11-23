@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// VoiceTurn is one speaker's continuous speech, in seconds from the start.
 type VoiceTurn struct {
 	Speaker  string  `json:"speaker"`
 	Channel  string  `json:"channel,omitempty"`
@@ -19,7 +18,6 @@ type VoiceTurn struct {
 	Text     string  `json:"text"`
 }
 
-// VoiceSource says where the speech came from.
 type VoiceSource struct {
 	Kind          string `json:"kind"`
 	URL           string `json:"url,omitempty"`
@@ -108,8 +106,6 @@ func (db *Database) VoiceTranscript(ctx context.Context, user, id string) (Voice
 	return t, nil
 }
 
-// UpdateVoiceTranscript renames speakers (for this transcript only) and
-// links the Note or recording made from it. Empty values leave fields alone.
 func (db *Database) UpdateVoiceTranscript(ctx context.Context, user, id string, speakers map[string]string, noteID, recordingItemID string) error {
 	if speakers != nil && !validSpeakerNames(speakers) || len(noteID) > 200 || len(recordingItemID) > 200 {
 		return ErrSpaceInvalid

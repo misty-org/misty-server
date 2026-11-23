@@ -19,58 +19,33 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// A call with one person left in it costs the server for nothing, so any LiveKit room with at most
-// one person in it is ended once it has been that way for liveKitAloneLimit. There are no
-// exceptions: not for a Space's owner or mods, nor for any plan. The app warns the person a minute
-// before; this is what holds the rule, since an app can't be trusted to leave on its own.
 const (
-	liveKitAloneLimit = 5 * time.Minute
-	// A safety net only: the clocks run from LiveKit's webhooks, to the second. The sweep picks up
-	// rooms the server hasn't heard about (after a restart) and corrects a missed webhook.
+	liveKitAloneLimit    = 5 * time.Minute
 	liveKitSweepInterval = time.Minute
-	// How soon a failed DeleteRoom is tried again.
-	liveKitDeleteRetry = 15 * time.Second
+	liveKitDeleteRetry   = 15 * time.Second
 )
 
-// LiveKitRoomWatcher keeps, for every LiveKit room, who is in it, from LiveKit's webhooks
-// (participant_joined, participant_left), and runs a five-minute timer from the moment a room has
-// one person or nobody in it. Anyone joining stops the timer; when it runs out, the room is
-// deleted through LiveKit's admin API (Twirp, JSON over HTTP).
-//
-// All of it is kept in memory only. A restart starts every clock over (from the first sweep that
-// finds the room), which can give a lone call up to one more limit; that is acceptable, and keeps
-// the rule free of any table or shared state. With several API replicas, LiveKit's webhooks reach
-// only one, while each sweeps; deleting a room twice is harmless.
 type LiveKitRoomWatcher struct {
 	baseURL, key, secret string
 	client               *http.Client
 	now                  func() time.Time
-	// after runs f once d has passed, and returns what cancels it (time.AfterFunc outside tests).
-	after func(d time.Duration, f func()) (stop func())
-	limit time.Duration
+	after                func(d time.Duration, f func()) (stop func())
+	limit                time.Duration
 
 	mu    sync.Mutex
 	ctx   context.Context
-	rooms map[string]*liveKitRoomState // by room name
+	rooms map[string]*liveKitRoomState
 }
 
 type liveKitRoomState struct {
-	sid string
-	// people holds the participant sids in the room; gone holds those that left, so a webhook for
-	// a join that arrives after the leave doesn't count them again.
+	sid          string
 	people, gone map[string]bool
-	// stop cancels the running timer, nil while none runs. gen tells a timer that fired after it
-	// was replaced or stopped that it no longer counts.
-	stop       func()
-	gen        int
-	heard      time.Time
-	mismatches int
+	stop         func()
+	gen          int
+	heard        time.Time
+	mismatches   int
 }
 
-// NewLiveKitRoomWatcher returns the watcher when LiveKit is set up (LIVEKIT_URL, LIVEKIT_API_KEY
-// and LIVEKIT_API_SECRET), else nil. LIVEKIT_ADMIN_URL is where the API reaches LiveKit's admin
-// API, such as http://livekit:7880 on the Docker network; without it, LIVEKIT_URL is used with
-// wss:// turned into https:// (and ws:// into http://).
 func NewLiveKitRoomWatcher() *LiveKitRoomWatcher {
 	publicURL := strings.TrimSpace(config.Getenv("LIVEKIT_URL"))
 	key := strings.TrimSpace(config.Getenv("LIVEKIT_API_KEY"))
@@ -101,7 +76,6 @@ func newLiveKitRoomWatcher(baseURL, key, secret string) *LiveKitRoomWatcher {
 	}
 }
 
-// liveKitAdminURL turns LiveKit's signalling address into the HTTP address of its admin API.
 func liveKitAdminURL(publicURL string) string {
 	switch {
 	case strings.HasPrefix(publicURL, "wss://"):
@@ -112,7 +86,6 @@ func liveKitAdminURL(publicURL string) string {
 	return publicURL
 }
 
-// Run sweeps at once, then once a minute, until ctx ends; the timers run on their own meanwhile.
 func (w *LiveKitRoomWatcher) Run(ctx context.Context) {
 	if w == nil {
 		return
@@ -146,9 +119,8 @@ func (w *LiveKitRoomWatcher) stopAll() {
 }
 
 type liveKitRoom struct {
-	SID  string `json:"sid"`
-	Name string `json:"name"`
-	// LiveKit's Twirp answers use the proto names and its webhooks the camel-case ones.
+	SID                  string `json:"sid"`
+	Name                 string `json:"name"`
 	NumParticipants      uint32 `json:"num_participants"`
 	NumParticipantsCamel uint32 `json:"numParticipants"`
 }
@@ -167,8 +139,6 @@ type liveKitEvent struct {
 	Participant *liveKitParticipant `json:"participant"`
 }
 
-// Webhook takes LiveKit's webhooks (POST, signed by LiveKit with the API secret: a JWT in
-// Authorization whose sha256 claim is the body's hash) and keeps each room's people and timer.
 func (w *LiveKitRoomWatcher) Webhook() http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		if w == nil {
@@ -250,8 +220,6 @@ func (w *LiveKitRoomWatcher) handle(event liveKitEvent) {
 	w.settle(name, st)
 }
 
-// room returns the room's state, starting it afresh for a room seen for the first time or opened
-// again under the same name (a new sid). The caller holds mu.
 func (w *LiveKitRoomWatcher) room(name, sid string) *liveKitRoomState {
 	st := w.rooms[name]
 	if st != nil && sid != "" && st.sid != "" && st.sid != sid {
@@ -268,8 +236,6 @@ func (w *LiveKitRoomWatcher) room(name, sid string) *liveKitRoomState {
 	return st
 }
 
-// settle starts the room's timer when it has one person or nobody, unless one already runs, and
-// stops it once there are two. The caller holds mu.
 func (w *LiveKitRoomWatcher) settle(name string, st *liveKitRoomState) {
 	if len(st.people) >= 2 {
 		if st.stop != nil {
@@ -290,7 +256,6 @@ func (w *LiveKitRoomWatcher) arm(name string, st *liveKitRoomState, d time.Durat
 	st.stop = w.after(d, func() { w.expire(name, gen) })
 }
 
-// forget stops the room's timer and drops it. The caller holds mu.
 func (w *LiveKitRoomWatcher) forget(name string) {
 	if st := w.rooms[name]; st != nil {
 		if st.stop != nil {
@@ -301,7 +266,6 @@ func (w *LiveKitRoomWatcher) forget(name string) {
 	}
 }
 
-// expire ends a room whose timer ran out, if that timer still counts.
 func (w *LiveKitRoomWatcher) expire(name string, gen int) {
 	w.mu.Lock()
 	st := w.rooms[name]
@@ -333,9 +297,6 @@ func (w *LiveKitRoomWatcher) expire(name string, gen int) {
 	w.forget(name)
 }
 
-// Sweep lists LiveKit's rooms once, as a safety net under the webhooks: a room the server hasn't
-// heard of, or whose head count has disagreed with LiveKit's for two sweeps running (a missed
-// webhook), has its people read from LiveKit; a room LiveKit no longer lists is dropped.
 func (w *LiveKitRoomWatcher) Sweep(ctx context.Context) error {
 	var listed struct {
 		Rooms []liveKitRoom `json:"rooms"`
@@ -363,7 +324,6 @@ func (w *LiveKitRoomWatcher) Sweep(ctx context.Context) error {
 		}
 	}
 	for name, st := range w.rooms {
-		// A minute's grace, so a room whose webhook came just before LiveKit listed it stays.
 		if !seen[name] && now.Sub(st.heard) >= liveKitSweepInterval {
 			w.forget(name)
 		}
@@ -394,8 +354,6 @@ func (w *LiveKitRoomWatcher) Sweep(ctx context.Context) error {
 	return failed
 }
 
-// call makes one RoomService call, authorized by a short-lived token signed with the API secret,
-// for one room when the call is about one.
 func (w *LiveKitRoomWatcher) call(ctx context.Context, method, room string, body any, out any) error {
 	token, err := w.adminToken(room)
 	if err != nil {
@@ -430,10 +388,7 @@ func (w *LiveKitRoomWatcher) call(ctx context.Context, method, room string, body
 	return json.Unmarshal(data, out)
 }
 
-// adminToken may list rooms and delete them (LiveKit checks roomCreate for DeleteRoom), and list
-// one room's people (roomAdmin, which LiveKit holds to the token's room). It lasts a minute.
 func (w *LiveKitRoomWatcher) adminToken(room string) (string, error) {
-	// Real time, not the watcher's clock: LiveKit checks the token against its own.
 	now := time.Now()
 	video := map[string]any{"roomList": true, "roomAdmin": true, "roomCreate": true}
 	if room != "" {

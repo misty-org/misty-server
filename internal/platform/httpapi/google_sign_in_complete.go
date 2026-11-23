@@ -16,9 +16,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// The completion code binds a finished Google sign-in to the browser that
-// finished it. Misty receives it through its misty:// link on this computer,
-// or the person types it. Ambiguous characters are left out of the alphabet.
 const googleCompletionAlphabet = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
 
 const googleCompletionLength = 10
@@ -40,8 +37,6 @@ func newGoogleCompletionCode() (string, error) {
 	return string(code), nil
 }
 
-// normalizeGoogleCompletionCode accepts the code as displayed (with a dash)
-// or typed in lower case. Anything else yields "".
 func normalizeGoogleCompletionCode(raw string) string {
 	var code strings.Builder
 	for _, character := range strings.ToUpper(raw) {
@@ -149,7 +144,6 @@ func (s *GoogleSignInService) Complete() http.HandlerFunc {
 
 func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *googleIdentity, email string) (*db.User, error) {
 	if flow.ReauthenticateUserID == "" {
-		// A server closed to new accounts still signs existing ones in, if they're on its list.
 		if gate, ok := s.store.(interface {
 			accountCounter
 			GetUserByEmail(string) (*db.User, string, error)
@@ -171,7 +165,6 @@ func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *g
 				if holder, ok := s.store.(interface {
 					SetAccountLimits(context.Context, string, db.AccountLimits) error
 				}); ok && openSignup() {
-					// The server's first account is never held back.
 					hold, err := gate.AnyAccount(context.Background())
 					if err != nil {
 						return nil, err
@@ -196,8 +189,6 @@ func (s *GoogleSignInService) googleAccount(flow db.GoogleSignInFlow, payload *g
 	return user, nil
 }
 
-// checkSignInAllowed refuses an existing account the server's allowlist leaves out. A store
-// that can't name the owner has no way to exempt them, so only the list decides.
 func (s *GoogleSignInService) checkSignInAllowed(user *db.User) error {
 	store, ok := s.store.(interface {
 		IsServerOwner(context.Context, string) (bool, error)
@@ -229,8 +220,6 @@ func googleSignInError(code string) string {
 	}
 }
 
-// googleSignInCompletePage hands the completion code to Misty on this
-// computer through its misty:// link, and shows it for typing as a fallback.
 func googleSignInCompletePage(w http.ResponseWriter, code string) {
 	link := "misty://auth/google/complete?code=" + url.QueryEscape(code)
 	display := code[:googleCompletionLength/2] + "-" + code[googleCompletionLength/2:]

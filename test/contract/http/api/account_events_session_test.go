@@ -14,8 +14,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// The account stream stays open across revalidations while its session is
-// active, and ends once the session is revoked, without periodic reconnects.
 func TestAccountEventsRevalidateSessionWithoutReconnecting(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	restore := TestingSetAccountEventSessionCheck(100 * time.Millisecond)
@@ -65,7 +63,6 @@ func TestAccountEventsRevalidateSessionWithoutReconnecting(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("no initial reset")
 	}
-	// Several revalidations pass; the stream neither ends nor resets.
 	deadline := time.After(500 * time.Millisecond)
 wait:
 	for {

@@ -17,27 +17,16 @@ import (
 	. "github.com/misty-org/misty-server/internal/app"
 )
 
-// Nothing AI runs on the server: an agent run starts, runs and ends on the
-// person's computer. The server sees only what it would
-// see from the person using the app by hand. These tests fail if it starts
-// accepting a prompt, a tool result or a model's output again.
-
-// removedRoutePrefixes are the route trees that left with the agents, after
-// their /api or /v1 prefix. None comes back, under any of those prefixes.
 var removedRoutePrefixes = []string{
 	"/mcp", "/internal/agent-runtime", "/ai", "/misty", "/integrations",
 	"/agent-runs", "/agent-mentions", "/agent-requests",
 	"/me/agent-", "/me/conversations", "/me/app-requests", "/me/memory",
 }
 
-// removedRouteParts are the same in the middle of a path.
 var removedRouteParts = []string{"/agent-runtime", "/embeddings", "/workflow-node-jobs", "/agent-execution"}
 
-// forbiddenRouteWord matches a path segment that would take a model's work.
 var forbiddenRouteWord = regexp.MustCompile(`(?i)(^|[-_])(prompt|prompts|completion|completions|invocation|invocations|mcp|toolbox|tool-result|tool-results|tool-output|model-output)($|[-_])`)
 
-// forbiddenRequestField matches, with case and separators removed, a JSON field
-// that would carry a model's work into or out of the server.
 var forbiddenRequestField = regexp.MustCompile(`^(systemprompt|prompt|prompts|toolresult|toolresults|tooloutput|toolcall|toolcalls|modeloutput|modelresponse|modelturn|completion|assistantmessage|assistanttext|runtimeevent|agentrunkey|runkey)$`)
 
 func routeProblem(path string) string {
@@ -67,7 +56,6 @@ func jsonFieldProblem(name string) bool {
 	return forbiddenRequestField.MatchString(normalized)
 }
 
-// The checks themselves: a test that can't fail proves nothing.
 func TestNoAgentsChecksCatchWhatTheyClaimTo(t *testing.T) {
 	for _, path := range []string{
 		"/mcp", "/v1/mcp", "/internal/agent-runtime/runs/{runID}/events", "/api/ai/invocations", "/ai/status",
@@ -136,8 +124,6 @@ func TestRouteGoldenHasNoRemovedRoutes(t *testing.T) {
 	}
 }
 
-// Every JSON field in the handler packages, whichever way it travels: a struct a
-// route could decode a prompt or a tool result into has no business here.
 func TestServerHandlersDeclareNoFieldForAModelsWork(t *testing.T) {
 	for _, dir := range []string{"../../../../internal/platform/httpapi", "../../../../internal/platform/db"} {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))

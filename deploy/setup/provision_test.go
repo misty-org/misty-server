@@ -31,14 +31,11 @@ func newHarness(t *testing.T) *harness {
 	return newHarnessWith(t, nil)
 }
 
-// newHarnessWith adds or replaces inputs on top of the defaults.
 func newHarnessWith(t *testing.T, extra map[string]string) *harness {
 	t.Helper()
 	fake := fakecloudflare.New("cf-token", testAccount, testZone, "misty.example")
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
-	// cloudflare.env holds only the API token: setup finds the zone and
-	// the account.
 	values := map[string]string{
 		"MISTY_HOSTNAME": "cloud.misty.example", "CLOUDFLARE_API_TOKEN": "cf-token",
 		"GOOGLE_CLIENT_ID": "g", "GOOGLE_CLIENT_SECRET": "g",
@@ -61,7 +58,6 @@ func newHarnessWith(t *testing.T, extra map[string]string) *harness {
 	return &harness{fake: fake, inputs: inputs, store: store, bundles: writeBundles(t)}
 }
 
-// writeBundles copies the real wrangler.jsonc files next to a stand-in bundle.
 func writeBundles(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -137,8 +133,7 @@ func TestProvisionCreatesEverythingOnce(t *testing.T) {
 		t.Fatal("library credentials do not match the token")
 	}
 	collab := fake.Scripts[names.CollabWorker]
-	// The Worker's newest migration tag (v7 added AppRoom).
-	if collab.MigrationTag != "v7" || !collab.Subdomain || !strings.Contains(stringify(collab.Metadata["bindings"]), "JOURNAL_COLLAB_TICKET_PUBLIC_KEY") {
+	if collab.MigrationTag != "v8" || !collab.Subdomain || !strings.Contains(stringify(collab.Metadata["bindings"]), "JOURNAL_COLLAB_TICKET_PUBLIC_KEY") {
 		t.Fatalf("collab worker %+v", collab.Metadata)
 	}
 	for _, name := range []string{"JOURNAL_COLLAB_TICKET_PRIVATE_KEY", serverenv.RootName, serverenv.APISecretName, "JOURNAL_COLLAB_ROOM_SALT", "MISTY_AUTH_SIGNING_KEY"} {

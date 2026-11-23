@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// createTestImage uploads a small image as a chat attachment, not yet posted.
 func createTestImage(t *testing.T, database *Database, userID, spaceID, filename, digestCharacter string) *MessageAttachment {
 	t.Helper()
 	digest := strings.Repeat(digestCharacter, 64)

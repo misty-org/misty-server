@@ -5,8 +5,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// WatchGauges shares one database sample across several fixed domain gauges.
-// All values retain their previous sample if the query fails.
 func (m *Registry) WatchGauges(definitions map[string]string, read func(context.Context) (map[string]float64, error)) {
 	gauges := make(map[string]prometheus.Gauge, len(definitions))
 	for name, help := range definitions {

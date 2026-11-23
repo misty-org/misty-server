@@ -9,8 +9,6 @@ import (
 	. "github.com/misty-org/misty-server/internal/app"
 )
 
-// The endpoint must be mounted only when a token is configured, and must be
-// reachable through the real router with all its middleware in place.
 func TestMetricsEndpointThroughTheRealRouter(t *testing.T) {
 	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_METRICS_TOKEN", "e2e-token-value")
@@ -23,7 +21,6 @@ func TestMetricsEndpointThroughTheRealRouter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Generate some traffic so tier 2 has something to report.
 	for range 3 {
 		server.Router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/spaces/space-1/notes", nil))
 	}

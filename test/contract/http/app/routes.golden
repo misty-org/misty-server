@@ -5,6 +5,7 @@ DELETE /v1/friends/requests
 DELETE /v1/friends/requests/{userID}
 DELETE /v1/friends/{userID}
 DELETE /v1/me/avatar
+DELETE /v1/me/banner
 DELETE /v1/me/voice/transcripts/{transcriptID}
 DELETE /v1/spaces/{spaceID}
 DELETE /v1/spaces/{spaceID}/agents/{agentID}
@@ -43,6 +44,7 @@ GET /v1/health
 GET /v1/invites/{code}
 GET /v1/me
 GET /v1/me/avatar
+GET /v1/me/banner
 GET /v1/me/events
 GET /v1/me/invite-code
 GET /v1/me/notices
@@ -118,12 +120,14 @@ POST /v1/auth/google/complete
 POST /v1/auth/refresh
 POST /v1/auth/web-handoff
 POST /v1/calls/livekit-events
+POST /v1/calls/{room}/moderate
 POST /v1/calls/{room}/token
 POST /v1/dms
 POST /v1/dms/{dmID}/call
 POST /v1/dms/{dmID}/members
 POST /v1/friends/requests
 POST /v1/friends/requests/{userID}/accept
+POST /v1/internal/journal/file-texts
 POST /v1/internal/journal/note-projections
 POST /v1/login
 POST /v1/logout
@@ -151,6 +155,7 @@ POST /v1/spaces/{spaceID}/conversations/{conversationID}/messages
 POST /v1/spaces/{spaceID}/conversations/{conversationID}/read
 POST /v1/spaces/{spaceID}/drive/items
 POST /v1/spaces/{spaceID}/drive/items/{itemID}/check-in-use
+POST /v1/spaces/{spaceID}/drive/items/{itemID}/collaboration-ticket
 POST /v1/spaces/{spaceID}/drive/items/{itemID}/restore
 POST /v1/spaces/{spaceID}/drive/items/{itemID}/trash
 POST /v1/spaces/{spaceID}/drive/uploads
@@ -175,6 +180,7 @@ POST /v1/spaces/{spaceID}/transfer
 PUT /operator/v1/spaces/{spaceID}/boosts/{id}
 PUT /v1/blocks/{userID}
 PUT /v1/me/avatar
+PUT /v1/me/banner
 PUT /v1/me/call-keys/{keyID}
 PUT /v1/me/password
 PUT /v1/me/privacy

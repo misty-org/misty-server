@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	MaxMessageChars = 4000
-	MaxMessageFiles = 5
-	// Per-object processing bound, independent of any account or Space allowance.
+	MaxMessageChars      = 4000
+	MaxMessageFiles      = 5
 	MaxSpaceStorageBytes = int64(1_000_000_000)
 )
 
@@ -21,7 +20,7 @@ var (
 	ErrSpaceForbidden        = errors.New("space permission denied")
 	ErrSpaceLimit            = errors.New("space limit reached")
 	ErrSpaceOwnershipLimit   = errors.New("space ownership limit reached")
-	ErrSpaceCountLimit       = errors.New("spaces limit reached") // making or joining one more Space past the account's limit
+	ErrSpaceCountLimit       = errors.New("spaces limit reached")
 	ErrSpacePeopleLimit      = errors.New("space member limit reached")
 	ErrSpaceConflict         = errors.New("space resource version conflict")
 	ErrSpaceInviteNotFound   = errors.New("space invitation not found")
@@ -32,53 +31,46 @@ var (
 )
 
 type Space struct {
-	ID               string `json:"id"`
-	SecurityDomainID string `json:"security_domain_id"`
-	OwnerUserID      string `json:"owner_user_id"`
-	Name             string `json:"name"`
-	IsDefault        bool   `json:"is_default"`
-	Role             string `json:"role"`
-	MemberCount      int    `json:"member_count"`
-	PendingCount     int    `json:"pending_count"`
-	IsShared         bool   `json:"is_shared"`
-	// AvatarVersion names the Space's uploaded picture; 0 means it has none.
-	AvatarVersion int64     `json:"avatar_version"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	// Permissions are the caller's effective Space-wide permissions.
-	Permissions []string `json:"permissions"`
+	ID               string    `json:"id"`
+	SecurityDomainID string    `json:"security_domain_id"`
+	OwnerUserID      string    `json:"owner_user_id"`
+	Name             string    `json:"name"`
+	IsDefault        bool      `json:"is_default"`
+	Role             string    `json:"role"`
+	MemberCount      int       `json:"member_count"`
+	PendingCount     int       `json:"pending_count"`
+	IsShared         bool      `json:"is_shared"`
+	AvatarVersion    int64     `json:"avatar_version"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	Permissions      []string  `json:"permissions"`
 }
 
 type SpaceMember struct {
-	SpaceID  string    `json:"space_id"`
-	UserID   string    `json:"user_id"`
-	Name     string    `json:"name"`
-	Email    string    `json:"email"`
-	Role     string    `json:"role"`
-	JoinedAt time.Time `json:"joined_at"`
-	ReadSeq  int64     `json:"read_message_seq"`
-	// AvatarVersion names the member's profile picture; 0 means they have none.
-	AvatarVersion int64 `json:"avatar_version"`
-	// RoleIDs are the member's roles besides everyone, highest first.
-	RoleIDs []string `json:"role_ids"`
+	SpaceID       string    `json:"space_id"`
+	UserID        string    `json:"user_id"`
+	Name          string    `json:"name"`
+	Email         string    `json:"email"`
+	Role          string    `json:"role"`
+	JoinedAt      time.Time `json:"joined_at"`
+	ReadSeq       int64     `json:"read_message_seq"`
+	AvatarVersion int64     `json:"avatar_version"`
+	RoleIDs       []string  `json:"role_ids"`
 }
 
 type SpaceInvitation struct {
-	ID              string  `json:"id"`
-	SpaceID         string  `json:"space_id"`
-	SpaceName       string  `json:"space_name"`
-	InvitedUserID   *string `json:"invited_user_id"`
-	InvitedUserName *string `json:"invited_user_name"`
-	InvitedEmail    string  `json:"invited_email"`
-	InvitedByUserID string  `json:"invited_by_user_id"`
-	InviterName     string  `json:"inviter_name,omitempty"`
-	// Emailed says this server is emailing the link to the invited person.
-	Emailed bool `json:"emailed,omitempty"`
-	// Link is the invitation's link, only in the answer that made it, for the
-	// owner to pass on. Only its hash is kept, once any email of it has gone.
-	Link      string    `json:"link,omitempty"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	SpaceID         string    `json:"space_id"`
+	SpaceName       string    `json:"space_name"`
+	InvitedUserID   *string   `json:"invited_user_id"`
+	InvitedUserName *string   `json:"invited_user_name"`
+	InvitedEmail    string    `json:"invited_email"`
+	InvitedByUserID string    `json:"invited_by_user_id"`
+	InviterName     string    `json:"inviter_name,omitempty"`
+	Emailed         bool      `json:"emailed,omitempty"`
+	Link            string    `json:"link,omitempty"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type SpaceInvitationPreview struct {
@@ -93,10 +85,9 @@ type MessageSpan struct {
 	Text    string `json:"text,omitempty"`
 	UserID  string `json:"user_id,omitempty"`
 	AgentID string `json:"agent_id,omitempty"`
-	// RoleID is an @role mention; the span stays as written if the role is deleted.
-	RoleID string `json:"role_id,omitempty"`
-	Label  string `json:"label,omitempty"`
-	URL    string `json:"url,omitempty"`
+	RoleID  string `json:"role_id,omitempty"`
+	Label   string `json:"label,omitempty"`
+	URL     string `json:"url,omitempty"`
 }
 
 type SpaceMessage struct {
@@ -115,11 +106,9 @@ type SpaceMessage struct {
 	Attachments         []MessageAttachment    `json:"attachments"`
 	Reactions           []SpaceMessageReaction `json:"reactions"`
 	ReplyToMessageID    string                 `json:"reply_to_message_id,omitempty"`
-	// ThreadRootID is set on a reply made in a thread's panel; such a reply is not in the channel's own list.
-	ThreadRootID string `json:"thread_root_id,omitempty"`
-	// ReplyCount and LastReplyAt are on a thread's root message.
-	ReplyCount  int        `json:"reply_count,omitempty"`
-	LastReplyAt *time.Time `json:"last_reply_at,omitempty"`
+	ThreadRootID        string                 `json:"thread_root_id,omitempty"`
+	ReplyCount          int                    `json:"reply_count,omitempty"`
+	LastReplyAt         *time.Time             `json:"last_reply_at,omitempty"`
 	EditedAt            *time.Time             `json:"edited_at,omitempty"`
 	CreatedAt           time.Time              `json:"created_at"`
 }
@@ -169,7 +158,6 @@ func (db *Database) SpaceTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return db.WithRLSContext(ctx, ServiceRLSSettings(), fn)
 }
 
-// maxSpaceNameRunes keeps a Space's name short enough to show whole in the app's Space switcher.
 const maxSpaceNameRunes = 64
 
 func normalizeSpaceName(name string) (string, error) {

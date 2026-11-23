@@ -5,7 +5,6 @@ import (
 	"net/http"
 )
 
-// SpacePeople lists the people the caller already shares a Space with.
 func SpacePeople(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, database)

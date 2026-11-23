@@ -22,10 +22,8 @@ type overviewView struct {
 	Accounts   int
 	CountsErr  bool
 	Activity   []db.ConsoleAuditEntry
-	// Alerts are the alerts service's open problems (server_alerts). The
-	// server never emails alerts, so this page and the owner's app show them.
-	Alerts    []db.ServerAlert
-	AlertsErr bool
+	Alerts     []db.ServerAlert
+	AlertsErr  bool
 }
 
 func (s *Server) overviewPage(r *http.Request) templ.Component {
@@ -73,8 +71,6 @@ func (s *Server) loadOverview(ctx context.Context) overviewView {
 	return view
 }
 
-// subtitle is "hosted · development · v0.42.1 · up 3h 12m", dropping the
-// version when the server reports its environment name as its version.
 func (v overviewView) subtitle() string {
 	text := v.Config.EnvironmentLabel()
 	if v.Health.Version != "" && v.Health.Version != v.Config.Environment {

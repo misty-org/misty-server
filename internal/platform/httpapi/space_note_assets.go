@@ -11,11 +11,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// SpaceNoteAssets lists a note's assets and initiates a new asset upload.
-//
-// The note_attachment purpose is rejected by the generic Library upload
-// endpoint, so this is the only route that can create one, and it authorizes
-// against the parent note before reserving any quota.
 func (s *SpaceLibraryService) SpaceNoteAssets() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -86,8 +81,6 @@ func (s *SpaceLibraryService) SpaceNoteAssets() http.HandlerFunc {
 	}
 }
 
-// SpaceNoteAssetDownload issues an authorized download for one asset. Viewers
-// may download; only uploading and removal require edit access.
 func (s *SpaceLibraryService) SpaceNoteAssetDownload() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -104,7 +97,6 @@ func (s *SpaceLibraryService) SpaceNoteAssetDownload() http.HandlerFunc {
 	}
 }
 
-// SpaceNoteAsset removes one asset reference.
 func (s *SpaceLibraryService) SpaceNoteAsset() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

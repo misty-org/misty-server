@@ -19,19 +19,15 @@ import (
 )
 
 const (
-	googleKeysURL = "https://www.googleapis.com/oauth2/v3/certs"
-	// Keys are refetched at least this often, whatever Google's headers say.
+	googleKeysURL    = "https://www.googleapis.com/oauth2/v3/certs"
 	googleKeysMaxAge = 24 * time.Hour
-	// An unknown key id can't make the server call Google more often than this.
-	googleKeysRetry = time.Minute
-	googleKeysLimit = 1 << 20
-	googleMinKeyLen = 2048
+	googleKeysRetry  = time.Minute
+	googleKeysLimit  = 1 << 20
+	googleMinKeyLen  = 2048
 )
 
 var googleMaxAge = regexp.MustCompile(`(?i)\bmax-age=(\d+)`)
 
-// googleIdentity is what a Google ID token says, once its signature, audience and
-// expiry have been checked. validGoogleIdentity decides whether it's enough to sign in.
 type googleIdentity struct {
 	Issuer   string
 	Audience string
@@ -40,8 +36,6 @@ type googleIdentity struct {
 	Claims   map[string]any
 }
 
-// googleKeySet holds Google's signing keys. A key that can't be fetched fails the
-// sign-in; nothing falls back to trusting the token.
 type googleKeySet struct {
 	url    string
 	client *http.Client
@@ -65,8 +59,6 @@ func (k *googleKeySet) key(ctx context.Context, id string) (*rsa.PublicKey, erro
 	if key := k.keys[id]; key != nil && fresh {
 		return key, nil
 	}
-	// Google rotates keys, so an unknown id can mean a new key. Forged tokens can name any
-	// id, so that alone only asks Google once in a while.
 	if fresh && now.Sub(k.fetched) < googleKeysRetry {
 		return nil, errors.New("unknown Google signing key")
 	}
@@ -146,8 +138,6 @@ func googlePublicKey(modulus, exponent string) (*rsa.PublicKey, error) {
 	return key, nil
 }
 
-// validate checks a token's signature against Google's keys, its algorithm, audience and
-// expiry. Only RS256 is accepted, so a token can't choose how it's checked.
 func (k *googleKeySet) validate(ctx context.Context, raw, audience string) (*googleIdentity, error) {
 	if audience == "" {
 		return nil, errors.New("no Google client id")
@@ -168,7 +158,6 @@ func (k *googleKeySet) validate(ctx context.Context, raw, audience string) (*goo
 	}); err != nil {
 		return nil, err
 	}
-	// Google issues a single audience; a list could name someone else as well.
 	single, _ := claims["aud"].(string)
 	issuer, _ := claims["iss"].(string)
 	subject, _ := claims["sub"].(string)

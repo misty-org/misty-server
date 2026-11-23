@@ -71,8 +71,6 @@ func TestFriendRequestsRevealNothingAndHoldTheLimit(t *testing.T) {
 	if err := database.Block(ctx, blocker.ID, sender.ID); err != nil {
 		t.Fatal(err)
 	}
-	// Nobody by that name, someone who takes requests only from shared Spaces, and someone who
-	// blocked the sender all answer like a sent request, and none of them gets one.
 	for _, username := range []string{"nobody_by_this_name", private.Username, blocker.Username} {
 		if err := database.SendFriendRequest(ctx, sender.ID, username); err != nil {
 			t.Fatalf("SendFriendRequest(%s) error = %v, want nil", username, err)
@@ -87,7 +85,6 @@ func TestFriendRequestsRevealNothingAndHoldTheLimit(t *testing.T) {
 			t.Fatalf("%s got requests %#v, want none", user.Username, list.Incoming)
 		}
 	}
-	// Three sent today; a limit of three refuses the fourth.
 	three := int64(3)
 	if err := database.SetAccountLimits(ctx, sender.ID, AccountLimits{FriendRequestsPerDay: &three}); err != nil {
 		t.Fatal(err)
@@ -108,7 +105,6 @@ func TestDirectMessagesNeedFriendsAndEndWithTheFriendship(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Sharing a Space never opens a DM.
 	shared := createTestSpace(t, database, ctx, ana.ID, "Shared work")
 	invite, err := database.TestingInviteToSpace(ctx, ana.ID, shared.ID, ben.Email)
 	if err != nil {
@@ -132,7 +128,6 @@ func TestDirectMessagesNeedFriendsAndEndWithTheFriendship(t *testing.T) {
 	if _, _, err := database.CreateSpaceMessageWithReferencesAndClientNonce(ctx, ben.ID, dm.ID, []MessageSpan{{Type: "text", Text: "hey"}}, nil, nil, "", ""); err != nil {
 		t.Fatalf("message in the DM error = %v", err)
 	}
-	// A DM is never one of the person's Spaces.
 	spaces, err := database.ListSpaces(ctx, ana.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +144,6 @@ func TestDirectMessagesNeedFriendsAndEndWithTheFriendship(t *testing.T) {
 	if _, err := database.TestingInviteToSpace(ctx, ana.ID, dm.ID, "someone@example.com"); !errors.Is(err, ErrSpaceNotShareable) {
 		t.Fatalf("invite into a DM error = %v, want ErrSpaceNotShareable", err)
 	}
-	// Unfriending deletes the one-to-one DM for both.
 	if err := database.Unfriend(ctx, ben.ID, ana.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +227,6 @@ func TestSpaceDirectMessagesMoveWithTheirMessages(t *testing.T) {
 	if err != nil || len(listed) != 1 {
 		t.Fatalf("Directs() after the move = %#v, %v; want one", listed, err)
 	}
-	// They aren't friends, so the DM keeps its history read-only.
 	if !listed[0].ReadOnly {
 		t.Fatalf("moved DM between non-friends ReadOnly = false, want true")
 	}
@@ -244,7 +237,6 @@ func TestSpaceDirectMessagesMoveWithTheirMessages(t *testing.T) {
 	if _, _, err := database.CreateSpaceMessageWithReferencesAndClientNonce(ctx, ben.ID, listed[0].ID, []MessageSpan{{Type: "text", Text: "hi"}}, nil, nil, "", ""); !errors.Is(err, ErrNotFriends) {
 		t.Fatalf("message in a read-only DM error = %v, want ErrNotFriends", err)
 	}
-	// Running it again moves nothing twice.
 	if err := database.MigrateSpaceDirectMessages(ctx); err != nil {
 		t.Fatal(err)
 	}

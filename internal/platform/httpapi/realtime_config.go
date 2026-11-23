@@ -20,39 +20,21 @@ const (
 )
 
 type RealtimeClient struct {
-	UserID string
-	conn   *websocket.Conn
-	Send   chan []byte
-	Done   chan struct{}
-	once   sync.Once
-	// viewingSpaceID is the space this client last told us it's actively
-	// viewing (empty when not viewing any space's chat). Mutated only while
-	// holding RealtimeService.mu.
+	UserID         string
+	conn           *websocket.Conn
+	Send           chan []byte
+	Done           chan struct{}
+	once           sync.Once
 	viewingSpaceID string
-	// active is whether the client reported having this space's chat in
-	// focus (vs. connected but idle — e.g. tabbed away). Only meaningful
-	// while viewingSpaceID is non-empty. Mutated only while holding
-	// RealtimeService.mu.
-	active bool
-	// place and itemID are where in Misty this client said it is (see cleanPresencePlace), and
-	// placeAt when that last changed, so a user's most recent place wins across connections.
-	// Mutated only while holding RealtimeService.mu.
-	place   string
-	itemID  string
-	placeAt time.Time
-	// lastTypingAt bounds typing frame processing for this socket.
-	lastTypingAt time.Time
-	typingScopes map[string]bool
-	// lastAgentsAt bounds agent status frames for this socket, and agentStates holds what each of
-	// this client's agents was last said to be doing, to log only changes.
-	lastAgentsAt time.Time
-	agentStates  map[string]string
-	// idle is whether this computer has had no input for a while (it says so with "activity").
-	// Mutated only while holding RealtimeService.mu.
-	idle bool
-	// voiceSpaceID and voiceChannelID are the Space voice channel this computer is in, and voiceKeyID
-	// its call key's id there (realtime_voice.go); voiceWindowAt and voiceFrames bound its voice
-	// messages per second. Mutated only while holding RealtimeService.mu.
+	active         bool
+	place          string
+	itemID         string
+	placeAt        time.Time
+	lastTypingAt   time.Time
+	typingScopes   map[string]bool
+	lastAgentsAt   time.Time
+	agentStates    map[string]string
+	idle           bool
 	voiceSpaceID   string
 	voiceChannelID string
 	voiceKeyID     string
@@ -67,13 +49,10 @@ type RealtimeService struct {
 	Mu            sync.RWMutex
 	clients       map[*RealtimeClient]struct{}
 	clientsByUser map[string]map[*RealtimeClient]struct{}
-	// viewers maps a space ID to the set of clients currently viewing that
-	// space's chat, for the "active users" presence capsule. Guarded by mu.
-	Viewers map[string]map[*RealtimeClient]struct{}
-	// lastStatus is each account's status as it was last sent, so only changes go out. Guarded by mu.
-	lastStatus map[string]string
-	closed     chan struct{}
-	closeOnce  sync.Once
+	Viewers       map[string]map[*RealtimeClient]struct{}
+	lastStatus    map[string]string
+	closed        chan struct{}
+	closeOnce     sync.Once
 }
 
 func NewRealtimeService(database *db.Database, dsn string) *RealtimeService {
@@ -161,15 +140,11 @@ func (s *RealtimeService) listen() {
 
 func (s *RealtimeService) broadcastControl(payload []byte) {
 	var control struct {
-		Type    string   `json:"type"`
-		SpaceID string   `json:"space_id"`
-		UserIDs []string `json:"user_ids"`
-		NoteID  string   `json:"note_id"`
-		// KeepConnection marks a control message that revokes access to one
-		// resource rather than to the whole Space. Losing a note grant must not
-		// tear down the connection: the user is still a Space member and still
-		// needs chat, tasks, and Library events.
-		KeepConnection bool `json:"keep_connection"`
+		Type           string   `json:"type"`
+		SpaceID        string   `json:"space_id"`
+		UserIDs        []string `json:"user_ids"`
+		NoteID         string   `json:"note_id"`
+		KeepConnection bool     `json:"keep_connection"`
 	}
 	if json.Unmarshal(payload, &control) != nil {
 		return
@@ -239,5 +214,5 @@ func (s *RealtimeService) Ticket() http.HandlerFunc {
 var realtimeUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin:     func(_ *http.Request) bool { return true }, // Single-use authenticated ticket is the CSRF boundary.
+	CheckOrigin:     func(_ *http.Request) bool { return true },
 }

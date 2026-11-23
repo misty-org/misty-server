@@ -10,8 +10,6 @@ import (
 
 var ErrGoogleFlowInvalid = errors.New("Google sign-in expired; please try again")
 
-// ErrGoogleFlowNeedsCode means Google sign-in finished in the browser and the
-// app must present that browser's completion code to redeem it.
 var ErrGoogleFlowNeedsCode = errors.New("finish signing in with the code from your browser")
 
 type GoogleSignInFlow struct {
@@ -30,8 +28,6 @@ func (db *Database) CreateGoogleSignInFlow(ctx context.Context, flow GoogleSignI
 	})
 }
 
-// Advance is a compare-and-swap: both launching and exchanging the code are
-// single-use, across processes and server restarts.
 func (db *Database) AdvanceGoogleSignInFlow(ctx context.Context, stateHash, from, to string) (GoogleSignInFlow, error) {
 	var flow GoogleSignInFlow
 	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
@@ -43,8 +39,6 @@ func (db *Database) AdvanceGoogleSignInFlow(ctx context.Context, stateHash, from
 	return flow, err
 }
 
-// FinishGoogleSignInFlow records the outcome. A successful sign-in stores the
-// hash of the completion code shown only to the browser that finished it.
 func (db *Database) FinishGoogleSignInFlow(ctx context.Context, stateHash, userID, errorCode, completionHash string) error {
 	return db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `UPDATE google_sign_in_flows SET phase='ready',user_id=NULLIF($2,''),error_code=$3,completion_hash=$4,verifier='',nonce='' WHERE state_hash=$1 AND phase='exchanging' AND expires_at>NOW()`, stateHash, userID, errorCode, completionHash)
@@ -59,11 +53,6 @@ func (db *Database) FinishGoogleSignInFlow(ctx context.Context, stateHash, userI
 	})
 }
 
-// Only the app that possesses the separate polling secret can redeem the
-// result. Neither the browser URL nor Google's state contains that secret.
-// A successful sign-in also needs the completion code from the browser that
-// finished it: whoever started the flow is not necessarily who signed in.
-// A wrong code ends the flow, so codes cannot be guessed.
 func (db *Database) ConsumeGoogleSignInFlow(ctx context.Context, pollHash, completionHash string) (*GoogleSignInFlow, error) {
 	var result *GoogleSignInFlow
 	var refused error

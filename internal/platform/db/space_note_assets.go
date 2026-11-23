@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// SpaceNoteAsset is a verified file attached to one note. Assets inherit access
-// exclusively from their parent note and never appear in the Space Library.
 type SpaceNoteAsset struct {
 	ID             string    `json:"id"`
 	NoteID         string    `json:"note_id"`
@@ -24,13 +22,6 @@ type SpaceNoteAsset struct {
 	SHA256         string    `json:"sha256"`
 }
 
-// CreateNoteAssetUpload reserves quota and creates a pending note_attachment
-// upload.
-//
-// This exists separately from CreateLibraryUpload because the authorization
-// question is different: not "may this user upload to this Space" but "may this
-// user edit this note". A Space member who may attach files but has no note
-// grant must be rejected here.
 func (db *Database) CreateNoteAssetUpload(ctx context.Context, userID, noteID, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time) (*LibraryUpload, error) {
 	maxBytes := MaxUploadBytesForPurpose(UploadPurposeNoteAttachment)
 	if byteSize < 1 || byteSize > maxBytes || len(clientSHA) != 64 || filename == "" || objectKey == "" || tokenHash == "" {
@@ -48,8 +39,6 @@ func (db *Database) CreateNoteAssetUpload(ctx context.Context, userID, noteID, f
 			return err
 		}
 		if !access.CanEdit {
-			// Viewers, ungranted members, and Space owners all land here with
-			// the same answer as a note that does not exist.
 			return ErrLibraryNotFound
 		}
 		if err := tx.QueryRowContext(ctx,
@@ -91,7 +80,6 @@ func (db *Database) CreateNoteAssetUpload(ctx context.Context, userID, noteID, f
 	return out, err
 }
 
-// NoteAssets lists a note's ready assets for a caller who may view it.
 func (db *Database) NoteAssets(ctx context.Context, userID, noteID string) ([]SpaceNoteAsset, error) {
 	assets := []SpaceNoteAsset{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -124,8 +112,6 @@ func (db *Database) NoteAssets(ctx context.Context, userID, noteID string) ([]Sp
 	return assets, err
 }
 
-// NoteAssetDownload resolves the object behind an asset for a caller who may
-// view the parent note. Viewers may download; only editing is restricted.
 func (db *Database) NoteAssetDownload(ctx context.Context, userID, noteID, assetID string) (*LibraryDownload, error) {
 	download := &LibraryDownload{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -154,11 +140,6 @@ func (db *Database) NoteAssetDownload(ctx context.Context, userID, noteID, asset
 	return download, nil
 }
 
-// DeleteNoteAsset removes an asset.
-//
-// Only the creator may permanently remove an asset. An editor removing the
-// reference from the document marks it unreferenced instead, so the retention
-// window still applies and a concurrent collaborator's view does not break.
 func (db *Database) DeleteNoteAsset(ctx context.Context, userID, noteID, assetID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		access, err := noteAccessForTx(ctx, tx, userID, noteID)
@@ -184,8 +165,6 @@ func (db *Database) DeleteNoteAsset(ctx context.Context, userID, noteID, assetID
 			return err
 		}
 		if affected == 0 {
-			// Already removed, or never existed. Either way the caller's intent
-			// is satisfied, so a retry does not surface as an error.
 			return nil
 		}
 		var spaceID string

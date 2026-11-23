@@ -6,23 +6,19 @@ import (
 	"regexp"
 )
 
-// maxCallKeysPerAccount is how many computers' call keys one account keeps; the oldest goes first.
 const maxCallKeysPerAccount = 10
 
 var (
-	callKeyIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
-	// A P-256 public key, raw, in base64: 87 or 88 characters.
+	callKeyIDPattern     = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
 	callPublicKeyPattern = regexp.MustCompile(`^[A-Za-z0-9+/=_-]{32,256}$`)
 )
 
-// CallKey is one computer's public key for calls.
 type CallKey struct {
 	UserID    string `json:"user_id"`
 	KeyID     string `json:"key_id"`
 	PublicKey string `json:"public_key"`
 }
 
-// PutCallKey saves this computer's public key for calls, keeping the account's newest ten.
 func (db *Database) PutCallKey(ctx context.Context, userID, keyID, publicKey string) error {
 	if !callKeyIDPattern.MatchString(keyID) || !callPublicKeyPattern.MatchString(publicKey) {
 		return ErrSpaceInvalid
@@ -38,8 +34,6 @@ func (db *Database) PutCallKey(ctx context.Context, userID, keyID, publicKey str
 	})
 }
 
-// DirectCallKeys lists the call keys of everyone in a DM the caller is in, the caller's own other
-// computers included.
 func (db *Database) DirectCallKeys(ctx context.Context, userID, spaceID string) ([]CallKey, error) {
 	out := []CallKey{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {

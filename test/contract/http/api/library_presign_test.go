@@ -73,9 +73,6 @@ func TestPresignPutBindsKeySizeAndChecksum(t *testing.T) {
 	if aws.ToString(presigner.putInput.ChecksumSHA256) != wantChecksum {
 		t.Fatalf("signed checksum = %q, want %q", aws.ToString(presigner.putInput.ChecksumSHA256), wantChecksum)
 	}
-	// The client must be told exactly the headers the presigned request still
-	// expects as request headers. The checksum can be hoisted into the URL query
-	// by the AWS signer and should not be echoed as a browser header then.
 	if transfer.Headers["Content-Type"] != metadata.MIMEType ||
 		transfer.Headers["x-amz-meta-"+LibrarySHA256MetadataKey] != metadata.SHA256 {
 		t.Fatalf("headers = %#v", transfer.Headers)
@@ -162,7 +159,6 @@ func TestPresignGetForcesSafeAttachmentDisposition(t *testing.T) {
 func TestUploadLimitsAreEnforcedPerPurpose(t *testing.T) {
 	limits := DefaultUploadLimits()
 
-	// Library items are gone, and their purpose with them.
 	if limits.Max("library") != 0 {
 		t.Fatalf("library limit = %d, want 0", limits.Max("library"))
 	}
@@ -172,7 +168,6 @@ func TestUploadLimitsAreEnforcedPerPurpose(t *testing.T) {
 	if limits.Max(UploadPurposeChatAttachment) != 10<<20 {
 		t.Fatalf("chat limit = %d, want 10MB", limits.Max(UploadPurposeChatAttachment))
 	}
-	// An unknown purpose must be rejected, not silently given a default.
 	if limits.Max("avatar") != 0 {
 		t.Fatalf("unknown purpose limit = %d, want 0", limits.Max("avatar"))
 	}
@@ -196,11 +191,9 @@ func TestUploadLimitsRejectValuesAboveDatabaseCeiling(t *testing.T) {
 func TestUploadPurposeEnabledRejectsJournalAssetsOnGenericEndpoint(t *testing.T) {
 	service := &SpaceLibraryService{
 		AttachmentsEnabled: true,
-		NoteAssetsEnabled: true,
+		NoteAssetsEnabled:  true,
 	}
 
-	// Note assets authorize against the parent note, so the Space-wide Library
-	// upload endpoint must never accept them even when the feature is on.
 	if service.UploadPurposeEnabled(UploadPurposeNoteAttachment) {
 		t.Fatal("generic Library upload endpoint accepted the note_attachment purpose")
 	}

@@ -12,11 +12,8 @@ import (
 var ErrEmailTaken = errors.New("email already registered")
 var ErrProviderConflict = errors.New("this email belongs to an existing account; use its original sign-in method")
 
-// ErrPasswordAccount means the email belongs to an account that signs in with a password.
 var ErrPasswordAccount = errors.New("this email signs in with a password")
 
-// GoogleUser accepts only a server-verified Google identity. Never link an
-// existing account by email: Google's stable subject owns the identity.
 func (db Store) GoogleUser(email, subject string) (*User, error) {
 	email = NormalizeEmail(email)
 	if email == "" || subject == "" {
@@ -30,8 +27,6 @@ func (db Store) GoogleUser(email, subject string) (*User, error) {
 		if lifecycle != "active" {
 			return nil, ErrProviderConflict
 		}
-		// Keep the verified email current, while preserving the global uniqueness
-		// constraint. An email move must never merge two Misty accounts.
 		if storedEmail != email {
 			err = db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
 				_, err := tx.ExecContext(context.Background(), `UPDATE users SET email=$2, email_verified_at=now() WHERE id=$1`, id, email)
@@ -63,7 +58,6 @@ func (db Store) GoogleUser(email, subject string) (*User, error) {
 			username = usernameWithSuffix(username)
 			continue
 		}
-		// A concurrent callback may have created this exact identity already.
 		existing, _, lookupErr := db.GetUserByEmail(email)
 		if lookupErr != nil {
 			return nil, lookupErr
@@ -86,8 +80,6 @@ func usernameWithSuffix(username string) string {
 	return username[:min(len(username), 20)] + "_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
 }
 
-// emailTakenBy says why Google can't have an email another account holds: it signs in
-// with a password, or with a different Google identity.
 func emailTakenBy(existing *User) error {
 	if existing.Provider == "misty" {
 		return ErrPasswordAccount

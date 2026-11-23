@@ -13,8 +13,6 @@ func testRoot() []byte {
 	return root
 }
 
-// The derivation is part of every server's data: a changed label or info
-// string would sign everyone out and lose encrypted data. These are fixed.
 func TestDerivationIsStable(t *testing.T) {
 	root := testRoot()
 	api, err := APISecret(root)
@@ -122,8 +120,6 @@ func TestDefaultsFillOnlyWhatIsUnset(t *testing.T) {
 	if defaults["JOURNAL_COLLAB_ROOM_SALT"] == "" || defaults["DB_PASSWORD"] == "" {
 		t.Fatal("unset keys must be derived")
 	}
-	// Outside production nothing follows from the hostname, and without the
-	// API secret no key is derived: a development stack keeps its own.
 	env["MISTY_ENVIRONMENT"], env[APISecretName] = "development", ""
 	if defaults, _ := Defaults(func(name string) string { return env[name] }); len(defaults) != 0 {
 		t.Fatalf("development got %v", defaults)

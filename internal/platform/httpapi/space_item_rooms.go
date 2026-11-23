@@ -12,18 +12,10 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// An item's room and the API talk both ways. The API sends signed control commands (ACL
-// changes, purges, and the history commands below); the room posts a signed projection after
-// each save, and the answer carries back the limits the room keeps to.
-
-// itemHistoryResponseLimit bounds one earlier version, base64-encoded in JSON: an 8 MiB snapshot
-// is about 11 MiB.
 const itemHistoryResponseLimit = 12 << 20
 
 var itemHistoryVersionPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
-// writeRoomCallbackAnswer answers a room's callback with whether it applied and the limits the
-// room keeps to: history_days for its history.
 func (s *SpacesService) writeRoomCallbackAnswer(w http.ResponseWriter, r *http.Request, kindName, itemID string, applied bool) {
 	limits, err := s.database.SpaceItemLimitsForItem(r.Context(), kindName, itemID)
 	if err != nil {
@@ -33,14 +25,12 @@ func (s *SpacesService) writeRoomCallbackAnswer(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, map[string]any{"applied": applied, "limits": limits})
 }
 
-// itemHistoryVersion is one earlier version as the room lists it.
 type itemHistoryVersion struct {
 	ID           string    `json:"id"`
 	CreatedAt    time.Time `json:"created_at"`
 	ContentBytes int64     `json:"content_bytes"`
 }
 
-// itemHistoryKept is whether a version is still inside the Space level's history window.
 func itemHistoryKept(limits db.SpaceItemLimits, createdAt, now time.Time) bool {
 	if limits.HistoryDays == nil {
 		return true
@@ -48,7 +38,6 @@ func itemHistoryKept(limits db.SpaceItemLimits, createdAt, now time.Time) bool {
 	return !createdAt.Before(now.Add(-time.Duration(*limits.HistoryDays) * 24 * time.Hour))
 }
 
-// itemHistoryRoom resolves the item a history route names and the caller's access to it.
 func (s *SpacesService) itemHistoryRoom(w http.ResponseWriter, r *http.Request, kindName string, needEdit bool) (db.SpaceItemKind, string, db.SpaceItemLimits, bool) {
 	userID, ok := authenticatedUser(w, r, s.database)
 	if !ok {
@@ -68,7 +57,6 @@ func (s *SpacesService) itemHistoryRoom(w http.ResponseWriter, r *http.Request, 
 		writeSpaceError(w, err)
 		return db.SpaceItemKind{}, "", db.SpaceItemLimits{}, false
 	}
-	// A closing account's restore is refused before it gets here: it is a write.
 	return kind, itemID, limits, true
 }
 
@@ -88,8 +76,6 @@ func writeItemHistoryError(w http.ResponseWriter, err error) {
 	}
 }
 
-// itemHistoryVersions asks the room for the item's versions and keeps those inside the level's
-// history window.
 func (s *SpacesService) itemHistoryVersions(r *http.Request, kind db.SpaceItemKind, itemID string, limits db.SpaceItemLimits) ([]itemHistoryVersion, error) {
 	result, err := s.requestCollaborationControlCommand(r.Context(), kind.Party, s.JournalCollab.ItemRoomID(kind.Name, itemID),
 		itemID, "history_list", []byte(`{}`))
@@ -112,9 +98,6 @@ func (s *SpacesService) itemHistoryVersions(r *http.Request, kind db.SpaceItemKi
 	return versions, nil
 }
 
-// SpaceItemHistory lists an item's earlier versions, newest first:
-// GET /spaces/{space}/notes/{id}/history → {versions:[{id,created_at,content_bytes}]}.
-// Anyone who can read the item may.
 func (s *SpacesService) SpaceItemHistory(kindName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		kind, itemID, limits, ok := s.itemHistoryRoom(w, r, kindName, false)
@@ -131,8 +114,6 @@ func (s *SpacesService) SpaceItemHistory(kindName string) http.HandlerFunc {
 	}
 }
 
-// itemHistoryVersionRequest asks the room for one version with its state, refusing one past the
-// level's history window.
 func (s *SpacesService) itemHistoryVersionRequest(r *http.Request, kind db.SpaceItemKind, itemID, versionID string, limits db.SpaceItemLimits) (json.RawMessage, error) {
 	result, err := s.requestCollaborationControlCommandWithLimit(r.Context(), kind.Party, s.JournalCollab.ItemRoomID(kind.Name, itemID),
 		itemID, "history_get", mustRawJSON(map[string]string{"version_id": versionID}), itemHistoryResponseLimit)
@@ -151,8 +132,6 @@ func (s *SpacesService) itemHistoryVersionRequest(r *http.Request, kind db.Space
 	return result, nil
 }
 
-// SpaceItemHistoryVersion returns one earlier version as a full Yjs state:
-// GET .../history/{versionID} → {update: base64}.
 func (s *SpacesService) SpaceItemHistoryVersion(kindName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		kind, itemID, limits, ok := s.itemHistoryRoom(w, r, kindName, false)
@@ -184,9 +163,6 @@ func (s *SpacesService) SpaceItemHistoryVersion(kindName string) http.HandlerFun
 	}
 }
 
-// SpaceItemHistoryRestore makes an earlier version the item's content again, as a new revision
-// everyone connected sees. The room keeps what it replaced as a version, so a restore can be
-// undone. It needs edit access: POST .../history/{versionID}/restore → 204.
 func (s *SpacesService) SpaceItemHistoryRestore(kindName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		kind, itemID, limits, ok := s.itemHistoryRoom(w, r, kindName, true)

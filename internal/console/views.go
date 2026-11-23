@@ -17,14 +17,11 @@ type layoutView struct {
 	Content templ.Component
 }
 
-// csrfHeaders is the hx-headers value that makes every htmx request carry the
-// session's CSRF token.
 func (v layoutView) csrfHeaders() string {
 	data, _ := json.Marshal(map[string]string{"X-CSRF-Token": v.CSRF})
 	return string(data)
 }
 
-// ago formats a past time as "2 min ago", "3 h ago" or a date.
 func ago(t time.Time) string {
 	if t.IsZero() {
 		return "never"
@@ -55,7 +52,6 @@ func date(t time.Time) string {
 	return t.Local().Format("Jan 2, 2006")
 }
 
-// bytesLabel formats a byte count as "2.1 GB".
 func bytesLabel(n int64) string {
 	const unit = 1024
 	if n < unit {
@@ -78,7 +74,6 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-// humanize turns identifiers such as awaiting_approval into "Awaiting approval".
 func humanize(value string) string {
 	value = strings.ReplaceAll(value, "_", " ")
 	if value == "" {
@@ -87,7 +82,6 @@ func humanize(value string) string {
 	return strings.ToUpper(value[:1]) + value[1:]
 }
 
-// problemState reports whether a job or record state deserves emphasis.
 func problemState(state string) bool {
 	switch state {
 	case "failed", "partially_failed", "degraded", "unavailable", "exited", "dead", "restarting", "unhealthy":

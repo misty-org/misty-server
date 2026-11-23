@@ -13,7 +13,6 @@ import (
 	"github.com/lib/pq"
 )
 
-// The database names are fixed: the stack owns its PostgreSQL server.
 const (
 	dbHost          = "postgres"
 	dbName          = "misty"
@@ -30,10 +29,6 @@ func superuserDSNWith(password string) string {
 		envOr("MISTY_DB_HOST", dbHost), dbSuperuser, password, dbName)
 }
 
-// openSuperuser connects as the superuser. PostgreSQL keeps the password it
-// was created with, so after a rotation (or adopt-root) the current one fails
-// once: migrate then signs in with the previous one and moves the role onto
-// the current one.
 func openSuperuser(ctx context.Context, store *Store) (*sql.DB, error) {
 	database, err := sql.Open("postgres", superuserDSN(store))
 	if err != nil {
@@ -73,15 +68,11 @@ func openSuperuser(ctx context.Context, store *Store) (*sql.DB, error) {
 	return database, nil
 }
 
-// wrongPassword reports PostgreSQL's invalid_password error.
 func wrongPassword(err error) bool {
 	var failure *pq.Error
 	return errors.As(err, &failure) && failure.Code == "28P01"
 }
 
-// runMigrate keeps the API's restricted role in step with the generated
-// password, applies every migration and grants the role what it needs. It
-// runs on every start and changes no rows itself.
 func runMigrate(ctx context.Context) error {
 	store, err := openStore(secretsDir())
 	if err != nil {
@@ -139,7 +130,6 @@ func waitForDatabase(ctx context.Context, database *sql.DB) error {
 		if err == nil {
 			return nil
 		}
-		// A wrong password does not get better by waiting.
 		if wrongPassword(err) || time.Now().After(deadline) || ctx.Err() != nil {
 			return fmt.Errorf("the database did not answer: %w", err)
 		}

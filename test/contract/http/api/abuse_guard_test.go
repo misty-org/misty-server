@@ -33,7 +33,6 @@ func TestAbuseGuardBlockEscalatesThenRecovers(t *testing.T) {
 		t.Fatalf("first block = %v, want the one minute base", first)
 	}
 
-	// Re-offending after the block expires costs longer each time.
 	current = current.Add(2 * time.Minute)
 	guard.RecordRejection("bad")
 	guard.RecordRejection("bad")
@@ -41,7 +40,6 @@ func TestAbuseGuardBlockEscalatesThenRecovers(t *testing.T) {
 		t.Fatalf("second block = %v, want escalation beyond the base", second)
 	}
 
-	// And a caller that stops offending is eventually forgiven.
 	current = current.Add(10 * time.Minute)
 	if blocked, _ := guard.Blocked("bad"); blocked {
 		t.Fatal("block should have expired")
@@ -65,8 +63,6 @@ func TestCostRoutesAreChargedPerAccountNotPerAddress(t *testing.T) {
 
 	allowed := 0
 	for i := 0; i < 200; i++ {
-		// One stolen credential, replayed from 200 different addresses — the
-		// botnet case that per-IP limiting cannot see.
 		request := httptest.NewRequest(http.MethodPost, "/spaces/space-1/notes/note_0123456789abcdef/assets/uploads", nil)
 		request.RemoteAddr = fmt.Sprintf("203.0.113.%d:1234", i%256)
 		request.Header.Set("Authorization", "Bearer stolen-session-token")
@@ -96,8 +92,6 @@ func TestDistinctAccountsKeepIndependentBudgets(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		call("account-one")
 	}
-	// A second account sharing the same NAT address must not inherit the first
-	// account's exhausted budget.
 	if code := call("account-two"); code != http.StatusOK {
 		t.Fatalf("second account behind the same address got %d, want 200", code)
 	}
@@ -130,15 +124,11 @@ func TestBearerAndCookieCredentialsAreBothRecognised(t *testing.T) {
 	cookie := httptest.NewRequest(http.MethodPost, "/spaces/space-1/notes/note_0123456789abcdef/assets/uploads", nil)
 	cookie.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "token-value"})
 
-	// The same session presented either way must land in the same bucket,
-	// otherwise switching transport doubles the budget.
 	if RateLimitIdentity(bearer) != RateLimitIdentity(cookie) {
 		t.Fatal("bearer and cookie forms of one session produced different keys")
 	}
 }
 
-// fakeBlockStore stands in for the database so the restart path can be tested
-// without one.
 type fakeBlockStore struct {
 	mu     sync.Mutex
 	blocks map[string]db.AbuseBlock
@@ -194,13 +184,11 @@ func TestBlocksSurviveARestart(t *testing.T) {
 	if blocked, _ := first.Blocked("ip:203.0.113.7"); !blocked {
 		t.Fatal("caller should be blocked before the restart")
 	}
-	// The write is asynchronous so a storage stall never delays a request.
 	deadline := time.Now().Add(2 * time.Second)
 	for store.count() == 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// A new process must not forgive the block simply because it restarted.
 	second := NewAbuseGuard(policy).WithStore(context.Background(), store)
 	if blocked, _ := second.Blocked("ip:203.0.113.7"); !blocked {
 		t.Fatal("a restarted instance forgave an active block")
@@ -212,7 +200,6 @@ func TestRefreshPropagatesBlocksBetweenInstances(t *testing.T) {
 	policy := DefaultAbusePolicy()
 	instanceB := NewAbuseGuard(policy).WithStore(context.Background(), store)
 
-	// Another instance blocks a caller directly in shared storage.
 	_ = store.SaveAbuseBlock(context.Background(), db.AbuseBlock{
 		Key: "acct:abusive", BlockedUntil: time.Now().Add(15 * time.Minute), BlockSeconds: 900,
 	})
@@ -235,7 +222,6 @@ func TestRefreshFailureKeepsExistingBlocks(t *testing.T) {
 	guard := NewAbuseGuard(policy).WithStore(context.Background(), store)
 	guard.RecordRejection("ip:203.0.113.7")
 
-	// A database blip must not silently unblock everyone.
 	store.mu.Lock()
 	store.fail = true
 	store.mu.Unlock()
@@ -247,7 +233,6 @@ func TestRefreshFailureKeepsExistingBlocks(t *testing.T) {
 }
 
 func TestGuardWithoutAStoreStillWorks(t *testing.T) {
-	// Single-node runs and tests pass nil; the guard must stay fully functional.
 	guard := NewAbuseGuard(DefaultAbusePolicy()).WithStore(context.Background(), nil)
 	guard.Refresh(context.Background())
 	if blocked, _ := guard.Blocked("ip:203.0.113.7"); blocked {

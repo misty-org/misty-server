@@ -20,6 +20,7 @@ type User struct {
 	Provider            string
 	ProviderSubject     string
 	AvatarVersion       int64
+	BannerVersion       int64
 	EmailUpdatesEnabled bool
 	CreatedAt           time.Time
 }
@@ -50,9 +51,6 @@ func (db Store) createUser(username, email, password string) (*User, error) {
 	return db.createIdentity(username, email, string(hash), "misty", "", false)
 }
 
-// UpgradePasswordHash remakes a password account's hash at PasswordCost when hash, the one
-// the password was just checked against, was made at a lower cost. It changes nothing if the
-// hash was replaced meanwhile, and a failure is only logged: the old hash still works.
 func (db Store) UpgradePasswordHash(id, hash, password string) {
 	cost, err := bcrypt.Cost([]byte(hash))
 	if err != nil || cost >= PasswordCost {
@@ -73,9 +71,6 @@ func (db Store) UpgradePasswordHash(id, hash, password string) {
 	}
 }
 
-// CreateConfirmedUser makes the password account whose email was just confirmed, from
-// the hash kept while it waited. If someone took the username meanwhile it gets a
-// suffix, which the person can change in settings.
 func (db Store) CreateConfirmedUser(username, email, hash string) (*User, error) {
 	for attempt := 0; attempt < 3; attempt++ {
 		user, err := db.createIdentity(username, email, hash, "misty", "", true)
@@ -87,10 +82,6 @@ func (db Store) CreateConfirmedUser(username, email, hash string) (*User, error)
 	return nil, ErrUsernameTaken
 }
 
-// createIdentity makes an account. verified says its email was proven: by a confirmation
-// link, by Google, or by the operator who made it. A password account made with no
-// confirmation (a server that sends no email, or the server's first account) is not, and an
-// operator can release its email (Database.ConsoleReleaseEmail) for its real owner.
 func (db Store) createIdentity(username, email, hash, provider, subject string, verified bool) (*User, error) {
 	normalizedEmail := NormalizeEmail(email)
 
@@ -151,12 +142,6 @@ func (db Store) GetUserByEmail(email string) (*User, string, error) {
 	return &u, hash, nil
 }
 
-// BumpUserAvatarVersion records a newly uploaded avatar stored at objectKey, without storing bytes
-// in Postgres; the PNG itself lives in the object store (R2). The version is one past the current
-// and never below the clock in milliseconds, so it never repeats after a removal (which sets 0)
-// and an app holding an earlier picture under the same number can't keep showing it. Each upload
-// has its own key: the trigger on users queues the previous object for deletion, and a deletion
-// still pending from a removal can't reach the new picture.
 func (db Store) BumpUserAvatarVersion(id, objectKey string) (int64, error) {
 	var version int64
 	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
@@ -173,8 +158,6 @@ func (db Store) BumpUserAvatarVersion(id, objectKey string) (int64, error) {
 	return version, err
 }
 
-// RemoveUserAvatar takes the person's picture away; the trigger on users queues its object for
-// deletion, and apps draw their initials again.
 func (db Store) RemoveUserAvatar(id string) error {
 	return db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(context.Background(),
@@ -183,8 +166,6 @@ func (db Store) RemoveUserAvatar(id string) error {
 	})
 }
 
-// GetUserAvatarVersion returns the current avatar version (0 when the user has
-// never set an avatar), used to build the ETag and decide whether to serve.
 func (db Store) GetUserAvatarVersion(id string) (int64, error) {
 	avatar, err := db.GetUserAvatarReference(id)
 	return avatar.Version, err
@@ -207,16 +188,57 @@ func (db Store) GetUserAvatarReference(id string) (UserAvatarReference, error) {
 	return avatar, err
 }
 
+func (db Store) BumpUserBannerVersion(id, objectKey string) (int64, error) {
+	var version int64
+	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(
+			context.Background(),
+			`UPDATE users SET banner_version = GREATEST(banner_version + 1, (EXTRACT(EPOCH FROM clock_timestamp())*1000)::bigint),
+			        banner_updated_at = NOW(), banner_object_key = $2 WHERE id = $1 RETURNING banner_version`,
+			id, objectKey,
+		).Scan(&version)
+	})
+	if err != nil {
+		log.Println("Failed to bump user banner version:", err)
+	}
+	return version, err
+}
+
+func (db Store) RemoveUserBanner(id string) error {
+	return db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(context.Background(),
+			`UPDATE users SET banner_version = 0, banner_updated_at = NOW() WHERE id = $1`, id)
+		return err
+	})
+}
+
+type UserBannerReference struct {
+	Version   int64
+	ObjectKey string
+}
+
+func (db Store) GetUserBannerReference(id string) (UserBannerReference, error) {
+	var banner UserBannerReference
+	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(context.Background(),
+			`SELECT banner_version,COALESCE(banner_object_key,'banners/'||id) FROM users WHERE id=$1`, id).Scan(&banner.Version, &banner.ObjectKey)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return banner, nil
+	}
+	return banner, err
+}
+
 func (db Store) GetUserByID(id string) (*User, error) {
 	var u User
 	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(
 			context.Background(),
-			`SELECT id, license_id, username, email, avatar_version,
+			`SELECT id, license_id, username, email, avatar_version, banner_version,
 			        email_updates_enabled, created_at, provider, COALESCE(provider_subject,'')
 			 FROM users WHERE id=$1 AND lifecycle_state='active'`,
 			id,
-		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &u.AvatarVersion, &u.EmailUpdatesEnabled, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
+		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &u.AvatarVersion, &u.BannerVersion, &u.EmailUpdatesEnabled, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -247,7 +269,6 @@ func (db Store) GetUserSettingsByID(id string) (*UserSettings, error) {
 	return &settings, nil
 }
 
-// SetUsername changes the account's username and answers it as stored.
 func (db Store) SetUsername(id, username string) (string, error) {
 	normalized, err := NormalizeUsername(username)
 	if err != nil {
@@ -283,15 +304,10 @@ func (db Store) UpdateUserSettings(id string, settings UserSettings) error {
 }
 
 var (
-	// ErrWrongCurrentPassword means the current password did not match.
 	ErrWrongCurrentPassword = errors.New("current password is wrong")
-	// ErrNoPasswordAccount means the account signs in another way (Google).
-	ErrNoPasswordAccount = errors.New("this account has no Misty password")
+	ErrNoPasswordAccount    = errors.New("this account has no Misty password")
 )
 
-// ChangePassword replaces a password account's password. It never returns the
-// hash. Every other session of the account ends with the change (the one named
-// by keepSessionHash stays), so a stolen session does not outlive the password.
 func (db Store) ChangePassword(id, current, next, keepSessionHash string) error {
 	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
 		var hash, provider string
@@ -303,8 +319,6 @@ func (db Store) ChangePassword(id, current, next, keepSessionHash string) error 
 		if provider != "misty" {
 			return ErrNoPasswordAccount
 		}
-		// An account made by the operator account API has no password until its
-		// first one is set here, after a setup key signed it in.
 		if hash != "" && bcrypt.CompareHashAndPassword([]byte(hash), []byte(current)) != nil {
 			return ErrWrongCurrentPassword
 		}

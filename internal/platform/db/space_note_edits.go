@@ -10,9 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// UpdateSpaceNoteContent is the server-owned Agent write boundary for native
-// Notes. The projection and collaboration command are committed together; the
-// retryable outbox makes delivery idempotent across runtime restarts.
 func (db *Database) UpdateSpaceNoteContent(ctx context.Context, userID, noteID, title, markdown string) (*SpaceNote, error) {
 	title = strings.TrimSpace(title)
 	markdown = strings.TrimSpace(markdown)
@@ -44,8 +41,6 @@ func (db *Database) UpdateSpaceNoteContent(ctx context.Context, userID, noteID, 
 	return db.SpaceNoteByID(ctx, userID, noteID)
 }
 
-// SpaceNoteByID returns one note the caller may view, with the caller's own
-// effective role attached. Any caller who cannot view it gets ErrSpaceNotFound.
 func (db *Database) SpaceNoteByID(ctx context.Context, userID, noteID string) (*SpaceNote, error) {
 	note := &SpaceNote{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -77,11 +72,6 @@ func (db *Database) SpaceNoteByID(ctx context.Context, userID, noteID string) (*
 	return note, nil
 }
 
-// UpdateNoteSharedTags replaces the server-owned tag list.
-//
-// Tags are deliberately not part of the CRDT: they are Space metadata rather
-// than document content, so they are edited here rather than through the
-// collaborative document. Any editor may change them.
 func (db *Database) UpdateNoteSharedTags(ctx context.Context, userID, noteID string, tags []string) error {
 	if tags == nil {
 		tags = []string{}
@@ -104,8 +94,6 @@ func (db *Database) UpdateNoteSharedTags(ctx context.Context, userID, noteID str
 			return err
 		}
 		if !access.CanEdit {
-			// A viewer must not be able to tell an editable note from a
-			// nonexistent one by the error it gets back.
 			return ErrSpaceNotFound
 		}
 		var spaceID string
@@ -118,8 +106,6 @@ func (db *Database) UpdateNoteSharedTags(ctx context.Context, userID, noteID str
 	})
 }
 
-// SetSpaceNoteArchived archives or restores a note. Only its creator or the
-// Space owner may change this lifecycle state.
 func (db *Database) SetSpaceNoteArchived(ctx context.Context, userID, noteID string, archived bool) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		var creatorUserID, spaceID, lifecycle string
@@ -154,13 +140,6 @@ func (db *Database) SetSpaceNoteArchived(ctx context.Context, userID, noteID str
 	})
 }
 
-// DeleteSpaceNote begins hard deletion. It is creator/owner-only and idempotent: a
-// retried request against an already-deleting note succeeds without a second
-// event, so a client that times out and retries does not see a conflict.
-//
-// The row moves to 'deleting' rather than being removed here. The collaboration
-// room and R2 assets must be purged first, and keeping the row until then is
-// also what lets the note.deleted event resolve its audience.
 func (db *Database) DeleteSpaceNote(ctx context.Context, userID, noteID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		access, err := noteAccessForTx(ctx, tx, userID, noteID)
@@ -168,13 +147,9 @@ func (db *Database) DeleteSpaceNote(ctx context.Context, userID, noteID string) 
 			return err
 		}
 		if !access.CanDelete {
-			// Covers ordinary members and a genuinely missing
-			// note with one indistinguishable answer.
 			if lifecycle, lookupErr := noteLifecycleTx(ctx, tx, noteID); lookupErr != nil {
 				return lookupErr
 			} else if lifecycle == NoteLifecycleDeleting {
-				// Already deleting: the creator's retry lands here because
-				// NoteAccessFor denies non-active notes.
 				if allowed, actorErr := noteDestructiveActorTx(ctx, tx, noteID, userID); actorErr != nil {
 					return actorErr
 				} else if allowed {
@@ -193,15 +168,11 @@ func (db *Database) DeleteSpaceNote(ctx context.Context, userID, noteID string) 
 		if err := recordNoteEventTx(ctx, tx, spaceID, userID, "note.deleted", noteID, nil); err != nil {
 			return err
 		}
-		// Files must remain referenced until the Journal asset worker has either
-		// deleted their blob or proved that another live reference owns it.
 		if _, err := tx.ExecContext(ctx, `UPDATE space_note_assets
 			SET lifecycle_state='deleting',deleted_at=COALESCE(deleted_at,NOW())
 			WHERE note_id=$1 AND lifecycle_state IN ('ready','unreferenced')`, noteID); err != nil {
 			return err
 		}
-		// The room must be torn down even if the control call fails right now,
-		// so the command is queued rather than issued inline.
 		return enqueueNoteControlTx(ctx, tx, noteID, "purge", nil)
 	})
 }
@@ -233,9 +204,6 @@ func noteDestructiveActorTx(
 	return creatorUserID == userID || role == "owner", nil
 }
 
-// enqueueNoteControlTx queues a command for the collaboration service. Delivery
-// is the outbox worker's job, so an unreachable service can never block or roll
-// back the authorization transaction that produced the command.
 func enqueueNoteControlTx(ctx context.Context, tx *sql.Tx, noteID, command string, payload map[string]any) error {
 	if payload == nil {
 		payload = map[string]any{}
@@ -245,17 +213,12 @@ func enqueueNoteControlTx(ctx context.Context, tx *sql.Tx, noteID, command strin
 		return err
 	}
 	_, err = tx.ExecContext(ctx,
-		// The clock, not the transaction's start, orders a note's commands: two queued in one
-		// transaction still go in the order they were queued.
 		`INSERT INTO space_note_control_outbox(id,note_id,command,payload,created_at)
 		 VALUES($1,$2,$3,$4,clock_timestamp())`,
 		"notectl_"+uuid.NewString(), noteID, command, raw)
 	return err
 }
 
-// RequireNoteView returns ErrSpaceNotFound for any caller who cannot view the
-// note. Callers must surface it as a plain not-found: the title, creator,
-// timestamps, asset names, and even the note's existence stay hidden.
 func (db *Database) RequireNoteView(ctx context.Context, userID, noteID string) (NoteAccess, error) {
 	access, err := db.NoteAccessFor(ctx, userID, noteID)
 	if err != nil {

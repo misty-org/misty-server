@@ -56,19 +56,16 @@ func TestWithMailjetTheServerEmailsEveryLinkAndNotice(t *testing.T) {
 	handler, database := closingServer(t)
 	_, body := call(t, handler, http.MethodPost, "/operator/v1/accounts", operatorToken, `{"email":"mail-`+uuid.NewString()+`@example.com"}`)
 	id, _ := accountField(body, "id").(string)
-	// The caller still gets the link, and is told the server is emailing it.
 	if issuedKey(t, body) == "" || accountField(body, "emailed") != true {
 		t.Fatalf("create = %v", body)
 	}
 	if rows := outboxKinds(t, database, id); rows[db.EmailSetup] != "pending" {
 		t.Fatalf("after create: %v", rows)
 	}
-	// Not signed in yet, so a new key is still the welcome; the old email is replaced.
 	_, again := call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/setup-key", operatorToken, "")
 	if accountField(again, "emailed") != true {
 		t.Fatalf("setup-key = %v", again)
 	}
-	// Signed in: a new key is a sign-in link.
 	rec, _ := call(t, handler, http.MethodPost, "/v1/setup-keys/redeem", "", `{"setup_key":"`+issuedKey(t, again)+`"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("redeem = %d", rec.Code)
@@ -77,7 +74,6 @@ func TestWithMailjetTheServerEmailsEveryLinkAndNotice(t *testing.T) {
 	if rows := outboxKinds(t, database, id); rows[db.EmailSignIn] != "pending" {
 		t.Fatalf("after signing in: %v", rows)
 	}
-	// Closing queues the pair, with where to keep the account; resuming drops what is unsent.
 	rec, _ = call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/close", operatorToken, `{"delete_after_days":30,"keep_url":"https://example.com/keep"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("close = %d", rec.Code)

@@ -9,17 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Creating and changing drive items. Each runs in one transaction under the
-// Space's drive lock: the item is locked, the version its sender names (if
-// any) and the name are checked, the change applied, the version bumped and
-// every row the change touched stamped with the next sequence numbers, and the
-// Space's members told to read the changes. The last write wins: a write to a
-// trashed item, or into a trashed folder, brings it back first, and a save over
-// content its sender never saw keeps that content as a trashed copy.
-
-// DriveCreateInput is one new item. ID is optional: a client-made id makes a
-// retry after a lost answer safe. A file names its content by digest and
-// size, and, when its bytes were just uploaded, the upload that carried them.
 type DriveCreateInput struct {
 	UserID, SpaceID string
 	Device          DriveDevice
@@ -31,13 +20,6 @@ type DriveCreateInput struct {
 	UploadID        string
 }
 
-// DriveWriteResult is a changed item. Created is false when a create was a
-// retry of one already made. Revived says the write brought the item, or the
-// folder it went into, back out of the trash first. Replaced is the trashed
-// copy a save kept of the content it replaced, when its sender hadn't seen
-// it. DeleteObjectKeys are objects nothing names any more (an upload whose
-// content another blob already held), which the caller deletes; RetireKeys are
-// blobs the change stopped naming, for RetireDriveBlobs.
 type DriveWriteResult struct {
 	Item             DriveItem
 	Created          bool
@@ -47,10 +29,6 @@ type DriveWriteResult struct {
 	RetireKeys       []string
 }
 
-// driveParentTx readies a folder new or moved items go into: a live folder of
-// the Space, brought back first (with the trashed folders it is in) when it
-// is in the trash. It returns the last sequence number the revival stamped,
-// 0 when it was live.
 func driveParentTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID *string) (int64, error) {
 	if parentID == nil {
 		return 0, nil
@@ -68,7 +46,6 @@ func driveParentTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID *st
 	return reviveDriveItemTx(ctx, tx, spaceID, parent)
 }
 
-// driveNullable passes an optional id to SQL: NULL when there is none.
 func driveNullable(value *string) any {
 	if value == nil {
 		return nil
@@ -83,10 +60,6 @@ func sameParent(a, b *string) bool {
 	return *a == *b
 }
 
-// CreateDriveItem adds a file or folder. A folder it goes into that is in the
-// trash comes back first (Revived). A name already taken in the folder is
-// refused (name_taken) with the item that holds it: the sender writes into
-// that file, or uses that folder.
 func (db *Database) CreateDriveItem(ctx context.Context, in DriveCreateInput) (*DriveWriteResult, error) {
 	if !ValidDriveDevice(in.Device) {
 		return nil, ErrLibraryInvalid
@@ -181,10 +154,6 @@ func (db *Database) CreateDriveItem(ctx context.Context, in DriveCreateInput) (*
 	return result, nil
 }
 
-// driveCreateRetryTx answers a create that names an id already in use: the
-// same item again (same Space, parent, name, kind and content) is a retry
-// whose first answer was lost; anything else, an id from another Space
-// included, is ErrDriveIDTaken.
 func driveCreateRetryTx(ctx context.Context, tx *sql.Tx, in DriveCreateInput, name string) (*DriveItem, error) {
 	var spaceID string
 	err := tx.QueryRowContext(ctx, `SELECT space_id FROM space_drive_items WHERE id=$1`, in.ID).Scan(&spaceID)
@@ -211,13 +180,6 @@ func driveCreateRetryTx(ctx context.Context, tx *sql.Tx, in DriveCreateInput, na
 	return &item, nil
 }
 
-// DrivePatchInput is one change to an item: any of a new name, a new parent
-// (MoveParent, with ParentID nil for the root), new content (Content) and a
-// new mtime. IfMatch, when above 0, is a precondition on the item's version;
-// 0 applies the change whatever the version. BaseVersion is the version the
-// sender's copy came from (0 when it doesn't know); a save whose sender saw
-// the content as it is now never needs to keep it. Replace lets a new name or
-// parent take a name a live item holds, trashing that item first.
 type DrivePatchInput struct {
 	UserID, SpaceID, ItemID string
 	Device                  DriveDevice
@@ -234,9 +196,6 @@ type DrivePatchInput struct {
 	Replace                 bool
 }
 
-// driveReplacedNameTx is the name of the trashed copy of content a save
-// replaced, "Report (replaced 2026-11-20 1405).pdf" in UTC, numbered on
-// when another item of the folder, live or trashed, already has it.
 func driveReplacedNameTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID *string, name string, at time.Time) (string, error) {
 	label := "replaced " + at.UTC().Format("2006-01-02 1504")
 	parent := ""
@@ -257,13 +216,6 @@ func driveReplacedNameTx(ctx context.Context, tx *sql.Tx, spaceID string, parent
 	}
 }
 
-// keepReplacedDriveContentTx keeps a file's current content as a new trashed
-// copy in the same folder before a save replaces it: the same blob (no bytes
-// are copied), its digest, size and mtime, who last changed it and when, and
-// replaced_of naming the item. The bytes counted for the item move to the
-// copy, against whoever they counted against, so the trash's 30 days count
-// them as they count any trashed file and its purge frees them. It returns
-// the copy. The caller holds the drive lock and the item's row.
 func keepReplacedDriveContentTx(ctx context.Context, tx *sql.Tx, spaceID, userID string, item DriveItem) (DriveItem, error) {
 	name, err := driveReplacedNameTx(ctx, tx, spaceID, item.ParentID, item.Name, time.Now())
 	if err != nil {
@@ -292,14 +244,6 @@ func keepReplacedDriveContentTx(ctx context.Context, tx *sql.Tx, spaceID, userID
 	return driveItemTx(ctx, tx, spaceID, id, false)
 }
 
-// PatchDriveItem renames, moves or changes the content of an item. The last
-// write wins: without IfMatch it applies whatever the version. A trashed item,
-// or one in a trashed folder, comes back first (Revived), and so does a
-// trashed folder it moves into. New content over content its sender never saw
-// (BaseVersion missing or older than the item's version) keeps that content as
-// a trashed copy first (Replaced): only a change of content counts, so a
-// rename, move or trash since the base version doesn't. A purged item is
-// ErrDriveNotFound.
 func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*DriveWriteResult, error) {
 	if !ValidDriveDevice(in.Device) || in.IfMatch < 0 || in.BaseVersion < 0 ||
 		(in.Name == nil && !in.MoveParent && !in.Content && in.MTimeMS == nil) {
@@ -323,8 +267,6 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 		if item.Kind == DriveKindFolder && (in.Content || in.MTimeMS != nil) {
 			return ErrLibraryInvalid
 		}
-		// What the sender saw: the version its copy came from, or the one it
-		// made the change against.
 		seen := in.BaseVersion
 		if seen == 0 {
 			seen = in.IfMatch
@@ -377,8 +319,6 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 				if !in.Replace {
 					return DriveConflictError{Code: "name_taken", Item: *holder}
 				}
-				// The item holding the name goes to the trash first, unless
-				// anyone has it open, the asking computer included.
 				if _, err := liveDriveItemTx(ctx, tx, in.SpaceID, holder.ID, true); err != nil {
 					return err
 				}
@@ -401,12 +341,9 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 				return err
 			}
 			result.DeleteObjectKeys = append(result.DeleteObjectKeys, discard...)
-			// Content the sender never saw is kept, not lost. An empty file
-			// has nothing to keep.
 			keep := !seenCurrent && in.SHA256 != sha && item.Size > 0
 			counted := item.ID
 			if keep {
-				// The replaced bytes stay counted, on the copy.
 				counted = ""
 			}
 			if err := requireDriveRoomTx(ctx, tx, in.UserID, in.SpaceID, counted, in.Size, held); err != nil {
@@ -442,7 +379,6 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 			return err
 		}
 		if contentChanged {
-			// New content counts against whoever wrote it.
 			if err := setDriveContributionTx(ctx, tx, in.SpaceID, item.ID, in.UserID, size); err != nil {
 				return err
 			}

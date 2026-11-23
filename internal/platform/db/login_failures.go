@@ -8,15 +8,11 @@ import (
 	"time"
 )
 
-// LoginFailureCap is one count of failed sign-ins: its key (a 64-character hash of what it
-// counts) and how many failures inside the window block it.
 type LoginFailureCap struct {
 	Key   string
 	Limit int
 }
 
-// LoginFailuresBlocked reports whether any cap has used up its failures inside the window,
-// and how long until the last of them reopens: when the failure that filled it expires.
 func (db *Database) LoginFailuresBlocked(ctx context.Context, caps []LoginFailureCap, window time.Duration) (bool, time.Duration, error) {
 	blocked := false
 	var retryAfter time.Duration
@@ -45,8 +41,6 @@ func (db *Database) LoginFailuresBlocked(ctx context.Context, caps []LoginFailur
 	return blocked, retryAfter, err
 }
 
-// RecordLoginFailure counts one failure against every key, and drops failures that have
-// left the window, whoever they were for.
 func (db *Database) RecordLoginFailure(ctx context.Context, keys []string, window time.Duration) error {
 	return db.serviceTx(ctx, func(tx *sql.Tx) error {
 		for _, key := range keys {
@@ -59,7 +53,6 @@ func (db *Database) RecordLoginFailure(ctx context.Context, keys []string, windo
 	})
 }
 
-// ClearLoginFailures forgets the failures counted against these keys, after a success.
 func (db *Database) ClearLoginFailures(ctx context.Context, keys []string) error {
 	return db.serviceTx(ctx, func(tx *sql.Tx) error {
 		for _, key := range keys {

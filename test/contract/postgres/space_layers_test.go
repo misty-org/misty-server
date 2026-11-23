@@ -10,8 +10,6 @@ import (
 	. "github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// asMember runs fn as one person under the app role, so the RLS policies
-// themselves decide what the queries see.
 func asMember(t *testing.T, database *Database, userID string, fn func(*sql.Tx) error) {
 	t.Helper()
 	var appRole bool
@@ -40,8 +38,6 @@ func countRows(t *testing.T, tx *sql.Tx, query string, args ...any) int {
 	return n
 }
 
-// A note toggled private disappears for everyone else: they
-// can't list, read, search or change it, by the queries or by RLS alone.
 func TestPrivateNoteOpensOnlyForItsCreator(t *testing.T) {
 	f := newSpaceAgentFixture(t)
 	ctx := context.Background()
@@ -87,12 +83,10 @@ func TestPrivateNoteOpensOnlyForItsCreator(t *testing.T) {
 		}
 	}
 
-	// Its creator still sees it.
 	if _, err := f.database.SpaceNoteByID(ctx, f.alice.ID, note.ID); err != nil {
 		t.Fatalf("the creator lost their private note: %v", err)
 	}
 
-	// RLS alone: a forgotten filter still can't leak it.
 	asMember(t, f.database, f.bob.ID, func(tx *sql.Tx) error {
 		if n := countRows(t, tx, `SELECT count(*) FROM space_notes WHERE id=$1`, note.ID); n != 0 {
 			t.Fatalf("RLS let another member select a private note (%d rows)", n)
@@ -114,7 +108,6 @@ func TestPrivateNoteOpensOnlyForItsCreator(t *testing.T) {
 	})
 }
 
-// A private agent is invisible to the rest of the Space; its owner still sees it.
 func TestPrivateAgentCantBeMentionedBySomeoneElse(t *testing.T) {
 	f := newSpaceAgentFixture(t)
 	ctx := context.Background()
@@ -141,7 +134,6 @@ func TestPrivateAgentCantBeMentionedBySomeoneElse(t *testing.T) {
 	})
 }
 
-// New items start private in a Space only their owner belongs to.
 func TestItemsStartPrivateInASoloSpace(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()
@@ -159,8 +151,6 @@ func TestItemsStartPrivateInASoloSpace(t *testing.T) {
 	}
 }
 
-// Leaving a Space deletes the leaver's private items there in the same
-// transaction; their public items stay with the Space.
 func TestLeavingASpaceDeletesThePrivateLayer(t *testing.T) {
 	f := newSpaceAgentFixture(t)
 	ctx := context.Background()

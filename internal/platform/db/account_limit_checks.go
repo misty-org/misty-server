@@ -5,9 +5,6 @@ import (
 	"database/sql"
 )
 
-// asServiceTx runs fn with the transaction in service RLS scope and restores
-// the scope it had. Limit checks run inside callers' transactions, some of
-// which have no RLS scope at all; account_controls must still be readable.
 func asServiceTx(ctx context.Context, tx *sql.Tx, fn func() error) error {
 	var previous sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT current_setting('app.rls_mode',true)`).Scan(&previous); err != nil {
@@ -23,8 +20,6 @@ func asServiceTx(ctx context.Context, tx *sql.Tx, fn func() error) error {
 	return err
 }
 
-// accountStorageUsedTx is everything the account stores on this server: its
-// Library, notes, messages and pending uploads.
 func accountStorageUsedTx(ctx context.Context, tx *sql.Tx, userID string) (int64, error) {
 	var used int64
 	err := asServiceTx(ctx, tx, func() error {
@@ -35,10 +30,6 @@ func accountStorageUsedTx(ctx context.Context, tx *sql.Tx, userID string) (int64
 	return used, err
 }
 
-// RequireAccountStorageRoomTx refuses adding bytes that would pass the
-// account's storage limit with ErrLibraryQuota. Accounts without a limit are
-// not measured at all. Callers hold the account's storage lock where they
-// reserve (prepareStorageReservationTx), so concurrent uploads cannot both pass.
 func RequireAccountStorageRoomTx(ctx context.Context, tx *sql.Tx, userID string, adding int64) error {
 	if adding <= 0 {
 		return nil
@@ -61,9 +52,6 @@ func RequireAccountStorageRoomTx(ctx context.Context, tx *sql.Tx, userID string,
 	return nil
 }
 
-// requireSpaceRoomTx refuses one more Space for the account once it belongs to as many active
-// Spaces as its limit allows, its own and joined ones counted together. Spaces it already belongs
-// to stay; only a new one is refused. Callers hold the account's Space lock (lockAccountSpacesTx).
 func requireSpaceRoomTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	return asServiceTx(ctx, tx, func() error {
 		limits, _, err := accountControlsTx(ctx, tx, userID)
@@ -71,7 +59,6 @@ func requireSpaceRoomTx(ctx context.Context, tx *sql.Tx, userID string) error {
 			return err
 		}
 		var belongs int64
-		// Direct messages are not Spaces the person chose to be in, so they never count.
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM space_members m
 			JOIN spaces s ON s.id=m.space_id AND s.lifecycle_state='active' AND s.kind='space' WHERE m.user_id=$1`, userID).Scan(&belongs); err != nil {
 			return err
@@ -83,16 +70,11 @@ func requireSpaceRoomTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	})
 }
 
-// lockAccountSpacesTx serializes everything that adds the account to a Space, so two at once
-// can't both pass its Spaces limit.
 func lockAccountSpacesTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:member:"+userID)
 	return err
 }
 
-// requireSpaceSharingRoomTx refuses one more invitation once the owner's account is at a sharing
-// limit: the people one Space may hold (members and open invitations both count), or the number
-// of its Spaces that may be shared at all. A Space already shared never counts against itself.
 func requireSpaceSharingRoomTx(ctx context.Context, tx *sql.Tx, ownerID, spaceID string) error {
 	return asServiceTx(ctx, tx, func() error {
 		limits, _, err := accountControlsTx(ctx, tx, ownerID)

@@ -14,7 +14,6 @@ import (
 	"github.com/misty-org/misty-server/test/testkit"
 )
 
-// fakeMailjet stands in for Mailjet.
 type fakeMailjet struct {
 	sent     []email.Message
 	failures int
@@ -115,7 +114,7 @@ func TestAFailedSendBacksOffAndKeepsItsKeyUntilItGoes(t *testing.T) {
 	if err := database.Conn.QueryRowContext(ctx, `SELECT last_error FROM email_outbox WHERE user_id=$1`, user.ID).Scan(&code); err != nil || code != "mailjet_503" {
 		t.Fatalf("last error = %q %v", code, err)
 	}
-	deliverAll(t, database, mail) // Not due yet: it backs off.
+	deliverAll(t, database, mail)
 	if len(mail.sent) != 0 {
 		t.Fatal("retried before its backoff")
 	}
@@ -147,7 +146,6 @@ func TestANewerKeyCancelsTheUnsentEmailOfTheOldOne(t *testing.T) {
 func TestAKeyAndItsEmailAreStoredTogether(t *testing.T) {
 	database := testkit.OpenDatabase(t)
 	user := outboxAccount(t, database)
-	// A kind the table refuses fails the whole step, so no key is left without its email.
 	bad := &KeyEmail{Kind: "nonsense", Recipient: user.Email, Key: "misty_setup_bad", Link: "https://mistysys.com/setup"}
 	if err := database.IssueSetupKeyWithEmail(context.Background(), user.ID, "hash-"+uuid.NewString(), time.Now().Add(time.Hour), bad); err == nil {
 		t.Fatal("a bad email was accepted")
@@ -164,7 +162,7 @@ func TestClosingSendsANoticeAndAWarningThreeDaysBefore(t *testing.T) {
 	user := outboxAccount(t, database)
 	deleteAt := time.Now().Add(30 * 24 * time.Hour).UTC().Truncate(time.Microsecond)
 	keep := "https://example.com/keep"
-	for range 2 { // A repeated close stores the pair once.
+	for range 2 {
 		if err := database.QueueClosingEmails(ctx, user.ID, user.Email, keep, deleteAt); err != nil {
 			t.Fatal(err)
 		}
@@ -234,7 +232,6 @@ func TestResumingCancelsPendingClosingEmails(t *testing.T) {
 	if len(mail.sent) != 1 {
 		t.Fatalf("emails = %v", mail.subjects())
 	}
-	// Closed again later: a new notice and warning for the new date.
 	if err := database.QueueClosingEmails(ctx, user.ID, user.Email, "", deleteAt.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +249,6 @@ func TestInvitationEmailsFollowTheInvitation(t *testing.T) {
 	if err := database.QueueInvitationEmail(ctx, invitation, recipient, "misty://open/invite/old", "Team", "Sam"); err != nil {
 		t.Fatal(err)
 	}
-	// A new link replaces the old one, whose email had not gone.
 	if err := database.QueueInvitationEmail(ctx, invitation, recipient, "misty://open/invite/new", "Team", "Sam"); err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +261,6 @@ func TestInvitationEmailsFollowTheInvitation(t *testing.T) {
 	if err := database.Conn.QueryRowContext(ctx, `SELECT count(*) FROM email_outbox WHERE invitation_id=$1 AND link IS NOT NULL`, invitation).Scan(&kept); err != nil || kept != 0 {
 		t.Fatalf("%d rows still hold a link: %v", kept, err)
 	}
-	// A revoked invitation's unsent email never goes.
 	revoked := "invite-" + uuid.NewString()
 	if err := database.QueueInvitationEmail(ctx, revoked, recipient, "misty://open/invite/revoked", "Team", "Sam"); err != nil {
 		t.Fatal(err)

@@ -16,7 +16,6 @@ func TestRouteInventory(t *testing.T) {
 	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_ENVIRONMENT", "")
 	t.Setenv("MISTY_METRICS_TOKEN", "")
-	// The inventory includes the operator account API, which mounts only with a token.
 	t.Setenv("MISTY_OPERATOR_TOKEN", "route-inventory")
 	t.Setenv("R2_ENDPOINT", "")
 	t.Setenv("R2_BUCKET", "")

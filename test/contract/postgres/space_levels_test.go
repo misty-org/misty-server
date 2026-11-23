@@ -11,7 +11,6 @@ import (
 	"github.com/misty-org/misty-server/test/testkit"
 )
 
-// Misty Cloud's levels, small enough to test: Level 1 at 2 Boosts, Level 2 at 4.
 const testSpaceLevels = `{"thresholds":[2,4],"storage_bytes_per_boost":100,"levels":[
 	{"members":2,"upload_bytes":1000,"agents":1},
 	{"members":3,"storage_bytes":5000,"upload_bytes":2000,"agents":2,"custom_icon":true},
@@ -49,7 +48,6 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 		t.Fatalf("base = %+v", got)
 	}
 
-	// Base: 2 people, invitations included. The owner and one invitation fill it.
 	invitation, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, friend.Email)
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +59,6 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// An outsider's Boosts don't count; members' do, together.
 	if err := database.SetSpaceBoosts(ctx, space.ID, outsider.ID, 5); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +75,6 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 	if got.Level != 1 || got.Boosts != 3 || got.NextLevel != 4 || !got.Limits.CustomIcon {
 		t.Fatalf("level 1 = %+v", got)
 	}
-	// Each Boost past the threshold adds storage: 5000 + 1×100.
 	if *got.Limits.StorageBytes != 5100 {
 		t.Fatalf("level 1 storage = %d", *got.Limits.StorageBytes)
 	}
@@ -93,7 +89,6 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 		t.Fatal("an outsider read the Space's boosts")
 	}
 
-	// Agents: level 1 allows 2. Renaming one already in the Space never counts twice.
 	for _, agent := range []string{"agent-a", "agent-b"} {
 		if _, err := database.AddSpaceAgent(ctx, owner.ID, space.ID, agent, agent); err != nil {
 			t.Fatalf("%s = %v", agent, err)
@@ -106,7 +101,6 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 		t.Fatalf("third agent = %v", err)
 	}
 
-	// Uploads: level 1 allows 2000 bytes a file, and the Space's own 5100 bytes of storage.
 	upload := func(size int64) error {
 		key := strings.Repeat("a", 64)
 		_, err := database.CreateLibraryUpload(ctx, friend.ID, space.ID, "attachment", "f.bin", "application/octet-stream", size,
@@ -128,8 +122,6 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 	if err := upload(1000); !errors.Is(err, ErrSpaceStorageLimit) {
 		t.Fatalf("past the Space's storage = %v", err)
 	}
-	// The boosted Space's files are the Space's, not the uploader's: a tiny personal limit
-	// doesn't stop them, and they don't count against it elsewhere.
 	if err := database.SetAccountLimits(ctx, friend.ID, AccountLimits{StorageBytes: limit(10), UploadBytes: limit(3000)}); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +130,6 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Boosts lapse: back to the base level, and nothing already in the Space goes away.
 	if err := database.SetSpaceBoosts(ctx, space.ID, friend.ID, 0); err != nil {
 		t.Fatal(err)
 	}

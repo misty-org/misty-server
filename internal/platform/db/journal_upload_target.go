@@ -6,9 +6,6 @@ import (
 	"errors"
 )
 
-// ValidateJournalUploadTarget binds the immutable upload parent to the HTTP
-// route. The generic upload route cannot finalize a note asset with a broader
-// Space-wide grant. The completion transaction rechecks current access too.
 func (db *Database) ValidateJournalUploadTarget(ctx context.Context, userID, spaceID, uploadID, noteID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		var purpose, storedNote string

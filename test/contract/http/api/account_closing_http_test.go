@@ -15,8 +15,6 @@ import (
 
 const readOnlyPassword = "a-long-enough-password"
 
-// readOnlyServer mounts sign-in, reads, the account export and a few writes
-// behind the guard, as the app mounts them.
 func readOnlyServer(t *testing.T) http.Handler {
 	t.Helper()
 	t.Setenv("MISTY_PUBLIC_API_URL", "https://cloud.misty.example/v1")
@@ -71,7 +69,6 @@ func TestClosingAccountReadsAndExportsButCannotChangeAnything(t *testing.T) {
 	}
 	at, _ := time.Parse(time.RFC3339Nano, deleteAt)
 
-	// Reads, refresh and the export still work.
 	if rec, body := call(t, handler, http.MethodGet, "/v1/me", "", "", session...); rec.Code != http.StatusOK || body["delete_at"] != at.UTC().Format(time.RFC3339) {
 		t.Fatalf("me while closing = %d %v", rec.Code, body)
 	}
@@ -86,7 +83,6 @@ func TestClosingAccountReadsAndExportsButCannotChangeAnything(t *testing.T) {
 	}
 	session = signIn(t, handler)
 
-	// Changes answer account_closing with the date and how to keep the account.
 	for _, write := range []struct{ method, path, body string }{
 		{http.MethodPost, "/v1/spaces", `{"name":"New"}`},
 		{http.MethodPost, "/v1/spaces/space_1/library/uploads", `{}`},
@@ -98,13 +94,10 @@ func TestClosingAccountReadsAndExportsButCannotChangeAnything(t *testing.T) {
 			t.Fatalf("%s %s while closing = %d %v", write.method, write.path, rec.Code, body)
 		}
 	}
-	// Its password still changes, so a sign-in link can reset a forgotten one
-	// and the customer can export.
 	if rec, body := call(t, handler, http.MethodPut, "/v1/me/password", "", `{"current_password":"`+readOnlyPassword+`","new_password":"another-long-password"}`, session...); rec.Code != http.StatusOK {
 		t.Fatalf("password change while closing = %d %v", rec.Code, body)
 	}
 
-	// Resuming makes it writable again.
 	if rec, body := call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/resume", operatorToken, ""); rec.Code != http.StatusOK || accountField(body, "delete_at") != nil {
 		t.Fatalf("resume = %d %v", rec.Code, body)
 	}

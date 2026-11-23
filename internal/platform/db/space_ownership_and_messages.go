@@ -38,9 +38,6 @@ func (db *Database) TransferSpaceOwnership(ctx context.Context, ownerID, spaceID
 		if activeReservations > 0 {
 			return ErrSpaceConflict
 		}
-		// Ownership transfer deliberately does not validate current storage.
-		// Each contributor keeps their account-owned bytes; Space ownership
-		// never transfers cloud usage or introduces a Space allowance.
 		if _, err := tx.ExecContext(ctx, `UPDATE space_members SET role='member' WHERE space_id=$1 AND user_id=$2`, spaceID, ownerID); err != nil {
 			return err
 		}
@@ -79,7 +76,6 @@ func validateMessageWithReferences(content []MessageSpan, referenceCount int) er
 		case "text":
 			chars += len([]rune(span.Text))
 		case "mention":
-			// Exactly one of a person, an agent or a role.
 			named := 0
 			for _, id := range []string{span.UserID, span.AgentID, span.RoleID} {
 				if id != "" {
@@ -113,8 +109,6 @@ func (db *Database) CreateSpaceConversationMessageWithReferencesAndClientNonce(c
 	return db.createSpaceMessageWithReferences(ctx, userID, spaceID, conversationID, content, fileNodeIDs, attachmentIDs, replyToMessageID, "", clientNonce)
 }
 
-// CreateSpaceThreadReplyWithClientNonce posts a reply in a thread's panel, in the conversation the thread is
-// in ("" for the Space's Everyone chat).
 func (db *Database) CreateSpaceThreadReplyWithClientNonce(ctx context.Context, userID, spaceID, conversationID string, content []MessageSpan, fileNodeIDs, attachmentIDs []string, threadRootID, clientNonce string) (*SpaceMessage, []string, error) {
 	return db.createSpaceMessageWithReferences(ctx, userID, spaceID, conversationID, content, fileNodeIDs, attachmentIDs, "", threadRootID, clientNonce)
 }

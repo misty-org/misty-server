@@ -122,7 +122,6 @@ func TestAbuseEventsStayIdleAndApplyBlockUnblockAndReset(t *testing.T) {
 	s.mu.Unlock()
 	s.hint()
 	awaitAbuse(t, func() bool { blocked, _ := g.Blocked("remote"); return !blocked })
-	// A reconnect hint performs the same authoritative read, recovering a missed change.
 	s.mu.Lock()
 	s.blocks["missed"] = db.AbuseBlock{Key: "missed", BlockedUntil: time.Now().Add(time.Minute), BlockSeconds: 60}
 	s.mu.Unlock()

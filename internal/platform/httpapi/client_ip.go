@@ -9,22 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// Client IP resolution for rate limiting and abuse blocking.
-//
-// Getting this wrong defeats every limit in the server at once, so the rules
-// are deliberately conservative:
-//
-//  1. Forwarded headers are ignored unless TRUST_PROXY_HEADERS is set.
-//  2. Even then, they are honoured only when the request actually arrived from
-//     a trusted proxy address — otherwise a direct caller could forge them.
-//  3. The chain is read right-to-left, skipping trusted hops. The standard
-//     nginx recipe ($proxy_add_x_forwarded_for) *appends* the real peer, so
-//     anything a client sends sits to the left of the truth. Reading the
-//     left-most entry — the previous behaviour — took the attacker's value.
-
-// defaultTrustedProxyCIDRs covers loopback and the private ranges a reverse
-// proxy realistically sits in. Public proxy ranges (Cloudflare, a load
-// balancer) must be added explicitly through TRUSTED_PROXY_CIDRS.
 var defaultTrustedProxyCIDRs = []string{
 	"127.0.0.0/8", "::1/128",
 	"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
@@ -36,7 +20,6 @@ var (
 	trustedProxyNets []*net.IPNet
 )
 
-// trustedProxyNetworks parses the trusted set once per process.
 func trustedProxyNetworks() []*net.IPNet {
 	trustedProxyOnce.Do(func() {
 		entries := append([]string{}, defaultTrustedProxyCIDRs...)
@@ -48,8 +31,6 @@ func trustedProxyNetworks() []*net.IPNet {
 			if entry == "" {
 				continue
 			}
-			// A bare address is accepted as a single-host network so operators
-			// can pin one proxy without writing a mask.
 			if !strings.Contains(entry, "/") {
 				if ip := net.ParseIP(entry); ip != nil {
 					bits := 32
@@ -67,8 +48,6 @@ func trustedProxyNetworks() []*net.IPNet {
 	return trustedProxyNets
 }
 
-// ResetTrustedProxyCacheForTest re-reads TRUSTED_PROXY_CIDRS. Tests change the
-// environment between cases; production parses once and never calls this.
 func ResetTrustedProxyCacheForTest() {
 	trustedProxyOnce = sync.Once{}
 	trustedProxyNets = nil
@@ -87,30 +66,23 @@ func isTrustedProxyAddress(address string) bool {
 	return false
 }
 
-// clientIPFromRequest returns the address rate limits are keyed on.
 func ClientIPFromRequest(r *http.Request) string {
 	remote := remoteHostFromRequest(r)
 	if !trustProxyHeaders() {
 		return remote
 	}
-	// Forged headers from a direct connection must not be believed. Only a
-	// request that genuinely came from a trusted proxy may carry a chain.
 	if !isTrustedProxyAddress(remote) {
 		return remote
 	}
 	if forwarded := forwardedClientIP(r.Header.Get("X-Forwarded-For")); forwarded != "" {
 		return forwarded
 	}
-	// X-Real-IP is a single value set by the proxy itself, so it is not
-	// attacker-extendable in the way a chain is.
 	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); net.ParseIP(realIP) != nil {
 		return realIP
 	}
 	return remote
 }
 
-// forwardedClientIP walks the chain right-to-left and returns the first address
-// that is not itself a trusted proxy.
 func forwardedClientIP(header string) string {
 	parts := strings.Split(header, ",")
 	for index := len(parts) - 1; index >= 0; index-- {
@@ -118,13 +90,11 @@ func forwardedClientIP(header string) string {
 		if candidate == "" {
 			continue
 		}
-		// Some proxies emit "ip:port" or a bracketed IPv6 literal.
 		if host, _, err := net.SplitHostPort(candidate); err == nil {
 			candidate = host
 		}
 		candidate = strings.Trim(candidate, "[]")
 		if net.ParseIP(candidate) == nil {
-			// A malformed hop means the chain cannot be trusted further left.
 			return ""
 		}
 		if isTrustedProxyAddress(candidate) {

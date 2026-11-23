@@ -6,24 +6,22 @@ import (
 	"time"
 )
 
-// loadExportAccountProfile fills the account identity block for an active user.
 func loadExportAccountProfile(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
 ) error {
 	if err := tx.QueryRowContext(ctx, `
-			SELECT id,username,email,avatar_version,created_at
+			SELECT id,username,email,avatar_version,banner_version,created_at
 			FROM users WHERE id=$1 AND lifecycle_state='active'`, userID,
 	).Scan(
 		&out.Account.ID,
 		&out.Account.Username, &out.Account.Email,
-		&out.Account.AvatarVersion, &out.Account.CreatedAt,
+		&out.Account.AvatarVersion, &out.Account.BannerVersion, &out.Account.CreatedAt,
 	); err != nil {
 		return err
 	}
 	return nil
 }
 
-// loadExportSettings copies the user's account-level preference flags.
 func loadExportSettings(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
 ) error {
@@ -40,7 +38,6 @@ func loadExportSettings(
 	return nil
 }
 
-// loadExportSpaces lists the spaces the user is a member of.
 func loadExportSpaces(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
 ) error {
@@ -58,8 +55,6 @@ func loadExportSpaces(
 	})
 }
 
-// loadExportJournal lists the notes the user created that they
-// can still see. Each is downloaded from its room as a raw Yjs update.
 func loadExportJournal(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
 ) error {
@@ -89,7 +84,6 @@ func loadExportJournal(
 	})
 }
 
-// loadExportAssets lists the ready files the user uploaded or authored and can still see.
 func loadExportAssets(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
 ) error {
@@ -144,7 +138,6 @@ func loadExportAssets(
 	})
 }
 
-// loadExportMessages lists the messages the user authored in spaces and conversations they can see.
 func loadExportMessages(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
 ) error {
@@ -170,7 +163,6 @@ func loadExportMessages(
 	})
 }
 
-// loadExportConnections lists the user's active cloud connections without credentials.
 func loadExportConnections(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
 ) error {

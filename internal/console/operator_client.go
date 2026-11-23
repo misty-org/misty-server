@@ -13,12 +13,8 @@ import (
 	"time"
 )
 
-// maxOperatorAnswer has room for an account export, the largest answer there is.
 const maxOperatorAnswer = 64 << 20
 
-// operatorClient changes accounts through the running server's operator
-// account API, so the console never re-implements limits, suspension or
-// setup keys, and the server applies a suspension the moment it is made.
 type operatorClient struct {
 	base   string
 	token  string
@@ -45,14 +41,10 @@ func (c *operatorClient) resume(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodPost, "/accounts/"+url.PathEscape(id)+"/resume", nil)
 }
 
-// close makes the account read-only and deletes it in 30 days unless resumed.
 func (c *operatorClient) close(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodPost, "/accounts/"+url.PathEscape(id)+"/close", map[string]any{"delete_after_days": 30})
 }
 
-// signInLink issues a new setup key and returns its sign-in link. The console
-// shows the link to pass on, since a server without Mailjet configured sends
-// no email; earlier unused links stop working.
 func (c *operatorClient) signInLink(ctx context.Context, id string) (string, error) {
 	var answer struct {
 		Account struct {
@@ -68,8 +60,6 @@ func (c *operatorClient) signInLink(ctx context.Context, id string) (string, err
 	return answer.Account.SetupLink, nil
 }
 
-// exportAccount asks for the account's export. Signing a link for every file
-// can take a while, so it waits longer than the other calls.
 func (c *operatorClient) exportAccount(ctx context.Context, id string) (AccountExportManifest, error) {
 	patient := *c
 	patient.client = &http.Client{Timeout: 2 * time.Minute}
@@ -82,8 +72,6 @@ func (c *operatorClient) do(ctx context.Context, method, path string, body any) 
 	return c.call(ctx, method, path, body, nil)
 }
 
-// call sends one request and, when out is set, decodes a successful answer
-// into it.
 func (c *operatorClient) call(ctx context.Context, method, path string, body any, out any) error {
 	if !c.configured() {
 		return errOperatorUnconfigured

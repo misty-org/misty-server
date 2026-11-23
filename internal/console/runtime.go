@@ -15,7 +15,6 @@ type jobsView struct {
 	Err    string
 }
 
-// countGroups groups state counts under their job kind, preserving order.
 func countGroups(counts []db.ConsoleStateCount) [][]db.ConsoleStateCount {
 	var groups [][]db.ConsoleStateCount
 	for _, c := range counts {
@@ -39,7 +38,6 @@ func (s *Server) jobsPage(r *http.Request) templ.Component {
 	return jobsPage(view)
 }
 
-// setting is one configuration value shown with secrets masked.
 type setting struct {
 	Name     string
 	Value    string

@@ -14,12 +14,6 @@ import (
 	. "github.com/misty-org/misty-server/internal/app"
 )
 
-// These tests attack the full router the way an outside caller would: weak
-// sign-ups, guessing one account's password, reaching another account's Space,
-// forging internal calls, cross-site requests and injection payloads.
-
-// attackServer is the full router on the disposable test database that
-// `misty server test --isolated` (the pre-push suite) provides.
 func attackServer(t *testing.T) *Server {
 	t.Helper()
 	if os.Getenv("TEST_DB_HOST") == "" {
@@ -72,22 +66,17 @@ func (c *attackClient) do(method, path string, body any, headers map[string]stri
 	return recorder
 }
 
-// attackRun keeps each run's accounts apart: the test database can outlive a
-// run, and an account left by an earlier one would already be registered.
 var attackRun = func() string {
 	suffix := make([]byte, 4)
 	_, _ = rand.Read(suffix)
 	return hex.EncodeToString(suffix)
 }()
 
-// attackEmail is the address registerAttackUser gives an account named name.
 func attackEmail(name string) string { return name + "_" + attackRun + "@attack.test" }
 
 func registerAttackUser(t *testing.T, server *Server, name, address string) *attackClient {
 	t.Helper()
 	client := &attackClient{t: t, server: server, address: address}
-	// Only a server's first account registers itself; later ones come by
-	// invitation or the operator API. Make the account directly and sign in.
 	if _, err := server.Database.CreateUserWithUsername(name+"_"+attackRun, attackEmail(name), "correct horse battery staple"); err != nil {
 		t.Fatalf("create %s: %v", name, err)
 	}
@@ -117,8 +106,6 @@ func TestAttackWeakPasswordsAreRefused(t *testing.T) {
 func TestAttackPasswordGuessingIsCappedPerAccount(t *testing.T) {
 	server := attackServer(t)
 	registerAttackUser(t, server, "guess_victim", "198.51.100.20:4000")
-	// Guesses spread across addresses, so neither the per-address limit nor the count for the
-	// email from one address trips: only the count for the email from every address does.
 	for attempt := 0; attempt < 30; attempt++ {
 		guesser := &attackClient{t: t, server: server, address: "203.0.113." + string(rune('1'+attempt%9)) + ":5000"}
 		response := guesser.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail("guess_victim"), "password": "wrong guess"}, nil)
@@ -126,13 +113,11 @@ func TestAttackPasswordGuessingIsCappedPerAccount(t *testing.T) {
 			t.Fatalf("guess %d: status %d", attempt, response.Code)
 		}
 	}
-	// Even the right password is refused until the window passes.
 	late := &attackClient{t: t, server: server, address: "203.0.113.200:5000"}
 	response := late.do(http.MethodPost, "/v1/login", map[string]string{"email": strings.ToUpper(attackEmail("guess_victim")), "password": "correct horse battery staple"}, nil)
 	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") == "" {
 		t.Fatalf("attempt after the cap: status %d", response.Code)
 	}
-	// Another account is unaffected.
 	registerAttackUser(t, server, "guess_bystander", "198.51.100.21:4000")
 	response = late.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail("guess_bystander"), "password": "correct horse battery staple"}, nil)
 	if response.Code != http.StatusOK {
@@ -140,8 +125,6 @@ func TestAttackPasswordGuessingIsCappedPerAccount(t *testing.T) {
 	}
 }
 
-// One address that knows someone's email can't lock them out: its own guesses stop, the
-// person's sign-in from elsewhere doesn't.
 func TestAttackOneAddressCantLockAnAccountOut(t *testing.T) {
 	server := attackServer(t)
 	registerAttackUser(t, server, "lockout_victim", "198.51.100.40:4000")
@@ -221,7 +204,6 @@ func TestAttackForgedInternalAndCrossSiteCalls(t *testing.T) {
 		"/internal/agent-runtime/runs/run_00000000-0000-0000-0000-000000000000/complete",
 		"/mcp",
 	} {
-		// The server holds no agent runs, so a forged call has nothing to reach.
 		response := user.do(http.MethodPost, path, map[string]string{"tool": "space.delete"}, map[string]string{
 			"X-Misty-Agent-Timestamp": "1", "X-Misty-Agent-Signature": "00", "Idempotency-Key": "forged",
 		})
@@ -229,7 +211,6 @@ func TestAttackForgedInternalAndCrossSiteCalls(t *testing.T) {
 			t.Fatalf("forged %s = %d %s", path, response.Code, response.Body.String())
 		}
 	}
-	// A page on another site holding the user's cookies, with and without the header.
 	for _, headers := range []map[string]string{
 		{"X-Misty-CSRF": ""},
 		{"Origin": "https://attacker.example"},
@@ -268,7 +249,6 @@ func TestAttackInjectionPayloadsAreInert(t *testing.T) {
 			t.Fatalf("login payload %q = %d", payload, response.Code)
 		}
 	}
-	// The accounts table still answers normally.
 	response := user.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail("inject_user"), "password": "correct horse battery staple"}, nil)
 	if response.Code != http.StatusOK {
 		t.Fatalf("login after payloads = %d %s", response.Code, response.Body.String())
@@ -288,7 +268,6 @@ func TestAllowlistDecidesWhoGetsIn(t *testing.T) {
 		return client.do(http.MethodPost, "/v1/login", map[string]string{"email": attackEmail(name), "password": password}, nil)
 	}
 
-	// A wrong password says nothing about who's on the list.
 	if response := signIn("allow_removed", "198.51.100.63:4000", "wrong password"); response.Code != http.StatusUnauthorized {
 		t.Fatalf("wrong password off the list = %d", response.Code)
 	}
@@ -300,7 +279,6 @@ func TestAllowlistDecidesWhoGetsIn(t *testing.T) {
 		t.Fatalf("sign-in on the list = %d %s", response.Code, response.Body.String())
 	}
 
-	// Coming off the list ends a session that's already open.
 	if response := removed.do(http.MethodPost, "/v1/auth/refresh", nil, nil); response.Code != http.StatusForbidden {
 		t.Fatalf("refresh off the list = %d %s", response.Code, response.Body.String())
 	}

@@ -19,7 +19,6 @@ func TestAbuseBlockSurvivesAndExpires(t *testing.T) {
 		t.Fatalf("SaveAbuseBlock() error = %v", err)
 	}
 
-	// A fresh process reads the block back, so a restart does not forgive it.
 	blocks, err := database.ActiveAbuseBlocks(ctx)
 	if err != nil {
 		t.Fatalf("ActiveAbuseBlocks() error = %v", err)
@@ -37,7 +36,6 @@ func TestAbuseBlockSurvivesAndExpires(t *testing.T) {
 		t.Fatal("a live block was not returned")
 	}
 
-	// An elapsed block must stop applying.
 	if err := database.SaveAbuseBlock(ctx, AbuseBlock{
 		Key: "ip:198.51.100.9", BlockedUntil: time.Now().UTC().Add(-time.Minute), BlockSeconds: 60,
 	}); err != nil {
@@ -60,8 +58,6 @@ func TestAbuseBlockEscalationIsNotLostOnRepeat(t *testing.T) {
 	if err := database.SaveAbuseBlock(ctx, AbuseBlock{Key: key, BlockedUntil: long, BlockSeconds: 1800}); err != nil {
 		t.Fatalf("SaveAbuseBlock() error = %v", err)
 	}
-	// A later, shorter block must not shorten an existing longer one — that
-	// would let an offender downgrade their own penalty.
 	short := time.Now().UTC().Add(time.Minute)
 	if err := database.SaveAbuseBlock(ctx, AbuseBlock{Key: key, BlockedUntil: short, BlockSeconds: 60}); err != nil {
 		t.Fatalf("SaveAbuseBlock(short) error = %v", err)

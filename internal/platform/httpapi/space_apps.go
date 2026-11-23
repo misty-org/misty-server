@@ -7,10 +7,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// maxAppInstallBodyBytes is an app's pinned source at its longest (64 KiB) plus the rest of the body.
 const maxAppInstallBodyBytes = 72 << 10
 
-// SpaceApps lists the apps a Space has installed.
 func (s *SpacesService) SpaceApps() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -26,7 +24,6 @@ func (s *SpacesService) SpaceApps() http.HandlerFunc {
 	}
 }
 
-// SpaceApp installs an app (PUT, which also moves an installed one to a new version) or removes it.
 func (s *SpacesService) SpaceApp() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -37,11 +34,9 @@ func (s *SpacesService) SpaceApp() http.HandlerFunc {
 		switch r.Method {
 		case http.MethodPut:
 			var body struct {
-				Version     string   `json:"version"`
-				Permissions []string `json:"permissions"`
-				// Source is the pinned build of an app outside the reviewed catalog; the server keeps
-				// it as given, for members to download the same build.
-				Source json.RawMessage `json:"source"`
+				Version     string          `json:"version"`
+				Permissions []string        `json:"permissions"`
+				Source      json.RawMessage `json:"source"`
 			}
 			if decodeJSONUpTo(w, r, &body, maxAppInstallBodyBytes) != nil {
 				return
@@ -64,8 +59,6 @@ func (s *SpacesService) SpaceApp() http.HandlerFunc {
 	}
 }
 
-// SpaceAppRoomTicket mints a short-lived credential for one of an installed app's live documents, after
-// rechecking that the person is a member and a mod approved the app's `rooms` permission.
 func (s *SpacesService) SpaceAppRoomTicket() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

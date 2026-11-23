@@ -40,8 +40,6 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/avatar", spaces.SpaceAvatar())
 	s.Router.MethodFunc(http.MethodPut, prefix+"/spaces/{spaceID}/avatar", spaces.SpaceAvatar())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/avatar", spaces.SpaceAvatar())
-	// Accepting or declining an invitation from inside the app, by its id; the email link uses
-	// the token route below.
 	s.Router.Post(prefix+"/spaces/invitations/{inviteID}/{action}", spaces.SpaceInvitationResponse())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/invitations", spaces.Invite())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/invitations", spaces.Invite())
@@ -59,7 +57,6 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.Get(prefix+"/spaces/{spaceID}/messages/search", spaces.SearchMessages())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/conversations", spaces.Conversations())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/conversations", spaces.Conversations())
-	// DMs left Spaces: they open through /dms now.
 	s.Router.Post(prefix+"/spaces/{spaceID}/conversations/dm", api.Gone("dms_moved"))
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/conversations/{conversationID}", spaces.Conversation())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/conversations/{conversationID}", spaces.Conversation())

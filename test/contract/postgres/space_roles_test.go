@@ -14,7 +14,6 @@ import (
 	"github.com/misty-org/misty-server/internal/spaces"
 )
 
-// rolesFixture is a Space with its owner and two members, all joined.
 type rolesFixture struct {
 	database *Database
 	ctx      context.Context
@@ -95,7 +94,6 @@ func TestNewSpaceStartsWithTheEveryoneRoleAndMembersKeepTodaysPermissions(t *tes
 	if !reflect.DeepEqual(joined.Permissions, want) {
 		t.Fatalf("member's Space permissions = %v, want today's fixed list and leave", joined.Permissions)
 	}
-	// The everyone role keeps its name, and nobody can delete it.
 	other := "Everybody"
 	if _, err := f.database.UpdateSpaceRole(f.ctx, f.owner.ID, f.space.ID, everyone.ID, SpaceRoleInput{Name: &other}); !errors.Is(err, ErrSpaceInvalid) {
 		t.Fatalf("renaming everyone error = %v, want ErrSpaceInvalid", err)
@@ -105,7 +103,6 @@ func TestNewSpaceStartsWithTheEveryoneRoleAndMembersKeepTodaysPermissions(t *tes
 	}
 }
 
-// The migration seeds every existing Space with the same grant new Spaces get.
 func TestRolesMigrationSeedsTheDefaultEveryoneGrant(t *testing.T) {
 	raw, err := os.ReadFile("../../../internal/platform/db/migrations/20271220000000_space_roles.sql")
 	if err != nil {
@@ -119,7 +116,6 @@ func TestRolesMigrationSeedsTheDefaultEveryoneGrant(t *testing.T) {
 	for _, item := range strings.Split(string(seed[1]), ",") {
 		seeded = append(seeded, strings.Trim(strings.TrimSpace(item), "'"))
 	}
-	// Later migrations add to every existing everyone role what new Spaces start with.
 	for _, later := range []string{"20271225000000_space_drive.sql"} {
 		raw, err := os.ReadFile("../../../internal/platform/db/migrations/" + later)
 		if err != nil {
@@ -130,7 +126,6 @@ func TestRolesMigrationSeedsTheDefaultEveryoneGrant(t *testing.T) {
 			seeded = append(seeded, added[1])
 		}
 	}
-	// And take out of every role what Misty no longer has.
 	for _, later := range []string{"20280125000000_remove_library_items.sql"} {
 		raw, err := os.ReadFile("../../../internal/platform/db/migrations/" + later)
 		if err != nil {
@@ -161,7 +156,6 @@ func TestRoleHierarchyLimitsWhatAManagerCanTouch(t *testing.T) {
 	low := f.role(t, "Low")
 	manager := f.role(t, "Manager", spaces.PermissionRolesManage, spaces.PermissionMembersRemove)
 	top := f.role(t, "Top")
-	// New roles land at the bottom: Top 1, Manager 2, Low 3. Put Top first, then Manager, then Low.
 	if _, err := f.database.ReorderSpaceRoles(f.ctx, f.owner.ID, f.space.ID, []string{top.ID, manager.ID, low.ID}); err != nil {
 		t.Fatalf("ReorderSpaceRoles(owner) error = %v", err)
 	}
@@ -182,7 +176,6 @@ func TestRoleHierarchyLimitsWhatAManagerCanTouch(t *testing.T) {
 	if _, err := f.database.ReorderSpaceRoles(f.ctx, f.crew.ID, f.space.ID, []string{top.ID, low.ID, manager.ID}); !errors.Is(err, ErrSpaceForbidden) {
 		t.Fatalf("moving a role up past the manager's error = %v, want ErrSpaceForbidden", err)
 	}
-	// Assigning skips roles the manager can't touch and keeps them as they were.
 	member, err := f.database.SetSpaceMemberRoles(f.ctx, f.crew.ID, f.space.ID, f.rest.ID, []string{low.ID, top.ID})
 	if err != nil || !reflect.DeepEqual(member.RoleIDs, []string{low.ID}) {
 		t.Fatalf("SetSpaceMemberRoles(manager) = %#v, %v, want just Low", member, err)
@@ -249,7 +242,6 @@ func TestPrivateChannelIsInvisibleToThoseWithoutRead(t *testing.T) {
 		t.Fatal("a member without read got the private channel's message")
 	}
 
-	// Taking the crew's allow away removes the channel from them, and only them.
 	crewCursor := int64(0)
 	if crewEvents, _, err := f.database.SpaceEventsAfter(f.ctx, f.crew.ID, 0, 1000); err == nil && len(crewEvents) > 0 {
 		crewCursor = crewEvents[len(crewEvents)-1].ID

@@ -1,10 +1,5 @@
 package db
 
-// Due-time planning for lifecycle deadlines.
-
-// Processing requests are retried by the queue's error backoff until their
-// provider and storage cleanup succeeds. A closed account is due on its
-// deletion date (matching DueClosedAccounts).
 const accountDeletionWorkerDeadline = `SELECT min(due) FROM (
  (SELECT clock_timestamp() AS due FROM account_deletion_requests WHERE cleanup_owner='go' AND status='processing' LIMIT 1)
  UNION ALL

@@ -21,7 +21,6 @@ func Run() {
 		panic(err)
 	}
 	defer server.Database.Stop()
-	// Once: DMs that still live inside Spaces move into DMs of their own.
 	if err := server.Database.MigrateSpaceDirectMessages(context.Background()); err != nil {
 		log.Printf("moving DMs out of Spaces: %v", err)
 	}
@@ -48,11 +47,8 @@ func Run() {
 		WorkerFunc(func(ctx context.Context) { runRetention(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { email.Run(ctx, server.Database) }),
-		// Ends any call left with one person in it for five minutes; off when LiveKit isn't set up.
 		WorkerFunc(func(ctx context.Context) { server.LiveKitRooms.Run(ctx) }),
 	)
-	// Domain gauges refresh on their own schedule so a scrape never holds a
-	// database connection.
 	if server.Metrics != nil {
 		server.Metrics.StartSampling(workerContext, 15*time.Second)
 	}

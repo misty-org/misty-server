@@ -17,12 +17,6 @@ type noteFixture struct {
 	note     *SpaceNote
 }
 
-// newNoteFixture builds a Space owned by `owner`, joined by `creator` and
-// `member`, with one note created by `creator`.
-//
-// The owner is deliberately a different user from the note creator, so tests
-// can tell apart the capabilities that come from Space ownership and the ones
-// that come from having created the note.
 func newNoteFixture(t *testing.T, prefix string) noteFixture {
 	t.Helper()
 	database := openTestDatabase(t)
@@ -71,8 +65,6 @@ func userEmail(t *testing.T, database *Database, userID string) string {
 	return email
 }
 
-// Native notes are Space documents: every current member can read and write
-// them, with no per-note grant step.
 func TestEverySpaceMemberCanReadAndEditANote(t *testing.T) {
 	fixture := newNoteFixture(t, "note-shared")
 
@@ -89,8 +81,6 @@ func TestEverySpaceMemberCanReadAndEditANote(t *testing.T) {
 	}
 }
 
-// Destructive control is narrower than edit access: the creator and the Space
-// owner may delete, an ordinary member may not.
 func TestOnlyCreatorAndOwnerCanDelete(t *testing.T) {
 	fixture := newNoteFixture(t, "note-delete-rights")
 
@@ -113,7 +103,6 @@ func TestOnlyCreatorAndOwnerCanDelete(t *testing.T) {
 	}
 }
 
-// Membership is the whole gate, so someone outside the Space gets nothing.
 func TestNonMemberHasNoNoteAccess(t *testing.T) {
 	fixture := newNoteFixture(t, "note-outsider")
 	outsider, err := fixture.database.CreateUser("note-outsider-stranger@example.com", "password123")
@@ -130,7 +119,6 @@ func TestNonMemberHasNoNoteAccess(t *testing.T) {
 	}
 }
 
-// A former member loses access the moment their membership ends.
 func TestFormerSpaceMemberLosesNoteAccess(t *testing.T) {
 	fixture := newNoteFixture(t, "note-former")
 
@@ -155,8 +143,6 @@ func TestFormerSpaceMemberLosesNoteAccess(t *testing.T) {
 	}
 }
 
-// Archived notes are inaccessible to everyone until restored, including the
-// creator and the Space owner.
 func TestArchivedNoteIsInaccessibleToEveryone(t *testing.T) {
 	fixture := newNoteFixture(t, "note-archived")
 
@@ -179,8 +165,6 @@ func TestArchivedNoteIsInaccessibleToEveryone(t *testing.T) {
 	}
 }
 
-// An unauthorized read must be indistinguishable from a note that does not
-// exist, so a non-member cannot probe for note ids.
 func TestUnauthorizedNoteLooksExactlyLikeAMissingNote(t *testing.T) {
 	fixture := newNoteFixture(t, "note-indistinct")
 	outsider, err := fixture.database.CreateUser("note-indistinct-prober@example.com", "password123")
@@ -196,14 +180,11 @@ func TestUnauthorizedNoteLooksExactlyLikeAMissingNote(t *testing.T) {
 	if !errors.Is(err, ErrSpaceNotFound) {
 		t.Fatalf("missing RequireNoteView() = %v, want ErrSpaceNotFound", err)
 	}
-	// Any difference between the two would itself confirm the note exists.
 	if unauthorized != missing {
 		t.Fatalf("unauthorized %#v differs from missing %#v", unauthorized, missing)
 	}
 }
 
-// Listing returns every active note in the Space, with the caller's own
-// effective role attached.
 func TestAccessibleNotesListsEverySpaceNote(t *testing.T) {
 	fixture := newNoteFixture(t, "note-list")
 	second, err := fixture.database.CreateSpaceNote(fixture.ctx, fixture.member, fixture.spaceID, "Member's own note")
@@ -222,7 +203,6 @@ func TestAccessibleNotesListsEverySpaceNote(t *testing.T) {
 	for _, note := range notes {
 		roles[note.ID] = note.Role
 	}
-	// The caller is the creator of one and a plain editor on the other.
 	if roles[second.ID] != NoteRoleCreator {
 		t.Fatalf("role on own note = %q, want creator", roles[second.ID])
 	}
@@ -230,7 +210,6 @@ func TestAccessibleNotesListsEverySpaceNote(t *testing.T) {
 		t.Fatalf("role on another member's note = %q, want editor", roles[fixture.note.ID])
 	}
 
-	// A non-member sees nothing at all.
 	outsider, err := fixture.database.CreateUser("note-list-outsider@example.com", "password123")
 	if err != nil {
 		t.Fatal(err)

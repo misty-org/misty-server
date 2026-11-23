@@ -5,8 +5,6 @@ import (
 	"database/sql"
 )
 
-// PurgeExpiredSpaceData deletes at most limit expired rows per table, so a
-// retention backlog is drained in bounded transactions rather than one sweep.
 func (db *Database) PurgeExpiredSpaceData(ctx context.Context, limit int) (int64, error) {
 	if limit < 1 || limit > 5000 {
 		limit = 1000

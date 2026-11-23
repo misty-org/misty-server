@@ -10,9 +10,6 @@ import (
 	"github.com/lib/pq"
 )
 
-// voiceTestDB applies the voice migrations in a fresh schema of the disposable
-// database named by MISTY_VOICE_TEST_DSN (misty_voice_test). The connection
-// role must not bypass row-level security, so the owner policy is exercised.
 func voiceTestDB(t *testing.T) *Database {
 	t.Helper()
 	dsn := os.Getenv("MISTY_VOICE_TEST_DSN")
@@ -61,11 +58,9 @@ func voiceTestDB(t *testing.T) *Database {
 			t.Fatal(name, err)
 		}
 	}
-	// 20271106000000_open_source_no_billing.sql drops the ticket's billing columns.
 	if _, err = conn.Exec(`ALTER TABLE voice_live_sessions DROP COLUMN used_ms, DROP COLUMN reservation, DROP COLUMN status, DROP COLUMN settled_at`); err != nil {
 		t.Fatal(err)
 	}
-	// The memory triggers pin search_path to public; tests use their own schema.
 	for _, function := range []string{"misty_memory_index_event", "misty_memory_embedded"} {
 		if _, err = conn.Exec(`ALTER FUNCTION ` + function + `() SET search_path = ` + pq.QuoteIdentifier(schema) + `, pg_temp`); err != nil {
 			t.Fatal(err)

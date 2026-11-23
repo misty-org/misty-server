@@ -46,18 +46,14 @@ type libraryS3API interface {
 	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 }
 
-// libraryS3Presigner is satisfied by *s3.PresignClient. It is separate from
-// libraryS3API so tests can substitute either half independently.
 type libraryS3Presigner interface {
 	PresignPutObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 	PresignGetObject(context.Context, *s3.GetObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
 
 type S3LibraryObjectStore struct {
-	Bucket string
-	client libraryS3API
-	// presigner is nil only when a test injects a bare client; production
-	// construction always sets it, and PresignPut/PresignGet fail closed.
+	Bucket    string
+	client    libraryS3API
 	Presigner libraryS3Presigner
 }
 

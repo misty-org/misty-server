@@ -7,9 +7,6 @@ import (
 	"time"
 )
 
-// AgentActivity is one line of a Space's activity log: a member's agent changed what it is doing.
-// It holds the agent's name, which its owner wrote, and fixed codes for its state and the kind of
-// work. Nothing a model wrote is ever part of it: no prompt, no tool result, no answer.
 type AgentActivity struct {
 	ID        int64     `json:"id"`
 	UserID    string    `json:"user_id"`
@@ -20,10 +17,8 @@ type AgentActivity struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// AgentActivityEvent is the Space event type an activity line is stored under.
 const AgentActivityEvent = "agent.activity"
 
-// RecordAgentActivity appends a line to the Space's activity log and tells its members.
 func (db *Database) RecordAgentActivity(ctx context.Context, userID, spaceID, agentID, name, state, doing string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
@@ -35,7 +30,6 @@ func (db *Database) RecordAgentActivity(ctx context.Context, userID, spaceID, ag
 	})
 }
 
-// ListAgentActivity returns the Space's most recent activity lines, newest first.
 func (db *Database) ListAgentActivity(ctx context.Context, userID, spaceID string, limit int) ([]AgentActivity, error) {
 	if limit < 1 || limit > 200 {
 		limit = 200

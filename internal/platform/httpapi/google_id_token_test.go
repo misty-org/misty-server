@@ -110,7 +110,6 @@ func TestGoogleTokenForgeriesAreRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The classic confusion: an HMAC signed with the public key, which anyone can get.
 	confused, err := func() (string, error) {
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, googleClaims(now))
 		token.Header["kid"] = "one"
@@ -176,7 +175,6 @@ func TestGoogleKeysRotateWithoutLettingForgeriesHammerGoogle(t *testing.T) {
 	if got := server.requests.Load(); got != 1 {
 		t.Fatalf("known keys fetched %d times", got)
 	}
-	// Unknown ids in a burst stop at one fetch.
 	server.keys = map[string]*rsa.PublicKey{"one": &first.PublicKey, "two": &second.PublicKey}
 	clock = clock.Add(2 * googleKeysRetry)
 	for attempt := 0; attempt < 5; attempt++ {
@@ -187,11 +185,9 @@ func TestGoogleKeysRotateWithoutLettingForgeriesHammerGoogle(t *testing.T) {
 	if got := server.requests.Load(); got != 2 {
 		t.Fatalf("fetches after a burst = %d", got)
 	}
-	// That fetch learned the rotated key.
 	if _, err := keys.validate(ctx, signGoogle(t, second, "two", googleClaims(clock)), "client-id"); err != nil {
 		t.Fatal(err)
 	}
-	// Past their age, keys that can't be refreshed aren't trusted.
 	server.status.Store(http.StatusServiceUnavailable)
 	clock = clock.Add(2 * time.Hour)
 	if _, err := keys.validate(ctx, signGoogle(t, first, "one", googleClaims(clock)), "client-id"); err == nil {

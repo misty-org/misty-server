@@ -7,13 +7,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// The app hands its account to the website: POST /me/web-handoff gives the signed-in app a
-// single-use code that lasts two minutes, the app opens the website with it in the URL's
-// fragment (which never reaches a server or a referrer), and the website trades it at
-// POST /auth/web-handoff for a session of its own. A code only ever starts a session for the
-// account that asked for it.
-
-// WebHandoff answers POST /me/web-handoff with a new code for the signed-in account.
 func WebHandoff(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, database)
@@ -33,7 +26,6 @@ func WebHandoff(database *db.Database) http.HandlerFunc {
 	}
 }
 
-// RedeemWebHandoff answers POST /auth/web-handoff {"code"} with a session for the code's account.
 func RedeemWebHandoff(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")

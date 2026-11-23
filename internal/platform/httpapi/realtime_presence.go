@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// handleClientMessage processes viewing, ephemeral typing and agent status declarations sent by a
-// connected client.
 func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []byte) {
 	if s.handleVoiceMessage(client, payload) {
 		return
@@ -38,8 +36,6 @@ func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []
 	}
 }
 
-// broadcastTyping sends transient state only to people who can read the same chat.
-// It is never persisted; clients expire a stale active event after a few seconds.
 func (s *RealtimeService) broadcastTyping(client *RealtimeClient, spaceID, conversationID string, active bool) {
 	if spaceID == "" {
 		return
@@ -116,25 +112,17 @@ func (s *RealtimeService) broadcastTyping(client *RealtimeClient, spaceID, conve
 	}
 }
 
-// presencePlaces are the parts of Misty a viewer can say they are in. Anything else is dropped,
-// so presence never carries free text.
 var presencePlaces = map[string]bool{"": true, "studio": true, "lab": true, "app": true}
 
-// presenceAppID is the shape of the app a viewer has open, as `space_apps` names it.
 var presenceAppID = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 
-// presenceItemID is the shape of the one item the Lab may name: a notebook's doc id.
 var presenceItemID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
-// presenceRooms are the rooms of the Studio (Game mode's building) a viewer may say they are in,
-// by their fixed names. Nothing else about where they are goes out.
 var presenceRooms = map[string]bool{
 	"desk": true, "office": true, "meeting": true, "lounge": true,
 	"library": true, "arcade": true, "door": true,
 }
 
-// cleanPresencePlace keeps a known place, and an item only where that place names one: an
-// id-shaped notebook in the Lab, an app's id, or one of the Studio's rooms.
 func cleanPresencePlace(place, itemID string) (string, string) {
 	if !presencePlaces[place] {
 		place = ""
@@ -149,16 +137,10 @@ func cleanPresencePlace(place, itemID string) (string, string) {
 	return place, itemID
 }
 
-// SetViewing updates which space (if any) a client is actively viewing, with no place.
 func (s *RealtimeService) SetViewing(client *RealtimeClient, spaceID string, active bool) {
 	s.SetViewingPlace(client, spaceID, active, "", "")
 }
 
-// SetViewingPlace updates which space (if any) a client is actively viewing, whether it
-// currently has that space in focus, and which part of Misty it is in (the Studio, or the Lab and
-// which notebook), then broadcasts the resulting presence change. A non-empty spaceID is verified
-// against real space membership before being accepted — otherwise a client could claim to be
-// viewing a space it has no access to and leak its presence to that space's real members.
 func (s *RealtimeService) SetViewingPlace(client *RealtimeClient, spaceID string, active bool, place, itemID string) {
 	if spaceID != "" {
 		_, err := s.database.SpaceByID(context.Background(), client.UserID, spaceID)
@@ -204,21 +186,13 @@ func (s *RealtimeService) SetViewingPlace(client *RealtimeClient, spaceID string
 	}
 }
 
-// presenceViewer describes one distinct user viewing a space, and whether
-// any of their connections currently has that space's chat in focus.
 type PresenceViewer struct {
 	UserID string `json:"user_id"`
 	Active bool   `json:"active"`
-	// Place is where in Misty the user last went ("studio", "lab"), across their connections.
-	Place string `json:"place,omitempty"`
-	// ItemID is the Lab notebook they have open, when Place is "lab".
+	Place  string `json:"place,omitempty"`
 	ItemID string `json:"item_id,omitempty"`
 }
 
-// broadcastPresence sends the current list of distinct users viewing spaceID
-// (and their active/idle status) to every client currently viewing it. A
-// user with multiple connections (e.g. two tabs) counts as active if any one
-// of them has the space in focus.
 func (s *RealtimeService) broadcastPresence(spaceID string) {
 	s.Mu.RLock()
 	viewers := s.Viewers[spaceID]

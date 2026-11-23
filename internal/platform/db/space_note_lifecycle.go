@@ -5,19 +5,10 @@ import (
 	"database/sql"
 )
 
-// handleNoteMembershipLossTx runs inside the same transaction that removes a
-// user from a Space, so a note can never be left reachable by someone who is no
-// longer a member: every open connection to the Space's notes is cut, and the
-// members who are still there reconnect with fresh tickets.
-//
-// Notes belong to the Space, so a creator leaving does not archive or remove
-// them. Journal has no per-member note state to clean up.
 func handleNoteMembershipLossTx(ctx context.Context, tx *sql.Tx, spaceID, _ string) error {
 	return revokeNoteAccessForSpaceTx(ctx, tx, spaceID)
 }
 
-// revokeNoteAccessForSpaceTx invalidates every outstanding ticket and socket for
-// a Space's notes.
 func revokeNoteAccessForSpaceTx(ctx context.Context, tx *sql.Tx, spaceID string) error {
 	rows, err := tx.QueryContext(ctx,
 		`UPDATE space_notes SET acl_version=acl_version+1
@@ -52,29 +43,16 @@ func revokeNoteAccessForSpaceTx(ctx context.Context, tx *sql.Tx, spaceID string)
 	return nil
 }
 
-// handleNoteMembershipRestoreTx runs inside the transaction that re-adds a user
-// to a Space.
-//
-// Space notes never leave with their creator, so membership restoration needs
-// no note-specific work.
 func handleNoteMembershipRestoreTx(_ context.Context, _ *sql.Tx, _, _ string) error {
 	return nil
 }
 
-// PurgeExpiredNotes deletes archived notes whose retention window has passed,
-// plus notes already marked deleting whose room purge has been delivered.
-//
-// Batches are bounded and every step is safe to retry: the worker may be
-// interrupted at any point and will simply pick the remainder up next tick.
 func (db *Database) PurgeExpiredNotes(ctx context.Context, limit int) (int64, error) {
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
 	var purged int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		// Only notes whose purge command actually reached the collaboration
-		// service are removed. Deleting the row first would strand the Durable
-		// Object with no record of what to clean up.
 		ids, err := queryItemIDsTx(ctx, tx,
 			`DELETE FROM space_notes WHERE id IN (
 			     SELECT n.id FROM space_notes n
@@ -91,13 +69,11 @@ func (db *Database) PurgeExpiredNotes(ctx context.Context, limit int) (int64, er
 			return err
 		}
 		purged = int64(len(ids))
-		// What the room stored stops counting with the row.
 		return releaseItemContentStorageTx(ctx, tx, ids)
 	})
 	return purged, err
 }
 
-// NoteControlCommand is one queued instruction for the collaboration service.
 type NoteControlCommand struct {
 	ID       string
 	NoteID   string
@@ -106,24 +82,15 @@ type NoteControlCommand struct {
 	Attempts int
 }
 
-// noteControlMaxAttempts is how often a note command is tried before it is
-// given up on: about twenty minutes of retries, the last ones a minute apart.
 const noteControlMaxAttempts = 25
 
-// noteControlOpen is the outbox rows still to deliver, aliased o.
 const noteControlOpen = `o.delivered_at IS NULL AND o.abandoned_at IS NULL`
 
-// noteControlHead keeps each note's commands in the order they were queued:
-// only a note's oldest open command may go, so a replace never overtakes the
-// bootstrap before it, nor an ACL change the one it follows.
 const noteControlHead = noteControlOpen + ` AND NOT EXISTS (
 	SELECT 1 FROM space_note_control_outbox p
 	WHERE p.note_id=o.note_id AND p.delivered_at IS NULL AND p.abandoned_at IS NULL
 	  AND (p.created_at,p.id) < (o.created_at,o.id))`
 
-// PendingNoteControlCommands claims a bounded batch of undelivered commands,
-// at most one per note, and pushes their next attempt out, so two workers
-// cannot pick up the same command.
 func (db *Database) PendingNoteControlCommands(ctx context.Context, limit int) ([]NoteControlCommand, error) {
 	if limit < 1 || limit > 200 {
 		limit = 50
@@ -154,7 +121,6 @@ func (db *Database) PendingNoteControlCommands(ctx context.Context, limit int) (
 	return commands, err
 }
 
-// MarkNoteControlDelivered records a successful delivery. It is idempotent.
 func (db *Database) MarkNoteControlDelivered(ctx context.Context, commandID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
@@ -164,16 +130,10 @@ func (db *Database) MarkNoteControlDelivered(ctx context.Context, commandID stri
 	})
 }
 
-// MarkNoteControlFailed records why a delivery failed so the backlog is
-// diagnosable. The row stays pending and is retried, until it has been tried
-// noteControlMaxAttempts times; then it is given up on so the note's later
-// commands can go.
 func (db *Database) MarkNoteControlFailed(ctx context.Context, commandID, reason string) error {
 	return db.markNoteControlFailed(ctx, commandID, reason, false)
 }
 
-// AbandonNoteControlCommand gives up on a command the collaboration service
-// refused as malformed: sending it again would be refused again.
 func (db *Database) AbandonNoteControlCommand(ctx context.Context, commandID, reason string) error {
 	return db.markNoteControlFailed(ctx, commandID, reason, true)
 }
@@ -192,8 +152,6 @@ func (db *Database) markNoteControlFailed(ctx context.Context, commandID, reason
 	})
 }
 
-// NoteControlBacklog reports undelivered commands that are already due, for
-// readiness metrics. A small transient backlog is normal.
 func (db *Database) NoteControlBacklog(ctx context.Context) (int64, error) {
 	var backlog int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -204,7 +162,6 @@ func (db *Database) NoteControlBacklog(ctx context.Context) (int64, error) {
 	return backlog, err
 }
 
-// queryItemIDsTx runs a query whose rows are single ids.
 func queryItemIDsTx(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {

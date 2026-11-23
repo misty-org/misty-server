@@ -73,7 +73,6 @@ func newSpaceRouteFixture(t *testing.T) *spaceRouteFixture {
 	return f
 }
 
-// do makes a request as userID; an empty userID makes it signed out.
 func (f *spaceRouteFixture) do(userID, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
 	f.t.Helper()
 	var payload io.Reader = http.NoBody
@@ -287,8 +286,6 @@ func TestSpaceNoteContentRouteWritesThroughTheRoomPostgres(t *testing.T) {
 	if replaced := f.do(f.member, "PUT", content, map[string]string{"markdown": "# Ready"}); replaced.Code != http.StatusOK || !strings.Contains(replaced.Body.String(), digest("# Ready")) {
 		t.Fatalf("replace = %d %s", replaced.Code, replaced.Body.String())
 	}
-	// A note's commands reach its room one at a time, oldest first: the bootstrap, and once it
-	// is delivered, the replacement.
 	for _, want := range []string{"bootstrap", "replace_markdown"} {
 		commands, err := f.database.PendingNoteControlCommands(ctx, 50)
 		if err != nil {

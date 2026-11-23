@@ -6,12 +6,8 @@ import (
 	"errors"
 )
 
-// maxPinnedMessages bounds how many messages one chat (a channel, the Space-wide chat or a DM)
-// keeps pinned.
 const maxPinnedMessages = 50
 
-// requirePinRightTx lets anyone in a DM pin, and in a Space only those who may manage messages
-// where the message is.
 func requirePinRightTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID string) error {
 	permissions, err := messagePermissionsTx(ctx, tx, userID, spaceID, conversationID)
 	if err != nil {
@@ -30,8 +26,6 @@ func requirePinRightTx(ctx context.Context, tx *sql.Tx, userID, spaceID, convers
 	return ErrSpaceForbidden
 }
 
-// SetSpaceMessagePinned pins or unpins a message in the Space-wide chat (conversationID "") or a
-// channel. Everyone who can read the chat hears of it.
 func (db *Database) SetSpaceMessagePinned(ctx context.Context, userID, spaceID, conversationID, messageID string, pinned bool) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requirePinRightTx(ctx, tx, userID, spaceID, conversationID); err != nil {
@@ -70,7 +64,6 @@ func (db *Database) SetSpaceMessagePinned(ctx context.Context, userID, spaceID, 
 	})
 }
 
-// SpacePinnedMessages lists the messages pinned in a chat, the most recently pinned first.
 func (db *Database) SpacePinnedMessages(ctx context.Context, userID, spaceID, conversationID string) ([]SpaceMessage, error) {
 	items := []SpaceMessage{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {

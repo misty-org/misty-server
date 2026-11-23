@@ -5,16 +5,6 @@ import (
 	"database/sql"
 )
 
-// The Space purge removes a deleted Space for good once its recovery window
-// ends: an owner's delete waits 30 days, a deleted account's Spaces go at
-// once. Notes and live code sessions live in collaboration rooms, so each
-// first gets a purge command (the note-control and code-session-control
-// workers deliver them).
-// When every room has confirmed, the caller deletes the Space's stored
-// objects (SpacePurgeObjectKeys) and then its rows (DeleteSpaceData): the
-// Space with everything that cascades from it, and its Library.
-
-// DueSpacePurges lists deleted Spaces whose recovery window has ended.
 func (db *Database) DueSpacePurges(ctx context.Context, limit int) ([]string, error) {
 	if limit < 1 || limit > 100 {
 		limit = 10
@@ -39,8 +29,6 @@ func (db *Database) DueSpacePurges(ctx context.Context, limit int) ([]string, er
 	return ids, err
 }
 
-// BeginSpacePurge queues a room purge for every note and code session
-// in the Space that lacks one, and reports how many rooms have not confirmed yet.
 func (db *Database) BeginSpacePurge(ctx context.Context, spaceID string) (int, error) {
 	waiting := 0
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -89,9 +77,6 @@ func spacePurgeIDsTx(ctx context.Context, tx *sql.Tx, query, spaceID string) ([]
 	return ids, rows.Err()
 }
 
-// SpacePurgeObjectKeys lists every stored object of a deleted Space: its
-// Library's blobs (files, previews, renditions, exports, drive files),
-// pending uploads and its picture.
 func (db *Database) SpacePurgeObjectKeys(ctx context.Context, spaceID string) ([]string, error) {
 	keys := []string{}
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -107,7 +92,6 @@ func (db *Database) SpacePurgeObjectKeys(ctx context.Context, spaceID string) ([
 	return keys, err
 }
 
-// DeleteSpaceData removes a deleted Space's rows after its objects are gone.
 func (db *Database) DeleteSpaceData(ctx context.Context, spaceID string) error {
 	return db.serviceTx(ctx, func(tx *sql.Tx) error {
 		var domain string
@@ -118,12 +102,9 @@ func (db *Database) DeleteSpaceData(ctx context.Context, spaceID string) error {
 		if err != nil {
 			return err
 		}
-		// The Space and its domain point at each other; both checks wait for commit.
 		if _, err := tx.ExecContext(ctx, `SET CONSTRAINTS security_domains_space_fk, spaces_security_domain_fk DEFERRED`); err != nil {
 			return err
 		}
-		// Drive items name Library blobs, so they go before the blobs do
-		// (their in-use marks with them).
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_drive_items WHERE space_id=$1`, spaceID); err != nil {
 			return err
 		}

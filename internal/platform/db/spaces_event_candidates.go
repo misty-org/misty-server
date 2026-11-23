@@ -8,8 +8,6 @@ import (
 	"github.com/lib/pq"
 )
 
-// SpaceEventCandidateUsers narrows fanout to current Space members. This is only
-// a candidate set: EventByIDForUser must still enforce resource and conversation ACLs.
 func (db *Database) SpaceEventCandidateUsers(ctx context.Context, eventID int64) ([]string, error) {
 	users := []string{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -31,9 +29,6 @@ func (db *Database) SpaceEventCandidateUsers(ctx context.Context, eventID int64)
 	return users, err
 }
 
-// SpaceEventForUsers loads an event once and returns the subset of users who
-// may see it, applying the same membership and per-resource visibility rules
-// as EventByIDForUser, in one transaction rather than one per recipient.
 func (db *Database) SpaceEventForUsers(ctx context.Context, eventID int64, users []string) (*SpaceEvent, []string, error) {
 	out := &SpaceEvent{}
 	visible := []string{}

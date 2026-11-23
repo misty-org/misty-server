@@ -16,8 +16,6 @@ func noteLifecycleState(t *testing.T, fixture noteFixture, noteID string) string
 	return state
 }
 
-// Notes belong to the Space, not to the person who typed them first, so a
-// creator leaving must not take the Space's document with them.
 func TestCreatorLeavingKeepsTheNoteForEveryoneElse(t *testing.T) {
 	fixture := newNoteFixture(t, "note-life-leave")
 
@@ -35,7 +33,6 @@ func TestCreatorLeavingKeepsTheNoteForEveryoneElse(t *testing.T) {
 	if !access.CanEdit {
 		t.Fatalf("remaining member lost access when the creator left: %#v", access)
 	}
-	// The departed creator is no longer a member, so they lose access.
 	gone, err := fixture.database.NoteAccessFor(fixture.ctx, fixture.creator, fixture.note.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +42,6 @@ func TestCreatorLeavingKeepsTheNoteForEveryoneElse(t *testing.T) {
 	}
 }
 
-// Removal by the owner behaves the same as leaving voluntarily.
 func TestCreatorRemovedKeepsTheNote(t *testing.T) {
 	fixture := newNoteFixture(t, "note-life-removed")
 
@@ -58,8 +54,6 @@ func TestCreatorRemovedKeepsTheNote(t *testing.T) {
 	}
 }
 
-// Deleting a note queues a room purge, and the row is held until that purge is
-// confirmed delivered so the Durable Object is never stranded.
 func TestPurgeWaitsForRoomPurgeDelivery(t *testing.T) {
 	fixture := newNoteFixture(t, "note-life-delivery")
 	if err := fixture.database.DeleteSpaceNote(fixture.ctx, fixture.creator, fixture.note.ID); err != nil {
@@ -99,7 +93,6 @@ func TestPurgeWaitsForRoomPurgeDelivery(t *testing.T) {
 	}
 }
 
-// Two workers must not deliver the same command twice.
 func TestPendingControlCommandsAreClaimedOnce(t *testing.T) {
 	fixture := newNoteFixture(t, "note-life-claim")
 	if err := fixture.database.DeleteSpaceNote(fixture.ctx, fixture.creator, fixture.note.ID); err != nil {
@@ -113,8 +106,6 @@ func TestPendingControlCommandsAreClaimedOnce(t *testing.T) {
 	if len(first) == 0 {
 		t.Fatal("no commands were claimed")
 	}
-	// The per-attempt backoff pushes the next attempt out, so an immediate
-	// second poll must not hand back the same command.
 	second, err := fixture.database.PendingNoteControlCommands(fixture.ctx, 10)
 	if err != nil {
 		t.Fatal(err)

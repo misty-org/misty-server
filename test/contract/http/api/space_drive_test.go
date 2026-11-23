@@ -13,8 +13,6 @@ import (
 	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// Items come in, the change feed lists them in one order, and the feed's
-// cursor picks up exactly where it stopped.
 func TestDriveCreateAndListChanges(t *testing.T) {
 	f := newDriveFixture(t, "drive-create")
 	docs := f.folder(f.owner, nil, "Docs")
@@ -28,7 +26,6 @@ func TestDriveCreateAndListChanges(t *testing.T) {
 	empty := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.base+"/items", 0, map[string]any{
 		"parent_id": nil, "name": "empty.txt", "kind": "file", "sha256": db.EmptyFileSHA256, "size": 0,
 	}), http.StatusCreated)
-	// The same content again needs no upload.
 	if answer := driveJSON[map[string]any](t, f.call(f.owner, http.MethodPost, f.base+"/uploads", 0,
 		map[string]any{"sha256": *report.SHA256, "size": report.Size}), http.StatusOK); answer["present"] != true || answer["upload_id"] == "" {
 		t.Fatalf("second upload of the same content = %v", answer)
@@ -72,7 +69,6 @@ func TestDriveCreateAndListChanges(t *testing.T) {
 			t.Fatalf("name %q code = %s", name, code)
 		}
 	}
-	// Names are unique in a folder ignoring case, and the answer names who has it.
 	taken := driveJSON[map[string]any](t, f.call(f.owner, http.MethodPost, f.base+"/items", 0,
 		map[string]any{"parent_id": docs.ID, "name": "report.PDF", "kind": "folder"}), http.StatusConflict)
 	if taken["code"] != "name_taken" || taken["item"].(map[string]any)["id"] != report.ID {
@@ -80,8 +76,6 @@ func TestDriveCreateAndListChanges(t *testing.T) {
 	}
 }
 
-// A create that names its own id is safe to send again after a lost answer,
-// and an id that is someone else's is never taken over.
 func TestDriveCreateWithClientIDIsIdempotent(t *testing.T) {
 	f := newDriveFixture(t, "drive-ids")
 	id := "drv_" + uuid.NewString()
@@ -101,8 +95,6 @@ func TestDriveCreateWithClientIDIsIdempotent(t *testing.T) {
 	if code := driveCode(t, f.call(f.owner, http.MethodPost, f.base+"/items", 0, clash), http.StatusConflict); code != "id_taken" {
 		t.Fatalf("same id, other name code = %s", code)
 	}
-	// Another person's Space, made in this fixture: a second fixture would wait
-	// forever on the test database lock this one holds.
 	otherOwner, err := f.database.CreateUser(uniqueTestEmail("drive-ids-other-owner"), "password123")
 	if err != nil {
 		t.Fatal(err)
@@ -122,8 +114,6 @@ func TestDriveCreateWithClientIDIsIdempotent(t *testing.T) {
 	}
 }
 
-// The last write wins: a change without If-Match applies whatever the
-// version, and only a sender that names one (a merged save) is held to it.
 func TestDrivePatchIfMatchIsOptional(t *testing.T) {
 	f := newDriveFixture(t, "drive-patch")
 	docs := f.folder(f.owner, nil, "Docs")
@@ -142,12 +132,10 @@ func TestDrivePatchIfMatchIsOptional(t *testing.T) {
 	if stale["code"] != "version_conflict" || stale["item"].(map[string]any)["version"].(float64) != float64(moved.Version) {
 		t.Fatalf("stale If-Match = %v", stale)
 	}
-	// The same change without If-Match goes through.
 	mine := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, path, 0, map[string]any{"name": "mine.txt"}), http.StatusOK)
 	if mine.Name != "mine.txt" || mine.ModifiedBy != f.memberID {
 		t.Fatalf("unconditional change from the member = %+v", mine)
 	}
-	// New content, from a fresh upload, against the current version.
 	uploadID, sha := f.upload(f.member, f.memberID, []byte("second draft"))
 	changed := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, path, mine.Version,
 		map[string]any{"sha256": sha, "size": 12, "upload_id": uploadID, "mtime_ms": 1800000000000}), http.StatusOK)
@@ -166,10 +154,6 @@ func TestDrivePatchIfMatchIsOptional(t *testing.T) {
 	}
 }
 
-// A save over content its sender never saw replaces it, and the replaced
-// content is kept as a trashed copy in the same folder: the same blob, who
-// last changed it, and replaced_of naming the item. Only a change of content
-// counts as unseen; the copy's bytes stay counted until the trash empties.
 func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 	f := newDriveFixture(t, "drive-replaced")
 	docs := f.folder(f.owner, nil, "Docs")
@@ -190,17 +174,14 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 			WHERE space_id=$1 AND source_kind='drive' AND source_id=$2 AND state='active'`, f.spaceID, itemID)
 	}
 
-	// Ben's save from the current version replaces nothing he didn't see.
 	ben := save(f.member, f.memberID, "ben's draft", notes.Version)
 	if ben.Replaced != nil {
 		t.Fatalf("save from the current version kept a copy: %+v", ben.Replaced)
 	}
 	benKey := f.text(`SELECT blob_key FROM space_drive_items WHERE id=$1`, notes.ID)
-	// A rename since doesn't count as content Ana missed.
 	renamed := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, path, 0, map[string]any{"name": "Notes.txt"}), http.StatusOK)
 	before := f.changes(f.owner, 0).Head
 
-	// Ana's save from version 1 never saw Ben's draft: it wins, and his draft is kept.
 	ana := save(f.owner, f.ownerID, "ana's draft", notes.Version)
 	copy := ana.Replaced
 	if copy == nil {
@@ -220,12 +201,10 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 	if key := f.text(`SELECT blob_key FROM space_drive_items WHERE id=$1`, copy.ID); key != benKey {
 		t.Fatalf("copy's blob = %s, want the replaced one %s", key, benKey)
 	}
-	// The change feed carries the copy and the item, in that order.
 	after := f.changes(f.member, before)
 	if len(after.Items) != 2 || after.Items[0].ID != copy.ID || after.Items[1].ID != notes.ID || after.Items[0].ReplacedOf == nil {
 		t.Fatalf("changes after the stale save = %+v", after.Items)
 	}
-	// Ben's bytes stay counted, on the copy; Ana's count on the item.
 	if got := counted(copy.ID); got != strconv.FormatInt(ben.Size, 10) {
 		t.Fatalf("copy counts %s bytes, want %d", got, ben.Size)
 	}
@@ -239,13 +218,11 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 		t.Fatalf("trash = %+v", trash.Items)
 	}
 
-	// A save with no base at all keeps what it replaces too.
 	blind := save(f.member, f.memberID, "blind save", 0)
 	if blind.Replaced == nil || blind.Replaced.SHA256 == nil || *blind.Replaced.SHA256 != *ana.SHA256 || blind.Replaced.ID == copy.ID {
 		t.Fatalf("save without a base = %+v", blind)
 	}
 
-	// The trash's 30 days end the copy like anything trashed, and its bytes go.
 	f.exec(`UPDATE space_drive_items SET trashed_at=NOW()-interval '31 days' WHERE id=$1`, copy.ID)
 	if _, err := f.drive.PurgeExpiredTrash(f.ctx, 100); err != nil {
 		t.Fatal(err)
@@ -261,10 +238,6 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 	}
 }
 
-// A delete needs no If-Match, and a write after it wins: a change to a
-// trashed item, or to one in a trashed folder, brings it back, and so does a
-// new item made in a trashed folder. The trash keeps an item's bytes, and
-// restore brings it back under a free name.
 func TestDriveWritesReviveTrashedItems(t *testing.T) {
 	f := newDriveFixture(t, "drive-trash")
 	report := f.file(f.owner, f.ownerID, nil, "Report.pdf", "the report")
@@ -280,14 +253,12 @@ func TestDriveWritesReviveTrashedItems(t *testing.T) {
 	if code := driveCode(t, f.call(f.owner, http.MethodPost, f.itemPath(report.ID)+"/trash", 0, nil), http.StatusConflict); code != "trashed" {
 		t.Fatalf("trash of a trashed item code = %s", code)
 	}
-	// The trash never removes bytes.
 	if state := f.text(`SELECT lifecycle_state FROM library_blobs WHERE r2_object_key=$1`, key); state != "ready" {
 		t.Fatalf("trashed file's blob = %s, want ready", state)
 	}
 	if _, err := f.store.Head(f.ctx, key); err != nil {
 		t.Fatalf("trashed file's object: %v", err)
 	}
-	// The member's edit after the delete wins: the item is back, edited.
 	revived := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, f.itemPath(report.ID), 0, map[string]any{"name": "Report (edited).pdf"}), http.StatusOK)
 	if revived.Trashed || !revived.Revived || revived.Name != "Report (edited).pdf" || revived.ModifiedBy != f.memberID || revived.Version <= trashed.Version {
 		t.Fatalf("edit of a trashed item = %+v", revived)
@@ -296,7 +267,6 @@ func TestDriveWritesReviveTrashedItems(t *testing.T) {
 		t.Fatalf("edit of a live item said revived: %+v", again)
 	}
 
-	// A folder's contents hide with it; a change inside brings the folder back.
 	box := f.folder(f.owner, nil, "Box")
 	inner := f.file(f.owner, f.ownerID, &box.ID, "inner.txt", "inside the box")
 	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(box.ID)+"/trash", 0, nil), http.StatusOK)
@@ -307,7 +277,6 @@ func TestDriveWritesReviveTrashedItems(t *testing.T) {
 	if folder := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodGet, f.itemPath(box.ID), 0, nil), http.StatusOK); folder.Trashed {
 		t.Fatalf("the folder stayed in the trash: %+v", folder)
 	}
-	// A new item made in a trashed folder brings the folder back.
 	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(box.ID)+"/trash", 0, nil), http.StatusOK)
 	made := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPost, f.base+"/items", 0, map[string]any{"parent_id": box.ID, "name": "new", "kind": "folder"}), http.StatusCreated)
 	if !made.Revived || made.ParentID == nil || *made.ParentID != box.ID {
@@ -320,7 +289,6 @@ func TestDriveWritesReviveTrashedItems(t *testing.T) {
 		t.Fatalf("create in a live folder said revived: %+v", plain)
 	}
 
-	// Someone made another Report.pdf while the old one was in the trash; it comes back renamed.
 	old := f.file(f.owner, f.ownerID, nil, "Old.pdf", "an old report")
 	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(old.ID)+"/trash", 0, nil), http.StatusOK)
 	f.file(f.member, f.memberID, nil, "old.pdf", "a new report")
@@ -330,9 +298,6 @@ func TestDriveWritesReviveTrashedItems(t *testing.T) {
 	}
 }
 
-// A rename or move onto a taken name is refused unless it asks to replace:
-// then the item holding the name goes to the trash first, unless anyone has it
-// open, the asking computer included.
 func TestDriveRenameWithReplaceTrashesTheHolder(t *testing.T) {
 	f := newDriveFixture(t, "drive-replace")
 	target := f.file(f.owner, f.ownerID, nil, "a.txt", "the one in the way")
@@ -366,8 +331,6 @@ func TestDriveRenameWithReplaceTrashesTheHolder(t *testing.T) {
 	}
 }
 
-// Deleting for good needs drive.purge and an item already in the trash; it
-// leaves tombstones and retires bytes nothing else uses.
 func TestDrivePurgeNeedsPermissionAndTrash(t *testing.T) {
 	f := newDriveFixture(t, "drive-purge")
 	box := f.folder(f.owner, nil, "Old")
@@ -400,8 +363,6 @@ func TestDrivePurgeNeedsPermissionAndTrash(t *testing.T) {
 	}
 }
 
-// A cursor older than the pruned tombstones can't know what was purged, so it
-// starts over; since 0 and newer cursors read on.
 func TestDriveChangesNeedResyncPastTheHorizon(t *testing.T) {
 	f := newDriveFixture(t, "drive-horizon")
 	early := f.folder(f.owner, nil, "Early")

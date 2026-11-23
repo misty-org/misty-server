@@ -33,9 +33,6 @@ type LibraryObjectMetadata struct {
 	MIMEType string
 }
 
-// LibraryObjectStore keeps permanent objects under the library/ and avatars/
-// prefixes. The bucket is shared (drive files, chat attachments, user
-// avatars), so lifecycle rules must exclude these permanent prefixes.
 type LibraryObjectStore interface {
 	Health(context.Context) error
 	Put(context.Context, string, io.Reader, LibraryObjectMetadata) error
@@ -44,9 +41,6 @@ type LibraryObjectStore interface {
 	Delete(context.Context, string) error
 }
 
-// LibraryObjectInventory is implemented by production object stores that can
-// page through a prefix without opening object bodies. Reconciliation uses it
-// to find old objects that are no longer referenced by PostgreSQL.
 type LibraryObjectInventory interface {
 	List(context.Context, string, string, int) (LibraryObjectPage, error)
 }

@@ -9,8 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// WebsiteURLFromEnv is Misty's website, read from MISTY_WEBSITE_URL. Must be
-// https unless it targets localhost.
 func WebsiteURLFromEnv() (string, error) {
 	return validatedURLFromEnv("MISTY_WEBSITE_URL", "http://localhost:5174")
 }

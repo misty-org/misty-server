@@ -10,13 +10,10 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// realtimeReplayLimit is the most missed events a connection replays; past it the app resyncs.
 const realtimeReplayLimit = 500
 
 func (s *RealtimeService) Connect() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Check the upgrade before consuming the single-use ticket. A reverse
-		// proxy that drops the Upgrade headers must not invalidate a valid ticket.
 		if !websocket.IsWebSocketUpgrade(r) {
 			log.Printf("Realtime WebSocket upgrade headers missing")
 			w.Header().Set("Upgrade", "websocket")
@@ -40,9 +37,6 @@ func (s *RealtimeService) Connect() http.HandlerFunc {
 			return
 		}
 		client := &RealtimeClient{UserID: userID, conn: conn, Send: make(chan []byte, 256), Done: make(chan struct{})}
-		// Registered before the replay is read, so an event committed in between is held in Send
-		// for the write loop instead of falling between the two. One may then come twice; the
-		// app applies events by id.
 		s.register(client)
 		events, resync, err := s.database.SpaceEventsAfter(r.Context(), userID, after, realtimeReplayLimit)
 		if err != nil {
@@ -51,8 +45,6 @@ func (s *RealtimeService) Connect() http.HandlerFunc {
 			_ = conn.Close()
 			return
 		}
-		// A full replay may have stopped short of the newest events: the app takes a fresh copy
-		// instead of trusting a gap.
 		if len(events) >= realtimeReplayLimit {
 			resync = true
 		}
@@ -101,8 +93,6 @@ func (s *RealtimeService) Unregister(client *RealtimeClient) {
 	go s.PublishStatus(client.UserID)
 }
 
-// removeViewerLocked removes client from spaceID's viewer set. Callers must
-// hold s.mu.
 func (s *RealtimeService) removeViewerLocked(spaceID string, client *RealtimeClient) {
 	viewers := s.Viewers[spaceID]
 	if viewers == nil {
@@ -116,7 +106,6 @@ func (s *RealtimeService) removeViewerLocked(spaceID string, client *RealtimeCli
 
 func (s *RealtimeService) readLoop(client *RealtimeClient) {
 	defer func() { s.Unregister(client); _ = client.conn.Close() }()
-	// Room for the largest message the app sends: 12 agents with 5 file paths each.
 	client.conn.SetReadLimit(16 << 10)
 	_ = client.conn.SetReadDeadline(time.Now().Add(realtimePongWait))
 	client.conn.SetPongHandler(func(string) error { return client.conn.SetReadDeadline(time.Now().Add(realtimePongWait)) })
@@ -152,10 +141,6 @@ func (s *RealtimeService) writeLoop(client *RealtimeClient) {
 	}
 }
 
-// ConnectionCount reports how many realtime WebSockets are currently held.
-//
-// These connections are long-lived, so an edge proxy sees only the upgrade and
-// never how many are still open. This is the only place that number exists.
 func (s *RealtimeService) ConnectionCount() int {
 	if s == nil {
 		return 0

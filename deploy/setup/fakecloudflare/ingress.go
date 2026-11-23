@@ -6,9 +6,6 @@ func (f *Fake) inZone(name string) bool {
 	return name == f.ZoneName || strings.HasSuffix(name, "."+f.ZoneName)
 }
 
-// validIngress accepts what Cloudflare accepts for a tunnel's ingress: rules
-// with distinct hostnames and a service each, ending in one catch-all rule
-// without a hostname.
 func validIngress(config any) bool {
 	body, _ := config.(map[string]any)
 	rules, _ := body["ingress"].([]any)
@@ -29,8 +26,6 @@ func validIngress(config any) bool {
 	return true
 }
 
-// Ingress returns a tunnel's ingress rules in order as hostname=service, with
-// the catch-all as =service.
 func (f *Fake) Ingress(tunnelID string) []string {
 	f.Mu.Lock()
 	defer f.Mu.Unlock()
@@ -46,7 +41,6 @@ func (f *Fake) Ingress(tunnelID string) []string {
 	return out
 }
 
-// Record returns the DNS record for a name, or nil.
 func (f *Fake) Record(name string) map[string]any {
 	f.Mu.Lock()
 	defer f.Mu.Unlock()

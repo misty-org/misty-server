@@ -10,7 +10,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/serverenv"
 )
 
-// databaseHasData reports whether the PostgreSQL data volume was initialised.
 func databaseHasData(dataDir string) bool {
 	if dataDir == "" {
 		return false
@@ -19,13 +18,8 @@ func databaseHasData(dataDir string) bool {
 	return err == nil
 }
 
-// errSecretsLost stops the stack: the database holds data its secrets no
-// longer match.
 var errSecretsLost = errors.New("secrets lost")
 
-// guardData refuses to continue when the database holds data but the secrets
-// that protect it are gone. Generating new ones would lock the database (its
-// passwords) and make encrypted data unreadable.
 func guardData(store *Store, hasData bool) error {
 	if !hasData {
 		return nil
@@ -51,8 +45,6 @@ func guardData(store *Store, hasData bool) error {
 				missing = append(missing, spec.Name)
 			}
 		default:
-			// A volume from before the root: its stored values are the ones
-			// that protect the data.
 			if !stored {
 				missing = append(missing, spec.Name)
 			}
@@ -78,10 +70,6 @@ func dedupe(values []string) []string {
 	return out
 }
 
-// ensureRoot makes the root secret when the volume has none, and records for
-// each key that guards data which value it uses. It reports whether it made
-// the root. A volume from before the root gets one too, for the keys it never
-// stored and for adopt-root later; every stored key keeps its value.
 func ensureRoot(store *Store) (bool, error) {
 	made := false
 	if !store.Stored(serverenv.RootName) {
@@ -106,8 +94,6 @@ func ensureRoot(store *Store) (bool, error) {
 	return made, nil
 }
 
-// storedKeys are the keys that still use a value of their own instead of the
-// root's.
 func storedKeys(store *Store) []string {
 	var names []string
 	for _, spec := range secretSpecs {
@@ -118,10 +104,6 @@ func storedKeys(store *Store) []string {
 	return names
 }
 
-// rotate gives a key a new value, keeping the old one valid in its previous
-// slot when it has one. A key with a stored value moves onto the root; a key
-// already on the root moves to its next version. Data-bound keys refuse:
-// rotating them would rewrite data.
 func rotate(store *Store, name string) error {
 	spec, ok := specFor(name)
 	if !ok {
@@ -138,7 +120,6 @@ func rotate(store *Store, name string) error {
 	}
 	version := store.version(spec.Purpose)
 	if old := store.Values[name]; old != "" {
-		// Its own value goes; the root's current version takes over.
 		delete(store.Values, name)
 		version.Previous = 0
 		if spec.Previous != "" {
@@ -152,7 +133,6 @@ func rotate(store *Store, name string) error {
 		version = serverenv.Version{Current: version.Current + 1}
 		if spec.Previous != "" {
 			version.Previous = version.Current - 1
-			// The root's previous version replaces an older stored one.
 			store.Set(spec.Previous, "")
 		}
 	}
@@ -163,8 +143,6 @@ func rotate(store *Store, name string) error {
 	return nil
 }
 
-// retire clears a previous slot once nothing signed with the old value is
-// still in use.
 func retire(store *Store, name string) error {
 	spec, ok := specFor(name)
 	if !ok || spec.Previous == "" {
@@ -177,12 +155,6 @@ func retire(store *Store, name string) error {
 	return nil
 }
 
-// adoptRoot moves every key that still has a stored value onto the root.
-// Keys with a previous slot keep the old value valid there, as rotate does,
-// so nobody is signed out; retire them later. Data-bound keys move only with
-// discardData, which makes what they protect unreadable: links already shared
-// stop working, open collaboration rooms start empty, and older backups need
-// the old backup key. It returns the names it moved and the ones it kept.
 func adoptRoot(store *Store, discardData bool) (moved, kept []string, err error) {
 	if store.root() == nil {
 		return nil, nil, fmt.Errorf("the secrets volume has no %s yet; start the stack once first", serverenv.RootName)

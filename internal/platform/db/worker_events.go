@@ -10,9 +10,6 @@ import (
 	"github.com/lib/pq"
 )
 
-// One additional LISTEN connection per API process, shared by every worker.
-// Coalesced hints carry a bounded queue name or a resource-key digest, never
-// raw resource names, task payloads or account data.
 type workerEventHub struct {
 	mu          sync.Mutex
 	listener    *pq.Listener
@@ -34,7 +31,6 @@ func (workerDialer) Dial(network, address string) (net.Conn, error) {
 	return workerDialer{}.DialTimeout(network, address, 5*time.Second)
 }
 func (workerDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
-	// TCP probes detect a dead path without issuing recurring SQL state queries.
 	d := net.Dialer{Timeout: timeout, KeepAliveConfig: net.KeepAliveConfig{
 		Enable: true, Idle: 30 * time.Second, Interval: 10 * time.Second, Count: 3,
 	}}

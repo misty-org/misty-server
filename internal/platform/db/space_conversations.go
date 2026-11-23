@@ -21,7 +21,6 @@ type SpaceActorRef struct {
 
 type SpaceConversationParticipant struct {
 	SpaceActorRef
-	// OwnerUserID is the person an agent participant belongs to; only they can ask it to act.
 	OwnerUserID string    `json:"owner_user_id,omitempty"`
 	Name        string    `json:"name"`
 	Email       string    `json:"email,omitempty"`
@@ -29,25 +28,19 @@ type SpaceConversationParticipant struct {
 }
 
 type SpaceConversation struct {
-	ID      string `json:"id"`
-	SpaceID string `json:"space_id"`
-	Title   string `json:"title"`
-	Kind    string `json:"kind"`
-	// Voice is a standard channel people drop into for a call rather than write in.
+	ID              string                         `json:"id"`
+	SpaceID         string                         `json:"space_id"`
+	Title           string                         `json:"title"`
+	Kind            string                         `json:"kind"`
 	Voice           bool                           `json:"voice"`
 	CreatedByUserID string                         `json:"created_by_user_id"`
 	VisibleToSpace  bool                           `json:"visible_to_space"`
 	Participants    []SpaceConversationParticipant `json:"participants"`
-	// Overwrites are a standard channel's per-role changes to channel-scoped
-	// permissions; a DM has none.
-	Overwrites []SpaceConversationOverwrite `json:"overwrites"`
-	// Permissions are the caller's effective permissions in this conversation.
-	Permissions []string `json:"permissions"`
-	// UnreadCount is how many messages from others the caller hasn't read yet, capped at
-	// spaceUnreadCap. Only the conversation list fills it.
-	UnreadCount int64     `json:"unread_count"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	Overwrites      []SpaceConversationOverwrite   `json:"overwrites"`
+	Permissions     []string                       `json:"permissions"`
+	UnreadCount     int64                          `json:"unread_count"`
+	CreatedAt       time.Time                      `json:"created_at"`
+	UpdatedAt       time.Time                      `json:"updated_at"`
 }
 
 func normalizeConversationTitle(title string) (string, error) {
@@ -67,10 +60,6 @@ func privateMemberConversationTitle(left, right string) string {
 	return title
 }
 
-// requireSpaceConversationMemberTx checks that the caller can open a
-// conversation: a Space member, a participant unless the whole Space is in it,
-// and, in a standard channel, holding messages.read there. A channel they can't
-// read answers ErrSpaceNotFound; anything else they can't open, ErrSpaceForbidden.
 func requireSpaceConversationMemberTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID string) error {
 	if conversationID == "" {
 		return ErrSpaceForbidden
@@ -82,10 +71,6 @@ func loadSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, conver
 	return loadSpaceConversationParticipantsForTx(ctx, tx, conversation, nil)
 }
 
-// loadSpaceConversationParticipantsForTx lists who is in a conversation. In a
-// channel the whole Space is in, that's every member who can read it, so typing
-// and member lists stay inside a private channel. readers, when given, is
-// channelReadersTx's answer, so a list of channels loads it once.
 func loadSpaceConversationParticipantsForTx(ctx context.Context, tx *sql.Tx, conversation *SpaceConversation, readers map[string]map[string]bool) error {
 	if err := loadAllSpaceConversationParticipantsTx(ctx, tx, conversation); err != nil {
 		return err
@@ -147,7 +132,6 @@ func loadAllSpaceConversationParticipantsTx(ctx context.Context, tx *sql.Tx, con
 	return loadConversationAgentParticipantsTx(ctx, tx, conversation)
 }
 
-// spaceUnreadCap bounds an unread count: past it the app shows "99+", and counting stops there.
 const spaceUnreadCap = 100
 
 func (db *Database) SpaceConversations(ctx context.Context, userID, spaceID string) ([]SpaceConversation, error) {
@@ -155,10 +139,6 @@ func (db *Database) SpaceConversations(ctx context.Context, userID, spaceID stri
 	return items, err
 }
 
-// SpaceConversationsWithUnread lists the caller's conversations with each one's unread count,
-// and the unread count of the Space's Everyone chat. A message is unread when someone else sent
-// it after the caller's read position and after they joined, so joining a busy Space doesn't
-// arrive with everything already unread.
 func (db *Database) SpaceConversationsWithUnread(ctx context.Context, userID, spaceID string) ([]SpaceConversation, int64, error) {
 	return db.spaceConversations(ctx, userID, spaceID, true)
 }
@@ -167,8 +147,6 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 	items := []SpaceConversation{}
 	var everyoneUnread int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		// A channel can let in someone the Space-wide chat doesn't, so membership is the
-		// gate here and each channel's messages.read decides whether it is listed.
 		access, err := memberAccessTx(ctx, tx, spaceID, userID)
 		if err != nil {
 			return err
@@ -240,23 +218,14 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 	return items, everyoneUnread, err
 }
 
-// CreateSpaceConversation makes a group chat, which is public to the Space:
-// everyone in the Space is in it, and everyone who joins later joins it
-// (space_members_join_group_chats). Naming people adds nothing, though each named
-// person must still be in the Space. A private chat is a DM.
 func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef) (*SpaceConversation, error) {
 	return db.CreateSpaceConversationWithOverwrites(ctx, userID, spaceID, title, participantRefs, nil)
 }
 
-// CreateSpaceConversationWithOverwrites is CreateSpaceConversation for someone
-// with channels.manage, starting the channel with overwrites: everyone denied
-// messages.read and chosen roles allowed it makes a private channel.
 func (db *Database) CreateSpaceConversationWithOverwrites(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef, overwrites []SpaceConversationOverwrite) (*SpaceConversation, error) {
 	return db.createSpaceChannel(ctx, userID, spaceID, title, participantRefs, overwrites, false)
 }
 
-// CreateSpaceVoiceChannel makes a voice channel: a standard channel, under the same channels.manage
-// and overwrites, that people drop into for a call.
 func (db *Database) CreateSpaceVoiceChannel(ctx context.Context, userID, spaceID, title string, overwrites []SpaceConversationOverwrite) (*SpaceConversation, error) {
 	return db.createSpaceChannel(ctx, userID, spaceID, title, nil, overwrites, true)
 }
@@ -307,7 +276,6 @@ func (db *Database) createSpaceChannel(ctx context.Context, userID, spaceID, tit
 		if err := insertConversationOverwritesTx(ctx, tx, out.ID, normalized); err != nil {
 			return err
 		}
-		// Delivered per reader: a channel created private reaches only who may read it.
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "conversation.created", out.ID, map[string]any{"conversation_id": out.ID, "title": title}); err != nil {
 			return err
 		}
@@ -319,9 +287,6 @@ func (db *Database) createSpaceChannel(ctx context.Context, userID, spaceID, tit
 	return out, err
 }
 
-// DirectMemberConversation returns the one DM between two people in a Space,
-// creating it atomically. Only those two ever see it: not the rest of the Space,
-// and not the Space's owner.
 func (db *Database) DirectMemberConversation(ctx context.Context, userID, spaceID, targetUserID string) (*SpaceConversation, error) {
 	userID, targetUserID = strings.TrimSpace(userID), strings.TrimSpace(targetUserID)
 	if userID == "" || targetUserID == "" || userID == targetUserID {

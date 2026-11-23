@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// Every registered kind's events have a visibility rule of their own: none falls through to the
-// Space-wide families, which reach every member, or to the default, which reaches no one.
 func TestEverySpaceItemKindHasAnEventVisibilityRule(t *testing.T) {
 	for _, kind := range SpaceItemKinds() {
 		for _, event := range []string{"created", "updated", "deleted"} {
@@ -26,8 +24,6 @@ func TestEverySpaceItemKindHasAnEventVisibilityRule(t *testing.T) {
 	}
 }
 
-// The registry is the one list: its names, sections, tables, rooms, outboxes and queues are all
-// distinct, and every name a SQL string is built from is a plain identifier.
 func TestSpaceItemKindRegistryIsConsistent(t *testing.T) {
 	identifier := regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 	seen := map[string]string{}
@@ -67,7 +63,6 @@ func TestSpaceItemKindRegistryIsConsistent(t *testing.T) {
 	if _, ok := SpaceItemKindNamed("note"); !ok {
 		t.Error("note is not registered")
 	}
-	// Misty ships no Space apps of its own: whiteboards, decks and workbooks are gone.
 	for _, name := range []string{"deck", "workbook", "drawing"} {
 		if _, ok := SpaceItemKindNamed(name); ok {
 			t.Errorf("%s is still registered", name)

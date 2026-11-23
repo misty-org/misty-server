@@ -11,8 +11,6 @@ func TestEgressGuardCapsBytesNotRequests(t *testing.T) {
 	guard := NewEgressGuard(EgressBudget{
 		PerIdentityDailyBytes: 1 << 20, GlobalDailyBytes: 1 << 30,
 	})
-	// Four requests is nothing; four large files is the whole quota. A request
-	// count limit would not have noticed.
 	const quarterMiB = 256 << 10
 	for i := 0; i < 4; i++ {
 		if !guard.Allow("acct:one", quarterMiB) {
@@ -34,7 +32,6 @@ func TestEgressGuardIsolatesIdentities(t *testing.T) {
 	if guard.Allow("acct:one", 1) {
 		t.Fatal("first identity should be exhausted")
 	}
-	// One heavy user must not deny service to everyone else.
 	if !guard.Allow("acct:two", 1<<20) {
 		t.Fatal("second identity was refused because of another's usage")
 	}
@@ -44,8 +41,6 @@ func TestEgressGuardEnforcesGlobalCeiling(t *testing.T) {
 	guard := NewEgressGuard(EgressBudget{
 		PerIdentityDailyBytes: 1 << 30, GlobalDailyBytes: 2 << 20,
 	})
-	// Many accounts, each individually within quota, must still not drain the
-	// deployment's total transfer allowance.
 	allowed := 0
 	for i := 0; i < 20; i++ {
 		if guard.Allow(idFor(i), 1<<20) {
@@ -74,7 +69,6 @@ func TestEgressQuotaResetsAfterTheWindow(t *testing.T) {
 	if guard.Allow("acct:one", 1) {
 		t.Fatal("identity should be exhausted inside the window")
 	}
-	// A day later the allowance is fresh.
 	current = current.Add(25 * time.Hour)
 	if !guard.Allow("acct:one", 1<<20) {
 		t.Fatal("quota did not reset after the window elapsed")
@@ -85,8 +79,6 @@ func TestEgressGuardChargesUpFrontSoConcurrentTransfersCannotOvershoot(t *testin
 	guard := NewEgressGuard(EgressBudget{
 		PerIdentityDailyBytes: 10 << 20, GlobalDailyBytes: 1 << 30,
 	})
-	// Ten concurrent 1 MiB transfers exactly fill the quota; the eleventh must
-	// be refused even though none has finished sending.
 	for i := 0; i < 10; i++ {
 		if !guard.Allow("acct:one", 1<<20) {
 			t.Fatalf("concurrent transfer %d refused early", i)

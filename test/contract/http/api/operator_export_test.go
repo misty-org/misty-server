@@ -15,7 +15,6 @@ func TestOperatorExportNeedsTheTokenAndNoPassword(t *testing.T) {
 	if rec, body := call(t, handler, http.MethodPost, path, "wrong-token", ""); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("wrong token = %d %v", rec.Code, body)
 	}
-	// A person's own session is not enough; this is the operator's route.
 	if rec, body := call(t, handler, http.MethodPost, path, "", "", session...); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("session = %d %v", rec.Code, body)
 	}

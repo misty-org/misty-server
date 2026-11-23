@@ -8,8 +8,6 @@ import (
 	"github.com/misty-org/misty-server/internal/spaces"
 )
 
-// privateChannel gives the crew member a Crew role and makes a channel only
-// the owner and the crew can read.
 func (f rolesFixture) privateChannel(t *testing.T) *SpaceConversation {
 	t.Helper()
 	crewRole := f.role(t, "Crew")
@@ -92,7 +90,6 @@ func TestMentioningANonReaderInAPrivateChannelReachesNobodyElse(t *testing.T) {
 	}
 }
 
-// The row security function answers as the API does.
 func TestCanReadSpaceConversationFunctionMatchesTheAPI(t *testing.T) {
 	f := newRolesFixture(t, "roles-rls")
 	channel := f.privateChannel(t)
@@ -127,7 +124,6 @@ func TestCanReadSpaceConversationFunctionMatchesTheAPI(t *testing.T) {
 			t.Errorf("%s = %v, want %v", check.name, got, check.want)
 		}
 	}
-	// A deny on one of the member's roles loses to an allow on another.
 	muted := f.role(t, "Muted")
 	if _, err := f.database.SetSpaceMemberRoles(f.ctx, f.owner.ID, f.space.ID, f.crew.ID, append(roleIDsOf(t, f, f.crew.ID), muted.ID)); err != nil {
 		t.Fatal(err)
@@ -139,7 +135,6 @@ func TestCanReadSpaceConversationFunctionMatchesTheAPI(t *testing.T) {
 	if !canRead(channel.ID, f.crew.ID) {
 		t.Fatal("the crew's allow lost to the muted role's deny")
 	}
-	// An administrator reads past every overwrite.
 	admin := f.role(t, "Admin", spaces.PermissionAdministrator)
 	if _, err := f.database.SetSpaceMemberRoles(f.ctx, f.owner.ID, f.space.ID, f.rest.ID, []string{admin.ID}); err != nil {
 		t.Fatal(err)
@@ -205,7 +200,6 @@ func TestRoleMentionsNeedAMentionableRoleOrTheOwner(t *testing.T) {
 	if _, _, err := f.database.TestingCreateSpaceMessage(f.ctx, f.owner.ID, f.space.ID, mention(&everyone), nil); !errors.Is(err, ErrSpaceInvalid) {
 		t.Fatalf("mentioning the everyone role error = %v, want ErrSpaceInvalid", err)
 	}
-	// Once the role is gone, the message keeps the span, and editing it still works.
 	if err := f.database.DeleteSpaceRole(f.ctx, f.owner.ID, f.space.ID, mentionable.ID); err != nil {
 		t.Fatal(err)
 	}

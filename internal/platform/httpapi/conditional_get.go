@@ -8,13 +8,6 @@ import (
 	"strings"
 )
 
-// ConditionalGET lets a client revalidate a large snapshot instead of
-// re-downloading it: a successful GET carries a content ETag and
-// "private, no-cache", so the client's HTTP cache revalidates on every read and
-// an unchanged snapshot answers 304 with no body. Each request still runs the
-// handler, so authentication and authorization are unchanged, and another
-// account's snapshot hashes differently. Other methods, errors and handlers
-// that set no-store pass through untouched. Bodies are not compressed here.
 func ConditionalGET(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

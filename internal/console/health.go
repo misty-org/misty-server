@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// HealthCheck mirrors one entry of misty-server's GET /health response. The
-// shape is duplicated rather than imported so the console does not link the
-// whole server composition root (internal/app).
 type HealthCheck struct {
 	Name       string
 	Status     string `json:"status"`
@@ -21,7 +18,6 @@ type HealthCheck struct {
 	DurationMS int64  `json:"duration_ms,omitempty"`
 }
 
-// HealthSnapshot mirrors misty-server's GET /health response.
 type HealthSnapshot struct {
 	Status         string                 `json:"status"`
 	Version        string                 `json:"version"`
@@ -31,12 +27,10 @@ type HealthSnapshot struct {
 	Checks         map[string]HealthCheck `json:"checks"`
 }
 
-// Healthy reports whether the server considers itself fully healthy.
 func (s HealthSnapshot) Healthy() bool {
 	return s.Status == "ok"
 }
 
-// SortedChecks returns checks with failures first, then alphabetical.
 func (s HealthSnapshot) SortedChecks() []HealthCheck {
 	checks := make([]HealthCheck, 0, len(s.Checks))
 	for name, check := range s.Checks {
@@ -53,7 +47,6 @@ func (s HealthSnapshot) SortedChecks() []HealthCheck {
 	return checks
 }
 
-// OK reports whether a check passed or was intentionally skipped.
 func (c HealthCheck) OK() bool {
 	switch c.Status {
 	case "ok", "ready", "disabled":
@@ -62,7 +55,6 @@ func (c HealthCheck) OK() bool {
 	return false
 }
 
-// Label turns a check key such as object_storage into "Object storage".
 func (c HealthCheck) Label() string {
 	words := strings.Split(c.Name, "_")
 	for i, word := range words {
@@ -78,7 +70,6 @@ func (c HealthCheck) Label() string {
 	return strings.ToUpper(label[:1]) + label[1:]
 }
 
-// Uptime formats the uptime as "3h 12m" or "4d 2h".
 func (s HealthSnapshot) Uptime() string {
 	d := time.Duration(s.UptimeSeconds) * time.Second
 	switch {
@@ -100,8 +91,6 @@ func newHealthClient(apiURL string, client *http.Client) *healthClient {
 	return &healthClient{url: strings.TrimRight(apiURL, "/") + "/health", client: client}
 }
 
-// Fetch decodes the snapshot even on 503, which the server returns together
-// with a full body when a critical check fails.
 func (h *healthClient) Fetch(ctx context.Context) (HealthSnapshot, error) {
 	var snapshot HealthSnapshot
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.url, nil)

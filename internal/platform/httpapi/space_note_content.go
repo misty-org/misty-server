@@ -12,15 +12,10 @@ import (
 )
 
 const (
-	// A note's body is up to 100,000 characters, which JSON can spell in far more
-	// bytes than the 8 KiB other requests get.
 	noteContentBodyLimit = 512 << 10
 	noteMarkdownMaxChars = 100_000
 )
 
-// SpaceNoteContent replaces a note's body or adds to its end. It takes the
-// durable path agents and imports use: the note stays editable by people in the
-// room, and the replacement reaches them through the collaboration outbox.
 func (s *SpacesService) SpaceNoteContent() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -76,13 +71,10 @@ func decodeNoteContent(w http.ResponseWriter, r *http.Request, dst any) error {
 	return nil
 }
 
-// createSpaceNote makes a note, starting from a Markdown body when there is one.
 func (s *SpacesService) createSpaceNote(w http.ResponseWriter, r *http.Request, userID, spaceID string) {
 	var body struct {
-		Title    string `json:"title"`
-		Markdown string `json:"markdown"`
-		// "private" keeps a new note its creator's alone from its first moment; "public" or ""
-		// as the Space's default.
+		Title      string `json:"title"`
+		Markdown   string `json:"markdown"`
 		Visibility string `json:"visibility"`
 	}
 	if decodeNoteContent(w, r, &body) != nil {

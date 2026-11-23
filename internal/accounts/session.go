@@ -9,9 +9,6 @@ import (
 
 const SessionCookieName = "misty_session"
 
-// accessToken is the access JWT a request presents: the desktop app's bearer, or the website's
-// cookie. A bearer always speaks for the request, so one that fails to verify is never rescued by
-// a cookie sent with it.
 func accessToken(r *http.Request) (string, bool) {
 	if token, bearer := BearerTokenFromRequest(r); bearer {
 		return token, true
@@ -23,8 +20,6 @@ func accessToken(r *http.Request) (string, bool) {
 	return cookie.Value, true
 }
 
-// SessionUserID is the account a request is signed in as, or "" when it is not. Other bearer
-// tokens (a run's MCP token, the operator's) don't verify as access tokens, so they are not signed in.
 func SessionUserID(r *http.Request) (string, error) {
 	token, ok := accessToken(r)
 	if !ok {
@@ -41,9 +36,6 @@ func SessionUserID(r *http.Request) (string, error) {
 	return claims.Subject, nil
 }
 
-// SessionID returns the account session that signed this request's access
-// token, so a long-lived stream can revalidate that session later. It is empty
-// when the request has no valid access token.
 func SessionID(r *http.Request) string {
 	token, ok := accessToken(r)
 	if !ok {

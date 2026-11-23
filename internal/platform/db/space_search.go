@@ -8,21 +8,14 @@ import (
 	"unicode"
 )
 
-// SpaceSearchMaxQuery is the longest search text a route accepts.
 const SpaceSearchMaxQuery = 500
 
 const spaceSearchMaxWords = 32
 
-// spaceNoteSearchVector is the expression space_notes_search_idx indexes, spelled
-// the same so Postgres uses that index. Titles outrank tags, and tags outrank text.
 const spaceNoteSearchVector = `(setweight(to_tsvector('simple'::regconfig,COALESCE(n.title_projection,'')),'A')
 	|| setweight(to_tsvector('simple'::regconfig,COALESCE(n.shared_tags::text,'')),'B')
 	|| setweight(to_tsvector('simple'::regconfig,COALESCE(n.plain_text_projection,'')),'C'))`
 
-// spaceSearchQuery turns what someone typed into a tsquery: every word has to
-// appear, as the start of a word, so "budg" finds "budget". Only letters, digits
-// and marks reach it, so nothing in the text is tsquery syntax. Empty means the
-// text has no words to look for.
 func spaceSearchQuery(text string) string {
 	words := strings.FieldsFunc(text, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !unicode.IsMark(r)
@@ -34,8 +27,6 @@ func spaceSearchQuery(text string) string {
 	return strings.Join(terms, " & ")
 }
 
-// SearchSpaceNotes finds the notes a caller may view in one Space, best match
-// first. It applies the same access rules as AccessibleSpaceNotes.
 func (db *Database) SearchSpaceNotes(ctx context.Context, userID, spaceID, text string, limit int) ([]SpaceNote, error) {
 	notes := []SpaceNote{}
 	query := spaceSearchQuery(text)
@@ -80,16 +71,10 @@ func (db *Database) SearchSpaceNotes(ctx context.Context, userID, spaceID, text 
 	return notes, err
 }
 
-// spaceMessageVisibleTo is the one rule for who sees a message: the main chat
-// is the whole Space's, and a conversation's messages belong to those who can
-// read that conversation now (conversationReadableSQL, private channels
-// included). The placeholder is the caller.
 func spaceMessageVisibleTo(user string) string {
 	return `(m.conversation_id IS NULL OR ` + conversationReadableSQL("m.conversation_id", user) + `)`
 }
 
-// SearchSpaceMessages finds messages the caller can see in one Space, in its
-// main chat and in the conversations they can open, best match first.
 func (db *Database) SearchSpaceMessages(ctx context.Context, userID, spaceID, text string, limit int) ([]SpaceMessage, error) {
 	items := []SpaceMessage{}
 	query := spaceSearchQuery(text)
@@ -133,8 +118,6 @@ func (db *Database) SearchSpaceMessages(ctx context.Context, userID, spaceID, te
 	return items, err
 }
 
-// SpaceSearchHit is one note or message that matched a search across
-// Spaces.
 type SpaceSearchHit struct {
 	Kind      string
 	ID        string
@@ -144,15 +127,10 @@ type SpaceSearchHit struct {
 	SpaceName string
 }
 
-// SearchSpaces searches notes and messages together, ranked against each other,
-// across every Space the caller belongs to or just spaceID. Every member may
-// read a Space's messages, so membership is the check that decides which
-// Spaces are searched (hasSpacePermissionTx).
 func (db *Database) SearchSpaces(ctx context.Context, userID, text, spaceID string, notes, messages bool, limit int) ([]SpaceSearchHit, error) {
 	return db.SearchSpaceKinds(ctx, userID, text, spaceID, map[string]bool{"note": notes, "message": messages}, limit)
 }
 
-// SearchSpaceKinds is SearchSpaces over any set of kinds: "message" and "note".
 func (db *Database) SearchSpaceKinds(ctx context.Context, userID, text, spaceID string, kinds map[string]bool, limit int) ([]SpaceSearchHit, error) {
 	notes, messages := kinds[SpaceItemNote], kinds["message"]
 	hits := []SpaceSearchHit{}

@@ -6,14 +6,11 @@ import (
 	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// mountNoteRoutes registers the server-backed note API. Current Space
-// membership grants read/write access; creator/owner checks protect deletion.
 func (s *Server) mountNoteRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/notes", spaces.SpaceNotes())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/notes", spaces.SpaceNotes())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/notes/{noteID}", spaces.SpaceNote())
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/notes/{noteID}", spaces.SpaceNote())
-	// Archive/unarchive.
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/notes/{noteID}", spaces.SpaceNote())
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/notes/{noteID}/metadata", spaces.SpaceNoteMetadata())
 	s.Router.Put(prefix+"/spaces/{spaceID}/notes/{noteID}/content", spaces.SpaceNoteContent())
@@ -23,9 +20,6 @@ func (s *Server) mountNoteRoutes(prefix string, spaces *api.SpacesService) {
 	if s.Library == nil {
 		return
 	}
-	// Assets live on the Library service because they reuse its upload,
-	// verification, quota, and signed-transfer pipeline. Authorization is still
-	// the note's, not the Space's.
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/notes/{noteID}/assets", s.Library.SpaceNoteAssets())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/notes/{noteID}/assets/uploads", s.Library.SpaceNoteAssets())
 	s.Router.Post(prefix+"/spaces/{spaceID}/notes/{noteID}/assets/uploads/{uploadID}/finalize", s.Library.FinalizeUpload())

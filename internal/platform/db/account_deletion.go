@@ -91,10 +91,6 @@ func (db *Database) BeginAccountDeletion(
 	return out, err
 }
 
-// beginAccountDeletionTx records the deletion request, marks the locked,
-// active account pending deletion, ends its sessions and stops its agents.
-// A person deleting their own account must first hand off shared Spaces they
-// own (requireNoSharedSpaces); a closed account's are handed over for it.
 func beginAccountDeletionTx(
 	ctx context.Context, tx *sql.Tx, userID, requestID, statusTokenHash string,
 	purgeAfter time.Time, requireNoSharedSpaces bool,

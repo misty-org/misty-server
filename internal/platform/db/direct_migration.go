@@ -10,13 +10,6 @@ import (
 
 const directMigrationName = "space_dms_to_direct"
 
-// MigrateSpaceDirectMessages moves every DM that still lives inside a Space (a conversation of
-// kind 'dm') into a DM of its own. Each one moved is gone from its Space, so running it again
-// moves nothing twice; direct_migrations records when it first finished. A one-to-one DM between the same two people in several
-// Spaces becomes one DM, its messages in the order they were sent; a group DM becomes its own.
-// Text, replies, reactions, threads and how far each person read come along. A file sent in one
-// stays in its Space's storage, so the message says what the file was and where it stayed.
-// Two people who aren't friends keep their history read-only until they are.
 func (db *Database) MigrateSpaceDirectMessages(ctx context.Context) error {
 	ids := []string{}
 	if err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -81,7 +74,6 @@ func moveSpaceDirectTx(ctx context.Context, tx *sql.Tx, conversationID string) e
 	}
 	rows.Close()
 	if len(people) < 2 {
-		// Nobody left to talk to: the DM goes with its Space conversation.
 		return dropSpaceDirectTx(ctx, tx, conversationID)
 	}
 	starter := people[0]
@@ -118,7 +110,6 @@ func moveSpaceDirectTx(ctx context.Context, tx *sql.Tx, conversationID string) e
 			return err
 		}
 	}
-	// A file stays in the Space it was sent in; its message says so.
 	attachments, err := tx.QueryContext(ctx, `SELECT a.message_id,a.display_name FROM space_message_attachments a JOIN space_messages m ON m.id=a.message_id
 		WHERE m.conversation_id=$1 ORDER BY a.created_at,a.id`, conversationID)
 	if err != nil {
@@ -167,7 +158,6 @@ func moveSpaceDirectTx(ctx context.Context, tx *sql.Tx, conversationID string) e
 	if _, err := tx.ExecContext(ctx, `UPDATE space_message_reactions SET space_id=$2 WHERE message_id IN (SELECT id FROM space_messages WHERE conversation_id=$1)`, conversationID, target); err != nil {
 		return err
 	}
-	// Mentions of the old Space's members stay as written; the DM's people are the same people.
 	if _, err := tx.ExecContext(ctx, `UPDATE space_messages SET space_id=$2,conversation_id=NULL,expires_at=NULL WHERE conversation_id=$1`, conversationID, target); err != nil {
 		return err
 	}
@@ -178,8 +168,6 @@ func moveSpaceDirectTx(ctx context.Context, tx *sql.Tx, conversationID string) e
 	return dropSpaceDirectTx(ctx, tx, conversationID)
 }
 
-// dropSpaceDirectTx removes the emptied Space conversation; its messages have moved, and its
-// members, reads and listed agents go with it.
 func dropSpaceDirectTx(ctx context.Context, tx *sql.Tx, conversationID string) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE space_message_attachments SET message_id=NULL WHERE message_id IN (SELECT id FROM space_messages WHERE conversation_id=$1)`, conversationID); err != nil {
 		return err

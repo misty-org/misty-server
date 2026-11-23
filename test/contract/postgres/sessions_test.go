@@ -10,8 +10,8 @@ import (
 
 	. "github.com/misty-org/misty-server/internal/platform/db"
 
-	"github.com/misty-org/misty-server/internal/platform/security"
 	"github.com/lib/pq"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 func TestSessionCRUDAndExpiry(t *testing.T) {
@@ -67,13 +67,11 @@ func TestSessionCacheHitsAndEviction(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 
-	// First lookup (cache hit from CreateSession)
 	userID, err := database.GetSessionUserID(tokenHash)
 	if err != nil || userID != user.ID {
 		t.Fatalf("GetSessionUserID() = %q, err = %v, want %q", userID, err, user.ID)
 	}
 
-	// Delete session should evict from cache
 	if err := database.DeleteSession(tokenHash); err != nil {
 		t.Fatalf("DeleteSession() error = %v", err)
 	}
@@ -117,8 +115,6 @@ func openRuntimeRoleDatabase(t *testing.T, adminDatabase *Database) *Database {
 	if runtimeUser == "" || runtimePassword == "" {
 		t.Skip("DB_USER and DB_PASSWORD are required to exercise the runtime RLS role")
 	}
-	// Mirror the application role grants (deploy/setup and cmd/misty-dev-setup), which run
-	// after every migration: the runtime role gets DML on every table.
 	if _, err := adminDatabase.Conn.Exec(
 		"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO " + pq.QuoteIdentifier(runtimeUser),
 	); err != nil {

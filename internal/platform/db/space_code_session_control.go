@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// CodeSessionControlCommand is one retryable instruction for a session's code room.
 type CodeSessionControlCommand struct {
 	ID        string
 	SessionID string
@@ -37,8 +36,6 @@ func enqueueCodeSessionControlTx(
 	return err
 }
 
-// PendingCodeSessionControlCommands claims a bounded batch and moves each retry deadline
-// forward so concurrent workers cannot deliver the same row.
 func (db *Database) PendingCodeSessionControlCommands(
 	ctx context.Context,
 	limit int,
@@ -77,7 +74,6 @@ func (db *Database) PendingCodeSessionControlCommands(
 	return commands, err
 }
 
-// MarkCodeSessionControlDelivered records that the room carried out the command.
 func (db *Database) MarkCodeSessionControlDelivered(ctx context.Context, commandID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
@@ -88,8 +84,6 @@ func (db *Database) MarkCodeSessionControlDelivered(ctx context.Context, command
 	})
 }
 
-// AbandonCodeSessionControlCommand settles a command the room refused for good, such as an
-// ACL change that reached a room already purged. It is not retried.
 func (db *Database) AbandonCodeSessionControlCommand(ctx context.Context, commandID, reason string) error {
 	if len(reason) > 500 {
 		reason = reason[:500]
@@ -103,7 +97,6 @@ func (db *Database) AbandonCodeSessionControlCommand(ctx context.Context, comman
 	})
 }
 
-// MarkCodeSessionControlFailed keeps the command queued with the reason it failed.
 func (db *Database) MarkCodeSessionControlFailed(ctx context.Context, commandID, reason string) error {
 	if len(reason) > 500 {
 		reason = reason[:500]

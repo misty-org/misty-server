@@ -25,7 +25,6 @@ func createTestSpace(t *testing.T, database *Database, ctx context.Context, owne
 	return space
 }
 
-// standardSpaces leaves out the personal Space every account starts with.
 func standardSpaces(spaces []Space) []Space {
 	out := []Space{}
 	for _, space := range spaces {
@@ -36,7 +35,6 @@ func standardSpaces(spaces []Space) []Space {
 	return out
 }
 
-// personalSpace is the protected Space an account gets at sign-up.
 func personalSpace(t *testing.T, database *Database, ctx context.Context, userID string) Space {
 	t.Helper()
 	spaces, err := database.ListSpaces(ctx, userID)

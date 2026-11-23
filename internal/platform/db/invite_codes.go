@@ -9,11 +9,8 @@ import (
 	"strings"
 )
 
-// ErrInviteCodeNotFound means no open account holds that invite code.
 var ErrInviteCodeNotFound = errors.New("no such invite code")
 
-// newInviteCode is ten base32 characters, 50 random bits: short enough to share and too
-// many to guess through the lookup's rate limit.
 func newInviteCode() (string, error) {
 	raw := make([]byte, 7)
 	if _, err := rand.Read(raw); err != nil {
@@ -22,7 +19,6 @@ func newInviteCode() (string, error) {
 	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw))[:10], nil
 }
 
-// InviteCode is the person's invite code, made the first time they ask for it.
 func (db *Database) InviteCode(ctx context.Context, userID string) (string, error) {
 	generated, err := newInviteCode()
 	if err != nil {
@@ -38,8 +34,6 @@ func (db *Database) InviteCode(ctx context.Context, userID string) (string, erro
 	return code, err
 }
 
-// InviterName is the username behind an invite code. A suspended or closing account's
-// link no longer names anyone.
 func (db *Database) InviterName(ctx context.Context, code string) (string, error) {
 	var name string
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {

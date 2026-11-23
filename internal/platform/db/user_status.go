@@ -10,8 +10,6 @@ import (
 	"unicode/utf8"
 )
 
-// ChosenStatus is what a person set: "online" (worked out from their connections, Idle included),
-// "dnd" or "invisible", and an optional custom line with an emoji and when it ends.
 type ChosenStatus struct {
 	Chosen          string     `json:"chosen"`
 	CustomText      string     `json:"custom_text,omitempty"`
@@ -19,7 +17,6 @@ type ChosenStatus struct {
 	CustomExpiresAt *time.Time `json:"custom_expires_at,omitempty"`
 }
 
-// live drops a custom line that has run out.
 func (s ChosenStatus) live(now time.Time) ChosenStatus {
 	if s.CustomExpiresAt != nil && !s.CustomExpiresAt.After(now) {
 		s.CustomText, s.CustomEmoji, s.CustomExpiresAt = "", "", nil
@@ -45,7 +42,6 @@ func chosenStatusTx(ctx context.Context, tx *sql.Tx, userID string) (ChosenStatu
 	return out.live(time.Now()), nil
 }
 
-// ChosenStatuses returns what each of these people chose; anyone who never chose is Online.
 func (db *Database) ChosenStatuses(ctx context.Context, userIDs []string) (map[string]ChosenStatus, error) {
 	out := map[string]ChosenStatus{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -61,7 +57,6 @@ func (db *Database) ChosenStatuses(ctx context.Context, userIDs []string) (map[s
 	return out, err
 }
 
-// SetChosenStatus saves the person's status. A custom line is trimmed, at most 128 characters.
 func (db *Database) SetChosenStatus(ctx context.Context, userID string, status ChosenStatus) (*ChosenStatus, error) {
 	if status.Chosen != "online" && status.Chosen != "dnd" && status.Chosen != "invisible" {
 		return nil, ErrSpaceInvalid
@@ -87,8 +82,6 @@ func (db *Database) SetChosenStatus(ctx context.Context, userID string, status C
 	return &live, nil
 }
 
-// StatusAudience is who may see the person's status: their friends and everyone they share a
-// Space with, less anyone either of them blocked.
 func (db *Database) StatusAudience(ctx context.Context, userID string) ([]string, error) {
 	out := []string{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -118,7 +111,6 @@ func (db *Database) StatusAudience(ctx context.Context, userID string) ([]string
 	return out, err
 }
 
-// AccountNotice is something the server tells a person once.
 type AccountNotice struct {
 	ID        string          `json:"id"`
 	Kind      string          `json:"kind"`
@@ -126,7 +118,6 @@ type AccountNotice struct {
 	CreatedAt time.Time       `json:"created_at"`
 }
 
-// AccountNotices returns the notices the person hasn't seen.
 func (db *Database) AccountNotices(ctx context.Context, userID string) ([]AccountNotice, error) {
 	out := []AccountNotice{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -149,7 +140,6 @@ func (db *Database) AccountNotices(ctx context.Context, userID string) ([]Accoun
 	return out, err
 }
 
-// MarkAccountNoticeSeen keeps a notice from showing again.
 func (db *Database) MarkAccountNoticeSeen(ctx context.Context, userID, noticeID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `UPDATE account_notices SET seen_at=now() WHERE id=$1 AND user_id=$2 AND seen_at IS NULL`, noticeID, userID)
@@ -157,9 +147,6 @@ func (db *Database) MarkAccountNoticeSeen(ctx context.Context, userID, noticeID 
 	})
 }
 
-// CanJoinCall says whether the person may join a call room. A room is "dm:<dm id>", open to that
-// DM's people while the DM may take messages, or "space:<space id>:voice:<channel id>", open to
-// whoever may read that voice channel.
 func (db *Database) CanJoinCall(ctx context.Context, userID, room string) (bool, error) {
 	if spaceID, channelID, ok := voiceRoomParts(room); ok {
 		return db.canJoinVoiceChannel(ctx, userID, spaceID, channelID)
@@ -188,7 +175,6 @@ func (db *Database) CanJoinCall(ctx context.Context, userID, room string) (bool,
 	return allowed, err
 }
 
-// DirectMemberIDs lists the people in a DM the caller is in, for ringing a call.
 func (db *Database) DirectMemberIDs(ctx context.Context, userID, spaceID string) ([]string, error) {
 	out := []string{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -212,7 +198,6 @@ func (db *Database) DirectMemberIDs(ctx context.Context, userID, spaceID string)
 	return out, err
 }
 
-// voiceRoomParts splits "space:<space id>:voice:<channel id>".
 func voiceRoomParts(room string) (spaceID, channelID string, ok bool) {
 	rest, found := strings.CutPrefix(room, "space:")
 	if !found {
@@ -225,7 +210,6 @@ func voiceRoomParts(room string) (spaceID, channelID string, ok bool) {
 	return spaceID, channelID, true
 }
 
-// canJoinVoiceChannel: the channel is one of the Space's voice channels and the person may read it.
 func (db *Database) canJoinVoiceChannel(ctx context.Context, userID, spaceID, channelID string) (bool, error) {
 	allowed := false
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {

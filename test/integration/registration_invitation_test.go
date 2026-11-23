@@ -10,7 +10,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// A production server takes its first account, then only invited ones.
 func TestProductionRegistrationIsFirstAccountThenInvitations(t *testing.T) {
 	database := openIntegrationDatabase(t)
 	t.Setenv("MISTY_ENVIRONMENT", "production")

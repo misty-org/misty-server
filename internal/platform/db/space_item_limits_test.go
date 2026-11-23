@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// history_days reads from MISTY_SPACE_LEVELS like the other limits: unset or null is unlimited,
-// a number is the limit, and less than 1 is refused.
 func TestSpaceLevelItemLimits(t *testing.T) {
 	var config SpaceLevelConfig
 	raw := `{"thresholds":[2],"levels":[

@@ -11,11 +11,8 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// Transcripts are owner-only; they are never shared through a Space. A Note
-// made from one lives in the person's own Space.
 const voiceTranscriptBodyLimit = 8 << 20
 
-// VoiceTranscripts saves a finished capture's diarized transcript.
 func (s *SpacesService) VoiceTranscripts() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, ok := authenticatedUser(w, r, s.database)
@@ -38,7 +35,6 @@ func (s *SpacesService) VoiceTranscripts() http.HandlerFunc {
 	}
 }
 
-// VoiceTranscript reads, renames speakers on, or deletes one transcript.
 func (s *SpacesService) VoiceTranscript() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, ok := authenticatedUser(w, r, s.database)
@@ -59,7 +55,6 @@ func (s *SpacesService) VoiceTranscript() http.HandlerFunc {
 			}
 			writeJSON(w, http.StatusOK, transcript)
 		case http.MethodPatch:
-			// Speaker names, and the Library item holding the recording.
 			var body struct {
 				Speakers        map[string]string `json:"speakers"`
 				RecordingItemID string            `json:"recording_item_id"`
@@ -97,7 +92,6 @@ func writeVoiceError(w http.ResponseWriter, err error) {
 	}
 }
 
-// personalSpaceID is the person's own default Space, where voice Notes go.
 func (s *SpacesService) personalSpaceID(ctx context.Context, user string) (string, error) {
 	spaces, err := s.database.ListSpaces(ctx, user)
 	if err != nil {

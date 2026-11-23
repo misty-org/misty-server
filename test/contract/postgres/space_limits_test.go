@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// Space counts the tests create. No account has a Space cap.
 const (
 	spaceCountSample      = 3
 	largeSpaceCountSample = 10

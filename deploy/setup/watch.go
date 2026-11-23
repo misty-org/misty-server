@@ -17,15 +17,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// watch is the alerts service of compose.yml. Every minute it checks that the
-// API answers /health, how many of its requests failed with a server error
-// (from /metrics), the free space on the database volume and, hourly, that a
-// backup was made in the last 26 hours. A problem seen on two checks in a row
-// becomes an open alert in the server_alerts table, which the console and the
-// server owner's app show; it is removed when the problem clears. Alerts are
-// never emailed. A write that fails (the database itself may be down) is
-// tried again on the next check.
-
 const (
 	watchInterval   = time.Minute
 	backupMaxAge    = 26 * time.Hour
@@ -34,7 +25,6 @@ const (
 	minRequests     = 20
 )
 
-// alertBook keeps the open alerts where the API and the console read them.
 type alertBook interface {
 	openAlerts(ctx context.Context) (map[string]bool, error)
 	raise(ctx context.Context, probe, title, detail string) error
@@ -103,9 +93,6 @@ func runWatch(ctx context.Context) error {
 	}
 }
 
-// tick runs every probe once. A problem seen on two checks in a row opens
-// an alert, and its end closes it. The alerts open before a restart are read
-// back first, so one that cleared meanwhile still closes.
 func (w *watcher) tick(ctx context.Context) {
 	if !w.loaded {
 		if open, err := w.book.openAlerts(ctx); err == nil {
@@ -171,7 +158,6 @@ func checkHealth(ctx context.Context, client *http.Client, api string) string {
 	return fmt.Sprintf("The API's health check answered %s. Failing: %s.", resp.Status, strings.Join(failing, ", "))
 }
 
-// errorShare compares the request counters between two checks.
 type errorShare struct {
 	total, failed float64
 	known         bool
@@ -185,7 +171,7 @@ func (e *errorShare) check(ctx context.Context, client *http.Client, api, token 
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := client.Do(req)
 	if err != nil {
-		return "" // The health probe reports an API that doesn't answer.
+		return ""
 	}
 	defer resp.Body.Close()
 	total, failed := requestCounts(resp.Body)
@@ -198,8 +184,6 @@ func (e *errorShare) check(ctx context.Context, client *http.Client, api, token 
 	return fmt.Sprintf("%.0f of the last %.0f requests failed with a server error.", errors, requests)
 }
 
-// requestCounts sums misty_http_requests_total, and its 5xx part, from
-// Prometheus text.
 func requestCounts(body io.Reader) (total, failed float64) {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 64<<10), 1<<20)

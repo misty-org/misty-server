@@ -15,8 +15,6 @@ func noteAssetUpload(t *testing.T, fixture noteFixture, userID string, byteSize 
 		"library/noteasset"+suffix, "note-asset-token-"+suffix, time.Now().Add(time.Hour))
 }
 
-// Uploading an asset requires edit access to the parent note, which every
-// current Space member has. Someone outside the Space has none.
 func TestNoteAssetUploadRequiresNoteEditAccess(t *testing.T) {
 	fixture := newNoteFixture(t, "note-asset-auth")
 
@@ -37,8 +35,6 @@ func TestNoteAssetUploadRequiresNoteEditAccess(t *testing.T) {
 	}
 }
 
-// The 15 MB note ceiling is enforced in the database, independently of the API
-// service and the desktop.
 func TestNoteAssetUploadEnforcesTheNoteLimit(t *testing.T) {
 	fixture := newNoteFixture(t, "note-asset-limit")
 
@@ -50,8 +46,6 @@ func TestNoteAssetUploadEnforcesTheNoteLimit(t *testing.T) {
 	}
 }
 
-// The upload row must record its note so finalization creates a note asset
-// rather than a Library item.
 func TestNoteAssetUploadRecordsItsParentNote(t *testing.T) {
 	fixture := newNoteFixture(t, "note-asset-binding")
 
@@ -73,8 +67,6 @@ func TestNoteAssetUploadRecordsItsParentNote(t *testing.T) {
 	}
 }
 
-// A Library upload must never carry a note reference, and a note upload must
-// never lack one. The database enforces both directions.
 func TestUploadPurposeAndNoteReferenceMustAgree(t *testing.T) {
 	fixture := newNoteFixture(t, "note-asset-constraint")
 
@@ -97,8 +89,6 @@ func TestUploadPurposeAndNoteReferenceMustAgree(t *testing.T) {
 	}
 }
 
-// Listing and downloading follow the parent note's access, which is Space
-// membership.
 func TestNoteAssetVisibilityFollowsTheParentNote(t *testing.T) {
 	fixture := newNoteFixture(t, "note-asset-visibility")
 
@@ -122,7 +112,6 @@ func TestNoteAssetVisibilityFollowsTheParentNote(t *testing.T) {
 	}
 }
 
-// Removing an asset is idempotent, so a retried request does not error.
 func TestDeleteNoteAssetIsIdempotentAndRequiresEditAccess(t *testing.T) {
 	fixture := newNoteFixture(t, "note-asset-delete")
 

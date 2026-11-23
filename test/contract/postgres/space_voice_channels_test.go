@@ -7,9 +7,6 @@ import (
 	"github.com/misty-org/misty-server/internal/spaces"
 )
 
-// A voice channel's call is open to whoever may read the channel, and to nobody else: a hidden voice
-// channel is closed to those it hides from, a text channel has no call, and a channel is joined only
-// under its own Space.
 func TestVoiceChannelCallsFollowWhoMayReadTheChannel(t *testing.T) {
 	f := newRolesFixture(t, "voice-calls")
 	crewRole := f.role(t, "Crew")

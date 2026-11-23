@@ -13,10 +13,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// Drive items over HTTP: the change feed, one item, creating, changing,
-// trashing, restoring and purging items, the trash, and a file's download.
-
-// DriveChanges is GET /spaces/{spaceID}/drive/changes?since=&limit=.
 func (s *SpaceDriveService) DriveChanges() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -51,7 +47,6 @@ func (s *SpaceDriveService) DriveChanges() http.HandlerFunc {
 	}
 }
 
-// DriveItem is GET /spaces/{spaceID}/drive/items/{itemID}.
 func (s *SpaceDriveService) DriveItem() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -79,9 +74,6 @@ type driveCreateBody struct {
 	UploadID string  `json:"upload_id"`
 }
 
-// CreateDriveItem is POST /spaces/{spaceID}/drive/items: 201 with the new
-// item, or 200 with the same item when a create naming its own id is retried.
-// A trashed folder it goes into comes back first (revived: true).
 func (s *SpaceDriveService) CreateDriveItem() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -140,12 +132,6 @@ type drivePatchBody struct {
 	Replace     bool            `json:"replace"`
 }
 
-// PatchDriveItem is PATCH /spaces/{spaceID}/drive/items/{itemID}: a new name,
-// parent (null for the root), content or mtime. If-Match is optional: sent, a
-// stale one is 409 version_conflict; left out, the write applies. base_version
-// is the version the sender's copy came from, so content it never saw is kept
-// as a trashed copy (replaced); replace lets a new name take one a live item
-// holds, trashing that item first. A trashed item comes back (revived: true).
 func (s *SpaceDriveService) PatchDriveItem() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -208,10 +194,6 @@ func (s *SpaceDriveService) PatchDriveItem() http.HandlerFunc {
 	}
 }
 
-// TrashDriveItem is POST /spaces/{spaceID}/drive/items/{itemID}/trash with
-// {held}. If-Match is optional: a stale one is 409 version_conflict. It
-// answers 423 while the item, or anything in a folder, is open on another
-// computer.
 func (s *SpaceDriveService) TrashDriveItem() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -241,8 +223,6 @@ func (s *SpaceDriveService) TrashDriveItem() http.HandlerFunc {
 	}
 }
 
-// RestoreDriveItem is POST /spaces/{spaceID}/drive/items/{itemID}/restore. An
-// If-Match is optional here: restoring changes nothing anyone could have lost.
 func (s *SpaceDriveService) RestoreDriveItem() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -269,8 +249,6 @@ func (s *SpaceDriveService) RestoreDriveItem() http.HandlerFunc {
 	}
 }
 
-// PurgeDriveItem is DELETE /spaces/{spaceID}/drive/items/{itemID}: a trashed
-// item and everything under it go for good. It needs drive.purge.
 func (s *SpaceDriveService) PurgeDriveItem() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -291,7 +269,6 @@ func (s *SpaceDriveService) PurgeDriveItem() http.HandlerFunc {
 	}
 }
 
-// DriveTrash is GET /spaces/{spaceID}/drive/trash?after=&limit=.
 func (s *SpaceDriveService) DriveTrash() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -317,9 +294,6 @@ func (s *SpaceDriveService) DriveTrash() http.HandlerFunc {
 	}
 }
 
-// DriveContent is GET /spaces/{spaceID}/drive/items/{itemID}/content: one
-// presigned download of a file, valid for 15 minutes. An empty file has no
-// bytes to fetch, so its URL is empty.
 func (s *SpaceDriveService) DriveContent() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

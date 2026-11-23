@@ -15,8 +15,6 @@ import (
 
 const operatorToken = "operator-test-token"
 
-// issuedKey is the setup key an operator answer carries, failing the test
-// when it carries none.
 func issuedKey(t *testing.T, body map[string]any) string {
 	t.Helper()
 	key, _ := accountField(body, "setup_key").(string)
@@ -26,7 +24,6 @@ func issuedKey(t *testing.T, body map[string]any) string {
 	return key
 }
 
-// operatorServer mounts the routes the app mounts for this feature.
 func operatorServer(t *testing.T) http.Handler {
 	t.Helper()
 	t.Setenv("MISTY_PUBLIC_API_URL", "https://cloud.misty.example/v1")
@@ -95,7 +92,6 @@ func TestOperatorCreateReturnsASetupKeyThatSignsInLikeLogin(t *testing.T) {
 	if rec.Code != http.StatusCreated || body["created"] != true {
 		t.Fatalf("create = %d %v", rec.Code, body)
 	}
-	// searches_per_month is retired: billing may still send it, and it is ignored.
 	if accountField(body, "limits", "devices") != float64(5) || accountField(body, "limits", "searches_per_month") != nil || accountField(body, "setup", "live_key") != true {
 		t.Fatalf("account = %v", body["account"])
 	}
@@ -106,13 +102,10 @@ func TestOperatorCreateReturnsASetupKeyThatSignsInLikeLogin(t *testing.T) {
 	if _, emailed := body["setup_key_sent"]; emailed {
 		t.Fatalf("the server sends no email: %v", body)
 	}
-	// Created again (a retried webhook): same account, and no second key
-	// while the first still works.
 	rec, body = call(t, handler, http.MethodPost, "/operator/v1/accounts", operatorToken, `{"email":"NEW@example.com","limits":{"devices":3}}`)
 	if rec.Code != http.StatusOK || body["created"] != false || accountField(body, "setup_key") != nil || accountField(body, "setup_link") != nil {
 		t.Fatalf("retried create = %d %v", rec.Code, body)
 	}
-	// Looked up by its exact email, whatever the case.
 	if rec, list := call(t, handler, http.MethodGet, "/operator/v1/accounts?email=New@Example.com", operatorToken, ""); rec.Code != http.StatusOK || len(list["accounts"].([]any)) != 1 {
 		t.Fatalf("by email = %d %v", rec.Code, list)
 	}
@@ -139,22 +132,17 @@ func TestOperatorCreateReturnsASetupKeyThatSignsInLikeLogin(t *testing.T) {
 	if again, body := call(t, handler, http.MethodPost, "/v1/setup-keys/redeem", "", `{"setup_key":"`+key+`"}`); again.Code != http.StatusUnauthorized || body["code"] != "setup_key_invalid" {
 		t.Fatalf("second redeem = %d %v", again.Code, body)
 	}
-	// Once signed in, a repeat create issues nothing.
 	if _, body := call(t, handler, http.MethodPost, "/operator/v1/accounts", operatorToken, `{"email":"new@example.com"}`); accountField(body, "setup_key") != nil {
 		t.Fatalf("create after sign-in issued a key: %v", body)
 	}
 }
 
-// A setup key for an account that already has a password signs it in and
-// lets it choose a new password: the server's only password reset.
 func TestSetupKeyResetsAForgottenPassword(t *testing.T) {
 	handler := operatorServer(t)
 	_, list := call(t, handler, http.MethodGet, "/operator/v1/accounts?email=owner@example.com", operatorToken, "")
 	owner, _ := list["accounts"].([]any)[0].(map[string]any)
 	id, _ := owner["id"].(string)
 	rec, body := call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/setup-key", operatorToken, "")
-	// Registering first doesn't make this password account the owner: only a Google
-	// account with MISTY_OWNER_EMAIL is.
 	if rec.Code != http.StatusOK || accountField(body, "owner") != false {
 		t.Fatalf("setup key = %d %v", rec.Code, body)
 	}
@@ -207,7 +195,6 @@ func TestSuspendedSignInGetsAProofAndNoSession(t *testing.T) {
 		t.Fatalf("suspend = %d", rec.Code)
 	}
 
-	// Only someone who knows the password learns anything.
 	rec, body = call(t, handler, http.MethodPost, "/v1/login", "", `{"email":"owner@example.com","password":"not the password at all"}`)
 	if rec.Code != http.StatusUnauthorized || body["proof"] != nil {
 		t.Fatalf("wrong password = %d %v", rec.Code, body)
@@ -225,7 +212,6 @@ func TestSuspendedSignInGetsAProofAndNoSession(t *testing.T) {
 		t.Fatalf("proof = %d %v", rec.Code, body)
 	}
 
-	// Paid again, the same password signs in as usual.
 	if rec, _ := call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/resume", operatorToken, ""); rec.Code != http.StatusOK {
 		t.Fatalf("resume = %d", rec.Code)
 	}

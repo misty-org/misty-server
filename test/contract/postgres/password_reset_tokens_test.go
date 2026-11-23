@@ -12,7 +12,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// A setup key's sign-in may set a new password without the old one, once.
 func TestPasswordResetGrantLifecycle(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()

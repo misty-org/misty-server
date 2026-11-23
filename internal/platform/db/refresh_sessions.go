@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// Existing session deletion paths (account deletion, enrollment changes) also
-// revoke refresh sessions. Access JWTs expire independently within five minutes.
 func (db *Database) CreateRefreshSession(ctx context.Context, sessionHash, refreshHash, userID string, expires time.Time) error {
 	return db.WithRLSContext(ctx, sessionCreateRLSSettings(sessionHash, userID), func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `INSERT INTO sessions(token_hash, refresh_hash, user_id, expires_at)
@@ -25,13 +23,8 @@ func (db *Database) CreateRefreshSession(ctx context.Context, sessionHash, refre
 	})
 }
 
-// RefreshRotationGrace is how long the token replaced by a rotation stays
-// usable. It covers a client that never received the rotated cookies and
-// retries with the one it still holds; any later reuse is treated as a replay.
 const RefreshRotationGrace = 2 * time.Minute
 
-// Rotation is serialized across all instances. A replay revokes the complete
-// session family, including the refresh token issued by an earlier winner.
 func (db *Database) RotateRefreshSession(ctx context.Context, sessionHash, oldHash, newHash, userID string) (bool, error) {
 	valid := false
 	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
@@ -53,20 +46,17 @@ func (db *Database) RotateRefreshSession(ctx context.Context, sessionHash, oldHa
 		}
 		now := time.Now()
 		matchesCurrent := subtle.ConstantTimeCompare([]byte(current), []byte(oldHash)) == 1
-		// Only the token the latest rotation replaced, and only briefly.
 		withinGrace := previous.Valid && rotatedAt.Valid &&
 			subtle.ConstantTimeCompare([]byte(previous.String), []byte(oldHash)) == 1 &&
 			now.Sub(rotatedAt.Time) <= RefreshRotationGrace
 		if owner != userID || !active || !expires.After(now) || (!matchesCurrent && !withinGrace) {
 			_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=$1`, sessionHash)
-			return err // Commit revocation even though the credential is invalid.
+			return err
 		}
 		if matchesCurrent {
 			_, err = tx.ExecContext(ctx, `UPDATE sessions SET refresh_hash=$2, previous_refresh_hash=$3, refresh_rotated_at=$4
    WHERE token_hash=$1`, sessionHash, newHash, current, now)
 		} else {
-			// A grace retry: the unreceived token becomes the previous one, but
-			// the window still ends where the original rotation started it.
 			_, err = tx.ExecContext(ctx, `UPDATE sessions SET refresh_hash=$2, previous_refresh_hash=$3
    WHERE token_hash=$1`, sessionHash, newHash, current)
 		}
@@ -76,8 +66,6 @@ func (db *Database) RotateRefreshSession(ctx context.Context, sessionHash, oldHa
 	return valid, err
 }
 
-// AccountSessionFresh reports whether a session was signed in within the window, the proof a
-// destructive request needs from an account that has no password to type.
 func (db *Database) AccountSessionFresh(ctx context.Context, sessionHash, userID string, window time.Duration) (bool, error) {
 	fresh := false
 	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
@@ -87,9 +75,6 @@ func (db *Database) AccountSessionFresh(ctx context.Context, sessionHash, userID
 	return fresh, err
 }
 
-// AccountSessionActive reports whether a session can still mint access tokens
-// for an active account. Long-lived streams call it instead of reconnecting to
-// re-present a credential.
 func (db *Database) AccountSessionActive(ctx context.Context, sessionHash, userID string) (bool, error) {
 	active := false
 	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {

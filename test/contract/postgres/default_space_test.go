@@ -55,7 +55,6 @@ func TestDefaultSpaceCannotBeTransferred(t *testing.T) {
 		t.Fatal(err)
 	}
 	space := personalSpace(t, database, ctx, owner.ID)
-	// A Personal is never shared, so nobody can be in it to take it over.
 	if _, err := database.TestingInviteToSpace(ctx, owner.ID, space.ID, member.Email); !errors.Is(err, ErrSpaceNotShareable) {
 		t.Fatalf("invite into Personal = %v, want ErrSpaceNotShareable", err)
 	}

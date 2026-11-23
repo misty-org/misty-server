@@ -11,8 +11,6 @@ import (
 
 const RefreshCookieName = "misty_refresh"
 
-// The desktop app holds its JWTs in native code, so it asks for them in response headers
-// instead of cookies. The website only ever gets cookies.
 const (
 	TokenTransportHeader = "X-Misty-Token-Transport"
 	AccessTokenHeader    = "X-Misty-Access-Token"
@@ -20,9 +18,6 @@ const (
 	SessionEndedHeader   = "X-Misty-Session-Ended"
 )
 
-// usesTokenHeaders says whether this request may receive tokens it can read. Browsers send
-// Origin on every POST, and only POST issues a session here, so a page or an injected script
-// can never reach this: whatever it sets, its answer stays in HttpOnly cookies.
 func usesTokenHeaders(r *http.Request) bool {
 	_, hasOrigin := r.Header["Origin"]
 	return r.Method == http.MethodPost && !hasOrigin &&
@@ -94,8 +89,6 @@ func writeAuthCookie(w http.ResponseWriter, r *http.Request, name, value string,
 		Secure: secure, SameSite: SessionCookieSameSite(r, secure), MaxAge: maxAge})
 }
 
-// clearAuthCookies ends the session on the client: the desktop app is told in a header, and
-// cookies are expired. A request that asks for headers gets Set-Cookie only if it came with cookies.
 func clearAuthCookies(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if usesTokenHeaders(r) {
@@ -114,8 +107,6 @@ func hasAuthCookie(r *http.Request) bool {
 	return accessErr == nil || refreshErr == nil
 }
 
-// presentedRefreshToken is the refresh JWT a request presents, and whether it came as a bearer.
-// A bearer speaks for the request: one that fails is never rescued by a cookie sent with it.
 func presentedRefreshToken(r *http.Request) (token string, bearer, ok bool) {
 	if token, ok := BearerTokenFromRequest(r); ok {
 		return token, true, true
@@ -154,7 +145,6 @@ func RefreshSession(database *db.Database) http.HandlerFunc {
 			writeAccountSuspended(w)
 			return
 		}
-		// Taking someone off the allowlist ends their session here, not only their next sign-in.
 		if allowedEmails() != nil {
 			user, err := database.GetUserByID(claims.Subject)
 			if err != nil {
@@ -189,8 +179,6 @@ func RefreshSession(database *db.Database) http.HandlerFunc {
 			http.Error(w, "not authenticated", http.StatusUnauthorized)
 			return
 		}
-		// Tokens leave in headers only for a refresh token that arrived readable: one held in a
-		// cookie stays out of reach of whoever sent this request, whatever else it asked for.
 		if viaBearer && usesTokenHeaders(r) {
 			writeTokenHeaders(w, access, refresh)
 		} else {
@@ -200,10 +188,6 @@ func RefreshSession(database *db.Database) http.HandlerFunc {
 	}
 }
 
-// Require an explicit non-simple header on cookie-authenticated mutations.
-// CORS is not itself CSRF protection: reject disallowed origins before handlers.
-// A bearer request sends no cookie, so no other site can make a browser send it for
-// someone; it passes unless it also carries a cookie or is a sign-in.
 func CookieCSRFProtection(allowedOrigin func(string) bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -213,10 +197,7 @@ func CookieCSRFProtection(allowedOrigin func(string) bool) func(http.Handler) ht
 			}
 			_, accessErr := r.Cookie(SessionCookieName)
 			_, refreshErr := r.Cookie(RefreshCookieName)
-			// Login also needs protection against login CSRF.
 			path := strings.TrimPrefix(r.URL.Path, "/v1")
-			// A confirmation link's form comes from the website, with any cookies this browser
-			// has here. Its token is all it uses, and it opens no session.
 			if path == "/auth/confirm-email" {
 				next.ServeHTTP(w, r)
 				return

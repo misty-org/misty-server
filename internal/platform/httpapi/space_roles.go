@@ -7,8 +7,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// Roles lists a Space's roles, highest first (GET, any member), or adds one at
-// the bottom (POST, roles.manage).
 func (s *SpacesService) Roles() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -38,7 +36,6 @@ func (s *SpacesService) Roles() http.HandlerFunc {
 	}
 }
 
-// Role edits (PATCH) or deletes (DELETE) one role below the caller's highest.
 func (s *SpacesService) Role() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -67,7 +64,6 @@ func (s *SpacesService) Role() http.HandlerFunc {
 	}
 }
 
-// RoleOrder puts every role but everyone in a new order, top first.
 func (s *SpacesService) RoleOrder() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -89,7 +85,6 @@ func (s *SpacesService) RoleOrder() http.HandlerFunc {
 	}
 }
 
-// MemberRoles sets which roles a member holds, as far as the caller may assign them.
 func (s *SpacesService) MemberRoles() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -111,7 +106,6 @@ func (s *SpacesService) MemberRoles() http.HandlerFunc {
 	}
 }
 
-// ConversationOverwrites replaces a standard channel's overwrites.
 func (s *SpacesService) ConversationOverwrites() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

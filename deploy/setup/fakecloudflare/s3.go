@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-// serveS3 is just enough of path-style S3 for backups: put, get and list.
-// Signatures are not checked.
 func (f *Fake) serveS3(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 	bucketName, key, _ := strings.Cut(path, "/")

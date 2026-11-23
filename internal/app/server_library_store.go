@@ -9,8 +9,6 @@ import (
 	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// libraryR2Names are the R2 settings, all required in production. The setup
-// container provisions the bucket and its credentials.
 var libraryR2Names = []string{"R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY", "R2_SECRET_KEY"}
 
 func libraryR2Configured() bool {
@@ -22,8 +20,6 @@ func libraryR2Configured() bool {
 	return false
 }
 
-// LibraryStoreFromEnv opens the R2 bucket for drive files, attachments, note images and
-// avatars. A development server without R2 keeps them in memory.
 func LibraryStoreFromEnv() (api.LibraryObjectStore, error) {
 	if !libraryR2Configured() && !productionEnvironment() {
 		return api.NewMemoryLibraryObjectStore(), nil

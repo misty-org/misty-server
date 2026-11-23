@@ -7,9 +7,6 @@ import (
 	"fmt"
 )
 
-// retireLibraryBlobsIfUnusedTx marks each ready blob deleted when nothing
-// live references it and returns the object keys to delete. The blob's
-// deduplication lock keeps a concurrent upload from reusing it meanwhile.
 func retireLibraryBlobsIfUnusedTx(ctx context.Context, tx *sql.Tx, blobIDs []string) ([]string, error) {
 	keys := []string{}
 	seen := map[string]bool{}
@@ -48,9 +45,6 @@ func retireLibraryBlobsIfUnusedTx(ctx context.Context, tx *sql.Tx, blobIDs []str
 		if err != nil {
 			return nil, err
 		}
-		// The finished upload that first wrote this object still names it;
-		// retiring it too lets the orphan sweep collect the object if the
-		// caller's delete fails.
 		if _, err := tx.ExecContext(ctx, `UPDATE space_library_uploads SET state='deleted',version=version+1,updated_at=NOW() WHERE object_key=$1 AND state='ready'`, key); err != nil {
 			return nil, err
 		}

@@ -97,11 +97,10 @@ func TestRealtimeFanoutPreservesAccountAndResourceBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	participant := testRealtimeClient(s, "participant", 4)
-	s.BroadcastEvent(2) // Space membership does not grant access to a private conversation.
+	s.BroadcastEvent(2)
 	if len(first.Send) != 0 || len(second.Send) != 0 || len(outsider.Send) != 0 {
 		t.Fatal("unauthorized event delivered")
 	}
-	// One authorization pass resolves each recipient separately.
 	if got := <-participant.Send; !strings.Contains(string(got), `"type":"event"`) {
 		t.Fatalf("participant did not receive the private event: %s", got)
 	}

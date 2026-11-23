@@ -15,8 +15,6 @@ const (
 	deliverBatch    = 20
 )
 
-// Run delivers the outbox until ctx ends. A server without Mailjet never queues
-// anything, so it has nothing to run.
 func Run(ctx context.Context, database *db.Database) {
 	client, err := FromEnv()
 	if err != nil {
@@ -40,8 +38,6 @@ func Run(ctx context.Context, database *db.Database) {
 	}
 }
 
-// DeliverDue sends what is due. A failure is retried with backoff; a row is
-// leased while it is sent, so two workers never send it twice.
 func DeliverDue(ctx context.Context, database *db.Database, sender Sender) error {
 	due, err := database.ClaimDueEmails(ctx, deliverBatch)
 	if err != nil {
@@ -72,8 +68,6 @@ func DeliverDue(ctx context.Context, database *db.Database, sender Sender) error
 	return nil
 }
 
-// sendErrorCode is what the outbox records about a failure: Mailjet's status and
-// code, never the message.
 func sendErrorCode(err error) string {
 	var refusal *Error
 	if errors.As(err, &refusal) {

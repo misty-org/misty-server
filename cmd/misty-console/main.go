@@ -1,6 +1,3 @@
-// Command misty-console serves the loopback-only operator console. In
-// development `misty server up --gui` starts it; in a server stack it is the
-// console service of compose.yml, published on 127.0.0.1:7070 only.
 package main
 
 import (
@@ -33,8 +30,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// The console stays useful when Postgres is down: the Overview reports the
-	// database as unreachable instead of the process refusing to start.
 	database := &db.Database{}
 	if err := database.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "misty-console: database unavailable: %v\n", err)

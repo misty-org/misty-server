@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// The Spaces routes stay mounted and need a signed-in session.
 func TestSpacesToolsRemainMountedAndAuthenticated(t *testing.T) {
 	server := noteRouteTestServer(t)
 	for _, prefix := range []string{"/v1"} {

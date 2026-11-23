@@ -12,8 +12,6 @@ type ConsoleStateCount struct {
 	Count int
 }
 
-// ConsoleJob is one background job that needs an operator's attention:
-// running, waiting or recently failed.
 type ConsoleJob struct {
 	Kind      string
 	Title     string
@@ -23,8 +21,6 @@ type ConsoleJob struct {
 	UpdatedAt time.Time
 }
 
-// Only the Library's own jobs still run on the server: every agent, schedule and
-// model call happens on the person's computer.
 const consoleJobStateCounts = `
 	SELECT 'Library jobs (24h)', state, count(*) FROM library_processing_jobs
 		WHERE updated_at > now() - interval '1 day' GROUP BY state

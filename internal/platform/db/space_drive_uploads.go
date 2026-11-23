@@ -14,17 +14,6 @@ import (
 	"github.com/misty-org/misty-server/internal/spaces"
 )
 
-// A drive file's bytes go up before the item that names them: a Library
-// upload of purpose "drive" reserves the bytes, the app PUTs them straight to
-// R2 (one presigned PUT, or presigned parts of an S3 multipart upload for a
-// large file), the complete call verifies the object, and the item's create or
-// change turns the upload into a blob in the same transaction that names it.
-// An upload no item ever names expires like any other, and the orphan sweep
-// collects its object. Asking again for the same content resumes the caller's
-// pending upload instead of starting another; content the Space's security
-// domain already holds needs no upload at all.
-
-// DriveUpload is one of the caller's drive uploads.
 type DriveUpload struct {
 	ID                string
 	SpaceID           string
@@ -37,15 +26,10 @@ type DriveUpload struct {
 	ExpiresAt         time.Time
 }
 
-// Pending says whether the upload's bytes may still arrive.
 func (u DriveUpload) Pending() bool {
 	return u.State == "initiated" || u.State == "uploading" || u.State == "uploaded_unverified"
 }
 
-// DriveUploadStart is the answer to a drive upload request. Present means the
-// domain already holds the content. Released are the caller's other pending
-// uploads of the same content that this answer gave up; the caller deletes
-// their objects (and aborts their multipart uploads).
 type DriveUploadStart struct {
 	Upload   DriveUpload
 	Present  bool
@@ -68,8 +52,6 @@ func spaceSecurityDomainTx(ctx context.Context, tx *sql.Tx, spaceID string) (str
 	return domainID, err
 }
 
-// driveBlobKeyTx returns the object of the domain's ready blob of this
-// content, taken for share so no retirement can remove it before commit.
 func driveBlobKeyTx(ctx context.Context, tx *sql.Tx, domainID, sha string, size int64) (string, error) {
 	var key string
 	err := tx.QueryRowContext(ctx, `SELECT r2_object_key FROM library_blobs
@@ -82,8 +64,6 @@ func driveBlobKeyTx(ctx context.Context, tx *sql.Tx, domainID, sha string, size 
 
 func newDriveObjectKey() string { return "library/" + strings.ReplaceAll(uuid.NewString(), "-", "") }
 
-// driveUploadTokenHash fills the upload's token column: drive uploads are
-// bound to their uploader's session, never to a token.
 func driveUploadTokenHash() string {
 	sum := sha256.Sum256([]byte("drive:" + uuid.NewString()))
 	return hex.EncodeToString(sum[:])
@@ -108,9 +88,6 @@ func sha256Hex(value string) bool {
 	return true
 }
 
-// StartDriveUpload answers an upload request for one file's content: present
-// when the domain holds it, else the caller's pending upload of it (resumed,
-// its lifetime renewed) or a new one, whose bytes are reserved now.
 func (db *Database) StartDriveUpload(ctx context.Context, userID, spaceID, sha string, size int64, expiresAt time.Time) (*DriveUploadStart, error) {
 	if size < 1 || !validDriveContent(sha, size) || !expiresAt.After(time.Now()) {
 		return nil, ErrLibraryInvalid
@@ -160,8 +137,6 @@ func (db *Database) StartDriveUpload(ctx context.Context, userID, spaceID, sha s
 			return err
 		}
 		if key != "" {
-			// Nothing to send. The answer still names an upload of the caller's,
-			// so an item can cite it; a pending one is no longer needed.
 			out.Present, out.Released = true, pending
 			if err := releaseDriveUploadsTx(ctx, tx, spaceID, pending, "superseded"); err != nil {
 				return err
@@ -179,7 +154,6 @@ func (db *Database) StartDriveUpload(ctx context.Context, userID, spaceID, sha s
 			return err
 		}
 		if len(pending) > 0 {
-			// The newest carries on with a new lifetime; any older one is given up.
 			out.Upload, out.Released = pending[0], pending[1:]
 			if err := releaseDriveUploadsTx(ctx, tx, spaceID, out.Released, "superseded"); err != nil {
 				return err
@@ -215,8 +189,6 @@ func (db *Database) StartDriveUpload(ctx context.Context, userID, spaceID, sha s
 	return out, nil
 }
 
-// releaseDriveUploadsTx gives up pending drive uploads: their reservations
-// free at once, and the caller deletes their objects.
 func releaseDriveUploadsTx(ctx context.Context, tx *sql.Tx, spaceID string, uploads []DriveUpload, code string) error {
 	if len(uploads) == 0 {
 		return nil
@@ -238,7 +210,6 @@ func releaseDriveUploadsTx(ctx context.Context, tx *sql.Tx, spaceID string, uplo
 	return err
 }
 
-// DriveUploadByID returns one of the caller's drive uploads in the Space.
 func (db *Database) DriveUploadByID(ctx context.Context, userID, spaceID, uploadID string) (*DriveUpload, error) {
 	var upload DriveUpload
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -258,8 +229,6 @@ func (db *Database) DriveUploadByID(ctx context.Context, userID, spaceID, upload
 	return &upload, nil
 }
 
-// SetDriveUploadMultipart records the S3 multipart upload a large drive
-// upload's parts go to. It only fills an upload that has none yet.
 func (db *Database) SetDriveUploadMultipart(ctx context.Context, userID, spaceID, uploadID, multipartID string, partSize int64) error {
 	if multipartID == "" || partSize < 1 {
 		return ErrLibraryInvalid
@@ -278,9 +247,6 @@ func (db *Database) SetDriveUploadMultipart(ctx context.Context, userID, spaceID
 	})
 }
 
-// MarkDriveUploadLanded records that the caller checked the upload's object
-// in the store: its size and digest are the ones reserved. An item that
-// names the upload then turns it into a blob.
 func (db *Database) MarkDriveUploadLanded(ctx context.Context, userID, spaceID, uploadID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `UPDATE space_library_uploads SET state='uploaded_unverified',verified_byte_size=requested_byte_size,
@@ -290,8 +256,6 @@ func (db *Database) MarkDriveUploadLanded(ctx context.Context, userID, spaceID, 
 	})
 }
 
-// RejectDriveUpload gives up an upload whose object didn't match what was
-// reserved; its reservation frees and the caller deletes the object.
 func (db *Database) RejectDriveUpload(ctx context.Context, userID, spaceID, uploadID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		upload, err := scanDriveUpload(tx.QueryRowContext(ctx, driveUploadSelect+` WHERE id=$1 AND space_id=$2 AND user_id=$3 AND purpose='drive' FOR UPDATE`, uploadID, spaceID, userID))
@@ -309,10 +273,6 @@ func (db *Database) RejectDriveUpload(ctx context.Context, userID, spaceID, uplo
 	})
 }
 
-// finishDriveUploadTx turns the caller's landed upload of this content into
-// a blob, or gives up its object when another blob already holds the
-// content. It returns the bytes the upload had reserved (now consumed) and
-// any object to delete.
 func finishDriveUploadTx(ctx context.Context, tx *sql.Tx, userID, spaceID, domainID, uploadID, sha string, size int64) (int64, string, error) {
 	upload, err := scanDriveUpload(tx.QueryRowContext(ctx, driveUploadSelect+` WHERE id=$1 AND space_id=$2 AND user_id=$3 AND purpose='drive' FOR UPDATE`, uploadID, spaceID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -326,15 +286,11 @@ func finishDriveUploadTx(ctx context.Context, tx *sql.Tx, userID, spaceID, domai
 	}
 	switch upload.State {
 	case "ready", "deleted":
-		// Already a blob, or given up to the blob that already held the content
-		// (or retired with it): the caller looks the content up by digest.
 		return 0, "", nil
 	case "uploaded_unverified":
 	default:
 		return 0, "", ErrDriveUploadIncomplete
 	}
-	// The digest index decides between this upload and any blob of the same
-	// content, so two uploads of it can never both become blobs.
 	var created string
 	err = tx.QueryRowContext(ctx, `INSERT INTO library_blobs(id,security_domain_id,r2_object_key,sha256,byte_size,client_declared_mime_type,server_detected_mime_type,scan_status,processing_status,lifecycle_state)
 		VALUES($1,$2,$3,$4,$5,$6,$6,'skipped','ready','ready')
@@ -363,17 +319,12 @@ func finishDriveUploadTx(ctx context.Context, tx *sql.Tx, userID, spaceID, domai
 	return held, discard, nil
 }
 
-// driveContent is a file's content as a change names it.
 type driveContent struct {
 	sha      string
 	size     int64
 	uploadID string
 }
 
-// resolveDriveContentTx finds the blob a file's content is in, finishing the
-// caller's upload of it first when one is named. It returns the blob's key
-// (empty for an empty file), the reserved bytes the upload handed over, and
-// any object to delete.
 func resolveDriveContentTx(ctx context.Context, tx *sql.Tx, userID, spaceID string, content driveContent) (string, int64, []string, error) {
 	if !validDriveContent(content.sha, content.size) {
 		return "", 0, nil, ErrLibraryInvalid
@@ -384,8 +335,6 @@ func resolveDriveContentTx(ctx context.Context, tx *sql.Tx, userID, spaceID stri
 	if err := requireSpaceUploadSizeTx(ctx, tx, userID, spaceID, content.size); err != nil {
 		return "", 0, nil, err
 	}
-	// The account's storage lock comes before the upload's row, as in
-	// StartDriveUpload, so the two never wait on each other.
 	if err := prepareStorageReservationTx(ctx, tx, userID, spaceID); err != nil {
 		return "", 0, nil, err
 	}
@@ -414,7 +363,6 @@ func resolveDriveContentTx(ctx context.Context, tx *sql.Tx, userID, spaceID stri
 	return key, held, discard, nil
 }
 
-// driveContributionTx is who an item's bytes count against now, and how many.
 func driveContributionTx(ctx context.Context, tx *sql.Tx, spaceID, itemID string) (string, int64, error) {
 	var userID string
 	var bytes int64
@@ -426,9 +374,6 @@ func driveContributionTx(ctx context.Context, tx *sql.Tx, spaceID, itemID string
 	return userID, bytes, err
 }
 
-// requireDriveRoomTx checks the storage limits for a file whose bytes will
-// count against userID: newBytes, less what the caller's upload already
-// reserved and what the item already counts against the same person.
 func requireDriveRoomTx(ctx context.Context, tx *sql.Tx, userID, spaceID, itemID string, newBytes, held int64) error {
 	if err := prepareStorageReservationTx(ctx, tx, userID, spaceID); err != nil {
 		return err
@@ -446,8 +391,6 @@ func requireDriveRoomTx(ctx context.Context, tx *sql.Tx, userID, spaceID, itemID
 	return RequireStorageRoomTx(ctx, tx, userID, spaceID, adding)
 }
 
-// setDriveContributionTx makes an item's bytes count against userID alone
-// (none for an empty file) and keeps the Space's counter in step.
 func setDriveContributionTx(ctx context.Context, tx *sql.Tx, spaceID, itemID, userID string, bytes int64) error {
 	released, err := releaseDriveContributionsTx(ctx, tx, spaceID, []string{itemID})
 	if err != nil {
@@ -468,8 +411,6 @@ func setDriveContributionTx(ctx context.Context, tx *sql.Tx, spaceID, itemID, us
 	return err
 }
 
-// releaseDriveContributionsTx stops items' bytes counting against anyone and
-// returns how many bytes that freed. The caller updates the Space's counter.
 func releaseDriveContributionsTx(ctx context.Context, tx *sql.Tx, spaceID string, itemIDs []string) (int64, error) {
 	var released int64
 	err := tx.QueryRowContext(ctx, `WITH released AS (
@@ -479,7 +420,6 @@ func releaseDriveContributionsTx(ctx context.Context, tx *sql.Tx, spaceID string
 	return released, err
 }
 
-// requireDrivePurgeTx checks drive.purge.
 func requireDrivePurgeTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) error {
 	return requireSpacePermissionTx(ctx, tx, userID, spaceID, spaces.PermissionDrivePurge)
 }

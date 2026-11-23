@@ -9,11 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/metrics"
 )
 
-// registerDomainGauges wires the counters that only this application knows.
-//
-// Everything here is a leading indicator. System metrics tell you the box is
-// already struggling; a queue depth that has been climbing for ten minutes
-// tells you why, and tells you before the requests start failing.
 func (s *Server) registerDomainGauges(registry *metrics.Registry) {
 
 	registry.WatchGauge(
@@ -95,11 +90,6 @@ func (s *Server) registerDomainGauges(registry *metrics.Registry) {
 
 }
 
-// metricsToken reads the bearer token that gates the metrics endpoint.
-//
-// When it is unset the endpoint is not mounted at all. The output names every
-// route, its traffic volume, and its error rate, so exposing it by default
-// would be a real disclosure.
 func metricsToken() string {
 	return strings.TrimSpace(config.Getenv("MISTY_METRICS_TOKEN"))
 }

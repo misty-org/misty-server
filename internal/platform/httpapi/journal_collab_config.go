@@ -15,27 +15,14 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// Journal collaboration tickets for notes and live code sessions.
-//
-// A ticket is the only thing the Cloudflare Worker trusts. It is signed with an
-// Ed25519 private key that never leaves this server, so a compromise of the
-// collaboration service cannot mint access to a private note.
-
 const (
-	// Short enough that a revoked user cannot hold a usable ticket for long,
-	// long enough to survive a slow client opening a WebSocket.
 	journalTicketLifetime = 60 * time.Second
 	journalTicketIssuer   = "misty-api"
 	journalTicketAudience = "misty-journal-collab"
 )
 
-// ErrCollaborationUnconfigured is a JournalCollabConfig's zero value at work:
-// only tests build one. Every server has the collaboration Worker.
 var ErrCollaborationUnconfigured = errors.New("journal collaboration is not configured")
 
-// JournalCollabConfig holds everything needed to talk to the shared note and
-// collaboration service. It is only usable once every field validates.
-// The zero value is unconfigured and refuses every ticket.
 type JournalCollabConfig struct {
 	Enabled                  bool
 	Host                     string
@@ -48,11 +35,6 @@ type JournalCollabConfig struct {
 	roomSalt                 []byte
 }
 
-// JournalCollabConfigFromEnv reads the collaboration configuration.
-//
-// Notes are saved through the collaboration Worker, so every
-// server needs it: PARTYKIT_HOST and every key must be present and valid, or
-// startup fails. The setup container deploys the Worker and writes them.
 func JournalCollabConfigFromEnv() (JournalCollabConfig, error) {
 	config := JournalCollabConfig{
 		Enabled:  true,
@@ -129,23 +111,14 @@ func decodeOptionalServiceSecret(name string) ([]byte, error) {
 	return decodeServiceSecret(name)
 }
 
-// RoomID derives the opaque room identifier for a note.
-//
-// The room appears in the collaboration WebSocket URL, which is handled by a
-// third-party edge network, so it is deliberately not the note id. The
-// derivation is deterministic, so both the ticket endpoint and the control
-// sender reach the same room without storing an extra column.
 func (c JournalCollabConfig) RoomID(noteID string) string {
 	return c.resourceRoomID("note", noteID)
 }
 
-// CodeRoomID derives the opaque room identifier for a live code session.
 func (c JournalCollabConfig) CodeRoomID(sessionID string) string {
 	return c.resourceRoomID("code", sessionID)
 }
 
-// ItemRoomID derives the opaque room identifier for a made item of any registered kind: the
-// same as RoomID for a note.
 func (c JournalCollabConfig) ItemRoomID(kind, itemID string) string {
 	return c.resourceRoomID(kind, itemID)
 }
@@ -156,9 +129,6 @@ func (c JournalCollabConfig) resourceRoomID(resourceType, resourceID string) str
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))[:32]
 }
 
-// SignServicePayload produces the HMAC a service-to-service call carries.
-// Timestamp and body are both covered so a captured call cannot be replayed
-// later or have its body swapped.
 func SignServicePayload(secret []byte, timestamp string, body []byte) string {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(timestamp))
@@ -167,7 +137,6 @@ func SignServicePayload(secret []byte, timestamp string, body []byte) string {
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// VerifyProjectionSignature checks a projection callback from the Worker.
 func (c JournalCollabConfig) VerifyProjectionSignature(timestamp string, body []byte, signature string) bool {
 	if !c.Enabled {
 		return false
@@ -183,12 +152,10 @@ func (c JournalCollabConfig) VerifyProjectionSignature(timestamp string, body []
 	return hmac.Equal([]byte(previous), []byte(signature))
 }
 
-// SignControlRequest signs a control command sent to the Worker.
 func (c JournalCollabConfig) SignControlRequest(timestamp string, body []byte) string {
 	return SignServicePayload(c.controlSecret, timestamp, body)
 }
 
-// JournalTicket is what the desktop needs to open a collaboration socket.
 type JournalTicket struct {
 	Ticket    string    `json:"ticket"`
 	Room      string    `json:"room"`
@@ -198,15 +165,14 @@ type JournalTicket struct {
 }
 
 type JournalTicketClaims struct {
-	Issuer       string `json:"iss"`
-	Audience     string `json:"aud"`
-	JTI          string `json:"jti"`
-	Subject      string `json:"sub"`
-	SpaceID      string `json:"space_id"`
-	ResourceType string `json:"resource_type"`
-	ResourceID   string `json:"resource_id"`
-	NoteID       string `json:"note_id,omitempty"`
-	// CodeSessionID is the live code session a code room belongs to.
+	Issuer        string `json:"iss"`
+	Audience      string `json:"aud"`
+	JTI           string `json:"jti"`
+	Subject       string `json:"sub"`
+	SpaceID       string `json:"space_id"`
+	ResourceType  string `json:"resource_type"`
+	ResourceID    string `json:"resource_id"`
+	NoteID        string `json:"note_id,omitempty"`
 	CodeSessionID string `json:"code_session_id,omitempty"`
 	Room          string `json:"room"`
 	Role          string `json:"role"`
@@ -220,11 +186,6 @@ type collaborationResource struct {
 	Party string
 }
 
-// MintNoteTicket signs a single-connection ticket for a note.
-//
-// Callers must have rechecked note access immediately before calling this: the
-// ticket is a bearer credential for the room, and nothing downstream re-reads
-// the ACL.
 func (c JournalCollabConfig) MintNoteTicket(userID, spaceID, noteID, role string, aclVersion int64) (JournalTicket, error) {
 	return c.mintResourceTicket(
 		userID,
@@ -235,8 +196,6 @@ func (c JournalCollabConfig) MintNoteTicket(userID, spaceID, noteID, role string
 	)
 }
 
-// MintCodeTicket signs a single-use ticket for one CodeRoom connection: a live code session.
-// Callers must have rechecked membership and that the session is open immediately before.
 func (c JournalCollabConfig) MintCodeTicket(
 	userID, spaceID, sessionID, role string,
 	aclVersion int64,
@@ -250,9 +209,6 @@ func (c JournalCollabConfig) MintCodeTicket(
 	)
 }
 
-// MintAppRoomTicket signs a single-use ticket for one connection to an app's live document (the SDK's
-// `room()`): a plain authenticated Yjs room, kept apart per Space and per app by its resource id. Callers
-// must have rechecked the app's room access immediately before.
 func (c JournalCollabConfig) MintAppRoomTicket(userID, spaceID, appID, roomID string) (JournalTicket, error) {
 	return c.mintResourceTicket(
 		userID,
@@ -263,8 +219,20 @@ func (c JournalCollabConfig) MintAppRoomTicket(userID, spaceID, appID, roomID st
 	)
 }
 
-// MintItemTicket signs a single-use ticket for one connection to the room of an item of any
-// registered kind. Callers must have rechecked the item's access immediately before.
+func (c JournalCollabConfig) MintFileRoomTicket(userID, spaceID, itemID, appID, format, role string) (JournalTicket, error) {
+	resourceID := spaceID + ":" + itemID
+	if format != "text" {
+		resourceID += ":" + appID
+	}
+	return c.mintResourceTicket(
+		userID,
+		spaceID,
+		collaborationResource{Type: "file", ID: resourceID, Party: fileRoomParty},
+		role,
+		1,
+	)
+}
+
 func (c JournalCollabConfig) MintItemTicket(
 	kind db.SpaceItemKind,
 	userID, spaceID, itemID, role string,

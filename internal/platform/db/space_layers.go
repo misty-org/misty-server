@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-// Private and public layers.
-// A Space item is public or private. A private item opens only for its owner.
-// The RLS policies say "public, or owned by the viewer"; queries that run as the
-// service say the same, so a forgotten filter in either still can't leak.
-
 const (
 	VisibilityPublic  = "public"
 	VisibilityPrivate = "private"
@@ -20,11 +15,9 @@ func validVisibility(visibility string) bool {
 	return visibility == VisibilityPublic || visibility == VisibilityPrivate
 }
 
-// visibilityTables maps an item kind to its table, owner column and id column: every made kind
-// in the registry (notes), then the Space's other items.
 var visibilityTables = withSpaceItemVisibility(map[string][3]string{
-	"node":         {"space_nodes", "uploader_user_id", "id"},
-	"agent":        {"space_agents", "owner_user_id", "agent_id"},
+	"node":  {"space_nodes", "uploader_user_id", "id"},
+	"agent": {"space_agents", "owner_user_id", "agent_id"},
 })
 
 func withSpaceItemVisibility(others map[string][3]string) map[string][3]string {
@@ -34,8 +27,6 @@ func withSpaceItemVisibility(others map[string][3]string) map[string][3]string {
 	return others
 }
 
-// SetSpaceItemVisibility flips one item between public and private. Only its
-// owner can, and only while they belong to the Space.
 func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID, kind, itemID, visibility string) error {
 	table, ok := visibilityTables[kind]
 	itemID = strings.TrimSpace(itemID)
@@ -46,7 +37,6 @@ func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID,
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
-		// Table and column names come from the fixed map above.
 		result, err := tx.ExecContext(ctx, `UPDATE `+table[0]+` SET visibility=$1 WHERE space_id=$2 AND `+table[2]+`=$3 AND `+table[1]+`=$4`,
 			visibility, spaceID, itemID, userID)
 		if err != nil {
@@ -55,8 +45,6 @@ func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID,
 		if n, _ := result.RowsAffected(); n == 0 {
 			return ErrSpaceNotFound
 		}
-		// A doc made private stops being open for the others now: their tickets and
-		// live connections end, and only those who may still see it reconnect.
 		if err := revokeItemConnectionsTx(ctx, tx, kind, itemID); err != nil {
 			return err
 		}
@@ -65,10 +53,6 @@ func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID,
 	})
 }
 
-// purgeSpaceMemberTx deletes everything of one person's in a Space, in the
-// transaction that takes them out of it: their private notes, files
-// and links, and (through the membership's cascades) their agents' listings.
-// Their public items stay with the Space.
 func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
 	notes, err := privateItemIDsTx(ctx, tx, `SELECT id FROM space_notes WHERE space_id=$1 AND creator_user_id=$2 AND visibility='private' AND lifecycle_state IN ('active','archived','archived_creator_left')`, spaceID, userID)
 	if err != nil {
@@ -95,8 +79,6 @@ func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string)
 	return nil
 }
 
-// purgeSpaceMembersTx runs the purge for everyone in a Space being deleted.
-// The public layer waits out the Space's recovery window; nothing private does.
 func purgeSpaceMembersTx(ctx context.Context, tx *sql.Tx, spaceID string, memberIDs []string) error {
 	for _, memberID := range memberIDs {
 		if err := purgeSpaceMemberTx(ctx, tx, spaceID, memberID); err != nil {
@@ -123,15 +105,12 @@ func privateItemIDsTx(ctx context.Context, tx *sql.Tx, query, spaceID, userID st
 	return ids, rows.Err()
 }
 
-// revokeItemConnectionsTx moves one made item's ACL version on and tells its room, which drops
-// every connection opened with an older ticket. Other kinds have no live room.
 func revokeItemConnectionsTx(ctx context.Context, tx *sql.Tx, kindName, itemID string) error {
 	kind, ok := SpaceItemKindNamed(kindName)
 	if !ok || kind.Name != kindName {
 		return nil
 	}
 	var aclVersion int64
-	// The table name comes from the registry.
 	if err := tx.QueryRowContext(ctx,
 		`UPDATE `+kind.Table+` SET acl_version=acl_version+1 WHERE id=$1 RETURNING acl_version`,
 		itemID).Scan(&aclVersion); err != nil {

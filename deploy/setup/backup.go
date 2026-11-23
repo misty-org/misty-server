@@ -19,13 +19,9 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// Backups are pg_dump custom-format dumps encrypted to the stack's age key and
-// uploaded to the locked backup bucket. Plaintext never touches the disk: the
-// dump streams through age into a temporary ciphertext file.
-
 const (
 	backupPrefix = "misty/"
-	backupHour   = 3 // UTC
+	backupHour   = 3
 )
 
 func backupClient(store *Store) (*s3.Client, string, error) {
@@ -46,8 +42,6 @@ func backupClient(store *Store) (*s3.Client, string, error) {
 	return client, bucket, nil
 }
 
-// runBackups backs up once with --now, otherwise every night at 03:00 UTC.
-// A failed night is logged and retried an hour later.
 func runBackups(ctx context.Context, now bool) error {
 	if now {
 		return backupOnce(ctx)
@@ -174,8 +168,6 @@ func listBackups(ctx context.Context) error {
 	return nil
 }
 
-// restoreBackup replaces the database's contents with one backup. Stop the
-// API first (docker compose stop api); the next `up` migrates and grants again.
 func restoreBackup(ctx context.Context, name string) error {
 	store, err := openStore(secretsDir())
 	if err != nil {
@@ -229,8 +221,6 @@ func restoreBackup(ctx context.Context, name string) error {
 
 func printBackupKey() error { return printSecret("MISTY_BACKUP_AGE_IDENTITY") }
 
-// printSecret prints one key, stored or derived, to keep a copy off the
-// server or hand it to a service the operator runs.
 func printSecret(name string) error {
 	store, err := openStore(secretsDir())
 	if err != nil {

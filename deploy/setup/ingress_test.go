@@ -33,7 +33,6 @@ func TestExtraIngressRoutesAndPointsDNS(t *testing.T) {
 		}
 	}
 
-	// A record someone set to DNS only is proxied again; nothing is duplicated.
 	fake.Record("billing.misty.example")["proxied"] = false
 	if err := h.provision(t); err != nil {
 		t.Fatal(err)

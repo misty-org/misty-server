@@ -14,9 +14,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// CleanupExpiredJournalAssets removes note asset references after the
-// collaboration undo window. Deduplicated blobs are deleted from R2 only when
-// the database atomically confirms that no other live reference remains.
 func (s *SpaceLibraryService) CleanupExpiredJournalAssets(
 	ctx context.Context,
 	safetyWindow time.Duration,
@@ -118,9 +115,6 @@ func (s *SpaceLibraryService) InitiateUpload() http.HandlerFunc {
 	}
 }
 
-// UploadTransfer describes how the client moves the bytes: an absolute
-// presigned R2 PUT that carries no Misty credentials. File bytes never pass
-// through the server, so a store that can't sign refuses instead.
 func (s *SpaceLibraryService) UploadTransfer(ctx context.Context, upload *db.LibraryUpload, token string, expiresAt time.Time) (LibraryObjectUpload, error) {
 	_, _ = token, expiresAt
 	if s.DirectTransfersActive() {

@@ -5,15 +5,10 @@ import (
 	"strings"
 )
 
-// decodeJSONC reads wrangler.jsonc: JSON with // and /* */ comments and
-// trailing commas.
 func decodeJSONC(data []byte, out any) error {
 	return json.Unmarshal([]byte(dropTrailingCommas(stripComments(string(data)))), out)
 }
 
-// scanJSON calls visit for every byte outside string literals and copies
-// string literals through unchanged. visit returns how many bytes it consumed
-// (0 copies the byte as is).
 func scanJSON(source string, visit func(rest string, b *strings.Builder) int) string {
 	var b strings.Builder
 	for i := 0; i < len(source); i++ {

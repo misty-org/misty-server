@@ -8,12 +8,6 @@ import (
 	envconfig "github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// loadDatabaseConfig resolves the destructive test database connection.
-//
-// Each field falls back from TEST_DB_* to the matching DB_* value, applying
-// the same derivations misty server test applies when it bootstraps the container, so a
-// bare `go test ./...` against an already-bootstrapped database resolves the
-// same connection the full harness does.
 func loadDatabaseConfig(t testing.TB) databaseConfig {
 	t.Helper()
 	config := databaseConfig{
@@ -47,16 +41,11 @@ func testDatabaseHost() string {
 	host := firstConfigured("TEST_DB_HOST", "DB_HOST")
 	switch host {
 	case "localhost", "::1":
-		// The development Postgres port is intentionally IPv4 loopback-only,
-		// and macOS resolves localhost to ::1 first. misty server test makes the same
-		// substitution when it bootstraps the container.
 		return "127.0.0.1"
 	}
 	return host
 }
 
-// testDatabaseName never returns the development database: a DB_NAME without
-// "test" in it gains the same _test suffix misty server test creates.
 func testDatabaseName() string {
 	if name := configured("TEST_DB_NAME"); name != "" {
 		return name
@@ -68,9 +57,6 @@ func testDatabaseName() string {
 	return name + "_test"
 }
 
-// testDatabaseRole prefers the migration role over DB_USER. DB_USER is the
-// application role and is deliberately unprivileged, so it can neither create
-// the test database nor TRUNCATE between tests.
 func testDatabaseRole() (user, password string) {
 	if user := configured("TEST_DB_USER"); user != "" {
 		return user, configured("TEST_DB_PASSWORD")
@@ -81,9 +67,6 @@ func testDatabaseRole() (user, password string) {
 	return configured("DB_USER"), configured("DB_PASSWORD")
 }
 
-// testDatabaseSSLMode ignores a production DB_SSLMODE for loopback hosts. The
-// bootstrapped container has no TLS, so inheriting sslmode=require from
-// the development database.env (in ~/.misty/dev/<kind>/.env/server) would fail every connection.
 func testDatabaseSSLMode(host string) string {
 	if mode := configured("TEST_DB_SSLMODE"); mode != "" {
 		return mode

@@ -52,7 +52,6 @@ func TestChannelPermissionsApplyEveryoneThenDenyThenAllow(t *testing.T) {
 	if !muted.Has(PermissionMessagesRead) || muted.Has(PermissionMessagesWrite) {
 		t.Fatalf("muted = %v, want read without write", muted.List())
 	}
-	// An allow on any role wins over a deny on another.
 	both := ChannelPermissions(base, "everyone", []string{"crew", "muted", "speaker"}, private)
 	if !both.Has(PermissionMessagesWrite) {
 		t.Fatalf("muted speaker = %v, want write", both.List())
@@ -151,7 +150,6 @@ func TestNormalizeRolesAndOverwrites(t *testing.T) {
 	if !ok || !reflect.DeepEqual(permissions, []string{PermissionMessagesRead, PermissionMessagesWrite}) {
 		t.Errorf("NormalizeRolePermissions = %v, %v", permissions, ok)
 	}
-	// An older app still sends the Library's retired permissions; they are dropped.
 	permissions, ok = NormalizeRolePermissions([]string{"library.view", PermissionMessagesRead, "library.upload"})
 	if !ok || !reflect.DeepEqual(permissions, []string{PermissionMessagesRead}) {
 		t.Errorf("NormalizeRolePermissions with retired permissions = %v, %v", permissions, ok)

@@ -17,7 +17,6 @@ func BearerTokenFromRequest(r *http.Request) (string, bool) {
 	return accounts.BearerTokenFromRequest(r)
 }
 
-// UpdateUsername answers PUT /me/username.
 func UpdateUsername(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, database)
@@ -62,22 +61,16 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			return
 		}
 
-		// A closing account is read-only until it is deleted on this date.
 		var deleteAt any
 		if at, closing := suspensions.Closing(r.Context(), userID); closing {
 			deleteAt = at.UTC().Format(time.RFC3339)
 		}
 
-		// The server owner's app shows the alerts service's open problems.
 		owner, _ := database.IsServerOwner(r.Context(), userID)
 
-		// No device allowed is how an account made through open signup starts, until the
-		// operator sets what it may use. The app says what to do about it.
 		limits, _ := database.AccountLimitsFor(r.Context(), userID)
 		devicesAllowed := limits.Devices == nil || *limits.Devices > 0
 
-		// Space levels exist only where the operator configured them (Misty Cloud); the app
-		// shows Boosts only then.
 		levels, _ := db.SpaceLevelsConfigured()
 
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -86,6 +79,7 @@ func GetMe(database *db.Database) http.HandlerFunc {
 			"email":           user.Email,
 			"provider":        user.Provider,
 			"avatar_version":  user.AvatarVersion,
+			"banner_version":  user.BannerVersion,
 			"created_at":      user.CreatedAt,
 			"delete_at":       deleteAt,
 			"server_owner":    owner,

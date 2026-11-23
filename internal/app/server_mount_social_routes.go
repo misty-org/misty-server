@@ -4,10 +4,6 @@ import (
 	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// mountSocialRoutes serves what belongs to the account rather than a Space: friends and blocks,
-// DMs (each a Space of kind 'direct', whose messages use the Space chat routes by its id), status,
-// one-time notices and call tokens. None of these paths sit under /me/conversations, which the
-// no-agents contract keeps empty.
 func (s *Server) mountSocialRoutes(prefix string, social *api.SocialService) {
 	s.Router.Get(prefix+"/friends", social.Friends())
 	s.Router.Post(prefix+"/friends/requests", social.FriendRequests())
@@ -35,6 +31,6 @@ func (s *Server) mountSocialRoutes(prefix string, social *api.SocialService) {
 	s.Router.Put(prefix+"/me/call-keys/{keyID}", social.CallKey())
 	s.Router.Get(prefix+"/calls/config", social.CallConfig())
 	s.Router.Post(prefix+"/calls/{room}/token", social.CallToken())
-	// LiveKit's webhooks, signed with the API secret: who joins and leaves each call.
 	s.Router.Post(prefix+"/calls/livekit-events", s.LiveKitRooms.Webhook())
+	s.Router.Post(prefix+"/calls/{room}/moderate", s.LiveKitRooms.Moderate(s.Database))
 }

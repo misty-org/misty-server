@@ -9,8 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// SpaceBoosts answers GET /spaces/{spaceID}/boosts for a member: whether this server has
-// Space levels, the Space's level, the Boosts the next one needs, and who boosts it.
 func (s *SpacesService) SpaceBoosts() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -26,8 +24,6 @@ func (s *SpacesService) SpaceBoosts() http.HandlerFunc {
 	}
 }
 
-// space answers GET /operator/v1/spaces/{spaceID}: its name, member IDs and level, so billing
-// can check that someone buying Boosts for it belongs to it.
 func (o *OperatorAccounts) space(w http.ResponseWriter, r *http.Request) {
 	space, err := o.database.OperatorSpaceByID(r.Context(), chi.URLParam(r, "spaceID"))
 	if errors.Is(err, db.ErrSpaceNotFound) {
@@ -41,9 +37,6 @@ func (o *OperatorAccounts) space(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"space": space})
 }
 
-// setSpaceBoosts answers PUT /operator/v1/spaces/{spaceID}/boosts/{id} {"boosts": n}: the
-// Boosts that account gives the Space, 0 to take them away. Billing calls it; it is
-// idempotent, and answers the Space as it now stands.
 func (o *OperatorAccounts) setSpaceBoosts(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Boosts *int64 `json:"boosts"`

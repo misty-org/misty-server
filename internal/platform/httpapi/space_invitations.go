@@ -98,16 +98,10 @@ func (s *SpacesService) SpaceInvitationItem() http.HandlerFunc {
 	}
 }
 
-// SpaceInvitationLink opens the invitation in Misty (misty://open/invite/...).
-// Creating an invitation, or a new link for one (which replaces the old link),
-// answers with it for the owner to pass on; a server with Mailjet configured also
-// emails it.
 func SpaceInvitationLink(token string) string {
 	return "misty://open/invite/" + url.PathEscape(token)
 }
 
-// emailInvitation stores the invitation's email and reports whether it will go. The
-// invitation stands either way: the owner still has its link.
 func (s *SpacesService) emailInvitation(ctx context.Context, invite *db.SpaceInvitation) bool {
 	if !email.Configured() {
 		return false
@@ -164,9 +158,6 @@ func (s *SpacesService) SpaceInvitationToken() http.HandlerFunc {
 	}
 }
 
-// SpaceInvitationResponse lets a signed-in person accept or decline an invitation addressed to
-// them from inside the app: POST /spaces/invitations/{inviteID}/accept or /decline. The email's
-// link goes through SpaceInvitationToken instead. Accepting answers the Space; declining, 204.
 func (s *SpacesService) SpaceInvitationResponse() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

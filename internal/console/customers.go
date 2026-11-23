@@ -13,10 +13,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// The Customers page lists the server's accounts with what each uses against
-// its limits. Reads come from the server's own account queries; every change
-// goes through the operator account API (operatorClient).
-
 type customersView struct {
 	Search    string
 	Customers []db.OperatorAccount
@@ -26,12 +22,11 @@ type customersView struct {
 }
 
 type customerDetailView struct {
-	Account   db.OperatorAccount
-	Console   db.ConsoleAccountDetail
-	CanChange bool
-	Flash     string
-	Err       string
-	// SignInLink is a link just issued, shown once to copy and pass on.
+	Account    db.OperatorAccount
+	Console    db.ConsoleAccountDetail
+	CanChange  bool
+	Flash      string
+	Err        string
 	SignInLink string
 }
 
@@ -39,7 +34,6 @@ func (v customerDetailView) actionPath(action string) string {
 	return "/customers/" + v.Account.ID + "/" + action
 }
 
-// customerStatus is the one state label a row shows.
 func customerStatus(a db.OperatorAccount) string {
 	switch {
 	case a.DeleteAt != nil:
@@ -61,8 +55,6 @@ func (s *Server) customersPage(r *http.Request) templ.Component {
 	return customersPage(s.customersViewFor(r, r.URL.Query().Get("id")))
 }
 
-// customersViewFor loads the list and the selected account, or the first one
-// when none is selected.
 func (s *Server) customersViewFor(r *http.Request, selected string) customersView {
 	view := customersView{Search: strings.TrimSpace(r.URL.Query().Get("q")), Selected: selected}
 	customers, err := s.db.OperatorAccounts(r.Context(), db.OperatorAccountSearch{Text: view.Search}, 100)
@@ -100,8 +92,6 @@ func (s *Server) loadCustomer(ctx context.Context, userID string) customerDetail
 	return view
 }
 
-// renderCustomerAction re-renders the detail panel after an action with a
-// confirmation or the error that stopped it.
 func (s *Server) renderCustomerAction(w http.ResponseWriter, r *http.Request, flash string, actionErr error) {
 	view := s.loadCustomer(r.Context(), chi.URLParam(r, "id"))
 	if actionErr != nil {
@@ -112,10 +102,6 @@ func (s *Server) renderCustomerAction(w http.ResponseWriter, r *http.Request, fl
 	render(w, r, customerDetail(view))
 }
 
-// signInLink issues a new setup key and shows its link once. The operator
-// passes the link on, to onboard someone or to reset a forgotten password (the
-// sign-in lets them choose a new one). A server with Mailjet configured also
-// emails it.
 func (s *Server) signInLink(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
 		http.NotFound(w, r)
@@ -139,8 +125,6 @@ func (s *Server) signInLink(w http.ResponseWriter, r *http.Request) {
 	render(w, r, customerDetail(view))
 }
 
-// customerAction runs one operator API call for the account in the URL and
-// records it in the audit log when it worked.
 func (s *Server) customerAction(audit, flash string, call func(context.Context, string) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.db == nil {
@@ -177,8 +161,6 @@ func (s *Server) setCustomerLimits(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-// releaseEmail frees an unconfirmed password account's email for its real owner. The audit
-// log keeps the address it held.
 func (s *Server) releaseEmail(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
 		http.NotFound(w, r)

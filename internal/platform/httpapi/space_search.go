@@ -9,7 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// spaceSearchLimit reads a search's limit: up to 50, 20 when it's left out.
 func spaceSearchLimit(r *http.Request) int {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit < 1 || limit > 50 {
@@ -18,18 +17,11 @@ func spaceSearchLimit(r *http.Request) int {
 	return limit
 }
 
-// spaceSearchText reads a search's words, and refuses a query that is empty or
-// too long to be one.
 func spaceSearchText(r *http.Request) (string, bool) {
 	text := strings.TrimSpace(r.URL.Query().Get("q"))
 	return text, text != "" && len([]rune(text)) <= db.SpaceSearchMaxQuery
 }
 
-// Search looks through notes and messages together,
-// across the caller's Spaces or the one named by space_id:
-// GET /search?q=&space_id=&kinds=note,message&limit=.
-// Each result's kind is note|message. Without kinds every
-// kind is searched.
 func (s *SpacesService) Search() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -62,7 +54,6 @@ func (s *SpacesService) Search() http.HandlerFunc {
 	}
 }
 
-// SearchMessages finds the messages the caller can see in one Space.
 func (s *SpacesService) SearchMessages() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -83,9 +74,6 @@ func (s *SpacesService) SearchMessages() http.HandlerFunc {
 	}
 }
 
-// spaceSearchKinds reads a search's kinds: "message" and every registered made kind, by its name
-// (note) or its section (notes). Empty is
-// all of them; an unknown kind refuses the search.
 func spaceSearchKinds(raw string) (map[string]bool, bool) {
 	kinds := map[string]bool{}
 	all := strings.TrimSpace(raw) == ""

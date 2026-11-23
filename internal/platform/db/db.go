@@ -20,9 +20,7 @@ import (
 var migrationFiles embed.FS
 
 type Database struct {
-	Conn *sql.DB
-	// DSN, when set, is the database Conn was opened against. LISTEN
-	// connections use it so notifications come from the same database.
+	Conn      *sql.DB
 	DSN       string
 	eventsMu  sync.Mutex
 	events    *accountEventHub
@@ -52,8 +50,6 @@ func (db *Database) GetDSN() string {
 	)
 }
 
-// Empty or whitespace-containing credentials must not consume the following
-// connection option. This also handles quotes and backslashes in passwords.
 func quoteDSNValue(value string) string {
 	return "'" + strings.NewReplacer("\\", "\\\\", "'", "\\'").Replace(value) + "'"
 }
@@ -122,11 +118,6 @@ func configureConnectionPool(conn *sql.DB) {
 	conn.SetConnMaxIdleTime(connMaxIdleTime)
 }
 
-// checkSchemaVersion fails fast with a clear error when the database hasn't
-// had every migration applied, instead of letting the server start against a
-// stale schema — which manifests later as scattered, hard-to-diagnose
-// failures (400s on requests that touch changed tables, dropped WebSocket
-// connections, etc.) rather than one obvious error at boot.
 func (db *Database) CheckSchemaVersion() error {
 	expected, err := LatestMigrationVersion()
 	if err != nil {

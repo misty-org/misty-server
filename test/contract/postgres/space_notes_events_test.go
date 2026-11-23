@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// noteEventTypesFor replays a user's visible events and returns the note event
-// types that reached them for one note.
 func noteEventTypesFor(t *testing.T, database *Database, ctx context.Context, userID, noteID string) []string {
 	t.Helper()
 	events, _, err := database.SpaceEventsAfter(ctx, userID, 0, 500)
@@ -25,7 +23,6 @@ func noteEventTypesFor(t *testing.T, database *Database, ctx context.Context, us
 	return types
 }
 
-// Notes are Space documents, so their events reach every current member.
 func TestNoteEventsReachEverySpaceMember(t *testing.T) {
 	fixture := newNoteFixture(t, "note-event-shared")
 
@@ -38,8 +35,6 @@ func TestNoteEventsReachEverySpaceMember(t *testing.T) {
 	}
 }
 
-// Live delivery uses EventByIDForUser, replay uses SpaceEventsAfter. Both must
-// apply the same rule, or one path would leak what the other hides.
 func TestNoteEventVisibilityMatchesOnLiveDeliveryAndReplay(t *testing.T) {
 	fixture := newNoteFixture(t, "note-event-paths")
 	outsider, err := fixture.database.CreateUser("note-event-outsider@example.com", "password123")
@@ -67,7 +62,6 @@ func TestNoteEventVisibilityMatchesOnLiveDeliveryAndReplay(t *testing.T) {
 			t.Fatalf("%s live delivery = %v, want the event", name, err)
 		}
 	}
-	// Someone outside the Space gets nothing through either path.
 	if _, err := fixture.database.EventByIDForUser(fixture.ctx, outsider.ID, noteEventID); !errors.Is(err, ErrSpaceNotFound) {
 		t.Fatalf("outsider live delivery = %v, want ErrSpaceNotFound", err)
 	}
@@ -76,8 +70,6 @@ func TestNoteEventVisibilityMatchesOnLiveDeliveryAndReplay(t *testing.T) {
 	}
 }
 
-// Visibility is resolved from membership as it stands at delivery time, not as
-// it stood when the event was written.
 func TestFormerMemberLosesAccessToPastNoteEvents(t *testing.T) {
 	fixture := newNoteFixture(t, "note-event-former")
 
@@ -94,8 +86,6 @@ func TestFormerMemberLosesAccessToPastNoteEvents(t *testing.T) {
 	}
 }
 
-// Space events are stored durably and replayed, so note content must never
-// ride along in one.
 func TestNoteEventPayloadsCarryNoContent(t *testing.T) {
 	fixture := newNoteFixture(t, "note-event-payload")
 

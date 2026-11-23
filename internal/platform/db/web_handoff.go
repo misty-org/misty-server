@@ -6,7 +6,6 @@ import (
 	"errors"
 )
 
-// CreateWebHandoff keeps a new hand-off code's hash for the account, for two minutes.
 func (db *Database) CreateWebHandoff(ctx context.Context, userID, hash string) error {
 	return db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM web_handoff_codes WHERE expires_at<=NOW()`); err != nil {
@@ -17,8 +16,6 @@ func (db *Database) CreateWebHandoff(ctx context.Context, userID, hash string) e
 	})
 }
 
-// ConsumeWebHandoff spends a hand-off code and names its account, or "" when the code is
-// unknown, spent or expired.
 func (db *Database) ConsumeWebHandoff(ctx context.Context, hash string) (string, error) {
 	var userID string
 	err := db.WithRLSContext(ctx, ServiceRLSSettings(), func(tx *sql.Tx) error {

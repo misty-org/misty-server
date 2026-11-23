@@ -8,16 +8,9 @@ import (
 	"time"
 )
 
-// Space voice channels over the socket: who is in which channel, and handing a channel's call key to
-// someone who joins. The server knows who is in a channel only while their connection lasts, and never
-// sees the key: someone already in the channel seals it for the joiner's computer, and the server passes
-// the sealed key on unread. The call itself goes through LiveKit, encrypted end to end.
-
-// maxVoicePeople is how many people one voice channel holds, as calls.config says.
 const maxVoicePeople = 8
 
 const (
-	// voiceFramesPerSecond bounds one socket's voice messages.
 	voiceFramesPerSecond = 20
 	maxVoiceSealedBytes  = 512
 	maxVoicePublicKey    = 256
@@ -36,7 +29,6 @@ type voiceMessage struct {
 	Sealed    string `json:"sealed"`
 }
 
-// voicePerson is one person in a voice channel, as members are told.
 type voicePerson struct {
 	UserID string `json:"user_id"`
 }
@@ -50,7 +42,6 @@ func voiceRoom(spaceID, channelID string) string {
 	return "space:" + spaceID + ":voice:" + channelID
 }
 
-// handleVoiceMessage takes a voice message from a client. It reports whether the message was one.
 func (s *RealtimeService) handleVoiceMessage(client *RealtimeClient, payload []byte) bool {
 	var msg voiceMessage
 	if json.Unmarshal(payload, &msg) != nil {
@@ -91,9 +82,6 @@ func (s *RealtimeService) allowVoiceFrame(client *RealtimeClient) bool {
 	return true
 }
 
-// setVoice puts the client in a voice channel ({space_id, channel_id, key_id}), or takes it out of any
-// (an empty channel_id). A channel that is full, or that the person may not join, answers "voice.full"
-// or nothing, and the client stays where it was.
 func (s *RealtimeService) setVoice(client *RealtimeClient, msg voiceMessage) {
 	channelID := msg.ChannelID
 	if channelID != "" {
@@ -125,7 +113,6 @@ func (s *RealtimeService) setVoice(client *RealtimeClient, msg voiceMessage) {
 	s.broadcastVoice(msg.SpaceID, client.UserID)
 }
 
-// leaveVoice takes a closing connection out of its voice channel and tells the Space.
 func (s *RealtimeService) leaveVoice(client *RealtimeClient) {
 	s.Mu.Lock()
 	spaceID := client.voiceSpaceID
@@ -136,8 +123,6 @@ func (s *RealtimeService) leaveVoice(client *RealtimeClient) {
 	}
 }
 
-// voiceChannelsLocked lists who is in each of a Space's voice channels, each person once however many
-// computers they joined from. Callers hold s.Mu (read is enough).
 func (s *RealtimeService) voiceChannelsLocked(spaceID string) map[string][]string {
 	seen := map[string]map[string]bool{}
 	for client := range s.clients {
@@ -159,8 +144,6 @@ func (s *RealtimeService) voiceChannelsLocked(spaceID string) map[string][]strin
 	return out
 }
 
-// VoiceRoomFull says whether a Space voice room already holds maxVoicePeople people other than userID.
-// Rooms that aren't voice channels are never full here (LiveKit's own room limit holds them).
 func (s *RealtimeService) VoiceRoomFull(room, userID string) bool {
 	spaceID, channelID, ok := splitVoiceRoom(room)
 	if !ok {
@@ -193,7 +176,6 @@ func splitVoiceRoom(room string) (spaceID, channelID string, ok bool) {
 	return "", "", false
 }
 
-// voiceStateFor is what one person may see of a Space's voice channels: only channels they may join.
 func (s *RealtimeService) voiceStateFor(ctx context.Context, userID, spaceID string, channels map[string][]string) []voiceChannelPeople {
 	ids := make([]string, 0, len(channels))
 	for channelID := range channels {
@@ -215,7 +197,6 @@ func (s *RealtimeService) voiceStateFor(ctx context.Context, userID, spaceID str
 	return out
 }
 
-// broadcastVoice tells every connected member of the Space who is in its voice channels they may see.
 func (s *RealtimeService) broadcastVoice(spaceID, actorUserID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -243,8 +224,6 @@ func (s *RealtimeService) broadcastVoice(spaceID, actorUserID string) {
 	}
 }
 
-// sendVoiceState answers "voice.sync": who is in the Space's voice channels now, for a window that just
-// opened the Space.
 func (s *RealtimeService) sendVoiceState(client *RealtimeClient, spaceID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -259,8 +238,6 @@ func (s *RealtimeService) sendVoiceState(client *RealtimeClient, spaceID string)
 	})
 }
 
-// relayVoiceKeyRequest passes a joiner's request for the channel's key ({key_id, public_key}) to the
-// other computers in that channel. The joiner must already be in it.
 func (s *RealtimeService) relayVoiceKeyRequest(client *RealtimeClient, msg voiceMessage) {
 	if len(msg.PublicKey) == 0 || len(msg.PublicKey) > maxVoicePublicKey {
 		return
@@ -292,8 +269,6 @@ func (s *RealtimeService) relayVoiceKeyRequest(client *RealtimeClient, msg voice
 	}
 }
 
-// relayVoiceKey passes a sealed channel key ({to_user_id, to_key_id, sealed}) from someone in the channel
-// to the joiner's computer in the same channel, unread.
 func (s *RealtimeService) relayVoiceKey(client *RealtimeClient, msg voiceMessage) {
 	if len(msg.Sealed) == 0 || len(msg.Sealed) > maxVoiceSealedBytes || !voiceIDPattern.MatchString(msg.ToKeyID) {
 		return
@@ -321,7 +296,6 @@ func (s *RealtimeService) relayVoiceKey(client *RealtimeClient, msg voiceMessage
 	}
 }
 
-// sendJSON delivers one message to one connection.
 func (s *RealtimeService) sendJSON(client *RealtimeClient, message map[string]any) {
 	payload, err := json.Marshal(message)
 	if err == nil {

@@ -13,13 +13,10 @@ type SpacePersonalItemState struct {
 	OpenedAt *time.Time `json:"opened_at,omitempty"`
 }
 
-// An item key names a made item of any registered kind (a note), a file or a chat.
 var spaceItemKeyPattern = regexp.MustCompile(`^(` + spaceItemKeyNames() + `|file|chat):[A-Za-z0-9_-]{1,128}$`)
 
 func ValidSpaceItemKey(key string) bool { return spaceItemKeyPattern.MatchString(key) }
 
-// These are private references, not grants of access to the referenced content.
-// Clients resolve them through the resource's existing permission-checked reads.
 func (db *Database) SpacePersonalItems(ctx context.Context, userID, spaceID string) ([]SpacePersonalItemState, error) {
 	out := []SpacePersonalItemState{}
 	err := db.WithRLSContext(ctx, userRLSSettings(userID), func(tx *sql.Tx) error {
@@ -52,7 +49,6 @@ func (db *Database) UpdateSpacePersonalItem(ctx context.Context, userID, spaceID
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
-		// Serialize this account/Space's small personal index, including retention.
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, userID+":"+spaceID); err != nil {
 			return err
 		}

@@ -6,9 +6,6 @@ import (
 	"fmt"
 )
 
-// pgAlertBook writes open alerts to the server_alerts table as the API's own
-// restricted role, in service mode (the table's row security admits only
-// that), the way the API reads them.
 type pgAlertBook struct{ database *sql.DB }
 
 func openAlertBook(store *Store) (*pgAlertBook, error) {

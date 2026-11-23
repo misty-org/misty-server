@@ -31,8 +31,6 @@ func (db *Database) MarkSpaceRead(ctx context.Context, userID, spaceID string, s
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
 			return err
 		}
-		// Never past the Space's latest message: a seq the app made up for a message still being
-		// sent would otherwise mark everything after it read for good.
 		_, err := tx.ExecContext(ctx, `UPDATE space_members SET read_message_seq=GREATEST(read_message_seq,
 			LEAST($1,(SELECT COALESCE(MAX(seq),0) FROM space_messages WHERE space_id=$2 AND conversation_id IS NULL)))
 			WHERE space_id=$2 AND user_id=$3`, seq, spaceID, userID)

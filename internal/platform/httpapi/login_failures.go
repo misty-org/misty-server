@@ -13,12 +13,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// Login is limited per address by the API limiter. On top of that, failed passwords are
-// counted twice: for the email from one address, which stops one caller guessing, and for
-// the email from every address together, which bounds guessing spread across many. The
-// first is low and the second higher, so a stranger who knows someone's email can't lock
-// them out from a single address. A success clears both. Counts live in the database
-// (db.LoginFailuresBlocked), so restarts and other instances see the same ones.
 const (
 	loginFailureWindow       = 15 * time.Minute
 	loginFailureLimit        = 10
@@ -31,14 +25,11 @@ type loginFailureStore interface {
 	ClearLoginFailures(ctx context.Context, keys []string) error
 }
 
-// failureKey is what a count is stored under: a hash, so the table never holds an email
-// or an address.
 func failureKey(kind, value string) string {
 	sum := sha256.Sum256([]byte(kind + "\n" + value))
 	return hex.EncodeToString(sum[:])
 }
 
-// passwordFailureCaps are the counts a wrong password for email adds to.
 func passwordFailureCaps(r *http.Request, email string) []db.LoginFailureCap {
 	address := accounts.NormalizeEmail(email)
 	return []db.LoginFailureCap{
@@ -47,7 +38,6 @@ func passwordFailureCaps(r *http.Request, email string) []db.LoginFailureCap {
 	}
 }
 
-// setupKeyFailureCaps count wrong setup keys from one address.
 func setupKeyFailureCaps(r *http.Request) []db.LoginFailureCap {
 	return []db.LoginFailureCap{{Key: failureKey("setup-key", ClientIPFromRequest(r)), Limit: loginFailureLimit}}
 }
@@ -60,9 +50,6 @@ func failureKeys(caps []db.LoginFailureCap) []string {
 	return keys
 }
 
-// lockedOut answers 429 when a cap is full, and 503 when the counts can't be read, since
-// a lockout that can't be checked must not let guesses through. It reports whether it
-// answered.
 func lockedOut(w http.ResponseWriter, r *http.Request, store loginFailureStore, caps []db.LoginFailureCap, message string) bool {
 	blocked, retryAfter, err := store.LoginFailuresBlocked(r.Context(), caps, loginFailureWindow)
 	if err != nil {

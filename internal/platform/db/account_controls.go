@@ -7,35 +7,25 @@ import (
 	"time"
 )
 
-// AccountLimits are what an account may use on this server. A nil field is
-// unlimited, which is every account's default (a self-hosted server sets none).
 type AccountLimits struct {
-	StorageBytes *int64 `json:"storage_bytes"`
-	Devices      *int64 `json:"devices"`
-	// SharedSpaces is how many of the Spaces the account owns may be shared with other people.
-	SharedSpaces *int64 `json:"shared_spaces"`
-	// SpaceMembers is how many people, the owner included, one of its Spaces may hold.
-	SpaceMembers *int64 `json:"space_members"`
-	// Spaces is how many active Spaces the account may belong to, its own and joined ones together.
-	Spaces *int64 `json:"spaces"`
-	// UploadBytes is the largest file the account may add, past what a Space's level allows (Misty+'s).
-	UploadBytes *int64 `json:"upload_bytes"`
-	// FriendRequestsPerDay is how many friend requests the account may send in any 24 hours.
+	StorageBytes         *int64 `json:"storage_bytes"`
+	Devices              *int64 `json:"devices"`
+	SharedSpaces         *int64 `json:"shared_spaces"`
+	SpaceMembers         *int64 `json:"space_members"`
+	Spaces               *int64 `json:"spaces"`
+	UploadBytes          *int64 `json:"upload_bytes"`
 	FriendRequestsPerDay *int64 `json:"friend_requests_per_day"`
 }
 
 var (
-	// ErrAccountSuspended refuses sign-in and API use for a suspended account.
 	ErrAccountSuspended = errors.New("account_suspended")
-	// ErrAccountNotFound names an account the operator asked for that does not exist.
-	ErrAccountNotFound = errors.New("account not found")
+	ErrAccountNotFound  = errors.New("account not found")
 )
 
 func (db *Database) serviceTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return db.WithRLSContext(ctx, ServiceRLSSettings(), fn)
 }
 
-// SetAccountLimits replaces the account's limits.
 func (db *Database) SetAccountLimits(ctx context.Context, userID string, limits AccountLimits) error {
 	return db.serviceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireActiveAccountTx(ctx, tx, userID); err != nil {
@@ -51,7 +41,6 @@ func (db *Database) SetAccountLimits(ctx context.Context, userID string, limits 
 	})
 }
 
-// AccountLimitsFor returns the account's limits; an account with no row is unlimited.
 func (db *Database) AccountLimitsFor(ctx context.Context, userID string) (AccountLimits, error) {
 	var limits AccountLimits
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -105,8 +94,6 @@ func requireActiveAccountTx(ctx context.Context, tx *sql.Tx, userID string) erro
 	return nil
 }
 
-// SuspendAccount stops the account signing in or using the API and ends its
-// sessions. Nothing it stored is removed.
 func (db *Database) SuspendAccount(ctx context.Context, userID string) error {
 	return db.serviceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireActiveAccountTx(ctx, tx, userID); err != nil {
@@ -121,9 +108,6 @@ func (db *Database) SuspendAccount(ctx context.Context, userID string) error {
 	})
 }
 
-// ResumeAccount lets a suspended account sign in again, makes a closing one
-// writable again and cancels its scheduled deletion. Once the deletion has
-// begun the account is gone.
 func (db *Database) ResumeAccount(ctx context.Context, userID string) error {
 	return db.serviceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireActiveAccountTx(ctx, tx, userID); err != nil {
@@ -135,7 +119,6 @@ func (db *Database) ResumeAccount(ctx context.Context, userID string) error {
 	})
 }
 
-// AccountSuspended reports whether the account is suspended.
 func (db *Database) AccountSuspended(ctx context.Context, userID string) (bool, error) {
 	var suspended bool
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -144,7 +127,6 @@ func (db *Database) AccountSuspended(ctx context.Context, userID string) (bool, 
 	return suspended, err
 }
 
-// SuspendedAccounts lists every suspended account, for the request guard.
 func (db *Database) SuspendedAccounts(ctx context.Context) ([]string, error) {
 	ids := []string{}
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -165,9 +147,6 @@ func (db *Database) SuspendedAccounts(ctx context.Context) ([]string, error) {
 	return ids, err
 }
 
-// PendingAccountInvitation reports whether an existing account invited this
-// email to a Space and the invitation is still open. After the first account,
-// that is how a person may register on this server by themselves.
 func (db *Database) PendingAccountInvitation(ctx context.Context, email string) (bool, error) {
 	var invited bool
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {

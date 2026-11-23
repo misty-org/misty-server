@@ -12,9 +12,6 @@ type SlidingWindowLimiter struct {
 	limit   int
 	window  time.Duration
 	history map[string][]time.Time
-	// maxKeys bounds the tracked callers. Without it, a caller that varies its
-	// key (a spoofed address, a sprayed path) grows this map until the process
-	// is killed — the limiter becomes the denial of service.
 	MaxKeys int
 }
 
@@ -30,11 +27,9 @@ type APIRateLimiter struct {
 	defaultWrite  RateLimitPolicy
 	RoutePolicies map[string]RateLimitPolicy
 	Limiters      map[string]*SlidingWindowLimiter
-	// abuse escalates repeated rejections into a temporary block.
-	abuse *AbuseGuard
+	abuse         *AbuseGuard
 }
 
-// WithAbuseGuard wires rejections into the shared abuse guard.
 func (l *APIRateLimiter) WithAbuseGuard(guard *AbuseGuard) *APIRateLimiter {
 	l.abuse = guard
 	return l
@@ -56,11 +51,7 @@ func NewSlidingWindowLimiter(limit int, window time.Duration) *SlidingWindowLimi
 	}
 }
 
-// defaultLimiterMaxKeys caps distinct callers tracked per limiter. Well past
-// any realistic concurrent client count, small enough to bound memory.
 const defaultLimiterMaxKeys = 20000
-
-// Keys are client addresses, so this tracks distinct callers per route.
 
 func NewAPIRateLimiter() *APIRateLimiter {
 	return &APIRateLimiter{
@@ -68,39 +59,37 @@ func NewAPIRateLimiter() *APIRateLimiter {
 		defaultGET:   RateLimitPolicy{Limit: 120, Window: time.Minute},
 		defaultWrite: RateLimitPolicy{Limit: 30, Window: time.Minute},
 		RoutePolicies: map[string]RateLimitPolicy{
-			"POST /register":                   {Limit: 10, Window: time.Minute},
-			"POST /login":                      {Limit: 20, Window: time.Minute},
-			"POST /auth/confirm-email":         {Limit: 20, Window: time.Minute},
-			"POST /auth/confirm-email/sign-in": {Limit: 20, Window: time.Minute},
-			"POST /setup-keys/redeem":          {Limit: 20, Window: time.Minute},
-			// The operator token holder (billing's webhook worker) may catch up
-			// on a backlog; the token is the protection here, not the budget.
-			"GET /operator/v1/accounts":                 {Limit: 600, Window: time.Minute},
-			"POST /operator/v1/accounts":                {Limit: 600, Window: time.Minute},
-			"GET /operator/v1/accounts/{id}":            {Limit: 600, Window: time.Minute},
-			"PATCH /operator/v1/accounts/{id}":          {Limit: 600, Window: time.Minute},
-			"POST /operator/v1/accounts/{id}/suspend":   {Limit: 600, Window: time.Minute},
-			"POST /operator/v1/accounts/{id}/resume":    {Limit: 600, Window: time.Minute},
-			"POST /operator/v1/accounts/{id}/setup-key": {Limit: 60, Window: time.Minute},
-			"POST /operator/v1/accounts/{id}/export":    {Limit: 20, Window: time.Hour},
-			"POST /auth/google":                         {Limit: 10, Window: time.Minute},
-			"GET /auth/google/start":                    {Limit: 20, Window: time.Minute},
-			"GET /auth/google/callback":                 {Limit: 20, Window: time.Minute},
-			"POST /auth/google/complete":                {Limit: 60, Window: time.Minute},
-			"POST /me/account-proof":                    {Limit: 20, Window: time.Minute},
-			"POST /me/web-handoff":                      {Limit: 10, Window: time.Minute},
-			"POST /auth/web-handoff":                    {Limit: 20, Window: time.Minute},
-			"GET /invites/{code}":                       {Limit: 30, Window: time.Minute},
-			"POST /me/export":                           {Limit: 3, Window: time.Hour},
-			"POST /me/deletion":                         {Limit: 3, Window: time.Hour},
-			// Friend requests have a daily cap per account too (friend_requests_per_day); this keeps a
-			// burst from spraying usernames in the first minute.
+			"POST /register":                                         {Limit: 10, Window: time.Minute},
+			"POST /login":                                            {Limit: 20, Window: time.Minute},
+			"POST /auth/confirm-email":                               {Limit: 20, Window: time.Minute},
+			"POST /auth/confirm-email/sign-in":                       {Limit: 20, Window: time.Minute},
+			"POST /setup-keys/redeem":                                {Limit: 20, Window: time.Minute},
+			"GET /operator/v1/accounts":                              {Limit: 600, Window: time.Minute},
+			"POST /operator/v1/accounts":                             {Limit: 600, Window: time.Minute},
+			"GET /operator/v1/accounts/{id}":                         {Limit: 600, Window: time.Minute},
+			"PATCH /operator/v1/accounts/{id}":                       {Limit: 600, Window: time.Minute},
+			"POST /operator/v1/accounts/{id}/suspend":                {Limit: 600, Window: time.Minute},
+			"POST /operator/v1/accounts/{id}/resume":                 {Limit: 600, Window: time.Minute},
+			"POST /operator/v1/accounts/{id}/setup-key":              {Limit: 60, Window: time.Minute},
+			"POST /operator/v1/accounts/{id}/export":                 {Limit: 20, Window: time.Hour},
+			"POST /auth/google":                                      {Limit: 10, Window: time.Minute},
+			"GET /auth/google/start":                                 {Limit: 20, Window: time.Minute},
+			"GET /auth/google/callback":                              {Limit: 20, Window: time.Minute},
+			"POST /auth/google/complete":                             {Limit: 60, Window: time.Minute},
+			"POST /me/account-proof":                                 {Limit: 20, Window: time.Minute},
+			"POST /me/web-handoff":                                   {Limit: 10, Window: time.Minute},
+			"POST /auth/web-handoff":                                 {Limit: 20, Window: time.Minute},
+			"GET /invites/{code}":                                    {Limit: 30, Window: time.Minute},
+			"POST /me/export":                                        {Limit: 3, Window: time.Hour},
+			"POST /me/deletion":                                      {Limit: 3, Window: time.Hour},
 			"POST /friends/requests":                                 {Limit: 10, Window: time.Minute},
 			"POST /spaces/{spaceID}/notes/{id}/collaboration-ticket": {Limit: 30, Window: time.Minute},
 			"POST /spaces/{spaceID}/code-sessions/{id}/collaboration-ticket": {
 				Limit: 30, Window: time.Minute,
 			},
-			// A restore rewrites a whole room; a history read can return a whole version.
+			"POST /spaces/{spaceID}/drive/items/{id}/collaboration-ticket": {
+				Limit: 30, Window: time.Minute,
+			},
 			"POST /spaces/{spaceID}/notes/{id}/history/{id}/restore": {Limit: 10, Window: time.Minute},
 			"GET /spaces/{spaceID}/notes/{id}/history/{id}":          {Limit: 60, Window: time.Minute},
 			"POST /spaces/{spaceID}/notes/{id}/assets/uploads":       {Limit: 20, Window: time.Minute},
@@ -125,13 +114,9 @@ func (l *SlidingWindowLimiter) Allow(key string, now time.Time) (bool, time.Dura
 	}
 
 	if len(requests) == 0 && len(l.history) >= l.MaxKeys {
-		// A new caller arriving at capacity: drop entries whose window has
-		// fully elapsed, which is the common case under a spray.
 		l.purgeExpired(cutoff)
 	}
 	if len(requests) == 0 && len(l.history) >= l.MaxKeys {
-		// Still full of live entries, so this is sustained abuse rather than
-		// churn. Refuse rather than grow without bound.
 		return false, l.window
 	}
 
@@ -148,8 +133,6 @@ func (l *SlidingWindowLimiter) Allow(key string, now time.Time) (bool, time.Dura
 	return true, 0
 }
 
-// purgeExpired drops callers with no activity inside the current window.
-// The caller must hold the mutex.
 func (l *SlidingWindowLimiter) purgeExpired(cutoff time.Time) {
 	for key, timestamps := range l.history {
 		live := false
@@ -175,10 +158,6 @@ func (l *APIRateLimiter) Middleware(next http.Handler) http.Handler {
 		path := NormalizeRateLimitPath(r.URL.Path)
 		policy := l.policyFor(r.Method, path)
 		limiter := l.limiterFor(r.Method, path, policy)
-		// Cost-bearing routes are charged to the account, so spreading a
-		// credential across many addresses buys no extra budget. Everything
-		// else stays keyed on the address, which is the only identity an
-		// unauthenticated caller has.
 		key := ClientIPFromRequest(r)
 		if costBearingRoutes[path] {
 			key = RateLimitIdentity(r)
@@ -208,12 +187,8 @@ func (l *APIRateLimiter) policyFor(method, path string) RateLimitPolicy {
 	return l.defaultWrite
 }
 
-// maxTrackedRoutes bounds the limiters map. Real deployments register far
-// fewer route shapes; anything beyond this is a caller inventing paths, and
-// those share one overflow bucket instead of allocating unboundedly.
 const MaxTrackedRoutes = 512
 
-// TrackedKeys reports how many callers this limiter is holding state for.
 func (l *SlidingWindowLimiter) TrackedKeys() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()

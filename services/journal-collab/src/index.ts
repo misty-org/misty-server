@@ -1,9 +1,9 @@
 import { routePartykitRequest } from "partyserver";
 
-import { AppRoom, CodeRoom, NoteRoom, type Env } from "./room";
+import { AppRoom, CodeRoom, FileRoom, NoteRoom, type Env } from "./room";
 import { responseWithRequestID } from "./response";
 
-export { AppRoom, CodeRoom, NoteRoom };
+export { AppRoom, CodeRoom, FileRoom, NoteRoom };
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {

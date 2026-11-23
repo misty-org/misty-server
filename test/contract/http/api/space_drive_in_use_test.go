@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// Being in use is a shared mark, never a lock: anyone may still change an
-// open file, but nobody may move it, or a folder holding it, to the trash
-// until the mark is cleared or its lease runs out.
 func TestDriveTrashIsRefusedWhileInUse(t *testing.T) {
 	f := newDriveFixture(t, "drive-in-use")
 	box := f.folder(f.owner, nil, "Shared")
@@ -28,9 +25,7 @@ func TestDriveTrashIsRefusedWhileInUse(t *testing.T) {
 			t.Fatalf("who = %v", holder)
 		}
 	}
-	// Someone else having it open never refuses a change.
 	renamed := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPatch, f.itemPath(report.ID), report.Version, map[string]any{"name": "Report v2.pdf"}), http.StatusOK)
-	// The computer asking to trash knows what it has open itself.
 	driveJSON[map[string]any](t, f.call(f.owner, http.MethodPut, f.itemPath(renamed.ID)+"/in-use", 0, map[string]any{"editing": true}), http.StatusOK)
 	if wait := driveJSON[map[string]any](t, f.call(f.owner, http.MethodPost, f.itemPath(box.ID)+"/check-in-use", 0, nil), http.StatusOK); wait["wait_ms"] != float64(2000) {
 		t.Fatalf("check-in-use = %v", wait)
@@ -39,13 +34,11 @@ func TestDriveTrashIsRefusedWhileInUse(t *testing.T) {
 		t.Fatalf("last event = %s", event)
 	}
 
-	// The member's lease runs out without a renewal: the folder may go.
 	f.exec(`UPDATE space_drive_in_use SET expires_at=NOW()-interval '1 second' WHERE user_id=$1`, f.memberID)
 	trashed := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(box.ID)+"/trash", box.Version, nil), http.StatusOK)
 	if !trashed.Trashed {
 		t.Fatalf("trash after the lease expired = %+v", trashed)
 	}
-	// A cleared mark frees the item at once.
 	f.exec(`UPDATE space_drive_in_use SET expires_at=NOW()+interval '2 minutes' WHERE user_id=$1`, f.memberID)
 	restored := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(box.ID)+"/restore", 0, nil), http.StatusOK)
 	if got := f.call(f.member, http.MethodDelete, f.itemPath(renamed.ID)+"/in-use", 0, nil); got.Code != http.StatusNoContent {
@@ -54,9 +47,6 @@ func TestDriveTrashIsRefusedWhileInUse(t *testing.T) {
 	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(box.ID)+"/trash", restored.Version, nil), http.StatusOK)
 }
 
-// There is no editing place: one person may edit a file on two computers at
-// once, and changes from either go through, the last one winning. Nothing
-// answers editing_elsewhere, and Edit here is gone.
 func TestDriveOnePersonEditsOnManyComputers(t *testing.T) {
 	f := newDriveFixture(t, "drive-editing")
 	doc := f.file(f.owner, f.ownerID, nil, "Plan.md", "# Plan")
@@ -75,7 +65,6 @@ func TestDriveOnePersonEditsOnManyComputers(t *testing.T) {
 	if second.Version != first.Version+1 || second.MTimeMS != 2 {
 		t.Fatalf("second computer's change = %+v", second)
 	}
-	// Others change it freely too.
 	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPatch, path, second.Version, map[string]any{"mtime_ms": 3}), http.StatusOK)
 	if res := f.call(f.memberB, http.MethodPost, path+"/edit-here", 0, nil); res.Code != http.StatusNotFound && res.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("edit-here = %d %s", res.Code, res.Body.String())
@@ -95,10 +84,6 @@ type driveTestMark struct {
 	ExpiresAt  string `json:"expires_at"`
 }
 
-// Every member sees who else has a file open: each computer's unexpired mark,
-// listed for the whole Space. Every mark added, changed or removed is heard as
-// drive.in_use, so the others fetch the list again; a renewal that changes
-// nothing is not.
 func TestDriveInUseMarksAreListedForEveryMember(t *testing.T) {
 	f := newDriveFixture(t, "drive-in-use-list")
 	doc := f.file(f.owner, f.ownerID, nil, "Notes.md", "# Notes")
@@ -127,12 +112,10 @@ func TestDriveInUseMarksAreListedForEveryMember(t *testing.T) {
 	if n := heard(); n != "1" {
 		t.Fatalf("drive.in_use after a new mark = %s", n)
 	}
-	// A renewal in the same state is not news.
 	driveJSON[map[string]any](t, f.call(f.member, http.MethodPut, path+"/in-use", 0, map[string]any{"editing": false}), http.StatusOK)
 	if n := heard(); n != "1" {
 		t.Fatalf("drive.in_use after a plain renewal = %s", n)
 	}
-	// Starting to edit is.
 	driveJSON[map[string]any](t, f.call(f.member, http.MethodPut, path+"/in-use", 0, map[string]any{"editing": true}), http.StatusOK)
 	if n := heard(); n != "2" {
 		t.Fatalf("drive.in_use after starting to edit = %s", n)
@@ -152,17 +135,14 @@ func TestDriveInUseMarksAreListedForEveryMember(t *testing.T) {
 	if !editing[f.member.id] || editing[f.memberB.id] {
 		t.Fatalf("editing by computer = %v", editing)
 	}
-	// The second computer starting to edit too is heard.
 	driveJSON[map[string]any](t, f.call(f.memberB, http.MethodPut, path+"/in-use", 0, map[string]any{"editing": true}), http.StatusOK)
 	if n := heard(); n != "4" {
 		t.Fatalf("drive.in_use after a second computer started editing = %s", n)
 	}
-	// Outsiders see nothing.
 	if code := driveCode(t, f.call(f.outsider, http.MethodGet, f.base+"/in-use", 0, nil), http.StatusForbidden); code != "forbidden" {
 		t.Fatalf("outsider marks code = %s", code)
 	}
 
-	// An expired mark is no longer listed, and clearing it after is not news.
 	f.exec(`UPDATE space_drive_in_use SET expires_at=NOW()-interval '1 second' WHERE device_id=$1`, f.memberB.id)
 	if got := marks(f.owner); len(got) != 1 || got[0].DeviceID != f.member.id {
 		t.Fatalf("marks after one lease ran out = %+v", got)
@@ -173,7 +153,6 @@ func TestDriveInUseMarksAreListedForEveryMember(t *testing.T) {
 	if n := heard(); n != "4" {
 		t.Fatalf("drive.in_use after clearing an expired mark = %s", n)
 	}
-	// Closing the file removes its mark, which the others hear.
 	if res := f.call(f.member, http.MethodDelete, path+"/in-use", 0, nil); res.Code != http.StatusNoContent {
 		t.Fatalf("clear = %d %s", res.Code, res.Body.String())
 	}
@@ -185,7 +164,6 @@ func TestDriveInUseMarksAreListedForEveryMember(t *testing.T) {
 	}
 }
 
-// The trash empties itself after 30 days, except what is held there.
 func TestDriveTrashEmptiesItselfExceptHeldItems(t *testing.T) {
 	f := newDriveFixture(t, "drive-retention")
 	plain := f.folder(f.owner, nil, "Plain")

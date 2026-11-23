@@ -23,9 +23,6 @@ type NoteControlEnvelope struct {
 	Payload    json.RawMessage `json:"payload"`
 }
 
-// ProcessNoteControlCommands delivers a bounded batch from the transactional
-// note outbox. Individual collaboration-service failures remain queued and do
-// not stop other notes from progressing.
 func (s *SpacesService) ProcessNoteControlCommands(ctx context.Context, limit int) (int, error) {
 	commands, err := s.database.PendingNoteControlCommands(ctx, limit)
 	if err != nil {
@@ -39,7 +36,6 @@ func (s *SpacesService) ProcessNoteControlCommands(ctx context.Context, limit in
 			mark := s.database.MarkNoteControlFailed
 			var refused *collaborationControlRefusal
 			if errors.As(err, &refused) && refused.status == http.StatusBadRequest {
-				// The room refused the command itself; it would refuse it again.
 				mark = s.database.AbandonNoteControlCommand
 			}
 			if markErr := mark(ctx, command.ID, err.Error()); markErr != nil {
@@ -88,8 +84,6 @@ func (s *SpacesService) requestCollaborationControlCommand(
 	return s.requestCollaborationControlCommandWithLimit(ctx, party, room, resourceID, command, payload, collaborationControlResponseLimit)
 }
 
-// requestCollaborationControlCommandWithLimit is requestCollaborationControlCommand for a command
-// whose answer may be larger than the usual limit: a whole earlier version of a document.
 func (s *SpacesService) requestCollaborationControlCommandWithLimit(
 	ctx context.Context,
 	party, room, resourceID, command string,
@@ -149,8 +143,6 @@ func (s *SpacesService) requestCollaborationControlCommandWithLimit(
 	return nil, &collaborationControlRefusal{status: response.StatusCode, reason: reason}
 }
 
-// collaborationControlRefusal is a control command the collaboration service
-// answered with an error status.
 type collaborationControlRefusal struct {
 	status int
 	reason string

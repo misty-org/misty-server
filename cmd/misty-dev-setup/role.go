@@ -11,9 +11,6 @@ import (
 	"github.com/lib/pq"
 )
 
-// grantAppRole creates or updates the API's restricted login and grants it
-// what it needs on the migrated schema, as deploy/setup does for a server
-// stack. It connects with the PG* variables, as psql would.
 func grantAppRole(ctx context.Context) error {
 	values, err := required("MISTY_APP_DB_USER", "MISTY_APP_DB_PASSWORD")
 	if err != nil {
@@ -55,8 +52,6 @@ func grantAppRole(ctx context.Context) error {
 	return nil
 }
 
-// connection builds a URL from PGHOST, PGPORT, PGUSER, PGPASSWORD,
-// PGDATABASE and PGSSLMODE; the development database has no TLS.
 func connection() string {
 	host := envOr("PGHOST", "localhost")
 	address := url.URL{

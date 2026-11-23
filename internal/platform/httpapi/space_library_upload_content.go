@@ -26,8 +26,6 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			writeLibraryError(w, err)
 			return
 		}
-		// A drive file's bytes become a drive item through the drive's routes,
-		// never an attachment of their own.
 		if upload.Purpose == UploadPurposeDrive {
 			writeJSON(w, http.StatusConflict, map[string]string{"code": "drive_item_required"})
 			return
@@ -54,9 +52,6 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, result)
 			return
 		}
-		// The client PUTs straight to R2, so the upload is still "initiated"
-		// here: the HEAD below is the only proof the bytes landed. File bytes
-		// never pass through the server.
 		directPending := upload.State == "initiated"
 		if upload.State != "uploaded_unverified" && !directPending {
 			writeLibraryError(w, db.ErrLibraryConflict)
@@ -70,8 +65,6 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			upload.State = "uploaded_unverified"
 		}
 
-		// Finalization verifies that the object actually in R2 matches exactly
-		// what the server authorized: same key, size, and checksum.
 		metadata, headErr := s.Store.Head(r.Context(), upload.ObjectKey)
 		if headErr != nil || metadata.ByteSize != upload.RequestedByteSize || metadata.SHA256 != upload.ClientSHA256 {
 			event, _ := json.Marshal(map[string]any{
@@ -87,11 +80,6 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 			writeLibraryError(w, db.ErrLibraryUploadMismatch)
 			return
 		}
-		// Journal assets are intentionally never streamed through this process,
-		// so they cannot be content-sniffed or synchronously scanned here.
-		// Restrict them to passive raster formats at both initiation and
-		// finalization; the database records the resulting blob as "skipped",
-		// never falsely as malware-scanned clean.
 		if IsJournalAssetPurpose(upload.Purpose) &&
 			!SupportedNoteAssetMIME(upload.ClientDeclaredMIMEType) {
 			s.rejectAndDelete(
@@ -133,8 +121,6 @@ func (s *SpaceLibraryService) FinalizeUpload() http.HandlerFunc {
 	}
 }
 
-// AbortUpload lets the uploader give up on a transfer that failed or was
-// canceled, so its reservation frees at once instead of when it expires.
 func (s *SpaceLibraryService) AbortUpload() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -143,7 +129,6 @@ func (s *SpaceLibraryService) AbortUpload() http.HandlerFunc {
 		}
 		spaceID, uploadID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "uploadID")
 		tokenHash := security.HashToken(strings.TrimSpace(r.Header.Get(LibraryUploadTokenHeader)))
-		// LibraryUpload finds only the caller's own uploads.
 		upload, err := s.database.LibraryUpload(r.Context(), userID, spaceID, uploadID)
 		if err != nil {
 			writeLibraryError(w, err)
@@ -151,7 +136,6 @@ func (s *SpaceLibraryService) AbortUpload() http.HandlerFunc {
 		}
 		switch upload.State {
 		case "rejected", "infected", "invalid", "processing_failed", "expired", "deleted":
-			// Already over, and its reservation already freed.
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -159,8 +143,6 @@ func (s *SpaceLibraryService) AbortUpload() http.HandlerFunc {
 			writeLibraryError(w, err)
 			return
 		}
-		// A partial object may have landed. Keep it if a blob took the key over
-		// while healing deduplication; the orphan sweep collects anything left.
 		if expected, err := s.database.LibraryObjectExpectations(r.Context(), []string{upload.ObjectKey}); err == nil {
 			if expected[upload.ObjectKey].Source != "blob" {
 				_ = s.Store.Delete(r.Context(), upload.ObjectKey)

@@ -22,17 +22,8 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// The operator account API (/operator/v1) lets whoever runs this server, or
-// its billing service, create accounts with limits, change the limits and
-// billing period, and suspend, close (read-only, then deleted) or resume an account. It is
-// authorized by MISTY_OPERATOR_TOKEN, unmounted while that is unset.
-// A setup key it issues comes back in the answer as setup_key and setup_link for
-// the caller to pass on; a server with Mailjet configured also emails it.
-
-// OperatorToken is MISTY_OPERATOR_TOKEN, or empty.
 func OperatorToken() string { return strings.TrimSpace(config.Getenv("MISTY_OPERATOR_TOKEN")) }
 
-// OperatorAccounts serves the operator account API.
 type OperatorAccounts struct {
 	database *db.Database
 	guard    *SuspensionGuard
@@ -43,25 +34,18 @@ func NewOperatorAccounts(database *db.Database, guard *SuspensionGuard) *Operato
 	return &OperatorAccounts{database: database, guard: guard, now: time.Now}
 }
 
-// operatorAccount is the account in an answer. SetupKey and SetupLink are
-// there only when this request issued a key; the key is never stored, so no
-// later answer can show it again.
 type operatorAccount struct {
 	db.OperatorAccount
 	SetupKey  string `json:"setup_key,omitempty"`
 	SetupLink string `json:"setup_link,omitempty"`
-	// Emailed says this server is emailing the key to the account's address.
-	Emailed bool `json:"emailed,omitempty"`
+	Emailed   bool   `json:"emailed,omitempty"`
 }
 
-// issuedKey is a setup key this request issued.
 type issuedKey struct {
 	key, link string
 	emailed   bool
 }
 
-// RequireOperator admits only `Authorization: Bearer <token>`. Both sides are
-// hashed first, so the comparison takes the same time whatever their lengths.
 func RequireOperator(token string) func(http.Handler) http.Handler {
 	want := sha256.Sum256([]byte(token))
 	return func(next http.Handler) http.Handler {
@@ -79,8 +63,6 @@ func RequireOperator(token string) func(http.Handler) http.Handler {
 	}
 }
 
-// Mount registers the routes on r, which the caller has already guarded with
-// RequireOperator.
 func (o *OperatorAccounts) Mount(r chi.Router) {
 	r.Get("/accounts", o.list)
 	r.Post("/accounts", o.create)
@@ -95,8 +77,6 @@ func (o *OperatorAccounts) Mount(r chi.Router) {
 	r.Put("/spaces/{spaceID}/boosts/{id}", o.setSpaceBoosts)
 }
 
-// list answers ?q= (a fragment of an email or username) or ?email= (one
-// exact email, case-insensitive), at most limit accounts.
 func (o *OperatorAccounts) list(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	items, err := o.database.OperatorAccounts(r.Context(), db.OperatorAccountSearch{
@@ -131,8 +111,6 @@ func (o *OperatorAccounts) create(w http.ResponseWriter, r *http.Request) {
 		writeOperatorError(w, err)
 		return
 	}
-	// A retried create issues a key again only while the person has neither
-	// signed in nor been given a key that still works.
 	var issued *issuedKey
 	state, err := o.database.AccountSetupState(r.Context(), user.ID)
 	if err == nil && (created || (!state.Done && !state.LiveKey)) {
@@ -203,8 +181,6 @@ func (o *OperatorAccounts) resume(w http.ResponseWriter, r *http.Request) {
 	o.writeAccount(w, r, id, http.StatusOK, nil, nil)
 }
 
-// fromProof answers with the account a signed-in person proved they hold
-// (POST /me/account-proof), for a service that can't see their session.
 func (o *OperatorAccounts) fromProof(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Proof string `json:"proof"`
@@ -224,10 +200,6 @@ func (o *OperatorAccounts) fromProof(w http.ResponseWriter, r *http.Request) {
 	o.writeAccount(w, r, id, http.StatusOK, nil, nil)
 }
 
-// close makes the account read-only, stops its agents and schedules its deletion
-// delete_after_days from now. The account-deletion worker deletes it on the
-// date. A server with Mailjet configured tells the person, with keep_url as where
-// they can keep the account; otherwise telling them is the caller's job.
 func (o *OperatorAccounts) close(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		DeleteAfterDays *int   `json:"delete_after_days"`
@@ -269,18 +241,13 @@ func (o *OperatorAccounts) close(w http.ResponseWriter, r *http.Request) {
 	o.writeAccount(w, r, id, http.StatusOK, nil, nil)
 }
 
-// newSetupKey issues a sign-in link for any password account, whether or not
-// it has signed in before: for an account that has, it is how a forgotten
-// password is reset (the sign-in may choose a new one).
 func (o *OperatorAccounts) newSetupKey(w http.ResponseWriter, r *http.Request) {
 	user, err := o.database.GetUserByID(chi.URLParam(r, "id"))
 	if err == nil && (user == nil || user.Provider != "misty") {
-		// A Google account signs in with Google; it has no use for a key.
 		err = db.ErrAccountNotFound
 	}
 	var issued *issuedKey
 	if err == nil {
-		// An account that has signed in before gets a sign-in link, not a welcome.
 		kind := db.EmailSetup
 		var state db.SetupState
 		if state, err = o.database.AccountSetupState(r.Context(), user.ID); err == nil {
@@ -297,9 +264,6 @@ func (o *OperatorAccounts) newSetupKey(w http.ResponseWriter, r *http.Request) {
 	o.writeAccount(w, r, user.ID, http.StatusOK, issued, nil)
 }
 
-// issueSetupKey stores a new key (by hash) and returns it with its link.
-// Earlier unused keys stop working. A server with Mailjet configured also emails
-// the link, as the kind of email named.
 func (o *OperatorAccounts) issueSetupKey(ctx context.Context, r *http.Request, user *db.User, kind string) (*issuedKey, error) {
 	key, err := GenerateSetupKey()
 	if err != nil {
@@ -333,10 +297,6 @@ func (o *OperatorAccounts) writeAccount(w http.ResponseWriter, r *http.Request, 
 	writeJSON(w, status, body)
 }
 
-// setupPageURL is the website's static setup page. It reads the server and
-// key from the fragment in the browser and offers misty://setup, so the same
-// page serves every server, self-hosted ones included. MISTY_WEBSITE_URL names
-// another site: the local website on a development server.
 func setupPageURL() string {
 	return websiteURL() + "/setup"
 }
@@ -348,14 +308,10 @@ func websiteURL() string {
 	return "https://mistysys.com"
 }
 
-// SetupLink is a setup key's sign-in link:
-// https://mistysys.com/setup#server=<MISTY_HOSTNAME>&key=<key>. Without
-// MISTY_HOSTNAME (a development server) the host comes from the server origin.
 func SetupLink(serverOrigin, key string) string {
 	return setupPageURL() + "#server=" + url.QueryEscape(serverHost(serverOrigin)) + "&key=" + url.QueryEscape(key)
 }
 
-// serverHost is the host people know this server by, for the website's pages.
 func serverHost(serverOrigin string) string {
 	host := strings.ToLower(strings.TrimSpace(config.Getenv("MISTY_HOSTNAME")))
 	if parsed, err := url.Parse(serverOrigin); host == "" && err == nil {
@@ -364,8 +320,6 @@ func serverHost(serverOrigin string) string {
 	return host
 }
 
-// publicServerOrigin is the server's public origin (MISTY_PUBLIC_API_URL
-// without its /v1 path), which is the address people enter in Misty.
 func publicServerOrigin(r *http.Request) string {
 	if parsed, err := url.Parse(strings.TrimSpace(config.Getenv("MISTY_PUBLIC_API_URL"))); err == nil && parsed.Scheme != "" && parsed.Host != "" {
 		return parsed.Scheme + "://" + parsed.Host

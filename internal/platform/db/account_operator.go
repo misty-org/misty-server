@@ -11,8 +11,6 @@ import (
 	"github.com/misty-org/misty-server/internal/accounts"
 )
 
-// OperatorAccount is one account as the operator account API and the console
-// show it: who it is, its limits and what it uses against them.
 type OperatorAccount struct {
 	ID           string        `json:"id"`
 	Email        string        `json:"email"`
@@ -29,16 +27,11 @@ type OperatorAccount struct {
 	StorageKnown bool          `json:"-"`
 }
 
-// AccountUse is what the account uses against each limit. PeriodStart is the
-// start of its current billing period.
 type AccountUse struct {
 	StorageBytes *int64    `json:"storage_bytes,omitempty"`
 	PeriodStart  time.Time `json:"period_start"`
 }
 
-// CreateOperatorAccount makes a password-less account for the email with the
-// given limits, or, when the email already has an account, applies the limits
-// to it. created reports which. It is safe to call again with the same email.
 func (db *Database) CreateOperatorAccount(ctx context.Context, email string, limits AccountLimits) (user *User, created bool, err error) {
 	email = normalizeEmail(email)
 	if email == "" || !strings.Contains(email, "@") || len(email) > 320 {
@@ -53,7 +46,6 @@ func (db *Database) CreateOperatorAccount(ctx context.Context, email string, lim
 			user = existing
 			break
 		}
-		// An account being deleted still holds its email until the purge.
 		var pending bool
 		if err = db.serviceTx(ctx, func(tx *sql.Tx) error {
 			pending, err = accountPendingDeletionTx(ctx, tx, email)
@@ -74,7 +66,6 @@ func (db *Database) CreateOperatorAccount(ctx context.Context, email string, lim
 		case err == nil:
 			created = true
 		case errors.Is(err, ErrUsernameTaken), errors.Is(err, ErrEmailTaken):
-			// Another create won the email, or the name is taken: look again.
 			user, err = nil, nil
 		default:
 			return nil, false, err
@@ -121,8 +112,6 @@ func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, 
 	return a, nil
 }
 
-// fillOperatorAccountTx adds the billing period and the setup state; storage is
-// measured only when asked, since it sums every stored payload.
 func fillOperatorAccountTx(ctx context.Context, tx *sql.Tx, a *OperatorAccount, storage bool) error {
 	err := tx.QueryRowContext(ctx, `SELECT misty_usage_period((SELECT period_anchor FROM account_controls WHERE user_id=$1), now())`, a.ID).Scan(&a.Usage.PeriodStart)
 	if err != nil {
@@ -141,7 +130,6 @@ func fillOperatorAccountTx(ctx context.Context, tx *sql.Tx, a *OperatorAccount, 
 	return nil
 }
 
-// OperatorAccountByID returns one active account with its storage measured.
 func (db *Database) OperatorAccountByID(ctx context.Context, userID string) (OperatorAccount, error) {
 	var a OperatorAccount
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -158,16 +146,11 @@ func (db *Database) OperatorAccountByID(ctx context.Context, userID string) (Ope
 	return a, err
 }
 
-// OperatorAccountSearch picks the accounts OperatorAccounts lists: Email, when
-// set, is one exact email (compared as stored, lower case); otherwise Text is
-// a fragment of an email or username, and empty matches every account.
 type OperatorAccountSearch struct {
 	Text  string
 	Email string
 }
 
-// OperatorAccounts lists the active accounts the search matches, newest
-// first. Storage is not measured in the list.
 func (db *Database) OperatorAccounts(ctx context.Context, search OperatorAccountSearch, limit int) ([]OperatorAccount, error) {
 	if limit < 1 || limit > 500 {
 		limit = 100

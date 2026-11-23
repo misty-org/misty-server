@@ -75,7 +75,6 @@ func TestAccountArchiveHoldsTheFilesAndNoLinks(t *testing.T) {
 	if files["journal/notes/note-1.yjs"] != "yjs-bytes" {
 		t.Fatalf("note missing: %v", files)
 	}
-	// A filename can't climb out of its folder.
 	if files["assets/librarys/file-1-pass_wd.txt"] != file {
 		t.Fatalf("file missing or unsafe: %v", files)
 	}

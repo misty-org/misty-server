@@ -9,13 +9,10 @@ import (
 )
 
 var (
-	// ErrFriendRequestLimit refuses a friend request past the account's daily limit.
 	ErrFriendRequestLimit = errors.New("friend request limit reached")
-	// ErrNotFriends refuses a DM, or adding someone to one, with a person who isn't the caller's friend.
-	ErrNotFriends = errors.New("not friends")
+	ErrNotFriends         = errors.New("not friends")
 )
 
-// Person is someone shown in the friends list or a DM: their id, username and picture.
 type Person struct {
 	UserID        string    `json:"user_id"`
 	Username      string    `json:"username"`
@@ -23,8 +20,6 @@ type Person struct {
 	Since         time.Time `json:"since"`
 }
 
-// FriendsList is the caller's friends, the requests waiting on them and on others, and whom
-// they blocked.
 type FriendsList struct {
 	Friends  []Person `json:"friends"`
 	Incoming []Person `json:"incoming"`
@@ -32,12 +27,10 @@ type FriendsList struct {
 	Blocked  []Person `json:"blocked"`
 }
 
-// FriendPrivacy is who may send the person a friend request: "everyone" or "shared_spaces".
 type FriendPrivacy struct {
 	FriendRequests string `json:"friend_requests"`
 }
 
-// friendPair orders two user ids the way friendships stores them.
 func friendPair(a, b string) (string, string) {
 	if a < b {
 		return a, b
@@ -45,7 +38,6 @@ func friendPair(a, b string) (string, string) {
 	return b, a
 }
 
-// AreFriendsTx is true when the two have an accepted friendship.
 func areFriendsTx(ctx context.Context, tx *sql.Tx, a, b string) (bool, error) {
 	low, high := friendPair(a, b)
 	var ok bool
@@ -53,7 +45,6 @@ func areFriendsTx(ctx context.Context, tx *sql.Tx, a, b string) (bool, error) {
 	return ok, err
 }
 
-// blockedEitherWayTx is true when either has blocked the other.
 func blockedEitherWayTx(ctx context.Context, tx *sql.Tx, a, b string) (bool, error) {
 	var blocked bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM user_blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))`, a, b).Scan(&blocked)
@@ -66,7 +57,6 @@ func activeUserIDTx(ctx context.Context, tx *sql.Tx, userID string) (bool, error
 	return ok, err
 }
 
-// Friends lists the caller's friends, pending requests both ways, and the people they blocked.
 func (db *Database) Friends(ctx context.Context, userID string) (*FriendsList, error) {
 	out := &FriendsList{Friends: []Person{}, Incoming: []Person{}, Outgoing: []Person{}, Blocked: []Person{}}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -118,11 +108,6 @@ func (db *Database) Friends(ctx context.Context, userID string) (*FriendsList, e
 	return out, err
 }
 
-// SendFriendRequest asks the person with this username to be friends. It answers the same way
-// whether or not the request went anywhere: no such person, a block either way, or someone who
-// takes requests only from people they share a Space with all look like a sent request, so a
-// username can't be probed. A request to someone who already asked the caller accepts theirs.
-// Only the daily limit is reported.
 func (db *Database) SendFriendRequest(ctx context.Context, userID, username string) error {
 	username = strings.ToLower(strings.TrimSpace(username))
 	if username == "" || len(username) > 30 {
@@ -132,7 +117,6 @@ func (db *Database) SendFriendRequest(ctx context.Context, userID, username stri
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "friends:send:"+userID); err != nil {
 			return err
 		}
-		// Every attempt counts toward the limit, found or not, so the limit also bounds probing.
 		var limit *int64
 		if err := asServiceTx(ctx, tx, func() error {
 			limits, _, err := accountControlsTx(ctx, tx, userID)
@@ -191,7 +175,6 @@ func (db *Database) SendFriendRequest(ctx context.Context, userID, username stri
 	})
 }
 
-// AcceptFriendRequest accepts the request otherID sent the caller.
 func (db *Database) AcceptFriendRequest(ctx context.Context, userID, otherID string) error {
 	low, high := friendPair(userID, otherID)
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -207,8 +190,6 @@ func (db *Database) AcceptFriendRequest(ctx context.Context, userID, otherID str
 	})
 }
 
-// RemoveFriendRequest ignores a request to the caller, or cancels one they sent. The other person
-// is never told.
 func (db *Database) RemoveFriendRequest(ctx context.Context, userID, otherID string) error {
 	low, high := friendPair(userID, otherID)
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -217,7 +198,6 @@ func (db *Database) RemoveFriendRequest(ctx context.Context, userID, otherID str
 	})
 }
 
-// ClearIncomingFriendRequests ignores every request waiting on the caller.
 func (db *Database) ClearIncomingFriendRequests(ctx context.Context, userID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM friendships WHERE state='pending' AND requested_by<>$1 AND (user_low=$1 OR user_high=$1)`, userID)
@@ -225,8 +205,6 @@ func (db *Database) ClearIncomingFriendRequests(ctx context.Context, userID stri
 	})
 }
 
-// Unfriend ends a friendship, and with it the pair's one-to-one DM and everything in it, for both
-// of them. Group DMs they share stay.
 func (db *Database) Unfriend(ctx context.Context, userID, otherID string) error {
 	low, high := friendPair(userID, otherID)
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -241,8 +219,6 @@ func (db *Database) Unfriend(ctx context.Context, userID, otherID string) error 
 	})
 }
 
-// Block stops otherID sending the caller requests or messages and hides the caller's status from
-// them. It ends any friendship or request between them, and deletes their one-to-one DM for both.
 func (db *Database) Block(ctx context.Context, userID, otherID string) error {
 	if userID == otherID {
 		return ErrSpaceInvalid
@@ -264,7 +240,6 @@ func (db *Database) Block(ctx context.Context, userID, otherID string) error {
 	})
 }
 
-// Unblock lifts the caller's block. It brings back no friendship and no DM.
 func (db *Database) Unblock(ctx context.Context, userID, otherID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM user_blocks WHERE blocker_id=$1 AND blocked_id=$2`, userID, otherID)
@@ -272,7 +247,6 @@ func (db *Database) Unblock(ctx context.Context, userID, otherID string) error {
 	})
 }
 
-// Privacy returns who may send the caller friend requests.
 func (db *Database) Privacy(ctx context.Context, userID string) (*FriendPrivacy, error) {
 	out := &FriendPrivacy{FriendRequests: "everyone"}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -285,7 +259,6 @@ func (db *Database) Privacy(ctx context.Context, userID string) (*FriendPrivacy,
 	return out, err
 }
 
-// SetPrivacy sets who may send the caller friend requests.
 func (db *Database) SetPrivacy(ctx context.Context, userID string, privacy FriendPrivacy) (*FriendPrivacy, error) {
 	if privacy.FriendRequests != "everyone" && privacy.FriendRequests != "shared_spaces" {
 		return nil, ErrSpaceInvalid

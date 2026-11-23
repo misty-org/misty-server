@@ -19,24 +19,17 @@ const (
 	PermissionAskRun           = spaces.PermissionAskRun
 )
 
-// Upload purposes decide which Space permission an upload needs and which
-// maximum file size applies. The database enforces the maximum independently of
-// the API service so a misconfigured service cannot widen the limit.
 const (
 	UploadPurposeChatAttachment = spaces.UploadPurposeChatAttachment
 	UploadPurposeNoteAttachment = spaces.UploadPurposeNoteAttachment
 	UploadPurposeDrive          = spaces.UploadPurposeDrive
 )
 
-// Default per-purpose maximums. Deployments may lower these through
-// configuration, but never above the ceiling enforced here.
 const (
 	DefaultChatAttachmentMaxFileBytes = spaces.DefaultChatAttachmentMaxFileBytes
 	DefaultNoteAttachmentMaxFileBytes = spaces.DefaultNoteAttachmentMaxFileBytes
 )
 
-// MaxUploadBytesForPurpose is the hard database ceiling for a purpose. An
-// unknown purpose has no valid ceiling and returns 0.
 func MaxUploadBytesForPurpose(purpose string) int64 { return spaces.MaxUploadBytesForPurpose(purpose) }
 
 func UploadPurposePermission(purpose string) (string, bool) {
@@ -61,10 +54,9 @@ type SpaceStorageUsage struct {
 	PersonalReservedBytes int64                 `json:"personal_reserved_bytes"`
 	Personal              StorageUsageDimension `json:"personal"`
 	Space                 StorageUsageDimension `json:"space"`
-	// Compatibility fields: these mirror the requesting user's personal usage.
-	UsedBytes     int64 `json:"used_bytes"`
-	ReservedBytes int64 `json:"reserved_bytes"`
-	Version       int64 `json:"version"`
+	UsedBytes             int64                 `json:"used_bytes"`
+	ReservedBytes         int64                 `json:"reserved_bytes"`
+	Version               int64                 `json:"version"`
 }
 
 type LibraryUpload struct {

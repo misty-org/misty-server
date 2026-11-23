@@ -32,18 +32,15 @@ func TestOperatorAccountCreateIsIdempotentPerEmail(t *testing.T) {
 	if err != nil || *limits.Devices != 2 || *limits.StorageBytes != 50_000_000_000 {
 		t.Fatalf("limits = %+v %v", limits, err)
 	}
-	// No password yet: password sign-in finds an empty hash that matches nothing.
 	if _, hash, err := database.GetUserByEmail(first.Email); err != nil || hash != "" {
 		t.Fatalf("hash = %q %v", hash, err)
 	}
-	// The first password is set without a current one; later ones need it.
 	if err := database.ChangePassword(first.ID, "", "a-long-enough-password", ""); err != nil {
 		t.Fatalf("first password: %v", err)
 	}
 	if err := database.ChangePassword(first.ID, "", "another-long-password", ""); !errors.Is(err, ErrWrongCurrentPassword) {
 		t.Fatalf("second password without current = %v", err)
 	}
-	// A taken username gets a suffix instead of failing.
 	other, created, err := database.CreateOperatorAccount(ctx, "cloud.person@another.example", AccountLimits{})
 	if err != nil || !created || other.Username == first.Username {
 		t.Fatalf("username collision = %+v %v %v", other, created, err)
@@ -122,7 +119,6 @@ func TestSuspensionEndsSessionsKeepsDataAndRefusesKeys(t *testing.T) {
 	if err := database.ResumeAccount(ctx, user.ID); err != nil {
 		t.Fatal(err)
 	}
-	// The key was not spent while the account was suspended.
 	if _, err := database.RedeemSetupKey(ctx, key); err != nil {
 		t.Fatalf("redeem after resume = %v", err)
 	}
@@ -147,7 +143,6 @@ func TestGoogleSignInRefusesAnEmailAnotherAccountHolds(t *testing.T) {
 	if _, hash, err := database.GetUserByEmail(email); err != nil || hash == "" {
 		t.Fatalf("the password went: %q, %v", hash, err)
 	}
-	// One Google identity holds an email; another claiming it is refused.
 	google := "google." + suffix + "@example.com"
 	if _, err := database.GoogleUser(google, "first-"+suffix); err != nil {
 		t.Fatal(err)
@@ -197,7 +192,6 @@ func TestStorageLimitCountsLibrary(t *testing.T) {
 	if err := room(1001); !errors.Is(err, ErrLibraryQuota) {
 		t.Fatalf("over the limit = %v", err)
 	}
-	// Deleting never needs room.
 	if err := room(-50); err != nil {
 		t.Fatalf("negative = %v", err)
 	}
@@ -242,7 +236,6 @@ func TestSpacesLimitCountsOwnAndJoinedSpaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Every account starts in its own personal Space, which counts as one.
 	if spaces, err := database.ListSpaces(ctx, member.ID); err != nil || len(spaces) != 1 {
 		t.Fatalf("personal Space = %d %v", len(spaces), err)
 	}
@@ -260,7 +253,6 @@ func TestSpacesLimitCountsOwnAndJoinedSpaces(t *testing.T) {
 	if _, err := database.RespondToSpaceInvite(ctx, member.ID, invite("Team"), true); err != nil {
 		t.Fatalf("joining the second Space = %v", err)
 	}
-	// Owned and joined count together: both a third of its own and a third to join are refused.
 	if _, err := database.TestingCreateSpace(ctx, member.ID, "Another"); !errors.Is(err, ErrSpaceCountLimit) {
 		t.Fatalf("third own Space = %v", err)
 	}
@@ -268,7 +260,6 @@ func TestSpacesLimitCountsOwnAndJoinedSpaces(t *testing.T) {
 	if _, err := database.RespondToSpaceInvite(ctx, member.ID, third, true); !errors.Is(err, ErrSpaceCountLimit) {
 		t.Fatalf("joining a third Space = %v", err)
 	}
-	// Declining always works, and a higher limit lets the same invitation in.
 	if err := database.SetAccountLimits(ctx, member.ID, AccountLimits{Spaces: limit(5)}); err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +270,6 @@ func TestSpacesLimitCountsOwnAndJoinedSpaces(t *testing.T) {
 	if err != nil || limits.Spaces == nil || *limits.Spaces != 5 {
 		t.Fatalf("limits = %+v %v", limits, err)
 	}
-	// Lowering the limit keeps every Space it belongs to; it only refuses a new one.
 	if err := database.SetAccountLimits(ctx, member.ID, AccountLimits{Spaces: limit(2)}); err != nil {
 		t.Fatal(err)
 	}

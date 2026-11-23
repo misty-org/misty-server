@@ -16,7 +16,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// bearerFixture is one account with one live session, signed the way a sign-in signs it.
 type bearerFixture struct {
 	database        *db.Database
 	email, password string
@@ -92,7 +91,6 @@ func TestSessionRefusesEveryOtherBearer(t *testing.T) {
 	f := newBearerFixture(t)
 	for name, token := range map[string]string{"refresh token": f.refresh, "garbage": "not-a-jwt"} {
 		r := bearerRequest(http.MethodGet, token)
-		// A cookie doesn't rescue a bearer that failed.
 		r.AddCookie(&http.Cookie{Name: SessionCookieName, Value: f.access})
 		if user, err := accounts.SessionUserID(r); err != nil || user != "" {
 			t.Fatalf("%s signed in as %q: %v", name, user, err)
@@ -153,7 +151,6 @@ func TestReusedRefreshTokenIsRefused(t *testing.T) {
 	if first.Code != http.StatusNoContent {
 		t.Fatalf("first refresh = %d", first.Code)
 	}
-	// A retry just after a rotation is forgiven for a moment; past that it's a replay.
 	if err := f.database.WithRLSContext(context.Background(), db.ServiceRLSSettings(), func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(context.Background(), `UPDATE sessions SET refresh_rotated_at=$2 WHERE user_id=$1`,
 			f.userID, time.Now().Add(-db.RefreshRotationGrace-time.Minute))
@@ -167,7 +164,6 @@ func TestReusedRefreshTokenIsRefused(t *testing.T) {
 		t.Fatalf("replayed refresh = %d", replay.Code)
 	}
 	noTokenHeaders(t, replay)
-	// A replay ends the whole session, so the token it was rotated to is dead too.
 	after := httptest.NewRecorder()
 	RefreshSession(f.database)(after, desktopRequest(first.Header().Get(RefreshTokenHeader)))
 	if after.Code != http.StatusUnauthorized {

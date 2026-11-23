@@ -7,22 +7,14 @@ import (
 	"time"
 )
 
-// SetupKeyTTL is how long a setup key (a sign-in link) stays valid.
 const SetupKeyTTL = 7 * 24 * time.Hour
 
-// ErrSetupKeyInvalid covers a key that is unknown, used, replaced or expired.
-// The caller cannot tell which, so a guess learns nothing.
 var ErrSetupKeyInvalid = errors.New("setup_key_invalid")
 
-// IssueSetupKey stores a new key (by hash) for the account and replaces every
-// earlier key that was not used, so only the newest link works.
 func (db *Database) IssueSetupKey(ctx context.Context, userID, keyHash string, expiresAt time.Time) error {
 	return db.IssueSetupKeyWithEmail(ctx, userID, keyHash, expiresAt, nil)
 }
 
-// IssueSetupKeyWithEmail also stores the key's email, in the same transaction: a
-// key that exists without its email would never reach the person, since a retried
-// create issues no second key while one still works.
 func (db *Database) IssueSetupKeyWithEmail(ctx context.Context, userID, keyHash string, expiresAt time.Time, email *KeyEmail) error {
 	return db.serviceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireActiveAccountTx(ctx, tx, userID); err != nil {
@@ -42,8 +34,6 @@ func (db *Database) IssueSetupKeyWithEmail(ctx context.Context, userID, keyHash 
 	})
 }
 
-// RedeemSetupKey marks the key used and returns its account. A suspended
-// account's key is refused with ErrAccountSuspended and stays unused.
 func (db *Database) RedeemSetupKey(ctx context.Context, keyHash string) (*User, error) {
 	var userID string
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -76,13 +66,9 @@ func (db *Database) RedeemSetupKey(ctx context.Context, keyHash string) (*User, 
 	return user, err
 }
 
-// SetupState says whether an account still waits for its first sign-in.
 type SetupState struct {
-	// Done: a key was used or a password set, so the person has signed in.
-	Done bool `json:"done"`
-	// LiveKey: an unused key that has not expired is out.
-	LiveKey bool `json:"live_key"`
-	// LastSentAt is when the newest key was issued.
+	Done       bool       `json:"done"`
+	LiveKey    bool       `json:"live_key"`
 	LastSentAt *time.Time `json:"last_sent_at,omitempty"`
 }
 
@@ -100,7 +86,6 @@ func accountSetupStateTx(ctx context.Context, tx *sql.Tx, userID string) (SetupS
 	return state, err
 }
 
-// AccountSetupState reports where the account is in its first sign-in.
 func (db *Database) AccountSetupState(ctx context.Context, userID string) (SetupState, error) {
 	var state SetupState
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {

@@ -28,8 +28,7 @@ func (s *SpacesService) Conversations() http.HandlerFunc {
 			Title        string                          `json:"title"`
 			Participants []db.SpaceActorRef              `json:"participants"`
 			Overwrites   []db.SpaceConversationOverwrite `json:"overwrites"`
-			// Voice makes a voice channel, people dropping into a call instead of writing.
-			Voice bool `json:"voice"`
+			Voice        bool                            `json:"voice"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -49,7 +48,6 @@ func (s *SpacesService) Conversations() http.HandlerFunc {
 	}
 }
 
-// DirectConversation opens the DM between the caller and another person in the Space.
 func (s *SpacesService) DirectConversation() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -63,7 +61,6 @@ func (s *SpacesService) DirectConversation() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		// One other person is the one-to-one DM, found or made; two or more make a group DM.
 		var item *db.SpaceConversation
 		var err error
 		if len(body.UserIDs) > 1 {
@@ -140,21 +137,18 @@ func (s *SpacesService) ConversationMessages() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Content       []db.MessageSpan `json:"content"`
-			FileNodeIDs   []string         `json:"file_node_ids"`
-			AttachmentIDs []string         `json:"attachment_ids"`
-			// An older app may still send Library items; they are gone, so
-			// the field is read and ignored.
-			LibraryItemIDs   []string `json:"library_item_ids"`
-			ReplyToMessageID string   `json:"reply_to_message_id"`
-			ThreadRootID     string   `json:"thread_root_id"`
-			ClientNonce      string   `json:"client_nonce"`
-			InputModality    string   `json:"input_modality"`
+			Content          []db.MessageSpan `json:"content"`
+			FileNodeIDs      []string         `json:"file_node_ids"`
+			AttachmentIDs    []string         `json:"attachment_ids"`
+			LibraryItemIDs   []string         `json:"library_item_ids"`
+			ReplyToMessageID string           `json:"reply_to_message_id"`
+			ThreadRootID     string           `json:"thread_root_id"`
+			ClientNonce      string           `json:"client_nonce"`
+			InputModality    string           `json:"input_modality"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		// An @mention runs on the sender's own computer, which posts the reply as an ordinary message.
 		var message *db.SpaceMessage
 		var err error
 		if body.ThreadRootID != "" {

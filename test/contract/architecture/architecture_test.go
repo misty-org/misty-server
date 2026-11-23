@@ -41,8 +41,6 @@ func TestRepositoryLayout(t *testing.T) {
 	}
 }
 
-// Internal unit tests may exercise unexported state machines beside production
-// code. TestDomainImportDirection checks that deployed packages never import tests.
 func TestHandwrittenGoFilesRespectHardMaximum(t *testing.T) {
 	root := repositoryRoot(t)
 	walkGoFiles(t, root, func(relative, absolute string) {
@@ -100,13 +98,6 @@ func TestEnvironmentAccessIsCentralized(t *testing.T) {
 	})
 }
 
-// environmentContract is every environment variable the server reads. A
-// server's values come from ~/.misty/.env/server/ and the setup container;
-// no env file is committed. On a stack setup manages, the keys come from
-// MISTY_API_SECRET and MISTY_SERVER_KEY_VERSIONS, and MISTY_PUBLIC_API_URL and
-// R2_BUCKET from MISTY_HOSTNAME (config.ApplyServerDefaults); a value set
-// under its own name still wins. serverEnvironmentContract lists what the
-// server reads only through that derivation.
 const environmentContract = `
 CLOUDFLARE_API_TOKEN
 LIVEKIT_ADMIN_URL
@@ -173,8 +164,6 @@ TRUSTED_PROXY_CIDRS
 TRUST_PROXY_HEADERS
 `
 
-// serverEnvironmentContract is read by serverenv.Defaults, through the
-// getenv it is given rather than config.Getenv.
 const serverEnvironmentContract = `
 MISTY_API_SECRET
 MISTY_SERVER_KEY_VERSIONS
@@ -224,8 +213,6 @@ func TestEnvironmentContractIsExplicit(t *testing.T) {
 	}
 }
 
-// Every key the API derives is one it reads, and the derivation's own
-// variables are the ones listed.
 func TestDerivedKeysAreInTheEnvironmentContract(t *testing.T) {
 	documented := map[string]bool{}
 	for _, name := range strings.Fields(environmentContract) {
@@ -314,8 +301,6 @@ func walkGoFiles(t *testing.T, root string, visit func(relative, absolute string
 		if err != nil {
 			return err
 		}
-		// `.claude` holds local agent worktrees: copies of the repository that git ignores and
-		// that aren't part of this checkout's source.
 		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == ".claude" ||
 			entry.Name() == "node_modules" || entry.Name() == "vendor") {
 			return filepath.SkipDir

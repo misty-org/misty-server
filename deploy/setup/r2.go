@@ -8,17 +8,11 @@ import (
 	"fmt"
 )
 
-// The Library bucket holds uploads, attachments and avatars; the backup
-// bucket holds encrypted database dumps under a lock rule, so a token that
-// leaks from this server cannot delete or overwrite a backup.
-
 const (
 	backupRetentionDays = 30
 	r2WritePermission   = "Workers R2 Storage Bucket Item Write"
 )
 
-// desktopOrigins are the app's own origins, which upload to the Library
-// bucket with signed URLs.
 var desktopOrigins = []string{"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"}
 
 func provisionR2(ctx context.Context, cf *cloudflare, inputs Inputs, names Names, store *Store) error {
@@ -48,7 +42,6 @@ func provisionR2(ctx context.Context, cf *cloudflare, inputs Inputs, names Names
 	if err := cf.call(ctx, "PUT", cf.accountPath("r2/buckets/%s/lock", names.BackupBucket), lock, nil); err != nil {
 		return err
 	}
-	// Delete a day after the lock lets go, so the bucket does not grow forever.
 	lifecycle := map[string]any{"rules": []map[string]any{{
 		"id": "misty-backups-expire", "enabled": true, "conditions": map[string]any{"prefix": ""},
 		"deleteObjectsTransition": map[string]any{"condition": map[string]any{"type": "Age", "maxAge": retention + 24*60*60}},
@@ -67,7 +60,6 @@ func provisionR2(ctx context.Context, cf *cloudflare, inputs Inputs, names Names
 	if err := ensureBucketToken(ctx, cf, store, names.BackupToken, names.BackupBucket, permission, "MISTY_BACKUP_R2_ACCESS_KEY", "MISTY_BACKUP_R2_SECRET_KEY"); err != nil {
 		return err
 	}
-	// The API and the backups find their buckets from the hostname.
 	store.Set("R2_ENDPOINT", "https://"+cf.account+".r2.cloudflarestorage.com")
 	return nil
 }
@@ -99,10 +91,6 @@ type apiToken struct {
 	Value string `json:"value"`
 }
 
-// ensureBucketToken keeps an account API token that can read and write one
-// bucket, and its S3 credentials (access key = token ID, secret = SHA-256 of
-// the token value). A stored pair is kept while its token exists; a token
-// whose value was lost has its value rolled instead of creating another.
 func ensureBucketToken(ctx context.Context, cf *cloudflare, store *Store, tokenName, bucket, permission, accessName, secretName string) error {
 	if id := store.Get(accessName); id != "" && store.Has(secretName) {
 		err := cf.call(ctx, "GET", cf.accountPath("tokens/%s", id), nil, nil)

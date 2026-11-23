@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-// ServerAlert is a problem the alerts service saw on two checks in a row and
-// that has not cleared (deploy/setup/watch.go writes them). The server never
-// emails alerts, so the console and the server owner's app show these instead.
 type ServerAlert struct {
 	Probe    string    `json:"probe"`
 	Title    string    `json:"title"`
@@ -16,7 +13,6 @@ type ServerAlert struct {
 	OpenedAt time.Time `json:"opened_at"`
 }
 
-// OpenServerAlerts lists the open alerts, oldest first.
 func (db *Database) OpenServerAlerts(ctx context.Context) ([]ServerAlert, error) {
 	out := []ServerAlert{}
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {

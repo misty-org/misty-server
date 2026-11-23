@@ -11,10 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// agentStatus is what a member's computer says one of their agents is doing now. The agents run on
-// that computer; the server only passes this on to the Space's other members. State and Doing are
-// fixed codes and Files are the agent's claim: paths relative to the Space's linked folder of the
-// files its run is changing, so nothing a model wrote can travel here.
 type agentStatus struct {
 	ID    string   `json:"id"`
 	Name  string   `json:"name"`
@@ -35,8 +31,6 @@ const (
 	maxAgentFiles    = 5
 )
 
-// cleanAgentStatuses keeps only well-formed statuses. Anything else is dropped whole, so a client
-// can't use the channel to carry free text.
 func cleanAgentStatuses(raw []agentStatus) []agentStatus {
 	clean := make([]agentStatus, 0, len(raw))
 	for _, status := range raw {
@@ -63,8 +57,6 @@ func cleanAgentStatuses(raw []agentStatus) []agentStatus {
 	return clean
 }
 
-// broadcastAgents passes a member's agent statuses to the Space's other members, and writes a line
-// in the Space's activity log whenever an agent's state or kind of work changes.
 func (s *RealtimeService) broadcastAgents(client *RealtimeClient, spaceID string, raw []agentStatus) {
 	if spaceID == "" {
 		return
@@ -84,7 +76,6 @@ func (s *RealtimeService) broadcastAgents(client *RealtimeClient, spaceID string
 		key := spaceID + "\x00" + status.ID
 		now := status.State + "\x00" + status.Doing
 		if client.agentStates[key] != now {
-			// An agent first seen at rest has done nothing worth a line.
 			if _, known := client.agentStates[key]; known || status.State != "resting" {
 				changed = append(changed, status)
 			}
@@ -94,7 +85,6 @@ func (s *RealtimeService) broadcastAgents(client *RealtimeClient, spaceID string
 	s.Mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	// Membership is checked here; someone who isn't in the Space reaches nobody.
 	members, err := s.database.SpaceMembers(ctx, client.UserID, spaceID)
 	if err != nil {
 		return
@@ -124,7 +114,6 @@ func (s *RealtimeService) broadcastAgents(client *RealtimeClient, spaceID string
 	}
 }
 
-// AgentActivity lists a Space's recent activity log for one of its members.
 func (s *SpacesService) AgentActivity() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -140,8 +129,6 @@ func (s *SpacesService) AgentActivity() http.HandlerFunc {
 	}
 }
 
-// claimPath reports whether a claimed file is a short path inside a linked folder: relative,
-// forward slashes only, never climbing out, never a line of text.
 func claimPath(file string) bool {
 	if file == "" || len(file) > 200 || strings.HasPrefix(file, "/") ||
 		strings.ContainsAny(file, "\\\n\r\t:") {

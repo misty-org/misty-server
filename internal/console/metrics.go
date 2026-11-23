@@ -16,8 +16,6 @@ import (
 
 var errMetricsNotConfigured = errors.New("set MISTY_METRICS_TOKEN to show traffic metrics")
 
-// MetricsSummary is the handful of numbers the Overview shows. Rates are
-// computed between consecutive scrapes, so the first view has no rate yet.
 type MetricsSummary struct {
 	HasRate        bool
 	RequestsPerMin float64
@@ -31,8 +29,6 @@ type metricsSample struct {
 	serverErr float64
 }
 
-// metricsSampler scrapes misty-server's bearer-protected /metrics endpoint
-// and remembers the previous sample to derive per-minute rates.
 type metricsSampler struct {
 	url    string
 	token  string
@@ -94,8 +90,6 @@ func (m *metricsSampler) Sample(ctx context.Context) (MetricsSummary, error) {
 	return summary, nil
 }
 
-// requestTotals sums all requests and those whose status label is a 5xx.
-// The server labels status by class ("5xx") but exact codes are accepted too.
 func requestTotals(family *dto.MetricFamily) (total, serverErr float64) {
 	if family == nil {
 		return 0, 0

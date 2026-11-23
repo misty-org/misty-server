@@ -11,7 +11,6 @@ import (
 	"testing"
 )
 
-// memoryBook is an alert table in memory; failing makes every write fail.
 type memoryBook struct {
 	rows    map[string]string
 	events  []string
@@ -66,7 +65,6 @@ func TestWatchOpensAnAlertOnTheSecondFailureAndClearsIt(t *testing.T) {
 	if len(book.events) != 0 {
 		t.Fatalf("alerted after one failure: %v", book.events)
 	}
-	// A write that fails is tried again on the next check.
 	book.failing = true
 	w.tick(ctx)
 	book.failing = false
@@ -90,7 +88,6 @@ func TestWatchOpensAnAlertOnTheSecondFailureAndClearsIt(t *testing.T) {
 	}
 }
 
-// An alert open before a restart still clears when its problem has gone.
 func TestWatchClearsAnAlertOpenBeforeARestart(t *testing.T) {
 	book := &memoryBook{rows: map[string]string{"disk": "The server is running out of disk"}}
 	w := &watcher{book: book, failures: map[string]int{}, open: map[string]bool{},

@@ -24,7 +24,6 @@ function encodeSegment(value: unknown): string {
   return base64Url(new TextEncoder().encode(JSON.stringify(value)));
 }
 
-/** Mints tickets the way the Go server will, so tests exercise the real format. */
 async function issuer() {
   const pair = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
     "sign",
@@ -138,7 +137,6 @@ describe("collaboration ticket verification", () => {
     const api = await issuer();
     const token = await api.mint({ role: "viewer" });
     const [header, , signature] = token.split(".") as [string, string, string];
-    // Swap the claims for an escalated set, keeping the original signature.
     const escalated = encodeSegment({
       iss: "misty-api",
       aud: "misty-journal-collab",
@@ -208,7 +206,6 @@ describe("collaboration ticket verification", () => {
     const token = await api.mint({ exp: now + 60 });
     const context = verificationContext(api.publicKeyBase64);
 
-    // Valid a second before expiry, rejected once the clock passes it.
     await expect(
       verifyTicket(token, { ...context, now: now + 59 }),
     ).resolves.toBeTruthy();

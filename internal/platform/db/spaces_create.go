@@ -15,9 +15,6 @@ type CreateSpaceResult struct {
 	Space Space `json:"space"`
 }
 
-// CreateSpace makes an empty Space owned by the caller. Every Space starts
-// the same; what people and agents make in it is what makes it different.
-// A repeated idempotency key returns the Space the first request created.
 func (db *Database) CreateSpace(ctx context.Context, userID, name, idempotencyKey string) (*CreateSpaceResult, error) {
 	name, err := normalizeSpaceName(name)
 	if err != nil {
@@ -104,15 +101,12 @@ func (db *Database) CreateSpace(ctx context.Context, userID, name, idempotencyKe
 	return result, nil
 }
 
-// SpacePerson is someone the caller already shares an active Space with.
 type SpacePerson struct {
 	UserID string `json:"user_id"`
 	Name   string `json:"name"`
 	Email  string `json:"email"`
 }
 
-// SpacePeople lists the people the caller shares active Spaces with, most
-// recently joined first, so a new Space can invite them in one click.
 func (db *Database) SpacePeople(ctx context.Context, userID string) ([]SpacePerson, error) {
 	people := []SpacePerson{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -141,7 +135,6 @@ func (db *Database) SpacePeople(ctx context.Context, userID string) ([]SpacePers
 	return people, err
 }
 
-// addSpaceMembershipTx is the canonical write path for Space memberships.
 func addSpaceMembershipTx(ctx context.Context, tx *sql.Tx, spaceID, userID, role string) error {
 	if role != "owner" && role != "member" {
 		return ErrSpaceInvalid

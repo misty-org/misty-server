@@ -9,10 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// hasSpacePermissionTx answers from the member's effective Space-wide
-// permissions: the owner holds every one, everyone else what their roles give
-// (memberAccessTx). Channel overwrites don't apply here; see
-// requireSpaceChannelPermissionTx.
 func hasSpacePermissionTx(ctx context.Context, tx *sql.Tx, userID, spaceID, permission string) (bool, error) {
 	access, err := memberAccessTx(ctx, tx, spaceID, userID)
 	if err != nil {
@@ -42,9 +38,6 @@ func (db *Database) SpaceStorageUsage(ctx context.Context, userID, spaceID strin
 			return err
 		}
 		if out.OwnerUserID == userID {
-			// Keep the selected Space counter authoritative at read time. Older
-			// deployments can leave the derived cache at zero even though its
-			// contribution and reservation ledgers contain storage.
 			if _, err := tx.ExecContext(ctx, `WITH actual AS (
 				SELECT
 					COALESCE((SELECT sum(logical_bytes) FROM space_storage_contributions WHERE space_id=$1 AND state IN ('active','recovery')),0) used,
@@ -80,14 +73,10 @@ func (db *Database) CreateLibraryUpload(ctx context.Context, userID, spaceID, pu
 	return db.CreateLibraryUploadForConversation(ctx, userID, spaceID, "", purpose, filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt)
 }
 
-// CreateLibraryUploadForConversation starts a chat attachment's upload in one
-// conversation ("" for the Space's own chat), or another purpose's upload.
 func (db *Database) CreateLibraryUploadForConversation(ctx context.Context, userID, spaceID, conversationID, purpose, filename, declaredMIME string, byteSize int64, clientSHA, objectKey, tokenHash string, expiresAt time.Time) (*LibraryUpload, error) {
 	return db.createLibraryUpload(ctx, userID, spaceID, conversationID, purpose, filename, declaredMIME, byteSize, clientSHA, objectKey, tokenHash, expiresAt)
 }
 
-// uploadObjectSizeAllowed is the bound on one uploaded object: its purpose's
-// cap, and never more than one object may hold.
 func uploadObjectSizeAllowed(purpose string, byteSize int64) bool {
 	return byteSize >= 1 && byteSize <= MaxUploadBytesForPurpose(purpose) && byteSize <= MaxSpaceStorageBytes
 }
@@ -100,7 +89,6 @@ func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, co
 	out := &LibraryUpload{ID: "upload_" + uuid.NewString(), SpaceID: spaceID, UserID: userID, ObjectKey: objectKey, OriginalFilename: filename, Purpose: purpose, ClientDeclaredMIMEType: declaredMIME, RequestedByteSize: byteSize, ClientSHA256: clientSHA, State: "initiated", UploadTokenHash: tokenHash, ExpiresAt: expiresAt, Version: 1}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if purpose == UploadPurposeChatAttachment && conversationID != "" {
-			// In a conversation the channel's own grant decides, overwrites included.
 			if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 				return err
 			}
@@ -156,10 +144,6 @@ func (db *Database) LibraryUpload(ctx context.Context, userID, spaceID, uploadID
 	return out, err
 }
 
-// LibraryUploadDeduplicationObjectKey returns the object currently selected as
-// the deduplication target for an upload. The object store must verify this key
-// before finalization reuses it; a ready database row alone does not prove the
-// immutable object still exists in R2.
 func (db *Database) LibraryUploadDeduplicationObjectKey(ctx context.Context, userID, spaceID, uploadID string) (string, error) {
 	var objectKey string
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {

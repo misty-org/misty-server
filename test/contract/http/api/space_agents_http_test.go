@@ -12,8 +12,6 @@ import (
 	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// Bring an agent, over the routes the app calls: a Space lists an agent from the
-// id and name the caller's computer sends, with no agent row on the server.
 func TestSpaceAgentRoutesListAnAgentByNameOnly(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := context.Background()

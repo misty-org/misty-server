@@ -17,7 +17,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// composeService is one row of `docker compose ps --format json`.
 type composeService struct {
 	Service  string `json:"Service"`
 	State    string `json:"State"`
@@ -26,7 +25,6 @@ type composeService struct {
 	ExitCode int    `json:"ExitCode"`
 }
 
-// status is the health when the container defines a healthcheck, else state.
 func (c composeService) status() string {
 	if c.Health != "" {
 		return c.Health
@@ -34,7 +32,6 @@ func (c composeService) status() string {
 	return c.State
 }
 
-// setupJobs finish and exit; successful ones are hidden like `misty server status`.
 var setupJobs = []string{"setup", "dev-init", "migrate", "database-permissions", "cloudflare-deploy"}
 
 type composeRunner interface {
@@ -43,12 +40,8 @@ type composeRunner interface {
 	Run(ctx context.Context, action, service string) error
 }
 
-// dockerCompose drives the stack exactly as the CLI does: its compose file
-// (compose.dev.yml in development, compose.yml otherwise), with
-// Compose's own .env loading disabled.
 type dockerCompose struct{ dir, file string }
 
-// composeFileFor is the compose file the stack of this environment uses.
 func composeFileFor(cfg Config) string {
 	if cfg.Development() {
 		return "compose.dev.yml"
@@ -148,8 +141,6 @@ func (s *Server) servicesPanel(w http.ResponseWriter, r *http.Request) {
 	render(w, r, servicesPanel(s.loadServices(r.Context())))
 }
 
-// knownService guards every compose argument: only services Compose itself
-// reports can be targeted, so request input never reaches argv unchecked.
 func (s *Server) knownService(ctx context.Context, name string) bool {
 	services, err := s.compose.PS(ctx)
 	if err != nil {
@@ -187,7 +178,6 @@ func (s *Server) serviceAction(w http.ResponseWriter, r *http.Request) {
 }
 
 type logsView struct {
-	// Base is the page the panel belongs to: /services or /logs.
 	Base    string
 	Service string
 	Lines   []string

@@ -15,8 +15,6 @@ import (
 //go:embed assets
 var assetFiles embed.FS
 
-// Server wires the console's routes. db is nil when Postgres was unreachable
-// at startup; database-backed pages then say so instead of failing.
 type Server struct {
 	cfg         Config
 	db          *db.Database
@@ -46,8 +44,6 @@ func (s *Server) Handler() http.Handler {
 	assets, _ := fs.Sub(assetFiles, "assets")
 	r := chi.NewRouter()
 	r.Use(requireHost, securityHeaders)
-	// Unauthenticated liveness probe used by `misty server up --gui` to reuse
-	// a running console instead of starting a second one.
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
@@ -75,8 +71,6 @@ func (s *Server) Handler() http.Handler {
 	return r
 }
 
-// requirePage hides an endpoint whenever its page is unavailable in this
-// deployment mode (for example Services outside development).
 func (s *Server) requirePage(slug string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := findPage(s.cfg, slug); !ok {
@@ -103,8 +97,6 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 	render(w, r, layout(view))
 }
 
-// audit records an operator action. A failed write is ignored so it never
-// fails the action it records.
 func (s *Server) audit(r *http.Request, action, target, detail string) {
 	if s.db != nil {
 		_ = s.db.ConsoleRecordAudit(r.Context(), action, target, detail)

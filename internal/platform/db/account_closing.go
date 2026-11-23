@@ -7,25 +7,8 @@ import (
 	"time"
 )
 
-// Closing an account: the operator account API, or the
-// billing service through it, sets the day the account's data is deleted.
-// Until then the account is read-only (account_read_only.go): it signs in,
-// reads and exports, and changes nothing. On the date the account-deletion
-// worker deletes it with the same full purge as a person deleting their own
-// account. A server with Mailjet configured emails the person; without it,
-// telling them is the billing service's job (or the operator's). Resuming
-// before then cancels it all. A
-// suspension is separate and, when both apply, wins.
-
-// ErrAccountPendingDeletion refuses an operator create for an email whose
-// account is being deleted: the email is free again once the purge finishes.
 var ErrAccountPendingDeletion = errors.New("account_pending_deletion")
 
-// CloseAccount makes the account read-only, stops its agent runs and
-// schedules, and schedules its deletion for deleteAt. Its sessions stay, so it
-// can still export. Closing an account that is already closing keeps the date
-// set first, so a retried request never moves it; resume, then close again, to
-// change it. It returns the date that holds.
 func (db *Database) CloseAccount(ctx context.Context, userID string, deleteAt time.Time) (time.Time, error) {
 	var held time.Time
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -45,7 +28,6 @@ func (db *Database) CloseAccount(ctx context.Context, userID string, deleteAt ti
 const closingAccounts = `account_controls c JOIN users u ON u.id=c.user_id AND u.lifecycle_state='active'
 	WHERE c.delete_at IS NOT NULL`
 
-// DueClosedAccounts lists closed accounts whose deletion date has come.
 func (db *Database) DueClosedAccounts(ctx context.Context, limit int) ([]string, error) {
 	if limit < 1 || limit > 100 {
 		limit = 25
@@ -70,10 +52,6 @@ func (db *Database) DueClosedAccounts(ctx context.Context, limit int) ([]string,
 	return ids, err
 }
 
-// BeginClosedAccountDeletion starts the purge of a closed account whose date
-// has come: Spaces it owns that other people use pass to their longest-standing
-// member, and a deletion request due at once takes the account through the
-// same steps as self-deletion. It does nothing when the account was resumed.
 func (db *Database) BeginClosedAccountDeletion(ctx context.Context, userID, requestID, statusTokenHash string) (bool, error) {
 	started := false
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -98,9 +76,6 @@ func (db *Database) BeginClosedAccountDeletion(ctx context.Context, userID, requ
 	return started, err
 }
 
-// handOverSharedSpacesTx gives each active Space the account owns that has
-// other members to the member who joined first, as an ownership transfer
-// would. The personal Space has no other members.
 func handOverSharedSpacesTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	rows, err := tx.QueryContext(ctx, `SELECT s.id,(SELECT m.user_id FROM space_members m
 		WHERE m.space_id=s.id AND m.user_id<>$1 ORDER BY m.joined_at,m.user_id LIMIT 1)
@@ -144,8 +119,6 @@ func handOverSharedSpacesTx(ctx context.Context, tx *sql.Tx, userID string) erro
 	return nil
 }
 
-// SetAccountPeriodAnchor sets when the account's billing periods start, or
-// clears it (nil) for calendar months.
 func (db *Database) SetAccountPeriodAnchor(ctx context.Context, userID string, anchor *time.Time) error {
 	var value any
 	if anchor != nil {
@@ -161,8 +134,6 @@ func (db *Database) SetAccountPeriodAnchor(ctx context.Context, userID string, a
 	})
 }
 
-// accountPendingDeletionTx reports whether the email belongs to an account
-// that is being deleted.
 func accountPendingDeletionTx(ctx context.Context, tx *sql.Tx, email string) (bool, error) {
 	var pending bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE lower(email)=$1 AND lifecycle_state='pending_deletion')`, email).Scan(&pending)

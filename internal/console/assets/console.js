@@ -1,4 +1,3 @@
-// Sidebar search: filters console pages by title; Enter opens the first match.
 document.addEventListener("DOMContentLoaded", () => {
   const input = document.getElementById("nav-search");
   if (!input) return;
@@ -33,8 +32,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-// Copy buttons: data-copy names the input whose value is copied. Clicks are
-// delegated, so buttons htmx swaps in work too.
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-copy]");
   if (!button) return;

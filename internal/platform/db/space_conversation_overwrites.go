@@ -9,16 +9,12 @@ import (
 	"github.com/misty-org/misty-server/internal/spaces"
 )
 
-// SpaceConversationOverwrite changes channel-scoped permissions for one role
-// in one standard channel.
 type SpaceConversationOverwrite struct {
 	RoleID string   `json:"role_id"`
 	Allow  []string `json:"allow"`
 	Deny   []string `json:"deny"`
 }
 
-// spaceConversationEvent is a whole conversation as a conversation.updated
-// event carries it. Permissions are each reader's own, so it carries none.
 type spaceConversationEvent struct {
 	ConversationID string `json:"conversation_id"`
 	SpaceConversation
@@ -33,7 +29,6 @@ func domainOverwrites(values []SpaceConversationOverwrite) []spaces.Overwrite {
 	return out
 }
 
-// conversationOverwritesTx lists a conversation's overwrites, everyone's first.
 func conversationOverwritesTx(ctx context.Context, tx *sql.Tx, conversationID string) ([]SpaceConversationOverwrite, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT o.role_id,o.allow,o.deny FROM space_conversation_overwrites o
 		JOIN space_roles r ON r.id=o.role_id WHERE o.conversation_id=$1 ORDER BY r.position,o.role_id`, conversationID)
@@ -62,7 +57,6 @@ func insertConversationOverwritesTx(ctx context.Context, tx *sql.Tx, conversatio
 	return nil
 }
 
-// requireSpaceRoleIDsTx checks that every overwrite names a role of this Space.
 func requireSpaceRoleIDsTx(ctx context.Context, tx *sql.Tx, spaceID string, overwrites []spaces.Overwrite) error {
 	for _, overwrite := range overwrites {
 		var exists bool
@@ -77,8 +71,6 @@ func requireSpaceRoleIDsTx(ctx context.Context, tx *sql.Tx, spaceID string, over
 	return nil
 }
 
-// fillConversationAccessTx sets a conversation's overwrites and the caller's
-// permissions in it.
 func fillConversationAccessTx(ctx context.Context, tx *sql.Tx, access *memberAccess, conversation *SpaceConversation) error {
 	conversation.Overwrites = []SpaceConversationOverwrite{}
 	if conversation.Kind != "standard" {
@@ -94,8 +86,6 @@ func fillConversationAccessTx(ctx context.Context, tx *sql.Tx, access *memberAcc
 	return nil
 }
 
-// loadSpaceConversationTx loads one conversation with its participants and
-// overwrites, but nobody's permissions.
 func loadSpaceConversationTx(ctx context.Context, tx *sql.Tx, spaceID, conversationID string) (*SpaceConversation, error) {
 	out := &SpaceConversation{}
 	err := tx.QueryRowContext(ctx, `SELECT id,space_id,title,kind,voice,created_by_user_id,visible_to_space,created_at,updated_at
@@ -119,10 +109,6 @@ func loadSpaceConversationTx(ctx context.Context, tx *sql.Tx, spaceID, conversat
 	return out, nil
 }
 
-// recordConversationUpdatedTx announces a whole conversation as
-// conversation.updated. Each reader gets it only while they can read the
-// channel (spaceEventVisibleToUserTx), so it also shows a channel to someone
-// who just gained it.
 func recordConversationUpdatedTx(ctx context.Context, tx *sql.Tx, spaceID, actorID, conversationID string) error {
 	conversation, err := loadSpaceConversationTx(ctx, tx, spaceID, conversationID)
 	if err != nil {
@@ -133,10 +119,6 @@ func recordConversationUpdatedTx(ctx context.Context, tx *sql.Tx, spaceID, actor
 	return err
 }
 
-// SetSpaceConversationOverwrites replaces a standard channel's overwrites. It
-// takes channels.manage in that channel, and every permission it changes must
-// be one the caller holds there. Whoever can no longer read the channel gets
-// conversation.removed; everyone who can gets conversation.updated.
 func (db *Database) SetSpaceConversationOverwrites(ctx context.Context, userID, spaceID, conversationID string, overwrites []SpaceConversationOverwrite) (*SpaceConversation, error) {
 	normalized, ok := spaces.NormalizeOverwrites(domainOverwrites(overwrites))
 	if !ok {

@@ -1,5 +1,3 @@
-// Package testkit provides infrastructure shared by contract and integration
-// suites. It is not imported by production code.
 package testkit
 
 import (
@@ -31,7 +29,6 @@ type databaseConfig struct {
 	sslmode  string
 }
 
-// OpenDatabase opens, serializes, and resets the destructive test database.
 func OpenDatabase(t testing.TB) *db.Database {
 	t.Helper()
 	LoadEnvironment()
@@ -73,14 +70,6 @@ func OpenDatabase(t testing.TB) *db.Database {
 	return database
 }
 
-// LoadEnvironment loads the repository dotenv files at most once for suites
-// that need a secret before opening their first database connection.
-//
-// go test runs each package with its own directory as the working directory,
-// so the files are resolved from the repository root rather than relative to
-// the caller. godotenv never overwrites a value already present in the
-// process environment, so misty server test's exports and CI's job environment still
-// take precedence over the scoped development files.
 func LoadEnvironment() {
 	loadEnvironmentOnce.Do(func() {
 		root := repositoryRoot()
@@ -96,8 +85,6 @@ func LoadEnvironment() {
 	})
 }
 
-// repositoryRoot resolves the checkout root from this file's compile-time
-// path, which is stable no matter which package's tests are running.
 func repositoryRoot() string {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -106,10 +93,6 @@ func repositoryRoot() string {
 	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
 }
 
-// ApplyDatabaseEnvironment points DB_* at the resolved test database for the
-// duration of the test. Suites that let production code open its own
-// connection from the environment use this instead of resolving TEST_DB_*
-// themselves, so every suite agrees on which database is the test database.
 func ApplyDatabaseEnvironment(t *testing.T) {
 	t.Helper()
 	LoadEnvironment()
@@ -122,8 +105,6 @@ func ApplyDatabaseEnvironment(t *testing.T) {
 	t.Setenv("DB_SSLMODE", config.sslmode)
 }
 
-// DatabaseDSN returns the test database connection string with a caller-owned
-// runtime role substituted for the administrative role.
 func DatabaseDSN(t testing.TB, user, password string) string {
 	t.Helper()
 	LoadEnvironment()
@@ -133,16 +114,8 @@ func DatabaseDSN(t testing.TB, user, password string) string {
 	return config.dsn()
 }
 
-// resetDatabase truncates every application table. The list comes from the
-// catalog, because a hand-kept list missed tables added by later migrations and
-// their rows leaked into the next run. Only goose_db_version is kept, since
-// checkSchemaVersion reads it; migrations seed no reference data.
 func resetDatabase(t testing.TB, database *db.Database) {
 	t.Helper()
-	// TRUNCATE replaces every table's files, which dominated the suite's time
-	// with ~200 mostly empty tables. Truncate only tables holding rows (checking
-	// an empty table is nearly free) and restart only sequences that advanced,
-	// which leaves the same clean state as truncating everything.
 	_, err := database.Conn.Exec(`
 		DO $$
 		DECLARE

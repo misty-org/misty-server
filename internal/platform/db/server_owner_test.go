@@ -15,7 +15,7 @@ func TestServerOwnerComesOnlyFromConfig(t *testing.T) {
 	}{
 		{"owner@example.com", "google", true},
 		{"  OWNER@example.COM", "google", true},
-		{"owner@example.com", "misty", false}, // a password account can't prove the address
+		{"owner@example.com", "misty", false},
 		{"first@example.com", "google", false},
 		{"", "google", false},
 	}

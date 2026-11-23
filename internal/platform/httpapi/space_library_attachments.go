@@ -8,8 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// CleanupExpired gives up on uploads whose reservation ran out and deletes
-// whatever bytes they left in the object store.
 func (s *SpaceLibraryService) CleanupExpired(ctx context.Context, limit int) (int, error) {
 	uploads, err := s.database.ExpireLibraryUploads(ctx, limit)
 	if err != nil {
@@ -24,8 +22,6 @@ func (s *SpaceLibraryService) CleanupExpired(ctx context.Context, limit int) (in
 	return len(uploads), err
 }
 
-// DownloadAttachment signs a download of a file posted in a chat, for someone
-// who can read the message it was posted with.
 func (s *SpaceLibraryService) DownloadAttachment() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

@@ -16,10 +16,6 @@ import (
 	"github.com/misty-org/misty-server/test/testkit"
 )
 
-// testDatabaseLockID matches the advisory lock ID used by the db and
-// integration packages' own test helpers, so this package's tests don't run
-// concurrently with theirs against the same shared test database (they
-// truncate tables between tests; racing that would be flaky by construction).
 const testDatabaseLockID int64 = 621042
 
 func openPresenceTestDatabase(t *testing.T) *db.Database {
@@ -49,9 +45,6 @@ func openPresenceTestDatabase(t *testing.T) *db.Database {
 	return database
 }
 
-// uniqueTestEmail avoids colliding with rows left behind by a previous run of
-// this test against the same persistent database (this package doesn't
-// truncate tables between runs the way db/integration's helpers do).
 func uniqueTestEmail(label string) string {
 	return fmt.Sprintf("presence-%s-%d@example.com", label, time.Now().UnixNano())
 }
@@ -99,10 +92,6 @@ func assertNoMessage(t *testing.T, client *RealtimeClient, context string) {
 	}
 }
 
-// TestRealtimePresenceRejectsNonMembers guards the security property behind
-// the "active users" capsule: a client cannot make itself appear as
-// "viewing" a Space it does not belong to, and doing so must not leak its
-// presence (or anyone else's) to that Space's real members.
 func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := context.Background()
@@ -130,9 +119,6 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 		t.Fatalf("owner presence message = %#v, want solo active owner", msg)
 	}
 
-	// The outsider is not a member of this Space. Claiming to view it must be
-	// silently rejected: no broadcast to the real member, and no confirmation
-	// back to the outsider either.
 	service.SetViewing(outsiderClient, space.ID, true)
 	assertNoMessage(t, ownerClient, "owner after outsider's rejected viewing claim")
 	assertNoMessage(t, outsiderClient, "outsider after rejected viewing claim")
@@ -144,7 +130,6 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 		t.Fatal("outsider must not be tracked as a viewer of a Space it does not belong to")
 	}
 
-	// A real invited member joining is broadcast correctly to the owner.
 	member, err := database.CreateUser(uniqueTestEmail("member"), "password123")
 	if err != nil {
 		t.Fatalf("CreateUser(member) error = %v", err)
@@ -170,8 +155,6 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 		t.Fatalf("member presence on join = %#v, want owner and member", memberMsg)
 	}
 
-	// The member going idle (still viewing, but Misty isn't in their focus)
-	// keeps them in the viewer list but flips their status.
 	service.SetViewing(memberClient, space.ID, false)
 	ownerMsgAfterIdle := readPresenceMessage(t, ownerClient)
 	memberActiveAfterIdle, memberFoundAfterIdle := viewerStatus(ownerMsgAfterIdle.Viewers, member.ID)
@@ -179,19 +162,15 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 		t.Fatalf("owner presence after member went idle = %#v, want member present but idle", ownerMsgAfterIdle)
 	}
 
-	// The member navigating away (viewing "") removes them and notifies the
-	// remaining viewer.
 	service.SetViewing(memberClient, "", false)
 	ownerMsgAfterLeave := readPresenceMessage(t, ownerClient)
 	if len(ownerMsgAfterLeave.Viewers) != 1 || ownerMsgAfterLeave.Viewers[0].UserID != owner.ID {
 		t.Fatalf("owner presence after member left = %#v, want solo owner", ownerMsgAfterLeave)
 	}
 
-	// Disconnecting (unregister) also cleans up viewer state and notifies
-	// anyone still watching.
 	secondMemberClient := newTestRealtimeClient(member.ID)
 	service.SetViewing(secondMemberClient, space.ID, true)
-	readPresenceMessage(t, ownerClient) // drain the join broadcast
+	readPresenceMessage(t, ownerClient)
 	readPresenceMessage(t, secondMemberClient)
 
 	service.Unregister(secondMemberClient)
@@ -208,9 +187,6 @@ func TestRealtimePresenceRejectsNonMembers(t *testing.T) {
 	}
 }
 
-// TestRealtimePresenceCarriesOnlyKnownPlaces checks that presence names where a member is in
-// Misty only from the fixed set of places, and a Lab notebook only when it is id-shaped, so
-// nothing a client makes up reaches the Space's other members.
 func TestRealtimePresenceCarriesOnlyKnownPlaces(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := context.Background()

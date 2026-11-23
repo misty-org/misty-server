@@ -7,13 +7,8 @@ import (
 	"fmt"
 )
 
-// ReplaceMissingLibraryUploadDeduplicationObject heals a deduplicated blob
-// whose R2 object disappeared. The caller must first verify that missingKey is
-// absent and that the upload's new object exists with the reserved metadata.
 func (db *Database) ReplaceMissingLibraryUploadDeduplicationObject(ctx context.Context, userID, spaceID, uploadID, missingKey string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		// The upload is the caller's own, started by a route that checked its
-		// purpose's permission.
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return ErrLibraryForbidden
 		}

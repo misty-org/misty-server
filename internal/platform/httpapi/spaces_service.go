@@ -44,14 +44,10 @@ func NewSpacesService(database *db.Database, encryptionKey string) (*SpacesServi
 	return &SpacesService{database: database, aead: aead, keyVer: 1}, nil
 }
 
-// SetLibraryProvider installs the upload service whose signer the account
-// export uses for its file downloads.
 func (s *SpacesService) SetLibraryProvider(library *SpaceLibraryService) {
 	s.library = library
 }
 
-// SetAvatarStore installs the object store used to serve member avatars, which
-// live under the avatars/ prefix in the shared bucket.
 func (s *SpacesService) SetAvatarStore(store LibraryObjectStore) {
 	s.avatarStore = store
 }
@@ -120,7 +116,6 @@ func (s *SpacesService) MemberAvatar() http.HandlerFunc {
 			writeJSON(w, http.StatusNotFound, map[string]string{"code": "not_found"})
 			return
 		}
-		// Authorization was checked above; stream the bytes from the object store.
 		serveAvatarObject(w, r, s.avatarStore, avatar.ObjectKey, avatar.Version)
 	}
 }

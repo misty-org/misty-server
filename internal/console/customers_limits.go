@@ -10,11 +10,8 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// gigabyte is the decimal gigabyte plans are sold in (50 GB = 50,000,000,000 bytes).
 const gigabyte = 1_000_000_000
 
-// limitsFromForm reads the limits form. A blank storage field is unlimited.
-// Devices is on or off: blank when the account is set up, 0 when not yet.
 func limitsFromForm(form url.Values) (map[string]any, error) {
 	limits := map[string]any{}
 	storage := strings.TrimSpace(form.Get("storage_gb"))
@@ -38,8 +35,6 @@ func limitsFromForm(form url.Values) (map[string]any, error) {
 	return limits, nil
 }
 
-// setUpForUse reports whether the devices limit lets the account use Misty:
-// any value but 0. The number itself is not shown.
 func setUpForUse(limit *int64) bool { return limit == nil || *limit > 0 }
 
 func storageInput(limit *int64) string {
@@ -64,7 +59,6 @@ func storageAgainst(used *int64, limit *int64) string {
 	return text + " of " + gbLabel(*limit)
 }
 
-// atLimit marks a row whose use has reached its limit.
 func atLimit(used int64, limit *int64) bool { return limit != nil && used >= *limit }
 
 func setupLabel(a db.OperatorAccount) string {
@@ -79,7 +73,6 @@ func setupLabel(a db.OperatorAccount) string {
 	return "No sign-in link made"
 }
 
-// closingLabel says when a closed account is deleted.
 func closingLabel(a db.OperatorAccount) string {
 	if a.DeleteAt == nil {
 		return ""
@@ -87,7 +80,6 @@ func closingLabel(a db.OperatorAccount) string {
 	return "Closed and read-only: it can sign in and export until " + date(*a.DeleteAt) + ", when its data is deleted unless it is resumed first."
 }
 
-// periodLabel heads the usage rows with the account's current billing period.
 func periodLabel(a db.OperatorAccount) string {
 	if a.Usage.PeriodStart.IsZero() {
 		return "Usage this period"

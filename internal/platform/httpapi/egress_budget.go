@@ -10,30 +10,18 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// Egress accounting.
-//
-// Request-count limits do not bound bandwidth: 120 downloads a minute is
-// harmless for thumbnails and ruinous for 250 MB originals. Object storage
-// bills per operation and per byte, and the VPS itself has a transfer
-// allowance, so the quantity worth limiting is bytes — charged to the account,
-// because that is the identity an attacker cannot rotate.
-
-// EgressBudget bounds bytes served per identity and across the deployment.
 type EgressBudget struct {
 	PerIdentityDailyBytes int64
 	GlobalDailyBytes      int64
 }
 
-// DefaultEgressBudget allows heavy legitimate use — a user pulling a large
-// library down to a new device — while stopping a scripted drain.
 func DefaultEgressBudget() EgressBudget {
 	return EgressBudget{
-		PerIdentityDailyBytes: 25 << 30,  // 25 GiB
-		GlobalDailyBytes:      200 << 30, // 200 GiB
+		PerIdentityDailyBytes: 25 << 30,
+		GlobalDailyBytes:      200 << 30,
 	}
 }
 
-// EgressBudgetFromEnv reads the ceiling, falling back to the safe default.
 func EgressBudgetFromEnv() EgressBudget {
 	budget := DefaultEgressBudget()
 	budget.PerIdentityDailyBytes = positiveEnvBytes("MISTY_EGRESS_MAX_BYTES_PER_IDENTITY_DAY", budget.PerIdentityDailyBytes)
@@ -54,7 +42,6 @@ type egressRecord struct {
 	windowEnd time.Time
 }
 
-// EgressGuard tracks bytes served and refuses once a ceiling is reached.
 type EgressGuard struct {
 	Mu       sync.Mutex
 	Now      func() time.Time
@@ -77,11 +64,6 @@ func NewEgressGuard(budget EgressBudget) *EgressGuard {
 	}
 }
 
-// Allow reports whether a transfer of size bytes may start.
-//
-// The check is made before sending and the full size is charged up front, so a
-// caller cannot slip past the ceiling by starting many large transfers at once
-// and only being charged as they complete.
 func (g *EgressGuard) Allow(key string, size int64) bool {
 	if size < 0 {
 		size = 0
@@ -105,7 +87,6 @@ func (g *EgressGuard) Allow(key string, size int64) bool {
 				g.purgeLocked(now)
 			}
 			if len(g.PerKey) >= g.MaxKeys {
-				// Tracking is saturated; the global ceiling still applies.
 				g.global.bytes += size
 				return true
 			}
@@ -131,7 +112,6 @@ func (g *EgressGuard) purgeLocked(now time.Time) {
 	}
 }
 
-// WriteQuotaExceeded reports the refusal to the caller.
 func WriteQuotaExceeded(w http.ResponseWriter) {
 	w.Header().Set("Retry-After", "3600")
 	writeJSON(w, http.StatusTooManyRequests, map[string]string{

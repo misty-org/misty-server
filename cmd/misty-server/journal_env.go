@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// The collaboration secrets a value already in the environment keeps.
 var journalSecrets = map[string]bool{
 	"JOURNAL_COLLAB_TICKET_PRIVATE_KEY": true,
 	"JOURNAL_COLLAB_CONTROL_SECRET":     true,
@@ -15,10 +14,6 @@ var journalSecrets = map[string]bool{
 	"JOURNAL_COLLAB_ROOM_SALT":          true,
 }
 
-// loadJournalServerEnv reads the collaboration server's secrets from the file
-// the development stack's setup service writes (misty-dev-setup), when
-// MISTY_JOURNAL_SERVER_ENV_FILE names one. A secret already set in the
-// environment wins over the file.
 func loadJournalServerEnv(path string) error {
 	if path == "" {
 		return nil

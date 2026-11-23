@@ -13,24 +13,16 @@ import (
 )
 
 const (
-	// PendingAccountTTL is how long a confirmation link works.
-	PendingAccountTTL = 24 * time.Hour
-	// pendingAccountResend spaces out the emails one address can be sent.
+	PendingAccountTTL    = 24 * time.Hour
 	pendingAccountResend = 2 * time.Minute
 )
 
-// ErrPendingAccountInvalid means a confirmation link is wrong, used or expired.
 var ErrPendingAccountInvalid = errors.New("this confirmation link is no longer valid")
 
-// PendingAccount is what a sign-up keeps until its email is confirmed.
 type PendingAccount struct {
 	Username, Email, Password string
 }
 
-// QueuePendingAccount stores a sign-up and its confirmation email. The newest one for
-// an email wins, so a stranger's sign-up never locks out the address's owner, and its
-// link is the only one that works. Within pendingAccountResend of the last email it
-// does nothing, so nobody can flood an address.
 func (db *Database) QueuePendingAccount(ctx context.Context, account PendingAccount, tokenHash, link string) error {
 	username, err := accounts.NormalizeUsername(account.Username)
 	if err != nil {
@@ -62,8 +54,6 @@ func (db *Database) QueuePendingAccount(ctx context.Context, account PendingAcco
 	})
 }
 
-// ResendPendingAccount sends a live sign-up a new link, unless it was sent one
-// within pendingAccountResend.
 func (db *Database) ResendPendingAccount(ctx context.Context, email, tokenHash, link string) error {
 	address := accounts.NormalizeEmail(email)
 	return db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -77,8 +67,6 @@ func (db *Database) ResendPendingAccount(ctx context.Context, email, tokenHash, 
 	})
 }
 
-// queueConfirmEmailTx stores the email for a link just issued, when one was.
-// Earlier links stopped working, so their unsent emails are cancelled with them.
 func queueConfirmEmailTx(ctx context.Context, tx *sql.Tx, issued sql.Result, address, link string) error {
 	if count, err := issued.RowsAffected(); err != nil || count == 0 {
 		return err
@@ -91,7 +79,6 @@ func queueConfirmEmailTx(ctx context.Context, tx *sql.Tx, issued sql.Result, add
 	return err
 }
 
-// PendingAccountPassword is the password hash of a live sign-up, or "" without one.
 func (db *Database) PendingAccountPassword(ctx context.Context, email string) (string, error) {
 	var hash string
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
@@ -104,9 +91,6 @@ func (db *Database) PendingAccountPassword(ctx context.Context, email string) (s
 	return hash, err
 }
 
-// ConfirmPendingAccount makes the account a confirmation link stands for. Its email
-// may have gained an account meanwhile, through Google or the operator: that account
-// stays as it is and the answer is ErrEmailTaken.
 func (db *Database) ConfirmPendingAccount(ctx context.Context, tokenHash string) (*User, error) {
 	var address, username, hash string
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {

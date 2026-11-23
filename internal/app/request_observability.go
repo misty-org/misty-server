@@ -18,10 +18,6 @@ type requestIDContextKey struct{}
 
 var safeRequestID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$`)
 
-// requestObservabilityMiddleware gives every API request a correlation id and
-// emits one bounded, structured completion event. It deliberately logs the
-// route template rather than the raw URL so Space ids, filenames, query values,
-// and signed credentials never enter process logs.
 func RequestObservabilityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := r.Header.Get("X-Request-ID")
@@ -95,9 +91,6 @@ func requestLogLevel(status int) string {
 	}
 }
 
-// The current-user endpoint is polled to keep client authentication state synchronized.
-// Successful checks and expected post-logout 401s are routine, high-volume
-// traffic. Server failures remain visible.
 func shouldLogRequest(method, route string, status int) bool {
 	return method != http.MethodGet ||
 		route != "/v1/me" ||

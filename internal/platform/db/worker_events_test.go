@@ -63,14 +63,11 @@ func TestWorkerNotificationsCommitRollbackIsolationAndReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	workerQuiet(t, ai)
-	// The queue can change hundreds of times while processing: one hint is enough.
 	for i := 0; i < 100; i++ {
 		database.workers.publish("library-ai")
 	}
 	workerWake(t, ai)
 	workerQuiet(t, ai)
-	// Kill only listeners in this disposable database. pq reconnect emits reset
-	// and every queue must reconcile, even when notifications were missed.
 	if _, err = database.Conn.Exec(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity
   WHERE datname=current_database() AND application_name='misty-worker-listener'`); err != nil {
 		t.Fatal(err)

@@ -11,17 +11,12 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// accountEventSessionCheck bounds how long a stream outlives a revoked session.
 var accountEventSessionCheck = 10 * time.Minute
 
-// accountEventRevalidation spreads checks across ±25% so streams opened
-// together do not revalidate together.
 func accountEventRevalidation(d time.Duration) time.Duration {
 	return time.Duration(float64(d) * (0.75 + 0.5*rand.Float64()))
 }
 
-// AccountEvents streams committed invalidations, not private record contents.
-// Every reconnect starts with reset: snapshots remain the durable source of truth.
 func (s *SpacesService) AccountEvents() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -43,12 +38,8 @@ func (s *SpacesService) AccountEvents() http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache, no-transform")
 		w.Header().Set("X-Accel-Buffering", "no")
-		// Transport keepalive for proxies; it reads nothing.
 		keepalive := time.NewTicker(25 * time.Second)
 		defer keepalive.Stop()
-		// The stream outlives the access token that opened it. It confirms in
-		// band that the account session is still active rather than ending the
-		// stream, whose reconnect would reload every account snapshot.
 		session := ""
 		if sid := accounts.SessionID(r); sid != "" {
 			session = security.HashToken(sid)
@@ -61,7 +52,7 @@ func (s *SpacesService) AccountEvents() http.HandlerFunc {
 				return
 			case <-revalidate.C:
 				if session == "" {
-					return // No session to check: reconnect to re-authenticate.
+					return
 				}
 				active, err := s.database.AccountSessionActive(r.Context(), session, userID)
 				if err == nil && !active {
@@ -69,7 +60,6 @@ func (s *SpacesService) AccountEvents() http.HandlerFunc {
 				}
 				next := accountEventRevalidation(accountEventSessionCheck)
 				if err != nil {
-					// A database outage must not end every stream at once.
 					next = accountEventRevalidation(time.Minute)
 				}
 				revalidate.Reset(next)
@@ -90,7 +80,6 @@ func (s *SpacesService) AccountEvents() http.HandlerFunc {
 	}
 }
 
-// TestingSetAccountEventSessionCheck shortens session revalidation for tests.
 func TestingSetAccountEventSessionCheck(d time.Duration) (restore func()) {
 	previous := accountEventSessionCheck
 	accountEventSessionCheck = d

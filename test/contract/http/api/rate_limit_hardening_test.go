@@ -10,9 +10,6 @@ import (
 	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// These lock in the protections that stand between an abusive caller and a
-// provider bill. Each one failed before the hardening pass.
-
 func hardeningHandler(limiter *APIRateLimiter) http.Handler {
 	return limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -29,8 +26,6 @@ func TestForwardedHeaderCannotForgeARateLimitKey(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		request := httptest.NewRequest(http.MethodPost, "/login", nil)
 		request.RemoteAddr = "10.0.0.9:1234"
-		// nginx's $proxy_add_x_forwarded_for appends the real peer, so the
-		// attacker's value sits to the left and must be ignored.
 		request.Header.Set("X-Forwarded-For", fmt.Sprintf("1.2.3.%d, 203.0.113.7", i%256))
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, request)
@@ -48,8 +43,6 @@ func TestForwardedHeaderIgnoredFromUntrustedPeer(t *testing.T) {
 	ResetTrustedProxyCacheForTest()
 	t.Cleanup(ResetTrustedProxyCacheForTest)
 
-	// A direct connection from the public internet may not claim a chain, even
-	// when proxy trust is switched on.
 	request := httptest.NewRequest(http.MethodPost, "/login", nil)
 	request.RemoteAddr = "198.51.100.4:9999"
 	request.Header.Set("X-Forwarded-For", "1.2.3.4")
@@ -120,8 +113,6 @@ func TestExpiredCallersArePurgedSoLegitimateTrafficStillFlows(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		limiter.Allow(fmt.Sprintf("old-%d", i), start)
 	}
-	// Once the old window has elapsed those entries are dead weight; a new
-	// caller must not be refused because a past spray filled the table.
 	later := start.Add(2 * time.Minute)
 	if allowed, _ := limiter.Allow("fresh-caller", later); !allowed {
 		t.Fatal("a new caller was refused after the old window expired")
@@ -134,7 +125,6 @@ func TestSpaceRoutesShareOneBudgetPerRouteShape(t *testing.T) {
 
 	allowed := 0
 	for i := 0; i < 100; i++ {
-		// A different Space each time must not mint a fresh ticket budget.
 		path := fmt.Sprintf("/spaces/space_%036d/notes/note_abcdefabcdefabcdef/collaboration-ticket", i)
 		request := httptest.NewRequest(http.MethodPost, path, nil)
 		request.RemoteAddr = "203.0.113.7:1234"
@@ -214,7 +204,6 @@ func TestAbuseGuardBlocksSustainedAbuse(t *testing.T) {
 func TestAbuseGuardDoesNotBlockAnIsolatedBurst(t *testing.T) {
 	policy := DefaultAbusePolicy()
 	guard := NewAbuseGuard(policy)
-	// A handful of rejections is a client misbehaving briefly, not an attack.
 	for i := 0; i < policy.StrikesBeforeBlock-1; i++ {
 		guard.RecordRejection("203.0.113.7")
 	}

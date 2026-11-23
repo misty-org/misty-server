@@ -10,7 +10,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// MyInviteCode answers GET /me/invite-code with the code of the person's invite link.
 func MyInviteCode(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, database)
@@ -27,8 +26,6 @@ func MyInviteCode(database *db.Database) http.HandlerFunc {
 	}
 }
 
-// InviteByCode answers GET /invites/{code} with who an invite link is from. It needs no
-// account, since whoever opens the link has none yet, and says nothing but the username.
 func InviteByCode(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")

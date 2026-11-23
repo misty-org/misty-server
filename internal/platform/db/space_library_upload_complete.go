@@ -30,8 +30,6 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 		if upload.State != "uploaded_unverified" && upload.State != "quarantined" && upload.State != "scanning" && upload.State != "processing" {
 			return ErrLibraryConflict
 		}
-		// Only attachments and note assets finish here; a drive file becomes a
-		// drive item through the drive's own routes.
 		if upload.Purpose != UploadPurposeChatAttachment && upload.Purpose != UploadPurposeNoteAttachment {
 			return ErrLibraryInvalid
 		}
@@ -67,8 +65,6 @@ func (db *Database) CompleteLibraryUpload(ctx context.Context, userID, spaceID, 
 		}
 		sourceID, sourceKind := "", ""
 		if upload.Purpose == UploadPurposeNoteAttachment {
-			// A note asset is deliberately not a message
-			// attachment: it is reachable only through its parent note's ACL.
 			var noteID string
 			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(note_id,'') FROM space_library_uploads WHERE id=$1`, upload.ID).Scan(&noteID); err != nil {
 				return err

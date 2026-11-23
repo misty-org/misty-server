@@ -17,8 +17,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// AccountExportManifest is what the operator API answers for an account's
-// export: its data, and short-lived links to each note and file.
 type AccountExportManifest struct {
 	AccountData json.RawMessage         `json:"account_data"`
 	Documents   []AccountExportDocument `json:"documents"`
@@ -37,8 +35,6 @@ type AccountExportAsset struct {
 	} `json:"download"`
 }
 
-// The records are the parts that go in the archive's manifest; its links have
-// expired by the time anyone reads it, so they stay out.
 type accountDocumentRecord struct {
 	Kind       string `json:"kind"`
 	ID         string `json:"id"`
@@ -60,11 +56,6 @@ type accountAssetRecord struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// exportCustomer downloads a whole account as one zip, for answering someone
-// who emails to ask for a copy of their data. It is a GET so the browser saves
-// the file itself: the session cookie is SameSite=Strict, so another site can't
-// start one, and the audit log records each one. Links in the manifest last 15
-// minutes, so this fetches what they point to and the file keeps working.
 func (s *Server) exportCustomer(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
 		http.NotFound(w, r)
@@ -99,17 +90,11 @@ func (s *Server) exportCustomer(w http.ResponseWriter, r *http.Request) {
 		`attachment; filename="misty-account-%s-%s.zip"`, exportSegment(account.Email), now.Format("2006-01-02"),
 	))
 	if err := WriteAccountArchive(r.Context(), w, manifest, &http.Client{}, now); err != nil {
-		// The response has begun, so ending it uncleanly is the only way to
-		// make the browser report a failed download instead of a broken file.
 		log.Printf("console: export of %s stopped: %v", id, err)
 		panic(http.ErrAbortHandler)
 	}
 }
 
-// WriteAccountArchive writes the account as a zip with the same layout as the
-// website's export: manifest.json, journal/ and assets/. A file that doesn't
-// match its recorded size or checksum stops it, because the archive is the
-// person's record of their own data.
 func WriteAccountArchive(ctx context.Context, w io.Writer, manifest AccountExportManifest, client *http.Client, now time.Time) error {
 	archive := zip.NewWriter(w)
 	documents := make([]accountDocumentRecord, 0, len(manifest.Documents))
@@ -160,8 +145,6 @@ func WriteAccountArchive(ctx context.Context, w io.Writer, manifest AccountExpor
 	return archive.Close()
 }
 
-// addExportFile streams one download into the archive and reports its size and
-// checksum.
 func addExportFile(ctx context.Context, archive *zip.Writer, client *http.Client, name, link string) (int64, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link, http.NoBody)
 	if err != nil {
@@ -189,8 +172,6 @@ func addExportFile(ctx context.Context, archive *zip.Writer, client *http.Client
 
 var exportUnsafeCharacters = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
-// exportSegment makes one safe path segment, so a filename can't climb out of
-// its folder when the archive is unpacked.
 func exportSegment(value string) string {
 	if index := strings.LastIndexAny(value, `/\`); index >= 0 {
 		value = value[index+1:]

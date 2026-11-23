@@ -2,9 +2,6 @@ package api
 
 import "encoding/json"
 
-// What the desktop sends back after writing a Note on its own models, and
-// what it writes the Note from.
-
 type voiceTurnResult struct {
 	Speaker  string  `json:"speaker"`
 	Language string  `json:"language,omitempty"`

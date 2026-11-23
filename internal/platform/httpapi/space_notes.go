@@ -13,8 +13,6 @@ import (
 
 const noteProjectionBodyLimit = 512 * 1024
 
-// JournalNoteProjection accepts a signed callback from the serialized Yjs
-// room. It is intentionally separate from member-authenticated note routes.
 func (s *SpacesService) JournalNoteProjection() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -40,9 +38,8 @@ func (s *SpacesService) JournalNoteProjection() http.HandlerFunc {
 			Markdown        string   `json:"markdown"`
 			PlainText       string   `json:"plain_text"`
 			OutgoingNoteIDs []string `json:"outgoing_note_ids"`
-			// The room's snapshot and kept history, which count toward storage.
-			ContentBytes *int64 `json:"content_bytes"`
-			HistoryBytes *int64 `json:"history_bytes"`
+			ContentBytes    *int64   `json:"content_bytes"`
+			HistoryBytes    *int64   `json:"history_bytes"`
 		}
 		if json.Unmarshal(body, &input) != nil {
 			writeSpaceError(w, db.ErrSpaceInvalid)
@@ -57,12 +54,10 @@ func (s *SpacesService) JournalNoteProjection() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		// The limits tell the room how long to keep its history.
 		s.writeRoomCallbackAnswer(w, r, db.SpaceItemNote, input.NoteID, applied)
 	}
 }
 
-// SpaceNotes handles membership-wide native Space notes.
 func (s *SpacesService) SpaceNotes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -100,9 +95,6 @@ func (s *SpacesService) SpaceNotes() http.HandlerFunc {
 	}
 }
 
-// SpaceNote handles one note: reading it and deleting it. Both behave as
-// not-found for any caller without the matching capability, so neither reveals
-// that the note exists.
 func (s *SpacesService) SpaceNote() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -118,8 +110,6 @@ func (s *SpacesService) SpaceNote() http.HandlerFunc {
 				return
 			}
 			if note.SpaceID != chi.URLParam(r, "spaceID") {
-				// The note exists but was requested under the wrong Space. Answer
-				// as if it does not exist rather than confirming it elsewhere.
 				writeSpaceError(w, db.ErrSpaceNotFound)
 				return
 			}
@@ -154,9 +144,6 @@ func (s *SpacesService) SpaceNote() http.HandlerFunc {
 	}
 }
 
-// SpaceNoteMetadata updates server-owned, non-CRDT metadata. Collaborative
-// title and body changes never arrive here: they reach PostgreSQL only as
-// projections from the collaboration service.
 func (s *SpacesService) SpaceNoteMetadata() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -204,11 +191,6 @@ func (s *SpacesService) SpaceNoteBacklinks() http.HandlerFunc {
 	}
 }
 
-// SpaceNoteCollaborationTicket mints a short-lived, single-connection ticket
-// for the collaboration service.
-//
-// Access is rechecked here rather than trusted from the note fetch that
-// preceded it, because a grant can be revoked between the two calls.
 func (s *SpacesService) SpaceNoteCollaborationTicket() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -221,9 +203,6 @@ func (s *SpacesService) SpaceNoteCollaborationTicket() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		// The note is re-read here rather than trusted from an earlier request,
-		// because acl_version must be the one current at signing time. A ticket
-		// carrying a stale version is refused by the room.
 		note, err := s.database.SpaceNoteByID(r.Context(), userID, noteID)
 		if err != nil {
 			writeSpaceError(w, err)
@@ -238,8 +217,6 @@ func (s *SpacesService) SpaceNoteCollaborationTicket() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		// Tickets are bearer credentials with a 60 second life; no cache may
-		// keep one around.
 		w.Header().Set("Cache-Control", "private, no-store")
 		writeJSON(w, http.StatusCreated, ticket)
 	}

@@ -9,24 +9,14 @@ import (
 	"github.com/lib/pq"
 )
 
-// What an item's room reports after each save: the size of its snapshot and kept history, for
-// storage. The room is the only place that sees the document, so this is the server's only view
-// of it.
-
-// itemContentSourceKind is the storage contribution a made item's room content counts as.
 const itemContentSourceKind = "item_content"
 
-// maxItemContentBytes bounds what one room may claim to store: its snapshot is at most 8 MiB, and
-// its history a bounded number of those.
 const maxItemContentBytes = int64(1) << 40
 
-// SpaceItemLimits are the limits of a Space's level that an item's room keeps to. Nil is
-// unlimited.
 type SpaceItemLimits struct {
 	HistoryDays *int64 `json:"history_days"`
 }
 
-// spaceItemLimitsTx reads the Space level's item limits: all unlimited without levels.
 func spaceItemLimitsTx(ctx context.Context, tx *sql.Tx, spaceID string) (SpaceItemLimits, error) {
 	level, err := spaceLevelTx(ctx, tx, spaceID)
 	if err != nil || level == nil {
@@ -35,8 +25,6 @@ func spaceItemLimitsTx(ctx context.Context, tx *sql.Tx, spaceID string) (SpaceIt
 	return SpaceItemLimits{HistoryDays: level.Limits.HistoryDays}, nil
 }
 
-// SpaceItemLimitsForItem reads the limits that apply to one item, for its room's callback
-// answer. A missing item has none.
 func (db *Database) SpaceItemLimitsForItem(ctx context.Context, kindName, itemID string) (SpaceItemLimits, error) {
 	kind, ok := SpaceItemKindNamed(kindName)
 	if !ok {
@@ -58,9 +46,6 @@ func (db *Database) SpaceItemLimitsForItem(ctx context.Context, kindName, itemID
 	return limits, err
 }
 
-// setItemContentStorageTx records what an item's room stores as one storage contribution of its
-// creator's, and moves the Space's counter by the difference. The contribution is the ledger the
-// periodic reconciliation rebuilds the counter from, so the two never drift apart for long.
 func setItemContentStorageTx(ctx context.Context, tx *sql.Tx, spaceID, creatorUserID, itemID string, total int64) error {
 	if total < 0 || total > maxItemContentBytes {
 		return ErrSpaceInvalid
@@ -100,7 +85,6 @@ func setItemContentStorageTx(ctx context.Context, tx *sql.Tx, spaceID, creatorUs
 	})
 }
 
-// releaseItemContentStorageTx stops counting the room content of items whose rows were purged.
 func releaseItemContentStorageTx(ctx context.Context, tx *sql.Tx, itemIDs []string) error {
 	if len(itemIDs) == 0 {
 		return nil
@@ -117,7 +101,6 @@ func releaseItemContentStorageTx(ctx context.Context, tx *sql.Tx, itemIDs []stri
 	})
 }
 
-// applyNoteContentBytesTx records a note's room size after its projection was applied.
 func applyNoteContentBytesTx(ctx context.Context, tx *sql.Tx, spaceID, creatorUserID, noteID string, contentBytes, historyBytes *int64) error {
 	if contentBytes == nil && historyBytes == nil {
 		return nil

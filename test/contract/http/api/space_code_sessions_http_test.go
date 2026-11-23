@@ -26,9 +26,6 @@ func newCodeSessionTestRouter(spaces *SpacesService) *chi.Mux {
 	return router
 }
 
-// A live code session over the routes the Code page calls: any member starts, lists, reads and
-// joins one; only its starter ends it; once ended, its room can no longer be joined, and its
-// room is told to purge.
 func TestSpaceCodeSessionRoutes(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := context.Background()
@@ -81,7 +78,6 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 		"baseCommit": strings.ToUpper(codeSessionTestCommit), "branch": "misty/live/fix-login",
 	}
 
-	// Any member starts one; the shape is the app's, camelCase.
 	created := send(memberToken, http.MethodPost, base, start, http.StatusCreated)
 	sessionID, _ := created["id"].(string)
 	startedBy, _ := created["startedBy"].(map[string]any)
@@ -100,7 +96,6 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 		}
 	}
 
-	// Validation.
 	for name, change := range map[string]map[string]any{
 		"no name":           {"name": "  "},
 		"long name":         {"name": strings.Repeat("n", 81)},
@@ -131,7 +126,6 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 	}
 	sha256Session := send(ownerToken, http.MethodPost, base, sha256Body, http.StatusCreated)
 
-	// One open session per branch of a repo; another repo may use the same branch name.
 	conflict := send(ownerToken, http.MethodPost, base, start, http.StatusConflict)
 	if conflict["code"] != "branch_in_use" {
 		t.Fatalf("conflict = %v", conflict)
@@ -143,7 +137,6 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 	otherRepo["repoKey"] = "github.com/misty-org/other:" + codeSessionTestCommit
 	send(ownerToken, http.MethodPost, base, otherRepo, http.StatusCreated)
 
-	// Only members reach a Space's sessions.
 	if got := performConversationRequest(t, router, http.MethodGet, base, outsiderToken, nil); got.Code != http.StatusForbidden {
 		t.Fatalf("outsider list = %d", got.Code)
 	}
@@ -156,7 +149,6 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 	if got := performConversationRequest(t, router, http.MethodPost, base+"/"+sessionID+"/collaboration-ticket", outsiderToken, nil); got.Code != http.StatusNotFound {
 		t.Fatalf("outsider ticket = %d", got.Code)
 	}
-	// A session read under another Space is missing there.
 	if got := performConversationRequest(t, router, http.MethodGet, "/spaces/"+otherSpace.ID+"/code-sessions/"+sessionID, ownerToken, nil); got.Code != http.StatusNotFound {
 		t.Fatalf("other Space get = %d", got.Code)
 	}
@@ -170,7 +162,6 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 		t.Fatalf("read = %v", read)
 	}
 
-	// Any member joins the room as an editor.
 	ticket := send(ownerToken, http.MethodPost, base+"/"+sessionID+"/collaboration-ticket", nil, http.StatusCreated)
 	if ticket["role"] != "editor" || ticket["ticket"] == "" || ticket["room"] != collab.CodeRoomID(sessionID) ||
 		!strings.Contains(ticket["url"].(string), "/parties/code-room/") || ticket["expiresAt"] == nil {
@@ -185,7 +176,6 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 		t.Fatalf("claims = %#v", claims)
 	}
 
-	// Only the starter ends it, with a known outcome, and only once.
 	if got := performConversationRequest(t, router, http.MethodPost, base+"/"+sessionID+"/end", ownerToken, map[string]any{"outcome": "kept"}); got.Code != http.StatusForbidden {
 		t.Fatalf("owner ends a member's session = %d %s", got.Code, got.Body.String())
 	}
@@ -204,7 +194,6 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 		t.Fatalf("second end = %v", again)
 	}
 
-	// Ended: still readable, no longer listed or joinable, and its branch is free again.
 	if got := performConversationRequest(t, router, http.MethodPost, base+"/"+sessionID+"/collaboration-ticket", memberToken, nil); got.Code != http.StatusNotFound {
 		t.Fatalf("ticket after end = %d %s", got.Code, got.Body.String())
 	}
@@ -217,7 +206,6 @@ func TestSpaceCodeSessionRoutes(t *testing.T) {
 	}
 	send(ownerToken, http.MethodPost, base, start, http.StatusCreated)
 
-	// Ending queued the room's purge; the worker delivers it to the code room.
 	originalClient := NoteControlHTTPClient
 	t.Cleanup(func() { NoteControlHTTPClient = originalClient })
 	purgedRooms := map[string]bool{}

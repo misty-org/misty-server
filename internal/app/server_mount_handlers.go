@@ -12,8 +12,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/metrics"
 )
 
-// mountDeps holds the services and handlers that MountHandlers builds once and
-// then wires into the /v1 routes.
 type mountDeps struct {
 	health         http.HandlerFunc
 	register       http.HandlerFunc
@@ -35,8 +33,6 @@ func (s *Server) MountHandlers() error {
 		return err
 	}
 
-	// Every client uses /v1. Docker, compose and the setup tools probe the
-	// bare /health, so it stays outside /v1 too.
 	s.mountPublicRoutes("/v1", deps)
 	s.Router.Get("/health", deps.health)
 	s.mountOperationalRoutes(deps)
@@ -44,33 +40,23 @@ func (s *Server) MountHandlers() error {
 	return nil
 }
 
-// mountRequestMiddleware installs the router-wide middleware stack.
 func (s *Server) mountRequestMiddleware() {
 	s.Router.Use(cors.Handler(cors.Options{
 		AllowOriginFunc:  func(_ *http.Request, origin string) bool { return IsAllowedCORSOrigin(origin) },
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   allowedCORSRequestHeaders,
 		AllowCredentials: true,
-		// The client must be able to read the marker that distinguishes a signed
-		// download descriptor from a proxied file body, and the retry delay on
-		// rate-limit responses emitted before routing.
-		ExposedHeaders: []string{"X-Misty-Signed-Download", "X-Request-ID", "Retry-After", "X-Misty-RateLimit-Scope"},
-		MaxAge:         300,
+		ExposedHeaders:   []string{"X-Misty-Signed-Download", "X-Request-ID", "Retry-After", "X-Misty-RateLimit-Scope"},
+		MaxAge:           300,
 	}))
 	s.Router.Use(api.CookieCSRFProtection(IsAllowedCORSOrigin))
 	s.Router.Use(RequestObservabilityMiddleware)
 	s.Router.Use(middleware.Recoverer)
-	// The abuse guard runs first: a blocked caller is rejected before any
-	// routing or handler work, and repeated per-route rejections escalate
-	// into a block through the shared guard.
-	// Blocks are persisted so a restart or a second instance still honours
-	// them; the per-request counters stay in memory for speed.
 	abuseGuard := api.NewAbuseGuard(api.DefaultAbusePolicy()).
 		WithStore(context.Background(), s.Database)
 	s.AbuseGuard = abuseGuard
 	s.Router.Use(abuseGuard.Middleware)
 	s.Router.Use(api.NewAPIRateLimiter().WithAbuseGuard(abuseGuard).Middleware)
-	// A suspended account is refused before any handler runs; its data stays.
 	s.Suspensions = api.NewSuspensionGuard(s.Database)
 	s.Router.Use(s.Suspensions.Middleware)
 	s.Metrics = metrics.New()
@@ -78,7 +64,6 @@ func (s *Server) mountRequestMiddleware() {
 	s.Router.Use(s.Metrics.Middleware)
 }
 
-// buildMountDeps constructs the sign-in handlers and the health handler.
 func (s *Server) buildMountDeps() (*mountDeps, error) {
 	deps := &mountDeps{}
 	if err := s.wireAccountHandlers(deps); err != nil {
@@ -87,8 +72,6 @@ func (s *Server) buildMountDeps() (*mountDeps, error) {
 	return deps, nil
 }
 
-// wireAccountHandlers builds the sign-in handlers and the health handler.
-// There is no reset by email: a setup key's sign-in link resets a password.
 func (s *Server) wireAccountHandlers(deps *mountDeps) error {
 	googleSignIn, err := api.NewGoogleSignInService(s.Database)
 	if err != nil {
@@ -103,9 +86,6 @@ func (s *Server) wireAccountHandlers(deps *mountDeps) error {
 	return nil
 }
 
-// mountLibraryRoutes mounts what is left of the Library: a Space's storage
-// usage, the uploads chat attachments use, and their downloads. Note images
-// upload through the note routes.
 func (s *Server) mountLibraryRoutes(prefix string, library *api.SpaceLibraryService) {
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/library/usage", library.Usage())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/uploads", library.InitiateUpload())

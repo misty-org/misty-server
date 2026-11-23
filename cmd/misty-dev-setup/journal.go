@@ -10,9 +10,6 @@ import (
 	"strings"
 )
 
-// writeJournalSecrets hands the API the collaboration server's secrets
-// through the runtime volume (/run/misty/journal-server.env), which the API
-// reads at start through MISTY_JOURNAL_SERVER_ENV_FILE.
 func writeJournalSecrets(context.Context) error {
 	runtime := envOr("MISTY_RUNTIME_DIR", "/run/misty")
 	if err := os.MkdirAll(runtime, 0o755); err != nil {
@@ -37,8 +34,6 @@ func writeJournalSecrets(context.Context) error {
 	return nil
 }
 
-// deploy uploads the development collaboration Worker with wrangler. Only
-// what the Worker needs goes to Cloudflare: never the private signing key.
 func deploy(ctx context.Context) error {
 	if os.Getenv("CLOUDFLARE_API_TOKEN") == "" {
 		return errors.New("CLOUDFLARE_API_TOKEN is required for the containerized Worker deployment.\nAdd a Workers Scripts:Edit API token to cloudflare.env in the development .env/server folder (~/.misty/dev/default/.env/server unless misty.conf names another data folder).")

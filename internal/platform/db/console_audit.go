@@ -13,8 +13,6 @@ type ConsoleAuditEntry struct {
 	CreatedAt time.Time
 }
 
-// ConsoleRecordAudit appends an operator action. Callers must never pass
-// passwords or tokens in target or detail.
 func (db *Database) ConsoleRecordAudit(ctx context.Context, action, target, detail string) error {
 	return db.consoleTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
@@ -46,7 +44,6 @@ func (db *Database) ConsoleRecentAudit(ctx context.Context, limit int) ([]Consol
 	return entries, err
 }
 
-// ConsoleOverviewCounts returns the number of active accounts.
 func (db *Database) ConsoleOverviewCounts(ctx context.Context) (accounts int, err error) {
 	err = db.consoleTx(ctx, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE lifecycle_state = 'active'`).Scan(&accounts)

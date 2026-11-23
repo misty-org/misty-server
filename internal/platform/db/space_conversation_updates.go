@@ -6,12 +6,6 @@ import (
 	"errors"
 )
 
-// UpdateSpaceConversation renames a group chat. Everyone in the Space is in a
-// group chat, so its members don't change, and a DM can't be changed at all. It
-// takes channels.manage in that channel. This checks explicitly as well as through RLS so
-// the behavior is identical (a clear ErrSpaceForbidden, not a silently-ignored
-// zero-row update) regardless of which role is connected, including in tests that
-// run as a superuser and would otherwise bypass RLS entirely.
 func (db *Database) UpdateSpaceConversation(ctx context.Context, userID, spaceID, conversationID, title string) (*SpaceConversation, error) {
 	title, err := normalizeConversationTitle(title)
 	if err != nil {
@@ -74,7 +68,6 @@ func (db *Database) SpaceConversationMessages(ctx context.Context, userID, space
 	}
 	items := []SpaceMessage{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		// The channel's own messages.read decides, overwrites included.
 		if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
 		}

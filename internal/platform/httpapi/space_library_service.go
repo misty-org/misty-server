@@ -7,19 +7,11 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// transferPurposeEnabled gates the routes that move or finalize bytes for an
-// upload that already exists.
-//
-// Unlike initiation, these cannot be used to obtain access: the upload row was
-// created by an authorized route, carries its own note binding, and is proven
-// by the upload token. So note_attachment is allowed here even though the
-// generic initiation endpoint rejects it.
 func (s *SpaceLibraryService) transferPurposeEnabled(purpose UploadPurpose) bool {
 	if purpose == UploadPurposeNoteAttachment {
 		return s.NoteAssetsEnabled
 	}
 	if purpose == UploadPurposeDrive {
-		// Started, sent straight to R2 and finished by the drive's own routes.
 		return false
 	}
 	return s.UploadPurposeEnabled(purpose)
@@ -29,7 +21,6 @@ func IsJournalAssetPurpose(purpose UploadPurpose) bool {
 	return purpose == UploadPurposeNoteAttachment
 }
 
-// noteAssetMIMETypes are the passive raster formats a note's images may be.
 var noteAssetMIMETypes = map[string]bool{
 	"image/avif":               true,
 	"image/bmp":                true,

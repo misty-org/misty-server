@@ -88,7 +88,6 @@ func TestCreateServerRequiresProductionLibraryStorage(t *testing.T) {
 	}
 }
 
-// productionCoreValues is a complete production configuration.
 func productionCoreValues() map[string]string {
 	values := map[string]string{
 		"DB_HOST":              "database.internal",
@@ -165,8 +164,6 @@ func TestValidateProductionEnvironmentRequiresHTTPS(t *testing.T) {
 	}
 }
 
-// The server answers only under /v1, so a public URL without it would send
-// Google's sign-in callback and sign-in links to paths that answer 404.
 func TestValidateProductionEnvironmentRequiresV1PublicURL(t *testing.T) {
 	t.Setenv("MISTY_ENVIRONMENT", "production")
 	for key, value := range productionCoreValues() {

@@ -6,7 +6,6 @@ import (
 
 const SessionTTL = accounts.SessionTTL
 
-// Sessions are uncached so revocation propagates between API processes.
 func TestingClearSessionCache() {}
 func (db *Database) CreateSession(hash, user string) error {
 	return db.accountStore().CreateSession(hash, user)

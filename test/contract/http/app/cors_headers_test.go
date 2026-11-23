@@ -13,8 +13,6 @@ import (
 	. "github.com/misty-org/misty-server/internal/app"
 )
 
-// corsTestServer builds a server with the minimum valid configuration. Note
-// collaboration validates its signing key at startup, so it must be a real one.
 func corsTestServer(t *testing.T) *Server {
 	t.Helper()
 	configureJournalCollabForTest(t)
@@ -46,15 +44,9 @@ func corsTestServer(t *testing.T) *Server {
 	return server
 }
 
-// Every custom header the desktop client sends must survive the preflight.
-//
-// A missing entry fails in a uniquely unhelpful way: the preflight returns 200
-// with no Access-Control-Allow-Origin, so the browser reports an opaque "load
-// failed" that points at the origin rather than the header.
 func TestPreflightAllowsEveryClientHeader(t *testing.T) {
 	server := corsTestServer(t)
 
-	// Kept in sync with the headers the desktop actually sets.
 	clientHeaders := []string{
 		"Authorization",
 		"Content-Type",

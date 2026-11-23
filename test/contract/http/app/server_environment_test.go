@@ -39,10 +39,6 @@ func TestCreateServerConfiguresIndependentDevelopmentLibrary(t *testing.T) {
 	t.Setenv("R2_BUCKET", "")
 	t.Setenv("R2_ACCESS_KEY", "")
 	t.Setenv("R2_SECRET_KEY", "")
-	// The memory-backed Library fallback this test exercises is gated on a
-	// non-production environment; without this the test's outcome silently
-	// depends on whatever MISTY_ENVIRONMENT happens to be set to in the
-	// process running the suite (e.g. a local .env that mimics production).
 	t.Setenv("MISTY_ENVIRONMENT", "")
 
 	server, err := CreateServer()
@@ -127,7 +123,6 @@ func TestCORSAllowsAppOrigins(t *testing.T) {
 		}
 	}
 
-	// Exhaust a route budget in-process; the rejection occurs before routing.
 	for i := 0; i < 121; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/api/cors-rate-limit-test", nil)
 		req.Header.Set("Origin", "http://127.0.0.1:5173")

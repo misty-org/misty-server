@@ -118,8 +118,6 @@ func TestAPIRateLimiterSharesOneBudgetAcrossSpaces(t *testing.T) {
 	}
 }
 
-// Friend requests get their own small burst budget, under the default for writes, so a burst
-// can't spray usernames before the daily cap applies.
 func TestFriendRequestsHaveTheirOwnBurstLimit(t *testing.T) {
 	limiter := NewAPIRateLimiter()
 	limiter.Now = func() time.Time { return time.Unix(0, 0) }

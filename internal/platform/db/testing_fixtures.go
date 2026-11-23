@@ -7,9 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Test fixtures: thin forwarders over the production entry points, kept so
-// contract tests can set up spaces, messages and runs in one call.
-
 func (db *Database) TestingCreateSpace(ctx context.Context, userID, name string) (*Space, error) {
 	result, err := db.CreateSpace(ctx, userID, name, "")
 	if err != nil {

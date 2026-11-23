@@ -21,7 +21,6 @@ func TestRetentionPassDrainsFullBatchesWithinBudget(t *testing.T) {
 		{"once", 0, func(context.Context) (int, error) { once++; return 0, nil }},
 	}
 	err := runRetentionPass(context.Background(), tasks)
-	// 45 rows: four full batches, then a short one ends the drain.
 	if drains != 5 || backlog != 0 {
 		t.Fatal("drain", drains, backlog)
 	}

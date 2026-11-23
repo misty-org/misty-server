@@ -26,8 +26,6 @@ type accountExportAsset struct {
 
 var errAccountExportAssetsUnavailable = errors.New("this server can't sign links to its files")
 
-// AccountExportManifest answers POST /me/export once the person has confirmed
-// it is them.
 func (s *SpacesService) AccountExportManifest() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -56,10 +54,6 @@ func (s *SpacesService) AccountExportManifest() http.HandlerFunc {
 	}
 }
 
-// OperatorAccountExport answers POST /operator/v1/accounts/{id}/export, so
-// whoever runs the server can answer someone who asks for a copy of their data.
-// The operator token already lets its holder sign in as any account through a
-// setup key, so this needs no proof from the person.
 func (s *SpacesService) OperatorAccountExport() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
@@ -95,8 +89,6 @@ func (s *SpacesService) accountExportManifest(ctx context.Context, userID string
 	}
 	documents := make([]accountExportDocument, 0, len(export.Journal))
 	for _, resource := range export.Journal {
-		// Without a collaboration service, note bodies are in
-		// the export's own projections; there is no room to download from.
 		if !s.JournalCollab.Enabled {
 			break
 		}
@@ -134,8 +126,6 @@ func (s *SpacesService) accountExportManifest(ctx context.Context, userID string
 			Download:           download,
 		})
 	}
-	// Raw Journal metadata is replaced by the signed document descriptors;
-	// raw object keys remain excluded by their json tag.
 	export.Journal = nil
 	export.Assets = nil
 	return map[string]any{

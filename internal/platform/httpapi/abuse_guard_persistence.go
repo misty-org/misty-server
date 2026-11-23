@@ -9,9 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/workqueue"
 )
 
-// One temporary writer per guard drains the bounded strike map. Rejections
-// never create a goroutine per caller or hold the request while PostgreSQL waits.
-// Called with g.mu held. The writer exits as soon as no writes remain.
 func (g *AbuseGuard) startPersistenceLocked() {
 	if g.store == nil || g.persistRunning || g.persistCtx.Err() != nil {
 		return
@@ -31,7 +28,6 @@ func (g *AbuseGuard) startPersistenceLocked() {
 						return 0, true, nil
 					}
 				}
-				// A later rejection starts its own writer under this same lock.
 				g.persistRunning = false
 				cancel()
 				return 0, false, nil
@@ -44,8 +40,6 @@ func (g *AbuseGuard) startPersistenceLocked() {
 }
 
 func (g *AbuseGuard) persistNextBlock(ctx context.Context) (int, error) {
-	// Serializing snapshots with successful writes prevents a stale snapshot
-	// from forgiving an in-flight block, and permits explicit operator unblocks.
 	g.storeMu.Lock()
 	defer g.storeMu.Unlock()
 	g.mu.Lock()
@@ -80,7 +74,6 @@ func (g *AbuseGuard) persistNextBlock(ctx context.Context) (int, error) {
 	return 1, nil
 }
 
-// Close stops pending persistence retries. Run calls it when the server stops.
 func (g *AbuseGuard) Close() {
 	if g.persistCancel != nil {
 		g.persistCancel()

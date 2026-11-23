@@ -7,9 +7,6 @@ import (
 	"github.com/a-h/templ"
 )
 
-// Page is one sidebar entry. Available gates it by deployment mode and
-// environment; unavailable pages are hidden and their routes redirect to the
-// Overview.
 type Page struct {
 	Slug      string
 	Title     string
@@ -22,8 +19,6 @@ type Page struct {
 func always(Config) bool            { return true }
 func developmentOnly(c Config) bool { return c.Development() }
 
-// pages is the console's single navigation registry, in sidebar order. Each
-// page has a unique icon; groups are separated by small muted headers.
 var pages = []Page{
 	{Slug: "overview", Title: "Overview", Icon: iconDashboard, Available: always, Render: (*Server).overviewPage},
 	{Slug: "services", Title: "Services", Icon: iconBox, Available: developmentOnly, Render: (*Server).servicesPage},
@@ -35,7 +30,6 @@ var pages = []Page{
 	{Slug: "logs", Title: "Logs", Group: "System", Icon: iconFileText, Available: always, Render: (*Server).logsPage},
 }
 
-// NavGroup is a run of pages sharing a group header.
 type NavGroup struct {
 	Label string
 	Pages []Page

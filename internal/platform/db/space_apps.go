@@ -14,18 +14,11 @@ import (
 	"github.com/misty-org/misty-server/internal/spaces"
 )
 
-// SpaceApp is an app a Space has installed. Every app is a third party's: Misty ships none of its own.
-// The bundle itself comes from the host's catalog, or for an app the catalog hasn't reviewed, from the
-// pinned build in Source; the server only records which app, at which version, with the permissions a
-// mod approved.
 type SpaceApp struct {
-	SpaceID     string   `json:"space_id"`
-	AppID       string   `json:"app_id"`
-	Version     string   `json:"version"`
-	Permissions []string `json:"permissions"`
-	// Source is the pinned build of an app that isn't in the reviewed catalog (a pasted GitHub link),
-	// as the installing host described it: its repo, how its manifest was made and the catalog-style
-	// entry. Members read it to download the same build. The server never interprets it.
+	SpaceID     string          `json:"space_id"`
+	AppID       string          `json:"app_id"`
+	Version     string          `json:"version"`
+	Permissions []string        `json:"permissions"`
 	Source      json.RawMessage `json:"source,omitempty"`
 	InstalledBy string          `json:"installed_by"`
 	InstalledAt time.Time       `json:"installed_at"`
@@ -38,7 +31,6 @@ const (
 
 var spaceAppIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 
-// spaceAppPermissions are the only permissions an app may ask for (misty-app.json).
 var spaceAppPermissions = map[string]bool{"files": true, "chat.post": true, "rooms": true, "members": true}
 
 const spaceAppColumns = `space_id,app_id,version,permissions,source,installed_by,installed_at`
@@ -60,8 +52,6 @@ func scanSpaceApp(row interface{ Scan(...any) error }, out *SpaceApp) error {
 	return nil
 }
 
-// normalizeSpaceAppSource accepts no source (nil, or JSON null) or a JSON object under 64 KiB, and
-// returns what to store: nil for none.
 func normalizeSpaceAppSource(source json.RawMessage) ([]byte, error) {
 	trimmed := bytes.TrimSpace(source)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
@@ -96,7 +86,6 @@ func normalizeSpaceAppInput(appID, version string, permissions []string) ([]stri
 	return clean, nil
 }
 
-// SpaceApps lists a Space's installed apps, oldest first. Every member may read it.
 func (db *Database) SpaceApps(ctx context.Context, userID, spaceID string) ([]SpaceApp, error) {
 	apps := []SpaceApp{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -121,9 +110,6 @@ func (db *Database) SpaceApps(ctx context.Context, userID, spaceID string) ([]Sp
 	return apps, err
 }
 
-// InstallSpaceApp installs an app, or moves an installed one to a new version and permissions. Only a
-// member who holds apps.manage (a mod) may. The catalog's check of the version is the host's.
-// source is the pinned build of an app outside the reviewed catalog, or empty.
 func (db *Database) InstallSpaceApp(ctx context.Context, userID, spaceID, appID, version string, permissions []string, source json.RawMessage) (*SpaceApp, error) {
 	permissions, err := normalizeSpaceAppInput(appID, version, permissions)
 	if err != nil {
@@ -176,8 +162,6 @@ func (db *Database) InstallSpaceApp(ctx context.Context, userID, spaceID, appID,
 	return app, nil
 }
 
-// RemoveSpaceApp uninstalls an app. The Space's files are never touched: what an app saved lives in the
-// Space's Library, not in the app.
 func (db *Database) RemoveSpaceApp(ctx context.Context, userID, spaceID, appID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, userID, spaces.PermissionAppsManage); err != nil {
@@ -195,12 +179,8 @@ func (db *Database) RemoveSpaceApp(ctx context.Context, userID, spaceID, appID s
 	})
 }
 
-// spaceAppRoomPattern is an app's own name for one of its live documents.
 var spaceAppRoomPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
-// SpaceAppRoomAccess checks that a member may join one of an app's live documents in a Space: the Space
-// has the app, a mod approved its `rooms` permission, and the room id is one an app may name. Every member
-// who may use the app joins as an editor.
 func (db *Database) SpaceAppRoomAccess(ctx context.Context, userID, spaceID, appID, roomID string) error {
 	if !spaceAppIDPattern.MatchString(appID) || !spaceAppRoomPattern.MatchString(roomID) {
 		return ErrSpaceNotFound

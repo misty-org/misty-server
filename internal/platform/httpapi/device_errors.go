@@ -23,7 +23,6 @@ func writeDeviceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, db.ErrLibraryQuota):
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "storage_limit_reached", "message": "Storage quota has been reached."})
 	default:
-		// The caller sees a bare 500; the reason belongs in the server log.
 		log.Printf("agent request failed: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}

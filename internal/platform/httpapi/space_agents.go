@@ -7,7 +7,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// SpaceAgents lists the agents in a Space, each under the person who owns it.
 func (s *SpacesService) SpaceAgents() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -23,7 +22,6 @@ func (s *SpacesService) SpaceAgents() http.HandlerFunc {
 	}
 }
 
-// MySpaceAgents lists the agents in every Space the caller belongs to.
 func (s *SpacesService) MySpaceAgents() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -39,9 +37,6 @@ func (s *SpacesService) MySpaceAgents() http.HandlerFunc {
 	}
 }
 
-// SpaceAgent lists one of the caller's agents in a Space, or takes it out. The
-// agent itself lives on the caller's computer: the Space keeps its id and name
-// under its person, and nothing else about it.
 func (s *SpacesService) SpaceAgent() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

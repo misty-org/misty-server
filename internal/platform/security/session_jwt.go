@@ -36,8 +36,6 @@ var developmentKey = sync.OnceValues(func() ([]byte, error) {
 	return key, err
 })
 
-// SessionSignerFromEnv requires a stable deployment secret in production.
-// Development uses a process-local random key, so restart signs users out.
 func SessionSignerFromEnv() (*SessionSigner, error) {
 	raw := strings.TrimSpace(config.Getenv("MISTY_AUTH_SIGNING_KEY"))
 	var key []byte

@@ -89,8 +89,6 @@ func requireCookie(t *testing.T, rec *httptest.ResponseRecorder, name string) *h
 	return nil
 }
 
-// inviteToRegister opens registration for email the only way a server with an
-// account allows it: a Space invitation from an existing account.
 func inviteToRegister(t *testing.T, database *db.Database, ownerID, email string) {
 	t.Helper()
 	space, err := database.TestingCreateSpace(t.Context(), ownerID, "Invitations")

@@ -6,12 +6,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// SpaceItemVisibility flips a Space item between public and private: notes,
-// Library files, folders and links, and agents. Only
-// the item's owner can. Channels, threads and the Space itself have no
-// toggle, and DMs are always private.
-//
-// PUT /spaces/{spaceID}/items/{kind}/{itemID}/visibility {"visibility":"private"}
 func (s *SpacesService) SpaceItemVisibility() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

@@ -81,7 +81,6 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; 
   .content { padding: 20px 16px; }
 }
 
-/* Sidebar search and groups */
 .nav-search {
   display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 6px 8px;
   border: 1px solid var(--border); border-radius: 6px; color: var(--faint);
@@ -90,7 +89,6 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; 
 .nav-group + .nav-group { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 2px; }
 [hidden] { display: none !important; }
 
-/* Controls */
 .button, .icon-button, .link-button {
   display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; color: var(--text);
   background: transparent; border: 1px solid var(--border-strong); border-radius: 6px; padding: 5px 12px; cursor: pointer;
@@ -120,14 +118,12 @@ input[type="search"], input[type="password"], input[type="text"], select {
 .sign-in-link { display: flex; gap: 8px; margin: 10px 0 4px; }
 .sign-in-link input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 
-/* Status text: icon plus weight, never color */
 .tag-problem { font-weight: 600; border-color: var(--text); }
 .flash, .problem { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0; font-size: 13px; }
 .flash { color: var(--muted); }
 .problem { font-weight: 600; }
 .problem .icon, .flash .icon { margin-top: 1px; }
 
-/* Tables as grids so columns align without <table> scrolling */
 .table { display: flex; flex-direction: column; }
 .table-head, .table-row {
   display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px;
@@ -145,24 +141,20 @@ input[type="search"], input[type="password"], input[type="text"], select {
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .rows.compact .row { padding: 7px 0; }
 
-/* Accounts list with detail */
 .split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; align-items: start; }
 .detail { border-left: 1px solid var(--border); padding-left: 24px; min-width: 0; }
 .detail-title { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
 .detail .section-label { margin-top: 18px; }
 
-/* Grouped state counts */
 .count-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 24px; margin-bottom: 8px; }
 .count-group > .muted { font-size: 12px; margin-bottom: 2px; }
 
-/* Logs and tokens */
 .logs-header { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; }
 .logs-header .section-label { margin: 0; }
 .logs, .token {
   margin: 8px 0 0; background: var(--surface); border-radius: var(--radius); padding: 12px 14px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.6;
 }
-/* column-reverse keeps the newest lines in view without script */
 .logs { max-height: 420px; overflow: auto; display: flex; flex-direction: column-reverse; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .token { overflow-wrap: anywhere; white-space: pre-wrap; font-size: 13px; color: var(--text); }
 

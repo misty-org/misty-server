@@ -7,12 +7,6 @@ import (
 	"testing"
 )
 
-// TestConcurrentListSpacesNeverCrossesAccounts guards the server side of the
-// account-switch race investigated on the client: even under heavy concurrent
-// load from two different accounts hitting the same read path at once, each
-// request must only ever see its own account's data. Each request is
-// independently authenticated and scoped by userID, so this should hold by
-// construction — this test exists to keep it that way as ListSpaces evolves.
 func TestConcurrentListSpacesNeverCrossesAccounts(t *testing.T) {
 	database := openTestDatabase(t)
 	ctx := context.Background()

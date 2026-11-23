@@ -5,23 +5,6 @@ import (
 	"database/sql"
 )
 
-// The full purge of a deleted account, as Privacy §10 promises: after the
-// retention window "we delete your personal information or permanently
-// anonymize it". The users row stays, renamed and without credentials, as
-// the "deleted user" that content in Spaces other people still use is
-// attributed to. Everything else the account held goes:
-//
-//   - Spaces it owns alone, the personal Space included, are marked for the
-//     Space purge (space_purge.go), which removes their notes, chats,
-//     Library, drive and R2 objects;
-//   - every row in accountPurgeTables: voice transcripts, sessions,
-//     connections and settings.
-//
-// What stays, by design, is listed in accountPurgeKept. The purge test
-// (test/contract/postgres/account_purge_test.go) checks every table that
-// references users, so a new table must be added to one of the two lists.
-
-// accountPurgeTables are deleted by their user column, in this order.
 var accountPurgeTables = []struct{ Table, Column string }{
 	{"sessions", "user_id"},
 	{"email_verification_tokens", "user_id"},
@@ -36,10 +19,8 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"account_controls", "user_id"},
 	{"voice_live_sessions", "owner_user_id"},
 	{"voice_transcripts", "owner_user_id"},
-	// Connections.
 	{"cloud_connections", "user_id"},
 	{"space_provider_credentials", "user_id"},
-	// The account's private layer in Spaces it belonged to.
 	{"space_personal_item_state", "user_id"},
 	{"space_conversation_reads", "user_id"},
 	{"space_conversation_members", "user_id"},
@@ -52,9 +33,6 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"owner_storage_usage", "owner_user_id"},
 }
 
-// accountPurgeKept are the user columns that keep pointing at the deleted
-// user after the purge, each because it is attribution on content other
-// people still use, or the anonymized account record itself.
 var accountPurgeKept = map[string]string{
 	"licenses.user_id":                           "the identity the anonymized users row requires",
 	"account_deletion_requests.user_id":          "the record that the deletion ran",
@@ -82,16 +60,12 @@ var accountPurgeKept = map[string]string{
 	"space_integrations.connected_by_user_id":    "Space apps, marked as needing a new connection",
 }
 
-// AccountPurgeKept names the user columns the purge leaves, with why. The
-// purge test reads it.
 func AccountPurgeKept() map[string]string { return accountPurgeKept }
 
-// purgeAccountDataTx runs inside CompleteAccountDeletion.
 func purgeAccountDataTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	if err := handOverSharedSpacesTx(ctx, tx, userID); err != nil {
 		return err
 	}
-	// Owned Spaces now have no other member; the Space purge removes them.
 	if _, err := tx.ExecContext(ctx, `UPDATE spaces SET lifecycle_state='pending_deletion',
 		deletion_requested_at=COALESCE(deletion_requested_at,NOW()),permanent_delete_after=NOW(),updated_at=NOW()
 		WHERE owner_user_id=$1`, userID); err != nil {

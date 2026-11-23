@@ -12,11 +12,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Runs ChangePassword's SQL against a throwaway PostgreSQL. Set
-// MISTY_KEY_TRANSITION_TEST_DSN (key=value form) to an empty database whose name
-// contains "test" or "check"; the test creates one small table in it holding
-// only the columns this code reads. Row-level security is not part of this
-// check: the scope the store passes is applied by the shared adapter.
 func TestChangePasswordAgainstPostgres(t *testing.T) {
 	dsn := os.Getenv("MISTY_KEY_TRANSITION_TEST_DSN")
 	if dsn == "" {
@@ -97,7 +92,6 @@ func TestChangePasswordAgainstPostgres(t *testing.T) {
 		return out
 	}
 
-	// A wrong current password changes nothing.
 	if err = store.ChangePassword("password-account", "not it", "next-password", "this-session"); !errors.Is(err, ErrWrongCurrentPassword) {
 		t.Fatalf("a wrong current password was accepted: %v", err)
 	}
@@ -116,15 +110,12 @@ func TestChangePasswordAgainstPostgres(t *testing.T) {
 	if bcrypt.CompareHashAndPassword([]byte(stored("password-account")), []byte("typed password")) == nil {
 		t.Fatal("the old password still opens the account")
 	}
-	// Every other session of the account ended; this one and another account's stayed.
 	if got := strings.Join(sessions(), ","); got != "someone-elses,this-session" {
 		t.Fatalf("sessions after the change: %s", got)
 	}
-	// The next change starts from the new password.
 	if err = store.ChangePassword("password-account", "next-password", "newer-password", "this-session"); err != nil {
 		t.Fatalf("changing from the new password failed: %v", err)
 	}
-	// A Google account has no Misty password, and an unknown one is not found.
 	if err = store.ChangePassword("google-account", "unused", "next-password", "x"); !errors.Is(err, ErrNoPasswordAccount) {
 		t.Fatalf("a Google account got a password: %v", err)
 	}

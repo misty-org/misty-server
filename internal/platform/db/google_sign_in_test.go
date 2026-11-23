@@ -16,8 +16,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// These focused integration tests need only the account tables; they can run
-// against disposable PostgreSQL without pgvector or the unrelated app schema.
 func googleTestDatabase(t *testing.T) *Database {
 	t.Helper()
 	dsn := os.Getenv("MISTY_GOOGLE_AUTH_TEST_DSN")

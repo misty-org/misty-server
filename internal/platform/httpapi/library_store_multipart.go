@@ -12,23 +12,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-// Large drive files go to R2 as S3 multipart uploads: the server starts the
-// upload, signs a PUT for each part, and completes it from the parts' ETags.
-// The bytes still go straight between the app and R2. Each part's URL is
-// signed for its exact length, and the object carries the server's checksum
-// metadata from the start; R2 can't check a whole-object SHA-256 of a
-// multipart upload, so the digest is the uploader's word, checked by every
-// computer that downloads the file.
-
-// LibraryUploadPart is one part of a multipart upload as the app reports it.
 type LibraryUploadPart struct {
 	Number int32  `json:"number"`
 	ETag   string `json:"etag"`
 }
 
-// LibraryMultipartUploader is the optional capability of a store that takes
-// multipart uploads. The development stores don't have it, and the drive
-// refuses large files without it.
 type LibraryMultipartUploader interface {
 	CreateMultipartUpload(ctx context.Context, key string, metadata LibraryObjectMetadata) (string, error)
 	PresignUploadPart(ctx context.Context, key, uploadID string, number int32, size int64, ttl time.Duration) (string, error)
@@ -36,14 +24,12 @@ type LibraryMultipartUploader interface {
 	AbortMultipartUpload(ctx context.Context, key, uploadID string) error
 }
 
-// libraryS3MultipartAPI is the part of *s3.Client the multipart calls use.
 type libraryS3MultipartAPI interface {
 	CreateMultipartUpload(context.Context, *s3.CreateMultipartUploadInput, ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error)
 	CompleteMultipartUpload(context.Context, *s3.CompleteMultipartUploadInput, ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error)
 	AbortMultipartUpload(context.Context, *s3.AbortMultipartUploadInput, ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error)
 }
 
-// libraryS3PartPresigner is the part of *s3.PresignClient that signs part uploads.
 type libraryS3PartPresigner interface {
 	PresignUploadPart(context.Context, *s3.UploadPartInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
@@ -59,8 +45,6 @@ func (s *S3LibraryObjectStore) multipartClients() (libraryS3MultipartAPI, librar
 	return client, presigner, nil
 }
 
-// CreateMultipartUpload starts a multipart upload of one object, with the
-// content type and checksum metadata a single PUT would carry.
 func (s *S3LibraryObjectStore) CreateMultipartUpload(ctx context.Context, key string, metadata LibraryObjectMetadata) (string, error) {
 	if !libraryObjectKeyPattern.MatchString(key) || metadata.ByteSize < 1 || !sha256Pattern.MatchString(metadata.SHA256) {
 		return "", errors.New("invalid Library object constraints")
@@ -81,7 +65,6 @@ func (s *S3LibraryObjectStore) CreateMultipartUpload(ctx context.Context, key st
 	return aws.ToString(out.UploadId), nil
 }
 
-// PresignUploadPart signs one part's PUT for its exact length.
 func (s *S3LibraryObjectStore) PresignUploadPart(ctx context.Context, key, uploadID string, number int32, size int64, ttl time.Duration) (string, error) {
 	if !libraryObjectKeyPattern.MatchString(key) || uploadID == "" || number < 1 || number > 10000 || size < 1 {
 		return "", errors.New("invalid Library upload part")
@@ -104,7 +87,6 @@ func (s *S3LibraryObjectStore) PresignUploadPart(ctx context.Context, key, uploa
 	return signed.URL, nil
 }
 
-// CompleteMultipartUpload joins the parts, in order, into the object.
 func (s *S3LibraryObjectStore) CompleteMultipartUpload(ctx context.Context, key, uploadID string, parts []LibraryUploadPart) error {
 	if !libraryObjectKeyPattern.MatchString(key) || uploadID == "" || len(parts) == 0 {
 		return errors.New("invalid Library multipart completion")
@@ -128,7 +110,6 @@ func (s *S3LibraryObjectStore) CompleteMultipartUpload(ctx context.Context, key,
 	return mapLibraryS3Error(err)
 }
 
-// AbortMultipartUpload gives up a multipart upload and the parts it holds.
 func (s *S3LibraryObjectStore) AbortMultipartUpload(ctx context.Context, key, uploadID string) error {
 	if !libraryObjectKeyPattern.MatchString(key) || uploadID == "" {
 		return ErrLibraryObjectNotFound

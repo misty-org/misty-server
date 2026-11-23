@@ -14,7 +14,6 @@ func (db Store) CreateSession(tokenHash, userID string) error {
 	return db.CreateSessionWithTTL(tokenHash, userID, SessionTTL)
 }
 
-// CreateSessionWithTTL backs CreateSession with the session's lifetime.
 func (db Store) CreateSessionWithTTL(tokenHash, userID string, ttl time.Duration) error {
 	now := time.Now()
 	expiresAt := now.Add(ttl)

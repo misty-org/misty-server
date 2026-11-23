@@ -15,17 +15,12 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// Handoff is written to Config.HandoffPath so `misty server up --gui` can find and
-// reopen a running console. It holds the launch token, so it is 0600 and is
-// removed on shutdown.
 type Handoff struct {
 	PID       int       `json:"pid"`
 	URL       string    `json:"url"`
 	StartedAt time.Time `json:"started_at"`
 }
 
-// Run serves the console until ctx is cancelled. The launch URL is printed on
-// stdout as the only line written there.
 func Run(ctx context.Context, cfg Config, database *db.Database) error {
 	browserAddr := cfg.Addr
 	if cfg.PublishedAddr != "" {

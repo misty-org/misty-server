@@ -1,18 +1,5 @@
-/**
- * Journal collaboration ticket verification.
- *
- * A ticket is an Ed25519-signed JWT minted by the API immediately after it
- * rechecks document access. It authorizes exactly one WebSocket connection to
- * exactly one room, and it is the only thing this Worker trusts: the Worker
- * never queries the note ACL itself, so a forged or replayed ticket is the
- * whole attack surface.
- *
- * The signing private key lives only on the Go server. Cloudflare holds the
- * public key, so a compromise here cannot mint tickets.
- */
-
 export type DocumentRole = "creator" | "editor" | "viewer";
-export type CollaborationResourceType = "note" | "code" | "app";
+export type CollaborationResourceType = "note" | "code" | "app" | "file";
 
 export interface TicketClaims {
   iss: string;
@@ -23,7 +10,6 @@ export interface TicketClaims {
   resource_type: CollaborationResourceType;
   resource_id: string;
   note_id?: string;
-  /** The live code session a code room belongs to. */
   code_session_id?: string;
   room: string;
   role: DocumentRole;
@@ -35,18 +21,13 @@ interface TicketVerificationContext {
   publicKeyBase64: string;
   issuer: string;
   audience: string;
-  /** The room the socket is actually connecting to. */
   room: string;
-  /** The Durable Object class accepting the connection. */
   resourceType: CollaborationResourceType;
-  /** Seconds since epoch; injectable so expiry is testable without waiting. */
   now?: number;
 }
 
 export class TicketError extends Error {
   constructor(readonly code: string) {
-    // The message is deliberately the code alone. Ticket failures are logged
-    // and must never echo claim values, which identify a private document.
     super(code);
     this.name = "TicketError";
   }
@@ -58,7 +39,7 @@ const VALID_ROLES: ReadonlySet<string> = new Set([
   "editor",
   "viewer",
 ]);
-const VALID_RESOURCE_TYPES: ReadonlySet<string> = new Set(["note", "code", "app"]);
+const VALID_RESOURCE_TYPES: ReadonlySet<string> = new Set(["note", "code", "app", "file"]);
 
 function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -80,9 +61,6 @@ function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
 }
 
 async function importVerifyKey(publicKeyBase64: string): Promise<CryptoKey> {
-  // Raw 32-byte Ed25519 public key. Anything else is a configuration error, not
-  // a client error, so it fails loudly rather than rejecting every connection
-  // with a generic invalid-signature.
   const raw = base64ToBytes(publicKeyBase64.trim());
   if (raw.byteLength !== 32) {
     throw new TicketError("ticket_key_misconfigured");
@@ -132,8 +110,7 @@ function decodeClaims(payloadSegment: string): TicketClaims {
       claims.note_id !== claims.resource_id) ||
     (claims.resource_type === "code" &&
       claims.code_session_id !== claims.resource_id) ||
-    // An app's live document is kept to its Space: its id starts with the Space the ticket is for.
-    (claims.resource_type === "app" &&
+    ((claims.resource_type === "app" || claims.resource_type === "file") &&
       !claims.resource_id.startsWith(`${claims.space_id}:`))
   ) {
     throw new TicketError("ticket_resource_invalid");
@@ -147,13 +124,6 @@ function decodeClaims(payloadSegment: string): TicketClaims {
   return claims as TicketClaims;
 }
 
-/**
- * Verifies a ticket's signature and claims.
- *
- * Single-use enforcement is deliberately NOT here: `jti` can only be burned
- * inside the room's Durable Object, which is the one place with a serialized
- * view of that room. Callers must burn it there before accepting the socket.
- */
 export async function verifyTicket(
   token: string,
   context: TicketVerificationContext,
@@ -179,8 +149,6 @@ export async function verifyTicket(
   } catch {
     throw new TicketError("ticket_malformed");
   }
-  // Pinning the algorithm defeats "alg": "none" and any attempt to downgrade to
-  // a symmetric algorithm using the public key as the shared secret.
   if (header.alg !== "EdDSA") {
     throw new TicketError("ticket_alg_unsupported");
   }
@@ -198,8 +166,6 @@ export async function verifyTicket(
     throw new TicketError("ticket_signature_invalid");
   }
 
-  // Claims are only read after the signature checks out, so nothing below can
-  // be influenced by an attacker.
   const claims = decodeClaims(payloadSegment);
   if (claims.iss !== context.issuer) {
     throw new TicketError("ticket_issuer_invalid");
@@ -207,8 +173,6 @@ export async function verifyTicket(
   if (claims.aud !== context.audience) {
     throw new TicketError("ticket_audience_invalid");
   }
-  // Room equality stops a ticket minted for a note the user *can* read from
-  // being replayed against a different document's room.
   if (claims.room !== context.room) {
     throw new TicketError("ticket_room_mismatch");
   }
@@ -222,11 +186,6 @@ export async function verifyTicket(
   return claims;
 }
 
-/**
- * Verifies with the active public key, then the explicitly retained previous
- * key only when the signature does not match. Claim failures never fall
- * through to another key, so rotation cannot weaken validation.
- */
 export async function verifyTicketWithRotation(
   token: string,
   context: TicketVerificationContext,

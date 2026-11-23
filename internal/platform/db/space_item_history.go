@@ -6,11 +6,6 @@ import (
 	"errors"
 )
 
-// An item's earlier versions live in its collaboration room, which keeps snapshots as it is
-// edited. Reading them needs what reading the item needs, and restoring one what editing it
-// needs; the API checks both here before asking the room.
-
-// MadeItemAccess is the capability set one caller has on one item.
 type MadeItemAccess struct {
 	CanView   bool
 	CanEdit   bool
@@ -18,8 +13,6 @@ type MadeItemAccess struct {
 	Role      string
 }
 
-// SpaceItemAccess resolves one caller's access to an item of any registered kind in one Space.
-// An item in another Space, missing, or not visible to the caller is ErrSpaceNotFound.
 func (db *Database) SpaceItemAccess(ctx context.Context, kindName, userID, spaceID, itemID string) (MadeItemAccess, SpaceItemLimits, error) {
 	kind, ok := SpaceItemKindNamed(kindName)
 	if !ok {
@@ -29,7 +22,6 @@ func (db *Database) SpaceItemAccess(ctx context.Context, kindName, userID, space
 	var limits SpaceItemLimits
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		var itemSpace string
-		// The table name comes from the registry.
 		err := tx.QueryRowContext(ctx, `SELECT space_id FROM `+kind.Table+` WHERE id=$1`, itemID).Scan(&itemSpace)
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && itemSpace != spaceID) {
 			return ErrSpaceNotFound

@@ -48,17 +48,13 @@ func TestCloseMakesReadOnlyAndDeletesOnTheDateWithoutEmails(t *testing.T) {
 	if rec.Code != http.StatusOK || accountField(body, "suspended") != false || time.Until(deleteAt) < 29*24*time.Hour || time.Until(deleteAt) > 30*24*time.Hour {
 		t.Fatalf("close = %d %v", rec.Code, body)
 	}
-	// Closed is read-only, not suspended: the session still reads.
 	if rec, body := call(t, handler, http.MethodGet, "/v1/me", "", "", session...); rec.Code != http.StatusOK || body["delete_at"] != deleteAt.UTC().Format(time.RFC3339) {
 		t.Fatalf("me while closed = %d %v", rec.Code, body)
 	}
-	// A retried close keeps the date it set first.
 	if _, again := call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/close", operatorToken, `{"delete_after_days":5}`); accountField(again, "delete_at") != accountField(body, "delete_at") {
 		t.Fatalf("retried close moved the date: %v", again)
 	}
 
-	// A sign-in link still works while closing, and lets the person choose a
-	// password, so a customer who forgot theirs can sign in and export.
 	_, body = call(t, handler, http.MethodPost, "/operator/v1/accounts/"+id+"/setup-key", operatorToken, "")
 	rec, redeemed := call(t, handler, http.MethodPost, "/v1/setup-keys/redeem", "", `{"setup_key":"`+issuedKey(t, body)+`"}`)
 	reset, _ := redeemed["password_reset_token"].(string)
@@ -69,7 +65,6 @@ func TestCloseMakesReadOnlyAndDeletesOnTheDateWithoutEmails(t *testing.T) {
 		t.Fatalf("password while closing = %d %v", rec.Code, body)
 	}
 
-	// Nothing is due before the date, and nothing is sent.
 	closings := NewAccountClosings(database)
 	if started, err := closings.Process(ctx, 10); err != nil || started != 0 {
 		t.Fatalf("before the date = %d %v", started, err)

@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-// Retention purges are maintenance, not user-visible state changes: expired
-// rows are already excluded by their readers. They run on an explicit budget
-// rather than per-row deadlines, because inserts into these high-churn tables
-// (messages, tickets, events) must not publish notifications. One replica owns
-// each pass and drains bounded batches; the others skip it.
 const (
 	retentionInterval = 10 * time.Minute
 	retentionBatches  = 20
@@ -26,7 +21,6 @@ type retentionTask struct {
 
 func runRetention(ctx context.Context, server *Server) {
 	for {
-		// Full jitter spreads replicas and restarts across the interval.
 		timer := time.NewTimer(retentionInterval/2 + time.Duration(rand.Int64N(int64(retentionInterval))))
 		select {
 		case <-ctx.Done():
@@ -54,8 +48,6 @@ func runRetention(ctx context.Context, server *Server) {
 	}
 }
 
-// runRetentionPass drains each task while it returns full batches, up to a
-// fixed number of batches so a large backlog cannot monopolize the pass.
 func runRetentionPass(ctx context.Context, tasks []retentionTask) error {
 	var failures []error
 	for _, task := range tasks {
@@ -83,7 +75,6 @@ func retentionTasks(server *Server) []retentionTask {
 			n, err := server.Database.PurgeExpiredNotes(ctx, 100)
 			return int(n), err
 		}},
-		// Five tables share one call; a full batch from any of them drains again.
 		{"space-data", 1000, func(ctx context.Context) (int, error) {
 			n, err := server.Database.PurgeExpiredSpaceData(ctx, 1000)
 			return int(n), err
@@ -96,16 +87,12 @@ func retentionTasks(server *Server) []retentionTask {
 	}
 	if server.Drive != nil {
 		tasks = append(tasks,
-			// The drives' trash empties after 30 days, except what is held there.
 			retentionTask{"drive-trash", 25, func(ctx context.Context) (int, error) { return server.Drive.PurgeExpiredTrash(ctx, 25) }},
-			// Tombstones leave the change feed after 90 days, moving each Space's horizon.
 			retentionTask{"drive-tombstones", 1000, func(ctx context.Context) (int, error) { return server.Drive.PruneTombstones(ctx, 1000) }},
 		)
 	}
 	if server.Library != nil {
 		tasks = append(tasks,
-			// Object storage offers no change stream; the inventory comparison is
-			// the budgeted exception. It runs once per pass, not drained.
 			retentionTask{"library-objects", 0, func(ctx context.Context) (int, error) {
 				report, err := server.Library.ReconcileLibraryObjects(ctx, 24*time.Hour, 250)
 				if err == nil && (report.OrphanObjectsDeleted > 0 || report.MissingPermanentObjects > 0 ||

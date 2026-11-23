@@ -19,31 +19,26 @@ import (
 	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 )
 
-// The Space drive's contract tests share this fixture: a Space with its
-// owner, a member and an outsider, the drive's routes over an in-memory
-// object store with a stub presigner, and helpers that act as one computer.
-
 type driveTestItem struct {
-	ID             string  `json:"id"`
-	SpaceID        string  `json:"space_id"`
-	ParentID       *string `json:"parent_id"`
-	Name           string  `json:"name"`
-	Kind           string  `json:"kind"`
-	SHA256         *string `json:"sha256"`
-	Size           int64   `json:"size"`
-	MTimeMS        int64   `json:"mtime_ms"`
-	Version        int64   `json:"version"`
-	Seq            int64   `json:"seq"`
-	ModifiedBy     string  `json:"modified_by"`
-	ModifiedByName string  `json:"modified_by_name"`
-	Trashed        bool    `json:"trashed"`
-	TrashHold      bool    `json:"trash_hold"`
-	TrashedBy      *string `json:"trashed_by"`
-	Deleted        bool    `json:"deleted"`
-	ReplacedOf     *string `json:"replaced_of"`
-	// Revived and Replaced are only in the answers to writes.
-	Revived  bool           `json:"revived"`
-	Replaced *driveTestItem `json:"replaced"`
+	ID             string         `json:"id"`
+	SpaceID        string         `json:"space_id"`
+	ParentID       *string        `json:"parent_id"`
+	Name           string         `json:"name"`
+	Kind           string         `json:"kind"`
+	SHA256         *string        `json:"sha256"`
+	Size           int64          `json:"size"`
+	MTimeMS        int64          `json:"mtime_ms"`
+	Version        int64          `json:"version"`
+	Seq            int64          `json:"seq"`
+	ModifiedBy     string         `json:"modified_by"`
+	ModifiedByName string         `json:"modified_by_name"`
+	Trashed        bool           `json:"trashed"`
+	TrashHold      bool           `json:"trash_hold"`
+	TrashedBy      *string        `json:"trashed_by"`
+	Deleted        bool           `json:"deleted"`
+	ReplacedOf     *string        `json:"replaced_of"`
+	Revived        bool           `json:"revived"`
+	Replaced       *driveTestItem `json:"replaced"`
 }
 
 type driveTestChanges struct {
@@ -53,7 +48,6 @@ type driveTestChanges struct {
 	Head      int64           `json:"head"`
 }
 
-// driveTestDevice is one computer of one person.
 type driveTestDevice struct {
 	token, id, name string
 }
@@ -138,7 +132,6 @@ func newDriveFixture(t *testing.T, label string) *driveFixture {
 	return f
 }
 
-// call sends one request from a computer. version, when above 0, goes in If-Match.
 func (f *driveFixture) call(from driveTestDevice, method, target string, version int64, body any) *httptest.ResponseRecorder {
 	f.t.Helper()
 	var payload []byte
@@ -189,8 +182,6 @@ func (f *driveFixture) folder(from driveTestDevice, parent *string, name string)
 		map[string]any{"parent_id": parent, "name": name, "kind": "folder"}), http.StatusCreated)
 }
 
-// upload sends content as the app would: ask, PUT straight to "R2", complete.
-// It returns the upload to name in the item.
 func (f *driveFixture) upload(from driveTestDevice, userID string, content []byte) (string, string) {
 	f.t.Helper()
 	sum := sha256.Sum256(content)
@@ -218,7 +209,6 @@ func (f *driveFixture) upload(from driveTestDevice, userID string, content []byt
 	return uploadID, sha
 }
 
-// file uploads content and makes a file of it.
 func (f *driveFixture) file(from driveTestDevice, userID string, parent *string, name, content string) driveTestItem {
 	f.t.Helper()
 	uploadID, sha := f.upload(from, userID, []byte(content))

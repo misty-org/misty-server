@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// NextWorkerDelay uses database time so API-host clock skew cannot strand a
-// scheduled retry. NULL means no pending work and therefore no timer or scan.
 func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Duration, bool, error) {
 	var deadline string
 	switch queue {
@@ -30,7 +28,6 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 	if err != nil || !seconds.Valid {
 		return 0, false, err
 	}
-	// Avoid duration overflow for rows deliberately scheduled far in the future.
 	delay := time.Duration(max(0, min(seconds.Float64, 365*24*3600)) * float64(time.Second))
 	return delay, true, nil
 }

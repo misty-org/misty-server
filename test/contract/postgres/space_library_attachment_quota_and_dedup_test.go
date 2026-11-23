@@ -61,7 +61,6 @@ func TestAttachmentQuotaUploadAndDedup(t *testing.T) {
 	if usage.UsedBytes != 200 {
 		t.Fatalf("two independent contributions = %#v", usage)
 	}
-	// The Library item purpose is gone.
 	if _, err := database.CreateLibraryUpload(ctx, owner.ID, spaceID, "library", "third.txt", "text/plain", 100, digest, "library/thirdobject", "token-3", time.Now().Add(time.Hour)); err == nil {
 		t.Fatal("a Library item upload was started")
 	}

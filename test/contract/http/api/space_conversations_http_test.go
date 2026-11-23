@@ -62,8 +62,6 @@ func performConversationRequest(t *testing.T, router *chi.Mux, method, path, tok
 	return rec
 }
 
-// newConversationTestRouter mounts only the conversation endpoints this test
-// exercises, matching the routes registered in mountSpacesRoutes.
 func newConversationTestRouter(t *testing.T, spaces *SpacesService) *chi.Mux {
 	t.Helper()
 	router := chi.NewRouter()
@@ -75,10 +73,6 @@ func newConversationTestRouter(t *testing.T, spaces *SpacesService) *chi.Mux {
 	return router
 }
 
-// TestConversationHTTPAccessControl guards, at the HTTP handler layer, who sees
-// what in a Space's chat: a DM only its participants, not even the Space's owner;
-// a group chat everyone in the Space. It complements the DB-layer coverage
-// (TestUpdateSpaceConversationRestrictedToCreator) with real requests.
 func TestConversationHTTPAccessControl(t *testing.T) {
 	database := openPresenceTestDatabase(t)
 	ctx := context.Background()
@@ -112,8 +106,6 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		t.Fatalf("CreateSpace(owner) error = %v", err)
 	}
 
-	// member and spacemate both join the Space, and only member is in the DM
-	// below. outsider never joins the Space at all.
 	for _, invited := range []*db.User{member, spacemate} {
 		invite, inviteErr := database.TestingInviteToSpace(ctx, owner.ID, space.ID, invited.Email)
 		if inviteErr != nil {
@@ -131,7 +123,6 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 
 	listPath := "/spaces/" + space.ID + "/conversations"
 
-	// Opening a DM makes the real kind, and opening it again finds the same one.
 	rec := performConversationRequest(t, router, http.MethodPost, listPath+"/dm", memberToken, map[string]any{"user_id": spacemate.ID})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST direct status = %d, body = %s", rec.Code, rec.Body)
@@ -149,7 +140,6 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 	messagesPath := "/spaces/" + space.ID + "/conversations/" + conversation.ID + "/messages"
 	conversationPath := "/spaces/" + space.ID + "/conversations/" + conversation.ID
 
-	// A participant sees it in their list.
 	rec = performConversationRequest(t, router, http.MethodGet, listPath, memberToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET conversations (member) status = %d, body = %s", rec.Code, rec.Body)
@@ -164,8 +154,6 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		t.Fatalf("member conversation list = %#v, want just %q", memberList.Conversations, conversation.ID)
 	}
 
-	// The Space's owner isn't in it, so doesn't see it in their list, even though
-	// they can otherwise read the whole Space.
 	rec = performConversationRequest(t, router, http.MethodGet, listPath, ownerToken, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET conversations (owner) status = %d, body = %s", rec.Code, rec.Body)
@@ -180,14 +168,11 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		t.Fatalf("owner conversation list = %#v, want none", ownerList.Conversations)
 	}
 
-	// The owner is rejected outright if they try to read it directly by ID.
 	rec = performConversationRequest(t, router, http.MethodGet, messagesPath, ownerToken, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("GET messages (owner) status = %d, body = %s, want 403", rec.Code, rec.Body)
 	}
 
-	// A user outside the Space entirely is rejected too (space-level check
-	// fires before the conversation-membership check even runs).
 	rec = performConversationRequest(t, router, http.MethodGet, listPath, outsiderToken, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("GET conversations (outsider) status = %d, body = %s, want 403", rec.Code, rec.Body)
@@ -197,7 +182,6 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		t.Fatalf("GET messages (outsider) status = %d, body = %s, want 403", rec.Code, rec.Body)
 	}
 
-	// Nobody can change a DM, or reach into it by renaming it, the Space's owner included.
 	editBody := map[string]any{"title": "Hijacked"}
 	for _, token := range []string{ownerToken, memberToken} {
 		rec = performConversationRequest(t, router, http.MethodPatch, conversationPath, token, editBody)
@@ -206,14 +190,11 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		}
 	}
 
-	// Making a channel takes channels.manage, which members don't hold by default.
 	rec = performConversationRequest(t, router, http.MethodPost, listPath, memberToken, map[string]any{"title": "Launch crew"})
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("POST group chat (member) status = %d, body = %s, want 403", rec.Code, rec.Body)
 	}
 
-	// A group chat is public to the Space: everyone in it sees it without being
-	// named, and someone who joins later does too. Outsiders still don't.
 	rec = performConversationRequest(t, router, http.MethodPost, listPath, ownerToken, map[string]any{"title": "Launch crew"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("POST group chat status = %d, body = %s", rec.Code, rec.Body)
@@ -249,7 +230,6 @@ func TestConversationHTTPAccessControl(t *testing.T) {
 		t.Fatalf("someone who joined later sees %#v, %v, want just the group chat", joined, err)
 	}
 
-	// Only the Space's owner renames a group chat.
 	rec = performConversationRequest(t, router, http.MethodPatch, "/spaces/"+space.ID+"/conversations/"+group.ID, memberToken, editBody)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("PATCH group chat (member) status = %d, body = %s, want 403", rec.Code, rec.Body)

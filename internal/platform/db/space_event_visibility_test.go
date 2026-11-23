@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// The Space's own events reach every member, and a family with no rule reaches no one. Neither
-// answer reads the database, so no transaction is needed to ask.
 func TestSpaceEventFamiliesWithoutAnItemRule(t *testing.T) {
 	for eventType, want := range map[string]bool{
 		"space.updated":     true,
@@ -30,4 +28,3 @@ func TestSpaceEventFamiliesWithoutAnItemRule(t *testing.T) {
 		}
 	}
 }
-

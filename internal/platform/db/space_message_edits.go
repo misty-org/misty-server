@@ -69,7 +69,6 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 		if sender != userID {
 			return ErrSpaceForbidden
 		}
-		// Role mentions the message already had stay valid, even for a role since deleted.
 		var previousSpans []MessageSpan
 		_ = json.Unmarshal(previous, &previousSpans)
 		if err := validateRoleMentionsTx(ctx, tx, userID, spaceID, content, previousSpans); err != nil {

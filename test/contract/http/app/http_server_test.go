@@ -23,8 +23,6 @@ func TestNewHTTPServerBoundsHeadersAndIdleConnections(t *testing.T) {
 	if server.MaxHeaderBytes <= 0 || server.MaxHeaderBytes > 1<<20 {
 		t.Fatalf("MaxHeaderBytes = %d, want a small positive bound", server.MaxHeaderBytes)
 	}
-	// A server-wide WriteTimeout would also apply to WebSocket connections, so
-	// write deadlines are set per request instead.
 	if server.WriteTimeout != 0 {
 		t.Fatalf("WriteTimeout = %s, want 0 so WebSockets keep their own lifetime", server.WriteTimeout)
 	}
@@ -123,7 +121,6 @@ func TestRunHTTPServerDrainsInFlightRequestsAndStopsWorkers(t *testing.T) {
 	var workersStopped atomic.Bool
 	serveDone := make(chan error, 1)
 	go func() {
-		// Serve on the already-bound listener so the test has a stable address.
 		if serveErr := server.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
 			serveDone <- serveErr
 			return
@@ -153,7 +150,6 @@ func TestRunHTTPServerDrainsInFlightRequestsAndStopsWorkers(t *testing.T) {
 		shutdownDone <- shutdownErr
 	}()
 
-	// Shutdown must wait for the in-flight request rather than cutting it off.
 	if workersStopped.Load() {
 		t.Fatal("workers stopped before the in-flight request completed")
 	}

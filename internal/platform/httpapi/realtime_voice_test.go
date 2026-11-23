@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// inVoice puts a test client in a Space's voice channel, as setVoice does once the person may join.
 func inVoice(s *RealtimeService, client *RealtimeClient, spaceID, channelID, keyID string) {
 	s.Mu.Lock()
 	client.voiceSpaceID, client.voiceChannelID, client.voiceKeyID = spaceID, channelID, keyID
@@ -29,8 +28,6 @@ func received(t *testing.T, client *RealtimeClient) []map[string]any {
 	}
 }
 
-// A voice channel holds eight people, each counted once however many computers they joined from; a
-// ninth is refused, and someone already in it can always come back.
 func TestVoiceChannelHoldsEightPeople(t *testing.T) {
 	s := NewRealtimeService(nil, "")
 	room := voiceRoom("spc_1", "cnv_general")
@@ -38,9 +35,7 @@ func TestVoiceChannelHoldsEightPeople(t *testing.T) {
 		user := string(rune('a' + index))
 		inVoice(s, testRealtimeClient(s, user, 4), "spc_1", "cnv_general", "key_"+user)
 	}
-	// The first person on a second computer is still one person.
 	inVoice(s, testRealtimeClient(s, "a", 4), "spc_1", "cnv_general", "key_a2")
-	// Others in another channel or another Space don't count.
 	inVoice(s, testRealtimeClient(s, "z", 4), "spc_1", "cnv_other", "key_z")
 	inVoice(s, testRealtimeClient(s, "y", 4), "spc_2", "cnv_general", "key_y")
 
@@ -79,8 +74,6 @@ func TestVoiceRoomNamesParseOnlyWhole(t *testing.T) {
 	}
 }
 
-// A joiner's request for the channel's key reaches only the others in that channel, and only once the
-// joiner is in it; the sealed key goes back to the joiner's own computer alone, passed on unread.
 func TestVoiceKeysPassOnlyWithinTheChannel(t *testing.T) {
 	s := NewRealtimeService(nil, "")
 	joiner := testRealtimeClient(s, "joiner", 8)
@@ -92,7 +85,6 @@ func TestVoiceKeysPassOnlyWithinTheChannel(t *testing.T) {
 	inVoice(s, elsewhere, "spc_1", "cnv_other", "key_elsewhere")
 
 	request := voiceMessage{Type: "voice.key_request", SpaceID: "spc_1", ChannelID: "cnv_general", KeyID: "key_joiner", PublicKey: "pub"}
-	// Not in the channel yet: nobody hears it.
 	s.relayVoiceKeyRequest(joiner, request)
 	if got := received(t, there); len(got) != 0 {
 		t.Fatalf("a request from outside the channel was passed on: %v", got)
@@ -100,7 +92,6 @@ func TestVoiceKeysPassOnlyWithinTheChannel(t *testing.T) {
 
 	inVoice(s, joiner, "spc_1", "cnv_general", "key_joiner")
 	inVoice(s, joinerOther, "spc_1", "cnv_general", "key_joiner_other")
-	// A request under another key than the one it joined with is not its own.
 	s.relayVoiceKeyRequest(joiner, voiceMessage{Type: "voice.key_request", SpaceID: "spc_1", ChannelID: "cnv_general", KeyID: "key_stolen", PublicKey: "pub"})
 	if got := received(t, there); len(got) != 0 {
 		t.Fatalf("a request under another key was passed on: %v", got)
@@ -118,7 +109,6 @@ func TestVoiceKeysPassOnlyWithinTheChannel(t *testing.T) {
 	}
 	received(t, joinerOther)
 
-	// The sealed key: only from inside the channel, only to the joiner's computer with that key.
 	answer := voiceMessage{Type: "voice.key", SpaceID: "spc_1", ChannelID: "cnv_general", ToUserID: "joiner", ToKeyID: "key_joiner", Sealed: "sealed-bytes"}
 	s.relayVoiceKey(outside, answer)
 	if got := received(t, joiner); len(got) != 0 {
@@ -133,7 +123,6 @@ func TestVoiceKeysPassOnlyWithinTheChannel(t *testing.T) {
 		t.Fatalf("the joiner's other computer got a key sealed for another: %v", got)
 	}
 
-	// Too large to be a sealed key: dropped.
 	big := answer
 	big.Sealed = string(make([]byte, maxVoiceSealedBytes+1))
 	s.relayVoiceKey(there, big)
@@ -142,8 +131,6 @@ func TestVoiceKeysPassOnlyWithinTheChannel(t *testing.T) {
 	}
 }
 
-// Messages that aren't voice ones are left for the other handlers; voice ones with a bad Space id are
-// taken and dropped.
 func TestVoiceMessagesAreRecognisedAndChecked(t *testing.T) {
 	s := NewRealtimeService(nil, "")
 	client := testRealtimeClient(s, "a", 4)

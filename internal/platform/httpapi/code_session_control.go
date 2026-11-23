@@ -7,9 +7,6 @@ import (
 	"net/http"
 )
 
-// ProcessCodeSessionControlCommands delivers a bounded batch from the code session outbox to
-// the sessions' code rooms. Failed commands stay queued with backoff. A command the room
-// refuses for good (an ACL change reaching a room already purged) is settled, not retried.
 func (s *SpacesService) ProcessCodeSessionControlCommands(ctx context.Context, limit int) (int, error) {
 	commands, err := s.database.PendingCodeSessionControlCommands(ctx, limit)
 	if err != nil {

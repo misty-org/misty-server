@@ -28,8 +28,6 @@ func TestAccountEventIsolationAndOverflow(t *testing.T) {
 	}
 }
 
-// Opt-in test only runs against the disposable database created for this suite.
-// It exercises the actual migration function and transactional LISTEN/NOTIFY.
 func TestAccountEventsPostgresCommitRollbackAndReconnect(t *testing.T) {
 	if os.Getenv("MISTY_EVENTS_TEST") != "1" || os.Getenv("DB_NAME") != "misty_events_test" {
 		t.Skip("requires isolated misty_events_test PostgreSQL")
@@ -82,8 +80,6 @@ CREATE TABLE ai_intervention_waits(id text, user_id text);`)
 	if (<-a).Topic != "reset" || (<-b).Topic != "reset" {
 		t.Fatal("missing initial snapshot reset")
 	}
-	// A second API instance has a different listener, but receives the same
-	// committed database change without in-process publisher coupling.
 	second := &Database{}
 	defer second.Stop()
 	peer, stopPeer, err := second.SubscribeAccountEvents(ctx, "owner")

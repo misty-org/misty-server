@@ -27,8 +27,6 @@ type ConsoleDatabaseStats struct {
 	Tables      []ConsoleTableSize
 }
 
-// ConsoleDatabaseStats reports schema version, size and the largest tables.
-// Catalog views are not subject to RLS, so this needs no scope.
 func (db *Database) ConsoleDatabaseStats(ctx context.Context) (ConsoleDatabaseStats, error) {
 	var s ConsoleDatabaseStats
 	if err := db.Conn.QueryRowContext(ctx, `
@@ -60,7 +58,6 @@ func (db *Database) ConsoleDatabaseStats(ctx context.Context) (ConsoleDatabaseSt
 	return s, rows.Err()
 }
 
-// consoleMigrations lists the embedded migration files, newest first.
 func consoleMigrations(applied int64) ([]ConsoleMigration, error) {
 	entries, err := migrationFiles.ReadDir("migrations")
 	if err != nil {

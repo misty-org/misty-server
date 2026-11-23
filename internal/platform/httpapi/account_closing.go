@@ -9,10 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// AccountClosings is the account-deletion worker's part for closed accounts
-// (POST /operator/v1/accounts/{id}/close): it starts the purge once the date
-// comes. A server with Mailjet configured emails the notice and the warning;
-// without it, the billing service or the operator tells the person.
 type AccountClosings struct {
 	database *db.Database
 }
@@ -21,7 +17,6 @@ func NewAccountClosings(database *db.Database) *AccountClosings {
 	return &AccountClosings{database: database}
 }
 
-// Process starts due deletions, returning how many it started.
 func (c *AccountClosings) Process(ctx context.Context, limit int) (int, error) {
 	due, err := c.database.DueClosedAccounts(ctx, limit)
 	if err != nil {

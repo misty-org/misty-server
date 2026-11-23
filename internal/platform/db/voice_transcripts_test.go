@@ -19,7 +19,6 @@ func TestVoiceTranscriptsStayWithTheirOwnerAndKeepSpeakerNames(t *testing.T) {
 	if err := database.SaveVoiceTranscript(ctx, "owner", transcript); err != nil {
 		t.Fatal(err)
 	}
-	// Invalid transcripts are refused before they reach the database.
 	bad := transcript
 	bad.ID, bad.Source.Kind = uuid.NewString(), "camera"
 	if err := database.SaveVoiceTranscript(ctx, "owner", bad); !errors.Is(err, ErrSpaceInvalid) {
@@ -34,7 +33,6 @@ func TestVoiceTranscriptsStayWithTheirOwnerAndKeepSpeakerNames(t *testing.T) {
 	if err := database.UpdateVoiceTranscript(ctx, "owner", transcript.ID, map[string]string{"Speaker 1": "Ana"}, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	// Linking a Note leaves the speaker names alone.
 	if err := database.UpdateVoiceTranscript(ctx, "owner", transcript.ID, nil, "note-1", ""); err != nil {
 		t.Fatal(err)
 	}

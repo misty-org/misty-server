@@ -17,8 +17,6 @@ import (
 
 func testCollabConfig(t *testing.T) JournalCollabConfig {
 	t.Helper()
-	// The host contract must not depend on whichever development environment
-	// invoked the test process.
 	t.Setenv("PARTYKIT_HOST", "journal-collab-test.example")
 	t.Setenv("MISTY_COLLAB_PUBLIC_URL", "")
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
@@ -61,8 +59,6 @@ func decodeTicketClaims(t *testing.T, ticket string) JournalTicketClaims {
 	return claims
 }
 
-// The signature must verify against the public half, which is all Cloudflare
-// ever holds.
 func TestMintedTicketVerifiesWithThePublicKeyAlone(t *testing.T) {
 	config := testCollabConfig(t)
 
@@ -81,7 +77,6 @@ func TestMintedTicketVerifiesWithThePublicKeyAlone(t *testing.T) {
 		t.Fatal("minted ticket did not verify against its own public key")
 	}
 
-	// Header must pin EdDSA, matching what the Worker requires.
 	header, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
 		t.Fatal(err)
@@ -111,8 +106,6 @@ func TestTicketClaimsMatchTheWorkerContract(t *testing.T) {
 	if claims.ACLVersion != 7 {
 		t.Fatalf("acl_version = %d, want 7", claims.ACLVersion)
 	}
-	// The room in the claims must be the room in the URL, or the Worker's
-	// room-equality check rejects every connection.
 	if claims.Room != ticket.Room || !strings.HasSuffix(ticket.URL, "/"+ticket.Room) {
 		t.Fatalf("room mismatch: claim %q, ticket %q, url %q", claims.Room, ticket.Room, ticket.URL)
 	}
@@ -145,8 +138,6 @@ func TestCodeTicketUsesCodeRoomAndClaims(t *testing.T) {
 	}
 }
 
-// 60 seconds: long enough to open a socket, short enough that a
-// revoked user cannot sit on a usable ticket.
 func TestTicketExpiresInOneMinute(t *testing.T) {
 	config := testCollabConfig(t)
 
@@ -182,8 +173,6 @@ func TestExportTicketIsViewerOnlySingleUseAndShortLived(t *testing.T) {
 	}
 }
 
-// Every connection needs a distinct jti or the room's single-use check would
-// reject the second one.
 func TestEveryTicketGetsAFreshJTI(t *testing.T) {
 	config := testCollabConfig(t)
 	seen := map[string]bool{}
@@ -201,8 +190,6 @@ func TestEveryTicketGetsAFreshJTI(t *testing.T) {
 	}
 }
 
-// The room appears in a URL handled by a third-party edge network, so it must
-// not be the note id.
 func TestRoomIDIsOpaqueButStable(t *testing.T) {
 	config := testCollabConfig(t)
 
@@ -231,7 +218,6 @@ func TestJournalCollabConfigUsesTheOperatorsHost(t *testing.T) {
 
 func TestJournalCollabIsRequired(t *testing.T) {
 	testCollabConfig(t)
-	// Every server saves notes through the Worker.
 	t.Setenv("PARTYKIT_HOST", "")
 	if _, err := JournalCollabConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "PARTYKIT_HOST") {
 		t.Fatalf("no host = %v; want a startup error", err)
@@ -239,7 +225,6 @@ func TestJournalCollabIsRequired(t *testing.T) {
 	if _, err := (JournalCollabConfig{}).MintNoteTicket("user", "space", "note", "editor", 1); !errors.Is(err, ErrCollaborationUnconfigured) {
 		t.Fatalf("ticket from an unconfigured config = %v", err)
 	}
-	// A host without its keys still fails startup.
 	t.Setenv("PARTYKIT_HOST", "journal-collab-test.example")
 	t.Setenv("JOURNAL_COLLAB_ROOM_SALT", "")
 	if _, err := JournalCollabConfigFromEnv(); err == nil {
@@ -247,8 +232,6 @@ func TestJournalCollabIsRequired(t *testing.T) {
 	}
 }
 
-// Misty's own Space apps are gone: their kinds mint no tickets, and the registry's one kind still
-// reaches its own room.
 func TestItemTicketsFollowTheRegistry(t *testing.T) {
 	config := testCollabConfig(t)
 	note, ok := db.SpaceItemKindNamed("note")

@@ -14,9 +14,6 @@ func AllowedCORSOrigins() []string {
 		"http://tauri.localhost",
 		"https://tauri.localhost",
 	}
-	// Web origins (a hosted web app, for one) come only from the operator.
-	// Local development servers are credentialed origins only outside
-	// production; anything on the user's machine could otherwise serve them.
 	if !productionEnvironment() {
 		origins = append(origins, "http://localhost:5173", "http://127.0.0.1:5173")
 	}
@@ -29,11 +26,6 @@ func AllowedCORSOrigins() []string {
 	return origins
 }
 
-// allowedCORSRequestHeaders is every header the desktop client may send.
-//
-// A header missing here fails at the preflight with a 200 that carries no
-// Access-Control-Allow-Origin, which surfaces in the browser as an opaque
-// "load failed" rather than anything pointing at CORS.
 var allowedCORSRequestHeaders = []string{
 	"Accept",
 	"Authorization",
@@ -44,7 +36,6 @@ var allowedCORSRequestHeaders = []string{
 	"X-Misty-CSRF",
 	"X-Misty-Release-Channel",
 	"X-Misty-Library-Upload-Token",
-	// The Space drive: the version a change is made against, and the computer it comes from.
 	"If-Match",
 	"X-Misty-Device",
 	"X-Misty-Device-Name",

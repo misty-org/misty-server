@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-// apiService is where the tunnel sends the hostname's traffic: the API
-// container inside the Compose network.
 const apiService = "http://api:8080"
 
 type tunnel struct {
@@ -35,10 +33,6 @@ type zone struct {
 	} `json:"account"`
 }
 
-// resolveZone finds the zone that holds MISTY_HOSTNAME among the zones the
-// API token can see, and the account that owns it, and points the client at
-// that account. A CLOUDFLARE_ZONE_ID or CLOUDFLARE_ACCOUNT_ID the operator
-// still sets picks the zone or must match it.
 func resolveZone(ctx context.Context, cf *cloudflare, inputs *Inputs) (zone, error) {
 	var found zone
 	if inputs.ZoneID != "" {
@@ -47,8 +41,6 @@ func resolveZone(ctx context.Context, cf *cloudflare, inputs *Inputs) (zone, err
 		}
 		found.ID = inputs.ZoneID
 	} else {
-		// The longest zone name that holds the hostname: the hostname itself,
-		// then each parent down to a two-label name.
 		labels := strings.Split(inputs.Hostname, ".")
 		for start := 0; start+1 < len(labels) && found.ID == ""; start++ {
 			name := strings.Join(labels[start:], ".")
@@ -91,9 +83,6 @@ func resolveZone(ctx context.Context, cf *cloudflare, inputs *Inputs) (zone, err
 	return found, nil
 }
 
-// provisionTunnel finds or creates the named, remotely managed tunnel, routes
-// the hostname to the API (and any extra hostnames to their services) and
-// points DNS at it. It records the tunnel ID and the connector token.
 func provisionTunnel(ctx context.Context, cf *cloudflare, inputs Inputs, zone zone, names Names, store *Store) error {
 	for _, rule := range inputs.ExtraIngress {
 		if !inZone(rule.Host, zone.Name) {
@@ -131,7 +120,6 @@ func provisionTunnel(ctx context.Context, cf *cloudflare, inputs Inputs, zone zo
 		return errors.New("Cloudflare returned a tunnel without an ID")
 	}
 
-	// The API's hostname first, then any extra ones, then the catch-all.
 	ingress := []map[string]any{{"hostname": inputs.Hostname, "service": apiService}}
 	for _, rule := range inputs.ExtraIngress {
 		ingress = append(ingress, map[string]any{"hostname": rule.Host, "service": rule.Service})
@@ -161,9 +149,6 @@ func provisionTunnel(ctx context.Context, cf *cloudflare, inputs Inputs, zone zo
 	return nil
 }
 
-// ensureDNS keeps one proxied CNAME from a hostname to the tunnel. A record
-// that points anywhere else is the operator's; setup stops instead of
-// replacing it.
 func ensureDNS(ctx context.Context, cf *cloudflare, zoneID, hostname, tunnelID string) error {
 	target := tunnelID + ".cfargotunnel.com"
 	var records []dnsRecord

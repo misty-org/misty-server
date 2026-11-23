@@ -10,8 +10,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// The server sends no email: a setup key (a sign-in link from the operator
-// API or the console) resets a forgotten password.
 func TestSetupKeyResetsAPassword(t *testing.T) {
 	database := openIntegrationDatabase(t)
 
@@ -37,7 +35,6 @@ func TestSetupKeyResetsAPassword(t *testing.T) {
 		t.Fatal("a password account's redeem carries no password_reset_token")
 	}
 
-	// Without the reset token the old password is still needed.
 	refused := performJSONRequest(t, api.ChangePassword(database), http.MethodPut, "/me/password", map[string]any{
 		"current_password": "", "new_password": "new-password",
 	}, session)

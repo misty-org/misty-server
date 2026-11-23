@@ -10,8 +10,6 @@ import (
 	"github.com/misty-org/misty-server/test/testkit"
 )
 
-// A closing account is read-only: it keeps its sessions and reads, while every
-// write path refuses it, and resuming makes it writable again.
 func TestClosingAccountIsReadOnlyUntilResumed(t *testing.T) {
 	database := testkit.OpenDatabase(t)
 	ctx := context.Background()
@@ -27,12 +25,10 @@ func TestClosingAccountIsReadOnlyUntilResumed(t *testing.T) {
 	if err != nil || !held.Equal(want) {
 		t.Fatalf("close = %v %v", held, err)
 	}
-	// A retried close keeps the first date.
 	if again, err := database.CloseAccount(ctx, user.ID, want.Add(-20*24*time.Hour)); err != nil || !again.Equal(want) {
 		t.Fatalf("second close = %v %v", again, err)
 	}
 
-	// Not suspended: the session stays and sign-in keeps working.
 	if suspended, err := database.AccountSuspended(ctx, user.ID); err != nil || suspended {
 		t.Fatalf("suspended after close = %v %v", suspended, err)
 	}
@@ -46,12 +42,10 @@ func TestClosingAccountIsReadOnlyUntilResumed(t *testing.T) {
 	if closing, err := database.ClosingAccounts(ctx); err != nil || !closing[user.ID].Equal(want) {
 		t.Fatalf("closing list = %v %v", closing, err)
 	}
-	// Reads still work.
 	if _, err := database.AccountPortableExport(ctx, user.ID); err != nil {
 		t.Fatalf("export while closing: %v", err)
 	}
 
-	// Writes are refused, naming the date.
 	var closingErr AccountClosingError
 	if err := database.RequireAccountWritable(ctx, user.ID); !errors.As(err, &closingErr) || !closingErr.DeleteAt.Equal(want) || !errors.Is(err, ErrAccountClosing) {
 		t.Fatalf("writable while closing = %v", err)
@@ -67,8 +61,6 @@ func TestClosingAccountIsReadOnlyUntilResumed(t *testing.T) {
 	}
 }
 
-// Suspension stays separate: a suspended account that is also closing is in
-// both lists, and the guard refuses it outright.
 func TestSuspendedAndClosingAccountStaysSuspended(t *testing.T) {
 	database := testkit.OpenDatabase(t)
 	ctx := context.Background()

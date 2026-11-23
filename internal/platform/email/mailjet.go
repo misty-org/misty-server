@@ -1,7 +1,3 @@
-// Package email sends a server's email through Mailjet's v3.1 send API
-// (https://dev.mailjet.com/email/guides/send-api-v31/): one message per call,
-// over HTTPS with the API key and secret as basic auth. Mailjet is optional: a
-// server without it answers with links instead.
 package email
 
 import (
@@ -20,26 +16,20 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
 
-// DefaultBaseURL is Mailjet's API origin.
 const DefaultBaseURL = "https://api.mailjet.com"
 
-// Message is one email to one person.
 type Message struct {
-	To      string
-	Subject string
-	Text    string
-	HTML    string
-	// CustomID tags the message in Mailjet's logs: an outbox row's ID, never
-	// personal data.
+	To       string
+	Subject  string
+	Text     string
+	HTML     string
 	CustomID string
 }
 
-// Sender sends one message; tests use a fake.
 type Sender interface {
 	Send(ctx context.Context, m Message) error
 }
 
-// Client sends from one address.
 type Client struct {
 	APIKey, SecretKey   string
 	FromEmail, FromName string
@@ -47,10 +37,6 @@ type Client struct {
 	HTTP                *http.Client
 }
 
-// FromEnv reads MAILJET_API_KEY, MAILJET_SECRET_KEY, MAILJET_FROM_EMAIL,
-// MAILJET_FROM_NAME (default "Misty") and, for tests only,
-// MAILJET_API_BASE_URL. With none of the first three set it returns nil: this
-// server sends no email.
 func FromEnv() (*Client, error) {
 	key := strings.TrimSpace(config.Getenv("MAILJET_API_KEY"))
 	secret := strings.TrimSpace(config.Getenv("MAILJET_SECRET_KEY"))
@@ -79,8 +65,6 @@ func FromEnv() (*Client, error) {
 	return &Client{APIKey: key, SecretKey: secret, FromEmail: from, FromName: name, BaseURL: base, HTTP: &http.Client{Timeout: 15 * time.Second}}, nil
 }
 
-// Configured reports whether this server can send email. Nothing is queued
-// when it can't, so a key or link never waits in the database for no reason.
 func Configured() bool {
 	client, err := FromEnv()
 	return err == nil && client != nil
@@ -90,8 +74,6 @@ func loopback(host string) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
-// Error is Mailjet refusing a message. Message is Mailjet's own explanation,
-// shortened; it never carries the email's content.
 type Error struct {
 	Status  int
 	Code    string
@@ -135,8 +117,6 @@ type answer struct {
 	ErrorMessage    string `json:"ErrorMessage"`
 }
 
-// Send delivers m to Mailjet. Only a 2xx answer whose one message has status
-// "success" counts as sent.
 func (c *Client) Send(ctx context.Context, m Message) error {
 	if strings.TrimSpace(m.To) == "" || m.Subject == "" || m.Text == "" {
 		return errors.New("mailjet: a message needs a recipient, a subject and a text part")

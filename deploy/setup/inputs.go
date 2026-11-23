@@ -10,12 +10,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/serverenv"
 )
 
-// requiredInputs are the values the operator writes into the three files under
-// ~/.misty/.env/server/. Every one is required: Misty has no optional integrations. Setup
-// configures no mail provider, so a server it sets up sends no email.
-// Setup finds the Cloudflare zone from MISTY_HOSTNAME and the account from the
-// zone; CLOUDFLARE_ZONE_ID and CLOUDFLARE_ACCOUNT_ID, still read when set, pin
-// them.
 var requiredInputs = []struct{ File, Name string }{
 	{"misty.env", "MISTY_HOSTNAME"},
 	{"cloudflare.env", "CLOUDFLARE_API_TOKEN"},
@@ -23,25 +17,16 @@ var requiredInputs = []struct{ File, Name string }{
 	{"google.env", "GOOGLE_CLIENT_SECRET"},
 }
 
-// Inputs are the operator's values that setup itself uses.
 type Inputs struct {
-	Hostname string
-	Token    string
-	// AccountID and ZoneID are the operator's, when set; provisioning fills
-	// them in from Cloudflare otherwise.
-	AccountID string
-	ZoneID    string
-	// APIURL is the Cloudflare API base. Only tests point it elsewhere.
-	APIURL string
-	// Origins are extra web origins allowed to upload to the Library bucket.
-	Origins []string
-	// ExtraIngress are more hostnames the tunnel publishes, for services that
-	// run beside the server (MISTY_TUNNEL_EXTRA_INGRESS). Usually empty.
+	Hostname     string
+	Token        string
+	AccountID    string
+	ZoneID       string
+	APIURL       string
+	Origins      []string
 	ExtraIngress []IngressRule
 }
 
-// IngressRule routes one public hostname to a service inside the Compose
-// network.
 type IngressRule struct {
 	Host, Service string
 }
@@ -96,8 +81,6 @@ func readInputs(getenv func(string) string) (Inputs, error) {
 		return Inputs{}, err
 	}
 	inputs.ExtraIngress = extra
-	// With calls on, LiveKit's signalling is published beside the API through the same tunnel (TLS at
-	// Cloudflare); its media goes straight to the server over UDP.
 	if serverenv.CallsOn(getenv) {
 		host := serverenv.CallsHostname(inputs.Hostname)
 		taken := false
@@ -111,9 +94,6 @@ func readInputs(getenv func(string) string) (Inputs, error) {
 	return inputs, nil
 }
 
-// parseExtraIngress reads a comma-separated list of host=service entries, such
-// as billing.misty.example=http://billing:8091. Each host is a DNS name like
-// MISTY_HOSTNAME, and each service an http or https URL with a host and no path.
 func parseExtraIngress(value, hostname string) ([]IngressRule, error) {
 	var rules []IngressRule
 	seen := map[string]bool{hostname: true}
@@ -143,8 +123,6 @@ func parseExtraIngress(value, hostname string) ([]IngressRule, error) {
 	return rules, nil
 }
 
-// validHostname checks that host is a DNS name; name says which setting it
-// came from.
 func validHostname(name, host string) error {
 	if len(host) > 253 || !strings.Contains(host, ".") {
 		return fmt.Errorf("%s must be a DNS name such as cloud.misty.example, without scheme or path", name)
@@ -157,7 +135,6 @@ func validHostname(name, host string) error {
 	return nil
 }
 
-// Names are the Cloudflare resource names a hostname gets.
 type Names = serverenv.Names
 
 func resourceNames(hostname string) Names { return serverenv.ResourceNames(hostname) }

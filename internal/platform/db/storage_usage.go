@@ -5,22 +5,16 @@ import (
 	"database/sql"
 )
 
-// storageUsageState is what an account and a Space hold in cloud storage.
-// Storage is not limited; the counters are informational.
 type storageUsageState struct {
 	Personal StorageUsageDimension
 	Space    StorageUsageDimension
 }
 
-// lockAccountStorageTx serializes one account's storage writes.
 func lockAccountStorageTx(ctx context.Context, tx *sql.Tx, user string) error {
 	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "storage-personal:"+user)
 	return err
 }
 
-// accountStorageTx counts an account's retained payloads across all its
-// Spaces. Content stores use per-Space RLS contexts, so the inventory reads
-// as the service.
 func accountStorageTx(ctx context.Context, tx *sql.Tx, user string) (StorageUsageDimension, error) {
 	var previous sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT current_setting('app.rls_mode',true)`).Scan(&previous); err != nil {
@@ -31,8 +25,6 @@ func accountStorageTx(ctx context.Context, tx *sql.Tx, user string) (StorageUsag
 	}
 	defer tx.ExecContext(ctx, `SELECT set_config('app.rls_mode',$1,true)`, previous.String)
 	var objects, reserved, database int64
-	// A boosted Space (with at least the first level's Boosts from its members) keeps its
-	// files in its own storage, so they don't count against the people who added them.
 	err := tx.QueryRowContext(ctx, `WITH boosted AS (
  SELECT b.space_id FROM space_boosts b JOIN space_members m ON m.space_id=b.space_id AND m.user_id=b.user_id
  GROUP BY b.space_id HAVING sum(b.boosts)>=$2)
@@ -64,8 +56,6 @@ func storageUsageStateTx(ctx context.Context, tx *sql.Tx, userID, spaceID string
 	return storageUsageState{Personal: personal, Space: space}, nil
 }
 
-// prepareStorageReservationTx locks the account and makes sure the Space's
-// attribution row exists before an upload reserves bytes.
 func prepareStorageReservationTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) error {
 	if err := lockAccountStorageTx(ctx, tx, userID); err != nil {
 		return err

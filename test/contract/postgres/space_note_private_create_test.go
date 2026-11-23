@@ -8,8 +8,6 @@ import (
 	. "github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// A note created private (a person's Lab questions) is its creator's alone from its first moment:
-// no other member lists it, reads it or hears that it was made.
 func TestNoteCreatedPrivateNeverReachesAnotherMember(t *testing.T) {
 	f := newSpaceAgentFixture(t)
 	ctx := context.Background()

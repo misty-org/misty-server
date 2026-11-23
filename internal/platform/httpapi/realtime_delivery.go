@@ -11,8 +11,6 @@ import (
 
 var realtimeReset = []byte(`{"type":"replay","events":[],"resync_required":true}`)
 
-// Slow consumers reconnect and read durable state; the listener never waits for
-// their socket writes and never silently loses a revocation or reset.
 func (s *RealtimeService) deliver(client *RealtimeClient, payload []byte) {
 	select {
 	case <-client.Done:
@@ -70,16 +68,11 @@ func (s *RealtimeService) BroadcastEvent(eventID int64) {
 	for user := range targets {
 		users = append(users, user)
 	}
-	// One transaction loads the event and resolves current authorization for
-	// every connected candidate; the payload is serialized once. There is no
-	// cross-event permission cache, so revocation applies to the next event.
 	event, visible, err := s.database.SpaceEventForUsers(ctx, eventID, users)
 	if errors.Is(err, db.ErrSpaceNotFound) {
 		return
 	}
 	if err != nil {
-		// One failed check aborts the shared transaction; resolve recipients
-		// separately so a failure resets only the accounts it affects.
 		s.broadcastEventPerUser(ctx, eventID, targets)
 		return
 	}
@@ -123,7 +116,6 @@ func (s *RealtimeService) broadcastEventPerUser(ctx context.Context, eventID int
 	}
 }
 
-// ViewerSpaceCount reports how many Spaces currently have at least one viewer.
 func (s *RealtimeService) ViewerSpaceCount() int {
 	if s == nil {
 		return 0

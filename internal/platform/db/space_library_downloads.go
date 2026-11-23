@@ -18,7 +18,6 @@ func (db *Database) MessageAttachmentDownload(ctx context.Context, userID, space
 		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
 			return ErrLibraryForbidden
 		}
-		// A file posted in a channel the caller can't read is as hidden as the message.
 		return tx.QueryRowContext(ctx, `SELECT b.r2_object_key,a.display_name,b.server_detected_mime_type,b.byte_size,b.sha256
 			FROM space_message_attachments a
 			JOIN library_files f ON f.id=a.file_id JOIN library_blobs b ON b.id=f.blob_id

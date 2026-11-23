@@ -14,7 +14,6 @@ const (
 	bobAgentID = "agent-bob-on-his-computer"
 )
 
-// spaceAgentFixture is a shared Space, with one of Bob's agents listed in it.
 type spaceAgentFixture struct {
 	database   *Database
 	alice, bob *User
@@ -51,8 +50,6 @@ func addTestSpaceMember(t *testing.T, database *Database, spaceID, userID string
 	}
 }
 
-// A Space lists an agent by the id and name its owner's computer sent, with no
-// agent row on the server.
 func TestSpacesListAgentsByNameUnderTheirOwner(t *testing.T) {
 	f := newSpaceAgentFixture(t)
 	ctx := context.Background()
@@ -63,11 +60,9 @@ func TestSpacesListAgentsByNameUnderTheirOwner(t *testing.T) {
 	if got := agents[0]; got.AgentID != bobAgentID || got.AgentName != "Researcher" || got.OwnerUserID != f.bob.ID || got.OwnerName != f.bob.Username {
 		t.Fatalf("listed agent = %#v", got)
 	}
-	// The same id again renames it; it never becomes a second row.
 	if renamed, err := f.database.AddSpaceAgent(ctx, f.bob.ID, f.space.ID, bobAgentID, "Fact checker"); err != nil || renamed.AgentName != "Fact checker" {
 		t.Fatalf("renamed = %#v, %v", renamed, err)
 	}
-	// Ids are the computer's own: two people's agents may share one.
 	if _, err := f.database.AddSpaceAgent(ctx, f.alice.ID, f.space.ID, bobAgentID, "Planner"); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +90,6 @@ func TestSpacesListAgentsByNameUnderTheirOwner(t *testing.T) {
 	}
 }
 
-// Its owner or the Space's owner can take an agent out, and no one else.
 func TestOnlyAnAgentsOwnerOrTheSpacesOwnerRemovesIt(t *testing.T) {
 	f := newSpaceAgentFixture(t)
 	ctx := context.Background()
@@ -121,8 +115,6 @@ func TestOnlyAnAgentsOwnerOrTheSpacesOwnerRemovesIt(t *testing.T) {
 	}
 }
 
-// A mention names an agent listed in the Space. The server records it and does
-// nothing else: it starts on the sender's own computer.
 func TestMentionsNameAgentsListedInTheSpace(t *testing.T) {
 	f := newSpaceAgentFixture(t)
 	ctx := context.Background()
@@ -136,7 +128,6 @@ func TestMentionsNameAgentsListedInTheSpace(t *testing.T) {
 	if _, _, err := f.database.TestingCreateSpaceMessage(ctx, f.alice.ID, f.space.ID, mention("agent-nobody-listed"), nil); !errors.Is(err, ErrSpaceInvalid) {
 		t.Fatalf("mention of an unlisted agent = %v", err)
 	}
-	// A private agent can be mentioned by its owner and no one else.
 	if err := f.database.SetSpaceItemVisibility(ctx, f.bob.ID, f.space.ID, "agent", bobAgentID, VisibilityPrivate); err != nil {
 		t.Fatal(err)
 	}

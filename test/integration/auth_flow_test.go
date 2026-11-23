@@ -38,7 +38,6 @@ func TestAuthLifecycle(t *testing.T) {
 	if registerMeBody["username"] != "ada_lovelace" {
 		t.Fatalf("register /me username = %#v, want ada_lovelace", registerMeBody["username"])
 	}
-	// After the first account, only an invited email may register.
 	inviteToRegister(t, database, registerBody["user_id"].(string), "another-ada@example.com")
 	duplicateUsernameRec := performJSONRequest(t, api.Register(database), http.MethodPost, "/register", map[string]string{
 		"name":     "Another Ada",
@@ -101,7 +100,6 @@ func TestAuthLifecycle(t *testing.T) {
 	if replayRec.Code != http.StatusUnauthorized {
 		t.Fatalf("refresh after logout=%d", replayRec.Code)
 	}
-	// Stateless access credentials remain valid until their five-minute expiry.
 	meAfterLogout := performJSONRequest(t, api.GetMe(database), http.MethodGet, "/me", nil, sessionCookie)
 	if meAfterLogout.Code != http.StatusOK {
 		t.Fatalf("access token should remain valid until expiry: %d", meAfterLogout.Code)

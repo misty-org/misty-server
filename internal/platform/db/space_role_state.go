@@ -9,16 +9,11 @@ import (
 	"github.com/misty-org/misty-server/internal/spaces"
 )
 
-// lockSpaceRolesTx serializes changes to a Space's roles, their order, who
-// holds them and channel overwrites, so positions and access diffs stay sound.
 func lockSpaceRolesTx(ctx context.Context, tx *sql.Tx, spaceID string) error {
 	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "spaces:roles:"+spaceID)
 	return err
 }
 
-// ensureEveryoneRoleTx gives a Space its everyone role, with what members could
-// do before roles existed, unless it has one. New Spaces get it when they're
-// made; the migration gave every older Space one.
 func ensureEveryoneRoleTx(ctx context.Context, tx *sql.Tx, spaceID string) error {
 	if err := lockSpaceRolesTx(ctx, tx, spaceID); err != nil {
 		return err
@@ -29,8 +24,6 @@ func ensureEveryoneRoleTx(ctx context.Context, tx *sql.Tx, spaceID string) error
 	return err
 }
 
-// spaceRoleState is a whole Space's roles, who holds them and its channels'
-// overwrites, loaded at once to see who can read which channel.
 type spaceRoleState struct {
 	everyoneRoleID string
 	roles          map[string]spaces.Role
@@ -105,7 +98,6 @@ func (s *spaceRoleState) loadMembersTx(ctx context.Context, tx *sql.Tx, spaceID 
 	return rows.Err()
 }
 
-// base is a member's Space-wide permissions, as memberAccessTx computes them.
 func (s *spaceRoleState) base(userID string) spaces.PermissionSet {
 	member, ok := s.members[userID]
 	if !ok {
@@ -123,8 +115,6 @@ func (s *spaceRoleState) base(userID string) spaces.PermissionSet {
 	return spaces.BasePermissions(roles)
 }
 
-// channelReadersTx is, for every channel the whole Space is in, the members who
-// may read it.
 func channelReadersTx(ctx context.Context, tx *sql.Tx, spaceID string) (map[string]map[string]bool, error) {
 	state, err := loadSpaceRoleStateTx(ctx, tx, spaceID)
 	if err != nil {
@@ -147,10 +137,6 @@ func channelReadersTx(ctx context.Context, tx *sql.Tx, spaceID string) (map[stri
 	return out, nil
 }
 
-// announceChannelAccessTx compares who could read each channel before a change
-// with who can now. Each member who lost a channel gets conversation.removed;
-// a channel someone gained is announced again whole as conversation.updated,
-// unless the caller announces that one itself (announced).
 func announceChannelAccessTx(ctx context.Context, tx *sql.Tx, spaceID, actorID string, before map[string]map[string]bool, announced string) error {
 	after, err := channelReadersTx(ctx, tx, spaceID)
 	if err != nil {

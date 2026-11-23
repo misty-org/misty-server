@@ -12,8 +12,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// Nodes answers GET /spaces/{spaceID}/nodes: the Drive links shared into the
-// Space. Nothing creates or changes one any more; older messages still name them.
 func (s *SpacesService) Nodes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -29,7 +27,6 @@ func (s *SpacesService) Nodes() http.HandlerFunc {
 	}
 }
 
-// Node answers DELETE /spaces/{spaceID}/nodes/{nodeID}.
 func (s *SpacesService) Node() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

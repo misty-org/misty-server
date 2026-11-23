@@ -18,8 +18,6 @@ func (db *Database) CreateGoogleReauthenticationToken(ctx context.Context, userI
 	})
 }
 
-// The proof is single-use, bound to the authenticated account, and issued only
-// after fresh Google authentication. It cannot be used as a login password.
 func (db *Database) VerifyAccountReauthentication(ctx context.Context, userID, password, token string) (bool, error) {
 	user, err := db.GetUserByID(userID)
 	if err != nil || user == nil {

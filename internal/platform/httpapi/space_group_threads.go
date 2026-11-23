@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// ConversationMembers adds people to a group DM that has three or more already.
 func (s *SpacesService) ConversationMembers() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -29,7 +28,6 @@ func (s *SpacesService) ConversationMembers() http.HandlerFunc {
 	}
 }
 
-// LeaveConversation takes the caller out of a group DM.
 func (s *SpacesService) LeaveConversation() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -44,7 +42,6 @@ func (s *SpacesService) LeaveConversation() http.HandlerFunc {
 	}
 }
 
-// ConversationAgent lists the caller's agent in a DM (PUT) or takes it out (DELETE).
 func (s *SpacesService) ConversationAgent() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -74,7 +71,6 @@ func (s *SpacesService) ConversationAgent() http.HandlerFunc {
 	}
 }
 
-// ThreadReplies pages a thread's newest replies, in chronological order within the page.
 func (s *SpacesService) ThreadReplies() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -92,8 +88,6 @@ func (s *SpacesService) ThreadReplies() http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{"messages": messages, "has_older": hasOlder})
 			return
 		}
-		// Older clients page forward with `after`; keep that contract while the current client
-		// uses a newest-first `before` cursor.
 		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
 		messages, err := s.database.SpaceThreadRepliesAfter(r.Context(), userID, chi.URLParam(r, "spaceID"), chi.URLParam(r, "messageID"), after, limit)
 		if err != nil {
@@ -104,7 +98,6 @@ func (s *SpacesService) ThreadReplies() http.HandlerFunc {
 	}
 }
 
-// ThreadRead moves the caller's read position in a thread forward.
 func (s *SpacesService) ThreadRead() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -125,7 +118,6 @@ func (s *SpacesService) ThreadRead() http.HandlerFunc {
 	}
 }
 
-// Threads lists the threads the caller follows in a Space.
 func (s *SpacesService) Threads() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)

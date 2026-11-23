@@ -78,7 +78,7 @@ func TestSendTimesOut(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	defer close(release) // Before Close, which waits for the handler.
+	defer close(release)
 	c := &Client{APIKey: "k", SecretKey: "s", FromEmail: "hello@mistysys.com", BaseURL: server.URL, HTTP: &http.Client{Timeout: 50 * time.Millisecond}}
 	if err := c.Send(context.Background(), Message{To: "a@example.com", Subject: "Hi", Text: "plain"}); err == nil || !strings.Contains(err.Error(), "mailjet unreachable") {
 		t.Fatalf("timeout = %v", err)

@@ -9,7 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// messageFor turns an outbox row into its email, or reports that it can't.
 func messageFor(row db.OutgoingEmail) (Message, bool) {
 	m := Message{To: row.Recipient, CustomID: "misty-" + row.ID}
 	switch row.Kind {
@@ -39,7 +38,6 @@ func messageFor(row db.OutgoingEmail) (Message, bool) {
 	return m, true
 }
 
-// setupServer reads the server's address from a setup link's fragment.
 func setupServer(link string) string {
 	parsed, err := url.Parse(link)
 	if err != nil {
@@ -49,8 +47,6 @@ func setupServer(link string) string {
 	return fragment.Get("server")
 }
 
-// keyEmail is the setup email for a new account, or the sign-in email for one
-// that has signed in before: the link, and the server and key to type instead.
 func keyEmail(signIn bool, link, server, key string) (subject, text, htmlBody string) {
 	subject, opening, button := "Your Misty account is ready", "Your Misty account is ready.", "Set up Misty"
 	closing := "The key works once and expires in 7 days. After it signs you in, Misty asks you to choose a password."
@@ -72,9 +68,6 @@ func keyEmail(signIn bool, link, server, key string) (subject, text, htmlBody st
 	return subject, text, htmlBody
 }
 
-// closingEmail is the notice when a closed account becomes read-only, or the
-// warning 3 days before it is deleted. keepURL, when the operator named one, is
-// where the person can keep the account.
 func closingEmail(warning bool, deleteAt time.Time, keepURL string) (subject, text, htmlBody string) {
 	date := deleteAt.UTC().Format("January 2, 2006 at 15:04 UTC")
 	subject = "Your Misty account is read-only"
@@ -107,8 +100,6 @@ func closingEmail(warning bool, deleteAt time.Time, keepURL string) (subject, te
 	return subject, text, body.String()
 }
 
-// invitationEmail carries a Space invitation's link. The link opens Misty, and
-// many mail apps won't follow a misty:// address, so it is shown to copy.
 func invitationEmail(inviter, space, link string) (subject, text, htmlBody string) {
 	if inviter == "" {
 		inviter = "Someone"
@@ -125,7 +116,6 @@ func invitationEmail(inviter, space, link string) (subject, text, htmlBody strin
 	return subject, text, htmlBody
 }
 
-// confirmEmail carries the link that finishes a new account.
 func confirmEmail(link string) (subject, text, htmlBody string) {
 	subject = "Confirm your email for Misty"
 	opening := "Confirm your email to finish creating your Misty account."

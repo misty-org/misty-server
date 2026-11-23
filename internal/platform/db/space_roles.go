@@ -11,9 +11,6 @@ import (
 	"github.com/misty-org/misty-server/internal/spaces"
 )
 
-// SpaceRole is one of a Space's roles. The default one (is_default) is
-// everyone: every member holds it, it sits at position 0, and only its
-// permissions change.
 type SpaceRole struct {
 	ID          string    `json:"id"`
 	SpaceID     string    `json:"space_id"`
@@ -28,7 +25,6 @@ type SpaceRole struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// SpaceRoleInput is a role's editable fields; a nil one stays as it is.
 type SpaceRoleInput struct {
 	Name        *string   `json:"name"`
 	Color       *string   `json:"color"`
@@ -50,7 +46,6 @@ func scanSpaceRole(scanner interface{ Scan(...any) error }, role *SpaceRole) err
 	return nil
 }
 
-// spaceRolesTx lists a Space's roles, highest first.
 func spaceRolesTx(ctx context.Context, tx *sql.Tx, spaceID string) ([]SpaceRole, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT `+spaceRoleColumns+` FROM space_roles WHERE space_id=$1 ORDER BY position DESC`, spaceID)
 	if err != nil {
@@ -68,7 +63,6 @@ func spaceRolesTx(ctx context.Context, tx *sql.Tx, spaceID string) ([]SpaceRole,
 	return out, rows.Err()
 }
 
-// spaceRoleForUpdateTx loads one role of the Space and locks it.
 func spaceRoleForUpdateTx(ctx context.Context, tx *sql.Tx, spaceID, roleID string) (*SpaceRole, error) {
 	role := &SpaceRole{}
 	err := scanSpaceRole(tx.QueryRowContext(ctx, `SELECT `+spaceRoleColumns+` FROM space_roles
@@ -79,7 +73,6 @@ func spaceRoleForUpdateTx(ctx context.Context, tx *sql.Tx, spaceID, roleID strin
 	return role, err
 }
 
-// requireRolesManagerTx takes the roles lock and checks roles.manage.
 func requireRolesManagerTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) (*memberAccess, error) {
 	if err := lockSpaceRolesTx(ctx, tx, spaceID); err != nil {
 		return nil, err
@@ -94,7 +87,6 @@ func requireRolesManagerTx(ctx context.Context, tx *sql.Tx, spaceID, userID stri
 	return access, nil
 }
 
-// SpaceRoles lists a Space's roles, highest first, for any member.
 func (db *Database) SpaceRoles(ctx context.Context, userID, spaceID string) ([]SpaceRole, error) {
 	var out []SpaceRole
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -111,8 +103,6 @@ func (db *Database) SpaceRoles(ctx context.Context, userID, spaceID string) ([]S
 	return out, err
 }
 
-// CreateSpaceRole adds a role at the bottom, position 1, moving every other
-// role up one. It can carry only permissions its maker holds.
 func (db *Database) CreateSpaceRole(ctx context.Context, userID, spaceID string, input SpaceRoleInput) (*SpaceRole, error) {
 	if input.Name == nil {
 		return nil, ErrSpaceInvalid
@@ -170,8 +160,6 @@ func (db *Database) CreateSpaceRole(ctx context.Context, userID, spaceID string,
 	return role, nil
 }
 
-// UpdateSpaceRole changes a role below the caller's highest one. The everyone
-// role keeps its name, color and flags; only its permissions change.
 func (db *Database) UpdateSpaceRole(ctx context.Context, userID, spaceID, roleID string, input SpaceRoleInput) (*SpaceRole, error) {
 	role := &SpaceRole{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -213,8 +201,6 @@ func (db *Database) UpdateSpaceRole(ctx context.Context, userID, spaceID, roleID
 	return role, nil
 }
 
-// applySpaceRoleInput applies an edit to a loaded role. Giving the everyone
-// role its own name, color or flags again is no change, and allowed.
 func applySpaceRoleInput(role *SpaceRole, input SpaceRoleInput) error {
 	if input.Name != nil {
 		name, ok := spaces.NormalizeRoleName(*input.Name)
@@ -255,8 +241,6 @@ func applySpaceRoleInput(role *SpaceRole, input SpaceRoleInput) error {
 	return nil
 }
 
-// DeleteSpaceRole deletes a role below the caller's highest one; the roles
-// above it move down one. The everyone role can't be deleted.
 func (db *Database) DeleteSpaceRole(ctx context.Context, userID, spaceID, roleID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		access, err := requireRolesManagerTx(ctx, tx, spaceID, userID)
@@ -291,11 +275,6 @@ func (db *Database) DeleteSpaceRole(ctx context.Context, userID, spaceID, roleID
 	})
 }
 
-// validateRoleMentionsTx checks a message's @role mentions: each names a role of
-// this Space other than everyone, and one that isn't mentionable only the owner
-// or an administrator may mention (ErrSpaceForbidden). Roles the message already
-// mentioned (kept) pass as they are, so editing it never fails over a role
-// since deleted or made unmentionable.
 func validateRoleMentionsTx(ctx context.Context, tx *sql.Tx, userID, spaceID string, content, kept []MessageSpan) error {
 	already := map[string]bool{}
 	for _, span := range kept {

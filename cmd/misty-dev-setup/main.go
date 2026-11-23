@@ -1,12 +1,3 @@
-// Command misty-dev-setup prepares the development stack (compose.dev.yml):
-// it applies the migrations, keeps the API's restricted database role in
-// step, and hands the collaboration server its secrets. `misty server up`
-// runs it as the setup service; `misty server deploy` runs its deploy step.
-// A server stack (compose.yml) uses deploy/setup instead.
-//
-//	misty-setup [startup]       migrations, the application role, Worker secrets
-//	misty-setup deploy          deploy the development collaboration Worker
-//	misty-setup grant-app-role  only the application role (the CLI's isolated tests)
 package main
 
 import (
@@ -60,8 +51,6 @@ func startup(ctx context.Context) error {
 	return nil
 }
 
-// migrate runs goose with the GOOSE_DRIVER, GOOSE_DBSTRING and
-// GOOSE_MIGRATION_DIR that compose.dev.yml sets.
 func migrate(ctx context.Context) error {
 	goose := exec.CommandContext(ctx, "goose", "up")
 	goose.Stdout, goose.Stderr = os.Stdout, os.Stderr

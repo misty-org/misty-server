@@ -1,7 +1,3 @@
-// Package fakecloudflare is a stand-in for the parts of the Cloudflare API the
-// setup container uses (tunnels, DNS, R2 buckets and tokens, Workers), plus a
-// minimal S3 endpoint for backups. Tests and the stack test run against it so
-// nothing ever calls the real API.
 package fakecloudflare
 
 import (
@@ -12,7 +8,6 @@ import (
 	"sync"
 )
 
-// Script is one uploaded Worker.
 type Script struct {
 	Metadata     map[string]any
 	Modules      map[string][]byte
@@ -21,19 +16,16 @@ type Script struct {
 	Uploads      int
 }
 
-// Bucket is one R2 bucket and its rules.
 type Bucket struct {
 	CORS, Lock, Lifecycle any
 	Objects               map[string][]byte
 }
 
-// Token is an account API token.
 type Token struct {
 	ID, Name, Value string
 	Policies        any
 }
 
-// Fake holds the fake account's state. Lock Mu to read it while serving.
 type Fake struct {
 	Mu        sync.Mutex
 	APIToken  string
@@ -42,15 +34,14 @@ type Fake struct {
 	ZoneName  string
 	Subdomain string
 
-	Tunnels  map[string]map[string]any // id -> tunnel
-	Configs  map[string]any            // tunnel id -> configuration
-	DNS      map[string]map[string]any // id -> record
+	Tunnels  map[string]map[string]any
+	Configs  map[string]any
+	DNS      map[string]map[string]any
 	Buckets  map[string]*Bucket
 	Tokens   map[string]*Token
 	Scripts  map[string]*Script
 	Requests []string
-	// Fail makes every API call answer 503, as during an outage.
-	Fail bool
+	Fail     bool
 
 	next int
 }
@@ -68,7 +59,6 @@ func (f *Fake) id() string {
 	return fmt.Sprintf("%032x", f.next)
 }
 
-// Count returns how many requests matched "METHOD path-prefix".
 func (f *Fake) Count(prefix string) int {
 	f.Mu.Lock()
 	defer f.Mu.Unlock()
@@ -128,7 +118,6 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	switch {
 	case len(parts) == 1 && parts[0] == "zones" && r.Method == "GET":
-		// The token sees one zone; list it when the filters match.
 		zones := []map[string]any{}
 		query := r.URL.Query()
 		if (query.Get("name") == "" || query.Get("name") == f.ZoneName) && (query.Get("account.id") == "" || query.Get("account.id") == f.AccountID) {
@@ -163,7 +152,6 @@ func (f *Fake) serveZone(w http.ResponseWriter, r *http.Request, parts []string)
 	case len(parts) == 1 && parts[0] == "dns_records" && r.Method == "POST":
 		record := decode(r)
 		if name, _ := record["name"].(string); !f.inZone(name) {
-			// Cloudflare refuses a record outside the zone.
 			reply(w, http.StatusBadRequest, nil)
 			return
 		}

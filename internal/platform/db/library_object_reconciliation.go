@@ -7,9 +7,6 @@ import (
 	"github.com/lib/pq"
 )
 
-// LibraryObjectExpectation is the immutable metadata PostgreSQL expects for an
-// R2 object. Source distinguishes permanent blobs from uploads that may still
-// be finalized by a retrying client.
 type LibraryObjectExpectation struct {
 	ObjectKey string
 	ByteSize  int64
@@ -17,9 +14,6 @@ type LibraryObjectExpectation struct {
 	Source    string
 }
 
-// LibraryObjectExpectations resolves a bounded inventory page in one query.
-// Terminal failed/expired uploads are deliberately excluded so their old
-// objects become eligible for orphan cleanup after the safety window.
 func (db *Database) LibraryObjectExpectations(
 	ctx context.Context, objectKeys []string,
 ) (map[string]LibraryObjectExpectation, error) {
@@ -53,8 +47,6 @@ func (db *Database) LibraryObjectExpectations(
 			); err != nil {
 				return err
 			}
-			// A ready blob is authoritative when the upload row that created it
-			// is also present.
 			if existing, ok := out[item.ObjectKey]; !ok || item.Source == "blob" ||
 				existing.Source != "blob" {
 				out[item.ObjectKey] = item
@@ -65,9 +57,6 @@ func (db *Database) LibraryObjectExpectations(
 	return out, err
 }
 
-// LibraryReadyBlobExpectations returns permanent objects that should exist.
-// Reconciliation HEADs this bounded set to surface missing data without
-// automatically destroying database references that may still be recoverable.
 func (db *Database) LibraryReadyBlobExpectations(
 	ctx context.Context, limit int,
 ) ([]LibraryObjectExpectation, error) {
@@ -98,10 +87,6 @@ func (db *Database) LibraryReadyBlobExpectations(
 	return out, err
 }
 
-// LibraryInterruptedFinalizations returns uploaded objects whose database
-// transaction has not completed yet. These remain client-retryable until their
-// reservation expires; the reconciler reports them instead of guessing the
-// parent record or bypassing validation.
 func (db *Database) LibraryInterruptedFinalizations(
 	ctx context.Context, limit int,
 ) ([]LibraryObjectExpectation, error) {

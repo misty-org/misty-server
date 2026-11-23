@@ -9,8 +9,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// AccountStatus is how one person shows to others: online, idle, dnd or offline, and their custom
-// line. Invisible shows as offline, with no custom line.
 type AccountStatus struct {
 	UserID      string `json:"user_id"`
 	Status      string `json:"status"`
@@ -18,8 +16,6 @@ type AccountStatus struct {
 	CustomEmoji string `json:"custom_emoji,omitempty"`
 }
 
-// setIdle records whether this computer has gone idle, and tells others if the account's status
-// changed with it.
 func (s *RealtimeService) setIdle(client *RealtimeClient, idle bool) {
 	s.Mu.Lock()
 	changed := client.idle != idle
@@ -30,8 +26,6 @@ func (s *RealtimeService) setIdle(client *RealtimeClient, idle bool) {
 	}
 }
 
-// connectionStatusLocked is what the account's connections say: offline with none, idle when every
-// one is idle, otherwise online. Callers hold s.Mu (read is enough).
 func (s *RealtimeService) connectionStatusLocked(userID string) string {
 	clients := s.clientsByUser[userID]
 	if len(clients) == 0 {
@@ -58,7 +52,6 @@ func shownStatus(userID, connection string, chosen db.ChosenStatus) AccountStatu
 	return out
 }
 
-// Statuses returns how each of these people shows right now.
 func (s *RealtimeService) Statuses(ctx context.Context, userIDs []string) ([]AccountStatus, error) {
 	chosen, err := s.database.ChosenStatuses(ctx, userIDs)
 	if err != nil {
@@ -73,10 +66,7 @@ func (s *RealtimeService) Statuses(ctx context.Context, userIDs []string) ([]Acc
 	return out, nil
 }
 
-// PublishStatus sends the account's status to its audience (friends and people it shares a Space
-// with), when it changed since it was last sent.
 func (s *RealtimeService) PublishStatus(userID string) {
-	// A realtime service made without a database (some tests) has no statuses to publish.
 	if s.database == nil {
 		return
 	}
@@ -89,7 +79,6 @@ func (s *RealtimeService) PublishStatus(userID string) {
 	}
 	s.Mu.Lock()
 	status := shownStatus(userID, s.connectionStatusLocked(userID), chosen[userID])
-	// Offline is no entry at all, so the map holds only accounts that are on.
 	key := ""
 	if status.Status != "offline" {
 		key = status.Status + "\x00" + status.CustomText + "\x00" + status.CustomEmoji
@@ -113,11 +102,9 @@ func (s *RealtimeService) PublishStatus(userID string) {
 	if err != nil {
 		return
 	}
-	// The person's own computers read their status on load; only others are told.
 	s.SendToUsers(audience, payload)
 }
 
-// SendToUsers delivers one message to every connection of these accounts.
 func (s *RealtimeService) SendToUsers(userIDs []string, payload []byte) {
 	targets := []*RealtimeClient{}
 	s.Mu.RLock()

@@ -2,9 +2,6 @@ package api
 
 import "testing"
 
-// Presence names a place, and an item only where that place has one: a notebook's id in the Lab,
-// an app's id, or one of the Studio's rooms by its fixed name. Anything else is dropped, so it never carries
-// free text.
 func TestCleanPresencePlaceKeepsOnlyKnownItems(t *testing.T) {
 	cases := []struct{ place, item, wantPlace, wantItem string }{
 		{"lab", "note_0123-abc", "lab", "note_0123-abc"},

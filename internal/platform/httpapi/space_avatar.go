@@ -11,8 +11,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// SpaceAvatar serves a Space's picture to its members, and lets its owner upload a new one (PUT,
-// a PNG of at most 5 MB) or remove it (DELETE), after which the app draws the Space's initials.
 func (s *SpacesService) SpaceAvatar() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -33,7 +31,6 @@ func (s *SpacesService) SpaceAvatar() http.HandlerFunc {
 			}
 			serveAvatarObject(w, r, s.avatarStore, db.SpaceAvatarObjectKey(spaceID), version)
 		case http.MethodPut:
-			// Only who may manage the Space changes it; checked before anything is read or stored.
 			if err := s.database.RequireSpacePermission(r.Context(), userID, spaceID, db.PermissionSpaceRename); err != nil {
 				writeSpaceError(w, err)
 				return
@@ -68,8 +65,6 @@ func (s *SpacesService) SpaceAvatar() http.HandlerFunc {
 				writeSpaceError(w, err)
 				return
 			}
-			// A removed picture doesn't stay in storage. Members already see none; a failed delete
-			// leaves only the bytes, which the Space's purge removes with the rest.
 			if s.avatarStore != nil {
 				_ = s.avatarStore.Delete(r.Context(), db.SpaceAvatarObjectKey(spaceID))
 			}

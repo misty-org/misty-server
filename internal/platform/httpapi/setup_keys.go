@@ -13,15 +13,10 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// A setup key is "misty_setup_" and 32 base32 characters (160 random bits).
-// The operator account API and the console issue one as a sign-in link; it
-// signs that account in once, within db.SetupKeyTTL. There is no reset by
-// email, so a setup key is also how a forgotten password is reset.
 const setupKeyPrefix = "misty_setup_"
 
 var setupKeyEncoding = base32.NewEncoding("abcdefghijklmnopqrstuvwxyz234567").WithPadding(base32.NoPadding)
 
-// GenerateSetupKey returns a new key; only its hash (security.HashToken) is stored.
 func GenerateSetupKey() (string, error) {
 	var random [20]byte
 	if _, err := rand.Read(random[:]); err != nil {
@@ -30,8 +25,6 @@ func GenerateSetupKey() (string, error) {
 	return setupKeyPrefix + setupKeyEncoding.EncodeToString(random[:]), nil
 }
 
-// NormalizeSetupKey trims a pasted key and accepts either case. ok is false
-// when it cannot be a setup key.
 func NormalizeSetupKey(raw string) (string, bool) {
 	key := strings.ToLower(strings.TrimSpace(raw))
 	body, found := strings.CutPrefix(key, setupKeyPrefix)
@@ -44,12 +37,6 @@ func NormalizeSetupKey(raw string) (string, bool) {
 	return key, true
 }
 
-// RedeemSetupKey signs the key's account in exactly as POST /login does (the
-// same response body, cookies and session) and marks the key used. Failures
-// count toward the same lockout as sign-in, per client address. A password
-// account's answer also carries password_reset_token, which lets PUT
-// /me/password set a new password without the old one within
-// db.PasswordResetTTL.
 func RedeemSetupKey(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

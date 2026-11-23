@@ -239,8 +239,6 @@ func TestGoogleSignInRoundTrip(t *testing.T) {
 				if !found || normalizeGoogleCompletionCode(code) == "" || !strings.Contains(page, `http-equiv="refresh"`) {
 					t.Fatalf("completion page has no deep link: %s", page)
 				}
-				// Holding only the polling secret, as whoever sent the link
-				// would, must not redeem the session.
 				if pending := poll(flow.Token); pending.Code != 202 || !strings.Contains(pending.Body.String(), "confirm") || sessions != 0 {
 					t.Fatalf("session redeemed without the browser's code: %d", pending.Code)
 				}
@@ -306,7 +304,6 @@ func TestGoogleSignInCanEndOnTheWebsite(t *testing.T) {
 	if finished.Code != http.StatusSeeOther || !onSite || normalizeGoogleCompletionCode(code) == "" {
 		t.Fatalf("callback=%d to %q", finished.Code, destination)
 	}
-	// The address the code travels in must not reach the server hosting the website.
 	if strings.Contains(strings.Split(destination, "#")[0], code) {
 		t.Fatal("completion code outside the fragment")
 	}

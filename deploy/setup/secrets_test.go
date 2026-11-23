@@ -21,7 +21,6 @@ func stringify(value any) string {
 	return string(data)
 }
 
-// freshStore is a new stack's secrets volume after setup's first run.
 func freshStore(t *testing.T) (*Store, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -38,8 +37,6 @@ func freshStore(t *testing.T) (*Store, string) {
 	return store, dir
 }
 
-// legacyStore is a secrets volume written before the root secret: every key
-// stored on its own, as setup used to generate them.
 func legacyStore(t *testing.T) (*Store, string, map[string]string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -123,7 +120,6 @@ func TestServerEnvGivesTheAPIItsKeysAndNothingMore(t *testing.T) {
 			t.Fatalf("%s is not in %s", name, file)
 		}
 	}
-	// What the API works out from server.env is what setup derives.
 	values, err := godotenv.Read(filepath.Join(dir, "server.env"))
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +143,6 @@ func TestServerEnvGivesTheAPIItsKeysAndNothingMore(t *testing.T) {
 	if defaults["MISTY_PUBLIC_API_URL"] != "https://cloud.misty.example/v1" || defaults["R2_BUCKET"] != "misty-cloud-misty-example-library" {
 		t.Fatalf("hostname values %v", defaults)
 	}
-	// The shell entrypoints source server.env.
 	if _, err := exec.LookPath("sh"); err == nil {
 		out, err := exec.Command("sh", "-c", `set -a; . "$1"; printf %s "$MISTY_API_SECRET"`, "sh", filepath.Join(dir, "server.env")).Output()
 		if err != nil || string(out) != store.Get(serverenv.APISecretName) {
@@ -186,7 +181,6 @@ func TestAVolumeFromBeforeTheRootKeepsItsKeys(t *testing.T) {
 			t.Fatalf("server.env still stores %s", name)
 		}
 	}
-	// The API reads the stored keys, which win over what it would derive.
 	values, _ := godotenv.Read(filepath.Join(dir, "server.env"))
 	defaults, _ := serverenv.Defaults(func(name string) string { return values[name] })
 	for _, spec := range secretSpecs {
@@ -194,7 +188,6 @@ func TestAVolumeFromBeforeTheRootKeepsItsKeys(t *testing.T) {
 			t.Fatalf("the API would not use the stored %s", spec.Name)
 		}
 	}
-	// A lost data-bound key is refused, as before the root.
 	store.Set("SPACE_LINK_ENCRYPTION_KEY", "")
 	if err := guardData(store, true); !errors.Is(err, errSecretsLost) || !strings.Contains(err.Error(), "SPACE_LINK_ENCRYPTION_KEY") {
 		t.Fatalf("expected a refusal naming the key, got %v", err)
@@ -217,7 +210,6 @@ func TestAdoptRootMovesKeysAndKeepsSessions(t *testing.T) {
 			t.Fatalf("%s changed without --discard-data", name)
 		}
 	}
-	// Old sessions and tickets stay valid through the previous slots.
 	if store.Get("MISTY_AUTH_SIGNING_KEY") == legacy["MISTY_AUTH_SIGNING_KEY"] || store.Get("MISTY_AUTH_SIGNING_KEY_PREVIOUS") != legacy["MISTY_AUTH_SIGNING_KEY"] {
 		t.Fatal("the old signing key must stay valid")
 	}
@@ -316,7 +308,6 @@ func TestRotation(t *testing.T) {
 	if err := retire(store, "MISTY_AUTH_SIGNING_KEY"); err != nil || store.Has("MISTY_AUTH_SIGNING_KEY_PREVIOUS") {
 		t.Fatal("retire did not clear the previous slot")
 	}
-	// Only the versions changed: the root is still the one stored value.
 	if names := sortedKeys(store.Values); len(names) != 1 {
 		t.Fatalf("stored %v", names)
 	}
@@ -355,7 +346,7 @@ func TestWranglerConfigsParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if collab.Config.CompatibilityDate == "" || len(collab.Config.DurableObjects.Bindings) != 3 || len(collab.Config.Migrations) != 7 || collab.Config.Vars["JOURNAL_COLLAB_ISSUER"] != "misty-api" {
+	if collab.Config.CompatibilityDate == "" || len(collab.Config.DurableObjects.Bindings) != 4 || len(collab.Config.Migrations) != 8 || collab.Config.Vars["JOURNAL_COLLAB_ISSUER"] != "misty-api" {
 		t.Fatalf("collab config %+v", collab.Config)
 	}
 	if len(collab.Modules) != 1 {

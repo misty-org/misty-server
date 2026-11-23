@@ -20,9 +20,6 @@ const googleSignInTTL = 10 * time.Minute
 
 const googleSignInCookie = "misty_google_sign_in"
 
-// Marks the state cookie of a sign-in begun on the website, so it ends there with its
-// completion code instead of on the app's page. The code is no use without the polling
-// token, which only the tab that began the sign-in holds.
 const googleSignInWebsiteMark = ".website"
 
 type googleSignInStore interface {
@@ -222,7 +219,6 @@ func (s *GoogleSignInService) Callback() http.HandlerFunc {
 				completionHash = security.HashToken(completion)
 			}
 		}
-		// Persist a terminal result even if the browser disconnects while exchanging.
 		finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 		defer finishCancel()
 		if err = s.store.FinishGoogleSignInFlow(finishCtx, flow.StateHash, userID, errorCode, completionHash); err != nil {

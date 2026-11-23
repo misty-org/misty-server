@@ -12,12 +12,9 @@ import (
 	"time"
 )
 
-// cloudflare is a minimal client for the Cloudflare v4 API. Errors name the
-// request and Cloudflare's error codes, never the token or response bodies.
 type cloudflare struct {
-	base  string
-	token string
-	// account is set once resolveZone has found it.
+	base    string
+	token   string
 	account string
 	http    *http.Client
 }
@@ -41,7 +38,6 @@ func newCloudflare(inputs Inputs) *cloudflare {
 	return &cloudflare{base: inputs.APIURL, token: inputs.Token, account: inputs.AccountID, http: &http.Client{Timeout: 60 * time.Second}}
 }
 
-// call sends a JSON request (or nil) and decodes the envelope's result into out.
 func (c *cloudflare) call(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader
 	contentType := ""
@@ -95,8 +91,6 @@ func (c *cloudflare) send(ctx context.Context, method, path string, body io.Read
 	return nil
 }
 
-// redactPath drops the query, which can carry names but never credentials,
-// to keep messages short.
 func redactPath(path string) string {
 	if index := strings.IndexByte(path, '?'); index >= 0 {
 		return path[:index]

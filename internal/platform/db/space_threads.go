@@ -9,8 +9,6 @@ import (
 	"github.com/lib/pq"
 )
 
-// SpaceThread is a thread the caller follows: its root message, how many replies it has, and how many
-// of them the caller hasn't read.
 type SpaceThread struct {
 	Root        SpaceMessage `json:"root"`
 	ReplyCount  int          `json:"reply_count"`
@@ -18,8 +16,6 @@ type SpaceThread struct {
 	UnreadCount int          `json:"unread_count"`
 }
 
-// followThreadTx makes the replier, and the root's author, follow a thread. The replier has read up to
-// their own reply; the author starts from the root, so replies they haven't seen are unread.
 func followThreadTx(ctx context.Context, tx *sql.Tx, userID, rootID string, seq int64) error {
 	if _, err := tx.ExecContext(ctx, `INSERT INTO space_thread_reads(user_id,thread_root_id,read_message_seq) VALUES($1,$2,$3)
 		ON CONFLICT(user_id,thread_root_id) DO UPDATE
@@ -33,8 +29,6 @@ func followThreadTx(ctx context.Context, tx *sql.Tx, userID, rootID string, seq 
 	return err
 }
 
-// threadAccessTx lets the caller into a message's conversation: the Space's Everyone chat takes
-// messages.read, anything else its own membership and overwrites.
 func threadAccessTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID string) error {
 	if conversationID == "" {
 		return requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead)
@@ -42,7 +36,6 @@ func threadAccessTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversati
 	return requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID)
 }
 
-// threadRootTx finds a thread's root and the conversation it is in.
 func threadRootTx(ctx context.Context, tx *sql.Tx, spaceID, rootID string) (conversationID string, seq int64, err error) {
 	err = tx.QueryRowContext(ctx, `SELECT COALESCE(conversation_id,''),seq FROM space_messages WHERE id=$1 AND space_id=$2 AND thread_root_id IS NULL`, rootID, spaceID).Scan(&conversationID, &seq)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -51,8 +44,6 @@ func threadRootTx(ctx context.Context, tx *sql.Tx, spaceID, rootID string) (conv
 	return conversationID, seq, err
 }
 
-// loadThreadSummariesTx fills each root's reply count and last reply, so "N replies" doesn't depend on
-// how much of the channel is loaded.
 func loadThreadSummariesTx(ctx context.Context, tx *sql.Tx, items []SpaceMessage) error {
 	if len(items) == 0 {
 		return nil
@@ -91,8 +82,6 @@ func loadThreadSummariesTx(ctx context.Context, tx *sql.Tx, items []SpaceMessage
 	return nil
 }
 
-// SpaceThreadReplies returns the newest replies before a sequence, in chronological order.
-// A zero cursor starts at the newest reply.
 func (db *Database) SpaceThreadReplies(ctx context.Context, userID, spaceID, rootID string, before int64, limit int) ([]SpaceMessage, bool, error) {
 	if limit < 1 || limit > 200 {
 		limit = 50
@@ -156,7 +145,6 @@ func (db *Database) SpaceThreadReplies(ctx context.Context, userID, spaceID, roo
 	return items, hasOlder, err
 }
 
-// SpaceThreadRepliesAfter preserves the former forward-paging contract for older clients.
 func (db *Database) SpaceThreadRepliesAfter(ctx context.Context, userID, spaceID, rootID string, after int64, limit int) ([]SpaceMessage, error) {
 	if limit < 1 || limit > 200 {
 		limit = 100
@@ -201,7 +189,6 @@ func (db *Database) SpaceThreadRepliesAfter(ctx context.Context, userID, spaceID
 	return items, err
 }
 
-// MarkSpaceThreadRead moves the caller's read position in a thread forward, and follows it if they didn't.
 func (db *Database) MarkSpaceThreadRead(ctx context.Context, userID, spaceID, rootID string, seq int64) error {
 	if seq < 0 {
 		return ErrSpaceInvalid
@@ -228,8 +215,6 @@ func (db *Database) MarkSpaceThreadRead(ctx context.Context, userID, spaceID, ro
 	})
 }
 
-// SpaceThreads lists the threads the caller follows in a Space, the most recently replied to first, each
-// with its unread count. A thread in a conversation the caller can no longer read is left out.
 func (db *Database) SpaceThreads(ctx context.Context, userID, spaceID string, limit int) ([]SpaceThread, error) {
 	if limit < 1 || limit > 100 {
 		limit = 50

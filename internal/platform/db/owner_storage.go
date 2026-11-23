@@ -5,14 +5,11 @@ import (
 	"database/sql"
 )
 
-// StorageUsageDimension is what an account or a Space holds in cloud storage.
 type StorageUsageDimension struct {
 	UsedBytes     int64 `json:"used_bytes"`
 	ReservedBytes int64 `json:"reserved_bytes"`
 }
 
-// OwnerStorageUsage describes the authenticated user's personal contribution
-// across owned and joined Spaces.
 type OwnerStorageUsage struct {
 	OwnerUserID   string                   `json:"owner_user_id,omitempty"`
 	UserID        string                   `json:"user_id,omitempty"`

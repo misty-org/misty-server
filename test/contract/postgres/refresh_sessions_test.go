@@ -43,7 +43,6 @@ func TestRefreshRotationRevokesFamilyOnReplay(t *testing.T) {
 	if !rotate(t, database, sid, "new", "next", userID) {
 		t.Fatal("second rotation rejected")
 	}
-	// "old" is two rotations back, so it is a replay even inside the grace window.
 	if rotate(t, database, sid, "old", "replay", userID) {
 		t.Fatal("replay accepted")
 	}
@@ -57,7 +56,6 @@ func TestRefreshRotationAcceptsRetryAfterLostResponse(t *testing.T) {
 	if !rotate(t, database, sid, "old", "lost", userID) {
 		t.Fatal("first rotation rejected")
 	}
-	// The client never received "lost" and retries with the token it still holds.
 	if !rotate(t, database, sid, "old", "retry", userID) {
 		t.Fatal("retry within the grace window rejected")
 	}

@@ -28,11 +28,7 @@ func (l *APIRateLimiter) limiterFor(method, path string, policy RateLimitPolicy)
 
 const overflowRouteKey = "{overflow}"
 
-// costBearingRoutes spend money or third-party quota on the server's credentials, so
-// they are charged per account rather than per address. Keyed by the normalized
-// path the limiter already computes.
 var costBearingRoutes = map[string]bool{
-	// Egress and storage operations bill per byte and per request.
 	"/spaces/{spaceID}/attachments/{id}/download":               true,
 	"/spaces/{spaceID}/notes/{id}/assets/uploads":               true,
 	"/spaces/{spaceID}/notes/{id}/assets/uploads/{id}/finalize": true,
@@ -50,9 +46,6 @@ func NormalizeRateLimitPath(path string) string {
 		trimmed = trimmed[len("/v1"):]
 	}
 	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
-	// Space-scoped routes carry ids in the path. Collapsing them keeps one
-	// budget per route shape instead of handing out a fresh budget per Space —
-	// and keeps the number of tracked route templates bounded.
 	if parts[0] == "spaces" && len(parts) >= 2 {
 		parts[1] = "{spaceID}"
 		for index := 2; index < len(parts); index++ {
@@ -62,11 +55,9 @@ func NormalizeRateLimitPath(path string) string {
 		}
 		return "/" + strings.Join(parts, "/")
 	}
-	// One budget across every invite code, so guessing them gets no fresh budget per try.
 	if parts[0] == "invites" && len(parts) == 2 {
 		return "/invites/{code}"
 	}
-	// Operator account routes name an account; one budget covers them all.
 	if parts[0] == "operator" && len(parts) >= 4 && parts[2] == "accounts" {
 		parts[3] = "{id}"
 		return "/" + strings.Join(parts, "/")
@@ -74,13 +65,7 @@ func NormalizeRateLimitPath(path string) string {
 	return trimmed
 }
 
-// looksLikeRatePathIdentifier reports whether a segment is a generated id
-// rather than a fixed route word. Misty ids are prefixed UUIDs ("msg_<uuid>")
-// or bare UUID/hex, and provider ids are similar, so length plus a separator or
-// pure hex is a reliable signal without a per-route table.
 func looksLikeRatePathIdentifier(segment string) bool {
-	// Long fixed route words containing a hyphen would otherwise look like
-	// Misty's prefixed identifiers and silently miss their explicit policy.
 	if fixedRatePathSegments[segment] {
 		return false
 	}

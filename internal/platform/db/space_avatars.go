@@ -5,18 +5,10 @@ import (
 	"database/sql"
 )
 
-// SpaceAvatarObjectKey is where a Space's picture lives in the object store: under the avatars/
-// prefix the bucket's lifecycle rules already keep, beside people's. One flat name, since the
-// store takes no nested keys (`libraryObjectKeyPattern`).
 func SpaceAvatarObjectKey(spaceID string) string { return "avatars/space-" + spaceID }
 
-// nextAvatarVersion is SQL for a picture's next version: one past the current, and never below
-// the clock in milliseconds. A removed picture's version drops to 0, so a counter would hand the
-// next upload a number an earlier picture already had and every app holding that one would keep
-// showing it; the clock never repeats one.
 const nextAvatarVersion = `GREATEST(avatar_version+1,(EXTRACT(EPOCH FROM clock_timestamp())*1000)::bigint)`
 
-// SpaceAvatarVersion is the version of a Space's picture for one of its members (0: none).
 func (db *Database) SpaceAvatarVersion(ctx context.Context, userID, spaceID string) (int64, error) {
 	var version int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -33,9 +25,6 @@ func (db *Database) SpaceAvatarVersion(ctx context.Context, userID, spaceID stri
 	return version, err
 }
 
-// SetSpaceAvatar records a new picture (picture true) or its removal, for whoever holds
-// space.rename, and tells the Space's members so their apps show it. It returns the new
-// version (0 once removed).
 func (db *Database) SetSpaceAvatar(ctx context.Context, userID, spaceID string, picture bool) (int64, error) {
 	var version int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -56,8 +45,6 @@ func (db *Database) SetSpaceAvatar(ctx context.Context, userID, spaceID string, 
 	return version, err
 }
 
-// AnnounceMemberAvatar tells every Space the person is in that their picture changed (version 0:
-// removed), so the other members' apps show the new one without a reload.
 func (db *Database) AnnounceMemberAvatar(ctx context.Context, userID string, version int64) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx,

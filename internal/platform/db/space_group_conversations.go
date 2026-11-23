@@ -10,11 +10,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// maxGroupDirectMembers is the most people a group DM holds, the one who made it included.
 const maxGroupDirectMembers = 10
 
-// loadConversationAgentParticipantsTx adds the agents a conversation lists to its participants, after the
-// people. An agent is its owner's: only they can ask it to act.
 func loadConversationAgentParticipantsTx(ctx context.Context, tx *sql.Tx, conversation *SpaceConversation) error {
 	rows, err := tx.QueryContext(ctx, `SELECT a.agent_id,a.owner_user_id,a.agent_name,a.added_at
 		FROM space_conversation_agents a WHERE a.conversation_id=$1 ORDER BY a.agent_name,a.agent_id`, conversation.ID)
@@ -32,7 +29,6 @@ func loadConversationAgentParticipantsTx(ctx context.Context, tx *sql.Tx, conver
 	return rows.Err()
 }
 
-// groupDirectTitle names a group DM by its members, cut to the title limit.
 func groupDirectTitle(names []string) string {
 	title := strings.Join(names, ", ")
 	if runes := []rune(title); len(runes) > 80 {
@@ -41,8 +37,6 @@ func groupDirectTitle(names []string) string {
 	return title
 }
 
-// CreateGroupDirectConversation starts a DM with two or more other people. Unlike a one-to-one DM it is
-// never reused: the same people can have several. Only its members ever see it.
 func (db *Database) CreateGroupDirectConversation(ctx context.Context, userID, spaceID string, otherUserIDs []string) (*SpaceConversation, error) {
 	members := []string{strings.TrimSpace(userID)}
 	seen := map[string]bool{members[0]: true}
@@ -102,7 +96,6 @@ func fillNewDirectConversationTx(ctx context.Context, tx *sql.Tx, userID, spaceI
 	return fillConversationAccessTx(ctx, tx, access, out)
 }
 
-// spaceMemberNamesTx maps each id to its member's name, and fails when any is not in the Space.
 func spaceMemberNamesTx(ctx context.Context, tx *sql.Tx, spaceID string, ids []string) (map[string]string, error) {
 	names := map[string]string{}
 	for _, id := range ids {
@@ -119,7 +112,6 @@ func spaceMemberNamesTx(ctx context.Context, tx *sql.Tx, spaceID string, ids []s
 	return names, nil
 }
 
-// directConversationSizeTx is a DM's kind and how many people are in it.
 func directConversationSizeTx(ctx context.Context, tx *sql.Tx, spaceID, conversationID string) (kind string, people int, err error) {
 	err = tx.QueryRowContext(ctx, `SELECT c.kind,(SELECT count(*) FROM space_conversation_members cm WHERE cm.conversation_id=c.id AND cm.actor_kind='person')
 		FROM space_conversations c WHERE c.id=$1 AND c.space_id=$2`, conversationID, spaceID).Scan(&kind, &people)
@@ -129,8 +121,6 @@ func directConversationSizeTx(ctx context.Context, tx *sql.Tx, spaceID, conversa
 	return kind, people, err
 }
 
-// AddGroupDirectMembers adds people to a group DM that has three or more already; a one-to-one DM
-// never grows (a new group is made instead). Any member may add. They see the whole history.
 func (db *Database) AddGroupDirectMembers(ctx context.Context, userID, spaceID, conversationID string, userIDs []string) (*SpaceConversation, error) {
 	out := &SpaceConversation{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -182,8 +172,6 @@ func (db *Database) AddGroupDirectMembers(ctx context.Context, userID, spaceID, 
 	return out, err
 }
 
-// LeaveGroupDirectConversation takes the caller, and their agents, out of a group DM that keeps at least
-// two people. Their messages stay. Everyone else is told the members changed; the leaver is told it is gone.
 func (db *Database) LeaveGroupDirectConversation(ctx context.Context, userID, spaceID, conversationID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
@@ -210,8 +198,6 @@ func (db *Database) LeaveGroupDirectConversation(ctx context.Context, userID, sp
 	})
 }
 
-// AddConversationAgent lists one of the caller's agents in a DM they are in. The id and name come from
-// their computer and mean nothing to the server beyond this listing.
 func (db *Database) AddConversationAgent(ctx context.Context, userID, spaceID, conversationID, agentID, name string) error {
 	agentID, name = strings.TrimSpace(agentID), strings.TrimSpace(name)
 	if agentID == "" || len(agentID) > maxSpaceAgentIDLength || name == "" || utf8.RuneCountInString(name) > maxSpaceAgentNameLength {
@@ -237,7 +223,6 @@ func (db *Database) AddConversationAgent(ctx context.Context, userID, spaceID, c
 	})
 }
 
-// RemoveConversationAgent takes the caller's agent out of a DM.
 func (db *Database) RemoveConversationAgent(ctx context.Context, userID, spaceID, conversationID, agentID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceConversationMemberTx(ctx, tx, userID, spaceID, conversationID); err != nil {
@@ -258,9 +243,6 @@ func (db *Database) RemoveConversationAgent(ctx context.Context, userID, spaceID
 	})
 }
 
-// requireConversationAgentMentionTx decides whether the sender may @mention an agent in a conversation.
-// In a group DM (three or more people) only the sender's own agent that the group lists counts: owner-only.
-// Anywhere else the Space's own listing decides, as before.
 func requireConversationAgentMentionTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID, agentID string) error {
 	if conversationID != "" {
 		kind, people, err := directConversationSizeTx(ctx, tx, spaceID, conversationID)

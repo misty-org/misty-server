@@ -21,8 +21,6 @@ func noteRouteTestServer(t *testing.T) *Server {
 	return server
 }
 
-// Every note route must reject an unauthenticated caller before it does any
-// note lookup, so an anonymous request can never probe for note existence.
 func TestNoteRoutesRequireAuthentication(t *testing.T) {
 	server := noteRouteTestServer(t)
 
@@ -46,7 +44,6 @@ func TestNoteRoutesRequireAuthentication(t *testing.T) {
 	}
 }
 
-// The routes exist only on the /v1 tree.
 func TestNoteRoutesAreMountedOnlyUnderV1(t *testing.T) {
 	server := noteRouteTestServer(t)
 
@@ -63,8 +60,6 @@ func TestNoteRoutesAreMountedOnlyUnderV1(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		recorder := httptest.NewRecorder()
 		server.Router.ServeHTTP(recorder, request)
-		// 401 proves the route resolved to the handler; 404 would mean it is
-		// not registered at all.
 		if recorder.Code == http.StatusNotFound {
 			t.Fatalf("GET %s returned 404, want the route to be mounted", path)
 		}

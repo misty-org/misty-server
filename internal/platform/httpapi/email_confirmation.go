@@ -14,19 +14,12 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
-// A server that sends email makes a new password account only once its email is
-// confirmed. Until then the sign-up waits in pending_accounts: no account, no session.
-// Otherwise someone could hold another person's address, and that person could never sign
-// up with it. The server's first account is not held, and a server without email can't ask.
 func confirmsEmail() bool { return email.Configured() }
 
-// confirmationLink is the website's static page for a confirmation token, which
-// reads the server and token from the fragment and posts them to ConfirmEmail.
 func confirmationLink(serverOrigin, token string) string {
 	return websiteURL() + "/confirm-email#server=" + url.QueryEscape(serverHost(serverOrigin)) + "&token=" + url.QueryEscape(token)
 }
 
-// newConfirmation makes a token, and the hash and link that go with it.
 func newConfirmation(r *http.Request) (hash, link string, err error) {
 	token, err := security.GenerateSecureToken()
 	if err != nil {
@@ -35,8 +28,6 @@ func newConfirmation(r *http.Request) (hash, link string, err error) {
 	return security.HashToken(token), confirmationLink(publicServerOrigin(r), token), nil
 }
 
-// holdForConfirmation answers a sign-up on a server that confirms email. The answer
-// is the same whether or not a new email went out.
 func holdForConfirmation(w http.ResponseWriter, r *http.Request, database *db.Database, account db.PendingAccount) {
 	hash, link, err := newConfirmation(r)
 	if err == nil {
@@ -55,11 +46,6 @@ func holdForConfirmation(w http.ResponseWriter, r *http.Request, database *db.Da
 	}
 }
 
-// pendingSignIn handles a sign-in for an email with no account. It spends the same
-// bcrypt work whether or not a sign-up is waiting. The right password for one gets a new
-// link and the reason, and handled is true; anything else goes on to fail like any
-// unknown email. An app asking with waiting is told to keep waiting and sends nothing,
-// since a new link would stop the one in the person's inbox.
 func pendingSignIn(w http.ResponseWriter, r *http.Request, database *db.Database, address, password string, waiting bool) (handled bool) {
 	hash, err := database.PendingAccountPassword(r.Context(), address)
 	if err != nil {
@@ -87,8 +73,6 @@ func pendingSignIn(w http.ResponseWriter, r *http.Request, database *db.Database
 	return true
 }
 
-// confirmPending makes the account a confirmation token stands for. The result names what
-// happened, in the words the website's page knows; only "confirmed" comes with the account.
 func confirmPending(r *http.Request, database *db.Database, token string) (*db.User, string) {
 	user, err := database.ConfirmPendingAccount(r.Context(), security.HashToken(strings.TrimSpace(token)))
 	if err == nil && openSignup() {
@@ -107,11 +91,6 @@ func confirmPending(r *http.Request, database *db.Database, token string) (*db.U
 	}
 }
 
-// ConfirmEmail takes the form on the website's confirmation page and sends the person
-// back there with the result. It is a form because that page is on another site, for
-// every server. The token is all it needs: it opens no session, and the app the person
-// signed up in signs itself in. The page posts it when opened, so a mail scanner that only
-// fetches links confirms nothing, though one that runs the page in a browser could.
 func ConfirmEmail(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
@@ -122,10 +101,6 @@ func ConfirmEmail(database *db.Database) http.HandlerFunc {
 	}
 }
 
-// ConfirmEmailSignIn is ConfirmEmail for the website on its own server, where it has
-// sessions: the same token also signs the new account in, as POST /login does. A token
-// whose email gained an account meanwhile signs nobody in. The cookies have to land where
-// the website's requests go, so this is a request of the page's, not its form.
 func ConfirmEmailSignIn(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

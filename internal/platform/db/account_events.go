@@ -11,16 +11,12 @@ import (
 	"github.com/lib/pq"
 )
 
-// AccountEvent is an invalidation, never a grant or an effect receipt. Clients
-// reconcile durable, authorized snapshots on initial connect and reconnect.
 type AccountEvent = transport.AccountEvent
 
 type accountEventHub struct {
 	mu       sync.Mutex
 	listener *pq.Listener
-	// Subscribers by account: an event reaches only its own account's
-	// connections, so its cost does not grow with the instance's other users.
-	byUser map[string]map[chan AccountEvent]struct{}
+	byUser   map[string]map[chan AccountEvent]struct{}
 }
 
 func (h *accountEventHub) subscribe(ch chan AccountEvent, userID string) {
@@ -43,7 +39,6 @@ func (h *accountEventHub) unsubscribe(ch chan AccountEvent, userID string) {
 func (h *accountEventHub) publish(event AccountEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	// An event without an account (a database reconnect) reaches everyone.
 	if event.UserID == "" {
 		for _, subs := range h.byUser {
 			for ch := range subs {
@@ -61,8 +56,6 @@ func deliver(ch chan AccountEvent, event AccountEvent) {
 	select {
 	case ch <- event:
 	default:
-		// A slow consumer gets a full reconciliation instead of silently
-		// losing the one notification that completed its task.
 	drain:
 		for {
 			select {

@@ -13,10 +13,8 @@ import (
 )
 
 var (
-	// ErrCodeSessionBranchInUse is a new session on a branch an open session of the repo uses.
 	ErrCodeSessionBranchInUse = errors.New("an open code session already uses this branch")
-	// ErrCodeSessionEnded is ending a session that has already ended.
-	ErrCodeSessionEnded = errors.New("code session already ended")
+	ErrCodeSessionEnded       = errors.New("code session already ended")
 )
 
 var (
@@ -25,14 +23,11 @@ var (
 	codeSessionOutcomes          = map[string]bool{"merged": true, "pr": true, "kept": true, "discarded": true}
 )
 
-// CodeSessionPerson is who started a live code session.
 type CodeSessionPerson struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
-// SpaceCodeSession is a live code session's record. The code itself lives in the session's
-// code room and in each member's clone, never here. The JSON is the app's shape, as is.
 type SpaceCodeSession struct {
 	ID         string            `json:"id"`
 	SpaceID    string            `json:"spaceId"`
@@ -44,11 +39,9 @@ type SpaceCodeSession struct {
 	CreatedAt  time.Time         `json:"createdAt"`
 	EndedAt    *time.Time        `json:"endedAt"`
 	Outcome    *string           `json:"outcome"`
-	// ACLVersion is what the session's room tickets carry; it never leaves the server.
-	ACLVersion int64 `json:"-"`
+	ACLVersion int64             `json:"-"`
 }
 
-// NewCodeSession is what a member sends to go live.
 type NewCodeSession struct {
 	Name       string
 	RepoKey    string
@@ -99,7 +92,6 @@ func scanCodeSession(row codeSessionScanner) (SpaceCodeSession, error) {
 	return session, err
 }
 
-// CreateSpaceCodeSession opens a live session for any current member of the Space.
 func (db *Database) CreateSpaceCodeSession(
 	ctx context.Context,
 	userID, spaceID string,
@@ -138,7 +130,6 @@ func (db *Database) CreateSpaceCodeSession(
 	return &session, nil
 }
 
-// OpenSpaceCodeSessions lists a Space's open sessions, newest first, for a current member.
 func (db *Database) OpenSpaceCodeSessions(
 	ctx context.Context,
 	userID, spaceID string,
@@ -169,8 +160,6 @@ func (db *Database) OpenSpaceCodeSessions(
 	return sessions, err
 }
 
-// SpaceCodeSessionByID returns one session, ended ones too, to a current member. Anyone else,
-// and a session of another Space, gets ErrSpaceNotFound, the same as a missing one.
 func (db *Database) SpaceCodeSessionByID(
 	ctx context.Context,
 	userID, spaceID, sessionID string,
@@ -190,8 +179,6 @@ func (db *Database) SpaceCodeSessionByID(
 	return &session, nil
 }
 
-// OpenSpaceCodeSessionForRoom returns a session a member may join: open, in this Space.
-// An ended session is ErrSpaceNotFound, so its room can no longer be reached.
 func (db *Database) OpenSpaceCodeSessionForRoom(
 	ctx context.Context,
 	userID, spaceID, sessionID string,
@@ -206,8 +193,6 @@ func (db *Database) OpenSpaceCodeSessionForRoom(
 	return session, nil
 }
 
-// EndSpaceCodeSession ends an open session with its outcome. Only the member who started it
-// may; the session's room is purged through the outbox in the same transaction.
 func (db *Database) EndSpaceCodeSession(
 	ctx context.Context,
 	userID, spaceID, sessionID, outcome string,
@@ -248,8 +233,6 @@ func (db *Database) EndSpaceCodeSession(
 	return &session, nil
 }
 
-// requireCodeSessionMemberTx checks membership for a session route. Someone outside the Space
-// learns nothing about its sessions, so they get ErrSpaceNotFound.
 func requireCodeSessionMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
 	if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 		if errors.Is(err, ErrSpaceForbidden) {
@@ -279,9 +262,6 @@ func codeSessionByIDTx(
 	return session, err
 }
 
-// revokeCodeSessionAccessForSpaceTx runs with every membership loss, as
-// revokeNoteAccessForSpaceTx does for notes: each open session's room drops the sockets
-// minted before, and the members still there reconnect with fresh tickets.
 func revokeCodeSessionAccessForSpaceTx(ctx context.Context, tx *sql.Tx, spaceID string) error {
 	rows, err := tx.QueryContext(ctx,
 		`UPDATE space_code_sessions SET acl_version=acl_version+1
@@ -315,8 +295,6 @@ func revokeCodeSessionAccessForSpaceTx(ctx context.Context, tx *sql.Tx, spaceID 
 	return nil
 }
 
-// beginCodeSessionSpacePurgeTx ends a purging Space's open sessions and queues a room purge for
-// every session that lacks one. It reports how many rooms have not confirmed their purge.
 func beginCodeSessionSpacePurgeTx(ctx context.Context, tx *sql.Tx, spaceID string) (int, error) {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE space_code_sessions SET ended_at=NOW() WHERE space_id=$1 AND ended_at IS NULL`,

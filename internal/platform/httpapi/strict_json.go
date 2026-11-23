@@ -10,7 +10,6 @@ import (
 
 const maxStrictJSONBodyBytes = 2 << 20
 
-// decodeStrictJSON reads a request body that must be one JSON value of known fields.
 func decodeStrictJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	return decodeStrictJSONWithLimit(w, r, dst, maxStrictJSONBodyBytes)
 }
@@ -39,7 +38,6 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// textExcerpt is the start of a text on one line, for a search result.
 func textExcerpt(value string) string {
 	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
 	const maximum = 240

@@ -16,7 +16,6 @@ import (
 func Register(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			// Older apps still send a display name; people are known by username alone.
 			Name     string `json:"name"`
 			Username string `json:"username"`
 			Email    string `json:"email"`
@@ -56,8 +55,6 @@ func Register(database *db.Database) http.HandlerFunc {
 			http.Error(w, "email already registered", http.StatusConflict)
 			return
 		}
-		// The owner's email comes in only through Google, which proves it is theirs, so
-		// nobody else can claim it with a password first.
 		if db.IsServerOwnerEmail(body.Email) {
 			writeOwnerUsesGoogle(w)
 			return
@@ -69,7 +66,6 @@ func Register(database *db.Database) http.HandlerFunc {
 			writeRegistrationClosed(w)
 			return
 		}
-		// The server's first account is never held back.
 		anyAccount, err := database.AnyAccount(r.Context())
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -109,14 +105,10 @@ func Register(database *db.Database) http.HandlerFunc {
 	}
 }
 
-// writeOwnerUsesGoogle refuses a password account for MISTY_OWNER_EMAIL.
 func writeOwnerUsesGoogle(w http.ResponseWriter) {
 	writeJSON(w, http.StatusConflict, map[string]string{"code": "use_google", "message": "This server's owner signs in with Google. Please use Continue with Google instead."})
 }
 
-// writeUseGoogle answers a password for an email that signs in with Google. It says so
-// because people forget which way they signed up. It is not a 401, so the app doesn't
-// retry with the password itself (accountSignIn).
 func writeUseGoogle(w http.ResponseWriter) {
 	writeJSON(w, http.StatusConflict, map[string]string{"code": "use_google", "message": "This email already exists as a Misty account. Please use Continue with Google instead."})
 }
@@ -126,9 +118,7 @@ func Login(database *db.Database) http.HandlerFunc {
 		var body struct {
 			Email    string `json:"email"`
 			Password string `json:"password"`
-			// Waiting asks whether a sign-up's email has been confirmed yet, opening no
-			// session: 202 confirm_email until it is, then 200 confirmed.
-			Waiting bool `json:"waiting"`
+			Waiting  bool   `json:"waiting"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -156,8 +146,6 @@ func Login(database *db.Database) http.HandlerFunc {
 			return
 		}
 		if user == nil {
-			// pendingSignIn spent the same bcrypt work as a real check, so response
-			// time does not reveal which email addresses have password accounts.
 			recordFailure(r, database, failures)
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
@@ -168,10 +156,7 @@ func Login(database *db.Database) http.HandlerFunc {
 			return
 		}
 		clearFailures(r, database, failures)
-		// Hashes made at an older cost are remade at the current one while the password is
-		// at hand. A failure leaves the old hash, which still works.
 		database.UpgradePasswordHash(user.ID, hash, body.Password)
-		// After the password, so a stranger can't use this to learn who's on the list.
 		if allowed, err := signInAllowed(r.Context(), database, user); err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -188,8 +173,6 @@ func Login(database *db.Database) http.HandlerFunc {
 	}
 }
 
-// unknownAccountHash is a bcrypt hash of a random value at the cost real passwords use,
-// compared against when no password account matches the email.
 var unknownAccountHash = sync.OnceValue(func() []byte {
 	secret, _ := security.GenerateSecureToken()
 	hash, err := bcrypt.GenerateFromPassword([]byte(secret), accounts.PasswordCost)
@@ -209,7 +192,6 @@ func writeAuthSession(
 	writeAuthSessionWith(w, r, database, user, status, nil)
 }
 
-// writeAuthSessionWith is writeAuthSession with extra fields in the body.
 func writeAuthSessionWith(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -218,7 +200,6 @@ func writeAuthSessionWith(
 	status int,
 	extra map[string]any,
 ) {
-	// Every way of signing in ends here, so a suspended account gets no session.
 	if suspended, err := database.AccountSuspended(r.Context(), user.ID); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -243,10 +224,6 @@ func writeAuthSessionWith(
 	writeJSON(w, status, body)
 }
 
-// writeSessionCookie is the single definition of the session cookie shape. The
-// cookie carries no Domain attribute on purpose. Browser clients send
-// credentialed requests directly to the API origin, so the session should
-// never be exposed to sibling subdomains.
 func writeSessionCookie(w http.ResponseWriter, r *http.Request, token string, ttl time.Duration) {
 	writeAuthCookie(w, r, SessionCookieName, token, ttl)
 }
@@ -274,11 +251,8 @@ func Logout(database *db.Database) http.HandlerFunc {
 	}
 }
 
-// sessionToken is a JWT a request presents, and what it must verify as.
 type sessionToken struct{ token, kind string }
 
-// presentedSessionTokens is every token that could name the session signing out: the desktop
-// app's bearer (its refresh token, which outlives an access token) and the website's cookies.
 func presentedSessionTokens(r *http.Request) []sessionToken {
 	var tokens []sessionToken
 	if token, ok := BearerTokenFromRequest(r); ok {

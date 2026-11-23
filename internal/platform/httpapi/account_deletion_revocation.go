@@ -12,10 +12,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
-// Account deletion revokes the provider credentials older Misty versions
-// stored: cloud-drive connections and Space calendar credentials. Nothing
-// creates these rows anymore, but existing ones are still revoked.
-
 type providerTokenEnvelope struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
@@ -123,10 +119,6 @@ func (s *SpacesService) revokeCloudConnection(
 		}
 		return "revoked", nil
 	case "onedrive":
-		// Microsoft does not expose a per-refresh-token revocation endpoint
-		// for this delegated desktop flow. Erasing Misty's encrypted copy is
-		// the supported revocation action; users can also remove Misty from
-		// their Microsoft Account consent page.
 		return "local_revocation", nil
 	default:
 		return "unknown_provider_local_revocation", nil
@@ -138,9 +130,6 @@ func (s *SpacesService) decryptProviderSecret(provider string, ciphertext, nonce
 	if err == nil || provider != "google" {
 		return plaintext, err
 	}
-	// Existing Google Calendar credentials were sealed with the legacy provider
-	// identifier. The migration changes only metadata, so retain a read path until
-	// each credential is refreshed and sealed under the shared Google identity.
 	return s.aead.Open(nil, nonce, ciphertext, []byte("misty-provider-v2:google_calendar"))
 }
 

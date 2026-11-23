@@ -13,6 +13,7 @@
       { "name": "NOTE_ROOM", "class_name": "NoteRoom" },
       { "name": "CODE_ROOM", "class_name": "CodeRoom" },
       { "name": "APP_ROOM", "class_name": "AppRoom" },
+      { "name": "FILE_ROOM", "class_name": "FileRoom" },
     ],
   },
 
@@ -30,6 +31,8 @@
     { "tag": "v6", "deleted_classes": ["DrawingRoom", "ImageRoom", "DeckRoom", "WorkbookRoom"] },
     // Apps' live documents (the SDK's `room()`).
     { "tag": "v7", "new_sqlite_classes": ["AppRoom"] },
+    // Space files opened as live documents (the SDK's `room.forFile()`), with one writer's lease each.
+    { "tag": "v8", "new_sqlite_classes": ["FileRoom"] },
   ],
 
   "vars": {

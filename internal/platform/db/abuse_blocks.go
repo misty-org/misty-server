@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// AbuseBlock is a caller barred from the API until BlockedUntil.
 type AbuseBlock struct {
 	Key          string
 	BlockedUntil time.Time
@@ -14,11 +13,6 @@ type AbuseBlock struct {
 	Reason       string
 }
 
-// SaveAbuseBlock records or extends a block.
-//
-// A repeat offender keeps the longer of the two durations, so re-offending
-// after a restart escalates from where the previous block left off instead of
-// resetting to the base penalty.
 func (db *Database) SaveAbuseBlock(ctx context.Context, block AbuseBlock) error {
 	if block.Key == "" || block.BlockSeconds <= 0 {
 		return ErrSpaceInvalid
@@ -36,10 +30,6 @@ func (db *Database) SaveAbuseBlock(ctx context.Context, block AbuseBlock) error 
 	})
 }
 
-// ActiveAbuseBlocks returns live blocks. Expired rows have a separate deadline worker.
-//
-// Startup, committed hints and reconnects refresh this set outside the request
-// path. Burst coalescing in the guard bounds snapshot frequency.
 func (db *Database) ActiveAbuseBlocks(ctx context.Context) ([]AbuseBlock, error) {
 	blocks := []AbuseBlock{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
@@ -65,8 +55,6 @@ func (db *Database) SubscribeAbuseBlockEvents(ctx context.Context) (<-chan struc
 	return db.SubscribeWorkerEvents(ctx, "abuse-blocks")
 }
 
-// PurgeExpiredAbuseBlocks retains one day of expired records, using bounded
-// locked batches so concurrent servers can cooperate without duplicate scans.
 func (db *Database) PurgeExpiredAbuseBlocks(ctx context.Context, limit int) (int, error) {
 	var count int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {

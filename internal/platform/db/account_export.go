@@ -19,6 +19,7 @@ type AccountExportProfile struct {
 	Username      string    `json:"username"`
 	Email         string    `json:"email"`
 	AvatarVersion int64     `json:"avatar_version"`
+	BannerVersion int64     `json:"banner_version"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -65,10 +66,6 @@ type AccountPortableExport struct {
 	Connections   []map[string]any       `json:"cloud_connections"`
 }
 
-// AccountPortableExport returns user-supplied and account-owned data without
-// password hashes, sessions, OAuth secrets, internal object keys, or operator
-// credentials. Journal CRDT and asset URLs are attached by the API after fresh
-// authorization checks.
 func (db *Database) AccountPortableExport(
 	ctx context.Context, userID string,
 ) (*AccountPortableExport, error) {

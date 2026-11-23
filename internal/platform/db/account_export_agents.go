@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// AccountExportAgent is one agent the account listed in a Space. The agent
-// itself lives on the person's computer; a Space keeps its name and no more.
 type AccountExportAgent struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`

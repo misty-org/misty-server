@@ -106,7 +106,7 @@ type DriveItem struct {
 	Deleted        bool       `json:"deleted"`
 	ReplacedOf     *string    `json:"replaced_of"`
 	BlobKey        string     `json:"-"`
-	ContentVersion int64      `json:"-"`
+	ContentVersion int64      `json:"content_version"`
 }
 
 const driveItemSelect = `SELECT i.id,i.space_id,i.parent_id,i.name,i.kind,i.sha256,i.byte_size,i.mtime_ms,i.version,i.seq,
@@ -183,7 +183,7 @@ func normalizeDriveNameTx(ctx context.Context, tx *sql.Tx, raw string) (string, 
 		return "", ErrLibraryInvalid
 	}
 	for _, r := range raw {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || DriveHiddenRune(r) {
 			return "", ErrLibraryInvalid
 		}
 	}
@@ -195,6 +195,11 @@ func normalizeDriveNameTx(ctx context.Context, tx *sql.Tx, raw string) (string, 
 		return "", ErrLibraryInvalid
 	}
 	return name, nil
+}
+
+func DriveHiddenRune(r rune) bool {
+	return (r >= 0x202A && r <= 0x202E) || (r >= 0x2066 && r <= 0x2069) ||
+		(r >= 0x200B && r <= 0x200D) || r == 0x2060 || r == 0xFEFF
 }
 
 func lockDriveTx(ctx context.Context, tx *sql.Tx, spaceID string) error {
@@ -274,7 +279,8 @@ func driveNameHolderTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID
 		parent = *parentID
 	}
 	item, err := scanDriveItem(tx.QueryRowContext(ctx, driveItemSelect+`
-		WHERE i.space_id=$1 AND COALESCE(i.parent_id,'')=$2 AND lower(i.name)=lower($3::text) AND i.id<>$4
+		WHERE i.space_id=$1 AND COALESCE(i.parent_id,'')=$2
+		AND misty_drive_name_fold(i.name)=misty_drive_name_fold($3::text) AND i.id<>$4
 		AND i.trashed_at IS NULL AND i.deleted_at IS NULL LIMIT 1`, spaceID, parent, name, exceptID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

@@ -9,7 +9,7 @@ interface DocumentSocketState {
 }
 
 const MAX_CONNECTIONS_PER_ROOM = 40;
-const MAX_MESSAGE_BYTES = 512 * 1024;
+export const MAX_MESSAGE_BYTES = 12 * 1024 * 1024;
 
 function socketState(value: unknown): DocumentSocketState | null {
   if (

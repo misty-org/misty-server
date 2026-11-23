@@ -138,6 +138,13 @@ func (s *SpaceLibraryService) AbortUpload() http.HandlerFunc {
 		case "rejected", "infected", "invalid", "processing_failed", "expired", "deleted":
 			w.WriteHeader(http.StatusNoContent)
 			return
+		case "ready":
+			if err := s.database.DiscardUnsentAttachment(r.Context(), userID, spaceID, uploadID); err != nil {
+				writeLibraryError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
 		}
 		if err := s.database.RejectLibraryUpload(r.Context(), userID, spaceID, uploadID, tokenHash, "rejected", "upload_aborted"); err != nil {
 			writeLibraryError(w, err)

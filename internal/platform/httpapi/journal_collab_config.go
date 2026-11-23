@@ -178,12 +178,22 @@ type JournalTicketClaims struct {
 	Role          string `json:"role"`
 	ACLVersion    int64  `json:"acl_version"`
 	Expires       int64  `json:"exp"`
+	GC            *bool  `json:"gc,omitempty"`
 }
 
 type collaborationResource struct {
-	Type  string
-	ID    string
-	Party string
+	Type        string
+	ID          string
+	Party       string
+	Generation  string
+	KeepDeletes bool
+}
+
+func (r collaborationResource) roomKey() string {
+	if r.Generation == "" {
+		return r.ID
+	}
+	return r.ID + "#" + r.Generation
 }
 
 func (c JournalCollabConfig) MintNoteTicket(userID, spaceID, noteID, role string, aclVersion int64) (JournalTicket, error) {
@@ -209,28 +219,46 @@ func (c JournalCollabConfig) MintCodeTicket(
 	)
 }
 
-func (c JournalCollabConfig) MintAppRoomTicket(userID, spaceID, appID, roomID string) (JournalTicket, error) {
-	return c.mintResourceTicket(
-		userID,
-		spaceID,
-		collaborationResource{Type: "app", ID: spaceID + ":" + appID + ":" + roomID, Party: "app-room"},
-		"editor",
-		1,
-	)
+func AppRoomResourceID(spaceID, appID, roomID string) string {
+	return spaceID + ":" + appID + ":" + roomID
 }
 
-func (c JournalCollabConfig) MintFileRoomTicket(userID, spaceID, itemID, appID, format, role string) (JournalTicket, error) {
+func FileRoomResourceID(spaceID, itemID, appID, format string) string {
 	resourceID := spaceID + ":" + itemID
 	if format != "text" {
 		resourceID += ":" + appID
 	}
+	return resourceID
+}
+
+func (c JournalCollabConfig) MintAppRoomTicket(
+	userID, spaceID, appID, roomID, generation, role string,
+	keepDeletes bool,
+) (JournalTicket, error) {
 	return c.mintResourceTicket(
 		userID,
 		spaceID,
-		collaborationResource{Type: "file", ID: resourceID, Party: fileRoomParty},
+		collaborationResource{
+			Type: "app", ID: AppRoomResourceID(spaceID, appID, roomID), Party: "app-room", Generation: generation,
+			KeepDeletes: keepDeletes,
+		},
 		role,
 		1,
 	)
+}
+
+func (c JournalCollabConfig) MintFileRoomTicket(
+	userID, spaceID, itemID, appID, format, role, generation string,
+	keepDeletes bool,
+) (JournalTicket, error) {
+	resource := collaborationResource{
+		Type: "file", ID: FileRoomResourceID(spaceID, itemID, appID, format), Party: fileRoomParty,
+		KeepDeletes: keepDeletes,
+	}
+	if format != "text" {
+		resource.Generation = generation
+	}
+	return c.mintResourceTicket(userID, spaceID, resource, role, 1)
 }
 
 func (c JournalCollabConfig) MintItemTicket(

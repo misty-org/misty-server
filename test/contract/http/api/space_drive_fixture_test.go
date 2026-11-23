@@ -96,9 +96,10 @@ func newDriveFixture(t *testing.T, label string) *driveFixture {
 		t.Fatal(err)
 	}
 	drive.Presigner = &stubPresigner{}
+	drive.StarterIgnore = false
 	f.drive, f.router = drive, newDriveTestRouter(drive)
 	user := func(name string) string {
-		created, err := f.database.CreateUser(uniqueTestEmail(label+"-"+name), "password123")
+		created, err := f.database.CreateUser(name+"-"+uuid.NewString()[:12]+"@example.com", "password123")
 		if err != nil {
 			t.Fatal(err)
 		}

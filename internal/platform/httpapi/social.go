@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -99,10 +100,12 @@ func (s *SocialService) Friend() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if err := s.database.Unfriend(r.Context(), userID, chi.URLParam(r, "userID")); err != nil {
+		otherID := chi.URLParam(r, "userID")
+		if err := s.database.Unfriend(r.Context(), userID, otherID); err != nil {
 			writeSpaceError(w, err)
 			return
 		}
+		endDirectCallsBetween(r.Context(), userID, otherID)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -123,6 +126,9 @@ func (s *SocialService) Block() http.HandlerFunc {
 		if err != nil {
 			writeSpaceError(w, err)
 			return
+		}
+		if r.Method != http.MethodDelete {
+			endDirectCallsBetween(r.Context(), userID, otherID)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -248,10 +254,12 @@ func (s *SocialService) LeaveDirect() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if err := s.database.LeaveDirect(r.Context(), userID, chi.URLParam(r, "dmID")); err != nil {
+		dmID := chi.URLParam(r, "dmID")
+		if err := s.database.LeaveDirect(r.Context(), userID, dmID); err != nil {
 			writeSpaceError(w, err)
 			return
 		}
+		endDirectCallFor(r.Context(), dmID, userID)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -275,12 +283,19 @@ func (s *SocialService) Status() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		saved, err := s.database.SetChosenStatus(r.Context(), userID, body)
+		var fields []string
+		for _, field := range strings.Split(r.URL.Query().Get("fields"), ",") {
+			if field = strings.TrimSpace(field); field != "" {
+				fields = append(fields, field)
+			}
+		}
+		saved, err := s.database.SetChosenStatusFields(r.Context(), userID, body, fields)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
 		s.publishStatus(userID)
+		s.publishOwnStatus(userID, saved)
 		writeJSON(w, http.StatusOK, saved)
 	}
 }
@@ -342,4 +357,15 @@ func (s *SocialService) publishStatus(userID string) {
 	if s.realtime != nil {
 		go s.realtime.PublishStatus(userID)
 	}
+}
+
+func (s *SocialService) publishOwnStatus(userID string, status *db.ChosenStatus) {
+	if s.realtime == nil || status == nil {
+		return
+	}
+	payload, err := json.Marshal(map[string]any{"type": "status.mine", "status": status})
+	if err != nil {
+		return
+	}
+	s.realtime.SendToUsers([]string{userID}, payload)
 }

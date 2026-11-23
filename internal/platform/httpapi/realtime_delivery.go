@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/misty-org/misty-server/internal/platform/db"
@@ -86,7 +87,9 @@ func (s *RealtimeService) BroadcastEvent(eventID int64) {
 	}
 	for _, user := range visible {
 		for _, client := range targets[user] {
-			s.deliver(client, payload)
+			if wantsEvent(client, event.EventType) {
+				s.deliver(client, payload)
+			}
 		}
 	}
 }
@@ -111,9 +114,15 @@ func (s *RealtimeService) broadcastEventPerUser(ctx context.Context, eventID int
 			}
 		}
 		for _, client := range clients {
-			s.deliver(client, payload)
+			if wantsEvent(client, event.EventType) {
+				s.deliver(client, payload)
+			}
 		}
 	}
+}
+
+func wantsEvent(client *RealtimeClient, eventType string) bool {
+	return client.eventPrefix == "" || strings.HasPrefix(eventType, client.eventPrefix)
 }
 
 func (s *RealtimeService) ViewerSpaceCount() int {

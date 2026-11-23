@@ -23,6 +23,7 @@ const (
 	liveKitAloneLimit    = 5 * time.Minute
 	liveKitSweepInterval = time.Minute
 	liveKitDeleteRetry   = 15 * time.Second
+	callRemovedAttribute = "misty.removed"
 )
 
 type LiveKitRoomWatcher struct {
@@ -130,7 +131,8 @@ func (r liveKitRoom) people() int {
 }
 
 type liveKitParticipant struct {
-	SID string `json:"sid"`
+	SID      string `json:"sid"`
+	Identity string `json:"identity"`
 }
 
 type liveKitEvent struct {
@@ -160,6 +162,9 @@ func (w *LiveKitRoomWatcher) Webhook() http.HandlerFunc {
 			return
 		}
 		w.handle(event)
+		if event.Event == "participant_joined" {
+			w.checkJoined(event)
+		}
 		rw.WriteHeader(http.StatusOK)
 	}
 }

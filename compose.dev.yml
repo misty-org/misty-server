@@ -145,7 +145,7 @@ services:
   # server nor LiveKit can hear or see them. Signalling reaches it through the tunnel; sound and
   # video are UDP, which a tunnel can't carry, so they go straight to this Mac at the local network
   # address `misty server up` finds (MISTY_DEV_LAN_IP). Someone on another network needs UDP
-  # 3478 and 50000-50100 and TCP 7881 forwarded to this Mac.
+  # 3478 and 7882 and TCP 7881 forwarded to this Mac.
   livekit:
     image: livekit/livekit-server:v1.8.4
     logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
@@ -175,8 +175,7 @@ services:
             - http://misty-api:8080/v1/calls/livekit-events
         rtc:
           tcp_port: 7881
-          port_range_start: 50000
-          port_range_end: 50100
+          udp_port: 7882
           # The address other computers reach this Mac at; inside Docker LiveKit can't see it.
           node_ip: "${MISTY_DEV_LAN_IP:-127.0.0.1}"
           use_external_ip: false
@@ -186,7 +185,7 @@ services:
     ports:
       - "7881:7881"
       - "3478:3478/udp"
-      - "50000-50100:50000-50100/udp"
+      - "7882:7882/udp"
     networks: [edge]
 
   tunnel:

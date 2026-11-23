@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"time"
 )
 
 func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, messageIDs []string) error {
@@ -21,6 +23,17 @@ func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, mes
 	if err != nil {
 		return err
 	}
+	if err := releaseMessageAttachmentsTx(ctx, tx, spaceID, rows); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM space_events WHERE entity_id=ANY($1::text[])`, pqStringArray(messageIDs)); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `DELETE FROM space_messages WHERE space_id=$1 AND id=ANY($2::text[])`, spaceID, pqStringArray(messageIDs))
+	return err
+}
+
+func releaseMessageAttachmentsTx(ctx context.Context, tx *sql.Tx, spaceID string, rows *sql.Rows) error {
 	type attachmentCleanup struct {
 		id, fileID, uploadID string
 		bytes                int64
@@ -72,11 +85,62 @@ func cleanupSpaceMessagesTx(ctx context.Context, tx *sql.Tx, spaceID string, mes
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM space_events WHERE entity_id=ANY($1::text[])`, pqStringArray(messageIDs)); err != nil {
-		return err
+	return nil
+}
+
+const unsentAttachmentQuery = `SELECT a.id,a.file_id,a.upload_id,
+		COALESCE(c.logical_bytes,0)
+		FROM space_message_attachments a
+		LEFT JOIN space_storage_contributions c ON c.space_id=a.space_id AND c.source_kind='attachment'
+			AND c.source_id=a.id AND c.state IN ('active','recovery')
+		WHERE a.space_id=$1 AND a.message_id IS NULL AND a.lifecycle_state='ready'`
+
+func (db *Database) DiscardUnsentAttachment(ctx context.Context, userID, spaceID, uploadID string) error {
+	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, unsentAttachmentQuery+` AND a.upload_id=$2 AND a.uploader_user_id=$3 FOR UPDATE OF a`, spaceID, uploadID, userID)
+		if err != nil {
+			return err
+		}
+		return releaseMessageAttachmentsTx(ctx, tx, spaceID, rows)
+	})
+}
+
+func (db *Database) DiscardStaleUnsentAttachments(ctx context.Context, olderThan time.Duration, limit int) (int, error) {
+	if limit < 1 || limit > 1000 {
+		limit = 250
 	}
-	_, err = tx.ExecContext(ctx, `DELETE FROM space_messages WHERE space_id=$1 AND id=ANY($2::text[])`, spaceID, pqStringArray(messageIDs))
-	return err
+	type stale struct{ spaceID, id string }
+	found := []stale{}
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT space_id,id FROM space_message_attachments
+			WHERE message_id IS NULL AND lifecycle_state='ready' AND created_at<NOW()-$1::interval
+			ORDER BY created_at LIMIT $2 FOR UPDATE SKIP LOCKED`, fmt.Sprintf("%d seconds", int64(olderThan.Seconds())), limit)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var item stale
+			if err := rows.Scan(&item.spaceID, &item.id); err != nil {
+				rows.Close()
+				return err
+			}
+			found = append(found, item)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, item := range found {
+			attachment, err := tx.QueryContext(ctx, unsentAttachmentQuery+` AND a.id=$2 FOR UPDATE OF a`, item.spaceID, item.id)
+			if err != nil {
+				return err
+			}
+			if err := releaseMessageAttachmentsTx(ctx, tx, item.spaceID, attachment); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return len(found), err
 }
 
 func messageIDsForConversationTx(ctx context.Context, tx *sql.Tx, spaceID, conversationID string) ([]string, error) {

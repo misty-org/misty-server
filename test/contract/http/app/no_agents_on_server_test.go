@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	. "github.com/misty-org/misty-server/internal/app"
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 var removedRoutePrefixes = []string{
@@ -27,7 +28,14 @@ var removedRouteParts = []string{"/agent-runtime", "/embeddings", "/workflow-nod
 
 var forbiddenRouteWord = regexp.MustCompile(`(?i)(^|[-_])(prompt|prompts|completion|completions|invocation|invocations|mcp|toolbox|tool-result|tool-results|tool-output|model-output)($|[-_])`)
 
-var forbiddenRequestField = regexp.MustCompile(`^(systemprompt|prompt|prompts|toolresult|toolresults|tooloutput|toolcall|toolcalls|modeloutput|modelresponse|modelturn|completion|assistantmessage|assistanttext|runtimeevent|agentrunkey|runkey)$`)
+var forbiddenRequestField = regexp.MustCompile(`^(systemprompt|prompt|prompts|toolresult|toolresults|tooloutput|toolcall|toolcalls|modeloutput|modelresponse|modelturn|completion|assistantmessage|assistanttext|runtimeevent|agentrunkey|runkey|apikey|apikeys|secretkey|secret|credential|credentials|connector|connectors|connectedapps|mcpserver|mcpservers|plugin|plugins|skill|skills|memory|memories|enginememory|enginesignin)$`)
+
+var agentDefinitionFields = map[string]bool{
+	"space_id": true, "space_name": true, "agent_id": true, "agent_name": true, "owner_user_id": true, "owner_name": true,
+	"added_at": true, "visibility": true, "name": true, "role": true, "description": true, "instructions": true, "soul": true,
+	"icon": true, "avatar": true, "voice_id": true, "engine_id": true, "engine_model": true, "reasoning_effort": true,
+	"origin": true, "revision": true, "updated_at": true, "updated_by_user_id": true, "can_edit": true,
+}
 
 func routeProblem(path string) string {
 	normalized := strings.TrimPrefix(strings.TrimPrefix(path, "/api/"), "/v1/")
@@ -75,12 +83,18 @@ func TestNoAgentsChecksCatchWhatTheyClaimTo(t *testing.T) {
 			t.Errorf("%s failed the route check: %s", path, problem)
 		}
 	}
-	for _, field := range []string{"prompt", "system_prompt", "toolResults", "tool_output", "model-output", "toolCalls", "completion"} {
+	for _, field := range []string{
+		"prompt", "system_prompt", "toolResults", "tool_output", "model-output", "toolCalls", "completion",
+		"api_key", "apiKey", "connectors", "mcp_servers", "plugins", "skills", "memory", "engine_memory", "credentials",
+	} {
 		if !jsonFieldProblem(field) {
 			t.Errorf("%s passed the field check", field)
 		}
 	}
-	for _, field := range []string{"name", "text", "result", "content", "agent_id", "agent_name"} {
+	for _, field := range []string{
+		"name", "text", "result", "content", "agent_id", "agent_name",
+		"instructions", "soul", "voice_id", "engine_id", "engine_model", "reasoning_effort", "avatar", "revision",
+	} {
 		if jsonFieldProblem(field) {
 			t.Errorf("%s failed the field check", field)
 		}
@@ -153,6 +167,48 @@ func TestServerHandlersDeclareNoFieldForAModelsWork(t *testing.T) {
 				}
 				return true
 			})
+		}
+	}
+}
+
+func TestAnAgentsDefinitionCarriesOnlyItsDefinition(t *testing.T) {
+	for _, shape := range []reflect.Type{reflect.TypeOf(db.SpaceAgent{}), reflect.TypeOf(db.SpaceAgentDefinition{})} {
+		for index := 0; index < shape.NumField(); index++ {
+			name, _, _ := strings.Cut(shape.Field(index).Tag.Get("json"), ",")
+			if name == "" || name == "-" {
+				t.Errorf("%s.%s has no JSON name", shape.Name(), shape.Field(index).Name)
+				continue
+			}
+			if !agentDefinitionFields[name] || jsonFieldProblem(name) {
+				t.Errorf("%s declares %q, which isn't part of an agent's definition", shape.Name(), name)
+			}
+		}
+	}
+}
+
+var sharedThreadFields = map[string]bool{
+	"id": true, "space_id": true, "agent_id": true, "owner_user_id": true, "owner_name": true,
+	"title": true, "state": true, "continued_from": true, "entries": true, "created_at": true,
+	"updated_at": true, "key": true, "seq": true, "kind": true, "body": true, "reactions": true,
+	"emoji": true, "count": true, "mine": true,
+}
+
+func TestASharedThreadCarriesOnlyWhatMembersSee(t *testing.T) {
+	for _, shape := range []reflect.Type{
+		reflect.TypeOf(db.AgentThread{}),
+		reflect.TypeOf(db.AgentThreadEntry{}),
+		reflect.TypeOf(db.AgentThreadEntryInput{}),
+		reflect.TypeOf(db.AgentThreadReaction{}),
+	} {
+		for index := 0; index < shape.NumField(); index++ {
+			name, _, _ := strings.Cut(shape.Field(index).Tag.Get("json"), ",")
+			if name == "" || name == "-" {
+				t.Errorf("%s.%s has no JSON name", shape.Name(), shape.Field(index).Name)
+				continue
+			}
+			if !sharedThreadFields[name] || jsonFieldProblem(name) {
+				t.Errorf("%s declares %q, which members of a Space never see of a thread", shape.Name(), name)
+			}
 		}
 	}
 }

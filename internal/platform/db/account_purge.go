@@ -31,6 +31,8 @@ var accountPurgeTables = []struct{ Table, Column string }{
 	{"space_invitations", "invited_by_user_id"},
 	{"space_creation_requests", "user_id"},
 	{"owner_storage_usage", "owner_user_id"},
+	{"space_agent_thread_reactions", "user_id"},
+	{"space_agent_threads", "owner_user_id"},
 }
 
 var accountPurgeKept = map[string]string{
@@ -73,6 +75,9 @@ func purgeAccountDataTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM space_members m USING spaces s
 		WHERE m.space_id=s.id AND m.user_id=$1 AND s.owner_user_id<>$1`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE space_agents SET updated_by_user_id=NULL WHERE updated_by_user_id=$1`, userID); err != nil {
 		return err
 	}
 	for _, target := range accountPurgeTables {

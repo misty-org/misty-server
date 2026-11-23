@@ -184,6 +184,10 @@ func (db *Database) UpdateSpaceRole(ctx context.Context, userID, spaceID, roleID
 		if err != nil {
 			return err
 		}
+		writers, err := fileRoomWritersTx(ctx, tx, spaceID)
+		if err != nil {
+			return err
+		}
 		if err := scanSpaceRole(tx.QueryRowContext(ctx, `UPDATE space_roles
 			SET name=$2,color=$3,hoist=$4,mentionable=$5,permissions=$6,updated_at=NOW()
 			WHERE id=$1 RETURNING `+spaceRoleColumns, role.ID, role.Name, role.Color, role.Hoist,
@@ -191,6 +195,9 @@ func (db *Database) UpdateSpaceRole(ctx context.Context, userID, spaceID, roleID
 			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "role.updated", role.ID, role); err != nil {
+			return err
+		}
+		if err := revokeLostFileRoomWritersTx(ctx, tx, spaceID, writers); err != nil {
 			return err
 		}
 		return announceChannelAccessTx(ctx, tx, spaceID, userID, readers, "")
@@ -261,6 +268,10 @@ func (db *Database) DeleteSpaceRole(ctx context.Context, userID, spaceID, roleID
 		if err != nil {
 			return err
 		}
+		writers, err := fileRoomWritersTx(ctx, tx, spaceID)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_roles WHERE id=$1`, role.ID); err != nil {
 			return err
 		}
@@ -269,6 +280,9 @@ func (db *Database) DeleteSpaceRole(ctx context.Context, userID, spaceID, roleID
 			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "role.deleted", role.ID, map[string]any{"id": role.ID}); err != nil {
+			return err
+		}
+		if err := revokeLostFileRoomWritersTx(ctx, tx, spaceID, writers); err != nil {
 			return err
 		}
 		return announceChannelAccessTx(ctx, tx, spaceID, userID, readers, "")

@@ -149,10 +149,12 @@ services:
   # `docker compose --profile calls up`. The server only mints room tokens; calls are end-to-end
   # encrypted between the people's computers, so neither the server nor LiveKit can hear or see them.
   # Its signalling is published at MISTY_HOSTNAME's calls sibling through the tunnel (setup adds the
-  # route); media goes straight to this machine, so open UDP 3478 and 50000-50100 and TCP 7881.
+  # route), so 7880 is only on this machine's loopback; media goes straight to this machine, so open
+  # UDP 3478 and 7882 and TCP 7881.
   livekit:
     image: livekit/livekit-server:v1.8.4
     profiles: [calls]
+    logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
     # The same secret the API signs tokens with, derived from the root by setup (livekit/api-secret).
     entrypoint:
       - /bin/sh
@@ -161,6 +163,8 @@ services:
     environment:
       LIVEKIT_CONFIG: |
         port: 7880
+        logging:
+          level: warn
         # At most 8 people in any call, whatever asked for the room. An empty room closes after 30
         # seconds, and 20 after its last person leaves; the API ends a room left with one person
         # after five minutes.
@@ -176,8 +180,7 @@ services:
             - http://api:8080/v1/calls/livekit-events
         rtc:
           tcp_port: 7881
-          port_range_start: 50000
-          port_range_end: 50100
+          udp_port: 7882
           # Finds this machine's public address itself (STUN), so people on other networks reach it.
           use_external_ip: true
         # TURN over UDP for people behind strict networks; it needs no certificate.
@@ -187,10 +190,10 @@ services:
     volumes:
       - secrets:/run/misty/secrets:ro
     ports:
-      - "${LIVEKIT_HOST_PORT:-7880}:7880"
+      - "127.0.0.1:${LIVEKIT_HOST_PORT:-7880}:7880"
       - "7881:7881"
       - "3478:3478/udp"
-      - "50000-50100:50000-50100/udp"
+      - "7882:7882/udp"
     restart: unless-stopped
     networks: [edge]
 

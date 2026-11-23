@@ -8,6 +8,7 @@ DELETE /v1/me/avatar
 DELETE /v1/me/banner
 DELETE /v1/me/voice/transcripts/{transcriptID}
 DELETE /v1/spaces/{spaceID}
+DELETE /v1/spaces/{spaceID}/agent-threads/{threadID}
 DELETE /v1/spaces/{spaceID}/agents/{agentID}
 DELETE /v1/spaces/{spaceID}/apps/{appID}
 DELETE /v1/spaces/{spaceID}/avatar
@@ -62,7 +63,10 @@ GET /v1/spaces
 GET /v1/spaces/resolve/{ticket}
 GET /v1/spaces/{spaceID}
 GET /v1/spaces/{spaceID}/agent-activity
+GET /v1/spaces/{spaceID}/agent-threads
+GET /v1/spaces/{spaceID}/agent-threads/{threadID}/entries
 GET /v1/spaces/{spaceID}/agents
+GET /v1/spaces/{spaceID}/agents/{agentID}/threads
 GET /v1/spaces/{spaceID}/apps
 GET /v1/spaces/{spaceID}/attachments/{attachmentID}/download
 GET /v1/spaces/{spaceID}/avatar
@@ -128,6 +132,7 @@ POST /v1/dms/{dmID}/members
 POST /v1/friends/requests
 POST /v1/friends/requests/{userID}/accept
 POST /v1/internal/journal/file-texts
+POST /v1/internal/journal/file-versions
 POST /v1/internal/journal/note-projections
 POST /v1/login
 POST /v1/logout
@@ -144,6 +149,8 @@ POST /v1/setup-keys/redeem
 POST /v1/space-invitations/{token}
 POST /v1/spaces
 POST /v1/spaces/invitations/{inviteID}/{action}
+POST /v1/spaces/{spaceID}/agent-threads/{threadID}/entries
+POST /v1/spaces/{spaceID}/agent-threads/{threadID}/reactions
 POST /v1/spaces/{spaceID}/apps/{appID}/rooms/{roomID}/collaboration-ticket
 POST /v1/spaces/{spaceID}/code-sessions
 POST /v1/spaces/{spaceID}/code-sessions/{sessionID}/collaboration-ticket
@@ -187,6 +194,7 @@ PUT /v1/me/privacy
 PUT /v1/me/settings
 PUT /v1/me/status
 PUT /v1/me/username
+PUT /v1/spaces/{spaceID}/agent-threads/{threadID}
 PUT /v1/spaces/{spaceID}/agents/{agentID}
 PUT /v1/spaces/{spaceID}/apps/{appID}
 PUT /v1/spaces/{spaceID}/avatar

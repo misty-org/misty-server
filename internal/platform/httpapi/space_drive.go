@@ -37,6 +37,8 @@ type SpaceDriveService struct {
 	Presigner     LibraryObjectPresigner
 	Multipart     LibraryMultipartUploader
 	UploadURLTTL  time.Duration
+	StarterIgnore bool
+	ignoreReady   sync.Map
 }
 
 func NewSpaceDriveService(database *db.Database, store LibraryObjectStore) (*SpaceDriveService, error) {
@@ -47,7 +49,7 @@ func NewSpaceDriveService(database *db.Database, store LibraryObjectStore) (*Spa
 	if _, err := validatePresignTTL(ttls.UploadURLTTL); err != nil {
 		return nil, err
 	}
-	service := &SpaceDriveService{database: database, Store: store, UploadURLTTL: ttls.UploadURLTTL}
+	service := &SpaceDriveService{database: database, Store: store, UploadURLTTL: ttls.UploadURLTTL, StarterIgnore: true}
 	if presigner, ok := store.(LibraryObjectPresigner); ok {
 		service.Presigner = presigner
 	}
@@ -141,6 +143,7 @@ func writeDriveError(w http.ResponseWriter, err error) {
 			"invalid_move":      db.ErrDriveInvalidMove, "not_trashed": db.ErrDriveNotTrashed,
 			"blob_missing": db.ErrDriveBlobMissing, "upload_incomplete": db.ErrDriveUploadIncomplete,
 			"id_taken": db.ErrDriveIDTaken, "upload_conflict": db.ErrLibraryConflict,
+			"protected": db.ErrDriveProtected,
 		} {
 			if errors.Is(err, known) {
 				writeJSON(w, http.StatusConflict, map[string]string{"code": code})

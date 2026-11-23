@@ -28,10 +28,13 @@ func (s *SpacesService) RemoveMember() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if err := s.database.RemoveSpaceMember(r.Context(), userID, chi.URLParam(r, "spaceID"), chi.URLParam(r, "userID")); err != nil {
+		spaceID := chi.URLParam(r, "spaceID")
+		memberID := chi.URLParam(r, "userID")
+		if err := s.database.RemoveSpaceMember(r.Context(), userID, spaceID, memberID); err != nil {
 			writeSpaceError(w, err)
 			return
 		}
+		s.endSpaceCallsFor(r.Context(), spaceID, []string{memberID})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -42,10 +45,12 @@ func (s *SpacesService) LeaveSpace() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if err := s.database.LeaveSpace(r.Context(), userID, chi.URLParam(r, "spaceID")); err != nil {
+		spaceID := chi.URLParam(r, "spaceID")
+		if err := s.database.LeaveSpace(r.Context(), userID, spaceID); err != nil {
 			writeSpaceError(w, err)
 			return
 		}
+		s.endSpaceCallsFor(r.Context(), spaceID, []string{userID})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

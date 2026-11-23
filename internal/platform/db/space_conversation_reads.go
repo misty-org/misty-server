@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 )
 
 func (db *Database) MarkSpaceConversationRead(
@@ -27,12 +28,19 @@ func (db *Database) MarkSpaceConversationRead(
 		if seq == 0 || seq > maximum {
 			seq = maximum
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_reads(
+		var next int64
+		err := tx.QueryRowContext(ctx, `INSERT INTO space_conversation_reads(
 			conversation_id,user_id,read_message_seq
 		) VALUES($1,$2,$3) ON CONFLICT(conversation_id,user_id) DO UPDATE
-		SET read_message_seq=GREATEST(
-			space_conversation_reads.read_message_seq,excluded.read_message_seq
-		),updated_at=NOW()`, conversationID, userID, seq)
-		return err
+		SET read_message_seq=excluded.read_message_seq,updated_at=NOW()
+		WHERE space_conversation_reads.read_message_seq<excluded.read_message_seq
+		RETURNING read_message_seq`, conversationID, userID, seq).Scan(&next)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return recordReadMarkerTx(ctx, tx, spaceID, userID, conversationID, "", 0, next)
 	})
 }

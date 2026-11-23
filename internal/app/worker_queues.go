@@ -38,6 +38,9 @@ func runNoteControlProcessing(ctx context.Context, server *Server) {
 		"code-session-control": func(ctx context.Context) (int, error) {
 			return server.Spaces.ProcessCodeSessionControlCommands(ctx, 50)
 		},
+		"room-control": func(ctx context.Context) (int, error) {
+			return server.Spaces.ProcessCollabRoomControlCommands(ctx, 50)
+		},
 	}
 	for kind, process := range queues {
 		workers.Add(1)

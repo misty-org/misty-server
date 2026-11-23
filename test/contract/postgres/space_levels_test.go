@@ -90,14 +90,14 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 	}
 
 	for _, agent := range []string{"agent-a", "agent-b"} {
-		if _, err := database.AddSpaceAgent(ctx, owner.ID, space.ID, agent, agent); err != nil {
+		if _, err := addTestSpaceAgent(ctx, database, owner.ID, space.ID, agent, agent); err != nil {
 			t.Fatalf("%s = %v", agent, err)
 		}
 	}
-	if _, err := database.AddSpaceAgent(ctx, owner.ID, space.ID, "agent-a", "renamed"); err != nil {
+	if _, err := addTestSpaceAgent(ctx, database, owner.ID, space.ID, "agent-a", "renamed"); err != nil {
 		t.Fatalf("rename = %v", err)
 	}
-	if _, err := database.AddSpaceAgent(ctx, friend.ID, space.ID, "agent-c", "c"); !errors.Is(err, ErrSpaceAgentLimit) {
+	if _, err := addTestSpaceAgent(ctx, database, friend.ID, space.ID, "agent-c", "c"); !errors.Is(err, ErrSpaceAgentLimit) {
 		t.Fatalf("third agent = %v", err)
 	}
 
@@ -140,7 +140,7 @@ func TestSpaceLevelsRiseWithMembersBoosts(t *testing.T) {
 	if err != nil || len(members) != 2 {
 		t.Fatalf("members after lapse = %d %v", len(members), err)
 	}
-	if _, err := database.AddSpaceAgent(ctx, owner.ID, space.ID, "agent-d", "d"); !errors.Is(err, ErrSpaceAgentLimit) {
+	if _, err := addTestSpaceAgent(ctx, database, owner.ID, space.ID, "agent-d", "d"); !errors.Is(err, ErrSpaceAgentLimit) {
 		t.Fatalf("agent after lapse = %v", err)
 	}
 	if err := database.SetSpaceBoosts(ctx, "space_missing", owner.ID, 1); !errors.Is(err, ErrSpaceNotFound) {
@@ -165,7 +165,7 @@ func TestWithoutSpaceLevelsEverySpaceIsUnlimited(t *testing.T) {
 		t.Fatalf("self-hosted = %+v %v", state, err)
 	}
 	for i := 0; i < 5; i++ {
-		if _, err := database.AddSpaceAgent(ctx, owner.ID, space.ID, "agent-"+string(rune('a'+i)), "agent"); err != nil {
+		if _, err := addTestSpaceAgent(ctx, database, owner.ID, space.ID, "agent-"+string(rune('a'+i)), "agent"); err != nil {
 			t.Fatalf("agent %d = %v", i, err)
 		}
 	}

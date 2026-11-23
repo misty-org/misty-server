@@ -10,10 +10,11 @@ import (
 )
 
 type AccountStatus struct {
-	UserID      string `json:"user_id"`
-	Status      string `json:"status"`
-	CustomText  string `json:"custom_text,omitempty"`
-	CustomEmoji string `json:"custom_emoji,omitempty"`
+	UserID          string     `json:"user_id"`
+	Status          string     `json:"status"`
+	CustomText      string     `json:"custom_text,omitempty"`
+	CustomEmoji     string     `json:"custom_emoji,omitempty"`
+	CustomExpiresAt *time.Time `json:"custom_expires_at,omitempty"`
 }
 
 func (s *RealtimeService) setIdle(client *RealtimeClient, idle bool) {
@@ -49,6 +50,9 @@ func shownStatus(userID, connection string, chosen db.ChosenStatus) AccountStatu
 		out.Status = "dnd"
 	}
 	out.CustomText, out.CustomEmoji = chosen.CustomText, chosen.CustomEmoji
+	if out.CustomText != "" || out.CustomEmoji != "" {
+		out.CustomExpiresAt = chosen.CustomExpiresAt
+	}
 	return out
 }
 
@@ -82,6 +86,9 @@ func (s *RealtimeService) PublishStatus(userID string) {
 	key := ""
 	if status.Status != "offline" {
 		key = status.Status + "\x00" + status.CustomText + "\x00" + status.CustomEmoji
+		if status.CustomExpiresAt != nil {
+			key += "\x00" + status.CustomExpiresAt.UTC().Format(time.RFC3339Nano)
+		}
 	}
 	if s.lastStatus[userID] == key {
 		s.Mu.Unlock()

@@ -52,14 +52,11 @@ func (s *SpacesService) SpaceAgent() http.HandlerFunc {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		var body struct {
-			Name string `json:"name"`
-		}
-		if err := decodeJSON(w, r, &body); err != nil {
-			writeSpaceError(w, db.ErrSpaceInvalid)
+		var body db.SpaceAgentDefinition
+		if err := decodeJSONUpTo(w, r, &body, db.MaxSpaceAgentBodyBytes); err != nil {
 			return
 		}
-		agent, err := s.database.AddSpaceAgent(r.Context(), userID, spaceID, agentID, body.Name)
+		agent, err := s.database.PutSpaceAgent(r.Context(), userID, spaceID, agentID, body)
 		if err != nil {
 			writeSpaceError(w, err)
 			return

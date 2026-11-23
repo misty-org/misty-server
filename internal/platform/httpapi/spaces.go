@@ -85,10 +85,17 @@ func (s *SpacesService) Space() http.HandlerFunc {
 			if decodeJSON(w, r, &body) != nil {
 				return
 			}
+			var memberIDs []string
+			if members, err := s.database.SpaceMembers(r.Context(), userID, spaceID); err == nil {
+				for _, member := range members {
+					memberIDs = append(memberIDs, member.UserID)
+				}
+			}
 			if err := s.database.DeleteSpace(r.Context(), userID, spaceID, body.Confirmation); err != nil {
 				writeSpaceError(w, err)
 				return
 			}
+			s.endSpaceCallsFor(r.Context(), spaceID, memberIDs)
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)

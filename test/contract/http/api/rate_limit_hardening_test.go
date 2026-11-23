@@ -124,7 +124,7 @@ func TestSpaceRoutesShareOneBudgetPerRouteShape(t *testing.T) {
 	handler := hardeningHandler(limiter)
 
 	allowed := 0
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 200; i++ {
 		path := fmt.Sprintf("/spaces/space_%036d/notes/note_abcdefabcdefabcdef/collaboration-ticket", i)
 		request := httptest.NewRequest(http.MethodPost, path, nil)
 		request.RemoteAddr = "203.0.113.7:1234"
@@ -134,8 +134,8 @@ func TestSpaceRoutesShareOneBudgetPerRouteShape(t *testing.T) {
 			allowed++
 		}
 	}
-	if allowed > 30 {
-		t.Fatalf("collaboration tickets allowed %d calls across Spaces, want the 30/min budget", allowed)
+	if allowed > 120 {
+		t.Fatalf("collaboration tickets allowed %d calls across Spaces, want the 120/min budget", allowed)
 	}
 }
 
@@ -157,7 +157,8 @@ func TestPublicBetaSensitiveRoutesHaveExplicitRateLimits(t *testing.T) {
 		path  string
 		limit int
 	}{
-		{"/spaces/space_abcdefabcdefabcdef/notes/note_abcdefabcdefabcdef/collaboration-ticket", 30},
+		{"/spaces/space_abcdefabcdefabcdef/notes/note_abcdefabcdefabcdef/collaboration-ticket", 120},
+		{"/spaces/space_abcdefabcdefabcdef/apps/sketch/rooms/board/collaboration-ticket", 120},
 		{"/spaces/space_abcdefabcdefabcdef/notes/note_abcdefabcdefabcdef/assets/uploads", 20},
 		{"/spaces/space_abcdefabcdefabcdef/notes/note_abcdefabcdefabcdef/assets/uploads/upload_abcdefabcdefabcdef/finalize", 30},
 		{"/spaces/space_abcdefabcdefabcdef/notes/note_abcdefabcdefabcdef/history/v_0123456789abcdef0123456789abcdef/restore", 10},

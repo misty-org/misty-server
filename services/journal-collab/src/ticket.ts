@@ -15,6 +15,7 @@ export interface TicketClaims {
   role: DocumentRole;
   acl_version: number;
   exp: number;
+  gc?: boolean;
 }
 
 interface TicketVerificationContext {
@@ -34,6 +35,7 @@ export class TicketError extends Error {
 }
 
 const MAX_TICKET_BYTES = 4096;
+export const MAX_RESOURCE_ID_LENGTH = 512;
 const VALID_ROLES: ReadonlySet<string> = new Set([
   "creator",
   "editor",
@@ -101,7 +103,7 @@ function decodeClaims(payloadSegment: string): TicketClaims {
   if (
     !VALID_RESOURCE_TYPES.has(claims.resource_type) ||
     claims.resource_id.length < 1 ||
-    claims.resource_id.length > 200
+    claims.resource_id.length > MAX_RESOURCE_ID_LENGTH
   ) {
     throw new TicketError("ticket_resource_invalid");
   }
@@ -119,6 +121,9 @@ function decodeClaims(payloadSegment: string): TicketClaims {
     throw new TicketError("ticket_malformed");
   }
   if (claims.jti.length < 8 || claims.jti.length > 128) {
+    throw new TicketError("ticket_malformed");
+  }
+  if (claims.gc !== undefined && typeof claims.gc !== "boolean") {
     throw new TicketError("ticket_malformed");
   }
   return claims as TicketClaims;

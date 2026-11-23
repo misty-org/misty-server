@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 const maxAppInstallBodyBytes = 72 << 10
@@ -65,13 +67,30 @@ func (s *SpacesService) SpaceAppRoomTicket() http.HandlerFunc {
 		if !ok {
 			return
 		}
+		var body struct {
+			GC *bool `json:"gc"`
+		}
+		if decodeOptionalJSON(w, r, &body, maxJSONBodyBytes) != nil {
+			return
+		}
 		spaceID, appID, roomID := chi.URLParam(r, "spaceID"), chi.URLParam(r, "appID"), chi.URLParam(r, "roomID")
-		if err := s.database.SpaceAppRoomAccess(r.Context(), userID, spaceID, appID, roomID); err != nil {
+		grant, err := s.database.SpaceAppRoomAccess(r.Context(), userID, spaceID, appID, roomID)
+		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		ticket, err := s.JournalCollab.MintAppRoomTicket(userID, spaceID, appID, roomID)
+		ticket, err := s.JournalCollab.MintAppRoomTicket(
+			userID, spaceID, appID, roomID, grant.Generation, grant.Role, body.GC != nil && !*body.GC,
+		)
 		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		if err := s.database.RecordCollabRoom(r.Context(), db.CollabRoomRecord{
+			Party: db.CollabPartyApp, Room: ticket.Room, SpaceID: spaceID,
+			ResourceID: AppRoomResourceID(spaceID, appID, roomID), AppID: appID, UserID: userID,
+			Permissions: []string{"rooms"},
+		}); err != nil {
 			writeSpaceError(w, err)
 			return
 		}

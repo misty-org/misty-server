@@ -65,7 +65,9 @@ describe("document room policy", () => {
   it("enforces room capacity and oversized message ceilings", () => {
     expect(roomIsFull(39)).toBe(false);
     expect(roomIsFull(40)).toBe(true);
-    expect(messageIsTooLarge(512 * 1024)).toBe(false);
-    expect(messageIsTooLarge(512 * 1024 + 1)).toBe(true);
+    expect(messageIsTooLarge(600 * 1024)).toBe(false);
+    expect(messageIsTooLarge(9 * 1024 * 1024)).toBe(false);
+    expect(messageIsTooLarge(12 * 1024 * 1024)).toBe(false);
+    expect(messageIsTooLarge(12 * 1024 * 1024 + 1)).toBe(true);
   });
 });

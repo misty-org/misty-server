@@ -15,7 +15,8 @@ func (l *APIRateLimiter) limiterFor(method, path string, policy RateLimitPolicy)
 	if ok {
 		return limiter
 	}
-	if len(l.Limiters) >= MaxTrackedRoutes {
+	_, explicit := l.RoutePolicies[key]
+	if !explicit && len(l.Limiters) >= MaxTrackedRoutes {
 		key = method + " " + overflowRouteKey
 		if overflow, exists := l.Limiters[key]; exists {
 			return overflow
@@ -27,6 +28,13 @@ func (l *APIRateLimiter) limiterFor(method, path string, policy RateLimitPolicy)
 }
 
 const overflowRouteKey = "{overflow}"
+
+var accountKeyedRoutes = map[string]bool{
+	"/spaces/{spaceID}/notes/{id}/collaboration-ticket":            true,
+	"/spaces/{spaceID}/code-sessions/{id}/collaboration-ticket":    true,
+	"/spaces/{spaceID}/drive/items/{id}/collaboration-ticket":      true,
+	"/spaces/{spaceID}/apps/{id}/rooms/{id}/collaboration-ticket": true,
+}
 
 var costBearingRoutes = map[string]bool{
 	"/spaces/{spaceID}/attachments/{id}/download":               true,
@@ -49,7 +57,7 @@ func NormalizeRateLimitPath(path string) string {
 	if parts[0] == "spaces" && len(parts) >= 2 {
 		parts[1] = "{spaceID}"
 		for index := 2; index < len(parts); index++ {
-			if looksLikeRatePathIdentifier(parts[index]) {
+			if namedRatePathIdentifier(parts, index) || looksLikeRatePathIdentifier(parts[index]) {
 				parts[index] = "{id}"
 			}
 		}
@@ -84,6 +92,19 @@ func looksLikeRatePathIdentifier(segment string) bool {
 		}
 	}
 	return true
+}
+
+func namedRatePathIdentifier(parts []string, index int) bool {
+	if fixedRatePathSegments[parts[index]] || parts[2] != "apps" {
+		return false
+	}
+	switch index {
+	case 3:
+		return true
+	case 5:
+		return parts[4] == "rooms"
+	}
+	return false
 }
 
 var fixedRatePathSegments = map[string]bool{

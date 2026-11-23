@@ -91,6 +91,11 @@ func (db *Database) CreateDriveItem(ctx context.Context, in DriveCreateInput) (*
 		if err != nil {
 			return err
 		}
+		if isRootDriveIgnore(in.ParentID, name) {
+			if err := requireDriveIgnoreEditTx(ctx, tx, in.UserID, in.SpaceID); err != nil {
+				return err
+			}
+		}
 		id := in.ID
 		if id == "" {
 			id = "drv_" + uuid.NewString()
@@ -197,7 +202,7 @@ type DrivePatchInput struct {
 }
 
 func driveReplacedNameTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID *string, name string, at time.Time) (string, error) {
-	label := "replaced " + at.UTC().Format("2006-01-02 1504")
+	label := "conflicted copy " + at.UTC().Format("2006-01-02 1504")
 	parent := ""
 	if parentID != nil {
 		parent = *parentID
@@ -206,7 +211,7 @@ func driveReplacedNameTx(ctx context.Context, tx *sql.Tx, spaceID string, parent
 		candidate := driveLabeledName(name, driveKindFile, label, n)
 		var used bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_drive_items
-			WHERE space_id=$1 AND COALESCE(parent_id,'')=$2 AND lower(name)=lower($3::text) AND deleted_at IS NULL)`,
+			WHERE space_id=$1 AND COALESCE(parent_id,'')=$2 AND misty_drive_name_fold(name)=misty_drive_name_fold($3::text) AND deleted_at IS NULL)`,
 			spaceID, parent, candidate).Scan(&used); err != nil {
 			return "", err
 		}
@@ -216,7 +221,7 @@ func driveReplacedNameTx(ctx context.Context, tx *sql.Tx, spaceID string, parent
 	}
 }
 
-func keepReplacedDriveContentTx(ctx context.Context, tx *sql.Tx, spaceID, userID string, item DriveItem) (DriveItem, error) {
+func keepReplacedDriveContentTx(ctx context.Context, tx *sql.Tx, spaceID string, item DriveItem) (DriveItem, error) {
 	name, err := driveReplacedNameTx(ctx, tx, spaceID, item.ParentID, item.Name, time.Now())
 	if err != nil {
 		return DriveItem{}, err
@@ -232,9 +237,9 @@ func keepReplacedDriveContentTx(ctx context.Context, tx *sql.Tx, spaceID, userID
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO space_drive_items(id,space_id,parent_id,name,kind,sha256,byte_size,mtime_ms,blob_key,seq,
 			modified_by,modified_at,trashed_at,trashed_by,trash_hold,replaced_of)
-		VALUES($1,$2,$3,$4,'file',$5,$6,$7,$8,$9,$10,$11,NOW(),$12,FALSE,$13)`,
+		VALUES($1,$2,$3,$4,'file',$5,$6,$7,$8,$9,$10,$11,NULL,NULL,FALSE,$12)`,
 		id, spaceID, driveNullable(item.ParentID), name, *item.SHA256, item.Size, item.MTimeMS, blobKey, seq,
-		item.ModifiedBy, item.ModifiedAt, userID, item.ID); err != nil {
+		item.ModifiedBy, item.ModifiedAt, item.ID); err != nil {
 		return DriveItem{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE space_storage_contributions SET source_id=$3,updated_at=NOW()
@@ -262,6 +267,9 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 			return err
 		}
 		if in.IfMatch > 0 && item.Version != in.IfMatch {
+			return DriveConflictError{Code: "version_conflict", Item: item}
+		}
+		if in.Content && in.BaseVersion > item.Version {
 			return DriveConflictError{Code: "version_conflict", Item: item}
 		}
 		if item.Kind == DriveKindFolder && (in.Content || in.MTimeMS != nil) {
@@ -310,12 +318,25 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 			result.Revived = result.Revived || parentRevived > 0
 			parentID = in.ParentID
 		}
+		wasIgnore := item.Kind == driveKindFile && isRootDriveIgnore(item.ParentID, item.Name)
+		becomesIgnore := item.Kind == driveKindFile && isRootDriveIgnore(parentID, name)
+		if wasIgnore && !becomesIgnore {
+			return ErrDriveProtected
+		}
+		if becomesIgnore && (!wasIgnore || in.Content) {
+			if err := requireDriveIgnoreEditTx(ctx, tx, in.UserID, in.SpaceID); err != nil {
+				return err
+			}
+		}
 		if name != item.Name || !sameParent(parentID, item.ParentID) {
 			holder, err := driveNameHolderTx(ctx, tx, in.SpaceID, parentID, name, item.ID)
 			if err != nil {
 				return err
 			}
 			if holder != nil {
+				if in.Replace && holder.Kind == driveKindFile && isRootDriveIgnore(holder.ParentID, holder.Name) {
+					return ErrDriveProtected
+				}
 				if !in.Replace {
 					return DriveConflictError{Code: "name_taken", Item: *holder}
 				}
@@ -333,6 +354,8 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 		}
 		if in.MTimeMS != nil {
 			mtime = *in.MTimeMS
+		} else if in.Content {
+			mtime = time.Now().UnixMilli()
 		}
 		contentChanged, newContent := false, false
 		if in.Content {
@@ -350,7 +373,7 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 				return err
 			}
 			if keep {
-				replaced, err := keepReplacedDriveContentTx(ctx, tx, in.SpaceID, in.UserID, item)
+				replaced, err := keepReplacedDriveContentTx(ctx, tx, in.SpaceID, item)
 				if err != nil {
 					return err
 				}

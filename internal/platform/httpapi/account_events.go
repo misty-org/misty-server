@@ -38,6 +38,8 @@ func (s *SpacesService) AccountEvents() http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache, no-transform")
 		w.Header().Set("X-Accel-Buffering", "no")
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
 		keepalive := time.NewTicker(25 * time.Second)
 		defer keepalive.Stop()
 		session := ""

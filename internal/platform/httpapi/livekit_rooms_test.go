@@ -21,6 +21,9 @@ type fakeLiveKit struct {
 	mu          sync.Mutex
 	rooms       map[string][]string
 	deleted     []string
+	removed     []string
+	marked      []string
+	created     []string
 	failDeletes bool
 }
 
@@ -55,7 +58,11 @@ func (f *fakeLiveKit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	video, _ := claims["video"].(map[string]any)
 	var body struct {
-		Room string `json:"room"`
+		Room            string            `json:"room"`
+		Name            string            `json:"name"`
+		Identity        string            `json:"identity"`
+		MaxParticipants int               `json:"max_participants"`
+		Attributes      map[string]string `json:"attributes"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	f.mu.Lock()
@@ -92,6 +99,40 @@ func (f *fakeLiveKit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		f.deleted = append(f.deleted, body.Room)
 		delete(f.rooms, body.Room)
+		_, _ = w.Write([]byte("{}"))
+	case "/twirp/livekit.RoomService/RemoveParticipant":
+		if video["roomAdmin"] != true || video["room"] != body.Room {
+			http.Error(w, "permission denied", http.StatusUnauthorized)
+			return
+		}
+		f.removed = append(f.removed, body.Room+"/"+body.Identity)
+		kept := []string{}
+		for _, sid := range f.rooms[body.Room] {
+			if "user-"+sid != body.Identity {
+				kept = append(kept, sid)
+			}
+		}
+		f.rooms[body.Room] = kept
+		_, _ = w.Write([]byte("{}"))
+	case "/twirp/livekit.RoomService/UpdateParticipant":
+		if video["roomAdmin"] != true || video["room"] != body.Room {
+			http.Error(w, "permission denied", http.StatusUnauthorized)
+			return
+		}
+		f.marked = append(f.marked, body.Room+"/"+body.Identity+"/"+body.Attributes[callRemovedAttribute])
+		_, _ = w.Write([]byte("{}"))
+	case "/twirp/livekit.RoomService/CreateRoom":
+		if video["roomCreate"] != true || body.Name == "" || body.MaxParticipants != maxVoicePeople {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		f.created = append(f.created, body.Name)
+		if f.rooms == nil {
+			f.rooms = map[string][]string{}
+		}
+		if _, ok := f.rooms[body.Name]; !ok {
+			f.rooms[body.Name] = nil
+		}
 		_, _ = w.Write([]byte("{}"))
 	default:
 		http.NotFound(w, r)
@@ -352,5 +393,104 @@ func TestLiveKitAdminURL(t *testing.T) {
 		if got := liveKitAdminURL(in); got != want {
 			t.Errorf("liveKitAdminURL(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestLiveKitRemovesMembersFromTheirSpacesVoiceRooms(t *testing.T) {
+	h := newLiveKitHarness(t)
+	h.fake.setRoom("space:s1:voice:general", "PA", "PB")
+	h.fake.setRoom("space:s1:voice:quiet", "PB")
+	h.fake.setRoom("space:s2:voice:general", "PA")
+	h.fake.setRoom("dm:1", "PA", "PC")
+
+	if err := h.watcher.removeFromRooms(context.Background(), "space:s1:voice:", []string{"user-PA"}); err != nil {
+		t.Fatal(err)
+	}
+	h.fake.mu.Lock()
+	defer h.fake.mu.Unlock()
+	if len(h.fake.removed) != 1 || h.fake.removed[0] != "space:s1:voice:general/user-PA" {
+		t.Fatalf("removed %v, want only user-PA from s1's general", h.fake.removed)
+	}
+	if len(h.fake.marked) != 1 || h.fake.marked[0] != "space:s1:voice:general/user-PA/space" {
+		t.Fatalf("marked %v, want user-PA marked as no longer in the Space", h.fake.marked)
+	}
+}
+
+func TestLiveKitEndsADirectCallBetweenTwoPeople(t *testing.T) {
+	h := newLiveKitHarness(t)
+	h.fake.setRoom("dm:1", "PA", "PB")
+	h.fake.setRoom("dm:2", "PA", "PC")
+
+	if err := h.watcher.endCallsBetween(context.Background(), "dm:", []string{"user-PA", "user-PB"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.fake.takeDeleted(); len(got) != 1 || got[0] != "dm:1" {
+		t.Fatalf("deleted %v, want [dm:1]", got)
+	}
+}
+
+func TestLiveKitCallRoomIsCappedAndCounted(t *testing.T) {
+	h := newLiveKitHarness(t)
+	people, full, err := h.watcher.prepareCallRoom(context.Background(), "dm:1", "user-PA", maxVoicePeople)
+	if err != nil || full || people == nil || len(people) != 0 {
+		t.Fatalf("new room people=%v full=%v err=%v", people, full, err)
+	}
+	h.fake.setRoom("space:s1:voice:general", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8")
+	people, full, err = h.watcher.prepareCallRoom(context.Background(), "space:s1:voice:general", "user-P9", maxVoicePeople)
+	if err != nil || !full || len(people) != 8 {
+		t.Fatalf("eight others people=%v full=%v err=%v", people, full, err)
+	}
+	people, full, err = h.watcher.prepareCallRoom(context.Background(), "space:s1:voice:general", "user-P1", maxVoicePeople)
+	if err != nil || full || len(people) != 7 || people[0] != "user-P2" {
+		t.Fatalf("rejoining member people=%v full=%v err=%v", people, full, err)
+	}
+	h.fake.mu.Lock()
+	defer h.fake.mu.Unlock()
+	if len(h.fake.created) != 3 {
+		t.Fatalf("created %v, want three CreateRoom calls", h.fake.created)
+	}
+}
+
+type fakeCallAccess map[string]bool
+
+func (f fakeCallAccess) CanJoinCall(_ context.Context, userID, room string) (bool, error) {
+	return f[room+"/"+userID], nil
+}
+
+func TestLiveKitRemovesWhoeverLostTheirWayIntoASpacesVoiceRooms(t *testing.T) {
+	h := newLiveKitHarness(t)
+	h.fake.setRoom("space:s1:voice:general", "PA", "PB")
+	h.fake.setRoom("space:s1:voice:quiet", "PB")
+	h.fake.setRoom("space:s2:voice:general", "PA")
+
+	access := fakeCallAccess{
+		"space:s1:voice:general/user-PA": true,
+		"space:s1:voice:quiet/user-PB":   true,
+	}
+	removed, err := h.watcher.removeUnallowed(context.Background(), "space:s1:voice:", access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 1 || removed[0] != "user-PB" {
+		t.Fatalf("removed %v, want [user-PB]", removed)
+	}
+	h.fake.mu.Lock()
+	defer h.fake.mu.Unlock()
+	if len(h.fake.removed) != 1 || h.fake.removed[0] != "space:s1:voice:general/user-PB" {
+		t.Fatalf("removed %v, want only user-PB from s1's general", h.fake.removed)
+	}
+}
+
+func TestLiveKitMarksSomeoneRemovedFromADirectCallAsSuch(t *testing.T) {
+	h := newLiveKitHarness(t)
+	h.fake.setRoom("dm:1", "PA", "PB")
+
+	if err := h.watcher.removeFromRooms(context.Background(), "dm:", []string{"user-PA"}); err != nil {
+		t.Fatal(err)
+	}
+	h.fake.mu.Lock()
+	defer h.fake.mu.Unlock()
+	if len(h.fake.marked) != 1 || h.fake.marked[0] != "dm:1/user-PA/direct" {
+		t.Fatalf("marked %v, want user-PA marked as out of the direct call", h.fake.marked)
 	}
 }

@@ -48,6 +48,7 @@ func (s *SpacesService) Role() http.HandlerFunc {
 				writeSpaceError(w, err)
 				return
 			}
+			s.recheckSpaceCalls(r.Context(), spaceID)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -60,6 +61,7 @@ func (s *SpacesService) Role() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
+		s.recheckSpaceCalls(r.Context(), spaceID)
 		writeJSON(w, http.StatusOK, role)
 	}
 }
@@ -97,11 +99,13 @@ func (s *SpacesService) MemberRoles() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		member, err := s.database.SetSpaceMemberRoles(r.Context(), userID, chi.URLParam(r, "spaceID"), chi.URLParam(r, "userID"), body.RoleIDs)
+		spaceID := chi.URLParam(r, "spaceID")
+		member, err := s.database.SetSpaceMemberRoles(r.Context(), userID, spaceID, chi.URLParam(r, "userID"), body.RoleIDs)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
+		s.recheckSpaceCalls(r.Context(), spaceID)
 		writeJSON(w, http.StatusOK, member)
 	}
 }
@@ -118,12 +122,14 @@ func (s *SpacesService) ConversationOverwrites() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
+		spaceID := chi.URLParam(r, "spaceID")
 		conversation, err := s.database.SetSpaceConversationOverwrites(r.Context(), userID,
-			chi.URLParam(r, "spaceID"), chi.URLParam(r, "conversationID"), body.Overwrites)
+			spaceID, chi.URLParam(r, "conversationID"), body.Overwrites)
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
+		s.recheckSpaceCalls(r.Context(), spaceID)
 		writeJSON(w, http.StatusOK, conversation)
 	}
 }

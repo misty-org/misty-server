@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -25,7 +27,7 @@ func (s *SocialService) DirectCall() http.HandlerFunc {
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		if body.State != "ringing" && body.State != "ended" && body.State != "declined" ||
+		if !directCallStates[body.State] ||
 			len(body.SealedKeys) > 100 || len(body.SenderKeyID) > 64 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"code": "invalid_request"})
 			return
@@ -53,7 +55,7 @@ func (s *SocialService) DirectCall() http.HandlerFunc {
 		}
 		others := []string{}
 		for _, id := range members {
-			if id != userID {
+			if id != userID || body.State == "answered" {
 				others = append(others, id)
 			}
 		}
@@ -65,6 +67,12 @@ func (s *SocialService) DirectCall() http.HandlerFunc {
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
+
+var directCallStates = map[string]bool{
+	"ringing": true, "ended": true, "declined": true, "answered": true, "busy": true,
+}
+
+const callRoomCheckTimeout = 3 * time.Second
 
 func (s *SocialService) CallConfig() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +116,17 @@ func (s *SocialService) CallToken() http.HandlerFunc {
 			writeJSON(w, http.StatusConflict, map[string]string{"code": "room_full"})
 			return
 		}
+		checking, cancel := context.WithTimeout(r.Context(), callRoomCheckTimeout)
+		people, full, err := callAdmin().prepareCallRoom(checking, room, userID, maxVoicePeople)
+		cancel()
+		if err != nil {
+			log.Printf("calls: prepare room before a token: %v", err)
+		}
+		knowsPeople := err == nil && people != nil
+		if full {
+			writeJSON(w, http.StatusConflict, map[string]string{"code": "room_full"})
+			return
+		}
 		now := time.Now()
 		claims := jwt.MapClaims{
 			"iss": s.liveKitKey,
@@ -124,7 +143,11 @@ func (s *SocialService) CallToken() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"token": token, "url": s.liveKitURL, "room": room})
+		out := map[string]any{"token": token, "url": s.liveKitURL, "room": room}
+		if knowsPeople {
+			out["people"] = people
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 

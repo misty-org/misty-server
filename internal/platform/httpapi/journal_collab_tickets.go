@@ -26,7 +26,7 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 		resource.Type == "" || resource.Party == "" || role == "" || aclVersion < 1 {
 		return JournalTicket{}, errors.New("incomplete ticket claims")
 	}
-	room := c.resourceRoomID(resource.Type, resource.ID)
+	room := c.resourceRoomID(resource.Type, resource.roomKey())
 	if lifetime < journalTicketLifetime || lifetime > 15*time.Minute {
 		return JournalTicket{}, errors.New("invalid ticket lifetime")
 	}
@@ -41,6 +41,10 @@ func (c JournalCollabConfig) mintResourceTicketWithLifetime(
 		claims.NoteID = resource.ID
 	} else if resource.Type == "code" {
 		claims.CodeSessionID = resource.ID
+	}
+	if resource.KeepDeletes {
+		gc := false
+		claims.GC = &gc
 	}
 	header, err := json.Marshal(map[string]string{"alg": "EdDSA", "typ": "JWT"})
 	if err != nil {

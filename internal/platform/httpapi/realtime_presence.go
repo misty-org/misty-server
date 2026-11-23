@@ -21,11 +21,17 @@ func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []
 		ItemID         string        `json:"item_id"`
 		Agents         []agentStatus `json:"agents"`
 		Idle           bool          `json:"idle"`
+		Editing        bool          `json:"editing"`
+		DeviceID       string        `json:"device_id"`
+		DeviceName     string        `json:"device_name"`
 	}
 	if json.Unmarshal(payload, &msg) != nil {
 		return
 	}
-	if msg.Type == "viewing" {
+	if msg.Type == "ping" {
+		pong, _ := json.Marshal(map[string]any{"type": "pong"})
+		s.deliver(client, pong)
+	} else if msg.Type == "viewing" {
 		s.SetViewingPlace(client, msg.SpaceID, msg.Active, msg.Place, msg.ItemID)
 	} else if msg.Type == "typing" {
 		s.broadcastTyping(client, msg.SpaceID, msg.ConversationID, msg.Active)
@@ -33,6 +39,8 @@ func (s *RealtimeService) handleClientMessage(client *RealtimeClient, payload []
 		s.broadcastAgents(client, msg.SpaceID, msg.Agents)
 	} else if msg.Type == "activity" {
 		s.setIdle(client, msg.Idle)
+	} else if msg.Type == "drive.hold" {
+		s.holdDrive(client, msg.SpaceID, msg.ItemID, msg.DeviceID, msg.DeviceName, msg.Active, msg.Editing)
 	}
 }
 

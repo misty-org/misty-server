@@ -12,14 +12,15 @@ import (
 )
 
 type agentStatus struct {
-	ID    string   `json:"id"`
-	Name  string   `json:"name"`
-	State string   `json:"state"`
-	Doing string   `json:"doing"`
-	Files []string `json:"files,omitempty"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	State   string   `json:"state"`
+	Doing   string   `json:"doing"`
+	Files   []string `json:"files,omitempty"`
+	Waiting int      `json:"waiting,omitempty"`
 }
 
-var agentStates = map[string]bool{"working": true, "needs-you": true, "resting": true}
+var agentStates = map[string]bool{"working": true, "needs-you": true, "landing": true, "resting": true}
 
 var agentDoing = map[string]bool{
 	"": true, "thinking": true, "browser": true, "web": true, "shell": true, "files": true,
@@ -29,6 +30,7 @@ var agentDoing = map[string]bool{
 const (
 	maxAgentStatuses = 12
 	maxAgentFiles    = 5
+	maxAgentWaiting  = 99
 )
 
 func cleanAgentStatuses(raw []agentStatus) []agentStatus {
@@ -52,7 +54,8 @@ func cleanAgentStatuses(raw []agentStatus) []agentStatus {
 			}
 			files = append(files, file)
 		}
-		clean = append(clean, agentStatus{ID: status.ID, Name: name, State: status.State, Doing: status.Doing, Files: files})
+		waiting := min(max(status.Waiting, 0), maxAgentWaiting)
+		clean = append(clean, agentStatus{ID: status.ID, Name: name, State: status.State, Doing: status.Doing, Files: files, Waiting: waiting})
 	}
 	return clean
 }

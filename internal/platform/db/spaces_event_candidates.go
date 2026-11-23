@@ -12,7 +12,8 @@ func (db *Database) SpaceEventCandidateUsers(ctx context.Context, eventID int64)
 	users := []string{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `SELECT m.user_id FROM space_members m
-   JOIN space_events e ON e.space_id=m.space_id WHERE e.id=$1`, eventID)
+   JOIN space_events e ON e.space_id=m.space_id WHERE e.id=$1
+   AND ((e.event_type NOT LIKE 'read.%' AND e.event_type NOT LIKE 'library.%') OR m.user_id=e.actor_user_id)`, eventID)
 		if err != nil {
 			return err
 		}

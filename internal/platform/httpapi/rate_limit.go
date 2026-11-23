@@ -53,6 +53,8 @@ func NewSlidingWindowLimiter(limit int, window time.Duration) *SlidingWindowLimi
 
 const defaultLimiterMaxKeys = 20000
 
+const collaborationTicketLimit = 120
+
 func NewAPIRateLimiter() *APIRateLimiter {
 	return &APIRateLimiter{
 		Now:          time.Now,
@@ -83,12 +85,15 @@ func NewAPIRateLimiter() *APIRateLimiter {
 			"POST /me/export":                                        {Limit: 3, Window: time.Hour},
 			"POST /me/deletion":                                      {Limit: 3, Window: time.Hour},
 			"POST /friends/requests":                                 {Limit: 10, Window: time.Minute},
-			"POST /spaces/{spaceID}/notes/{id}/collaboration-ticket": {Limit: 30, Window: time.Minute},
+			"POST /spaces/{spaceID}/notes/{id}/collaboration-ticket": {Limit: collaborationTicketLimit, Window: time.Minute},
 			"POST /spaces/{spaceID}/code-sessions/{id}/collaboration-ticket": {
-				Limit: 30, Window: time.Minute,
+				Limit: collaborationTicketLimit, Window: time.Minute,
 			},
 			"POST /spaces/{spaceID}/drive/items/{id}/collaboration-ticket": {
-				Limit: 30, Window: time.Minute,
+				Limit: collaborationTicketLimit, Window: time.Minute,
+			},
+			"POST /spaces/{spaceID}/apps/{id}/rooms/{id}/collaboration-ticket": {
+				Limit: collaborationTicketLimit, Window: time.Minute,
 			},
 			"POST /spaces/{spaceID}/notes/{id}/history/{id}/restore": {Limit: 10, Window: time.Minute},
 			"GET /spaces/{spaceID}/notes/{id}/history/{id}":          {Limit: 60, Window: time.Minute},
@@ -150,7 +155,7 @@ func (l *SlidingWindowLimiter) purgeExpired(cutoff time.Time) {
 
 func (l *APIRateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions {
+		if r.Method == http.MethodOptions || TrustedServiceCallback(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -159,7 +164,9 @@ func (l *APIRateLimiter) Middleware(next http.Handler) http.Handler {
 		policy := l.policyFor(r.Method, path)
 		limiter := l.limiterFor(r.Method, path, policy)
 		key := ClientIPFromRequest(r)
-		if costBearingRoutes[path] {
+		if accountKeyedRoutes[path] {
+			key = AuthenticatedRateLimitIdentity(r)
+		} else if costBearingRoutes[path] {
 			key = RateLimitIdentity(r)
 		}
 		allowed, retryAfter := limiter.Allow(key, l.Now())

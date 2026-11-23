@@ -302,3 +302,32 @@ func (s *RealtimeService) sendJSON(client *RealtimeClient, message map[string]an
 		s.deliver(client, payload)
 	}
 }
+
+func (s *RealtimeService) clearVoiceFor(spaceID string, userIDs []string) {
+	if s == nil || spaceID == "" || len(userIDs) == 0 {
+		return
+	}
+	gone := make(map[string]bool, len(userIDs))
+	for _, id := range userIDs {
+		gone[id] = true
+	}
+	s.Mu.Lock()
+	changed := false
+	actor := ""
+	for client := range s.clients {
+		if gone[client.UserID] {
+			if client.voiceSpaceID == spaceID {
+				client.voiceSpaceID, client.voiceChannelID, client.voiceKeyID = "", "", ""
+				changed = true
+			}
+			continue
+		}
+		if actor == "" && (client.voiceSpaceID == spaceID || client.viewingSpaceID == spaceID) {
+			actor = client.UserID
+		}
+	}
+	s.Mu.Unlock()
+	if changed && actor != "" {
+		go s.broadcastVoice(spaceID, actor)
+	}
+}

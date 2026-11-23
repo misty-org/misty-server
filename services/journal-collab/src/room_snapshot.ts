@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import {
   DOCUMENT_WARNING_BYTES,
   readDocumentSnapshot,
+  storedSnapshotExists,
   writeDocumentSnapshot,
 } from "./document_persistence";
 import { maybeRecordHistory } from "./document_history";
@@ -15,6 +16,7 @@ export interface RoomSnapshotContext {
   broadcast(message: string): void;
   publishNoteProjection?: () => Promise<void>;
   keepsHistory?: boolean;
+  measured?(bytes: number): void;
   log(event: string, details: Record<string, unknown>): void;
 }
 
@@ -25,11 +27,16 @@ export async function loadRoomSnapshot(room: RoomSnapshotContext): Promise<void>
     if (snapshot.source !== "current") {
       room.log("document_snapshot_recovered", { source: snapshot.source });
     }
+    return;
+  }
+  if (await storedSnapshotExists(room.storage)) {
+    room.log("document_snapshot_load_failed", { starts_empty: true });
   }
 }
 
 export async function saveRoomSnapshot(room: RoomSnapshotContext): Promise<void> {
   const update = Y.encodeStateAsUpdate(room.document);
+  room.measured?.(update.byteLength);
   if (room.keepsHistory) {
     try {
       const limits = await readRoomLimits(room.storage);

@@ -4,6 +4,7 @@ import {
   verifyControlRequestWithRotation,
 } from "./control_protocol";
 import type { Env } from "./room_env";
+import { MAX_RESOURCE_ID_LENGTH } from "./ticket";
 
 const MAX_CONTROL_BODY_BYTES = 512 * 1024;
 
@@ -60,7 +61,7 @@ export async function bindControlResourceID(
   resourceID: unknown,
 ): Promise<Response | null> {
   if (resourceID === undefined) return null;
-  if (typeof resourceID !== "string" || !resourceID.trim() || resourceID.length > 200) {
+  if (typeof resourceID !== "string" || !resourceID.trim() || resourceID.length > MAX_RESOURCE_ID_LENGTH) {
     return jsonResponse({ code: "invalid_resource_id" }, 400);
   }
   const trimmed = resourceID.trim();

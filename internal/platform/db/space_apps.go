@@ -5,11 +5,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/misty-org/misty-server/internal/spaces"
 )
@@ -31,7 +34,7 @@ const (
 
 var spaceAppIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 
-var spaceAppPermissions = map[string]bool{"files": true, "chat.post": true, "rooms": true, "members": true}
+var spaceAppPermissions = map[string]bool{"files": true, "chat.post": true, "rooms": true, "members": true, "calls": true}
 
 const spaceAppColumns = `space_id,app_id,version,permissions,source,installed_by,installed_at`
 
@@ -141,11 +144,22 @@ func (db *Database) InstallSpaceApp(ctx context.Context, userID, spaceID, appID,
 		if !already && installed >= maxSpaceAppsPerSpace {
 			return ErrSpaceAppLimit
 		}
-		if err := scanSpaceApp(tx.QueryRowContext(ctx, `INSERT INTO space_apps(space_id,app_id,version,permissions,source,installed_by)
-			VALUES($1,$2,$3,$4,$5::jsonb,$6)
+		var previous []string
+		if already {
+			if err := tx.QueryRowContext(ctx, `SELECT permissions FROM space_apps WHERE space_id=$1 AND app_id=$2 FOR UPDATE`,
+				spaceID, appID).Scan(pq.Array(&previous)); err != nil {
+				return err
+			}
+		}
+		if err := scanSpaceApp(tx.QueryRowContext(ctx, `INSERT INTO space_apps(space_id,app_id,version,permissions,source,installed_by,room_generation)
+			VALUES($1,$2,$3,$4,$5::jsonb,$6,$7)
 			ON CONFLICT (space_id,app_id) DO UPDATE SET version=EXCLUDED.version,permissions=EXCLUDED.permissions,
 				source=EXCLUDED.source,installed_by=EXCLUDED.installed_by,installed_at=NOW()
-			RETURNING `+spaceAppColumns, spaceID, appID, version, pq.Array(permissions), sourceValue, userID), app); err != nil {
+			RETURNING `+spaceAppColumns, spaceID, appID, version, pq.Array(permissions), sourceValue, userID,
+			newSpaceAppRoomGeneration()), app); err != nil {
+			return err
+		}
+		if err := revokeAppRoomAccessTx(ctx, tx, spaceID, appID, previous, app.Permissions); err != nil {
 			return err
 		}
 		eventType := "app.installed"
@@ -174,6 +188,9 @@ func (db *Database) RemoveSpaceApp(ctx context.Context, userID, spaceID, appID s
 		if removed, _ := result.RowsAffected(); removed == 0 {
 			return ErrSpaceNotFound
 		}
+		if err := purgeAppRoomsTx(ctx, tx, spaceID, appID); err != nil {
+			return err
+		}
 		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "app.removed", appID, map[string]any{"app_id": appID})
 		return err
 	})
@@ -181,28 +198,51 @@ func (db *Database) RemoveSpaceApp(ctx context.Context, userID, spaceID, appID s
 
 var spaceAppRoomPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
-func (db *Database) SpaceAppRoomAccess(ctx context.Context, userID, spaceID, appID, roomID string) error {
-	if !spaceAppIDPattern.MatchString(appID) || !spaceAppRoomPattern.MatchString(roomID) {
-		return ErrSpaceNotFound
+func ValidSpaceAppRoomID(roomID string) bool {
+	return spaceAppRoomPattern.MatchString(roomID) && strings.Trim(roomID, ".") != ""
+}
+
+func newSpaceAppRoomGeneration() string {
+	return strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
+}
+
+type SpaceAppRoomGrant struct {
+	Generation string
+	Role       string
+}
+
+func spaceAppGrantTx(ctx context.Context, tx *sql.Tx, spaceID, appID string, required ...string) (string, error) {
+	var permissions []string
+	var generation string
+	err := tx.QueryRowContext(ctx, `SELECT permissions,room_generation FROM space_apps WHERE space_id=$1 AND app_id=$2`,
+		spaceID, appID).Scan(pq.Array(&permissions), &generation)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrSpaceNotFound
 	}
-	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
+	if err != nil {
+		return "", err
+	}
+	if !holdsAppPermissions(permissions, required...) {
+		return "", ErrSpaceForbidden
+	}
+	return generation, nil
+}
+
+func (db *Database) SpaceAppRoomAccess(ctx context.Context, userID, spaceID, appID, roomID string) (*SpaceAppRoomGrant, error) {
+	if !spaceAppIDPattern.MatchString(appID) || !ValidSpaceAppRoomID(roomID) {
+		return nil, ErrSpaceNotFound
+	}
+	grant := &SpaceAppRoomGrant{Role: "editor"}
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
-		var permissions []string
-		err := tx.QueryRowContext(ctx, `SELECT permissions FROM space_apps WHERE space_id=$1 AND app_id=$2`,
-			spaceID, appID).Scan(pq.Array(&permissions))
-		if err == sql.ErrNoRows {
-			return ErrSpaceNotFound
-		}
-		if err != nil {
-			return err
-		}
-		for _, permission := range permissions {
-			if permission == "rooms" {
-				return nil
-			}
-		}
-		return ErrSpaceForbidden
+		generation, err := spaceAppGrantTx(ctx, tx, spaceID, appID, "rooms")
+		grant.Generation = generation
+		return err
 	})
+	if err != nil {
+		return nil, err
+	}
+	return grant, nil
 }

@@ -54,6 +54,13 @@ func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID,
 }
 
 func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
+	if err := revokeCollabRoomsForUserTx(ctx, tx, spaceID, userID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM space_agent_thread_reactions r USING space_agent_threads t
+		WHERE r.thread_id=t.id AND t.space_id=$1 AND r.user_id=$2`, spaceID, userID); err != nil {
+		return err
+	}
 	notes, err := privateItemIDsTx(ctx, tx, `SELECT id FROM space_notes WHERE space_id=$1 AND creator_user_id=$2 AND visibility='private' AND lifecycle_state IN ('active','archived','archived_creator_left')`, spaceID, userID)
 	if err != nil {
 		return err

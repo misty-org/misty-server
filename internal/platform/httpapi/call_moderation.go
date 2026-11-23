@@ -43,7 +43,7 @@ func (w *LiveKitRoomWatcher) Moderate(database *db.Database) http.HandlerFunc {
 			return
 		}
 		if body.Action == "mute" {
-			err = w.muteMicrophone(r.Context(), room, body.Person)
+			err = w.muteAudio(r.Context(), room, body.Person)
 		} else {
 			err = w.call(r.Context(), "RemoveParticipant", room,
 				map[string]any{"room": room, "identity": body.Person}, nil)
@@ -58,16 +58,22 @@ func (w *LiveKitRoomWatcher) Moderate(database *db.Database) http.HandlerFunc {
 
 type liveKitTrack struct {
 	SID    string          `json:"sid"`
+	Type   json.RawMessage `json:"type"`
 	Source json.RawMessage `json:"source"`
 	Muted  bool            `json:"muted"`
 }
 
-func (t liveKitTrack) microphone() bool {
+func (t liveKitTrack) audio() bool {
+	kind := bytes.TrimSpace(t.Type)
+	if len(kind) == 0 || bytes.Equal(kind, []byte(`"AUDIO"`)) || bytes.Equal(kind, []byte(`0`)) {
+		return true
+	}
 	source := bytes.TrimSpace(t.Source)
-	return bytes.Equal(source, []byte(`"MICROPHONE"`)) || bytes.Equal(source, []byte(`2`))
+	return bytes.Equal(source, []byte(`"MICROPHONE"`)) || bytes.Equal(source, []byte(`2`)) ||
+		bytes.Equal(source, []byte(`"SCREEN_SHARE_AUDIO"`)) || bytes.Equal(source, []byte(`4`))
 }
 
-func (w *LiveKitRoomWatcher) muteMicrophone(ctx context.Context, room, identity string) error {
+func (w *LiveKitRoomWatcher) muteAudio(ctx context.Context, room, identity string) error {
 	var found struct {
 		Tracks []liveKitTrack `json:"tracks"`
 	}
@@ -76,7 +82,7 @@ func (w *LiveKitRoomWatcher) muteMicrophone(ctx context.Context, room, identity 
 		return err
 	}
 	for _, track := range found.Tracks {
-		if !track.microphone() || track.Muted {
+		if !track.audio() || track.Muted {
 			continue
 		}
 		if err := w.call(ctx, "MutePublishedTrack", room, map[string]any{

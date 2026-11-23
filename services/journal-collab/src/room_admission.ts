@@ -15,6 +15,7 @@ interface AdmissionRoom {
   state: RoomState;
   storage: DurableObjectStorage;
   connectionCount(): number;
+  reserve(): void;
 }
 
 export async function admitSocket(
@@ -43,5 +44,6 @@ export async function admitSocket(
   if (roomIsFull(room.connectionCount())) {
     return { refusal: "room_full" };
   }
+  room.reserve();
   return { claims };
 }

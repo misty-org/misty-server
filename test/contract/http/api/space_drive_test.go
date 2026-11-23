@@ -190,10 +190,10 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 	if ana.Name != "Notes.txt" || ana.ModifiedBy != f.ownerID || ana.Version != renamed.Version+1 {
 		t.Fatalf("item after the stale save = %+v", ana)
 	}
-	if !regexp.MustCompile(`^Notes \(replaced \d{4}-\d{2}-\d{2} \d{4}\)\.txt$`).MatchString(copy.Name) {
+	if !regexp.MustCompile(`^Notes \(conflicted copy \d{4}-\d{2}-\d{2} \d{4}\)\.txt$`).MatchString(copy.Name) {
 		t.Fatalf("copy name = %q", copy.Name)
 	}
-	if !copy.Trashed || copy.TrashHold || copy.TrashedBy == nil || *copy.TrashedBy != f.ownerID || copy.ReplacedOf == nil || *copy.ReplacedOf != notes.ID ||
+	if copy.Trashed || copy.TrashHold || copy.TrashedBy != nil || copy.ReplacedOf == nil || *copy.ReplacedOf != notes.ID ||
 		copy.Kind != "file" || copy.ParentID == nil || *copy.ParentID != docs.ID || copy.ModifiedBy != f.memberID ||
 		copy.SHA256 == nil || *copy.SHA256 != *ben.SHA256 || copy.Size != ben.Size {
 		t.Fatalf("replaced copy = %+v", copy)
@@ -214,8 +214,8 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 	trash := driveJSON[struct {
 		Items []driveTestItem `json:"items"`
 	}](t, f.call(f.member, http.MethodGet, f.base+"/trash", 0, nil), http.StatusOK)
-	if len(trash.Items) != 1 || trash.Items[0].ID != copy.ID {
-		t.Fatalf("trash = %+v", trash.Items)
+	if len(trash.Items) != 0 {
+		t.Fatalf("trash = %+v, want the conflicted copy kept beside the file", trash.Items)
 	}
 
 	blind := save(f.member, f.memberID, "blind save", 0)
@@ -223,7 +223,7 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 		t.Fatalf("save without a base = %+v", blind)
 	}
 
-	f.exec(`UPDATE space_drive_items SET trashed_at=NOW()-interval '31 days' WHERE id=$1`, copy.ID)
+	f.exec(`UPDATE space_drive_items SET trashed_at=NOW()-interval '31 days', trashed_by=$2 WHERE id=$1`, copy.ID, f.ownerID)
 	if _, err := f.drive.PurgeExpiredTrash(f.ctx, 100); err != nil {
 		t.Fatal(err)
 	}
@@ -388,5 +388,26 @@ func TestDriveChangesNeedResyncPastTheHorizon(t *testing.T) {
 	}
 	if fresh := f.changes(f.member, horizon); len(fresh.Items) != 0 {
 		t.Fatalf("cursor at the horizon = %+v", fresh)
+	}
+}
+
+func TestDriveStartsWithAProtectedMistyignore(t *testing.T) {
+	f := newDriveFixture(t, "drive-starter-ignore")
+	f.drive.StarterIgnore = true
+	all := f.changes(f.member, 0)
+	var starter *driveTestItem
+	for index := range all.Items {
+		if all.Items[index].Name == ".mistyignore" && all.Items[index].ParentID == nil {
+			starter = &all.Items[index]
+		}
+	}
+	if starter == nil {
+		t.Fatalf("changes since 0 = %+v, want the starter .mistyignore", all)
+	}
+	if again := f.changes(f.member, 0); len(again.Items) != len(all.Items) {
+		t.Fatalf("a second read made another file: %+v", again)
+	}
+	if code := driveCode(t, f.call(f.member, http.MethodPost, f.itemPath(starter.ID)+"/trash", 0, map[string]any{"held": false}), http.StatusConflict); code != "protected" {
+		t.Fatalf("trashing the root .mistyignore code = %s", code)
 	}
 }

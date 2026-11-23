@@ -20,7 +20,7 @@ func TestAccountPortableExportIncludesAuthoredDataAndNoSecrets(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.database.AddSpaceAgent(fixture.ctx, fixture.creator, fixture.spaceID, "agent-on-this-computer", "Writer"); err != nil {
+	if _, err := addTestSpaceAgent(fixture.ctx, fixture.database, fixture.creator, fixture.spaceID, "agent-on-this-computer", "Writer"); err != nil {
 		t.Fatal(err)
 	}
 	digest := strings.Repeat("d", 64)

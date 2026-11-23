@@ -91,22 +91,30 @@ export function projectedDocumentBytes(document: Y.Doc, message: Uint8Array): nu
   return withProjectedDocument(document, message, (_projected, bytes) => bytes);
 }
 
+export function incomingUpdate(message: Uint8Array): Uint8Array | null {
+  try {
+    const decoder = decoding.createDecoder(message);
+    if (decoding.readVarUint(decoder) !== MESSAGE_SYNC) return null;
+    const syncType = decoding.readVarUint(decoder);
+    if (syncType !== SYNC_STEP_2 && syncType !== SYNC_UPDATE) return null;
+    return decoding.readVarUint8Array(decoder);
+  } catch {
+    return null;
+  }
+}
+
 export function withProjectedDocument<T>(
   document: Y.Doc,
   message: Uint8Array,
   inspect: (projected: Y.Doc, projectedBytes: number) => T,
 ): T | null {
   try {
-    const decoder = decoding.createDecoder(message);
-    if (decoding.readVarUint(decoder) !== MESSAGE_SYNC) return null;
-    const syncType = decoding.readVarUint(decoder);
-    if (syncType !== SYNC_STEP_2 && syncType !== SYNC_UPDATE) return null;
-    const incomingUpdate = decoding.readVarUint8Array(decoder);
+    const update = incomingUpdateOrThrow(message);
 
-    const projected = new Y.Doc();
+    const projected = new Y.Doc({ gc: document.gc });
     try {
       Y.applyUpdate(projected, Y.encodeStateAsUpdate(document));
-      Y.applyUpdate(projected, incomingUpdate);
+      Y.applyUpdate(projected, update);
       return inspect(projected, Y.encodeStateAsUpdate(projected).byteLength);
     } finally {
       projected.destroy();
@@ -114,6 +122,17 @@ export function withProjectedDocument<T>(
   } catch {
     return null;
   }
+}
+
+function incomingUpdateOrThrow(message: Uint8Array): Uint8Array {
+  const update = incomingUpdate(message);
+  if (!update) throw new Error("not_a_document_update");
+  return update;
+}
+
+export async function storedSnapshotExists(storage: DurableObjectStorage): Promise<boolean> {
+  const stored = await storage.get([CURRENT_MANIFEST_KEY, PREVIOUS_MANIFEST_KEY, LEGACY_CHUNK_COUNT_KEY]);
+  return stored.size > 0;
 }
 
 export async function currentSnapshotManifest(

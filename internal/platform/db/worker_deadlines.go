@@ -16,6 +16,8 @@ func (db *Database) NextWorkerDelay(ctx context.Context, queue string) (time.Dur
 		deadline = `SELECT min(o.next_attempt_at) FROM space_note_control_outbox o WHERE ` + noteControlHead
 	case "code-session-control":
 		deadline = `SELECT min(next_attempt_at) FROM space_code_session_control_outbox WHERE delivered_at IS NULL`
+	case "room-control":
+		deadline = `SELECT min(o.next_attempt_at) FROM space_collab_room_control_outbox o WHERE ` + collabRoomControlHead
 	case "account-deletion":
 		deadline = accountDeletionWorkerDeadline
 	default:

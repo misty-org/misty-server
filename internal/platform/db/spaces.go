@@ -34,13 +34,40 @@ func recordSpaceEventTx(ctx context.Context, tx *sql.Tx, spaceID, userID, eventT
 	return id, err
 }
 
+const spaceControlNotifyBytes = 7000
+
 func notifySpaceControlTx(ctx context.Context, tx *sql.Tx, payload any) error {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `SELECT pg_notify('misty_space_control',$1)`, string(raw))
-	return err
+	fields, isMap := payload.(map[string]any)
+	userIDs, hasUsers := fields["user_ids"].([]string)
+	if len(raw) <= spaceControlNotifyBytes || !isMap || !hasUsers || len(userIDs) < 2 {
+		_, err = tx.ExecContext(ctx, `SELECT pg_notify('misty_space_control',$1)`, string(raw))
+		return err
+	}
+	base := len(raw)
+	for _, userID := range userIDs {
+		base -= len(userID) + 3
+	}
+	for start := 0; start < len(userIDs); {
+		end, size := start, base
+		for end < len(userIDs) && (end == start || size+len(userIDs[end])+3 <= spaceControlNotifyBytes) {
+			size += len(userIDs[end]) + 3
+			end++
+		}
+		chunk := make(map[string]any, len(fields))
+		for key, value := range fields {
+			chunk[key] = value
+		}
+		chunk["user_ids"] = userIDs[start:end]
+		if err := notifySpaceControlTx(ctx, tx, chunk); err != nil {
+			return err
+		}
+		start = end
+	}
+	return nil
 }
 
 func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, error) {

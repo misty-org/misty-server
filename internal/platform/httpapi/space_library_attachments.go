@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
+
+const unsentAttachmentGrace = 24 * time.Hour
 
 func (s *SpaceLibraryService) CleanupExpired(ctx context.Context, limit int) (int, error) {
 	uploads, err := s.database.ExpireLibraryUploads(ctx, limit)
@@ -17,6 +20,9 @@ func (s *SpaceLibraryService) CleanupExpired(ctx context.Context, limit int) (in
 		if err := s.Store.Delete(ctx, upload.ObjectKey); err != nil && !errors.Is(err, ErrLibraryObjectNotFound) {
 			return len(uploads), err
 		}
+	}
+	if _, err := s.database.DiscardStaleUnsentAttachments(ctx, unsentAttachmentGrace, limit); err != nil {
+		return len(uploads), err
 	}
 	_, err = s.database.ReconcileLibraryStorageUsage(ctx, limit)
 	return len(uploads), err

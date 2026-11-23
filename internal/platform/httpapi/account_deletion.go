@@ -125,6 +125,7 @@ func (s *SpacesService) ProcessAccountDeletions(
 			)
 			return completed, err
 		}
+		endAllCallsFor(ctx, request.UserID)
 		completed++
 	}
 	return completed, nil

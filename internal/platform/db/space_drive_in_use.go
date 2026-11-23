@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -153,6 +155,193 @@ func (db *Database) ClearDriveInUse(ctx context.Context, userID, spaceID, itemID
 			return err
 		}
 		return recordDriveInUseChangedTx(ctx, tx, spaceID, userID, item.ID)
+	})
+}
+
+const driveHoldInterval = "100 years"
+
+func (db *Database) HoldDriveInUse(ctx context.Context, userID, spaceID, itemID string, device DriveDevice, editing bool, holder int32) error {
+	if !ValidDriveDevice(device) {
+		return ErrLibraryInvalid
+	}
+	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		item, err := driveInUseItemTx(ctx, tx, userID, spaceID, itemID)
+		if err != nil {
+			return err
+		}
+		found, oldName, oldEditing, err := driveInUseMarkTx(ctx, tx, item.ID, userID, device.ID)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO space_drive_in_use(item_id,space_id,user_id,device_id,device_name,editing,expires_at,connection_held,held_by)
+			VALUES($1,$2,$3,$4,$5,$6,NOW()+$7::interval,true,$8)
+			ON CONFLICT (item_id,user_id,device_id) DO UPDATE SET device_name=EXCLUDED.device_name,editing=EXCLUDED.editing,
+				expires_at=EXCLUDED.expires_at,connection_held=true,held_by=EXCLUDED.held_by,updated_at=NOW()`,
+			item.ID, spaceID, userID, device.ID, device.Name, editing, driveHoldInterval, holder); err != nil {
+			return err
+		}
+		if found && oldEditing == editing && oldName == device.Name {
+			return nil
+		}
+		return recordDriveInUseChangedTx(ctx, tx, spaceID, userID, item.ID)
+	})
+}
+
+func (db *Database) ReleaseDriveInUse(ctx context.Context, userID, spaceID, itemID, deviceID string) error {
+	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		var gone bool
+		err := tx.QueryRowContext(ctx, `WITH gone AS (
+				DELETE FROM space_drive_in_use WHERE item_id=$1 AND space_id=$2 AND user_id=$3 AND device_id=$4 AND connection_held
+				RETURNING 1)
+			SELECT EXISTS (SELECT 1 FROM gone)`, itemID, spaceID, userID, deviceID).Scan(&gone)
+		if err != nil || !gone {
+			return err
+		}
+		return recordDriveInUseChangedTx(ctx, tx, spaceID, userID, itemID)
+	})
+}
+
+const driveHoldLockClass = "misty:drive-holds"
+
+type DriveHoldOwner struct {
+	Key  int32
+	conn *sql.Conn
+}
+
+func (db *Database) ClaimDriveHolds(ctx context.Context) (*DriveHoldOwner, error) {
+	conn, err := db.Conn.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var key int32
+	for attempt := 0; ; attempt++ {
+		var raw [4]byte
+		if _, err := rand.Read(raw[:]); err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		key = int32(binary.BigEndian.Uint32(raw[:]) & 0x7fffffff)
+		var got bool
+		if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(hashtext($1),$2)`, driveHoldLockClass, key).Scan(&got); err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		if got {
+			break
+		}
+		if attempt >= 8 {
+			_ = conn.Close()
+			return nil, errors.New("no free drive hold key")
+		}
+	}
+	owner := &DriveHoldOwner{Key: key, conn: conn}
+	if err := db.releaseOrphanedDriveHolds(ctx, key); err != nil {
+		_ = owner.Close(ctx, db)
+		return nil, err
+	}
+	return owner, nil
+}
+
+func (owner *DriveHoldOwner) Close(ctx context.Context, db *Database) error {
+	if owner == nil || owner.conn == nil {
+		return nil
+	}
+	err := db.releaseDriveHoldsOf(ctx, &owner.Key)
+	_ = owner.conn.Close()
+	owner.conn = nil
+	return err
+}
+
+func (db *Database) releaseOrphanedDriveHolds(ctx context.Context, own int32) error {
+	var holders []sql.NullInt32
+	if err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT DISTINCT held_by FROM space_drive_in_use WHERE connection_held`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var holder sql.NullInt32
+			if err := rows.Scan(&holder); err != nil {
+				return err
+			}
+			holders = append(holders, holder)
+		}
+		return rows.Err()
+	}); err != nil {
+		return err
+	}
+	if len(holders) == 0 {
+		return nil
+	}
+	probe, err := db.Conn.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer probe.Close()
+	for _, holder := range holders {
+		if !holder.Valid {
+			if err := db.releaseDriveHoldsOf(ctx, nil); err != nil {
+				return err
+			}
+			continue
+		}
+		if holder.Int32 == own {
+			continue
+		}
+		var free bool
+		if err := probe.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(hashtext($1),$2)`, driveHoldLockClass, holder.Int32).Scan(&free); err != nil {
+			return err
+		}
+		if !free {
+			continue
+		}
+		holderID := holder.Int32
+		released := db.releaseDriveHoldsOf(ctx, &holderID)
+		if _, err := probe.ExecContext(ctx, `SELECT pg_advisory_unlock(hashtext($1),$2)`, driveHoldLockClass, holderID); err != nil {
+			return err
+		}
+		if released != nil {
+			return released
+		}
+	}
+	return nil
+}
+
+func (db *Database) releaseDriveHoldsOf(ctx context.Context, holder *int32) error {
+	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		query := `DELETE FROM space_drive_in_use WHERE connection_held AND held_by=$1 RETURNING space_id,user_id,item_id`
+		args := []any{}
+		if holder == nil {
+			query = `DELETE FROM space_drive_in_use WHERE connection_held AND held_by IS NULL RETURNING space_id,user_id,item_id`
+		} else {
+			args = append(args, *holder)
+		}
+		rows, err := tx.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		type gone struct{ spaceID, userID, itemID string }
+		var released []gone
+		for rows.Next() {
+			var row gone
+			if err := rows.Scan(&row.spaceID, &row.userID, &row.itemID); err != nil {
+				rows.Close()
+				return err
+			}
+			released = append(released, row)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+		for _, row := range released {
+			if err := recordDriveInUseChangedTx(ctx, tx, row.spaceID, row.userID, row.itemID); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

@@ -208,10 +208,19 @@ func (db *Database) MarkSpaceThreadRead(ctx context.Context, userID, spaceID, ro
 		if seq == 0 || seq > maximum {
 			seq = maximum
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO space_thread_reads(user_id,thread_root_id,read_message_seq) VALUES($1,$2,$3)
+		var next int64
+		err = tx.QueryRowContext(ctx, `INSERT INTO space_thread_reads(user_id,thread_root_id,read_message_seq) VALUES($1,$2,$3)
 			ON CONFLICT(user_id,thread_root_id) DO UPDATE
-			SET read_message_seq=GREATEST(space_thread_reads.read_message_seq,excluded.read_message_seq),updated_at=NOW()`, userID, rootID, seq)
-		return err
+			SET read_message_seq=excluded.read_message_seq,updated_at=NOW()
+			WHERE space_thread_reads.read_message_seq<excluded.read_message_seq
+			RETURNING read_message_seq`, userID, rootID, seq).Scan(&next)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return recordReadMarkerTx(ctx, tx, spaceID, userID, conversationID, rootID, 0, next)
 	})
 }
 

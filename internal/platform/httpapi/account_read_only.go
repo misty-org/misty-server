@@ -15,6 +15,7 @@ var readOnlyPosts = []*regexp.Regexp{
 	regexp.MustCompile(`^/realtime/tickets?$`),
 	regexp.MustCompile(`^/spaces/[^/]+/(notes|code-sessions)/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/drive/items/[^/]+/collaboration-ticket$`),
+	regexp.MustCompile(`^/spaces/[^/]+/apps/[^/]+/rooms/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/nodes/[^/]+/resolve$`),
 	regexp.MustCompile(`^/spaces/[^/]+/(conversations/[^/]+/)?read$`),
 }

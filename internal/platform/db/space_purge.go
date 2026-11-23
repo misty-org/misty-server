@@ -55,6 +55,11 @@ func (db *Database) BeginSpacePurge(ctx context.Context, spaceID string) (int, e
 			return err
 		}
 		waiting += codeRooms
+		collabRooms, err := beginCollabRoomSpacePurgeTx(ctx, tx, spaceID)
+		if err != nil {
+			return err
+		}
+		waiting += collabRooms
 		return nil
 	})
 	return waiting, err

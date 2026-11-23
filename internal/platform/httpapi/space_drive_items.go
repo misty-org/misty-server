@@ -37,6 +37,7 @@ func (s *SpaceDriveService) DriveChanges() http.HandlerFunc {
 			}
 			limit = parsed
 		}
+		s.ensureDriveIgnore(r.Context(), userID, chi.URLParam(r, "spaceID"))
 		page, err := s.database.DriveChanges(r.Context(), userID, chi.URLParam(r, "spaceID"), since, limit)
 		if err != nil {
 			writeDriveError(w, err)

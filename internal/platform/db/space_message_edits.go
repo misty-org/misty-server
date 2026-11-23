@@ -59,9 +59,9 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 		if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
 		}
-		var sender string
+		var sender, threadRootID string
 		var previous []byte
-		if err := tx.QueryRowContext(ctx, `SELECT sender_user_id,content FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 FOR UPDATE`, messageID, spaceID, conversationID).Scan(&sender, &previous); errors.Is(err, sql.ErrNoRows) {
+		if err := tx.QueryRowContext(ctx, `SELECT sender_user_id,content,COALESCE(thread_root_id,'') FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 FOR NO KEY UPDATE`, messageID, spaceID, conversationID).Scan(&sender, &previous, &threadRootID); errors.Is(err, sql.ErrNoRows) {
 			return ErrSpaceNotFound
 		} else if err != nil {
 			return err
@@ -74,8 +74,30 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 		if err := validateRoleMentionsTx(ctx, tx, userID, spaceID, content, previousSpans); err != nil {
 			return err
 		}
+		mentionedAgents := map[string]bool{}
+		for _, span := range previousSpans {
+			if span.AgentID != "" {
+				mentionedAgents[span.AgentID] = true
+			}
+		}
+		for _, span := range content {
+			if span.AgentID == "" || mentionedAgents[span.AgentID] {
+				continue
+			}
+			if err := requireConversationAgentMentionTx(ctx, tx, userID, spaceID, conversationID, span.AgentID); err != nil {
+				return err
+			}
+			mentionedAgents[span.AgentID] = true
+		}
+		for _, nodeID := range fileNodeIDs {
+			var ok bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_nodes WHERE id=$1 AND space_id=$2 AND kind='link')`, nodeID, spaceID).Scan(&ok); err != nil || !ok {
+				return ErrSpaceInvalid
+			}
+		}
 		raw, _ := json.Marshal(content)
-		if _, err := tx.ExecContext(ctx, `UPDATE space_messages SET content=$1,file_node_ids=$2,edited_at=NOW() WHERE id=$3`, raw, pqStringArray(fileNodeIDs), messageID); err != nil {
+		var editedAt sql.NullTime
+		if err := tx.QueryRowContext(ctx, `UPDATE space_messages SET content=$1,file_node_ids=$2,edited_at=NOW() WHERE id=$3 RETURNING edited_at`, raw, pqStringArray(fileNodeIDs), messageID).Scan(&editedAt); err != nil {
 			return err
 		}
 		for _, span := range content {
@@ -95,7 +117,21 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 				}
 			}
 		}
-		_, eventErr := recordSpaceEventTx(ctx, tx, spaceID, userID, "message.updated", messageID, map[string]any{"conversation_id": conversationID})
+		var senderName string
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT username FROM users WHERE id=$1),'')`, sender).Scan(&senderName); err != nil {
+			return err
+		}
+		payload := map[string]any{
+			"conversation_id": conversationID, "message_id": messageID, "content": content,
+			"file_node_ids": fileNodeIDs, "sender_user_id": sender, "sender_name": senderName,
+		}
+		if editedAt.Valid {
+			payload["edited_at"] = editedAt.Time
+		}
+		if threadRootID != "" {
+			payload["thread_root_id"] = threadRootID
+		}
+		_, eventErr := recordSpaceEventTx(ctx, tx, spaceID, userID, "message.updated", messageID, payload)
 		return eventErr
 	})
 	if err != nil {
@@ -109,12 +145,45 @@ func (db *Database) updateSpaceMessage(ctx context.Context, userID, spaceID, con
 		if err := scanSpaceMessage(tx.QueryRowContext(ctx, `SELECT `+spaceMessageColumns+` FROM space_messages m LEFT JOIN users u ON u.id=m.sender_user_id WHERE m.id=$1 AND m.space_id=$2 AND COALESCE(m.conversation_id,'')=$3`, messageID, spaceID, conversationID), out); err != nil {
 			return err
 		}
-		return loadSpaceMessageReferencesTx(ctx, tx, out, userID)
+		if err := loadSpaceMessageReferencesTx(ctx, tx, out, userID); err != nil {
+			return err
+		}
+		return loadSingleThreadSummaryTx(ctx, tx, out)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound
 	}
 	return out, err
+}
+
+func loadSingleThreadSummaryTx(ctx context.Context, tx *sql.Tx, message *SpaceMessage) error {
+	if message.ThreadRootID != "" {
+		return nil
+	}
+	items := []SpaceMessage{*message}
+	if err := loadThreadSummariesTx(ctx, tx, items); err != nil {
+		return err
+	}
+	message.ReplyCount, message.LastReplyAt = items[0].ReplyCount, items[0].LastReplyAt
+	return nil
+}
+
+func spaceMessageReactionCountsTx(ctx context.Context, tx *sql.Tx, messageID string) ([]map[string]any, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT emoji,count(*) FROM space_message_reactions WHERE message_id=$1 GROUP BY emoji ORDER BY min(created_at),emoji`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var emoji string
+		var count int
+		if err := rows.Scan(&emoji, &count); err != nil {
+			return nil, err
+		}
+		out = append(out, map[string]any{"emoji": emoji, "count": count})
+	}
+	return out, rows.Err()
 }
 
 func (db *Database) AddSpaceMessageReaction(ctx context.Context, userID, spaceID, messageID, emoji string) (*SpaceMessage, error) {
@@ -142,12 +211,12 @@ func (db *Database) setSpaceMessageReaction(ctx context.Context, userID, spaceID
 		if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
 			return err
 		}
-		var exists bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3)`, messageID, spaceID, conversationID).Scan(&exists); err != nil {
+		var locked string
+		if err := tx.QueryRowContext(ctx, `SELECT id FROM space_messages WHERE id=$1 AND space_id=$2 AND COALESCE(conversation_id,'')=$3 FOR NO KEY UPDATE`, messageID, spaceID, conversationID).Scan(&locked); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrSpaceNotFound
+			}
 			return err
-		}
-		if !exists {
-			return ErrSpaceNotFound
 		}
 		if reacted {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO space_message_reactions(message_id,space_id,user_id,emoji)
@@ -161,7 +230,13 @@ func (db *Database) setSpaceMessageReaction(ctx context.Context, userID, spaceID
 		if reacted {
 			eventType = "message.reaction_added"
 		}
-		_, err := recordSpaceEventTx(ctx, tx, spaceID, userID, eventType, messageID, map[string]any{"conversation_id": conversationID, "emoji": emoji})
+		counts, err := spaceMessageReactionCountsTx(ctx, tx, messageID)
+		if err != nil {
+			return err
+		}
+		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, eventType, messageID, map[string]any{
+			"conversation_id": conversationID, "emoji": emoji, "message_id": messageID, "reactions": counts,
+		})
 		return err
 	})
 	if err != nil {
@@ -179,7 +254,10 @@ func (db *Database) spaceMessageByID(ctx context.Context, userID, spaceID, conve
 		if err := scanSpaceMessage(tx.QueryRowContext(ctx, `SELECT `+spaceMessageColumns+` FROM space_messages m LEFT JOIN users u ON u.id=m.sender_user_id WHERE m.id=$1 AND m.space_id=$2 AND COALESCE(m.conversation_id,'')=$3`, messageID, spaceID, conversationID), out); err != nil {
 			return err
 		}
-		return loadSpaceMessageReferencesTx(ctx, tx, out, userID)
+		if err := loadSpaceMessageReferencesTx(ctx, tx, out, userID); err != nil {
+			return err
+		}
+		return loadSingleThreadSummaryTx(ctx, tx, out)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound

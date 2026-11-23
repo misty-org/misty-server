@@ -55,6 +55,12 @@ func (s *Server) mountRequestMiddleware() {
 	abuseGuard := api.NewAbuseGuard(api.DefaultAbusePolicy()).
 		WithStore(context.Background(), s.Database)
 	s.AbuseGuard = abuseGuard
+	s.Router.Use(api.TrustSignedServiceCallbacks(func() api.JournalCollabConfig {
+		if s.Spaces == nil {
+			return api.JournalCollabConfig{}
+		}
+		return s.Spaces.JournalCollab
+	}))
 	s.Router.Use(abuseGuard.Middleware)
 	s.Router.Use(api.NewAPIRateLimiter().WithAbuseGuard(abuseGuard).Middleware)
 	s.Suspensions = api.NewSuspensionGuard(s.Database)

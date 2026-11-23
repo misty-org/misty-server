@@ -13,6 +13,8 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 	permission := ""
 	itemKind, isItemEvent := spaceItemKindForEvent(event.EventType)
 	switch {
+	case strings.HasPrefix(event.EventType, "read."):
+		return event.ActorUserID != "" && event.ActorUserID == userID, nil
 	case event.EventType == "conversation.removed":
 		var payload struct {
 			UserID string `json:"user_id"`
@@ -70,6 +72,18 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 		}
 		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "agent."):
+		var payload struct {
+			OwnerUserID string `json:"owner_user_id"`
+			Visibility  string `json:"visibility"`
+		}
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return false, err
+		}
+		if payload.Visibility == VisibilityPrivate && payload.OwnerUserID != userID {
+			return false, nil
+		}
+		permission = PermissionStudioView
+	case strings.HasPrefix(event.EventType, "agent_thread."):
 		permission = PermissionStudioView
 	case spaceWideEvent(event.EventType):
 		return true, nil

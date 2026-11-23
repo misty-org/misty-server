@@ -35,6 +35,9 @@ func (db *Database) TrashDriveItem(ctx context.Context, userID, spaceID, itemID 
 		if hidden {
 			return DriveConflictError{Code: "trashed", Item: item}
 		}
+		if item.Kind == driveKindFile && isRootDriveIgnore(item.ParentID, item.Name) {
+			return ErrDriveProtected
+		}
 		if ifMatch > 0 && item.Version != ifMatch {
 			return DriveConflictError{Code: "version_conflict", Item: item}
 		}

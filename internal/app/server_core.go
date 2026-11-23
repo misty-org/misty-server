@@ -73,6 +73,7 @@ func CreateServer() (*Server, error) {
 	s.Spaces.SetLibraryProvider(s.Library)
 	s.Spaces.SetAvatarStore(s.LibraryStore)
 	s.Realtime = api.NewRealtimeService(s.Database, s.Database.GetDSN())
+	api.SetCallRemoval(s.LiveKitRooms, s.Realtime, s.Database)
 
 	s.HealthMonitor = NewHealthMonitor(s)
 

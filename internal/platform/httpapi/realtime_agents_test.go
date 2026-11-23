@@ -25,6 +25,17 @@ func TestCleanAgentStatusesKeepsOnlyFixedCodesAndClaimPaths(t *testing.T) {
 	}
 }
 
+func TestCleanAgentStatusesBoundsWhatIsWaiting(t *testing.T) {
+	clean := cleanAgentStatuses([]agentStatus{
+		{ID: "a1", Name: "Ada", State: "landing", Doing: "files", Waiting: 3},
+		{ID: "a2", Name: "Bo", State: "landing", Doing: "files", Waiting: 5000},
+		{ID: "a3", Name: "Cy", State: "working", Doing: "files", Waiting: -2},
+	})
+	if len(clean) != 3 || clean[0].Waiting != 3 || clean[1].Waiting != maxAgentWaiting || clean[2].Waiting != 0 {
+		t.Fatalf("waiting = %+v", clean)
+	}
+}
+
 func TestCleanAgentStatusesCapsHowManyAreSent(t *testing.T) {
 	many := make([]agentStatus, 0, 40)
 	for i := 0; i < 40; i++ {

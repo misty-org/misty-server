@@ -43,14 +43,31 @@ export function createRuntime(persistence, options = {}) {
   });
 }
 
-export function providerFor(runtimeUrl, room, doc, ticket, party = "note-room") {
+export function providerFor(runtimeUrl, room, doc, ticket, party = "note-room", options = {}) {
   return new YProvider(runtimeUrl.host, room, doc, {
     party,
     protocol: "ws",
     disableBc: true,
     WebSocketPolyfill: WebSocket,
     params: { ticket },
+    ...options,
   });
+}
+
+export function dropSocket(provider) {
+  provider.shouldConnect = false;
+  provider.ws?.close();
+}
+
+export function customMessages(provider) {
+  const messages = [];
+  provider.on("custom-message", (message) => {
+    try {
+      messages.push(JSON.parse(message));
+    } catch {
+    }
+  });
+  return messages;
 }
 
 export function providerSynced(provider) {
@@ -76,8 +93,8 @@ export function awarenessHasUser(provider, id, name) {
   );
 }
 
-export async function waitFor(predicate) {
-  const deadline = Date.now() + 5_000;
+export async function waitFor(predicate, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -90,8 +107,13 @@ const resourceIDClaims = {
   code: "code_session_id",
 };
 
-export function mintTicket(room, userID, resourceType = "note", role = "editor") {
-  const resourceID = `${resourceType}-runtime`;
+const spacedResourceIDs = {
+  app: "space-runtime:app-runtime:room-runtime",
+  file: "space-runtime:item-runtime",
+};
+
+export function mintTicket(room, userID, resourceType = "note", role = "editor", extra = {}) {
+  const resourceID = extra.resource_id ?? spacedResourceIDs[resourceType] ?? `${resourceType}-runtime`;
   const header = base64Url(JSON.stringify({ alg: "EdDSA", typ: "JWT" }));
   const payload = base64Url(
     JSON.stringify({
@@ -102,11 +124,12 @@ export function mintTicket(room, userID, resourceType = "note", role = "editor")
       space_id: "space-runtime",
       resource_type: resourceType,
       resource_id: resourceID,
-      [resourceIDClaims[resourceType]]: resourceID,
+      ...(resourceIDClaims[resourceType] ? { [resourceIDClaims[resourceType]]: resourceID } : {}),
       room,
       role,
       acl_version: 1,
       exp: Math.floor(Date.now() / 1_000) + 60,
+      ...extra,
     }),
   );
   const signature = sign(

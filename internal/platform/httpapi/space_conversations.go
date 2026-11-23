@@ -95,6 +95,7 @@ func (s *SpacesService) Conversation() http.HandlerFunc {
 				writeSpaceError(w, err)
 				return
 			}
+			endVoiceChannelCall(r.Context(), spaceID, conversationID)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}

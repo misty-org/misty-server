@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -40,6 +41,8 @@ type RealtimeClient struct {
 	voiceKeyID     string
 	voiceWindowAt  time.Time
 	voiceFrames    int
+	eventPrefix    string
+	driveHolds     map[string]driveHold
 }
 
 type RealtimeService struct {
@@ -51,6 +54,7 @@ type RealtimeService struct {
 	clientsByUser map[string]map[*RealtimeClient]struct{}
 	Viewers       map[string]map[*RealtimeClient]struct{}
 	lastStatus    map[string]string
+	holds         *db.DriveHoldOwner
 	closed        chan struct{}
 	closeOnce     sync.Once
 }
@@ -81,6 +85,13 @@ func (s *RealtimeService) Start() error {
 	if err := s.listener.Ping(); err != nil {
 		return err
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	holds, err := s.database.ClaimDriveHolds(ctx)
+	if err != nil {
+		return err
+	}
+	s.holds = holds
 	go s.listen()
 	return nil
 }
@@ -100,6 +111,13 @@ func (s *RealtimeService) Close() error {
 		s.clientsByUser = map[string]map[*RealtimeClient]struct{}{}
 		s.Viewers = map[string]map[*RealtimeClient]struct{}{}
 		s.Mu.Unlock()
+		if s.holds != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if released := s.holds.Close(ctx, s.database); released != nil && err == nil {
+				err = released
+			}
+			cancel()
+		}
 	})
 	return err
 }

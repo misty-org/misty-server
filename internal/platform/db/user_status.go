@@ -58,18 +58,44 @@ func (db *Database) ChosenStatuses(ctx context.Context, userIDs []string) (map[s
 }
 
 func (db *Database) SetChosenStatus(ctx context.Context, userID string, status ChosenStatus) (*ChosenStatus, error) {
-	if status.Chosen != "online" && status.Chosen != "dnd" && status.Chosen != "invisible" {
-		return nil, ErrSpaceInvalid
-	}
-	status.CustomText = strings.TrimSpace(status.CustomText)
-	status.CustomEmoji = strings.TrimSpace(status.CustomEmoji)
-	if utf8.RuneCountInString(status.CustomText) > 128 || utf8.RuneCountInString(status.CustomEmoji) > 32 {
-		return nil, ErrSpaceInvalid
-	}
-	if status.CustomText == "" && status.CustomEmoji == "" {
-		status.CustomExpiresAt = nil
-	}
+	return db.SetChosenStatusFields(ctx, userID, status, nil)
+}
+
+func (db *Database) SetChosenStatusFields(ctx context.Context, userID string, status ChosenStatus, fields []string) (*ChosenStatus, error) {
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		if len(fields) > 0 {
+			if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "user-status:"+userID); err != nil {
+				return err
+			}
+			current, err := chosenStatusTx(ctx, tx, userID)
+			if err != nil {
+				return err
+			}
+			for _, field := range fields {
+				switch field {
+				case "chosen":
+					current.Chosen = status.Chosen
+				case "custom_text":
+					current.CustomText = status.CustomText
+				case "custom_emoji":
+					current.CustomEmoji = status.CustomEmoji
+				case "custom_expires_at":
+					current.CustomExpiresAt = status.CustomExpiresAt
+				}
+			}
+			status = current
+		}
+		if status.Chosen != "online" && status.Chosen != "dnd" && status.Chosen != "invisible" {
+			return ErrSpaceInvalid
+		}
+		status.CustomText = strings.TrimSpace(status.CustomText)
+		status.CustomEmoji = strings.TrimSpace(status.CustomEmoji)
+		if utf8.RuneCountInString(status.CustomText) > 128 || utf8.RuneCountInString(status.CustomEmoji) > 32 {
+			return ErrSpaceInvalid
+		}
+		if status.CustomText == "" && status.CustomEmoji == "" {
+			status.CustomExpiresAt = nil
+		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO user_status(user_id,chosen,custom_text,custom_emoji,custom_expires_at) VALUES($1,$2,NULLIF($3,''),NULLIF($4,''),$5)
 			ON CONFLICT(user_id) DO UPDATE SET chosen=EXCLUDED.chosen,custom_text=EXCLUDED.custom_text,custom_emoji=EXCLUDED.custom_emoji,
 			custom_expires_at=EXCLUDED.custom_expires_at,updated_at=now()`, userID, status.Chosen, status.CustomText, status.CustomEmoji, status.CustomExpiresAt)

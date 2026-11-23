@@ -25,8 +25,21 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 			sender != userID && !permissions.Has(PermissionMessagesManage) {
 			return ErrSpaceForbidden
 		}
-		if err := cleanupSpaceMessagesTx(ctx, tx, spaceID, []string{messageID}); err != nil {
+		replyIDs := []string{}
+		if threadRootID == "" {
+			if replyIDs, err = threadReplyIDsTx(ctx, tx, spaceID, messageID); err != nil {
+				return err
+			}
+		}
+		if err := cleanupSpaceMessagesTx(ctx, tx, spaceID, append([]string{messageID}, replyIDs...)); err != nil {
 			return err
+		}
+		for _, replyID := range replyIDs {
+			if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "message.deleted", replyID, map[string]any{
+				"message_id": replyID, "conversation_id": conversationID, "thread_root_id": messageID,
+			}); err != nil {
+				return err
+			}
 		}
 		payload := map[string]any{"message_id": messageID, "conversation_id": conversationID}
 		if threadRootID != "" {
@@ -35,6 +48,23 @@ func (db *Database) deleteSpaceMessage(ctx context.Context, userID, spaceID, con
 		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "message.deleted", messageID, payload)
 		return err
 	})
+}
+
+func threadReplyIDsTx(ctx context.Context, tx *sql.Tx, spaceID, rootID string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM space_messages WHERE space_id=$1 AND thread_root_id=$2 FOR UPDATE`, spaceID, rootID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (db *Database) SpaceNodes(ctx context.Context, userID, spaceID string) ([]SpaceNode, error) {

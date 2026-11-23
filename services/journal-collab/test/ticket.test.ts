@@ -325,4 +325,33 @@ describe("collaboration ticket verification", () => {
       "ticket_resource_mismatch",
     );
   });
+
+  it("accepts an app room id as long as the API can mint one", async () => {
+    const api = await issuer();
+    const resourceID = `space_1:${"a".repeat(63)}:${"r".repeat(128)}`;
+    const token = await api.mint({
+      resource_type: "app",
+      resource_id: resourceID,
+      note_id: undefined,
+    });
+
+    const claims = await verifyTicket(token, {
+      ...verificationContext(api.publicKeyBase64),
+      resourceType: "app",
+    });
+    expect(claims.resource_id).toBe(resourceID);
+  });
+
+  it("reads a room's garbage collection choice and refuses a malformed one", async () => {
+    const api = await issuer();
+    const app = { resource_type: "app" as const, resource_id: "space_1:app:room", note_id: undefined };
+    const context = { ...verificationContext(api.publicKeyBase64), resourceType: "app" as const };
+
+    const kept = await verifyTicket(await api.mint({ ...app, gc: false }), context);
+    expect(kept.gc).toBe(false);
+    await expectRejection(
+      verifyTicket(await api.mint({ ...app, gc: "no" as unknown as boolean }), context),
+      "ticket_malformed",
+    );
+  });
 });

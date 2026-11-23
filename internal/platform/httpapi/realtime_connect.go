@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/misty-org/misty-server/internal/platform/db"
 	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
@@ -37,8 +39,22 @@ func (s *RealtimeService) Connect() http.HandlerFunc {
 			return
 		}
 		client := &RealtimeClient{UserID: userID, conn: conn, Send: make(chan []byte, 256), Done: make(chan struct{})}
+		if only := r.URL.Query().Get("only"); only == "drive." {
+			client.eventPrefix = only
+		}
 		s.register(client)
-		events, resync, err := s.database.SpaceEventsAfter(r.Context(), userID, after, realtimeReplayLimit)
+		events, recent, resync, newest := []db.SpaceEvent{}, []db.SpaceEvent{}, false, int64(0)
+		if after >= 0 && r.URL.Query().Get("live") != "1" {
+			var replay db.SpaceReplay
+			replay, err = s.database.SpaceEventsReplay(r.Context(), userID, after, realtimeReplayLimit)
+			if replay.Events != nil {
+				events = replay.Events
+			}
+			if replay.Recent != nil {
+				recent = replay.Recent
+			}
+			resync, newest = replay.Resync, replay.Newest
+		}
 		if err != nil {
 			log.Printf("Realtime WebSocket replay failed for user %s after %d: %v", userID, after, err)
 			s.Unregister(client)
@@ -48,7 +64,14 @@ func (s *RealtimeService) Connect() http.HandlerFunc {
 		if len(events) >= realtimeReplayLimit {
 			resync = true
 		}
-		initial, _ := json.Marshal(map[string]any{"type": "replay", "events": events, "resync_required": resync})
+		if !resync {
+			events = append(recent, events...)
+		}
+		replayMessage := map[string]any{"type": "replay", "events": events, "resync_required": resync}
+		if resync && newest > 0 {
+			replayMessage["newest_event_id"] = newest
+		}
+		initial, _ := json.Marshal(replayMessage)
 		if err := conn.WriteMessage(websocket.TextMessage, initial); err != nil {
 			s.Unregister(client)
 			_ = conn.Close()
@@ -85,12 +108,76 @@ func (s *RealtimeService) Unregister(client *RealtimeClient) {
 		s.removeViewerLocked(previousSpaceID, client)
 		client.viewingSpaceID = ""
 	}
+	holds := client.driveHolds
+	client.driveHolds = nil
+	typing := make([]string, 0, len(client.typingScopes))
+	for scope := range client.typingScopes {
+		typing = append(typing, scope)
+	}
+	agentSpaces := map[string]bool{}
+	for key := range client.agentStates {
+		if spaceID, _, found := strings.Cut(key, "\x00"); found && spaceID != "" {
+			agentSpaces[spaceID] = true
+		}
+	}
+	client.agentStates = nil
 	s.Mu.Unlock()
+	if len(typing) > 0 || len(agentSpaces) > 0 {
+		go s.clearLeftovers(client, typing, agentSpaces)
+	}
+	if len(holds) > 0 {
+		go s.releaseDriveHolds(client.UserID, holds)
+	}
 	if previousSpaceID != "" {
 		s.broadcastPresence(previousSpaceID)
 	}
 	go s.leaveVoice(client)
 	go s.PublishStatus(client.UserID)
+}
+
+func (s *RealtimeService) clearLeftovers(client *RealtimeClient, typing []string, agentSpaces map[string]bool) {
+	for _, scope := range typing {
+		spaceID, conversationID, _ := strings.Cut(scope, "\x00")
+		s.Mu.Lock()
+		if s.otherClientHoldsLocked(client, func(other *RealtimeClient) bool { return other.typingScopes[scope] }) {
+			s.Mu.Unlock()
+			continue
+		}
+		if client.typingScopes == nil {
+			client.typingScopes = map[string]bool{}
+		}
+		client.typingScopes[scope] = true
+		client.lastTypingAt = time.Time{}
+		s.Mu.Unlock()
+		s.broadcastTyping(client, spaceID, conversationID, false)
+	}
+	for spaceID := range agentSpaces {
+		prefix := spaceID + "\x00"
+		s.Mu.Lock()
+		if s.otherClientHoldsLocked(client, func(other *RealtimeClient) bool {
+			for key := range other.agentStates {
+				if strings.HasPrefix(key, prefix) {
+					return true
+				}
+			}
+			return false
+		}) {
+			s.Mu.Unlock()
+			continue
+		}
+		client.lastAgentsAt = time.Time{}
+		s.Mu.Unlock()
+		s.broadcastAgents(client, spaceID, nil)
+	}
+}
+
+func (s *RealtimeService) otherClientHoldsLocked(client *RealtimeClient, holds func(*RealtimeClient) bool) bool {
+	for other := range s.clientsByUser[client.UserID] {
+		if other != client && holds(other) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *RealtimeService) removeViewerLocked(spaceID string, client *RealtimeClient) {

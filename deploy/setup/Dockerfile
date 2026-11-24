@@ -1,7 +1,7 @@
 # The Misty tools image: the setup, migrate, backups, alerts, console and tunnel
 # services of compose.yml all run it. Build context: the repository root.
 
-FROM --platform=$BUILDPLATFORM golang:1.25.12-bookworm@sha256:ea341baa9bd5ba6784f6d7161ace70544349a6242d54d34a0fbfd2c4d51c9d58 AS tools
+FROM --platform=$BUILDPLATFORM golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0 AS tools
 ARG TARGETOS TARGETARCH
 ENV GOOSE_TAGS="no_clickhouse no_libsql no_mssql no_mysql no_sqlite3 no_vertica no_ydb" \
     CGO_ENABLED=0 GOMAXPROCS=2

@@ -2,7 +2,7 @@
 FROM api AS api
 
 # The setup command (cmd/misty-dev-setup), built natively and cross-compiled.
-FROM --platform=$BUILDPLATFORM golang:1.25.12-bookworm@sha256:ea341baa9bd5ba6784f6d7161ace70544349a6242d54d34a0fbfd2c4d51c9d58 AS tools
+FROM --platform=$BUILDPLATFORM golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0 AS tools
 ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./

@@ -1,6 +1,6 @@
 # The build stage runs natively on the build machine and cross-compiles for the
 # target platform, so an amd64 image builds at full speed on Apple Silicon.
-FROM --platform=$BUILDPLATFORM golang:1.25.12-bookworm@sha256:ea341baa9bd5ba6784f6d7161ace70544349a6242d54d34a0fbfd2c4d51c9d58 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0 AS builder
 ARG TARGETOS TARGETARCH
 # The commit or release /health reports; the image workflow passes the commit.
 ARG MISTY_SERVER_VERSION=development

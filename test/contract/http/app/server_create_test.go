@@ -28,7 +28,6 @@ func TestIsLocalhostHostname(t *testing.T) {
 }
 
 func TestStripeWebhookIsNotMounted(t *testing.T) {
-	configureJournalCollabForTest(t)
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatal(err)
@@ -47,8 +46,6 @@ func TestStripeWebhookIsNotMounted(t *testing.T) {
 }
 
 func TestCreateServerAndMountHandlers(t *testing.T) {
-	configureJournalCollabForTest(t)
-
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
@@ -102,8 +99,6 @@ func productionCoreValues() map[string]string {
 	for _, name := range []string{
 		"SPACE_LINK_ENCRYPTION_KEY", "MISTY_AUTH_SIGNING_KEY",
 		"R2_ACCESS_KEY", "R2_SECRET_KEY",
-		"PARTYKIT_HOST", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY", "JOURNAL_COLLAB_CONTROL_SECRET",
-		"JOURNAL_COLLAB_PROJECTION_SECRET", "JOURNAL_COLLAB_ROOM_SALT",
 		"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
 	} {
 		values[name] = "configured"
@@ -119,7 +114,7 @@ func TestValidateProductionEnvironmentRequiresEveryIntegration(t *testing.T) {
 	if err := ValidateProductionEnvironment(); err != nil {
 		t.Fatalf("a complete production configuration = %v", err)
 	}
-	for _, name := range []string{"R2_ACCESS_KEY", "PARTYKIT_HOST", "GOOGLE_CLIENT_ID"} {
+	for _, name := range []string{"R2_ACCESS_KEY", "GOOGLE_CLIENT_ID"} {
 		t.Setenv(name, "")
 		if err := ValidateProductionEnvironment(); err == nil || !strings.Contains(err.Error(), name) {
 			t.Fatalf("production without %s = %v", name, err)

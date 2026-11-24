@@ -94,19 +94,9 @@ func TestSpaceAppRoutesInstallAndRemove(t *testing.T) {
 		"repo": "maker/pinned", "listed": false, "manifest_from": "basic",
 		"entry": map[string]any{"id": "pinned", "name": "Pinned", "version": "0.3.0", "sha256": "abc123", "permissions": []any{"files"}},
 	}
-	installed := routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "0.3.0", "permissions": []string{"files"}, "source": source}), http.StatusOK)
-	if got, _ := installed["source"].(map[string]any); got == nil || got["repo"] != "maker/pinned" || got["listed"] != false {
-		t.Fatalf("install response source = %v", installed["source"])
-	}
-	listed := appNamed("pinned")
-	got, _ := listed["source"].(map[string]any)
-	entry, _ := got["entry"].(map[string]any)
-	if got == nil || got["manifest_from"] != "basic" || entry == nil || entry["sha256"] != "abc123" {
-		t.Fatalf("listed source = %v", listed["source"])
-	}
-	routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "1.0.0", "permissions": []string{}}), http.StatusOK)
-	if _, has := appNamed("pinned")["source"]; has {
-		t.Fatal("source kept after a reinstall without one")
+	routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "0.3.0", "permissions": []string{"files"}, "source": source}), http.StatusBadRequest)
+	if appNamed("pinned") != nil {
+		t.Fatal("an app from an unreviewed link was installed")
 	}
 	routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "1", "permissions": []string{}, "source": []any{1}}), http.StatusBadRequest)
 	routeJSON(t, call(http.MethodPut, base+"/pinned", map[string]any{"version": "1", "permissions": []string{}, "source": "maker/pinned"}), http.StatusBadRequest)

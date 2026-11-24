@@ -59,7 +59,7 @@ func loadExportJournal(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
 ) error {
 	return scanExportQuery(ctx, tx, `
-			SELECT 'note',id,space_id,title_projection,acl_version,created_at,updated_at
+			SELECT 'note',id,space_id,title_projection,markdown_projection,acl_version,created_at,updated_at
 			FROM space_notes n
 			WHERE creator_user_id=$1 AND lifecycle_state='active'
 			  AND EXISTS(
@@ -74,7 +74,7 @@ func loadExportJournal(
 			ORDER BY created_at`, userID, func(rows *sql.Rows) error {
 		var item AccountExportJournal
 		if err := rows.Scan(
-			&item.Kind, &item.ID, &item.SpaceID, &item.Title,
+			&item.Kind, &item.ID, &item.SpaceID, &item.Title, &item.Markdown,
 			&item.ACLVersion, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
 			return err

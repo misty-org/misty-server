@@ -30,39 +30,12 @@ func (db *Database) DueSpacePurges(ctx context.Context, limit int) ([]string, er
 }
 
 func (db *Database) BeginSpacePurge(ctx context.Context, spaceID string) (int, error) {
-	waiting := 0
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
-		notes, err := spacePurgeIDsTx(ctx, tx, `SELECT n.id FROM space_notes n WHERE n.space_id=$1
-			AND NOT EXISTS(SELECT 1 FROM space_note_control_outbox o WHERE o.note_id=n.id AND o.command='purge')`, spaceID)
-		if err != nil {
-			return err
-		}
-		for _, id := range notes {
-			if _, err := tx.ExecContext(ctx, `UPDATE space_notes SET lifecycle_state=$1,acl_version=acl_version+1,updated_at=NOW() WHERE id=$2`, NoteLifecycleDeleting, id); err != nil {
-				return err
-			}
-			if err := enqueueNoteControlTx(ctx, tx, id, "purge", nil); err != nil {
-				return err
-			}
-		}
-		codeRooms, err := beginCodeSessionSpacePurgeTx(ctx, tx, spaceID)
-		if err != nil {
-			return err
-		}
-		if err := tx.QueryRowContext(ctx, `SELECT
-			(SELECT count(*) FROM space_notes n WHERE n.space_id=$1 AND NOT EXISTS(SELECT 1 FROM space_note_control_outbox o
-			  WHERE o.note_id=n.id AND o.command='purge' AND o.delivered_at IS NOT NULL))`, spaceID).Scan(&waiting); err != nil {
-			return err
-		}
-		waiting += codeRooms
-		collabRooms, err := beginCollabRoomSpacePurgeTx(ctx, tx, spaceID)
-		if err != nil {
-			return err
-		}
-		waiting += collabRooms
-		return nil
+		_, err := tx.ExecContext(ctx, `UPDATE space_notes SET lifecycle_state=$1,acl_version=acl_version+1,updated_at=NOW()
+			WHERE space_id=$2 AND lifecycle_state<>$1`, NoteLifecycleDeleting, spaceID)
+		return err
 	})
-	return waiting, err
+	return 0, err
 }
 
 func spacePurgeIDsTx(ctx context.Context, tx *sql.Tx, query, spaceID string) ([]string, error) {

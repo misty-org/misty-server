@@ -2,19 +2,22 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/misty-org/misty-server/internal/platform/config"
 )
@@ -24,7 +27,20 @@ const (
 	backupHour   = 3
 )
 
-func backupClient(store *Store) (*s3.Client, string, error) {
+var backupResponseChecksums = []minio.ChecksumType{
+	minio.ChecksumCRC64NVME,
+	minio.ChecksumCRC32,
+	minio.ChecksumCRC32C,
+	minio.ChecksumSHA256,
+	minio.ChecksumSHA1,
+	minio.ChecksumSHA512,
+	minio.ChecksumMD5,
+	minio.ChecksumXXHash64,
+	minio.ChecksumXXHash3,
+	minio.ChecksumXXHash128,
+}
+
+func backupClient(store *Store) (*minio.Core, string, error) {
 	bucket, endpoint := resourceNames(config.Getenv("MISTY_HOSTNAME")).BackupBucket, store.Get("R2_ENDPOINT")
 	if strings.TrimSpace(config.Getenv("MISTY_HOSTNAME")) == "" {
 		bucket = ""
@@ -33,12 +49,20 @@ func backupClient(store *Store) (*s3.Client, string, error) {
 	if bucket == "" || endpoint == "" || access == "" || secret == "" {
 		return nil, "", errors.New("the backup bucket is not provisioned yet; the setup service must run first")
 	}
-	client := s3.New(s3.Options{
+	parsed, err := url.Parse(strings.TrimRight(endpoint, "/"))
+	if err != nil || parsed.Host == "" {
+		return nil, "", fmt.Errorf("the R2 endpoint %q is not a URL", endpoint)
+	}
+	client, err := minio.NewCore(parsed.Host, &minio.Options{
+		Creds:        credentials.NewStaticV4(access, secret, ""),
+		Secure:       parsed.Scheme == "https",
 		Region:       "auto",
-		BaseEndpoint: aws.String(endpoint),
-		Credentials:  credentials.NewStaticCredentialsProvider(access, secret, ""),
-		UsePathStyle: true,
+		BucketLookup: minio.BucketLookupPath,
+		MaxRetries:   3,
 	})
+	if err != nil {
+		return nil, "", err
+	}
 	return client, bucket, nil
 }
 
@@ -123,9 +147,17 @@ func backupOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	checksum := minio.ChecksumCRC32.Hasher()
+	if _, err := io.Copy(checksum, file); err != nil {
+		return err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
 	key := backupPrefix + time.Now().UTC().Format("2006-01-02T15-04-05Z") + ".dump.age"
-	if _, err := client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(bucket), Key: aws.String(key), Body: file, ContentLength: aws.Int64(info.Size()),
+	if _, err := client.PutObject(ctx, bucket, key, file, info.Size(), "", "", minio.PutObjectOptions{
+		UserMetadata:         map[string]string{minio.ChecksumCRC32.Key(): base64.StdEncoding.EncodeToString(checksum.Sum(nil))},
+		DisableContentSha256: true,
 	}); err != nil {
 		return fmt.Errorf("upload %s: %w", key, err)
 	}
@@ -133,20 +165,53 @@ func backupOnce(ctx context.Context) error {
 	return nil
 }
 
-func backupKeys(ctx context.Context, client *s3.Client, bucket string) ([]string, error) {
+func backupKeys(ctx context.Context, client *minio.Core, bucket string) ([]string, error) {
 	var keys []string
-	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{Bucket: aws.String(bucket), Prefix: aws.String(backupPrefix)})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
-		if err != nil {
-			return nil, err
+	fetchOwner := false
+	for object := range client.ListObjectsIter(ctx, bucket, minio.ListObjectsOptions{Prefix: backupPrefix, Recursive: true, FetchOwner: &fetchOwner}) {
+		if object.Err != nil {
+			return nil, object.Err
 		}
-		for _, object := range page.Contents {
-			keys = append(keys, aws.ToString(object.Key))
-		}
+		keys = append(keys, object.Key)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	sort.Strings(keys)
 	return keys, nil
+}
+
+func verifiedBackupBody(body io.ReadCloser, header http.Header) io.ReadCloser {
+	var algorithm minio.ChecksumType
+	expected := ""
+	for _, candidate := range backupResponseChecksums {
+		if value := header.Get(candidate.Key()); value != "" {
+			algorithm, expected = candidate, value
+		}
+	}
+	if expected == "" || strings.Contains(expected, "-") {
+		return body
+	}
+	return &backupChecksumReader{ReadCloser: body, hash: algorithm.Hasher(), algorithm: algorithm, expected: expected}
+}
+
+type backupChecksumReader struct {
+	io.ReadCloser
+	hash      hash.Hash
+	algorithm minio.ChecksumType
+	expected  string
+}
+
+func (reader *backupChecksumReader) Read(p []byte) (int, error) {
+	n, err := reader.ReadCloser.Read(p)
+	reader.hash.Write(p[:n])
+	if err == io.EOF {
+		actual := base64.StdEncoding.EncodeToString(reader.hash.Sum(nil))
+		if !strings.EqualFold(reader.expected, actual) {
+			return n, fmt.Errorf("checksum did not match: algorithm %s, expect %s, actual %s", reader.algorithm, reader.expected, actual)
+		}
+	}
+	return n, err
 }
 
 func listBackups(ctx context.Context) error {
@@ -188,14 +253,16 @@ func restoreBackup(ctx context.Context, name string) error {
 		}
 		key = keys[len(keys)-1]
 	}
-	object, err := client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)})
+	options := minio.GetObjectOptions{}
+	options.Set("x-amz-checksum-mode", "ENABLED")
+	body, _, header, err := client.GetObject(ctx, bucket, key, options)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", key, err)
 	}
-	defer object.Body.Close()
+	defer body.Close()
 	identity := secretsDir() + "/" + privateFiles["MISTY_BACKUP_AGE_IDENTITY"]
 	decrypt := exec.CommandContext(ctx, "age", "--decrypt", "--identity", identity)
-	decrypt.Stdin, decrypt.Stderr = object.Body, os.Stderr
+	decrypt.Stdin, decrypt.Stderr = verifiedBackupBody(body, header), os.Stderr
 	restore := exec.CommandContext(ctx, "pg_restore", "--clean", "--if-exists", "--no-owner", "--single-transaction",
 		"--host="+envOr("MISTY_DB_HOST", dbHost), "--username="+dbSuperuser, "--dbname="+dbName)
 	restore.Env = append(os.Environ(), "PGPASSWORD="+store.Get("DB_MIGRATION_PASSWORD"))

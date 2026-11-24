@@ -2,6 +2,7 @@ package main
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/misty-org/misty-server/internal/platform/serverenv"
 )
@@ -20,16 +21,21 @@ var secretSpecs = []secretSpec{
 	{Key: key("MISTY_OPERATOR_TOKEN")},
 	{Key: key("MISTY_METRICS_TOKEN"), Rotatable: true},
 	{Key: key("SPACE_LINK_ENCRYPTION_KEY"), DataBound: true},
-	{Key: key("JOURNAL_COLLAB_TICKET_PRIVATE_KEY")},
-	{Key: key("JOURNAL_COLLAB_CONTROL_SECRET")},
-	{Key: key("JOURNAL_COLLAB_PROJECTION_SECRET")},
-	{Key: key("JOURNAL_COLLAB_ROOM_SALT"), DataBound: true},
 	{Key: key("MISTY_BACKUP_AGE_IDENTITY"), DataBound: true},
 }
 
 var retiredSecrets = []string{
 	"DOCUMENT_SIGNING_KEY",
+	"JOURNAL_COLLAB_TICKET_PRIVATE_KEY",
+	"JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS",
+	"JOURNAL_COLLAB_CONTROL_SECRET",
+	"JOURNAL_COLLAB_CONTROL_SECRET_PREVIOUS",
+	"JOURNAL_COLLAB_PROJECTION_SECRET",
+	"JOURNAL_COLLAB_PROJECTION_SECRET_PREVIOUS",
+	"JOURNAL_COLLAB_ROOM_SALT",
 }
+
+var retiredValues = []string{"PARTYKIT_HOST", "JOURNAL_COLLAB_TICKET_PUBLIC_KEY"}
 
 func key(name string) serverenv.Key {
 	found, ok := serverenv.Lookup(name)
@@ -150,16 +156,13 @@ func (s *Store) deriveFrom(root []byte, name string) (string, error) {
 }
 
 var computedValues = []string{
-	"JOURNAL_COLLAB_TICKET_PUBLIC_KEY", "MISTY_BACKUP_AGE_RECIPIENT",
+	"MISTY_BACKUP_AGE_RECIPIENT",
 	"MISTY_PUBLIC_API_URL", "R2_BUCKET", "MISTY_BACKUP_BUCKET", "MISTY_CLOUDFLARE_TUNNEL_ID",
 	serverenv.APISecretName, serverenv.VersionsName,
 }
 
 func (s *Store) computed(name string) string {
 	switch name {
-	case "JOURNAL_COLLAB_TICKET_PUBLIC_KEY":
-		public, _ := serverenv.Ed25519PublicKey(s.Get("JOURNAL_COLLAB_TICKET_PRIVATE_KEY"))
-		return public
 	case "MISTY_BACKUP_AGE_RECIPIENT":
 		recipient, _ := serverenv.AgeRecipient(s.Get("MISTY_BACKUP_AGE_IDENTITY"))
 		return recipient
@@ -171,8 +174,13 @@ func (s *Store) normalize() {
 	if id := s.Values["MISTY_CLOUDFLARE_TUNNEL_ID"]; id != "" && s.State[tunnelState] == "" {
 		s.State[tunnelState] = id
 	}
-	for _, name := range computedValues {
+	for _, name := range append(computedValues, retiredValues...) {
 		delete(s.Values, name)
+	}
+	for name := range s.State {
+		if strings.HasPrefix(name, "worker:") {
+			delete(s.State, name)
+		}
 	}
 	for _, spec := range secretSpecs {
 		for _, name := range []string{spec.Name, spec.Previous} {

@@ -1,34 +1,26 @@
 package db
 
 import (
-	"context"
-	"database/sql"
 	"strings"
 )
 
 type SpaceItemKind struct {
-	Name          string
-	Section       string
-	Table         string
-	OwnerColumn   string
-	TitleColumn   string
-	DefaultTitle  string
-	IDPrefix      string
-	EventFamily   string
-	Party         string
-	ControlTable  string
-	ControlColumn string
-	ControlQueue  string
-	AssetTable    string
+	Name         string
+	Section      string
+	Table        string
+	OwnerColumn  string
+	TitleColumn  string
+	DefaultTitle string
+	IDPrefix     string
+	EventFamily  string
+	AssetTable   string
 }
 
 var spaceItemKinds = []SpaceItemKind{
 	{
 		Name: "note", Section: "notes", Table: "space_notes", OwnerColumn: "creator_user_id",
 		TitleColumn: "title_projection", DefaultTitle: "Untitled doc", IDPrefix: "note_",
-		EventFamily: "note.", Party: "note-room",
-		ControlTable: "space_note_control_outbox", ControlColumn: "note_id", ControlQueue: "note-control",
-		AssetTable: "space_note_assets",
+		EventFamily: "note.", AssetTable: "space_note_assets",
 	},
 }
 
@@ -74,12 +66,4 @@ func spaceItemKeyNames() string {
 		names = append(names, kind.Name)
 	}
 	return strings.Join(names, "|")
-}
-
-func (kind SpaceItemKind) enqueueControlTx(ctx context.Context, tx *sql.Tx, itemID, command string, payload map[string]any) error {
-	switch kind.Name {
-	case SpaceItemNote:
-		return enqueueNoteControlTx(ctx, tx, itemID, command, payload)
-	}
-	return ErrSpaceInvalid
 }

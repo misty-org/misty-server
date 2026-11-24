@@ -20,12 +20,11 @@ import (
 )
 
 type SpacesService struct {
-	JournalCollab JournalCollabConfig
-	database      *db.Database
-	library       *SpaceLibraryService
-	avatarStore   LibraryObjectStore
-	aead          cipher.AEAD
-	keyVer        int16
+	database    *db.Database
+	library     *SpaceLibraryService
+	avatarStore LibraryObjectStore
+	aead        cipher.AEAD
+	keyVer      int16
 }
 
 func NewSpacesService(database *db.Database, encryptionKey string) (*SpacesService, error) {

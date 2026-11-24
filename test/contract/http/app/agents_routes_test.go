@@ -9,7 +9,6 @@ import (
 )
 
 func TestAgentRoutesRequireAuthentication(t *testing.T) {
-	configureJournalCollabForTest(t)
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +29,6 @@ func TestAgentRoutesRequireAuthentication(t *testing.T) {
 }
 
 func TestCustomAgentMutationAndInvocationRoutesAreAbsent(t *testing.T) {
-	configureJournalCollabForTest(t)
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +65,6 @@ func TestCustomAgentMutationAndInvocationRoutesAreAbsent(t *testing.T) {
 }
 
 func TestRetiredAgentChatRoutesAreAbsent(t *testing.T) {
-	configureJournalCollabForTest(t)
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatal(err)

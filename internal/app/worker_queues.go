@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/misty-org/misty-server/internal/platform/workqueue"
@@ -26,25 +25,4 @@ func runDatabaseQueue(ctx context.Context, server *Server, kind string, process 
 		OnError: func(err error) { log.Printf("%s worker: %v", kind, err) },
 	}
 	queue.Run(ctx)
-}
-
-func runNoteControlProcessing(ctx context.Context, server *Server) {
-	if server.Spaces == nil {
-		return
-	}
-	var workers sync.WaitGroup
-	queues := map[string]func(context.Context) (int, error){
-		"note-control": func(ctx context.Context) (int, error) { return server.Spaces.ProcessNoteControlCommands(ctx, 50) },
-		"code-session-control": func(ctx context.Context) (int, error) {
-			return server.Spaces.ProcessCodeSessionControlCommands(ctx, 50)
-		},
-		"room-control": func(ctx context.Context) (int, error) {
-			return server.Spaces.ProcessCollabRoomControlCommands(ctx, 50)
-		},
-	}
-	for kind, process := range queues {
-		workers.Add(1)
-		go func() { defer workers.Done(); runDatabaseQueue(ctx, server, kind, process) }()
-	}
-	workers.Wait()
 }

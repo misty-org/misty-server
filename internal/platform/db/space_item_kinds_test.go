@@ -29,8 +29,7 @@ func TestSpaceItemKindRegistryIsConsistent(t *testing.T) {
 	seen := map[string]string{}
 	for _, kind := range SpaceItemKinds() {
 		for field, value := range map[string]string{
-			"name": kind.Name, "section": kind.Section, "table": kind.Table, "party": kind.Party,
-			"control table": kind.ControlTable, "control queue": kind.ControlQueue, "family": kind.EventFamily,
+			"name": kind.Name, "section": kind.Section, "table": kind.Table, "family": kind.EventFamily,
 			"id prefix": kind.IDPrefix,
 		} {
 			if value == "" {
@@ -42,13 +41,13 @@ func TestSpaceItemKindRegistryIsConsistent(t *testing.T) {
 			}
 			seen[value] = kind.Name + " " + field
 		}
-		for _, name := range []string{kind.Table, kind.OwnerColumn, kind.TitleColumn, kind.ControlTable, kind.ControlColumn} {
+		for _, name := range []string{kind.Table, kind.OwnerColumn, kind.TitleColumn} {
 			if !identifier.MatchString(name) {
 				t.Errorf("%s: %q is not a plain SQL identifier", kind.Name, name)
 			}
 		}
-		if kind.EventFamily != kind.Name+"." || kind.Party != kind.Name+"-room" || !strings.HasPrefix(kind.IDPrefix, kind.Name) {
-			t.Errorf("%s's family, room or id prefix doesn't follow its name", kind.Name)
+		if kind.EventFamily != kind.Name+"." || !strings.HasPrefix(kind.IDPrefix, kind.Name) {
+			t.Errorf("%s's family or id prefix doesn't follow its name", kind.Name)
 		}
 		if found, ok := SpaceItemKindNamed(kind.Section); !ok || found.Name != kind.Name {
 			t.Errorf("section %s does not find %s", kind.Section, kind.Name)
@@ -66,11 +65,6 @@ func TestSpaceItemKindRegistryIsConsistent(t *testing.T) {
 	for _, name := range []string{"deck", "workbook", "drawing"} {
 		if _, ok := SpaceItemKindNamed(name); ok {
 			t.Errorf("%s is still registered", name)
-		}
-	}
-	for _, kind := range SpaceItemKinds() {
-		if !workerQueue(kind.ControlQueue) {
-			t.Errorf("worker queue %s is not known to the worker hub", kind.ControlQueue)
 		}
 	}
 }

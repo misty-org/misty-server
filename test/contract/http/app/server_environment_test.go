@@ -34,7 +34,6 @@ func TestValidateProductionEnvironmentRejectsInvalidURLAndPort(t *testing.T) {
 }
 
 func TestCreateServerConfiguresIndependentDevelopmentLibrary(t *testing.T) {
-	configureJournalCollabForTest(t)
 	t.Setenv("R2_ENDPOINT", "")
 	t.Setenv("R2_BUCKET", "")
 	t.Setenv("R2_ACCESS_KEY", "")
@@ -89,7 +88,6 @@ func TestProductionCORSRejectsLoopbackOrigins(t *testing.T) {
 }
 
 func TestCORSAllowsAppOrigins(t *testing.T) {
-	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_ALLOWED_ORIGINS", "https://web.misty.example")
 
 	server, err := CreateServer()

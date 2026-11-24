@@ -47,14 +47,6 @@ func (s *Server) registerDomainGauges(registry *metrics.Registry) {
 		},
 	)
 	registry.WatchGauge(
-		"misty_note_control_backlog",
-		"Collaboration control commands that are due and still undelivered. A sustained non-zero value means note revocations are not reaching the collaboration service.",
-		func(ctx context.Context) (float64, error) {
-			backlog, err := s.Database.NoteControlBacklog(ctx)
-			return float64(backlog), err
-		},
-	)
-	registry.WatchGauge(
 		"misty_upload_reservations_active",
 		"Uploads holding reserved quota without having finalized. A number that climbs and never falls means abandoned uploads are outpacing cleanup.",
 		func(ctx context.Context) (float64, error) {

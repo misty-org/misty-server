@@ -79,6 +79,9 @@ func retentionTasks(server *Server) []retentionTask {
 			n, err := server.Database.PurgeExpiredSpaceData(ctx, 1000)
 			return int(n), err
 		}},
+		{"device-sign-in", 1000, func(ctx context.Context) (int, error) {
+			return server.Database.PurgeExpiredDeviceSignIns(ctx, 1000)
+		}},
 	}
 	if server.Spaces != nil {
 		tasks = append(tasks, retentionTask{"deleted-spaces", 25, func(ctx context.Context) (int, error) {

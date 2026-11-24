@@ -124,9 +124,6 @@ func (db *Database) RemoveSpaceMember(ctx context.Context, ownerID, spaceID, mem
 		if err := handleNoteMembershipLossTx(ctx, tx, spaceID, memberID); err != nil {
 			return err
 		}
-		if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
-			return err
-		}
 		if _, err = recordSpaceEventTx(ctx, tx, spaceID, ownerID, "member.removed", memberID, map[string]any{}); err != nil {
 			return err
 		}
@@ -157,9 +154,6 @@ func (db *Database) LeaveSpace(ctx context.Context, userID, spaceID string) erro
 		}
 
 		if err := handleNoteMembershipLossTx(ctx, tx, spaceID, userID); err != nil {
-			return err
-		}
-		if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "member.left", userID, map[string]any{}); err != nil {

@@ -37,14 +37,7 @@ services:
         api: service:misty-api
     logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
     restart: "no"
-    env_file:
-      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/cloudflare.env
-        required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/journal.env
-        required: false
     environment:
-      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
-      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
       PGHOST: postgres
       PGPORT: "5432"
       PGDATABASE: ${DB_NAME:-misty_server}
@@ -60,10 +53,6 @@ services:
         dbname=${DB_NAME:-misty_server}
         sslmode=disable
       GOOSE_MIGRATION_DIR: /app/migrations
-      MISTY_CLOUDFLARE_WORKER_NAME: ${MISTY_CLOUDFLARE_WORKER_NAME:-misty-journal-collab-dev}
-      MISTY_DEV_API_ORIGIN: ${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}
-    volumes:
-      - dev_runtime:/run/misty
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,8 +77,6 @@ services:
       - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/google.env
         required: false
       - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/documents.env
-        required: false
-      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/journal.env
         required: false
       - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/spaces.env
         required: false
@@ -120,10 +107,6 @@ services:
       DB_MIGRATION_USER: ""
       DB_MIGRATION_PASSWORD: ""
       CLOUDFLARE_API_TOKEN: ""
-      PARTYKIT_HOST: ${MISTY_CLOUDFLARE_WORKER_HOST:?run misty setup cloudflare}
-      MISTY_JOURNAL_SERVER_ENV_FILE: /run/misty/journal-server.env
-    volumes:
-      - dev_runtime:/run/misty:ro
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -138,6 +121,52 @@ services:
       retries: 3
     ports:
       - "127.0.0.1:${MISTY_HOST_PORT:-8081}:8080"
+    networks: [edge, database]
+
+  # The rooms (misty-collab), from the same image as the API. The tunnel sends /v1/collab here
+  # (`misty setup cloudflare` adds the path rule); the API's /health names this address as collab_url.
+  misty-collab:
+    <<: *api-image
+    container_name: misty-collab
+    logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
+    restart: unless-stopped
+    entrypoint: ["/usr/local/bin/misty-collab"]
+    env_file:
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/runtime.env
+        required: false
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/database.env
+        required: false
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/storage.env
+        required: false
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/documents.env
+        required: false
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/spaces.env
+        required: false
+      - path: ${MISTY_ENV_DIR:-~/.misty/dev/default/.env/server}/crypto/services.env
+        required: false
+    environment:
+      PORT: "8090"
+      MISTY_ENVIRONMENT: development
+      MISTY_PUBLIC_API_URL: "${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}/v1"
+      MISTY_COLLAB_SELF_URL: "${MISTY_DEV_API_ORIGIN:?run misty setup cloudflare}"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-misty_app}
+      DB_PASSWORD: ${DB_PASSWORD:-misty}
+      DB_NAME: ${DB_NAME:-misty_server}
+      DB_MIGRATION_USER: ""
+      DB_MIGRATION_PASSWORD: ""
+      CLOUDFLARE_API_TOKEN: ""
+    depends_on:
+      misty-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8090/health >/dev/null"]
+      start_period: 60s
+      start_interval: 3s
+      interval: 15m
+      timeout: 5s
+      retries: 3
     networks: [edge, database]
 
   # LiveKit carries calls (DMs and Space voice channels), as on a deployed server (compose.yml),
@@ -240,7 +269,6 @@ services:
 
 volumes:
   pgdata:
-  dev_runtime:
 
 networks:
   edge:

@@ -100,10 +100,6 @@ func (db *Database) SetSpaceMemberRoles(ctx context.Context, userID, spaceID, me
 		if err != nil {
 			return err
 		}
-		writers, err := fileRoomWritersTx(ctx, tx, spaceID)
-		if err != nil {
-			return err
-		}
 		changed, err := applyMemberRolesTx(ctx, tx, access, spaceID, memberID, target.roleIDs, desired, positions)
 		if err != nil {
 			return err
@@ -118,7 +114,7 @@ func (db *Database) SetSpaceMemberRoles(ctx context.Context, userID, spaceID, me
 			map[string]any{"user_id": memberID, "role_ids": out.RoleIDs}); err != nil {
 			return err
 		}
-		if err := revokeLostFileRoomWritersTx(ctx, tx, spaceID, writers); err != nil {
+		if err := notifyCollabAccessTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		return announceChannelAccessTx(ctx, tx, spaceID, userID, readers, "")

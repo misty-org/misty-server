@@ -4,20 +4,12 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
-
-type accountExportDocument struct {
-	db.AccountExportJournal
-	DownloadURL string    `json:"download_url"`
-	ExpiresAt   time.Time `json:"expires_at"`
-}
 
 type accountExportAsset struct {
 	db.AccountExportAsset
@@ -87,26 +79,6 @@ func (s *SpacesService) accountExportManifest(ctx context.Context, userID string
 	if err != nil {
 		return nil, err
 	}
-	documents := make([]accountExportDocument, 0, len(export.Journal))
-	for _, resource := range export.Journal {
-		if !s.JournalCollab.Enabled {
-			break
-		}
-		ticket, ticketErr := s.JournalCollab.MintJournalExportTicket(
-			userID, resource.SpaceID, resource.Kind, resource.ID,
-			resource.ACLVersion,
-		)
-		if ticketErr != nil {
-			return nil, ticketErr
-		}
-		downloadURL := strings.Replace(strings.Replace(ticket.URL, "wss://", "https://", 1), "ws://", "http://", 1) +
-			"?export=1&ticket=" + url.QueryEscape(ticket.Ticket)
-		documents = append(documents, accountExportDocument{
-			AccountExportJournal: resource,
-			DownloadURL:          downloadURL,
-			ExpiresAt:            ticket.ExpiresAt,
-		})
-	}
 	assets := make([]accountExportAsset, 0, len(export.Assets))
 	if len(export.Assets) > 0 && (s.library == nil || s.library.Presigner == nil) {
 		return nil, errAccountExportAssetsUnavailable
@@ -126,6 +98,7 @@ func (s *SpacesService) accountExportManifest(ctx context.Context, userID string
 			Download:           download,
 		})
 	}
+	documents := export.Journal
 	export.Journal = nil
 	export.Assets = nil
 	return map[string]any{

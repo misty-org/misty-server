@@ -10,7 +10,6 @@ import (
 )
 
 func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
-	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_ENVIRONMENT", "")
 	t.Setenv("MISTY_METRICS_TOKEN", "")
 	server, err := CreateServer()
@@ -27,7 +26,7 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 		for _, retired := range []string{"/stripe/webhook", "/billing", "/me/referral", "/internal/voice/live/settle", "/apps", "/me/apps", "/app-runtime", "/me/routines", "/me/routine-runs", "/automations", "/waitlist", "/activepieces", "/capabilities", "/me/sdk-targets", "/me/sdk-runs", "/me/capability-approvals", "/me/agent-approvals", "/me/agent-invocations", "/mcp/connections", "/studio", "/self-host", "/internal/self-host", "/billing/self-host-entitlement", "/ai/inbound-channels", "/sync", "/devices", "/auth/handoff", "/instance", "/me/device", "/me/telemetry",
 			"/spaces/{spaceID}/tasks", "/spaces/{spaceID}/calendar", "/spaces/{spaceID}/drawings",
 			"/spaces/{spaceID}/decks", "/spaces/{spaceID}/workbooks",
-			"/internal/journal/drawing-activity", "/internal/journal/deck-projections", "/internal/journal/workbook-projections",
+			"/internal/journal", "/spaces/{spaceID}/code-sessions",
 			"/spaces/{spaceID}/library/items", "/spaces/{spaceID}/library/facets",
 			"/spaces/{spaceID}/attachments/{attachmentID}/promote", "/spaces/{spaceID}/agent-artifacts",
 			"/me/voice/transcribe",

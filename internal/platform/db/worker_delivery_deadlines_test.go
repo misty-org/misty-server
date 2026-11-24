@@ -19,13 +19,6 @@ func workerExec(t *testing.T, database *Database, statement string) {
 		t.Fatal(err)
 	}
 }
-func TestWorkerControlDeadlines(t *testing.T) {
-	database := workerTestDatabase(t)
-	workerExec(t, database, `INSERT INTO space_note_control_outbox VALUES('note',now()+interval '1 hour',NULL)`)
-	checkWorkerDelay(t, database, "note-control", true, 59*time.Minute, time.Hour)
-	workerExec(t, database, `UPDATE space_note_control_outbox SET delivered_at=now()`)
-	checkWorkerDelay(t, database, "note-control", false, 0, 0)
-}
 func TestWorkerSocialDeadlinesNeverReplayUnknownSends(t *testing.T) {
 	database := workerTestDatabase(t)
 	workerExec(t, database, `INSERT INTO social_bindings VALUES('binding','disabled',now());

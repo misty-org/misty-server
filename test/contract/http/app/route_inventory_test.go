@@ -13,7 +13,6 @@ import (
 )
 
 func TestRouteInventory(t *testing.T) {
-	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_ENVIRONMENT", "")
 	t.Setenv("MISTY_METRICS_TOKEN", "")
 	t.Setenv("MISTY_OPERATOR_TOKEN", "route-inventory")
@@ -56,7 +55,6 @@ func TestRouteInventory(t *testing.T) {
 }
 
 func TestOperatorAccountAPIIsUnmountedWithoutAToken(t *testing.T) {
-	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_ENVIRONMENT", "")
 	t.Setenv("MISTY_OPERATOR_TOKEN", "")
 	server, err := CreateServer()

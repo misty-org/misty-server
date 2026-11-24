@@ -4,7 +4,6 @@
 **/.dev.vars
 **/.secrets
 **/.secrets/**
-**/.wrangler
 **/node_modules
 **/.output
 **/.nitro

@@ -45,7 +45,6 @@ func Run() {
 		}),
 		WorkerFunc(func(ctx context.Context) { runLifecycleQueues(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { runRetention(ctx, server) }),
-		WorkerFunc(func(ctx context.Context) { runNoteControlProcessing(ctx, server) }),
 		WorkerFunc(func(ctx context.Context) { email.Run(ctx, server.Database) }),
 		WorkerFunc(func(ctx context.Context) { server.LiveKitRooms.Run(ctx) }),
 	)

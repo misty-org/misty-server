@@ -25,19 +25,13 @@
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0}
     },
     {
-      "title": "Journal control backlog",
-      "type": "timeseries",
-      "targets": [{"expr": "misty_note_control_backlog", "legendFormat": "due controls"}],
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
-    },
-    {
       "title": "Realtime connections",
       "type": "timeseries",
       "targets": [
         {"expr": "misty_realtime_connections", "legendFormat": "connections"},
         {"expr": "misty_realtime_viewed_spaces", "legendFormat": "viewed Spaces"}
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
     },
     {
       "title": "Library and upload backlogs",
@@ -46,7 +40,7 @@
         {"expr": "misty_upload_reservations_active", "legendFormat": "upload reservations"},
         {"expr": "misty_library_jobs_pending_ai", "legendFormat": "AI"}
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
     }
   ],
   "refresh": "30s",

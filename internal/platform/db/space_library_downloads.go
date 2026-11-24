@@ -13,9 +13,25 @@ import (
 )
 
 func (db *Database) MessageAttachmentDownload(ctx context.Context, userID, spaceID, attachmentID string) (*LibraryDownload, error) {
+	return db.messageAttachmentDownload(ctx, userID, spaceID, attachmentID, false)
+}
+
+func (db *Database) DirectAttachmentDownload(ctx context.Context, userID, dmID, attachmentID string) (*LibraryDownload, error) {
+	return db.messageAttachmentDownload(ctx, userID, dmID, attachmentID, true)
+}
+
+func (db *Database) messageAttachmentDownload(ctx context.Context, userID, spaceID, attachmentID string, direct bool) (*LibraryDownload, error) {
 	out := &LibraryDownload{}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
+		if direct {
+			if err := requireInDirectTx(ctx, tx, userID, spaceID); err != nil {
+				return err
+			}
+		} else if isDirect, err := isDirectSpaceTx(ctx, tx, spaceID); err != nil {
+			return err
+		} else if isDirect {
+			return ErrLibraryNotFound
+		} else if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, PermissionMessagesRead); err != nil {
 			return ErrLibraryForbidden
 		}
 		return tx.QueryRowContext(ctx, `SELECT b.r2_object_key,a.display_name,b.server_detected_mime_type,b.byte_size,b.sha256

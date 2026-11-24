@@ -118,11 +118,6 @@ ELEVENLABS_API_KEY
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
 GOOGLE_SIGN_IN_REDIRECT_URL
-JOURNAL_COLLAB_CONTROL_SECRET
-JOURNAL_COLLAB_PROJECTION_SECRET
-JOURNAL_COLLAB_PROJECTION_SECRET_PREVIOUS
-JOURNAL_COLLAB_ROOM_SALT
-JOURNAL_COLLAB_TICKET_PRIVATE_KEY
 MISTY_AGENT_MODEL
 MISTY_AI_MODEL_CATALOG_JSON
 MAILJET_API_BASE_URL
@@ -134,6 +129,8 @@ MISTY_ALLOWED_ORIGINS
 MISTY_AUTH_SIGNING_KEY
 MISTY_AUTH_SIGNING_KEY_PREVIOUS
 MISTY_CHAT_ATTACHMENT_MAX_FILE_BYTES
+MISTY_COLLAB_SELF_URL
+MISTY_COLLAB_URL
 MISTY_EGRESS_MAX_BYTES_PER_DAY
 MISTY_EGRESS_MAX_BYTES_PER_IDENTITY_DAY
 MISTY_ENVIRONMENT
@@ -153,7 +150,6 @@ MISTY_RELEASE_CHANNEL
 MISTY_SIGNUP_LIMITS
 MISTY_SPACE_LEVELS
 MISTY_WEBSITE_URL
-PARTYKIT_HOST
 PORT
 R2_ACCESS_KEY
 R2_BUCKET
@@ -270,7 +266,7 @@ func TestDomainImportDirection(t *testing.T) {
 }
 
 func isIndependentDomain(importPath string) bool {
-	for _, domain := range []string{"accounts", "spaces", "journal", "library", "discovery", "integrations", "agent", "workflow"} {
+	for _, domain := range []string{"accounts", "spaces", "collab", "journal", "library", "discovery", "integrations", "agent", "workflow"} {
 		if strings.HasSuffix(importPath, "/internal/"+domain) || strings.Contains(importPath, "/internal/"+domain+"/") {
 			return true
 		}

@@ -30,6 +30,7 @@ func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 	s.Router.Post(prefix+"/logout", deps.logout)
 	s.Router.Post(prefix+"/auth/refresh", api.RefreshSession(s.Database))
 	s.Router.Post(prefix+"/auth/web-handoff", api.RedeemWebHandoff(s.Database))
+	s.mountSignInRoutes(prefix)
 }
 
 func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {

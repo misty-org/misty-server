@@ -54,9 +54,6 @@ func (db *Database) SetSpaceItemVisibility(ctx context.Context, userID, spaceID,
 }
 
 func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
-	if err := revokeCollabRoomsForUserTx(ctx, tx, spaceID, userID); err != nil {
-		return err
-	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM space_agent_thread_reactions r USING space_agent_threads t
 		WHERE r.thread_id=t.id AND t.space_id=$1 AND r.user_id=$2`, spaceID, userID); err != nil {
 		return err
@@ -74,9 +71,6 @@ func purgeSpaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, userID string)
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE space_note_assets SET lifecycle_state='deleting',deleted_at=COALESCE(deleted_at,NOW())
 			WHERE note_id=$1 AND lifecycle_state IN ('ready','unreferenced')`, noteID); err != nil {
-			return err
-		}
-		if err := enqueueNoteControlTx(ctx, tx, noteID, "purge", nil); err != nil {
 			return err
 		}
 	}
@@ -117,11 +111,6 @@ func revokeItemConnectionsTx(ctx context.Context, tx *sql.Tx, kindName, itemID s
 	if !ok || kind.Name != kindName {
 		return nil
 	}
-	var aclVersion int64
-	if err := tx.QueryRowContext(ctx,
-		`UPDATE `+kind.Table+` SET acl_version=acl_version+1 WHERE id=$1 RETURNING acl_version`,
-		itemID).Scan(&aclVersion); err != nil {
-		return err
-	}
-	return kind.enqueueControlTx(ctx, tx, itemID, "acl", map[string]any{"acl_version": aclVersion})
+	_, err := tx.ExecContext(ctx, `UPDATE `+kind.Table+` SET acl_version=acl_version+1 WHERE id=$1`, itemID)
+	return err
 }

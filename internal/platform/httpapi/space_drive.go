@@ -32,7 +32,6 @@ const (
 
 type SpaceDriveService struct {
 	database      *db.Database
-	JournalCollab JournalCollabConfig
 	Store         LibraryObjectStore
 	Presigner     LibraryObjectPresigner
 	Multipart     LibraryMultipartUploader

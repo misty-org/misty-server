@@ -2,26 +2,22 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"hash"
 	"io"
+	"iter"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"crypto/tls"
-	"fmt"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/retry"
-	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"net"
-
-	"github.com/aws/smithy-go"
-	smithyhttp "github.com/aws/smithy-go/transport/http"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 type S3LibraryObjectStoreConfig struct {
@@ -34,21 +30,20 @@ type S3LibraryObjectStoreConfig struct {
 	BucketPrivate      bool
 	PermanentObjects   bool
 	AllowInsecureLocal bool
-	HTTPClient         *http.Client
+	Transport          http.RoundTripper
 }
 
 type libraryS3API interface {
-	HeadBucket(context.Context, *s3.HeadBucketInput, ...func(*s3.Options)) (*s3.HeadBucketOutput, error)
-	PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error)
-	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
-	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
-	DeleteObject(context.Context, *s3.DeleteObjectInput, ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
-	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+	BucketExists(ctx context.Context, bucketName string) (bool, error)
+	PutObject(ctx context.Context, bucketName, objectName string, data io.Reader, size int64, md5Base64, sha256Hex string, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
+	GetObject(ctx context.Context, bucketName, objectName string, opts minio.GetObjectOptions) (io.ReadCloser, minio.ObjectInfo, http.Header, error)
+	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+	ListObjectsIter(ctx context.Context, bucketName string, opts minio.ListObjectsOptions) iter.Seq[minio.ObjectInfo]
 }
 
 type libraryS3Presigner interface {
-	PresignPutObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
-	PresignGetObject(context.Context, *s3.GetObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	PresignHeader(ctx context.Context, method, bucketName, objectName string, expires time.Duration, reqParams url.Values, extraHeaders http.Header) (*url.URL, error)
 }
 
 type S3LibraryObjectStore struct {
@@ -57,37 +52,77 @@ type S3LibraryObjectStore struct {
 	Presigner libraryS3Presigner
 }
 
+const (
+	libraryS3ChecksumSHA256Header = "x-amz-checksum-sha256"
+	libraryS3ChecksumModeHeader   = "x-amz-checksum-mode"
+	libraryS3MetadataHeaderPrefix = "x-amz-meta-"
+)
+
+var libraryS3ResponseChecksums = []minio.ChecksumType{
+	minio.ChecksumCRC64NVME,
+	minio.ChecksumCRC32,
+	minio.ChecksumCRC32C,
+	minio.ChecksumSHA256,
+	minio.ChecksumSHA1,
+	minio.ChecksumSHA512,
+	minio.ChecksumMD5,
+	minio.ChecksumXXHash64,
+	minio.ChecksumXXHash3,
+	minio.ChecksumXXHash128,
+}
+
 func (s *S3LibraryObjectStore) Health(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(s.Bucket)})
-	return err
+	exists, err := s.client.BucketExists(ctx, s.Bucket)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errors.New("Library bucket does not exist")
+	}
+	return nil
 }
 
 func NewS3LibraryObjectStore(config S3LibraryObjectStoreConfig) (*S3LibraryObjectStore, error) {
 	if err := validateS3LibraryObjectStoreConfig(config); err != nil {
 		return nil, err
 	}
-	httpClient := config.HTTPClient
-	if httpClient == nil {
-		httpClient = newLibraryHTTPClient()
+	transport := config.Transport
+	if transport == nil {
+		transport = newLibraryTransport()
 	}
-	options := s3.Options{
-		Region:       strings.TrimSpace(config.Region),
-		Credentials:  credentials.NewStaticCredentialsProvider(strings.TrimSpace(config.AccessKeyID), strings.TrimSpace(config.SecretAccessKey), ""),
-		HTTPClient:   httpClient,
-		UsePathStyle: config.ForcePathStyle,
-		Retryer:      retry.NewStandard(func(options *retry.StandardOptions) { options.MaxAttempts = 3 }),
+	region := strings.TrimSpace(config.Region)
+	endpoint, secure := libraryS3Endpoint(config.Endpoint, region)
+	lookup := minio.BucketLookupDNS
+	if config.ForcePathStyle {
+		lookup = minio.BucketLookupPath
 	}
-	if endpoint := strings.TrimSpace(config.Endpoint); endpoint != "" {
-		options.BaseEndpoint = aws.String(strings.TrimRight(endpoint, "/"))
+	client, err := minio.NewCore(endpoint, &minio.Options{
+		Creds:        credentials.NewStaticV4(strings.TrimSpace(config.AccessKeyID), strings.TrimSpace(config.SecretAccessKey), ""),
+		Secure:       secure,
+		Transport:    transport,
+		Region:       region,
+		BucketLookup: lookup,
+		MaxRetries:   3,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Library S3 client: %w", err)
 	}
-	client := s3.New(options)
 	return &S3LibraryObjectStore{
 		Bucket:    strings.TrimSpace(config.Bucket),
 		client:    client,
-		Presigner: s3.NewPresignClient(client),
+		Presigner: client,
 	}, nil
+}
+
+func libraryS3Endpoint(endpoint, region string) (string, bool) {
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if endpoint == "" {
+		return "s3." + region + ".amazonaws.com", true
+	}
+	parsed, _ := url.Parse(endpoint)
+	return parsed.Host, parsed.Scheme == "https"
 }
 
 func validateS3LibraryObjectStoreConfig(config S3LibraryObjectStoreConfig) error {
@@ -125,11 +160,13 @@ func (s *S3LibraryObjectStore) Put(ctx context.Context, key string, body io.Read
 	checksum, _ := hex.DecodeString(metadata.SHA256)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(s.Bucket), Key: aws.String(key), Body: body,
-		ContentLength: aws.Int64(metadata.ByteSize), ContentType: aws.String(metadata.MIMEType),
-		ChecksumSHA256: aws.String(base64.StdEncoding.EncodeToString(checksum)),
-		Metadata:       map[string]string{LibrarySHA256MetadataKey: metadata.SHA256},
+	_, err := s.client.PutObject(ctx, s.Bucket, key, body, metadata.ByteSize, "", "", minio.PutObjectOptions{
+		ContentType: metadata.MIMEType,
+		UserMetadata: map[string]string{
+			LibrarySHA256MetadataKey:      metadata.SHA256,
+			libraryS3ChecksumSHA256Header: base64.StdEncoding.EncodeToString(checksum),
+		},
+		DisableContentSha256: true,
 	})
 	return mapLibraryS3Error(err)
 }
@@ -140,11 +177,11 @@ func (s *S3LibraryObjectStore) Head(ctx context.Context, key string) (LibraryObj
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	result, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key)})
+	info, err := s.client.StatObject(ctx, s.Bucket, key, minio.StatObjectOptions{})
 	if err != nil {
 		return LibraryObjectMetadata{}, mapLibraryS3Error(err)
 	}
-	return libraryS3Metadata(result.ContentLength, result.ContentType, result.Metadata)
+	return libraryS3Metadata(info.Size, info.Metadata)
 }
 
 func (s *S3LibraryObjectStore) Open(ctx context.Context, key string) (io.ReadCloser, LibraryObjectMetadata, error) {
@@ -152,18 +189,20 @@ func (s *S3LibraryObjectStore) Open(ctx context.Context, key string) (io.ReadClo
 		return nil, LibraryObjectMetadata{}, ErrLibraryObjectNotFound
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key)})
+	options := minio.GetObjectOptions{}
+	options.Set(libraryS3ChecksumModeHeader, "ENABLED")
+	body, info, header, err := s.client.GetObject(ctx, s.Bucket, key, options)
 	if err != nil {
 		cancel()
 		return nil, LibraryObjectMetadata{}, mapLibraryS3Error(err)
 	}
-	metadata, err := libraryS3Metadata(result.ContentLength, result.ContentType, result.Metadata)
+	metadata, err := libraryS3Metadata(info.Size, header)
 	if err != nil {
 		cancel()
-		_ = result.Body.Close()
+		_ = body.Close()
 		return nil, LibraryObjectMetadata{}, err
 	}
-	return &cancelOnCloseReadCloser{ReadCloser: result.Body, cancel: cancel}, metadata, nil
+	return &cancelOnCloseReadCloser{ReadCloser: verifiedLibraryS3Body(body, header), cancel: cancel}, metadata, nil
 }
 
 func (s *S3LibraryObjectStore) Delete(ctx context.Context, key string) error {
@@ -172,8 +211,7 @@ func (s *S3LibraryObjectStore) Delete(ctx context.Context, key string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.Bucket), Key: aws.String(key)})
-	return mapLibraryS3Error(err)
+	return mapLibraryS3Error(s.client.RemoveObject(ctx, s.Bucket, key, minio.RemoveObjectOptions{}))
 }
 
 func isLoopbackLibraryHost(host string) bool {
@@ -191,60 +229,92 @@ func (s *S3LibraryObjectStore) List(
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	input := &s3.ListObjectsV2Input{
-		Bucket: aws.String(s.Bucket), Prefix: aws.String(prefix), MaxKeys: aws.Int32(int32(limit)),
-	}
-	if cursor != "" {
-		input.ContinuationToken = aws.String(cursor)
-	}
-	result, err := s.client.ListObjectsV2(ctx, input)
-	if err != nil {
-		return LibraryObjectPage{}, mapLibraryS3Error(err)
-	}
-	page := LibraryObjectPage{Objects: make([]LibraryObjectEntry, 0, len(result.Contents))}
-	for _, object := range result.Contents {
-		key := aws.ToString(object.Key)
-		if !libraryObjectKeyPattern.MatchString(key) {
+	fetchOwner := false
+	objects := s.client.ListObjectsIter(ctx, s.Bucket, minio.ListObjectsOptions{
+		Prefix: prefix, Recursive: true, StartAfter: cursor, MaxKeys: min(limit+1, 1000), FetchOwner: &fetchOwner,
+	})
+	page := LibraryObjectPage{Objects: make([]LibraryObjectEntry, 0, limit)}
+	listed, last := 0, ""
+	for object := range objects {
+		if object.Err != nil {
+			return LibraryObjectPage{}, mapLibraryS3Error(object.Err)
+		}
+		if listed == limit {
+			page.NextCursor = last
+			return page, nil
+		}
+		listed, last = listed+1, object.Key
+		if !libraryObjectKeyPattern.MatchString(object.Key) {
 			continue
 		}
 		page.Objects = append(page.Objects, LibraryObjectEntry{
-			Key: key, ByteSize: aws.ToInt64(object.Size), LastModified: aws.ToTime(object.LastModified),
+			Key: object.Key, ByteSize: object.Size, LastModified: object.LastModified,
 		})
 	}
-	if result.IsTruncated != nil && *result.IsTruncated {
-		page.NextCursor = aws.ToString(result.NextContinuationToken)
+	if err := ctx.Err(); err != nil {
+		return LibraryObjectPage{}, mapLibraryS3Error(err)
 	}
 	return page, nil
 }
 
-func libraryS3Metadata(contentLength *int64, contentType *string, values map[string]string) (LibraryObjectMetadata, error) {
-	if contentLength == nil || *contentLength < 1 {
+func libraryS3Metadata(size int64, header http.Header) (LibraryObjectMetadata, error) {
+	if size < 1 {
 		return LibraryObjectMetadata{}, errors.New("Library object has invalid size metadata")
 	}
-	checksum := strings.ToLower(strings.TrimSpace(values[LibrarySHA256MetadataKey]))
+	checksum := strings.ToLower(strings.TrimSpace(header.Get(libraryS3MetadataHeaderPrefix + LibrarySHA256MetadataKey)))
 	if !sha256Pattern.MatchString(checksum) {
 		return LibraryObjectMetadata{}, errors.New("Library object is missing verified checksum metadata")
 	}
-	return LibraryObjectMetadata{ByteSize: *contentLength, SHA256: checksum, MIMEType: aws.ToString(contentType)}, nil
+	return LibraryObjectMetadata{ByteSize: size, SHA256: checksum, MIMEType: strings.TrimSpace(header.Get("Content-Type"))}, nil
+}
+
+func verifiedLibraryS3Body(body io.ReadCloser, header http.Header) io.ReadCloser {
+	var algorithm minio.ChecksumType
+	expected := ""
+	for _, candidate := range libraryS3ResponseChecksums {
+		if value := header.Get(candidate.Key()); value != "" {
+			algorithm, expected = candidate, value
+		}
+	}
+	if expected == "" || strings.Contains(expected, "-") {
+		return body
+	}
+	return &libraryS3ChecksumReader{ReadCloser: body, hash: algorithm.Hasher(), algorithm: algorithm, expected: expected}
+}
+
+type libraryS3ChecksumReader struct {
+	io.ReadCloser
+	hash      hash.Hash
+	algorithm minio.ChecksumType
+	expected  string
+}
+
+func (reader *libraryS3ChecksumReader) Read(p []byte) (int, error) {
+	n, err := reader.ReadCloser.Read(p)
+	reader.hash.Write(p[:n])
+	if err == io.EOF {
+		actual := base64.StdEncoding.EncodeToString(reader.hash.Sum(nil))
+		if !strings.EqualFold(reader.expected, actual) {
+			return n, fmt.Errorf("checksum did not match: algorithm %s, expect %s, actual %s", reader.algorithm, reader.expected, actual)
+		}
+	}
+	return n, err
 }
 
 func mapLibraryS3Error(err error) error {
 	if err == nil {
 		return nil
 	}
-	var responseError *smithyhttp.ResponseError
-	if errors.As(err, &responseError) && responseError.HTTPStatusCode() == http.StatusNotFound {
-		return ErrLibraryObjectNotFound
-	}
-	var apiError smithy.APIError
-	if errors.As(err, &apiError) && (apiError.ErrorCode() == "NoSuchKey" || apiError.ErrorCode() == "NotFound") {
+	var response minio.ErrorResponse
+	if errors.As(err, &response) && (response.StatusCode == http.StatusNotFound ||
+		response.Code == minio.NoSuchKey || response.Code == minio.NoSuchUpload || response.Code == "NotFound") {
 		return ErrLibraryObjectNotFound
 	}
 	return fmt.Errorf("Library object store: %w", err)
 }
 
-func newLibraryHTTPClient() *http.Client {
-	return &http.Client{Transport: &http.Transport{
+func newLibraryTransport() *http.Transport {
+	return &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		ForceAttemptHTTP2:     true,
@@ -255,5 +325,6 @@ func newLibraryHTTPClient() *http.Client {
 		IdleConnTimeout:       60 * time.Second,
 		MaxIdleConns:          50,
 		MaxIdleConnsPerHost:   10,
-	}}
+		DisableCompression:    true,
+	}
 }

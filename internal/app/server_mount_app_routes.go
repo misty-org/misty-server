@@ -11,5 +11,4 @@ func (s *Server) mountAppRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.MethodFunc(http.MethodGet, apps, spaces.SpaceApps())
 	s.Router.MethodFunc(http.MethodPut, apps+"/{appID}", spaces.SpaceApp())
 	s.Router.MethodFunc(http.MethodDelete, apps+"/{appID}", spaces.SpaceApp())
-	s.Router.MethodFunc(http.MethodPost, apps+"/{appID}/rooms/{roomID}/collaboration-ticket", spaces.SpaceAppRoomTicket())
 }

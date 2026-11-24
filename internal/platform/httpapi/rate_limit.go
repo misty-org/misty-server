@@ -56,7 +56,7 @@ const defaultLimiterMaxKeys = 20000
 const collaborationTicketLimit = 120
 
 func NewAPIRateLimiter() *APIRateLimiter {
-	return &APIRateLimiter{
+	limiter := &APIRateLimiter{
 		Now:          time.Now,
 		defaultGET:   RateLimitPolicy{Limit: 120, Window: time.Minute},
 		defaultWrite: RateLimitPolicy{Limit: 30, Window: time.Minute},
@@ -86,9 +86,6 @@ func NewAPIRateLimiter() *APIRateLimiter {
 			"POST /me/deletion":                                      {Limit: 3, Window: time.Hour},
 			"POST /friends/requests":                                 {Limit: 10, Window: time.Minute},
 			"POST /spaces/{spaceID}/notes/{id}/collaboration-ticket": {Limit: collaborationTicketLimit, Window: time.Minute},
-			"POST /spaces/{spaceID}/code-sessions/{id}/collaboration-ticket": {
-				Limit: collaborationTicketLimit, Window: time.Minute,
-			},
 			"POST /spaces/{spaceID}/drive/items/{id}/collaboration-ticket": {
 				Limit: collaborationTicketLimit, Window: time.Minute,
 			},
@@ -104,6 +101,8 @@ func NewAPIRateLimiter() *APIRateLimiter {
 		},
 		Limiters: make(map[string]*SlidingWindowLimiter),
 	}
+	addSignInRoutePolicies(limiter.RoutePolicies)
+	return limiter
 }
 
 func (l *SlidingWindowLimiter) Allow(key string, now time.Time) (bool, time.Duration) {
@@ -155,12 +154,12 @@ func (l *SlidingWindowLimiter) purgeExpired(cutoff time.Time) {
 
 func (l *APIRateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions || TrustedServiceCallback(r) {
+		if r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		path := NormalizeRateLimitPath(r.URL.Path)
+		path := normalizeSignInRateLimitPath(NormalizeRateLimitPath(r.URL.Path))
 		policy := l.policyFor(r.Method, path)
 		limiter := l.limiterFor(r.Method, path, policy)
 		key := ClientIPFromRequest(r)

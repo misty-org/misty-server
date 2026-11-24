@@ -61,58 +61,52 @@ func (s *SpaceLibraryService) Usage() http.HandlerFunc {
 	}
 }
 
-func (s *SpaceLibraryService) InitiateUpload() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		var body struct {
-			Filename       string `json:"filename"`
-			MIMEType       string `json:"mime_type"`
-			ByteSize       int64  `json:"byte_size"`
-			SHA256         string `json:"sha256"`
-			Purpose        string `json:"purpose"`
-			ConversationID string `json:"conversation_id"`
-		}
-		if decodeJSON(w, r, &body) != nil {
-			return
-		}
-		if !s.UploadPurposeEnabled(body.Purpose) {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "library_uploads_disabled"})
-			return
-		}
-		body.Filename = sanitizeLibraryFilename(body.Filename)
-		body.SHA256 = strings.ToLower(strings.TrimSpace(body.SHA256))
-		body.MIMEType = strings.TrimSpace(body.MIMEType)
-		maxBytes := s.UploadLimits.Max(body.Purpose)
-		if maxBytes < 1 || body.ByteSize < 1 || body.ByteSize > maxBytes || !librarySHA256Pattern.MatchString(body.SHA256) || body.Filename == "" {
-			writeLibraryError(w, db.ErrLibraryInvalid)
-			return
-		}
-		token, err := security.GenerateSecureToken()
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		objectKey := "library/" + strings.ReplaceAll(uuid.NewString(), "-", "")
-		expiresAt := time.Now().Add(libraryUploadLifetime).UTC()
-		upload, err := s.database.CreateLibraryUploadForConversation(r.Context(), userID, chi.URLParam(r, "spaceID"), body.ConversationID, body.Purpose, body.Filename, body.MIMEType, body.ByteSize, body.SHA256, objectKey, security.HashToken(token), expiresAt)
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		transfer, err := s.UploadTransfer(r.Context(), upload, token, expiresAt)
-		if err != nil {
-			writeLibraryError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, map[string]any{
-			"upload":   upload,
-			"transfer": transfer,
-			"finalize": map[string]any{"headers": map[string]string{LibraryUploadTokenHeader: token}},
-		})
+func (s *SpaceLibraryService) initiateUpload(w http.ResponseWriter, r *http.Request, userID, spaceID string) {
+	var body struct {
+		Filename       string `json:"filename"`
+		MIMEType       string `json:"mime_type"`
+		ByteSize       int64  `json:"byte_size"`
+		SHA256         string `json:"sha256"`
+		Purpose        string `json:"purpose"`
+		ConversationID string `json:"conversation_id"`
 	}
+	if decodeJSON(w, r, &body) != nil {
+		return
+	}
+	if !s.UploadPurposeEnabled(body.Purpose) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": "library_uploads_disabled"})
+		return
+	}
+	body.Filename = sanitizeLibraryFilename(body.Filename)
+	body.SHA256 = strings.ToLower(strings.TrimSpace(body.SHA256))
+	body.MIMEType = strings.TrimSpace(body.MIMEType)
+	maxBytes := s.UploadLimits.Max(body.Purpose)
+	if maxBytes < 1 || body.ByteSize < 1 || body.ByteSize > maxBytes || !librarySHA256Pattern.MatchString(body.SHA256) || body.Filename == "" {
+		writeLibraryError(w, db.ErrLibraryInvalid)
+		return
+	}
+	token, err := security.GenerateSecureToken()
+	if err != nil {
+		writeLibraryError(w, err)
+		return
+	}
+	objectKey := "library/" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	expiresAt := time.Now().Add(libraryUploadLifetime).UTC()
+	upload, err := s.database.CreateLibraryUploadForConversation(r.Context(), userID, spaceID, body.ConversationID, body.Purpose, body.Filename, body.MIMEType, body.ByteSize, body.SHA256, objectKey, security.HashToken(token), expiresAt)
+	if err != nil {
+		writeLibraryError(w, err)
+		return
+	}
+	transfer, err := s.UploadTransfer(r.Context(), upload, token, expiresAt)
+	if err != nil {
+		writeLibraryError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"upload":   upload,
+		"transfer": transfer,
+		"finalize": map[string]any{"headers": map[string]string{LibraryUploadTokenHeader: token}},
+	})
 }
 
 func (s *SpaceLibraryService) UploadTransfer(ctx context.Context, upload *db.LibraryUpload, token string, expiresAt time.Time) (LibraryObjectUpload, error) {

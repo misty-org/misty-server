@@ -8,14 +8,6 @@ import (
 	"sync"
 )
 
-type Script struct {
-	Metadata     map[string]any
-	Modules      map[string][]byte
-	MigrationTag string
-	Subdomain    bool
-	Uploads      int
-}
-
 type Bucket struct {
 	CORS, Lock, Lifecycle any
 	Objects               map[string][]byte
@@ -32,14 +24,12 @@ type Fake struct {
 	AccountID string
 	ZoneID    string
 	ZoneName  string
-	Subdomain string
 
 	Tunnels  map[string]map[string]any
 	Configs  map[string]any
 	DNS      map[string]map[string]any
 	Buckets  map[string]*Bucket
 	Tokens   map[string]*Token
-	Scripts  map[string]*Script
 	Requests []string
 	Fail     bool
 
@@ -48,9 +38,9 @@ type Fake struct {
 
 func New(apiToken, accountID, zoneID, zoneName string) *Fake {
 	return &Fake{
-		APIToken: apiToken, AccountID: accountID, ZoneID: zoneID, ZoneName: zoneName, Subdomain: "misty-test",
+		APIToken: apiToken, AccountID: accountID, ZoneID: zoneID, ZoneName: zoneName,
 		Tunnels: map[string]map[string]any{}, Configs: map[string]any{}, DNS: map[string]map[string]any{},
-		Buckets: map[string]*Bucket{}, Tokens: map[string]*Token{}, Scripts: map[string]*Script{},
+		Buckets: map[string]*Bucket{}, Tokens: map[string]*Token{},
 	}
 }
 
@@ -180,8 +170,6 @@ func (f *Fake) serveAccount(w http.ResponseWriter, r *http.Request, parts []stri
 		f.serveR2(w, r, parts[1:])
 	case "tokens":
 		f.serveTokens(w, r, parts[1:])
-	case "workers":
-		f.serveWorkers(w, r, parts[1:])
 	default:
 		reply(w, http.StatusNotFound, nil)
 	}

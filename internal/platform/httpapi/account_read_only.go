@@ -13,7 +13,7 @@ var readOnlyPosts = []*regexp.Regexp{
 	regexp.MustCompile(`^/auth/(refresh|google|google/complete|confirm-email|confirm-email/sign-in|web-handoff)$`),
 	regexp.MustCompile(`^/me/(export|deletion|account-proof|web-handoff)$`),
 	regexp.MustCompile(`^/realtime/tickets?$`),
-	regexp.MustCompile(`^/spaces/[^/]+/(notes|code-sessions)/[^/]+/collaboration-ticket$`),
+	regexp.MustCompile(`^/spaces/[^/]+/notes/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/drive/items/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/apps/[^/]+/rooms/[^/]+/collaboration-ticket$`),
 	regexp.MustCompile(`^/spaces/[^/]+/nodes/[^/]+/resolve$`),

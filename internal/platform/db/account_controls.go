@@ -15,6 +15,7 @@ type AccountLimits struct {
 	Spaces               *int64 `json:"spaces"`
 	UploadBytes          *int64 `json:"upload_bytes"`
 	FriendRequestsPerDay *int64 `json:"friend_requests_per_day"`
+	IntegrationsPerSpace *int64 `json:"integrations_per_space"`
 }
 
 var (
@@ -31,12 +32,14 @@ func (db *Database) SetAccountLimits(ctx context.Context, userID string, limits 
 		if err := requireActiveAccountTx(ctx, tx, userID); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO account_controls(user_id,storage_bytes,devices,shared_spaces,space_members,spaces,upload_bytes,friend_requests_per_day)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+		_, err := tx.ExecContext(ctx, `INSERT INTO account_controls(user_id,storage_bytes,devices,shared_spaces,space_members,spaces,upload_bytes,friend_requests_per_day,integrations_per_space)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
 			ON CONFLICT(user_id) DO UPDATE SET storage_bytes=EXCLUDED.storage_bytes,devices=EXCLUDED.devices,
 			shared_spaces=EXCLUDED.shared_spaces,space_members=EXCLUDED.space_members,spaces=EXCLUDED.spaces,
-			upload_bytes=EXCLUDED.upload_bytes,friend_requests_per_day=EXCLUDED.friend_requests_per_day,updated_at=now()`,
-			userID, limits.StorageBytes, limits.Devices, limits.SharedSpaces, limits.SpaceMembers, limits.Spaces, limits.UploadBytes, limits.FriendRequestsPerDay)
+			upload_bytes=EXCLUDED.upload_bytes,friend_requests_per_day=EXCLUDED.friend_requests_per_day,
+			integrations_per_space=EXCLUDED.integrations_per_space,updated_at=now()`,
+			userID, limits.StorageBytes, limits.Devices, limits.SharedSpaces, limits.SpaceMembers, limits.Spaces, limits.UploadBytes, limits.FriendRequestsPerDay,
+			limits.IntegrationsPerSpace)
 		return err
 	})
 }
@@ -53,10 +56,10 @@ func (db *Database) AccountLimitsFor(ctx context.Context, userID string) (Accoun
 
 func accountControlsTx(ctx context.Context, tx *sql.Tx, userID string) (AccountLimits, *time.Time, error) {
 	var limits AccountLimits
-	var storage, devices, sharedSpaces, spaceMembers, spaces, uploads, friendRequests sql.NullInt64
+	var storage, devices, sharedSpaces, spaceMembers, spaces, uploads, friendRequests, integrations sql.NullInt64
 	var suspended sql.NullTime
-	err := tx.QueryRowContext(ctx, `SELECT storage_bytes,devices,shared_spaces,space_members,spaces,upload_bytes,friend_requests_per_day,suspended_at
-		FROM account_controls WHERE user_id=$1`, userID).Scan(&storage, &devices, &sharedSpaces, &spaceMembers, &spaces, &uploads, &friendRequests, &suspended)
+	err := tx.QueryRowContext(ctx, `SELECT storage_bytes,devices,shared_spaces,space_members,spaces,upload_bytes,friend_requests_per_day,integrations_per_space,suspended_at
+		FROM account_controls WHERE user_id=$1`, userID).Scan(&storage, &devices, &sharedSpaces, &spaceMembers, &spaces, &uploads, &friendRequests, &integrations, &suspended)
 	if errors.Is(err, sql.ErrNoRows) {
 		return limits, nil, nil
 	}
@@ -67,7 +70,7 @@ func accountControlsTx(ctx context.Context, tx *sql.Tx, userID string) (AccountL
 		StorageBytes: nullableInt(storage), Devices: nullableInt(devices),
 		SharedSpaces: nullableInt(sharedSpaces), SpaceMembers: nullableInt(spaceMembers),
 		Spaces: nullableInt(spaces), UploadBytes: nullableInt(uploads),
-		FriendRequestsPerDay: nullableInt(friendRequests),
+		FriendRequestsPerDay: nullableInt(friendRequests), IntegrationsPerSpace: nullableInt(integrations),
 	}
 	if suspended.Valid {
 		return limits, &suspended.Time, nil

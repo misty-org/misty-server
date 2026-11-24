@@ -24,7 +24,4 @@ func (s *Server) mountDriveRoutes(prefix string, drive *api.SpaceDriveService) {
 	s.Router.MethodFunc(http.MethodPost, item+"/check-in-use", drive.CheckDriveInUse())
 	s.Router.MethodFunc(http.MethodPut, item+"/in-use", drive.MarkDriveInUse())
 	s.Router.MethodFunc(http.MethodDelete, item+"/in-use", drive.ClearDriveInUse())
-	s.Router.MethodFunc(http.MethodPost, item+"/collaboration-ticket", drive.DriveFileRoomTicket())
-	s.Router.MethodFunc(http.MethodPost, prefix+"/internal/journal/file-texts", drive.DriveFileRoomText())
-	s.Router.MethodFunc(http.MethodPost, prefix+"/internal/journal/file-versions", drive.DriveFileRoomVersions())
 }

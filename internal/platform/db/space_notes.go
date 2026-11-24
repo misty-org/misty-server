@@ -202,10 +202,14 @@ func (db *Database) CreateSpaceNoteWithVisibility(ctx context.Context, creatorUs
 		if err := tx.QueryRowContext(ctx, insert, args...).Scan(&note.CreatedAt, &note.UpdatedAt, &note.Visibility); err != nil {
 			return err
 		}
-		if strings.TrimSpace(markdown) != "" {
-			if err := enqueueNoteControlTx(ctx, tx, note.ID, "bootstrap", map[string]any{"title": title, "markdown": markdown}); err != nil {
+		if body := strings.TrimSpace(markdown); body != "" {
+			if err := writeNoteContentTx(ctx, tx, note.ID, creatorUserID, spaceID, strings.TrimSpace(title), body); err != nil {
 				return err
 			}
+			note.TitleProjection = strings.TrimSpace(title)
+			note.MarkdownProjection = body
+			note.PlainTextProjection = noteMarkdownPlainText(body)
+			note.CollaborationRevision = 1
 		}
 		return recordNoteEventTx(ctx, tx, note.SpaceID, creatorUserID, "note.created", note.ID, nil)
 	})

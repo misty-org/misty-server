@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 func (db *Database) UpdateSpaceNoteContent(ctx context.Context, userID, noteID, title, markdown string) (*SpaceNote, error) {
@@ -24,16 +22,16 @@ func (db *Database) UpdateSpaceNoteContent(ctx context.Context, userID, noteID, 
 		if !access.CanEdit {
 			return ErrSpaceNotFound
 		}
-		var spaceID string
+		var spaceID, creatorUserID string
 		if err := tx.QueryRowContext(ctx,
-			`SELECT space_id FROM space_notes WHERE id=$1 AND lifecycle_state='active'`, noteID).
-			Scan(&spaceID); err != nil {
+			`SELECT space_id,creator_user_id FROM space_notes WHERE id=$1 AND lifecycle_state='active' FOR UPDATE`, noteID).
+			Scan(&spaceID, &creatorUserID); err != nil {
 			return err
 		}
-		if err := enqueueNoteControlTx(ctx, tx, noteID, "replace_markdown", map[string]any{"title": title, "markdown": markdown}); err != nil {
+		if err := writeNoteContentTx(ctx, tx, noteID, creatorUserID, spaceID, title, markdown); err != nil {
 			return err
 		}
-		return recordNoteEventTx(ctx, tx, spaceID, userID, "note.replacement.pending", noteID, nil)
+		return recordNoteEventTx(ctx, tx, spaceID, userID, "note.projection.updated", noteID, nil)
 	})
 	if err != nil {
 		return nil, err
@@ -173,7 +171,7 @@ func (db *Database) DeleteSpaceNote(ctx context.Context, userID, noteID string) 
 			WHERE note_id=$1 AND lifecycle_state IN ('ready','unreferenced')`, noteID); err != nil {
 			return err
 		}
-		return enqueueNoteControlTx(ctx, tx, noteID, "purge", nil)
+		return nil
 	})
 }
 
@@ -202,21 +200,6 @@ func noteDestructiveActorTx(
 		return false, err
 	}
 	return creatorUserID == userID || role == "owner", nil
-}
-
-func enqueueNoteControlTx(ctx context.Context, tx *sql.Tx, noteID, command string, payload map[string]any) error {
-	if payload == nil {
-		payload = map[string]any{}
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO space_note_control_outbox(id,note_id,command,payload,created_at)
-		 VALUES($1,$2,$3,$4,clock_timestamp())`,
-		"notectl_"+uuid.NewString(), noteID, command, raw)
-	return err
 }
 
 func (db *Database) RequireNoteView(ctx context.Context, userID, noteID string) (NoteAccess, error) {

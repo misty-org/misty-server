@@ -17,11 +17,12 @@ func validIngress(config any) bool {
 		rule, _ := item.(map[string]any)
 		hostname, _ := rule["hostname"].(string)
 		service, _ := rule["service"].(string)
+		path, _ := rule["path"].(string)
 		last := index == len(rules)-1
-		if service == "" || (last != (hostname == "")) || seen[hostname] {
+		if service == "" || (last != (hostname == "")) || seen[hostname+"\x00"+path] {
 			return false
 		}
-		seen[hostname] = true
+		seen[hostname+"\x00"+path] = true
 	}
 	return true
 }

@@ -1,17 +1,6 @@
 # The Misty tools image: the setup, migrate, backups, alerts, console and tunnel
 # services of compose.yml all run it. Build context: the repository root.
 
-# Bundle the Worker with wrangler's dry run; the image ships the bundle so
-# setup deploys it through the Cloudflare API with no Node at run time.
-FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS workers
-ENV WRANGLER_SEND_METRICS=false CI=true
-WORKDIR /services/journal-collab
-COPY services/journal-collab/package.json services/journal-collab/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
-COPY services/journal-collab/tsconfig.json services/journal-collab/wrangler.jsonc ./
-COPY services/journal-collab/src ./src
-RUN npx wrangler deploy --dry-run --outdir dist
-
 FROM --platform=$BUILDPLATFORM golang:1.25.12-bookworm@sha256:ea341baa9bd5ba6784f6d7161ace70544349a6242d54d34a0fbfd2c4d51c9d58 AS tools
 ARG TARGETOS TARGETARCH
 ENV GOOSE_TAGS="no_clickhouse no_libsql no_mssql no_mysql no_sqlite3 no_vertica no_ydb" \
@@ -37,7 +26,5 @@ COPY --from=tools /out/goose /usr/local/bin/goose
 COPY --from=tools /out/setup /usr/local/bin/misty-setup
 COPY --from=tools /out/misty-console /usr/local/bin/misty-console
 COPY internal/platform/db/migrations /opt/misty/migrations
-COPY --from=workers /services/journal-collab/wrangler.jsonc /opt/misty/workers/journal-collab/wrangler.jsonc
-COPY --from=workers /services/journal-collab/dist /opt/misty/workers/journal-collab/dist
 ENTRYPOINT ["/usr/local/bin/misty-setup"]
 CMD ["init"]

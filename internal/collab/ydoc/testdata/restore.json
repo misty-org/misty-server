@@ -1,0 +1,406 @@
+[
+ {
+  "name": "text_gc",
+  "gc": true,
+  "a": "restore_text_gc_a.bin",
+  "b": "restore_text_gc_b.bin",
+  "rootsA": {
+   "body": {
+    "kind": "text",
+    "json": "\"Version A body with 😀 emoji\"",
+    "empty": false,
+    "textSha256": "jHO5oT4U6v9uEzX7G/VvdHhStgtyqdHgwNB+YMhEPOI=",
+    "length": 28,
+    "delta": "[{\"insert\":\"Version\",\"attributes\":{\"bold\":true}},{\"insert\":\" A body with 😀 emoji\"}]"
+   },
+   "title": {
+    "kind": "text",
+    "json": "\"Title A\"",
+    "empty": false,
+    "textSha256": "cmhKK7WHnK3GoI0OEWCoLRwY+Hoqp4wYJy7BrBc3vkg=",
+    "length": 7,
+    "delta": "[{\"insert\":\"Title A\"}]"
+   },
+   "extra": {
+    "kind": "text",
+    "json": "\"\"",
+    "empty": true,
+    "textSha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+    "length": 0,
+    "delta": "[]"
+   }
+  },
+  "rootsB": {
+   "body": {
+    "kind": "text",
+    "json": "\"B rewrote A body with 😀 emoji\"",
+    "empty": false,
+    "textSha256": "QeaJGZ+D5vdeuuIET3j9dpj4X6WvCbibtbvH070/fbU=",
+    "length": 30,
+    "delta": "[{\"insert\":\"B rewrote A body with 😀 emoji\"}]"
+   },
+   "title": {
+    "kind": "text",
+    "json": "\"\"",
+    "empty": true,
+    "textSha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+    "length": 0,
+    "delta": "[]"
+   },
+   "extra": {
+    "kind": "text",
+    "json": "\"only in B\"",
+    "empty": false,
+    "textSha256": "SLuadJZ90hwrefJGuKW5/k9StFqYTzwTr+hSN8bFXFc=",
+    "length": 9,
+    "delta": "[{\"insert\":\"only in B\"}]"
+   }
+  }
+ },
+ {
+  "name": "map_gc",
+  "gc": true,
+  "a": "restore_map_gc_a.bin",
+  "b": "restore_map_gc_b.bin",
+  "rootsA": {
+   "state": {
+    "kind": "map",
+    "json": "{\"arr\":[1,\"two\",{\"three\":3}],\"big\":1e+300,\"bytes\":\"AQID\",\"bytesGone\":\"BA==\",\"inner\":{\"deep\":{\"y\":\"z\"},\"x\":1},\"n\":0.1,\"obj\":{\"a\":[1,2,{\"b\":\"c\"}]},\"removed\":\"in A only\",\"text\":\"map text A\",\"title\":\"A\"}",
+    "empty": false
+   },
+   "meta": {
+    "kind": "map",
+    "json": "{\"v\":1}",
+    "empty": false
+   }
+  },
+  "rootsB": {
+   "state": {
+    "kind": "map",
+    "json": "{\"added\":\"in B only\",\"arr\":[\"two\",{\"three\":3},\"four\"],\"big\":1e+300,\"bytes\":\"CQ==\",\"inner\":{\"deep\":{\"y\":\"changed\"},\"x\":2},\"n\":0.1,\"obj\":{\"a\":[1,2,{\"b\":\"c\"}]},\"text\":\"B: map text A\",\"title\":\"B\"}",
+    "empty": false
+   },
+   "meta": {
+    "kind": "map",
+    "json": "{\"v\":2}",
+    "empty": false
+   }
+  }
+ },
+ {
+  "name": "array_gc",
+  "gc": true,
+  "a": "restore_array_gc_a.bin",
+  "b": "restore_array_gc_b.bin",
+  "rootsA": {
+   "list": {
+    "kind": "array",
+    "json": "[1,0.1,\"three\",{\"four\":4},[5],\"Bwc=\",1.100000023841858,{\"k\":\"v\"},[\"x\",\"y\"],\"array text\"]",
+    "empty": false
+   }
+  },
+  "rootsB": {
+   "list": {
+    "kind": "array",
+    "json": "[\"new first\",\"three\",{\"four\":4},[5],\"Bwc=\",1.100000023841858,{\"k\":\"changed\"},[\"x\",\"y\"],\"array text\",\"tail\"]",
+    "empty": false
+   }
+  }
+ },
+ {
+  "name": "xml_gc",
+  "gc": true,
+  "a": "restore_xml_gc_a.bin",
+  "b": "restore_xml_gc_b.bin",
+  "rootsA": {
+   "doc": {
+    "kind": "xml",
+    "json": "\"<heading level=\\\"1\\\">Heading A</heading><paragraph class=\\\"lead\\\"><strong>Paragraph</strong> A text</paragraph><list><item>nested</item></list>\"",
+    "empty": false
+   }
+  },
+  "rootsB": {
+   "doc": {
+    "kind": "xml",
+    "json": "\"<paragraph class=\\\"changed\\\">B <strong>Paragraph</strong> A text</paragraph><list><item>nested</item></list><paragraph></paragraph>\"",
+    "empty": false
+   }
+  }
+ },
+ {
+  "name": "mixed_gc",
+  "gc": true,
+  "a": "restore_mixed_gc_a.bin",
+  "b": "restore_mixed_gc_b.bin",
+  "rootsA": {
+   "text": {
+    "kind": "text",
+    "json": "\"text A\"",
+    "empty": false,
+    "textSha256": "jzkjEb19PPuMYzgdhtctH2FQ/kmrtD6RHUtjw3/K1vs=",
+    "length": 6,
+    "delta": "[{\"insert\":\"text A\"}]"
+   },
+   "map": {
+    "kind": "map",
+    "json": "{\"a\":1}",
+    "empty": false
+   },
+   "list": {
+    "kind": "array",
+    "json": "[\"a\"]",
+    "empty": false
+   },
+   "xml": {
+    "kind": "xml",
+    "json": "\"<p>xml A</p>\"",
+    "empty": false
+   }
+  },
+  "rootsB": {
+   "text": {
+    "kind": "text",
+    "json": "\"text A then B\"",
+    "empty": false,
+    "textSha256": "UEWkOFM+40hx8ycV9k2paUJRpmn+6KKvmucG2lLcXws=",
+    "length": 13,
+    "delta": "[{\"insert\":\"text A then B\"}]"
+   },
+   "map": {
+    "kind": "map",
+    "json": "{\"a\":1,\"b\":2}",
+    "empty": false
+   },
+   "list": {
+    "kind": "array",
+    "json": "[\"a\",\"b\"]",
+    "empty": false
+   },
+   "xml": {
+    "kind": "xml",
+    "json": "\"<p>B xml A</p>\"",
+    "empty": false
+   }
+  }
+ },
+ {
+  "name": "text_nogc",
+  "gc": false,
+  "a": "restore_text_nogc_a.bin",
+  "b": "restore_text_nogc_b.bin",
+  "rootsA": {
+   "body": {
+    "kind": "text",
+    "json": "\"Version A body with 😀 emoji\"",
+    "empty": false,
+    "textSha256": "jHO5oT4U6v9uEzX7G/VvdHhStgtyqdHgwNB+YMhEPOI=",
+    "length": 28,
+    "delta": "[{\"insert\":\"Version\",\"attributes\":{\"bold\":true}},{\"insert\":\" A body with 😀 emoji\"}]"
+   },
+   "title": {
+    "kind": "text",
+    "json": "\"Title A\"",
+    "empty": false,
+    "textSha256": "cmhKK7WHnK3GoI0OEWCoLRwY+Hoqp4wYJy7BrBc3vkg=",
+    "length": 7,
+    "delta": "[{\"insert\":\"Title A\"}]"
+   },
+   "extra": {
+    "kind": "text",
+    "json": "\"\"",
+    "empty": true,
+    "textSha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+    "length": 0,
+    "delta": "[]"
+   }
+  },
+  "rootsB": {
+   "body": {
+    "kind": "text",
+    "json": "\"B rewrote A body with 😀 emoji\"",
+    "empty": false,
+    "textSha256": "QeaJGZ+D5vdeuuIET3j9dpj4X6WvCbibtbvH070/fbU=",
+    "length": 30,
+    "delta": "[{\"insert\":\"B rewrote A body with 😀 emoji\"}]"
+   },
+   "title": {
+    "kind": "text",
+    "json": "\"\"",
+    "empty": true,
+    "textSha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+    "length": 0,
+    "delta": "[]"
+   },
+   "extra": {
+    "kind": "text",
+    "json": "\"only in B\"",
+    "empty": false,
+    "textSha256": "SLuadJZ90hwrefJGuKW5/k9StFqYTzwTr+hSN8bFXFc=",
+    "length": 9,
+    "delta": "[{\"insert\":\"only in B\"}]"
+   }
+  }
+ },
+ {
+  "name": "map_nogc",
+  "gc": false,
+  "a": "restore_map_nogc_a.bin",
+  "b": "restore_map_nogc_b.bin",
+  "rootsA": {
+   "state": {
+    "kind": "map",
+    "json": "{\"arr\":[1,\"two\",{\"three\":3}],\"big\":1e+300,\"bytes\":\"AQID\",\"bytesGone\":\"BA==\",\"inner\":{\"deep\":{\"y\":\"z\"},\"x\":1},\"n\":0.1,\"obj\":{\"a\":[1,2,{\"b\":\"c\"}]},\"removed\":\"in A only\",\"text\":\"map text A\",\"title\":\"A\"}",
+    "empty": false
+   },
+   "meta": {
+    "kind": "map",
+    "json": "{\"v\":1}",
+    "empty": false
+   }
+  },
+  "rootsB": {
+   "state": {
+    "kind": "map",
+    "json": "{\"added\":\"in B only\",\"arr\":[\"two\",{\"three\":3},\"four\"],\"big\":1e+300,\"bytes\":\"CQ==\",\"inner\":{\"deep\":{\"y\":\"changed\"},\"x\":2},\"n\":0.1,\"obj\":{\"a\":[1,2,{\"b\":\"c\"}]},\"text\":\"B: map text A\",\"title\":\"B\"}",
+    "empty": false
+   },
+   "meta": {
+    "kind": "map",
+    "json": "{\"v\":2}",
+    "empty": false
+   }
+  }
+ },
+ {
+  "name": "array_nogc",
+  "gc": false,
+  "a": "restore_array_nogc_a.bin",
+  "b": "restore_array_nogc_b.bin",
+  "rootsA": {
+   "list": {
+    "kind": "array",
+    "json": "[1,0.1,\"three\",{\"four\":4},[5],\"Bwc=\",1.100000023841858,{\"k\":\"v\"},[\"x\",\"y\"],\"array text\"]",
+    "empty": false
+   }
+  },
+  "rootsB": {
+   "list": {
+    "kind": "array",
+    "json": "[\"new first\",\"three\",{\"four\":4},[5],\"Bwc=\",1.100000023841858,{\"k\":\"changed\"},[\"x\",\"y\"],\"array text\",\"tail\"]",
+    "empty": false
+   }
+  }
+ },
+ {
+  "name": "xml_nogc",
+  "gc": false,
+  "a": "restore_xml_nogc_a.bin",
+  "b": "restore_xml_nogc_b.bin",
+  "rootsA": {
+   "doc": {
+    "kind": "xml",
+    "json": "\"<heading level=\\\"1\\\">Heading A</heading><paragraph class=\\\"lead\\\"><strong>Paragraph</strong> A text</paragraph><list><item>nested</item></list>\"",
+    "empty": false
+   }
+  },
+  "rootsB": {
+   "doc": {
+    "kind": "xml",
+    "json": "\"<paragraph class=\\\"changed\\\">B <strong>Paragraph</strong> A text</paragraph><list><item>nested</item></list><paragraph></paragraph>\"",
+    "empty": false
+   }
+  }
+ },
+ {
+  "name": "mixed_nogc",
+  "gc": false,
+  "a": "restore_mixed_nogc_a.bin",
+  "b": "restore_mixed_nogc_b.bin",
+  "rootsA": {
+   "text": {
+    "kind": "text",
+    "json": "\"text A\"",
+    "empty": false,
+    "textSha256": "jzkjEb19PPuMYzgdhtctH2FQ/kmrtD6RHUtjw3/K1vs=",
+    "length": 6,
+    "delta": "[{\"insert\":\"text A\"}]"
+   },
+   "map": {
+    "kind": "map",
+    "json": "{\"a\":1}",
+    "empty": false
+   },
+   "list": {
+    "kind": "array",
+    "json": "[\"a\"]",
+    "empty": false
+   },
+   "xml": {
+    "kind": "xml",
+    "json": "\"<p>xml A</p>\"",
+    "empty": false
+   }
+  },
+  "rootsB": {
+   "text": {
+    "kind": "text",
+    "json": "\"text A then B\"",
+    "empty": false,
+    "textSha256": "UEWkOFM+40hx8ycV9k2paUJRpmn+6KKvmucG2lLcXws=",
+    "length": 13,
+    "delta": "[{\"insert\":\"text A then B\"}]"
+   },
+   "map": {
+    "kind": "map",
+    "json": "{\"a\":1,\"b\":2}",
+    "empty": false
+   },
+   "list": {
+    "kind": "array",
+    "json": "[\"a\",\"b\"]",
+    "empty": false
+   },
+   "xml": {
+    "kind": "xml",
+    "json": "\"<p>B xml A</p>\"",
+    "empty": false
+   }
+  }
+ },
+ {
+  "name": "emptied_gc",
+  "gc": true,
+  "a": "restore_emptied_gc_a.bin",
+  "b": "restore_emptied_gc_b.bin",
+  "rootsA": {
+   "body": {
+    "kind": "text",
+    "json": "\"was here\"",
+    "empty": false,
+    "textSha256": "u35RxtAr4wl6OtzyA8HBqCXT9KCPgIXdJohL88cXEQQ=",
+    "length": 8,
+    "delta": "[{\"insert\":\"was here\"}]"
+   },
+   "state": {
+    "kind": "map",
+    "json": "{\"k\":\"v\"}",
+    "empty": false
+   }
+  },
+  "rootsB": {
+   "body": {
+    "kind": "text",
+    "json": "\"\"",
+    "empty": true,
+    "textSha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+    "length": 0,
+    "delta": "[]"
+   },
+   "state": {
+    "kind": "map",
+    "json": "{}",
+    "empty": true
+   }
+  }
+ }
+]

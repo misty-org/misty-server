@@ -48,6 +48,7 @@ func workerTestDatabase(t *testing.T) *Database {
   edit_definition jsonb DEFAULT '{}',rendition_state text,rendition_updated_at timestamptz);
  CREATE TABLE space_rendition_reservations(source_kind text,source_id text,state text,reserved_bytes bigint DEFAULT 100,user_id text DEFAULT 'owner');
  CREATE TABLE space_note_control_outbox(id text PRIMARY KEY,next_attempt_at timestamptz,delivered_at timestamptz);
+ CREATE TABLE abuse_blocks(block_key text PRIMARY KEY,blocked_until timestamptz);
  CREATE TABLE space_drawing_control_outbox(id text PRIMARY KEY,drawing_id text,command text,next_attempt_at timestamptz,delivered_at timestamptz);
  CREATE TABLE space_drawings(id text PRIMARY KEY,lifecycle_state text);
  CREATE TABLE social_outbound_commands(id text PRIMARY KEY,state text,available_at timestamptz,lease_expires_at timestamptz,binding_id text);

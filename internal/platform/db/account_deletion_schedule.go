@@ -70,12 +70,6 @@ func (db *Database) ScheduleAccountDeletion(
 			if err := handleNoteMembershipLossTx(ctx, tx, spaceID, userID); err != nil {
 				return err
 			}
-			if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
-				return err
-			}
-			if err := revokeCollabRoomsForUserTx(ctx, tx, spaceID, userID); err != nil {
-				return err
-			}
 			if _, err := tx.ExecContext(ctx, `
 				DELETE FROM space_members WHERE space_id=$1 AND user_id=$2`,
 				spaceID, userID,
@@ -94,13 +88,6 @@ func (db *Database) ScheduleAccountDeletion(
 			SET revoked_at=NOW(),credential_ciphertext=''::bytea,
 			    credential_nonce=''::bytea,updated_at=NOW()
 			WHERE user_id=$1`, userID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE space_integrations
-			SET status='needs_attention',credential_reference='account_deleted',
-			    updated_at=NOW()
-			WHERE connected_by_user_id=$1`, userID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
@@ -172,6 +159,9 @@ func (db *Database) CompleteAccountDeletion(
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM device_sign_in_requests WHERE approved_user_id=$1`, userID); err != nil {
 			return err
 		}
 		if err := purgeAccountDataTx(ctx, tx, userID); err != nil {

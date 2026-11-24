@@ -55,12 +55,6 @@ func (s *Server) mountRequestMiddleware() {
 	abuseGuard := api.NewAbuseGuard(api.DefaultAbusePolicy()).
 		WithStore(context.Background(), s.Database)
 	s.AbuseGuard = abuseGuard
-	s.Router.Use(api.TrustSignedServiceCallbacks(func() api.JournalCollabConfig {
-		if s.Spaces == nil {
-			return api.JournalCollabConfig{}
-		}
-		return s.Spaces.JournalCollab
-	}))
 	s.Router.Use(abuseGuard.Middleware)
 	s.Router.Use(api.NewAPIRateLimiter().WithAbuseGuard(abuseGuard).Middleware)
 	s.Suspensions = api.NewSuspensionGuard(s.Database)
@@ -98,4 +92,8 @@ func (s *Server) mountLibraryRoutes(prefix string, library *api.SpaceLibraryServ
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/uploads/{uploadID}/finalize", library.FinalizeUpload())
 	s.Router.MethodFunc(http.MethodPost, prefix+"/spaces/{spaceID}/library/uploads/{uploadID}/abort", library.AbortUpload())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/attachments/{attachmentID}/download", library.DownloadAttachment())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/dms/{dmID}/attachments/uploads", library.DMInitiateUpload())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/dms/{dmID}/attachments/uploads/{uploadID}/finalize", library.DMFinalizeUpload())
+	s.Router.MethodFunc(http.MethodPost, prefix+"/dms/{dmID}/attachments/uploads/{uploadID}/abort", library.DMAbortUpload())
+	s.Router.MethodFunc(http.MethodGet, prefix+"/dms/{dmID}/attachments/{attachmentID}/download", library.DMDownloadAttachment())
 }

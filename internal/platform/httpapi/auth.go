@@ -244,6 +244,7 @@ func Logout(database *db.Database) http.HandlerFunc {
 				http.Error(w, "could not revoke session", http.StatusServiceUnavailable)
 				return
 			}
+			signalSessionEnded(r, database, claims.SessionID)
 		}
 		clearAuthCookies(w, r)
 

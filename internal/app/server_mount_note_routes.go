@@ -15,8 +15,6 @@ func (s *Server) mountNoteRoutes(prefix string, spaces *api.SpacesService) {
 	s.Router.MethodFunc(http.MethodPatch, prefix+"/spaces/{spaceID}/notes/{noteID}/metadata", spaces.SpaceNoteMetadata())
 	s.Router.Put(prefix+"/spaces/{spaceID}/notes/{noteID}/content", spaces.SpaceNoteContent())
 	s.Router.MethodFunc(http.MethodGet, prefix+"/spaces/{spaceID}/notes/{noteID}/backlinks", spaces.SpaceNoteBacklinks())
-	s.Router.MethodFunc(http.MethodPost, prefix+"/internal/journal/note-projections", spaces.JournalNoteProjection())
-	s.Router.Post(prefix+"/spaces/{spaceID}/notes/{noteID}/collaboration-ticket", spaces.SpaceNoteCollaborationTicket())
 	if s.Library == nil {
 		return
 	}

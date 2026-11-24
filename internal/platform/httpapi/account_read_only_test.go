@@ -28,7 +28,6 @@ func TestReadOnlyRequestsAreReadsTheListedPostsAndThePassword(t *testing.T) {
 		{http.MethodPost, "/logout", true},
 		{http.MethodPost, "/v1/realtime/tickets", true},
 		{http.MethodPost, "/v1/spaces/s1/notes/n1/collaboration-ticket", true},
-		{http.MethodPost, "/v1/spaces/s1/code-sessions/c1/collaboration-ticket", true},
 		{http.MethodGet, "/v1/spaces/s1/notes/n1/history", true},
 		{http.MethodPost, "/v1/spaces/s1/notes/n1/history/v1/restore", false},
 		{http.MethodPost, "/v1/spaces/s1/library/items/i1/collaboration-ticket", false},

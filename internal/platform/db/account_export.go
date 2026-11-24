@@ -28,6 +28,7 @@ type AccountExportJournal struct {
 	ID         string    `json:"id"`
 	SpaceID    string    `json:"space_id"`
 	Title      string    `json:"title"`
+	Markdown   string    `json:"markdown"`
 	ACLVersion int64     `json:"acl_version"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`

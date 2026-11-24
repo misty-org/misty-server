@@ -88,31 +88,30 @@ func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, co
 	}
 	out := &LibraryUpload{ID: "upload_" + uuid.NewString(), SpaceID: spaceID, UserID: userID, ObjectKey: objectKey, OriginalFilename: filename, Purpose: purpose, ClientDeclaredMIMEType: declaredMIME, RequestedByteSize: byteSize, ClientSHA256: clientSHA, State: "initiated", UploadTokenHash: tokenHash, ExpiresAt: expiresAt, Version: 1}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if purpose == UploadPurposeChatAttachment && conversationID != "" {
-			if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
-				return err
-			}
-			if err := requireSpaceChannelPermissionTx(ctx, tx, userID, spaceID, conversationID, permission); err != nil {
-				return err
-			}
-		} else if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, permission); err != nil {
+		direct, err := isDirectSpaceTx(ctx, tx, spaceID)
+		if err != nil {
+			return err
+		}
+		if direct {
+			err = requireDirectUploadTx(ctx, tx, userID, spaceID, conversationID, purpose)
+		} else {
+			err = requireSpaceUploadAccessTx(ctx, tx, userID, spaceID, conversationID, purpose, permission)
+		}
+		if err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `SELECT security_domain_id FROM spaces WHERE id=$1 FOR SHARE`, spaceID).Scan(&out.SecurityDomainID); err != nil {
 			return err
 		}
-		if purpose == UploadPurposeChatAttachment && conversationID == "" {
-			if err := requireSpaceMessageWriteTx(ctx, tx, userID, spaceID); err != nil {
-				return err
-			}
-		}
 		if err := prepareStorageReservationTx(ctx, tx, userID, spaceID); err != nil {
 			return err
 		}
-		if err := requireSpaceUploadSizeTx(ctx, tx, userID, spaceID, byteSize); err != nil {
-			return err
+		if direct {
+			err = RequireAccountStorageRoomTx(ctx, tx, userID, byteSize)
+		} else if err = requireSpaceUploadSizeTx(ctx, tx, userID, spaceID, byteSize); err == nil {
+			err = RequireStorageRoomTx(ctx, tx, userID, spaceID, byteSize)
 		}
-		if err := RequireStorageRoomTx(ctx, tx, userID, spaceID, byteSize); err != nil {
+		if err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `INSERT INTO space_library_uploads(id,space_id,security_domain_id,user_id,object_key,original_filename,purpose,client_declared_mime_type,requested_byte_size,client_sha256,state,upload_token_hash,expires_at,conversation_id)
@@ -128,6 +127,22 @@ func (db *Database) createLibraryUpload(ctx context.Context, userID, spaceID, co
 		return insertLibraryAuditTx(ctx, tx, spaceID, out.SecurityDomainID, userID, "library.upload.initiated", "upload", out.ID, "success", map[string]any{"purpose": purpose, "reserved_bytes": byteSize})
 	})
 	return out, err
+}
+
+func requireSpaceUploadAccessTx(ctx context.Context, tx *sql.Tx, userID, spaceID, conversationID, purpose, permission string) error {
+	if purpose == UploadPurposeChatAttachment && conversationID != "" {
+		if err := requireSpaceChannelWriteTx(ctx, tx, userID, spaceID, conversationID); err != nil {
+			return err
+		}
+		return requireSpaceChannelPermissionTx(ctx, tx, userID, spaceID, conversationID, permission)
+	}
+	if err := requireSpacePermissionTx(ctx, tx, userID, spaceID, permission); err != nil {
+		return err
+	}
+	if purpose == UploadPurposeChatAttachment {
+		return requireSpaceMessageWriteTx(ctx, tx, userID, spaceID)
+	}
+	return nil
 }
 
 func (db *Database) LibraryUpload(ctx context.Context, userID, spaceID, uploadID string) (*LibraryUpload, error) {

@@ -6,7 +6,7 @@ import (
 )
 
 type Names struct {
-	Tunnel, LibraryBucket, BackupBucket, LibraryToken, BackupToken, CollabWorker string
+	Tunnel, LibraryBucket, BackupBucket, LibraryToken, BackupToken string
 }
 
 func ResourceNames(hostname string) Names {
@@ -21,7 +21,6 @@ func ResourceNames(hostname string) Names {
 		BackupBucket:  base + "-backups",
 		LibraryToken:  base + " library",
 		BackupToken:   base + " backups",
-		CollabWorker:  base + "-collab",
 	}
 }
 

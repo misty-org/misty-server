@@ -122,7 +122,10 @@ func beginAccountDeletionTx(
 		WHERE id=$1`, userID); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=$1`, userID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM device_sign_in_requests WHERE approved_user_id=$1`, userID)
 	return err
 }
 

@@ -11,23 +11,25 @@ import (
 
 func TestWorkerRunnerSleepsWhenEmptyAndExecutesPersistedDeadline(t *testing.T) {
 	database := workerTestDatabase(t)
+	workerExec(t, database, `CREATE TRIGGER abuse_retention_worker_notify AFTER INSERT ON abuse_blocks
+ FOR EACH ROW EXECUTE FUNCTION misty_notify_worker_queue('abuse-retention')`)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var reads atomic.Int32
 	empty, finished, stopped := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	q := workqueue.Queue{
 		Subscribe: func(ctx context.Context) (<-chan struct{}, func(), error) {
-			return database.SubscribeWorkerEvents(ctx, "note-control")
+			return database.SubscribeWorkerEvents(ctx, "abuse-retention")
 		},
 		Next: func(ctx context.Context) (time.Duration, bool, error) {
-			delay, pending, err := database.NextWorkerDelay(ctx, "note-control")
+			delay, pending, err := database.NextWorkerDelay(ctx, "abuse-retention")
 			if reads.Add(1) == 1 {
 				close(empty)
 			}
 			return delay, pending, err
 		},
 		Process: func(ctx context.Context) (int, error) {
-			result, err := database.Conn.ExecContext(ctx, `UPDATE space_note_control_outbox SET delivered_at=now() WHERE delivered_at IS NULL AND next_attempt_at<=now()`)
+			result, err := database.Conn.ExecContext(ctx, `DELETE FROM abuse_blocks WHERE blocked_until+interval '1 day'<=now()`)
 			if err != nil {
 				return 0, err
 			}
@@ -57,7 +59,7 @@ func TestWorkerRunnerSleepsWhenEmptyAndExecutesPersistedDeadline(t *testing.T) {
 	if reads.Load() != 1 {
 		t.Fatal("empty worker performed repeated reads", reads.Load())
 	}
-	workerExec(t, database, `INSERT INTO space_note_control_outbox VALUES('command',now()+interval '250 milliseconds',NULL)`)
+	workerExec(t, database, `INSERT INTO abuse_blocks VALUES('block',now()-interval '1 day'+interval '250 milliseconds')`)
 	select {
 	case <-finished:
 		t.Fatal("ran before persisted deadline")

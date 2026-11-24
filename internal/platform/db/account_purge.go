@@ -7,6 +7,7 @@ import (
 
 var accountPurgeTables = []struct{ Table, Column string }{
 	{"sessions", "user_id"},
+	{"device_sign_in_requests", "approved_user_id"},
 	{"email_verification_tokens", "user_id"},
 	{"password_reset_tokens", "user_id"},
 	{"google_reauthentication_tokens", "user_id"},
@@ -44,7 +45,6 @@ var accountPurgeKept = map[string]string{
 	"space_conversations.created_by_user_id":     "chats in those Spaces",
 	"space_notes.creator_user_id":                "notes in those Spaces",
 	"space_note_assets.uploader_user_id":         "files in those notes",
-	"space_code_sessions.started_by_user_id":     "live code sessions in those Spaces",
 	"space_apps.installed_by":                    "apps installed in those Spaces",
 	"space_nodes.uploader_user_id":               "files in those Spaces",
 	"space_item_aliases.created_by_user_id":      "links in those Spaces",
@@ -59,7 +59,7 @@ var accountPurgeKept = map[string]string{
 	"space_events.actor_user_id":                 "activity in those Spaces, kept seven days",
 	"space_library_audit_events.actor_user_id":   "the Library audit trail of those Spaces",
 	"space_agents.owner_user_id":                 "the agent's name in those Spaces",
-	"space_integrations.connected_by_user_id":    "Space apps, marked as needing a new connection",
+	"space_integrations.created_by":              "integrations made in those Spaces",
 }
 
 func AccountPurgeKept() map[string]string { return accountPurgeKept }

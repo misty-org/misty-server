@@ -1,9 +1,9 @@
 package db
 
 import (
-	"context"
-	. "github.com/misty-org/misty-server/internal/platform/db"
 	"testing"
+
+	. "github.com/misty-org/misty-server/internal/platform/db"
 )
 
 func noteLifecycleState(t *testing.T, fixture noteFixture, noteID string) string {
@@ -54,87 +54,16 @@ func TestCreatorRemovedKeepsTheNote(t *testing.T) {
 	}
 }
 
-func TestPurgeWaitsForRoomPurgeDelivery(t *testing.T) {
+func TestDeletedNoteIsPurgedWithoutWaitingForARoom(t *testing.T) {
 	fixture := newNoteFixture(t, "note-life-delivery")
 	if err := fixture.database.DeleteSpaceNote(fixture.ctx, fixture.creator, fixture.note.ID); err != nil {
 		t.Fatal(err)
 	}
-
-	if _, err := fixture.database.PurgeExpiredNotes(fixture.ctx, 100); err != nil {
-		t.Fatal(err)
-	}
-	if state := noteLifecycleState(t, fixture, fixture.note.ID); state != NoteLifecycleDeleting {
-		t.Fatalf("lifecycle = %q, want the note held until its room purge lands", state)
-	}
-
-	commands, err := fixture.database.PendingNoteControlCommands(fixture.ctx, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var purgeCommandID string
-	for _, command := range commands {
-		if command.NoteID == fixture.note.ID && command.Command == "purge" {
-			purgeCommandID = command.ID
-		}
-	}
-	if purgeCommandID == "" {
-		t.Fatal("no purge command was queued for the deleted note")
-	}
-	if err := fixture.database.MarkNoteControlDelivered(fixture.ctx, purgeCommandID); err != nil {
-		t.Fatal(err)
-	}
-
 	purged, err := fixture.database.PurgeExpiredNotes(fixture.ctx, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if purged != 1 {
-		t.Fatalf("purged = %d, want the note removed once its room purge was delivered", purged)
-	}
-}
-
-func TestPendingControlCommandsAreClaimedOnce(t *testing.T) {
-	fixture := newNoteFixture(t, "note-life-claim")
-	if err := fixture.database.DeleteSpaceNote(fixture.ctx, fixture.creator, fixture.note.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	first, err := fixture.database.PendingNoteControlCommands(fixture.ctx, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(first) == 0 {
-		t.Fatal("no commands were claimed")
-	}
-	second, err := fixture.database.PendingNoteControlCommands(fixture.ctx, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, command := range second {
-		for _, claimed := range first {
-			if command.ID == claimed.ID {
-				t.Fatalf("command %s was claimed twice in a row", command.ID)
-			}
-		}
-	}
-}
-
-func TestNoteControlBacklogCountsOnlyDueUndelivered(t *testing.T) {
-	fixture := newNoteFixture(t, "note-life-backlog")
-	ctx := context.Background()
-
-	before, err := fixture.database.NoteControlBacklog(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := fixture.database.DeleteSpaceNote(fixture.ctx, fixture.creator, fixture.note.ID); err != nil {
-		t.Fatal(err)
-	}
-	after, err := fixture.database.NoteControlBacklog(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after <= before {
-		t.Fatalf("backlog = %d, want it to grow past %d after queuing a purge", after, before)
+		t.Fatalf("purged = %d, want the deleted note removed", purged)
 	}
 }

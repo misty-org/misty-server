@@ -27,10 +27,7 @@ type SpaceApp struct {
 	InstalledAt time.Time       `json:"installed_at"`
 }
 
-const (
-	maxSpaceAppsPerSpace  = 64
-	maxSpaceAppSourceSize = 64 << 10
-)
+const maxSpaceAppsPerSpace = 64
 
 var spaceAppIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 
@@ -60,14 +57,7 @@ func normalizeSpaceAppSource(source json.RawMessage) ([]byte, error) {
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return nil, nil
 	}
-	if len(trimmed) >= maxSpaceAppSourceSize || trimmed[0] != '{' || !json.Valid(trimmed) {
-		return nil, ErrSpaceInvalid
-	}
-	var object map[string]json.RawMessage
-	if json.Unmarshal(trimmed, &object) != nil {
-		return nil, ErrSpaceInvalid
-	}
-	return trimmed, nil
+	return nil, ErrSpaceInvalid
 }
 
 func normalizeSpaceAppInput(appID, version string, permissions []string) ([]string, error) {
@@ -159,8 +149,10 @@ func (db *Database) InstallSpaceApp(ctx context.Context, userID, spaceID, appID,
 			newSpaceAppRoomGeneration()), app); err != nil {
 			return err
 		}
-		if err := revokeAppRoomAccessTx(ctx, tx, spaceID, appID, previous, app.Permissions); err != nil {
-			return err
+		if already && !holdsAppPermissions(app.Permissions, previous...) {
+			if err := notifyCollabAccessTx(ctx, tx, spaceID); err != nil {
+				return err
+			}
 		}
 		eventType := "app.installed"
 		if already {
@@ -188,7 +180,7 @@ func (db *Database) RemoveSpaceApp(ctx context.Context, userID, spaceID, appID s
 		if removed, _ := result.RowsAffected(); removed == 0 {
 			return ErrSpaceNotFound
 		}
-		if err := purgeAppRoomsTx(ctx, tx, spaceID, appID); err != nil {
+		if err := notifyCollabAccessTx(ctx, tx, spaceID); err != nil {
 			return err
 		}
 		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "app.removed", appID, map[string]any{"app_id": appID})
@@ -204,11 +196,6 @@ func ValidSpaceAppRoomID(roomID string) bool {
 
 func newSpaceAppRoomGeneration() string {
 	return strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
-}
-
-type SpaceAppRoomGrant struct {
-	Generation string
-	Role       string
 }
 
 func spaceAppGrantTx(ctx context.Context, tx *sql.Tx, spaceID, appID string, required ...string) (string, error) {
@@ -228,21 +215,18 @@ func spaceAppGrantTx(ctx context.Context, tx *sql.Tx, spaceID, appID string, req
 	return generation, nil
 }
 
-func (db *Database) SpaceAppRoomAccess(ctx context.Context, userID, spaceID, appID, roomID string) (*SpaceAppRoomGrant, error) {
-	if !spaceAppIDPattern.MatchString(appID) || !ValidSpaceAppRoomID(roomID) {
-		return nil, ErrSpaceNotFound
-	}
-	grant := &SpaceAppRoomGrant{Role: "editor"}
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
-			return err
+func holdsAppPermissions(held []string, required ...string) bool {
+	for _, want := range required {
+		found := false
+		for _, permission := range held {
+			if permission == want {
+				found = true
+				break
+			}
 		}
-		generation, err := spaceAppGrantTx(ctx, tx, spaceID, appID, "rooms")
-		grant.Generation = generation
-		return err
-	})
-	if err != nil {
-		return nil, err
+		if !found {
+			return false
+		}
 	}
-	return grant, nil
+	return true
 }

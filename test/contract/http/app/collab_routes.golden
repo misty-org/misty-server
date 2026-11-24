@@ -1,0 +1,6 @@
+GET /v1/collab
+GET /v1/collab/rooms/{spaceID}/{key}
+OPTIONS /v1/collab/*
+POST /v1/collab/rooms/{spaceID}/{key}
+POST /v1/collab/stream
+POST /v1/collab/stream/{conn}

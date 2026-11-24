@@ -30,9 +30,8 @@ x-tools: &tools
     dockerfile: deploy/setup/Dockerfile
 
 # What the API and the console read besides the three files. The rest of their
-# configuration (the API's share of the root secret, R2, the Worker host) is
-# the secrets volume's server.env, loaded when each starts; they derive their
-# keys from it.
+# configuration (the API's share of the root secret, R2) is the secrets volume's
+# server.env, loaded when each starts; they derive their keys from it.
 x-server-environment: &server-environment
   CLOUDFLARE_API_TOKEN: ""
   MISTY_ENVIRONMENT: production
@@ -44,7 +43,7 @@ x-server-environment: &server-environment
 services:
   # One-shot: generates the root secret on the first start, refuses to start
   # when the database holds data its secrets no longer match, and provisions
-  # the tunnel, DNS, R2 buckets and credentials, and the collaboration Worker.
+  # the tunnel, DNS, R2 buckets and credentials.
   # MISTY_TUNNEL_EXTRA_INGRESS (host=service, comma-separated) publishes more
   # hostnames through the same tunnel, for services that run beside the
   # server on the edge network. Set it where Compose runs, not in misty.env.
@@ -145,6 +144,38 @@ services:
       retries: 3
     networks: [edge, database]
 
+  # The rooms: live co-editing for every app, from the API's image (misty-collab). The tunnel
+  # sends https://MISTY_HOSTNAME/v1/collab here; the API's /health names that address as
+  # collab_url. MISTY_COLLAB_SELF_URL is where clients reach this instance when another one
+  # sends them on; with one instance it is the public address.
+  collab:
+    image: ${MISTY_API_IMAGE:-${COMPOSE_PROJECT_NAME}-api:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MISTY_SERVER_VERSION: ${MISTY_SERVER_VERSION:-development}
+    <<: *config
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-ec", "set -a; . /run/misty/secrets/server.env; set +a; exec /usr/local/bin/misty-collab"]
+    environment:
+      <<: *server-environment
+      PORT: "8090"
+      MISTY_COLLAB_SELF_URL: ${MISTY_COLLAB_SELF_URL:-}
+    volumes:
+      - secrets:/run/misty/secrets:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8090/health >/dev/null"]
+      start_period: 60s
+      start_interval: 3s
+      interval: 15m
+      timeout: 5s
+      retries: 3
+    networks: [edge, database]
+
   # LiveKit carries calls (DMs and Space voice channels), only with MISTY_CALLS=1 in misty.env and
   # `docker compose --profile calls up`. The server only mints room tokens; calls are end-to-end
   # encrypted between the people's computers, so neither the server nor LiveKit can hear or see them.
@@ -214,6 +245,8 @@ services:
       - secrets:/run/misty/secrets:ro
     depends_on:
       api:
+        condition: service_healthy
+      collab:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:20241/ready >/dev/null"]

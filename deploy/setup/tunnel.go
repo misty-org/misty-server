@@ -10,6 +10,10 @@ import (
 
 const apiService = "http://api:8080"
 
+const collabService = "http://collab:8090"
+
+const collabPath = "^/v1/collab(/|$)"
+
 type tunnel struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -120,7 +124,10 @@ func provisionTunnel(ctx context.Context, cf *cloudflare, inputs Inputs, zone zo
 		return errors.New("Cloudflare returned a tunnel without an ID")
 	}
 
-	ingress := []map[string]any{{"hostname": inputs.Hostname, "service": apiService}}
+	ingress := []map[string]any{
+		{"hostname": inputs.Hostname, "path": collabPath, "service": collabService},
+		{"hostname": inputs.Hostname, "service": apiService},
+	}
 	for _, rule := range inputs.ExtraIngress {
 		ingress = append(ingress, map[string]any{"hostname": rule.Host, "service": rule.Service})
 	}

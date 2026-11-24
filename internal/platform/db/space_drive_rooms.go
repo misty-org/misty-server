@@ -7,46 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/misty-org/misty-server/internal/spaces"
 )
-
-type DriveFileRoomAccess struct {
-	Item           DriveItem
-	CanWrite       bool
-	RoomGeneration string
-}
-
-func (db *Database) DriveFileRoomAccess(ctx context.Context, userID, spaceID, itemID, appID string) (*DriveFileRoomAccess, error) {
-	if !spaceAppIDPattern.MatchString(appID) {
-		return nil, ErrSpaceNotFound
-	}
-	out := &DriveFileRoomAccess{}
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
-			return err
-		}
-		generation, err := spaceAppGrantTx(ctx, tx, spaceID, appID, "rooms", "files")
-		if err != nil {
-			return err
-		}
-		out.RoomGeneration = generation
-		item, err := liveDriveItemTx(ctx, tx, spaceID, itemID, false)
-		if err != nil {
-			return err
-		}
-		if item.Kind != driveKindFile || item.Trashed {
-			return ErrDriveNotFound
-		}
-		out.Item = item
-		out.CanWrite, err = hasSpacePermissionTx(ctx, tx, userID, spaceID, spaces.PermissionDriveWrite)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
 
 func (db *Database) CheckDriveFileRoomSave(ctx context.Context, userID, spaceID, itemID string, base, size int64, sha string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {

@@ -167,12 +167,6 @@ func purgeSpaces(t *testing.T, database *Database, ctx context.Context, personal
 		t.Fatal(err)
 	}
 	for _, id := range ids {
-		if waiting, err := database.BeginSpacePurge(ctx, id); err != nil {
-			t.Fatal(err)
-		} else if id == personalID && waiting != 1 {
-			t.Fatalf("the personal Space's note rooms = %d, want 1 waiting", waiting)
-		}
-		exec(t, database, `UPDATE space_note_control_outbox SET delivered_at=now() WHERE command='purge'`)
 		if waiting, err := database.BeginSpacePurge(ctx, id); err != nil || waiting != 0 {
 			t.Fatalf("waiting rooms = %d %v", waiting, err)
 		}

@@ -212,3 +212,16 @@ func TestAbuseGuardDoesNotBlockAnIsolatedBurst(t *testing.T) {
 		t.Fatal("an isolated burst must not be blocked")
 	}
 }
+
+func TestDirectMessageRoutesNormalizeToOneKey(t *testing.T) {
+	cases := map[string]string{
+		"/v1/dms/space_abcdefabcdefabcdef/attachments/att_abcdefabcdefabcdef/download":         "/dms/{dmID}/attachments/{id}/download",
+		"/v1/dms/space_abcdefabcdefabcdef/attachments/uploads/upload_abcdefabcdefabcdef/abort": "/dms/{dmID}/attachments/uploads/{id}/abort",
+		"/v1/dms/space_abcdefabcdefabcdef/call":                                                "/dms/{dmID}/call",
+	}
+	for input, want := range cases {
+		if got := NormalizeRateLimitPath(input); got != want {
+			t.Fatalf("normalizeRateLimitPath(%q) = %q, want %q", input, got, want)
+		}
+	}
+}

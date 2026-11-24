@@ -9,18 +9,28 @@ import (
 )
 
 func (db *Database) CreateRefreshSession(ctx context.Context, sessionHash, refreshHash, userID string, expires time.Time) error {
+	return db.CreateNamedRefreshSession(ctx, sessionHash, refreshHash, userID, "", expires)
+}
+
+func (db *Database) CreateNamedRefreshSession(ctx context.Context, sessionHash, refreshHash, userID, name string, expires time.Time) error {
 	return db.WithRLSContext(ctx, sessionCreateRLSSettings(sessionHash, userID), func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `INSERT INTO sessions(token_hash, refresh_hash, user_id, expires_at)
-   SELECT $1,$2,id,$4 FROM users WHERE id=$3 AND lifecycle_state='active'`, sessionHash, refreshHash, userID, expires)
-		if err != nil {
-			return err
-		}
-		count, err := result.RowsAffected()
-		if err == nil && count != 1 {
-			return errors.New("account is not active")
-		}
-		return err
+		return insertRefreshSessionTx(ctx, tx, sessionHash, refreshHash, userID, name, expires)
 	})
+}
+
+var ErrAccountNotActive = errors.New("account is not active")
+
+func insertRefreshSessionTx(ctx context.Context, tx *sql.Tx, sessionHash, refreshHash, userID, name string, expires time.Time) error {
+	result, err := tx.ExecContext(ctx, `INSERT INTO sessions(token_hash, refresh_hash, user_id, expires_at, name)
+   SELECT $1,$2,id,$4,$5 FROM users WHERE id=$3 AND lifecycle_state='active'`, sessionHash, refreshHash, userID, expires, name)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err == nil && count != 1 {
+		return ErrAccountNotActive
+	}
+	return err
 }
 
 const RefreshRotationGrace = 2 * time.Minute
@@ -54,10 +64,10 @@ func (db *Database) RotateRefreshSession(ctx context.Context, sessionHash, oldHa
 			return err
 		}
 		if matchesCurrent {
-			_, err = tx.ExecContext(ctx, `UPDATE sessions SET refresh_hash=$2, previous_refresh_hash=$3, refresh_rotated_at=$4
+			_, err = tx.ExecContext(ctx, `UPDATE sessions SET refresh_hash=$2, previous_refresh_hash=$3, refresh_rotated_at=$4, last_used_at=$4
    WHERE token_hash=$1`, sessionHash, newHash, current, now)
 		} else {
-			_, err = tx.ExecContext(ctx, `UPDATE sessions SET refresh_hash=$2, previous_refresh_hash=$3
+			_, err = tx.ExecContext(ctx, `UPDATE sessions SET refresh_hash=$2, previous_refresh_hash=$3, last_used_at=now()
    WHERE token_hash=$1`, sessionHash, newHash, current)
 		}
 		valid = err == nil

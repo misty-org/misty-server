@@ -82,16 +82,16 @@ func (db *Database) CreateOperatorAccount(ctx context.Context, email string, lim
 
 const operatorAccountColumns = `u.id,u.email,u.username,u.created_at,
 	u.provider,
-	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,c.shared_spaces,c.space_members,c.spaces,c.upload_bytes
+	c.suspended_at,c.delete_at,c.period_anchor,c.storage_bytes,c.devices,c.shared_spaces,c.space_members,c.spaces,c.upload_bytes,c.friend_requests_per_day,c.integrations_per_space
 	FROM users u LEFT JOIN account_controls c ON c.user_id=u.id`
 
 func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, error) {
 	var a OperatorAccount
 	var provider string
 	var suspended, deleteAt, anchor sql.NullTime
-	var storage, devices, sharedSpaces, spaceMembers, spaces, uploads sql.NullInt64
+	var storage, devices, sharedSpaces, spaceMembers, spaces, uploads, friendRequests, integrations sql.NullInt64
 	if err := row.Scan(&a.ID, &a.Email, &a.Username, &a.CreatedAt, &provider, &suspended, &deleteAt, &anchor,
-		&storage, &devices, &sharedSpaces, &spaceMembers, &spaces, &uploads); err != nil {
+		&storage, &devices, &sharedSpaces, &spaceMembers, &spaces, &uploads, &friendRequests, &integrations); err != nil {
 		return a, err
 	}
 	a.Owner = IsServerOwnerAccount(a.Email, provider)
@@ -105,6 +105,7 @@ func scanOperatorAccount(row interface{ Scan(...any) error }) (OperatorAccount, 
 		StorageBytes: nullableInt(storage), Devices: nullableInt(devices),
 		SharedSpaces: nullableInt(sharedSpaces), SpaceMembers: nullableInt(spaceMembers),
 		Spaces: nullableInt(spaces), UploadBytes: nullableInt(uploads),
+		FriendRequestsPerDay: nullableInt(friendRequests), IntegrationsPerSpace: nullableInt(integrations),
 	}
 	if suspended.Valid {
 		a.Suspended, a.SuspendedAt = true, &suspended.Time

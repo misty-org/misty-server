@@ -15,9 +15,6 @@
 
 **.secrets
 
-# Local Cloudflare account and build cache
-.wrangler/
-
 # Python audit tooling
 __pycache__/
 *.py[cod]

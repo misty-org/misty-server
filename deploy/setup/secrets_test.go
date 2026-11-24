@@ -54,8 +54,10 @@ func legacyStore(t *testing.T) (*Store, string, map[string]string) {
 	}
 	values["DOCUMENT_SIGNING_KEY"] = "legacy-document-key"
 	store.Set("DOCUMENT_SIGNING_KEY", values["DOCUMENT_SIGNING_KEY"])
-	public, _ := serverenv.Ed25519PublicKey(values["JOURNAL_COLLAB_TICKET_PRIVATE_KEY"])
-	store.Set("JOURNAL_COLLAB_TICKET_PUBLIC_KEY", public)
+	store.Set("JOURNAL_COLLAB_ROOM_SALT", "legacy-room-salt")
+	store.Set("JOURNAL_COLLAB_TICKET_PUBLIC_KEY", "legacy-ticket-public-key")
+	store.Set("PARTYKIT_HOST", "misty-cloud-misty-example-collab.misty.workers.dev")
+	store.State["worker:misty-cloud-misty-example-collab"] = "fingerprint"
 	store.Set("MISTY_PUBLIC_API_URL", "https://cloud.misty.example/v1")
 	store.Set("R2_BUCKET", "misty-cloud-misty-example-library")
 	store.Set("MISTY_BACKUP_BUCKET", "misty-cloud-misty-example-backups")
@@ -79,10 +81,6 @@ func TestAFreshStackStoresOnlyTheRoot(t *testing.T) {
 	if !strings.HasPrefix(store.Get("MISTY_OPERATOR_TOKEN"), "misty_op_") || !strings.HasPrefix(store.Get("MISTY_BACKUP_AGE_RECIPIENT"), "age1") ||
 		!strings.HasPrefix(store.Get("MISTY_BACKUP_AGE_IDENTITY"), "AGE-SECRET-KEY-1") {
 		t.Fatal("unexpected secret formats")
-	}
-	public, _ := serverenv.Ed25519PublicKey(store.Get("JOURNAL_COLLAB_TICKET_PRIVATE_KEY"))
-	if store.Get("JOURNAL_COLLAB_TICKET_PUBLIC_KEY") != public {
-		t.Fatal("the ticket public key does not follow from the private key")
 	}
 	if made, _ := ensureRoot(store); made {
 		t.Fatal("a second run made another root")
@@ -176,10 +174,16 @@ func TestAVolumeFromBeforeTheRootKeepsItsKeys(t *testing.T) {
 		t.Fatal("the tunnel ID did not move into state.json")
 	}
 	env, _ := os.ReadFile(filepath.Join(dir, "server.env"))
-	for _, name := range []string{"MISTY_PUBLIC_API_URL", "R2_BUCKET", "MISTY_BACKUP_BUCKET", "MISTY_CLOUDFLARE_TUNNEL_ID", "JOURNAL_COLLAB_TICKET_PUBLIC_KEY"} {
+	for _, name := range []string{"MISTY_PUBLIC_API_URL", "R2_BUCKET", "MISTY_BACKUP_BUCKET", "MISTY_CLOUDFLARE_TUNNEL_ID", "JOURNAL_COLLAB_TICKET_PUBLIC_KEY", "PARTYKIT_HOST"} {
 		if bytes.Contains(env, []byte(name+"=")) {
 			t.Fatalf("server.env still stores %s", name)
 		}
+	}
+	if store.Get("JOURNAL_COLLAB_ROOM_SALT") != "legacy-room-salt" {
+		t.Fatal("a retired key went before adopt-root")
+	}
+	if _, ok := store.State["worker:misty-cloud-misty-example-collab"]; ok {
+		t.Fatal("state.json still records a Worker upload")
 	}
 	values, _ := godotenv.Read(filepath.Join(dir, "server.env"))
 	defaults, _ := serverenv.Defaults(func(name string) string { return values[name] })
@@ -202,7 +206,7 @@ func TestAdoptRootMovesKeysAndKeepsSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(kept, " ") != "SPACE_LINK_ENCRYPTION_KEY JOURNAL_COLLAB_ROOM_SALT MISTY_BACKUP_AGE_IDENTITY" || len(moved) != len(secretSpecs)-3+1 {
+	if strings.Join(kept, " ") != "SPACE_LINK_ENCRYPTION_KEY MISTY_BACKUP_AGE_IDENTITY" || len(moved) != len(secretSpecs)-2+2 {
 		t.Fatalf("moved %v, kept %v", moved, kept)
 	}
 	for _, name := range kept {
@@ -213,11 +217,7 @@ func TestAdoptRootMovesKeysAndKeepsSessions(t *testing.T) {
 	if store.Get("MISTY_AUTH_SIGNING_KEY") == legacy["MISTY_AUTH_SIGNING_KEY"] || store.Get("MISTY_AUTH_SIGNING_KEY_PREVIOUS") != legacy["MISTY_AUTH_SIGNING_KEY"] {
 		t.Fatal("the old signing key must stay valid")
 	}
-	public, _ := serverenv.Ed25519PublicKey(legacy["JOURNAL_COLLAB_TICKET_PRIVATE_KEY"])
-	if store.Get("JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS") != public {
-		t.Fatal("the old ticket public key must stay valid")
-	}
-	if store.Get("DB_MIGRATION_PASSWORD_PREVIOUS") != legacy["DB_MIGRATION_PASSWORD"] || store.Stored("DB_PASSWORD") || store.Stored("DOCUMENT_SIGNING_KEY") {
+	if store.Get("DB_MIGRATION_PASSWORD_PREVIOUS") != legacy["DB_MIGRATION_PASSWORD"] || store.Stored("DB_PASSWORD") || store.Stored("DOCUMENT_SIGNING_KEY") || store.Stored("JOURNAL_COLLAB_ROOM_SALT") {
 		t.Fatal("database passwords did not move")
 	}
 	if err := store.Save(); err != nil {
@@ -237,7 +237,7 @@ func TestAdoptRootMovesKeysAndKeepsSessions(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "postgres/superuser-password-previous")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("retire left the old superuser password on disk")
 	}
-	if strings.Join(sortedKeys(store.Values), " ") != "JOURNAL_COLLAB_ROOM_SALT MISTY_BACKUP_AGE_IDENTITY MISTY_SERVER_SECRET SPACE_LINK_ENCRYPTION_KEY" {
+	if strings.Join(sortedKeys(store.Values), " ") != "MISTY_BACKUP_AGE_IDENTITY MISTY_SERVER_SECRET SPACE_LINK_ENCRYPTION_KEY" {
 		t.Fatalf("stored after adopt-root and retire: %v", sortedKeys(store.Values))
 	}
 	if _, _, err := adoptRoot(store, true); err != nil || len(storedKeys(store)) != 0 {
@@ -288,19 +288,11 @@ func TestRotation(t *testing.T) {
 	if store.State["key:auth-signing:version"] != "2" || store.Get(serverenv.VersionsName) != "auth-signing=2/1" {
 		t.Fatalf("versions %v", store.State)
 	}
-	ticket := store.Get("JOURNAL_COLLAB_TICKET_PRIVATE_KEY")
-	public, _ := serverenv.Ed25519PublicKey(ticket)
-	if err := rotate(store, "JOURNAL_COLLAB_TICKET_PRIVATE_KEY"); err != nil {
-		t.Fatal(err)
-	}
-	if store.Get("JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS") != public || store.Get("JOURNAL_COLLAB_TICKET_PRIVATE_KEY") == ticket {
-		t.Fatal("the previous ticket key slot must hold the old public key")
-	}
 	metrics := store.Get("MISTY_METRICS_TOKEN")
 	if err := rotate(store, "MISTY_METRICS_TOKEN"); err != nil || store.Get("MISTY_METRICS_TOKEN") == metrics {
 		t.Fatalf("a key without a previous slot rotates at restart: %v", err)
 	}
-	for _, name := range []string{"SPACE_LINK_ENCRYPTION_KEY", "JOURNAL_COLLAB_ROOM_SALT", "MISTY_BACKUP_AGE_IDENTITY", "UNKNOWN"} {
+	for _, name := range []string{"SPACE_LINK_ENCRYPTION_KEY", "MISTY_BACKUP_AGE_IDENTITY", "JOURNAL_COLLAB_TICKET_PRIVATE_KEY", "UNKNOWN"} {
 		if err := rotate(store, name); err == nil {
 			t.Fatalf("%s must not rotate", name)
 		}
@@ -340,43 +332,6 @@ func TestBackupKeyWorksWithAge(t *testing.T) {
 	}
 }
 
-func TestWranglerConfigsParse(t *testing.T) {
-	bundle := writeBundles(t)
-	collab, err := loadWorkerBundle(filepath.Join(bundle, "journal-collab"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if collab.Config.CompatibilityDate == "" || len(collab.Config.DurableObjects.Bindings) != 4 || len(collab.Config.Migrations) != 8 || collab.Config.Vars["JOURNAL_COLLAB_ISSUER"] != "misty-api" {
-		t.Fatalf("collab config %+v", collab.Config)
-	}
-	if len(collab.Modules) != 1 {
-		t.Fatalf("source maps must not upload: %v", collab.Modules)
-	}
-	var value map[string]any
-	if err := decodeJSONC([]byte(`{"a": "// not a comment", /* c */ "b": [1, 2,], // x
-	}`), &value); err != nil || value["a"] != "// not a comment" {
-		t.Fatalf("jsonc: %v %v", value, err)
-	}
-}
-
-func TestPendingMigrations(t *testing.T) {
-	all := []map[string]any{{"tag": "v1", "new_sqlite_classes": []any{"NoteRoom"}}, {"tag": "v2", "deleted_classes": []any{"DrawingRoom"}}}
-	fresh, _ := pendingMigrations(all, "")
-	if fresh["new_tag"] != "v2" || len(fresh["steps"].([]map[string]any)) != 2 || fresh["old_tag"] != nil {
-		t.Fatalf("fresh %v", fresh)
-	}
-	upgrade, _ := pendingMigrations(all, "v1")
-	if upgrade["old_tag"] != "v1" || len(upgrade["steps"].([]map[string]any)) != 1 || upgrade["steps"].([]map[string]any)[0]["deleted_classes"] == nil {
-		t.Fatalf("upgrade %v", upgrade)
-	}
-	if current, _ := pendingMigrations(all, "v2"); current != nil {
-		t.Fatalf("current %v", current)
-	}
-	if _, err := pendingMigrations(all, "v9"); err == nil {
-		t.Fatal("an unknown tag must fail")
-	}
-}
-
 func TestInputsAreAllRequired(t *testing.T) {
 	_, err := readInputs(func(string) string { return "" })
 	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_API_TOKEN in ~/.misty/.env/server/cloudflare.env") || !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID in ~/.misty/.env/server/google.env") {
@@ -386,7 +341,7 @@ func TestInputsAreAllRequired(t *testing.T) {
 		t.Fatalf("the account and zone come from Cloudflare: %v", err)
 	}
 	names := resourceNames("a-very-long-hostname-that-goes-on.and-on.misty.example")
-	if len(names.CollabWorker) > 63 || len(names.LibraryBucket) > 63 {
+	if len(names.LibraryBucket) > 63 || len(names.BackupBucket) > 63 {
 		t.Fatalf("names too long: %+v", names)
 	}
 }

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help generate console build run test test-unit lint fmt fmt-check vet sizes migrate check
+.PHONY: help generate console build run test test-unit test-collab lint fmt fmt-check vet sizes migrate check
 
 GOLANGCI := $(shell command -v golangci-lint 2>/dev/null || echo "$(shell go env GOPATH)/bin/golangci-lint")
 
@@ -24,6 +24,9 @@ test: ## Full suite — bootstraps Docker Postgres on :5435
 
 test-unit: ## Every Go test without the Docker bootstrap (DB tests need Postgres already up)
 	go test -p 1 ./... -count=1
+
+test-collab: ## Room runtime tests through misty-sdk (Docker, and misty-sdk beside this checkout)
+	cd test/collab && npm ci --no-audit --no-fund && npm test
 
 lint: ## golangci-lint
 	@test -x "$(GOLANGCI)" || { \

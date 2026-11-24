@@ -28,7 +28,6 @@ func TestPublicBetaObservabilityArtifactsReferenceMistyMetrics(t *testing.T) {
 	for _, required := range []string{
 		"MistyAPIHighErrorRate",
 		"MistyDatabasePoolNearExhaustion",
-		"MistyJournalControlBacklog",
 		"misty_upload_reservations_active",
 	} {
 		if !strings.Contains(text, required) {

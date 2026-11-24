@@ -114,7 +114,7 @@ func noteWriteResult(note *db.SpaceNote, title, markdown, operation string) json
 			"title":               title,
 			"markdown_characters": len([]rune(markdown)),
 			"markdown_sha256":     hex.EncodeToString(digest[:]),
-			"state":               "queued_for_collaboration",
+			"state":               "saved",
 		},
 	})
 }

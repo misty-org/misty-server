@@ -31,6 +31,7 @@ type HealthSnapshot struct {
 	GeneratedAt    time.Time              `json:"generated_at"`
 	UptimeSeconds  int64                  `json:"uptime_seconds"`
 	Checks         map[string]HealthCheck `json:"checks"`
+	CollabURL      string                 `json:"collab_url"`
 }
 
 type healthMonitor struct {
@@ -52,6 +53,7 @@ func (monitor *healthMonitor) Handler() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		snapshot, status := monitor.snapshot(r.Context())
+		snapshot.CollabURL = CollabURL(r)
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(snapshot)
 	}

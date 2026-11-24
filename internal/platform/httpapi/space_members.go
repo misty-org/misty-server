@@ -18,7 +18,12 @@ func (s *SpacesService) Members() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"members": members})
+		integrations, err := s.database.SpaceMemberIntegrations(r.Context(), userID, spaceID)
+		if err != nil {
+			writeSpaceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"members": members, "integrations": integrations})
 	}
 }
 

@@ -9,11 +9,9 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type PresignedTransfer struct {
@@ -79,43 +77,46 @@ func (s *S3LibraryObjectStore) PresignPut(ctx context.Context, key string, metad
 		return PresignedTransfer{}, errors.New("invalid Library object checksum")
 	}
 	encodedChecksum := base64.StdEncoding.EncodeToString(checksum)
-	presigned, err := s.Presigner.PresignPutObject(ctx, &s3.PutObjectInput{
-		Bucket:         aws.String(s.Bucket),
-		Key:            aws.String(key),
-		ContentLength:  aws.Int64(metadata.ByteSize),
-		ContentType:    aws.String(metadata.MIMEType),
-		ChecksumSHA256: aws.String(encodedChecksum),
-		Metadata:       map[string]string{LibrarySHA256MetadataKey: metadata.SHA256},
-	}, s3.WithPresignExpires(ttl))
+	query := url.Values{}
+	query.Set("X-Amz-Checksum-Sha256", encodedChecksum)
+	signedHeaders := http.Header{}
+	signedHeaders.Set("Content-Length", strconv.FormatInt(metadata.ByteSize, 10))
+	if metadata.MIMEType != "" {
+		signedHeaders.Set("Content-Type", metadata.MIMEType)
+	}
+	signedHeaders.Set(libraryS3MetadataHeaderPrefix+LibrarySHA256MetadataKey, metadata.SHA256)
+	presigned, err := s.Presigner.PresignHeader(ctx, http.MethodPut, s.Bucket, key, ttl, query, signedHeaders)
 	if err != nil {
 		return PresignedTransfer{}, mapLibraryS3Error(err)
 	}
+	signed := presignedSignedHeaders(presigned)
 	headers := map[string]string{}
-	addPresignedTransferHeader(headers, presigned.SignedHeader, "Content-Type", metadata.MIMEType)
-	addPresignedTransferHeader(headers, presigned.SignedHeader, "x-amz-checksum-sha256", encodedChecksum)
-	addPresignedTransferHeader(headers, presigned.SignedHeader, "x-amz-meta-"+LibrarySHA256MetadataKey, metadata.SHA256)
+	addPresignedTransferHeader(headers, signed, "Content-Type", metadata.MIMEType)
+	addPresignedTransferHeader(headers, signed, libraryS3ChecksumSHA256Header, encodedChecksum)
+	addPresignedTransferHeader(headers, signed, libraryS3MetadataHeaderPrefix+LibrarySHA256MetadataKey, metadata.SHA256)
 	return PresignedTransfer{
-		URL:       presigned.URL,
-		Method:    presigned.Method,
+		URL:       presigned.String(),
+		Method:    http.MethodPut,
 		Headers:   headers,
 		ExpiresAt: time.Now().Add(ttl).UTC(),
 	}, nil
 }
 
-func addPresignedTransferHeader(headers map[string]string, signed http.Header, name, value string) {
-	if value == "" || !presignedTransferHeaderSigned(signed, name) {
+func presignedSignedHeaders(presigned *url.URL) map[string]bool {
+	signed := map[string]bool{}
+	for _, name := range strings.Split(presigned.Query().Get("X-Amz-SignedHeaders"), ";") {
+		if name = strings.ToLower(strings.TrimSpace(name)); name != "" {
+			signed[name] = true
+		}
+	}
+	return signed
+}
+
+func addPresignedTransferHeader(headers map[string]string, signed map[string]bool, name, value string) {
+	if value == "" || !signed[strings.ToLower(name)] {
 		return
 	}
 	headers[name] = value
-}
-
-func presignedTransferHeaderSigned(signed http.Header, name string) bool {
-	for key := range signed {
-		if strings.EqualFold(key, name) {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *S3LibraryObjectStore) PresignGet(ctx context.Context, key, filename string, ttl time.Duration) (PresignedDownload, error) {
@@ -127,16 +128,14 @@ func (s *S3LibraryObjectStore) PresignGet(ctx context.Context, key, filename str
 		return PresignedDownload{}, err
 	}
 	disposition := safeContentDisposition(filename)
-	presigned, err := s.Presigner.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket:                     aws.String(s.Bucket),
-		Key:                        aws.String(key),
-		ResponseContentDisposition: aws.String(disposition),
-	}, s3.WithPresignExpires(ttl))
+	query := url.Values{}
+	query.Set("response-content-disposition", disposition)
+	presigned, err := s.Presigner.PresignHeader(ctx, http.MethodGet, s.Bucket, key, ttl, query, nil)
 	if err != nil {
 		return PresignedDownload{}, mapLibraryS3Error(err)
 	}
 	return PresignedDownload{
-		URL:       presigned.URL,
+		URL:       presigned.String(),
 		ExpiresAt: time.Now().Add(ttl).UTC(),
 		Filename:  sanitizeLibraryFilename(filename),
 	}, nil

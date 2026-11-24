@@ -10,7 +10,6 @@ import (
 
 func noteRouteTestServer(t *testing.T) *Server {
 	t.Helper()
-	configureJournalCollabForTest(t)
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +30,6 @@ func TestNoteRoutesRequireAuthentication(t *testing.T) {
 		{http.MethodDelete, "/v1/spaces/space-1/notes/note-1"},
 		{http.MethodPatch, "/v1/spaces/space-1/notes/note-1/metadata"},
 		{http.MethodPatch, "/v1/spaces/space-1/notes/note-1"},
-		{http.MethodPost, "/v1/spaces/space-1/notes/note-1/collaboration-ticket"},
 	}
 
 	for _, testCase := range cases {

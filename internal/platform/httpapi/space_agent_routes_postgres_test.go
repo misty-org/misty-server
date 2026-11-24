@@ -61,9 +61,7 @@ func newSpaceRouteFixture(t *testing.T) *spaceRouteFixture {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	service := &SpacesService{database: database, JournalCollab: JournalCollabConfig{
-		Enabled: true, Host: "collab.invalid", controlSecret: []byte("test-control-secret"), roomSalt: []byte("test-room-salt"),
-	}}
+	service := &SpacesService{database: database}
 	f.router = chi.NewRouter()
 	f.router.Get("/search", service.Search())
 	f.router.Get("/spaces/{spaceID}/notes", service.SpaceNotes())
@@ -145,12 +143,10 @@ func TestSpaceSearchRoutesShowOnlyWhatThePersonCanSeePostgres(t *testing.T) {
 	f := newSpaceRouteFixture(t)
 	ctx := t.Context()
 	note := func(creator, title, body string) string {
-		created, err := f.database.CreateSpaceNote(ctx, creator, f.space.ID, title)
+		created, err := f.database.CreateSpaceNoteWithAudience(ctx, creator, f.space.ID, title,
+			db.SpaceResourceAudience{Kind: db.SpaceAudienceSpace}, body)
 		if err != nil {
 			t.Fatal(err)
-		}
-		if applied, err := f.database.ApplySpaceNoteProjection(ctx, db.SpaceNoteProjection{NoteID: created.ID, Revision: 1, Title: title, Markdown: body, PlainText: body}); err != nil || !applied {
-			t.Fatalf("projection: %v %v", applied, err)
 		}
 		return created.ID
 	}
@@ -249,7 +245,7 @@ func TestSpaceSearchRoutesShowOnlyWhatThePersonCanSeePostgres(t *testing.T) {
 	}
 }
 
-func TestSpaceNoteContentRouteWritesThroughTheRoomPostgres(t *testing.T) {
+func TestSpaceNoteContentRouteSavesTheNotePostgres(t *testing.T) {
 	f := newSpaceRouteFixture(t)
 	ctx := t.Context()
 	path := "/spaces/" + f.space.ID + "/notes"
@@ -275,7 +271,7 @@ func TestSpaceNoteContentRouteWritesThroughTheRoomPostgres(t *testing.T) {
 		sum := sha256.Sum256([]byte(text))
 		return hex.EncodeToString(sum[:])
 	}
-	if note.Title != "Launch" || note.Receipt.Operation != "create" || note.Receipt.SHA256 != digest(long) || note.Receipt.State != "queued_for_collaboration" {
+	if note.Title != "Launch" || note.Receipt.Operation != "create" || note.Receipt.SHA256 != digest(long) || note.Receipt.State != "saved" {
 		t.Fatalf("create answered %s", created.Body.String())
 	}
 	if plain := f.do(f.member, "POST", path, map[string]string{"title": "Empty"}); plain.Code != http.StatusCreated || strings.Contains(plain.Body.String(), "content_receipt") {
@@ -286,32 +282,14 @@ func TestSpaceNoteContentRouteWritesThroughTheRoomPostgres(t *testing.T) {
 	if replaced := f.do(f.member, "PUT", content, map[string]string{"markdown": "# Ready"}); replaced.Code != http.StatusOK || !strings.Contains(replaced.Body.String(), digest("# Ready")) {
 		t.Fatalf("replace = %d %s", replaced.Code, replaced.Body.String())
 	}
-	for _, want := range []string{"bootstrap", "replace_markdown"} {
-		commands, err := f.database.PendingNoteControlCommands(ctx, 50)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var head *db.NoteControlCommand
-		for index := range commands {
-			if commands[index].NoteID == note.ID {
-				head = &commands[index]
-			}
-		}
-		if head == nil || head.Command != want {
-			t.Fatalf("next command = %+v, want %s", head, want)
-		}
-		if err := f.database.MarkNoteControlDelivered(ctx, head.ID); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if applied, err := f.database.ApplySpaceNoteProjection(ctx, db.SpaceNoteProjection{NoteID: note.ID, Revision: 5, Title: "Launch", Markdown: "# Ready\n", PlainText: "Ready"}); err != nil || !applied {
-		t.Fatalf("projection: %v %v", applied, err)
+	saved, err := f.database.SpaceNoteByID(ctx, f.member, note.ID)
+	if err != nil || saved.MarkdownProjection != "# Ready" || saved.PlainTextProjection != "Ready" {
+		t.Fatalf("saved note = %+v, %v", saved, err)
 	}
 	if added := f.do(f.member, "PUT", content, map[string]string{"append": "Another line"}); added.Code != http.StatusOK || !strings.Contains(added.Body.String(), digest("# Ready\n\nAnother line")) {
 		t.Fatalf("append = %d %s", added.Code, added.Body.String())
 	}
-	if renamed := f.do(f.member, "PUT", content, map[string]string{"title": "New title"}); renamed.Code != http.StatusOK || !strings.Contains(renamed.Body.String(), digest("# Ready\n")) {
+	if renamed := f.do(f.member, "PUT", content, map[string]string{"title": "New title"}); renamed.Code != http.StatusOK || !strings.Contains(renamed.Body.String(), digest("# Ready\n\nAnother line")) {
 		t.Fatalf("a new title must keep the body: %d %s", renamed.Code, renamed.Body.String())
 	}
 	if both := f.do(f.member, "PUT", content, map[string]string{"markdown": "x", "append": "y"}); both.Code != http.StatusBadRequest {

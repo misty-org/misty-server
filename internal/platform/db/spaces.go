@@ -197,9 +197,6 @@ func (db *Database) DeleteSpace(ctx context.Context, userID, spaceID, confirmati
 		if err := notifySpaceControlTx(ctx, tx, map[string]any{"type": "space.deleted", "space_id": spaceID, "user_ids": memberIDs}); err != nil {
 			return err
 		}
-		if err := revokeCodeSessionAccessForSpaceTx(ctx, tx, spaceID); err != nil {
-			return err
-		}
 		if err := revokeNoteAccessForSpaceTx(ctx, tx, spaceID); err != nil {
 			return err
 		}

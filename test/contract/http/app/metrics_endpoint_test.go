@@ -10,7 +10,6 @@ import (
 )
 
 func TestMetricsEndpointThroughTheRealRouter(t *testing.T) {
-	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_METRICS_TOKEN", "e2e-token-value")
 
 	server, err := CreateServer()
@@ -38,7 +37,6 @@ func TestMetricsEndpointThroughTheRealRouter(t *testing.T) {
 		"misty_http_requests_total",
 		`route="/v1/spaces/{spaceID}/notes"`,
 		"misty_realtime_connections",
-		"misty_note_control_backlog",
 		"misty_library_jobs_pending_ai",
 	} {
 		if !strings.Contains(body, want) {

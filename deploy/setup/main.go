@@ -95,7 +95,7 @@ const (
 func provision(ctx context.Context, inputs Inputs, store *Store) error {
 	resolved := inputs
 	if err := provisionCloudflare(ctx, &resolved, store); err != nil {
-		if store.State["provisioned"] == inputsFingerprint(recordedZone(inputs, store)) && store.Has("CLOUDFLARE_TUNNEL_TOKEN") && store.Has("PARTYKIT_HOST") {
+		if store.State["provisioned"] == inputsFingerprint(recordedZone(inputs, store)) && store.Has("CLOUDFLARE_TUNNEL_TOKEN") {
 			log.Printf("WARNING: Cloudflare is unreachable or refused a change (%v); starting with the resources from the last run", err)
 			return nil
 		}
@@ -136,10 +136,7 @@ func provisionCloudflare(ctx context.Context, inputs *Inputs, store *Store) erro
 	if endpoint := config.Getenv("MISTY_R2_ENDPOINT_URL"); endpoint != "" {
 		store.Set("R2_ENDPOINT", endpoint)
 	}
-	if err := store.Save(); err != nil {
-		return err
-	}
-	return provisionWorkers(ctx, cf, *inputs, names, store, envOr("MISTY_WORKERS_DIR", "/opt/misty/workers"))
+	return store.Save()
 }
 
 func inputsFingerprint(inputs Inputs) string {

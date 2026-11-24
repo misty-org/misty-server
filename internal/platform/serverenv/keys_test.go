@@ -83,14 +83,14 @@ func TestDefaultsFillOnlyWhatIsUnset(t *testing.T) {
 	root := testRoot()
 	api, _ := APISecret(root)
 	env := map[string]string{
-		APISecretName:              api,
-		VersionsName:               "auth-signing=2/1",
-		"MISTY_HOSTNAME":           "Cloud.Misty.Example",
-		"MISTY_ENVIRONMENT":        "production",
-		"MISTY_OPERATOR_TOKEN":     "misty_op_stored",
-		"R2_BUCKET":                "my-bucket",
-		"DB_MIGRATION_PASSWORD":    "",
-		"JOURNAL_COLLAB_ROOM_SALT": "",
+		APISecretName:               api,
+		VersionsName:                "auth-signing=2/1",
+		"MISTY_HOSTNAME":            "Cloud.Misty.Example",
+		"MISTY_ENVIRONMENT":         "production",
+		"MISTY_OPERATOR_TOKEN":      "misty_op_stored",
+		"R2_BUCKET":                 "my-bucket",
+		"DB_MIGRATION_PASSWORD":     "",
+		"SPACE_LINK_ENCRYPTION_KEY": "",
 	}
 	defaults, err := Defaults(func(name string) string { return env[name] })
 	if err != nil {
@@ -117,7 +117,7 @@ func TestDefaultsFillOnlyWhatIsUnset(t *testing.T) {
 	if defaults["MISTY_AUTH_SIGNING_KEY"] != v2 || defaults["MISTY_AUTH_SIGNING_KEY_PREVIOUS"] != v1 {
 		t.Fatal("versions were not applied")
 	}
-	if defaults["JOURNAL_COLLAB_ROOM_SALT"] == "" || defaults["DB_PASSWORD"] == "" {
+	if defaults["SPACE_LINK_ENCRYPTION_KEY"] == "" || defaults["DB_PASSWORD"] == "" {
 		t.Fatal("unset keys must be derived")
 	}
 	env["MISTY_ENVIRONMENT"], env[APISecretName] = "development", ""

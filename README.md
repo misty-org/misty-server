@@ -12,9 +12,9 @@ This page sets up the development stack, which the [`misty` CLI](https://github.
 - Rust through rustup, to build the `misty` CLI with its pinned toolchain.
 - Docker Engine with Compose v2.
 - curl, which the CLI uses to call the Cloudflare API.
-- A Cloudflare account with a domain and a workers.dev subdomain turned on, and an API token for that account and zone with account and zone read, Tunnel edit, DNS edit and Workers Scripts edit. See [Cloudflare's tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
+- A Cloudflare account with a domain, and an API token for that account and zone with account and zone read, Tunnel edit and DNS edit. See [Cloudflare's tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
 
-Go, Node.js, PostgreSQL, Wrangler and cloudflared run inside the containers. The development stack always uses Cloudflare; there is no local-only collaboration mode. Working on the desktop app needs its own [toolchain](https://github.com/misty-org/misty/blob/main/CONTRIBUTING.md#prerequisites).
+Go, PostgreSQL, LiveKit and cloudflared run inside the containers. Live co-editing rooms run in the `misty-collab` service, a second binary from this repository's image, beside the API in compose, so they need nothing from Cloudflare; the tunnel only publishes the stack. Working on the desktop app needs its own [toolchain](https://github.com/misty-org/misty/blob/main/CONTRIBUTING.md#prerequisites).
 
 ### Install
 
@@ -29,7 +29,7 @@ cargo install --path . --locked
 misty setup server
 ```
 
-`misty setup server` creates `.env/server/` in your Misty data folder (`~/.misty/dev/default` unless `~/.misty/misty.conf` names another) with development credentials and collaboration keys. Running it again keeps existing values. Keep these keys with your database and out of Git.
+`misty setup server` creates `.env/server/` in your Misty data folder (`~/.misty/dev/default` unless `~/.misty/misty.conf` names another) with development credentials and keys. Running it again keeps existing values. Keep these keys with your database and out of Git.
 
 ### Configure Cloudflare
 
@@ -41,7 +41,7 @@ Preview the tunnel and DNS route, then run the same command with `--apply` to cr
 misty setup cloudflare --account ACCOUNT_ID --zone ZONE_ID --hostname api.example.com
 ```
 
-Setup reuses the named tunnel, keeps unrelated tunnel routes and stops on a conflicting DNS record. It doesn't deploy the Worker.
+Setup reuses the named tunnel, keeps unrelated tunnel routes and stops on a conflicting DNS record.
 
 To see and check your settings:
 
@@ -57,12 +57,11 @@ misty env check
 
 ```sh
 misty server up
-misty server deploy
 misty doctor server
 misty doctor cloudflare
 ```
 
-`up` builds and starts the containers, applies migrations, waits until the services are healthy and returns. `deploy` deploys the development collaboration Worker; `up` never does. If startup fails, `up` prints the end of the relevant log. Build output, with secrets redacted, is saved in `.misty/logs/` here, and `--verbose` prints it after the build. Container logs rotate at 10 MB, three files per service.
+`up` builds and starts the containers, applies migrations, waits until the services are healthy and returns. If startup fails, `up` prints the end of the relevant log. Build output, with secrets redacted, is saved in `.misty/logs/` here, and `--verbose` prints it after the build. Container logs rotate at 10 MB, three files per service.
 
 ```sh
 misty server status
@@ -113,13 +112,13 @@ A server for real use runs from `compose.yml`, not the CLI. You write three env 
 | `cloudflare.env` | `CLOUDFLARE_API_TOKEN`. Setup finds the zone from `MISTY_HOSTNAME` and the account from the zone. `CLOUDFLARE_ZONE_ID` and `CLOUDFLARE_ACCOUNT_ID` are still read when set, and must match. |
 | `google.env` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 
-On the first start the setup service generates one secret, `MISTY_SERVER_SECRET`, into the stack's `secrets` volume. Every key comes from it: session signing, the operator and metrics tokens, the database passwords, the collaboration keys and the backup key. Each key is derived with HKDF-SHA256 under its own label and version. The API gets only its own share, `MISTY_API_SECRET`, and the collaboration Worker gets only the values it checks with. On every start setup also provisions the Cloudflare tunnel, DNS, R2 buckets and Worker, and the migrate service applies migrations. Everything else follows from the hostname or comes from Cloudflare, so the secrets volume is the one thing to keep a copy of off the server.
+On the first start the setup service generates one secret, `MISTY_SERVER_SECRET`, into the stack's `secrets` volume. Every key comes from it: session signing, the operator and metrics tokens, the database passwords and the backup key. Each key is derived with HKDF-SHA256 under its own label and version. The API gets only its own share, `MISTY_API_SECRET`. On every start setup also provisions the Cloudflare tunnel, DNS and R2 buckets, and the migrate service applies migrations. Live co-editing rooms run in the `misty-collab` service, from the same image as the API, beside it in `compose.yml`, with nothing to set up. Everything else follows from the hostname or comes from Cloudflare, so the secrets volume is the one thing to keep a copy of off the server.
 
 Setup's other commands run with `docker compose run --rm setup <command>`:
 
-- `rotate NAME…` gives a key its next version. The old value stays valid in its `*_PREVIOUS` slot until `retire NAME…`. `SPACE_LINK_ENCRYPTION_KEY`, `JOURNAL_COLLAB_ROOM_SALT` and `MISTY_BACKUP_AGE_IDENTITY` protect stored data, so they never rotate.
+- `rotate NAME…` gives a key its next version. The old value stays valid in its `*_PREVIOUS` slot until `retire NAME…`. `SPACE_LINK_ENCRYPTION_KEY` and `MISTY_BACKUP_AGE_IDENTITY` protect stored data, so they never rotate.
 - `operator-token` prints the operator token, for a service that calls the operator API. Setup also writes it to `operator/token` in the secrets volume, which a service beside the server can mount and read. `backup-key` prints the backup key.
-- `adopt-root` is for a secrets volume made before `MISTY_SERVER_SECRET`, which stores each key on its own. Such a volume keeps working unchanged, so nobody is signed out. `adopt-root` moves its keys onto the root, keeping each old value valid in its previous slot, so sessions survive. Afterwards, `retire` each key it moved. It leaves the three data-bound keys alone unless you pass `--discard-data`, which makes shared links and older backups unreadable. Use that only on a server with no data you need.
+- `adopt-root` is for a secrets volume made before `MISTY_SERVER_SECRET`, which stores each key on its own. Such a volume keeps working unchanged, so nobody is signed out. `adopt-root` moves its keys onto the root, keeping each old value valid in its previous slot, so sessions survive. Afterwards, `retire` each key it moved. It leaves the two data-bound keys alone unless you pass `--discard-data`, which makes shared links and older backups unreadable. Use that only on a server with no data you need.
 
 The API's `/health` reports the commit its image was built from. Published images have it built in. When you build on the server, pass it with `MISTY_SERVER_VERSION=$(git rev-parse HEAD) docker compose up -d --build`.
 

@@ -8,7 +8,6 @@ import (
 )
 
 func TestSharedSourceRoutesAreAbsent(t *testing.T) {
-	configureJournalCollabForTest(t)
 	server, err := CreateServer()
 	if err != nil {
 		t.Fatal(err)

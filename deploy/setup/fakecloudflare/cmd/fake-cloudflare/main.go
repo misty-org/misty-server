@@ -24,17 +24,13 @@ func main() {
 	mux.HandleFunc("GET /_state", func(w http.ResponseWriter, _ *http.Request) {
 		fake.Mu.Lock()
 		defer fake.Mu.Unlock()
-		scripts := map[string]any{}
-		for name, script := range fake.Scripts {
-			scripts[name] = map[string]any{"uploads": script.Uploads, "migration_tag": script.MigrationTag, "subdomain": script.Subdomain}
-		}
 		buckets := map[string]any{}
 		for name, bucket := range fake.Buckets {
 			buckets[name] = map[string]any{"objects": len(bucket.Objects), "lock": bucket.Lock != nil}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"tunnels": len(fake.Tunnels), "dns": len(fake.DNS), "tokens": len(fake.Tokens),
-			"scripts": scripts, "buckets": buckets, "requests": len(fake.Requests),
+			"buckets": buckets, "requests": len(fake.Requests),
 		})
 	})
 	mux.Handle("/", fake)

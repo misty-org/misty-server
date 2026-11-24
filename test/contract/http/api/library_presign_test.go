@@ -6,47 +6,72 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"net/http"
+	"net/url"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	. "github.com/misty-org/misty-server/internal/platform/httpapi"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
 
 type recordingPresigner struct {
-	putInput     *s3.PutObjectInput
-	getInput     *s3.GetObjectInput
-	signedHeader http.Header
+	method        string
+	bucket        string
+	object        string
+	expires       time.Duration
+	query         url.Values
+	headers       http.Header
+	signedHeaders string
 }
 
-func (p *recordingPresigner) PresignPutObject(_ context.Context, input *s3.PutObjectInput, _ ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
-	p.putInput = input
-	signedHeader := p.signedHeader
-	if signedHeader == nil {
-		signedHeader = http.Header{
-			"Content-Type":                        []string{aws.ToString(input.ContentType)},
-			"X-Amz-Meta-Misty-Library-Sha256":     []string{input.Metadata[LibrarySHA256MetadataKey]},
-			"X-Amz-Signed-Checksum-Hoisted-Query": []string{aws.ToString(input.ChecksumSHA256)},
+func (p *recordingPresigner) PresignHeader(_ context.Context, method, bucket, object string, expires time.Duration, query url.Values, headers http.Header) (*url.URL, error) {
+	p.method, p.bucket, p.object, p.expires, p.query, p.headers = method, bucket, object, expires, query, headers
+	signed := p.signedHeaders
+	if signed == "" {
+		names := []string{"host"}
+		for name := range headers {
+			names = append(names, strings.ToLower(name))
 		}
+		sort.Strings(names)
+		signed = strings.Join(names, ";")
 	}
-	return &v4.PresignedHTTPRequest{URL: "https://r2.example/signed-put", Method: http.MethodPut, SignedHeader: signedHeader}, nil
-}
-
-func (p *recordingPresigner) PresignGetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
-	p.getInput = input
-	return &v4.PresignedHTTPRequest{URL: "https://r2.example/signed-get", Method: http.MethodGet}, nil
+	values := url.Values{}
+	for name, value := range query {
+		values[name] = value
+	}
+	values.Set("X-Amz-SignedHeaders", signed)
+	return &url.URL{Scheme: "https", Host: "r2.example", Path: "/" + bucket + "/" + object, RawQuery: values.Encode()}, nil
 }
 
 func testObjectMetadata(t *testing.T) LibraryObjectMetadata {
 	t.Helper()
 	digest := sha256.Sum256([]byte("presign fixture"))
 	return LibraryObjectMetadata{ByteSize: 15, SHA256: hex.EncodeToString(digest[:]), MIMEType: "text/plain"}
+}
+
+func testObjectChecksum(t *testing.T, metadata LibraryObjectMetadata) string {
+	t.Helper()
+	checksum, err := hex.DecodeString(metadata.SHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(checksum)
+}
+
+func testR2Store(t *testing.T) *S3LibraryObjectStore {
+	t.Helper()
+	store, err := NewS3LibraryObjectStore(S3LibraryObjectStoreConfig{
+		Endpoint: "https://account.r2.cloudflarestorage.com", Region: "auto", Bucket: "misty",
+		AccessKeyID: "access", SecretAccessKey: "secret",
+		ForcePathStyle: true, BucketPrivate: true, PermanentObjects: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
 }
 
 func TestPresignPutBindsKeySizeAndChecksum(t *testing.T) {
@@ -59,19 +84,25 @@ func TestPresignPutBindsKeySizeAndChecksum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if transfer.URL != "https://r2.example/signed-put" || transfer.Method != http.MethodPut {
+	if !strings.HasPrefix(transfer.URL, "https://r2.example/misty/library/presignfixture1?") || transfer.Method != http.MethodPut {
 		t.Fatalf("PresignPut() = %#v", transfer)
 	}
-	if aws.ToString(presigner.putInput.Key) != "library/presignfixture1" {
-		t.Fatalf("signed key = %q", aws.ToString(presigner.putInput.Key))
+	if presigner.method != http.MethodPut || presigner.bucket != "misty" || presigner.object != "library/presignfixture1" {
+		t.Fatalf("signed %s %s/%s", presigner.method, presigner.bucket, presigner.object)
 	}
-	if aws.ToInt64(presigner.putInput.ContentLength) != metadata.ByteSize {
-		t.Fatalf("signed length = %d, want %d", aws.ToInt64(presigner.putInput.ContentLength), metadata.ByteSize)
+	if presigner.expires != 15*time.Minute {
+		t.Fatalf("signed expiry = %s, want 15m", presigner.expires)
 	}
-	checksum, _ := hex.DecodeString(metadata.SHA256)
-	wantChecksum := base64.StdEncoding.EncodeToString(checksum)
-	if aws.ToString(presigner.putInput.ChecksumSHA256) != wantChecksum {
-		t.Fatalf("signed checksum = %q, want %q", aws.ToString(presigner.putInput.ChecksumSHA256), wantChecksum)
+	if presigner.headers.Get("Content-Length") != "15" {
+		t.Fatalf("signed length = %q, want 15", presigner.headers.Get("Content-Length"))
+	}
+	wantChecksum := testObjectChecksum(t, metadata)
+	if presigner.query.Get("X-Amz-Checksum-Sha256") != wantChecksum {
+		t.Fatalf("signed checksum = %q, want %q", presigner.query.Get("X-Amz-Checksum-Sha256"), wantChecksum)
+	}
+	if presigner.headers.Get("Content-Type") != metadata.MIMEType ||
+		presigner.headers.Get("x-amz-meta-"+LibrarySHA256MetadataKey) != metadata.SHA256 {
+		t.Fatalf("signed headers = %#v", presigner.headers)
 	}
 	if transfer.Headers["Content-Type"] != metadata.MIMEType ||
 		transfer.Headers["x-amz-meta-"+LibrarySHA256MetadataKey] != metadata.SHA256 {
@@ -90,15 +121,10 @@ func TestPresignPutBindsKeySizeAndChecksum(t *testing.T) {
 
 func TestPresignPutReturnsChecksumHeaderWhenPresignerSignsIt(t *testing.T) {
 	metadata := testObjectMetadata(t)
-	checksum, _ := hex.DecodeString(metadata.SHA256)
-	wantChecksum := base64.StdEncoding.EncodeToString(checksum)
-	presigner := &recordingPresigner{signedHeader: http.Header{
-		"Content-Type":                    []string{metadata.MIMEType},
-		"X-Amz-Checksum-Sha256":           []string{wantChecksum},
-		"X-Amz-Meta-Misty-Library-Sha256": []string{metadata.SHA256},
-		"Host":                            []string{"r2.example"},
-		"Content-Length":                  []string{"15"},
-	}}
+	wantChecksum := testObjectChecksum(t, metadata)
+	presigner := &recordingPresigner{
+		signedHeaders: "content-length;content-type;host;x-amz-checksum-sha256;x-amz-meta-misty-library-sha256",
+	}
 	store := &S3LibraryObjectStore{Bucket: "misty", Presigner: presigner}
 
 	transfer, err := store.PresignPut(context.Background(), "library/presignfixture1", metadata, 15*time.Minute)
@@ -144,7 +170,10 @@ func TestPresignGetForcesSafeAttachmentDisposition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	disposition := aws.ToString(presigner.getInput.ResponseContentDisposition)
+	if presigner.method != http.MethodGet || presigner.expires != 2*time.Minute || len(presigner.headers) != 0 {
+		t.Fatalf("signed %s for %s with headers %#v", presigner.method, presigner.expires, presigner.headers)
+	}
+	disposition := presigner.query.Get("response-content-disposition")
 	if !strings.HasPrefix(disposition, "attachment;") {
 		t.Fatalf("disposition = %q, want attachment", disposition)
 	}
@@ -153,6 +182,80 @@ func TestPresignGetForcesSafeAttachmentDisposition(t *testing.T) {
 	}
 	if download.Filename != "report.pdf" {
 		t.Fatalf("Filename = %q, want report.pdf", download.Filename)
+	}
+}
+
+func TestR2PresignPutSignsTheObjectHeadersAndHoistsTheChecksum(t *testing.T) {
+	store := testR2Store(t)
+	metadata := testObjectMetadata(t)
+
+	transfer, err := store.PresignPut(context.Background(), "library/presignfixture1", metadata, 15*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	signed, err := url.Parse(transfer.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if signed.Scheme != "https" || signed.Host != "account.r2.cloudflarestorage.com" || signed.Path != "/misty/library/presignfixture1" {
+		t.Fatalf("URL = %s, want a path-style R2 URL", transfer.URL)
+	}
+	query := signed.Query()
+	if got := query.Get("X-Amz-SignedHeaders"); got != "content-length;content-type;host;x-amz-meta-misty-library-sha256" {
+		t.Fatalf("signed headers = %q", got)
+	}
+	if got := query.Get("X-Amz-Checksum-Sha256"); got != testObjectChecksum(t, metadata) {
+		t.Fatalf("hoisted checksum = %q", got)
+	}
+	if query.Get("X-Amz-Expires") != "900" || !strings.HasSuffix(query.Get("X-Amz-Credential"), "/auto/s3/aws4_request") ||
+		!strings.HasPrefix(query.Get("X-Amz-Credential"), "access/") || query.Get("X-Amz-Signature") == "" {
+		t.Fatalf("signature query = %#v", query)
+	}
+	if transfer.Method != http.MethodPut || len(transfer.Headers) != 2 ||
+		transfer.Headers["Content-Type"] != metadata.MIMEType ||
+		transfer.Headers["x-amz-meta-"+LibrarySHA256MetadataKey] != metadata.SHA256 {
+		t.Fatalf("transfer = %#v", transfer)
+	}
+}
+
+func TestR2PresignGetSignsOnlyTheHostAndTheDisposition(t *testing.T) {
+	store := testR2Store(t)
+
+	download, err := store.PresignGet(context.Background(), "library/presignfixture1", "Quarterly report.pdf", 2*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	signed, err := url.Parse(download.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := signed.Query()
+	if signed.Path != "/misty/library/presignfixture1" || query.Get("X-Amz-SignedHeaders") != "host" || query.Get("X-Amz-Expires") != "120" {
+		t.Fatalf("URL = %s", download.URL)
+	}
+	if got := query.Get("response-content-disposition"); got != `attachment; filename="Quarterly report.pdf"` {
+		t.Fatalf("disposition = %q", got)
+	}
+}
+
+func TestR2PresignUploadPartBindsThePartSize(t *testing.T) {
+	store := testR2Store(t)
+
+	partURL, err := store.PresignUploadPart(context.Background(), "library/presignfixture1", "upload/1+2", 3, 5<<20, 15*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	signed, err := url.Parse(partURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := signed.Query()
+	if signed.Path != "/misty/library/presignfixture1" || query.Get("X-Amz-SignedHeaders") != "content-length;host" ||
+		query.Get("partNumber") != "3" || query.Get("uploadId") != "upload/1+2" || query.Get("X-Amz-Expires") != "900" {
+		t.Fatalf("part URL = %s", partURL)
 	}
 }
 

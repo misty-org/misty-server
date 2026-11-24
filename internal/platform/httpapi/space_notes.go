@@ -1,62 +1,11 @@
 package api
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
-	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/misty-org/misty-server/internal/platform/db"
 )
-
-const noteProjectionBodyLimit = 512 * 1024
-
-func (s *SpacesService) JournalNoteProjection() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		body, err := io.ReadAll(io.LimitReader(r.Body, noteProjectionBodyLimit+1))
-		if err != nil || len(body) > noteProjectionBodyLimit {
-			writeSpaceError(w, db.ErrSpaceInvalid)
-			return
-		}
-		timestamp := r.Header.Get("X-Misty-Timestamp")
-		issuedAt, parseErr := strconv.ParseInt(timestamp, 10, 64)
-		if parseErr != nil || time.Since(time.Unix(issuedAt, 0)).Abs() > 5*time.Minute ||
-			!s.JournalCollab.VerifyProjectionSignature(timestamp, body, r.Header.Get("X-Misty-Signature")) {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "unauthorized"})
-			return
-		}
-		var input struct {
-			NoteID          string   `json:"note_id"`
-			Revision        int64    `json:"revision"`
-			Title           string   `json:"title"`
-			Markdown        string   `json:"markdown"`
-			PlainText       string   `json:"plain_text"`
-			OutgoingNoteIDs []string `json:"outgoing_note_ids"`
-			ContentBytes    *int64   `json:"content_bytes"`
-			HistoryBytes    *int64   `json:"history_bytes"`
-		}
-		if json.Unmarshal(body, &input) != nil {
-			writeSpaceError(w, db.ErrSpaceInvalid)
-			return
-		}
-		applied, err := s.database.ApplySpaceNoteProjection(r.Context(), db.SpaceNoteProjection{
-			NoteID: input.NoteID, Revision: input.Revision, Title: input.Title,
-			Markdown: input.Markdown, PlainText: input.PlainText, OutgoingNoteIDs: input.OutgoingNoteIDs,
-			ContentBytes: input.ContentBytes, HistoryBytes: input.HistoryBytes,
-		})
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		s.writeRoomCallbackAnswer(w, r, db.SpaceItemNote, input.NoteID, applied)
-	}
-}
 
 func (s *SpacesService) SpaceNotes() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -188,36 +137,5 @@ func (s *SpacesService) SpaceNoteBacklinks() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"backlinks": links})
-	}
-}
-
-func (s *SpacesService) SpaceNoteCollaborationTicket() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		noteID := chi.URLParam(r, "noteID")
-		access, err := s.database.RequireNoteView(r.Context(), userID, noteID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		note, err := s.database.SpaceNoteByID(r.Context(), userID, noteID)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		if note.SpaceID != chi.URLParam(r, "spaceID") {
-			writeSpaceError(w, db.ErrSpaceNotFound)
-			return
-		}
-		ticket, err := s.JournalCollab.MintNoteTicket(userID, note.SpaceID, note.ID, access.Role, note.ACLVersion)
-		if err != nil {
-			writeSpaceError(w, err)
-			return
-		}
-		w.Header().Set("Cache-Control", "private, no-store")
-		writeJSON(w, http.StatusCreated, ticket)
 	}
 }

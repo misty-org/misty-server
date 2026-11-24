@@ -44,7 +44,7 @@ func issueSession(w http.ResponseWriter, r *http.Request, database *db.Database,
 	if err != nil {
 		return err
 	}
-	if err := database.CreateRefreshSession(r.Context(), security.HashToken(sid), security.HashToken(refresh), userID, expires); err != nil {
+	if err := database.CreateNamedRefreshSession(r.Context(), security.HashToken(sid), security.HashToken(refresh), userID, sessionNameFor(r), expires); err != nil {
 		return err
 	}
 	if usesTokenHeaders(r) {

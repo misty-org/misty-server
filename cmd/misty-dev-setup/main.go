@@ -18,12 +18,10 @@ func main() {
 	switch command {
 	case "startup":
 		err = startup(ctx)
-	case "deploy":
-		err = deploy(ctx)
 	case "grant-app-role":
 		err = grantAppRole(ctx)
 	default:
-		fmt.Fprintln(os.Stderr, "Usage: misty-setup [startup|deploy|grant-app-role]")
+		fmt.Fprintln(os.Stderr, "Usage: misty-setup [startup|grant-app-role]")
 		os.Exit(2)
 	}
 	if err != nil {
@@ -39,7 +37,6 @@ func startup(ctx context.Context) error {
 	}{
 		{"Misty migrations", migrate},
 		{"application permissions", grantAppRole},
-		{"collaboration configuration", writeJournalSecrets},
 	}
 	for _, step := range steps {
 		fmt.Println("Setup: " + step.name)

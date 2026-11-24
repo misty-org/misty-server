@@ -30,14 +30,15 @@ func (l *APIRateLimiter) limiterFor(method, path string, policy RateLimitPolicy)
 const overflowRouteKey = "{overflow}"
 
 var accountKeyedRoutes = map[string]bool{
-	"/spaces/{spaceID}/notes/{id}/collaboration-ticket":            true,
-	"/spaces/{spaceID}/code-sessions/{id}/collaboration-ticket":    true,
-	"/spaces/{spaceID}/drive/items/{id}/collaboration-ticket":      true,
+	"/spaces/{spaceID}/notes/{id}/collaboration-ticket":           true,
+	"/spaces/{spaceID}/code-sessions/{id}/collaboration-ticket":   true,
+	"/spaces/{spaceID}/drive/items/{id}/collaboration-ticket":     true,
 	"/spaces/{spaceID}/apps/{id}/rooms/{id}/collaboration-ticket": true,
 }
 
 var costBearingRoutes = map[string]bool{
 	"/spaces/{spaceID}/attachments/{id}/download":               true,
+	"/dms/{dmID}/attachments/{id}/download":                     true,
 	"/spaces/{spaceID}/notes/{id}/assets/uploads":               true,
 	"/spaces/{spaceID}/notes/{id}/assets/uploads/{id}/finalize": true,
 }
@@ -58,6 +59,15 @@ func NormalizeRateLimitPath(path string) string {
 		parts[1] = "{spaceID}"
 		for index := 2; index < len(parts); index++ {
 			if namedRatePathIdentifier(parts, index) || looksLikeRatePathIdentifier(parts[index]) {
+				parts[index] = "{id}"
+			}
+		}
+		return "/" + strings.Join(parts, "/")
+	}
+	if parts[0] == "dms" && len(parts) >= 2 {
+		parts[1] = "{dmID}"
+		for index := 2; index < len(parts); index++ {
+			if looksLikeRatePathIdentifier(parts[index]) {
 				parts[index] = "{id}"
 			}
 		}

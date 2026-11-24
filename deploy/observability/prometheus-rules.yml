@@ -42,14 +42,6 @@ groups:
           severity: ticket
         annotations:
           summary: Misty domain metrics have stopped refreshing
-      - alert: MistyJournalControlBacklog
-        expr: misty_note_control_backlog > 0
-        for: 10m
-        labels:
-          severity: page
-        annotations:
-          summary: Journal permission and deletion controls are not draining
-          runbook: deploy/README.md#deploy
       - alert: MistyLibraryJobBacklog
         expr: |
           (

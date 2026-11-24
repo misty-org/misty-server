@@ -102,7 +102,6 @@ func TestNoAgentsChecksCatchWhatTheyClaimTo(t *testing.T) {
 }
 
 func TestServerMountsNoRouteForAModelsWork(t *testing.T) {
-	configureJournalCollabForTest(t)
 	t.Setenv("MISTY_ENVIRONMENT", "")
 	t.Setenv("MISTY_OPERATOR_TOKEN", "no-agents")
 	server, err := CreateServer()

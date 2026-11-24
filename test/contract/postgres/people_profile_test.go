@@ -136,7 +136,7 @@ func TestAnyoneSeesAPersonsPicture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	version, err := database.BumpUserAvatarVersion(ana.ID, "avatars/"+ana.ID+"-test")
+	version, err := database.BumpUserAvatarVersion(ana.ID, "avatars/"+ana.ID+"-0123456789abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestAnyoneSeesAPersonsPicture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a stranger's picture error = %v", err)
 	}
-	if avatar.Version != version || avatar.ObjectKey != "avatars/"+ana.ID+"-test" {
+	if avatar.Version != version || avatar.ObjectKey != "avatars/"+ana.ID+"-0123456789abcdef" {
 		t.Fatalf("PersonAvatarReference() = %#v, want version %d", avatar, version)
 	}
 	if _, err := database.PersonAvatarReference(ctx, "nobody"); !errors.Is(err, ErrSpaceNotFound) {

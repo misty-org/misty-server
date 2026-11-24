@@ -98,7 +98,7 @@ func TestProvisionCreatesEverythingOnce(t *testing.T) {
 		t.Fatal("bucket rules were not set")
 	}
 	for _, token := range fake.Tokens {
-		if !strings.Contains(stringify(token.Policies), "_default_misty-cloud-misty-example-") {
+		if !strings.Contains(stringify(token.Policies), "_default_misty-") {
 			t.Fatalf("token %s is not scoped to one bucket: %v", token.Name, token.Policies)
 		}
 	}

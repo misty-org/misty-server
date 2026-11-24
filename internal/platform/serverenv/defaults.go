@@ -17,10 +17,10 @@ func ResourceNames(hostname string) Names {
 	base := "misty-" + slug
 	return Names{
 		Tunnel:        base,
-		LibraryBucket: base + "-library",
-		BackupBucket:  base + "-backups",
-		LibraryToken:  base + " library",
-		BackupToken:   base + " backups",
+		LibraryBucket: "misty-space-drive",
+		BackupBucket:  "misty-db-backups",
+		LibraryToken:  "misty space drive",
+		BackupToken:   "misty db backups",
 	}
 }
 

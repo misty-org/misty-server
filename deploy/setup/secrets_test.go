@@ -59,8 +59,8 @@ func legacyStore(t *testing.T) (*Store, string, map[string]string) {
 	store.Set("PARTYKIT_HOST", "misty-cloud-misty-example-collab.misty.workers.dev")
 	store.State["worker:misty-cloud-misty-example-collab"] = "fingerprint"
 	store.Set("MISTY_PUBLIC_API_URL", "https://cloud.misty.example/v1")
-	store.Set("R2_BUCKET", "misty-cloud-misty-example-library")
-	store.Set("MISTY_BACKUP_BUCKET", "misty-cloud-misty-example-backups")
+	store.Set("R2_BUCKET", "misty-space-drive")
+	store.Set("MISTY_BACKUP_BUCKET", "misty-db-backups")
 	store.Set("MISTY_CLOUDFLARE_TUNNEL_ID", "tunnel-1")
 	if err := store.Save(); err != nil {
 		t.Fatal(err)
@@ -138,7 +138,7 @@ func TestServerEnvGivesTheAPIItsKeysAndNothingMore(t *testing.T) {
 			t.Fatalf("the API and setup disagree on %s", spec.Name)
 		}
 	}
-	if defaults["MISTY_PUBLIC_API_URL"] != "https://cloud.misty.example/v1" || defaults["R2_BUCKET"] != "misty-cloud-misty-example-library" {
+	if defaults["MISTY_PUBLIC_API_URL"] != "https://cloud.misty.example/v1" || defaults["R2_BUCKET"] != "misty-space-drive" {
 		t.Fatalf("hostname values %v", defaults)
 	}
 	if _, err := exec.LookPath("sh"); err == nil {

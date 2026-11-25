@@ -345,3 +345,16 @@ func TestInputsAreAllRequired(t *testing.T) {
 		t.Fatalf("names too long: %+v", names)
 	}
 }
+
+func TestEveryDerivedKeySetupWritesToAFileIsOneItDerives(t *testing.T) {
+	for _, files := range []map[string]string{privateFiles, sharedFiles} {
+		for name, file := range files {
+			if _, derived := serverenv.Lookup(name); !derived {
+				continue
+			}
+			if _, ok := specFor(name); !ok {
+				t.Errorf("%s is written to %s but setup never derives it, so the file is never made", name, file)
+			}
+		}
+	}
+}

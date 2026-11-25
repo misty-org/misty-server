@@ -10,7 +10,7 @@ help: ## List available targets
 generate: ## Regenerate templ views for the operator console
 	go tool templ generate -path internal/console
 
-console: generate ## Run the operator console (prefer: misty server up --gui)
+console: generate ## Run the operator console
 	go run ./cmd/misty-console
 
 build: ## Compile all packages

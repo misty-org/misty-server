@@ -2,97 +2,19 @@
 
 Misty Server provides accounts, Spaces and file services for [Misty](https://github.com/misty-org/misty). Agents, model calls and web search run on each person's desktop: the server never calls a model, holds no search key and makes no search call.
 
-This page sets up the development stack, which the [`misty` CLI](https://github.com/misty-org/misty-cli) runs. To run a server for yourself or other people, see [Self-hosting](#self-hosting).
+To run a server for yourself or other people, see [Self-hosting](#self-hosting).
 
-## Development stack
+## Work on the server
 
-### Prerequisites
-
-- Git.
-- Rust through rustup, to build the `misty` CLI with its pinned toolchain.
-- Docker Engine with Compose v2.
-- curl, which the CLI uses to call the Cloudflare API.
-- A Cloudflare account with a domain, and an API token for that account and zone with account and zone read, Tunnel edit and DNS edit. See [Cloudflare's tunnel setup](https://developers.cloudflare.com/tunnel/get-started/).
-
-Go, PostgreSQL, LiveKit and cloudflared run inside the containers. Live co-editing rooms run in the `misty-collab` service, a second binary from this repository's image, beside the API in compose, so they need nothing from Cloudflare; the tunnel only publishes the stack. Working on the desktop app needs its own [toolchain](https://github.com/misty-org/misty/blob/main/CONTRIBUTING.md#prerequisites).
-
-### Install
-
-The CLI finds this repository and the desktop app beside it, so keep all three checkouts in one folder:
+You need Go (the version in `go.mod`) and Docker.
 
 ```sh
-git clone https://github.com/misty-org/misty.git
-git clone https://github.com/misty-org/misty-server.git
-git clone https://github.com/misty-org/misty-cli.git
-cd misty-cli
-cargo install --path . --locked
-misty setup server
+make build       # compile every package
+make test-unit   # every Go test; the database tests need PostgreSQL on 127.0.0.1:5435
+make generate    # after editing the console's templ views in internal/console
 ```
 
-`misty setup server` creates `.env/server/` in your Misty data folder (`~/.misty/dev/default` unless `~/.misty/misty.conf` names another) with development credentials and keys. Running it again keeps existing values. Keep these keys with your database and out of Git.
-
-### Configure Cloudflare
-
-Set `CLOUDFLARE_API_TOKEN` in your shell, or save it with `misty env set CLOUDFLARE_API_TOKEN`, which reads the value from stdin. Don't put credentials in command arguments.
-
-Preview the tunnel and DNS route, then run the same command with `--apply` to create them and save the configuration:
-
-```sh
-misty setup cloudflare --account ACCOUNT_ID --zone ZONE_ID --hostname api.example.com
-```
-
-Setup reuses the named tunnel, keeps unrelated tunnel routes and stops on a conflicting DNS record.
-
-To see and check your settings:
-
-```sh
-misty env describe
-misty env status
-misty env check
-```
-
-`misty doctor server --fix` creates missing local files and development secrets. It doesn't touch Cloudflare.
-
-### Start
-
-```sh
-misty server up
-misty doctor server
-misty doctor cloudflare
-```
-
-`up` builds and starts the containers, applies migrations, waits until the services are healthy and returns. If startup fails, `up` prints the end of the relevant log. Build output, with secrets redacted, is saved in `.misty/logs/` here, and `--verbose` prints it after the build. Container logs rotate at 10 MB, three files per service.
-
-```sh
-misty server status
-misty server logs api --tail 100
-misty server logs api --follow
-misty server down
-```
-
-Check `/health` on your public API hostname before connecting from another computer. The API itself answers only under `/v1`, so a production server refuses to start unless `MISTY_PUBLIC_API_URL` ends in `/v1`. A healthy service doesn't prove that accounts and Spaces work, so try them in the app too.
-
-### Run the desktop app against it
-
-```sh
-misty setup desktop
-misty doctor desktop
-misty desktop dev
-```
-
-`misty desktop dev` points the app at this stack's API and website unless `MISTY_PUBLIC_API_URL` or `MISTY_PUBLIC_URL` is already set in your shell.
-
-### Operator console
-
-```sh
-misty server up --gui
-```
-
-With `--gui`, `up` also opens the operator console in your browser. It listens only on `127.0.0.1:7070`, never through the tunnel, and a one-time link signs the browser in. Running the command again reuses a console that is already running; `misty server down` stops it.
-
-The console shows health and traffic, the development services, customers (accounts with their storage against its limit, and their sessions), background jobs, configuration, database migrations, local backups and service logs. Traffic needs `MISTY_METRICS_TOKEN`. With `MISTY_OPERATOR_TOKEN` set, the Customers page can also set limits, suspend, close and resume accounts and issue sign-in links, through the operator account API. Each change is recorded in the audit log on the Overview.
-
-The views are templ files in `internal/console`; run `make generate` after editing them.
+`make help` lists the other targets.
 
 ## Accounts
 
@@ -140,6 +62,17 @@ Compose also reads three optional variables from where it runs (the shell or a `
 - `MISTY_TUNNEL_EXTRA_INGRESS` publishes more hostnames through the server's tunnel, for services you run beside it on the `edge` network: a comma-separated list of `host=service`, such as `billing.example.com=http://billing:8091`. Each host must be in the same zone as `MISTY_HOSTNAME`; setup routes it before the tunnel's catch-all and keeps its proxied DNS record. Empty by default. Removing an entry stops routing it but leaves its DNS record for you to delete.
 
 The [self-hosting guide](https://docs.mistysys.com/self-hosting) lists every value and covers optional email, backups, secret rotation and the console.
+
+### Operator console
+
+The stack runs an operator console on the server's own `127.0.0.1:7070`, never through the tunnel. Reach it over SSH and open the one-time sign-in link it printed when it started:
+
+```sh
+ssh -L 7070:127.0.0.1:7070 your-server
+docker compose logs console
+```
+
+It shows health and traffic, the services and their logs, customers (accounts with their storage against its limit, and their sessions), background jobs, configuration, database migrations and backups. Traffic needs `MISTY_METRICS_TOKEN`. With `MISTY_OPERATOR_TOKEN` set, the Customers page can also set limits, suspend, close and resume accounts and issue sign-in links, through the operator account API. Each change is recorded in the audit log on the Overview.
 
 ## More
 

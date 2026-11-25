@@ -20,6 +20,7 @@ var secretSpecs = []secretSpec{
 	{Key: key("MISTY_AUTH_SIGNING_KEY")},
 	{Key: key("MISTY_OPERATOR_TOKEN")},
 	{Key: key("MISTY_METRICS_TOKEN"), Rotatable: true},
+	{Key: key("LIVEKIT_API_SECRET"), Rotatable: true},
 	{Key: key("SPACE_LINK_ENCRYPTION_KEY"), DataBound: true},
 	{Key: key("MISTY_BACKUP_AGE_IDENTITY"), DataBound: true},
 }

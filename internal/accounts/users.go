@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/misty-org/misty-server/internal/avatars"
 )
 
 type User struct {
@@ -20,6 +22,7 @@ type User struct {
 	Provider            string
 	ProviderSubject     string
 	AvatarVersion       int64
+	AvatarDecoration    avatars.Decoration
 	BannerVersion       int64
 	EmailUpdatesEnabled bool
 	CreatedAt           time.Time
@@ -166,6 +169,16 @@ func (db Store) RemoveUserAvatar(id string) error {
 	})
 }
 
+func (db Store) SetUserAvatarDecoration(id string, decoration avatars.Decoration) (avatars.Decoration, error) {
+	var out avatars.Decoration
+	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
+		return tx.QueryRowContext(context.Background(),
+			`UPDATE users SET avatar_decoration = $2 WHERE id = $1 AND lifecycle_state='active' RETURNING avatar_decoration`,
+			id, decoration).Scan(&out)
+	})
+	return out, err
+}
+
 func (db Store) GetUserAvatarVersion(id string) (int64, error) {
 	avatar, err := db.GetUserAvatarReference(id)
 	return avatar.Version, err
@@ -234,11 +247,11 @@ func (db Store) GetUserByID(id string) (*User, error) {
 	err := db.Transaction(context.Background(), UserScope(id), func(tx *sql.Tx) error {
 		return tx.QueryRowContext(
 			context.Background(),
-			`SELECT id, license_id, username, email, avatar_version, banner_version,
+			`SELECT id, license_id, username, email, avatar_version, avatar_decoration, banner_version,
 			        email_updates_enabled, created_at, provider, COALESCE(provider_subject,'')
 			 FROM users WHERE id=$1 AND lifecycle_state='active'`,
 			id,
-		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &u.AvatarVersion, &u.BannerVersion, &u.EmailUpdatesEnabled, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
+		).Scan(&u.ID, &u.LicenseID, &u.Username, &u.Email, &u.AvatarVersion, &u.AvatarDecoration, &u.BannerVersion, &u.EmailUpdatesEnabled, &u.CreatedAt, &u.Provider, &u.ProviderSubject)
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

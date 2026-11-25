@@ -57,7 +57,7 @@ func spaceEventVisibleToUserTx(ctx context.Context, tx *sql.Tx, userID string, e
 			return conversationEventVisibleTx(ctx, tx, userID, event.SpaceID, payload.ConversationID, permissionCache)
 		}
 		permission = PermissionMessagesRead
-	case strings.HasPrefix(event.EventType, "node."):
+	case strings.HasPrefix(event.EventType, "node."), strings.HasPrefix(event.EventType, "channel_category."):
 		permission = PermissionMessagesRead
 	case strings.HasPrefix(event.EventType, "direct."):
 		permission = PermissionMessagesRead

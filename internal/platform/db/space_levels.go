@@ -13,7 +13,6 @@ import (
 )
 
 var (
-	ErrSpaceAppLimit     = errors.New("space app limit reached")
 	ErrSpaceAgentLimit   = errors.New("space agent limit reached")
 	ErrSpaceUploadLimit  = errors.New("space upload limit reached")
 	ErrSpaceStorageLimit = errors.New("space storage limit reached")

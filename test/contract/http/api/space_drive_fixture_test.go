@@ -32,12 +32,9 @@ type driveTestItem struct {
 	Seq            int64          `json:"seq"`
 	ModifiedBy     string         `json:"modified_by"`
 	ModifiedByName string         `json:"modified_by_name"`
-	Trashed        bool           `json:"trashed"`
-	TrashHold      bool           `json:"trash_hold"`
 	TrashedBy      *string        `json:"trashed_by"`
 	Deleted        bool           `json:"deleted"`
 	ReplacedOf     *string        `json:"replaced_of"`
-	Revived        bool           `json:"revived"`
 	Replaced       *driveTestItem `json:"replaced"`
 }
 
@@ -71,7 +68,6 @@ func newDriveTestRouter(drive *SpaceDriveService) *chi.Mux {
 	base := "/spaces/{spaceID}/drive"
 	item := base + "/items/{itemID}"
 	router.Get(base+"/changes", drive.DriveChanges())
-	router.Get(base+"/trash", drive.DriveTrash())
 	router.Get(base+"/in-use", drive.DriveInUseMarks())
 	router.Post(base+"/uploads", drive.StartDriveUpload())
 	router.Post(base+"/uploads/{uploadID}/complete", drive.CompleteDriveUpload())
@@ -245,3 +241,13 @@ func (f *driveFixture) text(query string, args ...any) string {
 }
 
 func (f *driveFixture) itemPath(id string) string { return f.base + "/items/" + id }
+
+func (f *driveFixture) trashID() string {
+	return f.text(`SELECT COALESCE((SELECT id FROM space_drive_items WHERE space_id=$1 AND parent_id IS NULL
+		AND name='.trash' AND deleted_at IS NULL),'')`, f.spaceID)
+}
+
+func (f *driveFixture) inTrash(item driveTestItem) bool {
+	trash := f.trashID()
+	return trash != "" && item.ParentID != nil && *item.ParentID == trash
+}

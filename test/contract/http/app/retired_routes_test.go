@@ -30,7 +30,7 @@ func TestBrowserServerDoesNotMountRetiredProducts(t *testing.T) {
 			"/spaces/{spaceID}/library/items", "/spaces/{spaceID}/library/facets",
 			"/spaces/{spaceID}/attachments/{attachmentID}/promote", "/spaces/{spaceID}/agent-artifacts",
 			"/me/voice/transcribe",
-			"/spaces/{spaceID}/apps/{appID}/storage"} {
+			"/spaces/{spaceID}/apps"} {
 			if normalized == retired || strings.HasPrefix(normalized, retired+"/") {
 				t.Errorf("retired route remains: %s %s", method, path)
 			}

@@ -11,8 +11,8 @@ DELETE /v1/me/voice/transcripts/{transcriptID}
 DELETE /v1/spaces/{spaceID}
 DELETE /v1/spaces/{spaceID}/agent-threads/{threadID}
 DELETE /v1/spaces/{spaceID}/agents/{agentID}
-DELETE /v1/spaces/{spaceID}/apps/{appID}
 DELETE /v1/spaces/{spaceID}/avatar
+DELETE /v1/spaces/{spaceID}/categories/{categoryID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}/agents/{agentID}
 DELETE /v1/spaces/{spaceID}/conversations/{conversationID}/members/me
@@ -77,7 +77,6 @@ GET /v1/spaces/{spaceID}/agent-threads
 GET /v1/spaces/{spaceID}/agent-threads/{threadID}/entries
 GET /v1/spaces/{spaceID}/agents
 GET /v1/spaces/{spaceID}/agents/{agentID}/threads
-GET /v1/spaces/{spaceID}/apps
 GET /v1/spaces/{spaceID}/attachments/{attachmentID}/download
 GET /v1/spaces/{spaceID}/avatar
 GET /v1/spaces/{spaceID}/boosts
@@ -88,7 +87,6 @@ GET /v1/spaces/{spaceID}/drive/changes
 GET /v1/spaces/{spaceID}/drive/in-use
 GET /v1/spaces/{spaceID}/drive/items/{itemID}
 GET /v1/spaces/{spaceID}/drive/items/{itemID}/content
-GET /v1/spaces/{spaceID}/drive/trash
 GET /v1/spaces/{spaceID}/integrations
 GET /v1/spaces/{spaceID}/invitations
 GET /v1/spaces/{spaceID}/item-state
@@ -111,6 +109,7 @@ GET /v1/statuses
 PATCH /operator/v1/accounts/{id}
 PATCH /v1/me/voice/transcripts/{transcriptID}
 PATCH /v1/spaces/{spaceID}
+PATCH /v1/spaces/{spaceID}/categories/{categoryID}
 PATCH /v1/spaces/{spaceID}/conversations/{conversationID}
 PATCH /v1/spaces/{spaceID}/drive/items/{itemID}
 PATCH /v1/spaces/{spaceID}/integrations/{integrationID}
@@ -163,6 +162,7 @@ POST /v1/spaces
 POST /v1/spaces/invitations/{inviteID}/{action}
 POST /v1/spaces/{spaceID}/agent-threads/{threadID}/entries
 POST /v1/spaces/{spaceID}/agent-threads/{threadID}/reactions
+POST /v1/spaces/{spaceID}/categories
 POST /v1/spaces/{spaceID}/conversations
 POST /v1/spaces/{spaceID}/conversations/dm
 POST /v1/spaces/{spaceID}/conversations/{conversationID}/members
@@ -194,6 +194,7 @@ POST /v1/spaces/{spaceID}/transfer
 PUT /operator/v1/spaces/{spaceID}/boosts/{id}
 PUT /v1/blocks/{userID}
 PUT /v1/me/avatar
+PUT /v1/me/avatar/decoration
 PUT /v1/me/banner
 PUT /v1/me/call-keys/{keyID}
 PUT /v1/me/password
@@ -203,13 +204,14 @@ PUT /v1/me/status
 PUT /v1/me/username
 PUT /v1/spaces/{spaceID}/agent-threads/{threadID}
 PUT /v1/spaces/{spaceID}/agents/{agentID}
-PUT /v1/spaces/{spaceID}/apps/{appID}
 PUT /v1/spaces/{spaceID}/avatar
+PUT /v1/spaces/{spaceID}/avatar/decoration
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/agents/{agentID}
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/pin
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/messages/{messageID}/reactions/{emoji}
 PUT /v1/spaces/{spaceID}/conversations/{conversationID}/overwrites
+PUT /v1/spaces/{spaceID}/conversations/{conversationID}/place
 PUT /v1/spaces/{spaceID}/drive/items/{itemID}/in-use
 PUT /v1/spaces/{spaceID}/items/{kind}/{itemID}/visibility
 PUT /v1/spaces/{spaceID}/members/{userID}/roles

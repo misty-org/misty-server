@@ -10,7 +10,6 @@ const (
 	PermissionStudioView         = "studio.view"
 	PermissionAskRun             = "ask.run"
 	PermissionIntegrationsManage = "integrations.manage"
-	PermissionAppsManage         = "apps.manage"
 	PermissionDriveWrite         = "drive.write"
 	PermissionDrivePurge         = "drive.purge"
 	PermissionSpaceInvite        = "space.invite"
@@ -29,6 +28,7 @@ const (
 var retiredPermissions = map[string]bool{
 	"library.view": true, "library.upload": true, "library.add": true,
 	"library.edit": true, "library.download": true, "library.import": true,
+	"apps.manage": true,
 }
 
 func IsRetiredPermission(permission string) bool { return retiredPermissions[permission] }

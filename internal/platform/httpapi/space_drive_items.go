@@ -118,7 +118,7 @@ func (s *SpaceDriveService) CreateDriveItem() http.HandlerFunc {
 		if !result.Created {
 			status = http.StatusOK
 		}
-		writeJSON(w, status, driveCreated{DriveItem: result.Item, Revived: result.Revived})
+		writeJSON(w, status, result.Item)
 	}
 }
 
@@ -191,7 +191,7 @@ func (s *SpaceDriveService) PatchDriveItem() http.HandlerFunc {
 			return
 		}
 		s.cleanUpDriveObjects(r.Context(), result.DeleteObjectKeys, result.RetireKeys)
-		writeJSON(w, http.StatusOK, driveChanged{DriveItem: result.Item, Revived: result.Revived, Replaced: result.Replaced})
+		writeJSON(w, http.StatusOK, driveChanged{DriveItem: result.Item, Replaced: result.Replaced})
 	}
 }
 
@@ -209,13 +209,7 @@ func (s *SpaceDriveService) TrashDriveItem() http.HandlerFunc {
 		if !ok {
 			return
 		}
-		var body struct {
-			Held bool `json:"held"`
-		}
-		if decodeOptionalJSON(w, r, &body, maxJSONBodyBytes) != nil {
-			return
-		}
-		result, err := s.database.TrashDriveItem(r.Context(), userID, chi.URLParam(r, "spaceID"), chi.URLParam(r, "itemID"), device, version, body.Held)
+		result, err := s.database.TrashDriveItem(r.Context(), userID, chi.URLParam(r, "spaceID"), chi.URLParam(r, "itemID"), device, version)
 		if err != nil {
 			writeDriveError(w, err)
 			return
@@ -267,31 +261,6 @@ func (s *SpaceDriveService) PurgeDriveItem() http.HandlerFunc {
 		}
 		s.cleanUpDriveObjects(r.Context(), nil, retire)
 		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
-func (s *SpaceDriveService) DriveTrash() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticatedUser(w, r, s.database)
-		if !ok {
-			return
-		}
-		limit := 100
-		if raw := r.URL.Query().Get("limit"); raw != "" {
-			parsed, err := strconv.Atoi(raw)
-			if err != nil || parsed < 1 || parsed > 200 {
-				writeDriveError(w, db.ErrLibraryInvalid)
-				return
-			}
-			limit = parsed
-		}
-		page, err := s.database.DriveTrash(r.Context(), userID, chi.URLParam(r, "spaceID"), r.URL.Query().Get("after"), limit)
-		if err != nil {
-			writeDriveError(w, err)
-			return
-		}
-		w.Header().Set("Cache-Control", "private, no-store")
-		writeJSON(w, http.StatusOK, page)
 	}
 }
 

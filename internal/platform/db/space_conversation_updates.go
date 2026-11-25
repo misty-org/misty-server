@@ -45,8 +45,8 @@ func (db *Database) UpdateSpaceConversation(ctx context.Context, userID, spaceID
 			return err
 		}
 		if err := tx.QueryRowContext(ctx,
-			`SELECT created_at, updated_at FROM space_conversations WHERE id=$1`, conversationID,
-		).Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
+			`SELECT voice, category_id, position, created_at, updated_at FROM space_conversations WHERE id=$1`, conversationID,
+		).Scan(&out.Voice, &out.CategoryID, &out.Position, &out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err
 		}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "conversation.updated", conversationID,

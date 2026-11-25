@@ -87,14 +87,8 @@ func driveIfMatch(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return version, true
 }
 
-type driveCreated struct {
-	db.DriveItem
-	Revived bool `json:"revived"`
-}
-
 type driveChanged struct {
 	db.DriveItem
-	Revived  bool          `json:"revived"`
 	Replaced *db.DriveItem `json:"replaced"`
 }
 

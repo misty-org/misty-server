@@ -376,14 +376,14 @@ func directTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) (*DirectC
 	if pairKey != "" {
 		out.Kind = "direct"
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.avatar_version,u.banner_version,m.joined_at FROM space_members m JOIN users u ON u.id=m.user_id
+	rows, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.avatar_version,u.avatar_decoration,u.banner_version,m.joined_at FROM space_members m JOIN users u ON u.id=m.user_id
 		WHERE m.space_id=$1 ORDER BY m.joined_at,u.id`, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var person Person
-		if err := rows.Scan(&person.UserID, &person.Username, &person.AvatarVersion, &person.BannerVersion, &person.Since); err != nil {
+		if err := rows.Scan(&person.UserID, &person.Username, &person.AvatarVersion, &person.AvatarDecoration, &person.BannerVersion, &person.Since); err != nil {
 			rows.Close()
 			return nil, err
 		}

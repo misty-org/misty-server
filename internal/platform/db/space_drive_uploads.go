@@ -396,27 +396,46 @@ func setDriveContributionTx(ctx context.Context, tx *sql.Tx, spaceID, itemID, us
 	if err != nil {
 		return err
 	}
+	var parent sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT parent_id FROM space_drive_items WHERE id=$1`, itemID).Scan(&parent); err != nil {
+		return err
+	}
+	var parentID *string
+	if parent.Valid {
+		parentID = &parent.String
+	}
+	inTrash, err := driveInTrashTx(ctx, tx, spaceID, parentID)
+	if err != nil {
+		return err
+	}
+	state, counted := "active", bytes
+	if inTrash {
+		state, counted = "trashed", 0
+	}
 	if bytes > 0 {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_storage_contributions(id,space_id,user_id,file_id,source_kind,source_id,logical_bytes,state)
-			VALUES($1,$2,$3,NULL,'drive',$4,$5,'active')
-			ON CONFLICT (space_id,user_id,source_kind,source_id) DO UPDATE SET logical_bytes=EXCLUDED.logical_bytes,state='active',released_at=NULL,updated_at=NOW()`,
-			"contribution_"+uuid.NewString(), spaceID, userID, itemID, bytes); err != nil {
+			VALUES($1,$2,$3,NULL,'drive',$4,$5,$6)
+			ON CONFLICT (space_id,user_id,source_kind,source_id) DO UPDATE SET logical_bytes=EXCLUDED.logical_bytes,state=EXCLUDED.state,released_at=NULL,updated_at=NOW()`,
+			"contribution_"+uuid.NewString(), spaceID, userID, itemID, bytes, state); err != nil {
 			return err
 		}
 	}
-	if released == 0 && bytes == 0 {
+	if released == 0 && counted == 0 {
 		return nil
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE space_storage_usage SET used_bytes=GREATEST(0,used_bytes-$1+$2),version=version+1,updated_at=NOW() WHERE space_id=$3`, released, bytes, spaceID)
+	_, err = tx.ExecContext(ctx, `UPDATE space_storage_usage SET used_bytes=GREATEST(0,used_bytes-$1+$2),version=version+1,updated_at=NOW() WHERE space_id=$3`, released, counted, spaceID)
 	return err
 }
 
 func releaseDriveContributionsTx(ctx context.Context, tx *sql.Tx, spaceID string, itemIDs []string) (int64, error) {
 	var released int64
-	err := tx.QueryRowContext(ctx, `WITH released AS (
-		UPDATE space_storage_contributions SET state='released',released_at=NOW(),updated_at=NOW()
-		WHERE space_id=$1 AND source_kind='drive' AND source_id=ANY($2) AND state IN ('active','recovery') RETURNING logical_bytes)
-		SELECT COALESCE(sum(logical_bytes),0) FROM released`, spaceID, pq.Array(itemIDs)).Scan(&released)
+	err := tx.QueryRowContext(ctx, `WITH held AS (
+		SELECT id,state,logical_bytes FROM space_storage_contributions
+		WHERE space_id=$1 AND source_kind='drive' AND source_id=ANY($2) AND state IN ('active','recovery','trashed') FOR UPDATE),
+		released AS (
+		UPDATE space_storage_contributions c SET state='released',released_at=NOW(),updated_at=NOW()
+		FROM held WHERE c.id=held.id RETURNING held.state,held.logical_bytes)
+		SELECT COALESCE(sum(logical_bytes) FILTER (WHERE state<>'trashed'),0) FROM released`, spaceID, pq.Array(itemIDs)).Scan(&released)
 	return released, err
 }
 

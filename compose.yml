@@ -1,7 +1,8 @@
 name: misty
 
-# The Misty server stack. Everything you configure is in
-# three files under ~/.misty/.env/server/ (MISTY_ENV_DIR names another folder):
+# The Misty server stack. Everything you configure is in three files in
+# MISTY_ENV_DIR, the .env/server folder of the root ~/.misty/misty.conf names
+# (~/.misty/rel/<version>/.env/server; the misty CLI sets it from misty.conf):
 # MISTY_HOSTNAME in misty.env, CLOUDFLARE_API_TOKEN in cloudflare.env and the
 # Google client in google.env. The setup service generates one root secret
 # into the secrets volume, derives every key from it, and provisions
@@ -13,9 +14,9 @@ x-config: &config
   # Every service reads the same three files. The API token for Cloudflare is
   # blanked for every service except setup, the only one that calls the API.
   env_file:
-    - ${MISTY_ENV_DIR:-~/.misty/.env/server}/misty.env
-    - ${MISTY_ENV_DIR:-~/.misty/.env/server}/cloudflare.env
-    - ${MISTY_ENV_DIR:-~/.misty/.env/server}/google.env
+    - ${MISTY_ENV_DIR:?set MISTY_ENV_DIR to <misty.root>/.env/server}/misty.env
+    - ${MISTY_ENV_DIR:?set MISTY_ENV_DIR to <misty.root>/.env/server}/cloudflare.env
+    - ${MISTY_ENV_DIR:?set MISTY_ENV_DIR to <misty.root>/.env/server}/google.env
   logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
 
 # setup, migrate, backups, alerts, console and cloudflared run one small image
@@ -109,14 +110,14 @@ services:
     <<: *config
     # The three files, and Mailjet if this server sends email.
     env_file:
-      - ${MISTY_ENV_DIR:-~/.misty/.env/server}/misty.env
-      - ${MISTY_ENV_DIR:-~/.misty/.env/server}/cloudflare.env
-      - ${MISTY_ENV_DIR:-~/.misty/.env/server}/google.env
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/mailjet.env
+      - ${MISTY_ENV_DIR:?set MISTY_ENV_DIR to <misty.root>/.env/server}/misty.env
+      - ${MISTY_ENV_DIR:?set MISTY_ENV_DIR to <misty.root>/.env/server}/cloudflare.env
+      - ${MISTY_ENV_DIR:?set MISTY_ENV_DIR to <misty.root>/.env/server}/google.env
+      - path: ${MISTY_ENV_DIR:?set MISTY_ENV_DIR to <misty.root>/.env/server}/mailjet.env
         required: false
       # Calls follow MISTY_CALLS=1: the API works out LIVEKIT_URL, LIVEKIT_API_KEY and
       # LIVEKIT_API_SECRET itself. A development stack can set them here instead.
-      - path: ${MISTY_ENV_DIR:-~/.misty/.env/server}/livekit.env
+      - path: ${MISTY_ENV_DIR:?set MISTY_ENV_DIR to <misty.root>/.env/server}/livekit.env
         required: false
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-ec", "set -a; . /run/misty/secrets/server.env; set +a; exec /usr/local/bin/misty-server"]

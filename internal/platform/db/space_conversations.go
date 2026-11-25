@@ -35,6 +35,8 @@ type SpaceConversation struct {
 	Voice           bool                           `json:"voice"`
 	CreatedByUserID string                         `json:"created_by_user_id"`
 	VisibleToSpace  bool                           `json:"visible_to_space"`
+	CategoryID      *string                        `json:"category_id"`
+	Position        int                            `json:"position"`
 	Participants    []SpaceConversationParticipant `json:"participants"`
 	Overwrites      []SpaceConversationOverwrite   `json:"overwrites"`
 	Permissions     []string                       `json:"permissions"`
@@ -162,7 +164,7 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 				LIMIT $3) unread)`
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT c.id,c.space_id,c.title,c.kind,c.voice,c.created_by_user_id,
-			c.visible_to_space,c.created_at,c.updated_at,`+unread+`
+			c.visible_to_space,c.category_id,c.position,c.created_at,c.updated_at,`+unread+`
 			FROM space_conversations c
 			LEFT JOIN space_conversation_members cm ON cm.conversation_id=c.id AND cm.user_id=$2
 			WHERE c.space_id=$1 AND (c.visible_to_space OR cm.user_id=$2)
@@ -173,7 +175,7 @@ func (db *Database) spaceConversations(ctx context.Context, userID, spaceID stri
 		for rows.Next() {
 			var item SpaceConversation
 			if err := rows.Scan(&item.ID, &item.SpaceID, &item.Title, &item.Kind, &item.Voice, &item.CreatedByUserID,
-				&item.VisibleToSpace, &item.CreatedAt, &item.UpdatedAt, &item.UnreadCount); err != nil {
+				&item.VisibleToSpace, &item.CategoryID, &item.Position, &item.CreatedAt, &item.UpdatedAt, &item.UnreadCount); err != nil {
 				rows.Close()
 				return err
 			}
@@ -223,14 +225,18 @@ func (db *Database) CreateSpaceConversation(ctx context.Context, userID, spaceID
 }
 
 func (db *Database) CreateSpaceConversationWithOverwrites(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef, overwrites []SpaceConversationOverwrite) (*SpaceConversation, error) {
-	return db.createSpaceChannel(ctx, userID, spaceID, title, participantRefs, overwrites, false)
+	return db.createSpaceChannel(ctx, userID, spaceID, title, participantRefs, overwrites, false, "")
 }
 
 func (db *Database) CreateSpaceVoiceChannel(ctx context.Context, userID, spaceID, title string, overwrites []SpaceConversationOverwrite) (*SpaceConversation, error) {
-	return db.createSpaceChannel(ctx, userID, spaceID, title, nil, overwrites, true)
+	return db.createSpaceChannel(ctx, userID, spaceID, title, nil, overwrites, true, "")
 }
 
-func (db *Database) createSpaceChannel(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef, overwrites []SpaceConversationOverwrite, voice bool) (*SpaceConversation, error) {
+func (db *Database) CreateSpaceChannelInCategory(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef, overwrites []SpaceConversationOverwrite, voice bool, categoryID string) (*SpaceConversation, error) {
+	return db.createSpaceChannel(ctx, userID, spaceID, title, participantRefs, overwrites, voice, categoryID)
+}
+
+func (db *Database) createSpaceChannel(ctx context.Context, userID, spaceID, title string, participantRefs []SpaceActorRef, overwrites []SpaceConversationOverwrite, voice bool, categoryID string) (*SpaceConversation, error) {
 	title, err := normalizeConversationTitle(title)
 	if err != nil {
 		return nil, err
@@ -264,9 +270,17 @@ func (db *Database) createSpaceChannel(ctx context.Context, userID, spaceID, tit
 		if err := validateSpaceActorRefsTx(ctx, tx, userID, spaceID, participants); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,created_by_user_id,visible_to_space,voice)
-			VALUES($1,$2,$3,$4,TRUE,$5) RETURNING created_at,updated_at`, out.ID, spaceID, title, userID, voice).
-			Scan(&out.CreatedAt, &out.UpdatedAt); err != nil {
+		if err := requireSpaceChannelCategoryTx(ctx, tx, spaceID, categoryID); err != nil {
+			return err
+		}
+		if categoryID != "" {
+			out.CategoryID = &categoryID
+		}
+		if err := tx.QueryRowContext(ctx, `INSERT INTO space_conversations(id,space_id,title,created_by_user_id,visible_to_space,voice,category_id,position)
+			VALUES($1,$2,$3,$4,TRUE,$5,NULLIF($6,''),(SELECT COALESCE(max(position)+1,0) FROM space_conversations
+			  WHERE space_id=$2 AND kind='standard' AND category_id IS NOT DISTINCT FROM NULLIF($6,'')))
+			RETURNING position,created_at,updated_at`, out.ID, spaceID, title, userID, voice, categoryID).
+			Scan(&out.Position, &out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_conversation_members(conversation_id,user_id)

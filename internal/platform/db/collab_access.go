@@ -69,7 +69,7 @@ func (db *Database) CollabFileAccess(ctx context.Context, spaceID, itemID, userI
 		if err != nil {
 			return err
 		}
-		if item.Kind != driveKindFile || item.Trashed {
+		if item.Kind != driveKindFile {
 			return ErrDriveNotFound
 		}
 		read = true

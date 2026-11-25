@@ -79,7 +79,7 @@ func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, err
 			  AND si.revoked_at IS NULL AND si.consumed_at IS NULL),
 			(EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=s.id AND sm.role='member') OR
 			 EXISTS(SELECT 1 FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW() AND si.revoked_at IS NULL AND si.consumed_at IS NULL)),
-			s.avatar_version,s.created_at,s.updated_at
+			s.avatar_version,s.avatar_decoration,s.created_at,s.updated_at
 			FROM spaces s JOIN space_members m ON m.space_id=s.id
 			WHERE m.user_id=$1 AND s.lifecycle_state='active' AND s.kind='space' ORDER BY s.updated_at DESC`, userID)
 		if err != nil {
@@ -87,7 +87,7 @@ func (db *Database) ListSpaces(ctx context.Context, userID string) ([]Space, err
 		}
 		for rows.Next() {
 			var space Space
-			if err := rows.Scan(&space.ID, &space.SecurityDomainID, &space.OwnerUserID, &space.Name, &space.IsDefault, &space.Role, &space.MemberCount, &space.PendingCount, &space.IsShared, &space.AvatarVersion, &space.CreatedAt, &space.UpdatedAt); err != nil {
+			if err := rows.Scan(&space.ID, &space.SecurityDomainID, &space.OwnerUserID, &space.Name, &space.IsDefault, &space.Role, &space.MemberCount, &space.PendingCount, &space.IsShared, &space.AvatarVersion, &space.AvatarDecoration, &space.CreatedAt, &space.UpdatedAt); err != nil {
 				rows.Close()
 				return err
 			}
@@ -121,9 +121,9 @@ func (db *Database) SpaceByID(ctx context.Context, userID, spaceID string) (*Spa
 			  AND si.revoked_at IS NULL AND si.consumed_at IS NULL),
 			(EXISTS(SELECT 1 FROM space_members sm WHERE sm.space_id=s.id AND sm.role='member') OR
 			 EXISTS(SELECT 1 FROM space_invitations si WHERE si.space_id=s.id AND si.expires_at>NOW() AND si.revoked_at IS NULL AND si.consumed_at IS NULL)),
-			s.avatar_version,s.created_at,s.updated_at
+			s.avatar_version,s.avatar_decoration,s.created_at,s.updated_at
 			FROM spaces s JOIN space_members m ON m.space_id=s.id
-			WHERE s.id=$1 AND m.user_id=$2 AND s.lifecycle_state='active'`, spaceID, userID).Scan(&out.ID, &out.SecurityDomainID, &out.OwnerUserID, &out.Name, &out.IsDefault, &out.Role, &out.MemberCount, &out.PendingCount, &out.IsShared, &out.AvatarVersion, &out.CreatedAt, &out.UpdatedAt); err != nil {
+			WHERE s.id=$1 AND m.user_id=$2 AND s.lifecycle_state='active'`, spaceID, userID).Scan(&out.ID, &out.SecurityDomainID, &out.OwnerUserID, &out.Name, &out.IsDefault, &out.Role, &out.MemberCount, &out.PendingCount, &out.IsShared, &out.AvatarVersion, &out.AvatarDecoration, &out.CreatedAt, &out.UpdatedAt); err != nil {
 			return err
 		}
 		permissions, err := spacePermissionListTx(ctx, tx, spaceID, userID)
@@ -218,7 +218,7 @@ func (db *Database) SpaceMembers(ctx context.Context, userID, spaceID string) ([
 		if err != nil {
 			return err
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT m.space_id,m.user_id,u.username,u.email,m.role,m.joined_at,m.read_message_seq,u.avatar_version
+		rows, err := tx.QueryContext(ctx, `SELECT m.space_id,m.user_id,u.username,u.email,m.role,m.joined_at,m.read_message_seq,u.avatar_version,u.avatar_decoration
 			FROM space_members m
 			JOIN users u ON u.id=m.user_id
 			WHERE m.space_id=$1
@@ -229,7 +229,7 @@ func (db *Database) SpaceMembers(ctx context.Context, userID, spaceID string) ([
 		defer rows.Close()
 		for rows.Next() {
 			var m SpaceMember
-			if err := rows.Scan(&m.SpaceID, &m.UserID, &m.Name, &m.Email, &m.Role, &m.JoinedAt, &m.ReadSeq, &m.AvatarVersion); err != nil {
+			if err := rows.Scan(&m.SpaceID, &m.UserID, &m.Name, &m.Email, &m.Role, &m.JoinedAt, &m.ReadSeq, &m.AvatarVersion, &m.AvatarDecoration); err != nil {
 				return err
 			}
 			m.RoleIDs = roleIDs[m.UserID]

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/misty-org/misty-server/internal/avatars"
 )
 
 const (
@@ -31,31 +33,33 @@ var (
 )
 
 type Space struct {
-	ID               string    `json:"id"`
-	SecurityDomainID string    `json:"security_domain_id"`
-	OwnerUserID      string    `json:"owner_user_id"`
-	Name             string    `json:"name"`
-	IsDefault        bool      `json:"is_default"`
-	Role             string    `json:"role"`
-	MemberCount      int       `json:"member_count"`
-	PendingCount     int       `json:"pending_count"`
-	IsShared         bool      `json:"is_shared"`
-	AvatarVersion    int64     `json:"avatar_version"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	Permissions      []string  `json:"permissions"`
+	ID               string             `json:"id"`
+	SecurityDomainID string             `json:"security_domain_id"`
+	OwnerUserID      string             `json:"owner_user_id"`
+	Name             string             `json:"name"`
+	IsDefault        bool               `json:"is_default"`
+	Role             string             `json:"role"`
+	MemberCount      int                `json:"member_count"`
+	PendingCount     int                `json:"pending_count"`
+	IsShared         bool               `json:"is_shared"`
+	AvatarVersion    int64              `json:"avatar_version"`
+	AvatarDecoration avatars.Decoration `json:"avatar_decoration"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+	Permissions      []string           `json:"permissions"`
 }
 
 type SpaceMember struct {
-	SpaceID       string    `json:"space_id"`
-	UserID        string    `json:"user_id"`
-	Name          string    `json:"name"`
-	Email         string    `json:"email"`
-	Role          string    `json:"role"`
-	JoinedAt      time.Time `json:"joined_at"`
-	ReadSeq       int64     `json:"read_message_seq"`
-	AvatarVersion int64     `json:"avatar_version"`
-	RoleIDs       []string  `json:"role_ids"`
+	SpaceID          string             `json:"space_id"`
+	UserID           string             `json:"user_id"`
+	Name             string             `json:"name"`
+	Email            string             `json:"email"`
+	Role             string             `json:"role"`
+	JoinedAt         time.Time          `json:"joined_at"`
+	ReadSeq          int64              `json:"read_message_seq"`
+	AvatarVersion    int64              `json:"avatar_version"`
+	AvatarDecoration avatars.Decoration `json:"avatar_decoration"`
+	RoleIDs          []string           `json:"role_ids"`
 }
 
 type SpaceInvitation struct {
@@ -65,6 +69,7 @@ type SpaceInvitation struct {
 	InvitedUserID   *string   `json:"invited_user_id"`
 	InvitedUserName *string   `json:"invited_user_name"`
 	InvitedEmail    string    `json:"invited_email"`
+	ByAccount       bool      `json:"by_account,omitempty"`
 	InvitedByUserID string    `json:"invited_by_user_id"`
 	InviterName     string    `json:"inviter_name,omitempty"`
 	Emailed         bool      `json:"emailed,omitempty"`
@@ -91,33 +96,35 @@ type MessageSpan struct {
 }
 
 type SpaceMessage struct {
-	Seq                 int64                  `json:"seq"`
-	ID                  string                 `json:"id"`
-	ClientNonce         string                 `json:"client_nonce,omitempty"`
-	SpaceID             string                 `json:"space_id"`
-	ConversationID      string                 `json:"conversation_id,omitempty"`
-	SenderUserID        string                 `json:"sender_user_id"`
-	SenderName          string                 `json:"sender_name"`
-	SenderAvatarVersion int64                  `json:"sender_avatar_version,omitempty"`
-	SenderKind          string                 `json:"sender_kind"`
-	Sender              SpaceMessageSender     `json:"sender"`
-	Content             []MessageSpan          `json:"content"`
-	FileNodeIDs         []string               `json:"file_node_ids"`
-	Attachments         []MessageAttachment    `json:"attachments"`
-	Reactions           []SpaceMessageReaction `json:"reactions"`
-	ReplyToMessageID    string                 `json:"reply_to_message_id,omitempty"`
-	ThreadRootID        string                 `json:"thread_root_id,omitempty"`
-	ReplyCount          int                    `json:"reply_count,omitempty"`
-	LastReplyAt         *time.Time             `json:"last_reply_at,omitempty"`
-	EditedAt            *time.Time             `json:"edited_at,omitempty"`
-	CreatedAt           time.Time              `json:"created_at"`
+	Seq                    int64                  `json:"seq"`
+	ID                     string                 `json:"id"`
+	ClientNonce            string                 `json:"client_nonce,omitempty"`
+	SpaceID                string                 `json:"space_id"`
+	ConversationID         string                 `json:"conversation_id,omitempty"`
+	SenderUserID           string                 `json:"sender_user_id"`
+	SenderName             string                 `json:"sender_name"`
+	SenderAvatarVersion    int64                  `json:"sender_avatar_version,omitempty"`
+	SenderAvatarDecoration avatars.Decoration     `json:"sender_avatar_decoration"`
+	SenderKind             string                 `json:"sender_kind"`
+	Sender                 SpaceMessageSender     `json:"sender"`
+	Content                []MessageSpan          `json:"content"`
+	FileNodeIDs            []string               `json:"file_node_ids"`
+	Attachments            []MessageAttachment    `json:"attachments"`
+	Reactions              []SpaceMessageReaction `json:"reactions"`
+	ReplyToMessageID       string                 `json:"reply_to_message_id,omitempty"`
+	ThreadRootID           string                 `json:"thread_root_id,omitempty"`
+	ReplyCount             int                    `json:"reply_count,omitempty"`
+	LastReplyAt            *time.Time             `json:"last_reply_at,omitempty"`
+	EditedAt               *time.Time             `json:"edited_at,omitempty"`
+	CreatedAt              time.Time              `json:"created_at"`
 }
 
 type SpaceMessageSender struct {
-	Kind          string `json:"kind"`
-	UserID        string `json:"user_id,omitempty"`
-	DisplayName   string `json:"display_name"`
-	AvatarVersion int64  `json:"avatar_version,omitempty"`
+	Kind             string             `json:"kind"`
+	UserID           string             `json:"user_id,omitempty"`
+	DisplayName      string             `json:"display_name"`
+	AvatarVersion    int64              `json:"avatar_version,omitempty"`
+	AvatarDecoration avatars.Decoration `json:"avatar_decoration"`
 }
 
 type SpaceMessageReaction struct {

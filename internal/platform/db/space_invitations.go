@@ -32,15 +32,33 @@ func (db *Database) InviteToSpaceWithToken(
 	ctx context.Context,
 	ownerID, spaceID, email, tokenHash string,
 ) (*SpaceInvitation, error) {
-	email = normalizeEmail(email)
+	return db.inviteToSpace(ctx, ownerID, spaceID, normalizeEmail(email), "", tokenHash)
+}
+
+func (db *Database) InviteFriendToSpaceWithToken(
+	ctx context.Context,
+	ownerID, spaceID, friendID, tokenHash string,
+) (*SpaceInvitation, error) {
+	friendID = strings.TrimSpace(friendID)
+	if friendID == "" {
+		return nil, ErrSpaceInvalid
+	}
+	return db.inviteToSpace(ctx, ownerID, spaceID, "", friendID, tokenHash)
+}
+
+func (db *Database) inviteToSpace(
+	ctx context.Context,
+	ownerID, spaceID, email, friendID, tokenHash string,
+) (*SpaceInvitation, error) {
+	byAccount := friendID != ""
 	tokenHash = strings.TrimSpace(tokenHash)
-	if email == "" || tokenHash == "" {
+	if (email == "" && !byAccount) || tokenHash == "" {
 		return nil, ErrSpaceInvalid
 	}
 	out := &SpaceInvitation{
 		ID: "invite_" + uuid.NewString(), SpaceID: spaceID, InvitedByUserID: ownerID,
-		InvitedEmail: email,
-		ExpiresAt:    time.Now().UTC().Add(7 * 24 * time.Hour),
+		InvitedEmail: email, ByAccount: byAccount,
+		ExpiresAt: time.Now().UTC().Add(7 * 24 * time.Hour),
 	}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, ownerID, PermissionSpaceInvite); err != nil {
@@ -62,6 +80,30 @@ func (db *Database) InviteToSpaceWithToken(
 		if _, err := tx.ExecContext(ctx, `UPDATE space_invitations SET revoked_at=COALESCE(revoked_at,NOW())
 			WHERE expires_at<=NOW() AND consumed_at IS NULL`); err != nil {
 			return err
+		}
+		if byAccount {
+			friends, err := areFriendsTx(ctx, tx, ownerID, friendID)
+			if err != nil {
+				return err
+			}
+			blocked, err := blockedEitherWayTx(ctx, tx, ownerID, friendID)
+			if err != nil {
+				return err
+			}
+			if !friends || blocked {
+				return ErrSpaceForbidden
+			}
+			var found string
+			err = tx.QueryRowContext(ctx, `SELECT email FROM users WHERE id=$1 AND lifecycle_state='active'`, friendID).Scan(&found)
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrSpaceInvalid
+			}
+			if err != nil {
+				return err
+			}
+			if email = normalizeEmail(found); email == "" {
+				return ErrSpaceInvalid
+			}
 		}
 		err := tx.QueryRowContext(ctx, `SELECT id,username,email FROM users WHERE lower(email)=$1`, email).
 			Scan(&out.InvitedUserID, &out.InvitedUserName, &out.InvitedEmail)
@@ -93,9 +135,9 @@ func (db *Database) InviteToSpaceWithToken(
 			return err
 		}
 		if err := tx.QueryRowContext(ctx, `INSERT INTO space_invitations
-			(id,space_id,invited_user_id,invited_email,invited_by_user_id,token_hash,delivery_status,expires_at)
-			VALUES($1,$2,NULLIF($3,''),$4,$5,$6,'pending',$7)
-			RETURNING created_at`, out.ID, spaceID, out.InvitedUserID, email, ownerID, tokenHash, out.ExpiresAt).
+			(id,space_id,invited_user_id,invited_email,invited_by_user_id,token_hash,delivery_status,expires_at,by_account)
+			VALUES($1,$2,NULLIF($3,''),$4,$5,$6,'pending',$7,$8)
+			RETURNING created_at`, out.ID, spaceID, out.InvitedUserID, email, ownerID, tokenHash, out.ExpiresAt, byAccount).
 			Scan(&out.CreatedAt); err != nil {
 			return err
 		}
@@ -108,6 +150,9 @@ func (db *Database) InviteToSpaceWithToken(
 		}
 		return notifyInviteeTx(ctx, tx, spaceID, invitedUserID)
 	})
+	if byAccount {
+		out.InvitedEmail = ""
+	}
 	return out, err
 }
 
@@ -166,7 +211,8 @@ func (db *Database) PendingSpaceInvitations(
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.space_id,s.name,
-			i.invited_user_id,invited.username,i.invited_email,
+			i.invited_user_id,invited.username,
+			CASE WHEN i.by_account THEN '' ELSE i.invited_email END,i.by_account,
 			i.invited_by_user_id,inviter.username,i.expires_at,i.created_at
 			FROM space_invitations i
 			JOIN spaces s ON s.id=i.space_id
@@ -182,8 +228,8 @@ func (db *Database) PendingSpaceInvitations(
 		for rows.Next() {
 			var item SpaceInvitation
 			if err := rows.Scan(&item.ID, &item.SpaceID, &item.SpaceName, &item.InvitedUserID,
-				&item.InvitedUserName, &item.InvitedEmail, &item.InvitedByUserID, &item.InviterName,
-				&item.ExpiresAt, &item.CreatedAt); err != nil {
+				&item.InvitedUserName, &item.InvitedEmail, &item.ByAccount, &item.InvitedByUserID,
+				&item.InviterName, &item.ExpiresAt, &item.CreatedAt); err != nil {
 				return err
 			}
 			items = append(items, item)
@@ -210,10 +256,11 @@ func (db *Database) RefreshSpaceInvitation(
 			  AND inviter.id=i.invited_by_user_id
 			  AND i.revoked_at IS NULL AND i.consumed_at IS NULL
 			RETURNING i.id,i.space_id,s.name,i.invited_user_id,
-			  i.invited_email,i.invited_by_user_id,inviter.username,
+			  CASE WHEN i.by_account THEN '' ELSE i.invited_email END,i.by_account,
+			  i.invited_by_user_id,inviter.username,
 			  i.expires_at,i.created_at`, tokenHash, expiresAt, inviteID, spaceID).
 			Scan(&out.ID, &out.SpaceID, &out.SpaceName, &out.InvitedUserID, &out.InvitedEmail,
-				&out.InvitedByUserID, &out.InviterName, &out.ExpiresAt,
+				&out.ByAccount, &out.InvitedByUserID, &out.InviterName, &out.ExpiresAt,
 				&out.CreatedAt)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrSpaceInviteNotFound

@@ -74,17 +74,18 @@ func GetMe(database *db.Database) http.HandlerFunc {
 		levels, _ := db.SpaceLevelsConfigured()
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id":              user.ID,
-			"username":        user.Username,
-			"email":           user.Email,
-			"provider":        user.Provider,
-			"avatar_version":  user.AvatarVersion,
-			"banner_version":  user.BannerVersion,
-			"created_at":      user.CreatedAt,
-			"delete_at":       deleteAt,
-			"server_owner":    owner,
-			"devices_allowed": devicesAllowed,
-			"space_levels":    levels != nil,
+			"id":                user.ID,
+			"username":          user.Username,
+			"email":             user.Email,
+			"provider":          user.Provider,
+			"avatar_version":    user.AvatarVersion,
+			"avatar_decoration": user.AvatarDecoration,
+			"banner_version":    user.BannerVersion,
+			"created_at":        user.CreatedAt,
+			"delete_at":         deleteAt,
+			"server_owner":      owner,
+			"devices_allowed":   devicesAllowed,
+			"space_levels":      levels != nil,
 		})
 	}
 }

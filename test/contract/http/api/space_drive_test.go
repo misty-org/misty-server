@@ -121,7 +121,7 @@ func TestDrivePatchIfMatchIsOptional(t *testing.T) {
 	path := f.itemPath(notes.ID)
 
 	renamed := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPatch, path, 0, map[string]any{"name": "renamed.txt"}), http.StatusOK)
-	if renamed.Version != notes.Version+1 || renamed.Name != "renamed.txt" || renamed.Revived || renamed.Replaced != nil {
+	if renamed.Version != notes.Version+1 || renamed.Name != "renamed.txt" || renamed.Replaced != nil {
 		t.Fatalf("unconditional rename = %+v", renamed)
 	}
 	moved := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPatch, path, renamed.Version, map[string]any{"name": "Notes.txt", "parent_id": docs.ID}), http.StatusOK)
@@ -193,7 +193,7 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 	if !regexp.MustCompile(`^Notes \(conflicted copy \d{4}-\d{2}-\d{2} \d{4}\)\.txt$`).MatchString(copy.Name) {
 		t.Fatalf("copy name = %q", copy.Name)
 	}
-	if copy.Trashed || copy.TrashHold || copy.TrashedBy != nil || copy.ReplacedOf == nil || *copy.ReplacedOf != notes.ID ||
+	if copy.TrashedBy != nil || copy.ReplacedOf == nil || *copy.ReplacedOf != notes.ID ||
 		copy.Kind != "file" || copy.ParentID == nil || *copy.ParentID != docs.ID || copy.ModifiedBy != f.memberID ||
 		copy.SHA256 == nil || *copy.SHA256 != *ben.SHA256 || copy.Size != ben.Size {
 		t.Fatalf("replaced copy = %+v", copy)
@@ -211,11 +211,8 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 	if got := counted(notes.ID); got != strconv.FormatInt(ana.Size, 10) {
 		t.Fatalf("item counts %s bytes, want %d", got, ana.Size)
 	}
-	trash := driveJSON[struct {
-		Items []driveTestItem `json:"items"`
-	}](t, f.call(f.member, http.MethodGet, f.base+"/trash", 0, nil), http.StatusOK)
-	if len(trash.Items) != 0 {
-		t.Fatalf("trash = %+v, want the conflicted copy kept beside the file", trash.Items)
+	if trash := f.trashID(); trash != "" {
+		t.Fatalf("a .trash folder %s, want the conflicted copy kept beside the file", trash)
 	}
 
 	blind := save(f.member, f.memberID, "blind save", 0)
@@ -223,7 +220,14 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 		t.Fatalf("save without a base = %+v", blind)
 	}
 
-	f.exec(`UPDATE space_drive_items SET trashed_at=NOW()-interval '31 days', trashed_by=$2 WHERE id=$1`, copy.ID, f.ownerID)
+	binned := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(copy.ID)+"/trash", 0, nil), http.StatusOK)
+	if !f.inTrash(binned) {
+		t.Fatalf("trashed copy = %+v, want it in .trash", binned)
+	}
+	if got := counted(copy.ID); got != "0" {
+		t.Fatalf("copy in .trash still counts %s bytes", got)
+	}
+	f.exec(`UPDATE space_drive_items SET trashed_at=NOW()-interval '31 days' WHERE id=$1`, copy.ID)
 	if _, err := f.drive.PurgeExpiredTrash(f.ctx, 100); err != nil {
 		t.Fatal(err)
 	}
@@ -238,17 +242,27 @@ func TestDriveStaleSaveKeepsReplacedContent(t *testing.T) {
 	}
 }
 
-func TestDriveWritesReviveTrashedItems(t *testing.T) {
+func TestDriveTrashIsAFolderInTheDrive(t *testing.T) {
 	f := newDriveFixture(t, "drive-trash")
-	report := f.file(f.owner, f.ownerID, nil, "Report.pdf", "the report")
+	docs := f.folder(f.owner, nil, "Docs")
+	report := f.file(f.owner, f.ownerID, &docs.ID, "Report.pdf", "the report")
 	key := f.text(`SELECT blob_key FROM space_drive_items WHERE id=$1`, report.ID)
+	counted := func(itemID string) string {
+		t.Helper()
+		return f.text(`SELECT COALESCE(sum(logical_bytes),0)::text FROM space_storage_contributions
+			WHERE space_id=$1 AND source_kind='drive' AND source_id=$2 AND state='active'`, f.spaceID, itemID)
+	}
+	size := strconv.FormatInt(report.Size, 10)
 
 	if code := driveCode(t, f.call(f.owner, http.MethodPost, f.itemPath(report.ID)+"/trash", report.Version+5, nil), http.StatusConflict); code != "version_conflict" {
 		t.Fatalf("trash with a stale If-Match code = %s", code)
 	}
-	trashed := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(report.ID)+"/trash", 0, map[string]any{"held": false}), http.StatusOK)
-	if !trashed.Trashed || trashed.Version != report.Version+1 {
+	trashed := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPost, f.itemPath(report.ID)+"/trash", 0, nil), http.StatusOK)
+	if !f.inTrash(trashed) || trashed.Name != "Report.pdf" || trashed.TrashedBy == nil || *trashed.TrashedBy != f.memberID || trashed.Version != report.Version+1 {
 		t.Fatalf("trashed = %+v", trashed)
+	}
+	if got := counted(report.ID); got != "0" {
+		t.Fatalf("a file in .trash counts %s bytes", got)
 	}
 	if code := driveCode(t, f.call(f.owner, http.MethodPost, f.itemPath(report.ID)+"/trash", 0, nil), http.StatusConflict); code != "trashed" {
 		t.Fatalf("trash of a trashed item code = %s", code)
@@ -259,42 +273,66 @@ func TestDriveWritesReviveTrashedItems(t *testing.T) {
 	if _, err := f.store.Head(f.ctx, key); err != nil {
 		t.Fatalf("trashed file's object: %v", err)
 	}
-	revived := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, f.itemPath(report.ID), 0, map[string]any{"name": "Report (edited).pdf"}), http.StatusOK)
-	if revived.Trashed || !revived.Revived || revived.Name != "Report (edited).pdf" || revived.ModifiedBy != f.memberID || revived.Version <= trashed.Version {
-		t.Fatalf("edit of a trashed item = %+v", revived)
+	listed := false
+	for _, item := range f.changes(f.member, 0).Items {
+		if item.ID == trashed.ID && f.inTrash(item) {
+			listed = true
+		}
 	}
-	if again := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, f.itemPath(report.ID), 0, map[string]any{"mtime_ms": 5}), http.StatusOK); again.Revived {
-		t.Fatalf("edit of a live item said revived: %+v", again)
+	if !listed {
+		t.Fatal("the trashed file isn't in the drive's changes under .trash")
 	}
 
-	box := f.folder(f.owner, nil, "Box")
-	inner := f.file(f.owner, f.ownerID, &box.ID, "inner.txt", "inside the box")
-	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(box.ID)+"/trash", 0, nil), http.StatusOK)
-	movedInside := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, f.itemPath(inner.ID), 0, map[string]any{"name": "moved.txt"}), http.StatusOK)
-	if !movedInside.Revived || movedInside.Name != "moved.txt" {
-		t.Fatalf("edit inside a trashed folder = %+v", movedInside)
+	twin := f.file(f.owner, f.ownerID, nil, "report.pdf", "another report")
+	twin = driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(twin.ID)+"/trash", 0, nil), http.StatusOK)
+	if !f.inTrash(twin) || twin.Name != "report 2.pdf" {
+		t.Fatalf("second report in .trash = %+v", twin)
 	}
-	if folder := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodGet, f.itemPath(box.ID), 0, nil), http.StatusOK); folder.Trashed {
-		t.Fatalf("the folder stayed in the trash: %+v", folder)
+
+	edited := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, f.itemPath(report.ID), 0, map[string]any{"mtime_ms": 5}), http.StatusOK)
+	if !f.inTrash(edited) {
+		t.Fatalf("an edit took the file out of .trash: %+v", edited)
 	}
-	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(box.ID)+"/trash", 0, nil), http.StatusOK)
-	made := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPost, f.base+"/items", 0, map[string]any{"parent_id": box.ID, "name": "new", "kind": "folder"}), http.StatusCreated)
-	if !made.Revived || made.ParentID == nil || *made.ParentID != box.ID {
-		t.Fatalf("create in a trashed folder = %+v", made)
+
+	restored := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPost, f.itemPath(report.ID)+"/restore", 0, nil), http.StatusOK)
+	if restored.ParentID == nil || *restored.ParentID != docs.ID || restored.Name != "Report.pdf" || restored.TrashedBy != nil {
+		t.Fatalf("restored = %+v", restored)
 	}
-	if folder := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodGet, f.itemPath(box.ID), 0, nil), http.StatusOK); folder.Trashed {
-		t.Fatalf("create left the folder in the trash: %+v", folder)
+	if got := counted(report.ID); got != size {
+		t.Fatalf("a restored file counts %s bytes, want %s", got, size)
 	}
-	if plain := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPost, f.base+"/items", 0, map[string]any{"parent_id": box.ID, "name": "plain", "kind": "folder"}), http.StatusCreated); plain.Revived {
-		t.Fatalf("create in a live folder said revived: %+v", plain)
+	if code := driveCode(t, f.call(f.member, http.MethodPost, f.itemPath(report.ID)+"/restore", 0, nil), http.StatusConflict); code != "not_trashed" {
+		t.Fatalf("restore outside .trash code = %s", code)
+	}
+
+	trash := f.trashID()
+	dropped := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, f.itemPath(report.ID), 0, map[string]any{"parent_id": trash}), http.StatusOK)
+	if !f.inTrash(dropped) || dropped.TrashedBy == nil || counted(report.ID) != "0" {
+		t.Fatalf("moved into .trash = %+v", dropped)
+	}
+	out := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPatch, f.itemPath(report.ID), 0, map[string]any{"parent_id": nil}), http.StatusOK)
+	if out.ParentID != nil || out.TrashedBy != nil || counted(report.ID) != size {
+		t.Fatalf("moved out of .trash = %+v", out)
 	}
 
 	old := f.file(f.owner, f.ownerID, nil, "Old.pdf", "an old report")
 	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(old.ID)+"/trash", 0, nil), http.StatusOK)
 	f.file(f.member, f.memberID, nil, "old.pdf", "a new report")
-	restored := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPost, f.itemPath(old.ID)+"/restore", 0, nil), http.StatusOK)
-	if restored.Trashed || restored.Name != "Old (restored).pdf" {
-		t.Fatalf("restored = %+v", restored)
+	back := driveJSON[driveTestItem](t, f.call(f.member, http.MethodPost, f.itemPath(old.ID)+"/restore", 0, nil), http.StatusOK)
+	if back.ParentID != nil || back.Name != "Old (restored).pdf" {
+		t.Fatalf("restored onto a taken name = %+v", back)
+	}
+
+	for _, change := range []map[string]any{{"name": "Bin"}, {"parent_id": docs.ID}} {
+		if code := driveCode(t, f.call(f.owner, http.MethodPatch, f.itemPath(trash), 0, change), http.StatusConflict); code != "protected" {
+			t.Fatalf("change %v to .trash code = %s", change, code)
+		}
+	}
+	if code := driveCode(t, f.call(f.owner, http.MethodPost, f.itemPath(trash)+"/trash", 0, nil), http.StatusConflict); code != "protected" {
+		t.Fatalf("trashing .trash code = %s", code)
+	}
+	if code := driveCode(t, f.call(f.owner, http.MethodPatch, f.itemPath(docs.ID), 0, map[string]any{"name": ".Trash"}), http.StatusConflict); code != "protected" {
+		t.Fatalf("renaming a folder to .trash code = %s", code)
 	}
 }
 
@@ -319,14 +357,14 @@ func TestDriveRenameWithReplaceTrashesTheHolder(t *testing.T) {
 	}
 	before := f.changes(f.owner, 0).Head
 	replaced := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPatch, path, 0, map[string]any{"name": "a.txt", "replace": true}), http.StatusOK)
-	if replaced.Name != "a.txt" || replaced.Trashed {
+	if replaced.Name != "a.txt" || f.inTrash(replaced) {
 		t.Fatalf("renamed with replace = %+v", replaced)
 	}
 	holder := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodGet, f.itemPath(target.ID), 0, nil), http.StatusOK)
-	if !holder.Trashed || holder.TrashedBy == nil || *holder.TrashedBy != f.ownerID || holder.Name != "a.txt" {
+	if !f.inTrash(holder) || holder.TrashedBy == nil || *holder.TrashedBy != f.ownerID || holder.Name != "a.txt" {
 		t.Fatalf("the item that held the name = %+v", holder)
 	}
-	if after := f.changes(f.member, before); len(after.Items) != 2 || after.Items[0].ID != target.ID || after.Items[1].ID != mover.ID {
+	if after := f.changes(f.member, before); len(after.Items) != 3 || after.Items[0].Name != ".trash" || after.Items[1].ID != target.ID || after.Items[2].ID != mover.ID {
 		t.Fatalf("changes after the replace = %+v", after.Items)
 	}
 }
@@ -383,7 +421,7 @@ func TestDriveChangesNeedResyncPastTheHorizon(t *testing.T) {
 		t.Fatalf("stale cursor code = %s", code)
 	}
 	full := f.changes(f.member, 0)
-	if len(full.Items) != 1 || full.Items[0].ID != early.ID {
+	if len(full.Items) != 2 || full.Items[0].ID != early.ID || full.Items[1].Name != ".trash" {
 		t.Fatalf("full listing = %+v", full)
 	}
 	if fresh := f.changes(f.member, horizon); len(fresh.Items) != 0 {
@@ -407,7 +445,7 @@ func TestDriveStartsWithAProtectedMistyignore(t *testing.T) {
 	if again := f.changes(f.member, 0); len(again.Items) != len(all.Items) {
 		t.Fatalf("a second read made another file: %+v", again)
 	}
-	if code := driveCode(t, f.call(f.member, http.MethodPost, f.itemPath(starter.ID)+"/trash", 0, map[string]any{"held": false}), http.StatusConflict); code != "protected" {
+	if code := driveCode(t, f.call(f.member, http.MethodPost, f.itemPath(starter.ID)+"/trash", 0, nil), http.StatusConflict); code != "protected" {
 		t.Fatalf("trashing the root .mistyignore code = %s", code)
 	}
 }

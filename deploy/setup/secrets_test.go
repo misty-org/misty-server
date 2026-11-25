@@ -334,7 +334,7 @@ func TestBackupKeyWorksWithAge(t *testing.T) {
 
 func TestInputsAreAllRequired(t *testing.T) {
 	_, err := readInputs(func(string) string { return "" })
-	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_API_TOKEN in ~/.misty/.env/server/cloudflare.env") || !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID in ~/.misty/.env/server/google.env") {
+	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_API_TOKEN in <misty.root>/.env/server/cloudflare.env") || !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID in <misty.root>/.env/server/google.env") {
 		t.Fatalf("expected every missing input, got %v", err)
 	}
 	if strings.Contains(err.Error(), "CLOUDFLARE_ACCOUNT_ID") || strings.Contains(err.Error(), "CLOUDFLARE_ZONE_ID") {

@@ -58,7 +58,7 @@ func (s *SpaceDriveService) saveFileRoomText(ctx context.Context, userID, spaceI
 			drop()
 			return nil, err
 		}
-		if item.Kind != "file" || item.Trashed || item.Deleted || DriveFileFormat(item.Name) != "text" {
+		if item.Kind != "file" || item.Deleted || DriveFileFormat(item.Name) != "text" {
 			drop()
 			return nil, db.ErrDriveNotFound
 		}

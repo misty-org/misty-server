@@ -3,6 +3,9 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
+
+	"github.com/misty-org/misty-server/internal/avatars"
 )
 
 func SpaceAvatarObjectKey(spaceID string) string { return "avatars/space-" + spaceID }
@@ -45,7 +48,36 @@ func (db *Database) SetSpaceAvatar(ctx context.Context, userID, spaceID string, 
 	return version, err
 }
 
+func (db *Database) SetSpaceAvatarDecoration(ctx context.Context, userID, spaceID string, decoration avatars.Decoration) (avatars.Decoration, error) {
+	var out avatars.Decoration
+	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, userID, PermissionSpaceRename); err != nil {
+			return err
+		}
+		if err := tx.QueryRowContext(ctx,
+			`UPDATE spaces SET avatar_decoration=$2,updated_at=NOW() WHERE id=$1 AND lifecycle_state='active' RETURNING avatar_decoration`,
+			spaceID, decoration).Scan(&out); err != nil {
+			return err
+		}
+		_, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "space.updated", spaceID,
+			map[string]any{"avatar_decoration": out})
+		return err
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return avatars.Decoration{}, ErrSpaceNotFound
+	}
+	return out, err
+}
+
 func (db *Database) AnnounceMemberAvatar(ctx context.Context, userID string, version int64) error {
+	return db.announceMemberUpdate(ctx, userID, map[string]any{"user_id": userID, "avatar_version": version})
+}
+
+func (db *Database) AnnounceMemberAvatarDecoration(ctx context.Context, userID string, decoration avatars.Decoration) error {
+	return db.announceMemberUpdate(ctx, userID, map[string]any{"user_id": userID, "avatar_decoration": decoration})
+}
+
+func (db *Database) announceMemberUpdate(ctx context.Context, userID string, payload map[string]any) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx,
 			`SELECT m.space_id FROM space_members m JOIN spaces s ON s.id=m.space_id
@@ -66,8 +98,7 @@ func (db *Database) AnnounceMemberAvatar(ctx context.Context, userID string, ver
 			return err
 		}
 		for _, spaceID := range spaces {
-			if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "member.updated", userID,
-				map[string]any{"user_id": userID, "avatar_version": version}); err != nil {
+			if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "member.updated", userID, payload); err != nil {
 				return err
 			}
 		}

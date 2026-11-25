@@ -249,7 +249,7 @@ func (db *Database) SpaceThreads(ctx context.Context, userID, spaceID string, li
 			var raw []byte
 			var files string
 			var last time.Time
-			if err := rows.Scan(&item.Root.Seq, &item.Root.ID, &item.Root.SpaceID, &item.Root.ConversationID, &item.Root.SenderUserID, &item.Root.SenderName, &item.Root.SenderAvatarVersion, &raw, &files, &item.Root.EditedAt, &item.Root.CreatedAt, &item.Root.ReplyToMessageID, &item.Root.ThreadRootID, &item.ReplyCount, &last, &item.UnreadCount); err != nil {
+			if err := rows.Scan(&item.Root.Seq, &item.Root.ID, &item.Root.SpaceID, &item.Root.ConversationID, &item.Root.SenderUserID, &item.Root.SenderName, &item.Root.SenderAvatarVersion, &item.Root.SenderAvatarDecoration, &raw, &files, &item.Root.EditedAt, &item.Root.CreatedAt, &item.Root.ReplyToMessageID, &item.Root.ThreadRootID, &item.ReplyCount, &last, &item.UnreadCount); err != nil {
 				rows.Close()
 				return err
 			}

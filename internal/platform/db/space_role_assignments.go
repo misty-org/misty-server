@@ -173,10 +173,10 @@ func spaceMemberRoleIDsTx(ctx context.Context, tx *sql.Tx, spaceID string) (map[
 
 func spaceMemberTx(ctx context.Context, tx *sql.Tx, spaceID, memberID string) (*SpaceMember, error) {
 	out := &SpaceMember{}
-	err := tx.QueryRowContext(ctx, `SELECT m.space_id,m.user_id,u.username,u.email,m.role,m.joined_at,m.read_message_seq,u.avatar_version
+	err := tx.QueryRowContext(ctx, `SELECT m.space_id,m.user_id,u.username,u.email,m.role,m.joined_at,m.read_message_seq,u.avatar_version,u.avatar_decoration
 		FROM space_members m JOIN users u ON u.id=m.user_id
 		WHERE m.space_id=$1 AND m.user_id=$2`, spaceID, memberID).
-		Scan(&out.SpaceID, &out.UserID, &out.Name, &out.Email, &out.Role, &out.JoinedAt, &out.ReadSeq, &out.AvatarVersion)
+		Scan(&out.SpaceID, &out.UserID, &out.Name, &out.Email, &out.Role, &out.JoinedAt, &out.ReadSeq, &out.AvatarVersion, &out.AvatarDecoration)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound
 	}

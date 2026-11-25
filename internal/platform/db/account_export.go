@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"time"
+
+	"github.com/misty-org/misty-server/internal/avatars"
 )
 
 type AccountExportSpace struct {
@@ -15,12 +17,13 @@ type AccountExportSpace struct {
 }
 
 type AccountExportProfile struct {
-	ID            string    `json:"id"`
-	Username      string    `json:"username"`
-	Email         string    `json:"email"`
-	AvatarVersion int64     `json:"avatar_version"`
-	BannerVersion int64     `json:"banner_version"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID               string             `json:"id"`
+	Username         string             `json:"username"`
+	Email            string             `json:"email"`
+	AvatarVersion    int64              `json:"avatar_version"`
+	AvatarDecoration avatars.Decoration `json:"avatar_decoration"`
+	BannerVersion    int64              `json:"banner_version"`
+	CreatedAt        time.Time          `json:"created_at"`
 }
 
 type AccountExportJournal struct {

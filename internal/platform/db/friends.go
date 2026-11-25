@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/misty-org/misty-server/internal/avatars"
 )
 
 var (
@@ -14,11 +16,12 @@ var (
 )
 
 type Person struct {
-	UserID        string    `json:"user_id"`
-	Username      string    `json:"username"`
-	AvatarVersion int64     `json:"avatar_version"`
-	BannerVersion int64     `json:"banner_version"`
-	Since         time.Time `json:"since"`
+	UserID           string             `json:"user_id"`
+	Username         string             `json:"username"`
+	AvatarVersion    int64              `json:"avatar_version"`
+	AvatarDecoration avatars.Decoration `json:"avatar_decoration"`
+	BannerVersion    int64              `json:"banner_version"`
+	Since            time.Time          `json:"since"`
 }
 
 type FriendsList struct {
@@ -61,7 +64,7 @@ func activeUserIDTx(ctx context.Context, tx *sql.Tx, userID string) (bool, error
 func (db *Database) Friends(ctx context.Context, userID string) (*FriendsList, error) {
 	out := &FriendsList{Friends: []Person{}, Incoming: []Person{}, Outgoing: []Person{}, Blocked: []Person{}}
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.avatar_version,u.banner_version,f.state,f.requested_by,COALESCE(f.accepted_at,f.created_at)
+		rows, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.avatar_version,u.avatar_decoration,u.banner_version,f.state,f.requested_by,COALESCE(f.accepted_at,f.created_at)
 			FROM friendships f
 			JOIN users u ON u.id = CASE WHEN f.user_low=$1 THEN f.user_high ELSE f.user_low END
 			WHERE (f.user_low=$1 OR f.user_high=$1) AND u.lifecycle_state='active'
@@ -72,7 +75,7 @@ func (db *Database) Friends(ctx context.Context, userID string) (*FriendsList, e
 		for rows.Next() {
 			var person Person
 			var state, requestedBy string
-			if err := rows.Scan(&person.UserID, &person.Username, &person.AvatarVersion, &person.BannerVersion, &state, &requestedBy, &person.Since); err != nil {
+			if err := rows.Scan(&person.UserID, &person.Username, &person.AvatarVersion, &person.AvatarDecoration, &person.BannerVersion, &state, &requestedBy, &person.Since); err != nil {
 				rows.Close()
 				return err
 			}
@@ -90,7 +93,7 @@ func (db *Database) Friends(ctx context.Context, userID string) (*FriendsList, e
 			return err
 		}
 		rows.Close()
-		blocked, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.avatar_version,u.banner_version,b.created_at
+		blocked, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.avatar_version,u.avatar_decoration,u.banner_version,b.created_at
 			FROM user_blocks b JOIN users u ON u.id=b.blocked_id
 			WHERE b.blocker_id=$1 ORDER BY lower(u.username)`, userID)
 		if err != nil {
@@ -99,7 +102,7 @@ func (db *Database) Friends(ctx context.Context, userID string) (*FriendsList, e
 		defer blocked.Close()
 		for blocked.Next() {
 			var person Person
-			if err := blocked.Scan(&person.UserID, &person.Username, &person.AvatarVersion, &person.BannerVersion, &person.Since); err != nil {
+			if err := blocked.Scan(&person.UserID, &person.Username, &person.AvatarVersion, &person.AvatarDecoration, &person.BannerVersion, &person.Since); err != nil {
 				return err
 			}
 			out.Blocked = append(out.Blocked, person)

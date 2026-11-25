@@ -10,7 +10,6 @@ func (s *Server) mountDriveRoutes(prefix string, drive *api.SpaceDriveService) {
 	base := prefix + "/spaces/{spaceID}/drive"
 	item := base + "/items/{itemID}"
 	s.Router.MethodFunc(http.MethodGet, base+"/changes", drive.DriveChanges())
-	s.Router.MethodFunc(http.MethodGet, base+"/trash", drive.DriveTrash())
 	s.Router.MethodFunc(http.MethodGet, base+"/in-use", drive.DriveInUseMarks())
 	s.Router.MethodFunc(http.MethodPost, base+"/uploads", drive.StartDriveUpload())
 	s.Router.MethodFunc(http.MethodPost, base+"/uploads/{uploadID}/complete", drive.CompleteDriveUpload())

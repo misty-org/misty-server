@@ -10,12 +10,12 @@ func loadExportAccountProfile(
 	ctx context.Context, tx *sql.Tx, userID string, out *AccountPortableExport,
 ) error {
 	if err := tx.QueryRowContext(ctx, `
-			SELECT id,username,email,avatar_version,banner_version,created_at
+			SELECT id,username,email,avatar_version,avatar_decoration,banner_version,created_at
 			FROM users WHERE id=$1 AND lifecycle_state='active'`, userID,
 	).Scan(
 		&out.Account.ID,
 		&out.Account.Username, &out.Account.Email,
-		&out.Account.AvatarVersion, &out.Account.BannerVersion, &out.Account.CreatedAt,
+		&out.Account.AvatarVersion, &out.Account.AvatarDecoration, &out.Account.BannerVersion, &out.Account.CreatedAt,
 	); err != nil {
 		return err
 	}

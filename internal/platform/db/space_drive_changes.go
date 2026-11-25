@@ -23,27 +23,26 @@ type DriveCreateInput struct {
 type DriveWriteResult struct {
 	Item             DriveItem
 	Created          bool
-	Revived          bool
 	Replaced         *DriveItem
 	DeleteObjectKeys []string
 	RetireKeys       []string
 }
 
-func driveParentTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID *string) (int64, error) {
+func driveParentTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID *string) error {
 	if parentID == nil {
-		return 0, nil
+		return nil
 	}
 	parent, err := liveDriveItemTx(ctx, tx, spaceID, *parentID, false)
 	if errors.Is(err, ErrDriveNotFound) {
-		return 0, ErrDriveParentMissing
+		return ErrDriveParentMissing
 	}
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if parent.Kind != DriveKindFolder {
-		return 0, ErrDriveParentNotFolder
+		return ErrDriveParentNotFolder
 	}
-	return reviveDriveItemTx(ctx, tx, spaceID, parent)
+	return nil
 }
 
 func driveNullable(value *string) any {
@@ -96,6 +95,9 @@ func (db *Database) CreateDriveItem(ctx context.Context, in DriveCreateInput) (*
 				return err
 			}
 		}
+		if in.Kind == driveKindFile && isRootDriveTrash(in.ParentID, name) {
+			return ErrDriveProtected
+		}
 		id := in.ID
 		if id == "" {
 			id = "drv_" + uuid.NewString()
@@ -105,11 +107,9 @@ func (db *Database) CreateDriveItem(ctx context.Context, in DriveCreateInput) (*
 			}
 			return err
 		}
-		revivedSeq, err := driveParentTx(ctx, tx, in.SpaceID, in.ParentID)
-		if err != nil {
+		if err := driveParentTx(ctx, tx, in.SpaceID, in.ParentID); err != nil {
 			return err
 		}
-		result.Revived = revivedSeq > 0
 		holder, err := driveNameHolderTx(ctx, tx, in.SpaceID, in.ParentID, name, "")
 		if err != nil {
 			return err
@@ -145,6 +145,17 @@ func (db *Database) CreateDriveItem(ctx context.Context, in DriveCreateInput) (*
 		if in.Kind == driveKindFile {
 			if err := setDriveContributionTx(ctx, tx, in.SpaceID, id, in.UserID, in.Size); err != nil {
 				return err
+			}
+		}
+		if parent := in.ParentID; parent != nil {
+			trash, err := driveTrashFolderTx(ctx, tx, in.SpaceID)
+			if err != nil {
+				return err
+			}
+			if *parent == trash {
+				if err := markDriveTrashTopTx(ctx, tx, id, in.UserID, nil, name); err != nil {
+					return err
+				}
 			}
 		}
 		if err := recordDriveChangedTx(ctx, tx, in.SpaceID, in.UserID, id, seq); err != nil {
@@ -236,14 +247,14 @@ func keepReplacedDriveContentTx(ctx context.Context, tx *sql.Tx, spaceID string,
 		blobKey = item.BlobKey
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO space_drive_items(id,space_id,parent_id,name,kind,sha256,byte_size,mtime_ms,blob_key,seq,
-			modified_by,modified_at,trashed_at,trashed_by,trash_hold,replaced_of)
-		VALUES($1,$2,$3,$4,'file',$5,$6,$7,$8,$9,$10,$11,NULL,NULL,FALSE,$12)`,
+			modified_by,modified_at,replaced_of)
+		VALUES($1,$2,$3,$4,'file',$5,$6,$7,$8,$9,$10,$11,$12)`,
 		id, spaceID, driveNullable(item.ParentID), name, *item.SHA256, item.Size, item.MTimeMS, blobKey, seq,
 		item.ModifiedBy, item.ModifiedAt, item.ID); err != nil {
 		return DriveItem{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE space_storage_contributions SET source_id=$3,updated_at=NOW()
-		WHERE space_id=$1 AND source_kind='drive' AND source_id=$2 AND state IN ('active','recovery')`, spaceID, item.ID, id); err != nil {
+		WHERE space_id=$1 AND source_kind='drive' AND source_id=$2 AND state IN ('active','recovery','trashed')`, spaceID, item.ID, id); err != nil {
 		return DriveItem{}, err
 	}
 	return driveItemTx(ctx, tx, spaceID, id, false)
@@ -280,16 +291,6 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 			seen = in.IfMatch
 		}
 		seenCurrent := seen >= item.ContentVersion
-		revivedSeq, err := reviveDriveItemTx(ctx, tx, in.SpaceID, item)
-		if err != nil {
-			return err
-		}
-		if revivedSeq > 0 {
-			result.Revived = true
-			if item, err = liveDriveItemTx(ctx, tx, in.SpaceID, item.ID, true); err != nil {
-				return err
-			}
-		}
 		name, parentID := item.Name, item.ParentID
 		if in.Name != nil {
 			if name, err = normalizeDriveNameTx(ctx, tx, *in.Name); err != nil {
@@ -311,11 +312,9 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 					}
 				}
 			}
-			parentRevived, err := driveParentTx(ctx, tx, in.SpaceID, in.ParentID)
-			if err != nil {
+			if err := driveParentTx(ctx, tx, in.SpaceID, in.ParentID); err != nil {
 				return err
 			}
-			result.Revived = result.Revived || parentRevived > 0
 			parentID = in.ParentID
 		}
 		wasIgnore := item.Kind == driveKindFile && isRootDriveIgnore(item.ParentID, item.Name)
@@ -328,13 +327,28 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 				return err
 			}
 		}
+		trash, err := driveTrashFolderTx(ctx, tx, in.SpaceID)
+		if err != nil {
+			return err
+		}
+		if item.ID == trash && (name != item.Name || !sameParent(parentID, item.ParentID)) {
+			return ErrDriveProtected
+		}
+		if item.ID != trash && isRootDriveTrash(parentID, name) && !isRootDriveTrash(item.ParentID, item.Name) {
+			return ErrDriveProtected
+		}
+		if trash != "" && parentID != nil && *parentID == trash && !sameParent(parentID, item.ParentID) && !in.Replace {
+			if name, err = driveFreeNameTx(ctx, tx, in.SpaceID, parentID, name, item.Kind, item.ID); err != nil {
+				return err
+			}
+		}
 		if name != item.Name || !sameParent(parentID, item.ParentID) {
 			holder, err := driveNameHolderTx(ctx, tx, in.SpaceID, parentID, name, item.ID)
 			if err != nil {
 				return err
 			}
 			if holder != nil {
-				if in.Replace && holder.Kind == driveKindFile && isRootDriveIgnore(holder.ParentID, holder.Name) {
+				if in.Replace && (holder.ID == trash || (holder.Kind == driveKindFile && isRootDriveIgnore(holder.ParentID, holder.Name))) {
 					return ErrDriveProtected
 				}
 				if !in.Replace {
@@ -343,9 +357,14 @@ func (db *Database) PatchDriveItem(ctx context.Context, in DrivePatchInput) (*Dr
 				if _, err := liveDriveItemTx(ctx, tx, in.SpaceID, holder.ID, true); err != nil {
 					return err
 				}
-				if _, err := trashDriveItemTx(ctx, tx, in.SpaceID, in.UserID, holder.ID, "", "", false); err != nil {
+				if _, err := trashDriveItemTx(ctx, tx, in.SpaceID, in.UserID, holder.ID, "", ""); err != nil {
 					return err
 				}
+			}
+		}
+		if !sameParent(parentID, item.ParentID) {
+			if err := driveTrashMoveTx(ctx, tx, in.SpaceID, in.UserID, item, item.ParentID, parentID, in.UserID, in.Device.ID); err != nil {
+				return err
 			}
 		}
 		sha, size, blobKey, mtime := "", item.Size, item.BlobKey, item.MTimeMS

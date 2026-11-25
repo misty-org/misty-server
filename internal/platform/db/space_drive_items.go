@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -39,7 +38,7 @@ var (
 	ErrDriveParentMissing    = errors.New("drive parent not found")
 	ErrDriveParentNotFolder  = errors.New("drive parent is not a folder")
 	ErrDriveInvalidMove      = errors.New("drive item cannot move into itself")
-	ErrDriveNotTrashed       = errors.New("drive item is not in the trash")
+	ErrDriveNotTrashed       = errors.New("drive item is not in the .trash folder")
 	ErrDriveBlobMissing      = errors.New("drive content is not on the server")
 	ErrDriveUploadIncomplete = errors.New("drive upload has not landed")
 	ErrDriveResyncRequired   = errors.New("drive changes since that point were pruned")
@@ -99,10 +98,8 @@ type DriveItem struct {
 	ModifiedBy     string     `json:"modified_by"`
 	ModifiedByName string     `json:"modified_by_name"`
 	ModifiedAt     time.Time  `json:"modified_at"`
-	Trashed        bool       `json:"trashed"`
 	TrashedAt      *time.Time `json:"trashed_at"`
 	TrashedBy      *string    `json:"trashed_by"`
-	TrashHold      bool       `json:"trash_hold"`
 	Deleted        bool       `json:"deleted"`
 	ReplacedOf     *string    `json:"replaced_of"`
 	BlobKey        string     `json:"-"`
@@ -110,7 +107,7 @@ type DriveItem struct {
 }
 
 const driveItemSelect = `SELECT i.id,i.space_id,i.parent_id,i.name,i.kind,i.sha256,i.byte_size,i.mtime_ms,i.version,i.seq,
-	i.modified_by,COALESCE(u.username,''),i.modified_at,i.trashed_at,i.trashed_by,i.trash_hold,i.deleted_at IS NOT NULL,COALESCE(i.blob_key,''),i.replaced_of,i.content_version
+	i.modified_by,COALESCE(u.username,''),i.modified_at,i.trashed_at,i.trashed_by,i.deleted_at IS NOT NULL,COALESCE(i.blob_key,''),i.replaced_of,i.content_version
 	FROM space_drive_items i LEFT JOIN users u ON u.id=i.modified_by`
 
 func scanDriveItem(row interface{ Scan(...any) error }) (DriveItem, error) {
@@ -119,7 +116,7 @@ func scanDriveItem(row interface{ Scan(...any) error }) (DriveItem, error) {
 	var trashedAt sql.NullTime
 	err := row.Scan(&item.ID, &item.SpaceID, &parent, &item.Name, &item.Kind, &sha, &item.Size, &item.MTimeMS,
 		&item.Version, &item.Seq, &item.ModifiedBy, &item.ModifiedByName, &item.ModifiedAt, &trashedAt, &trashedBy,
-		&item.TrashHold, &item.Deleted, &item.BlobKey, &replacedOf, &item.ContentVersion)
+		&item.Deleted, &item.BlobKey, &replacedOf, &item.ContentVersion)
 	if err != nil {
 		return item, err
 	}
@@ -131,7 +128,7 @@ func scanDriveItem(row interface{ Scan(...any) error }) (DriveItem, error) {
 	}
 	if trashedAt.Valid {
 		at := trashedAt.Time
-		item.TrashedAt, item.Trashed = &at, true
+		item.TrashedAt = &at
 	}
 	if trashedBy.Valid {
 		item.TrashedBy = &trashedBy.String
@@ -236,22 +233,6 @@ func driveAncestorsTx(ctx context.Context, tx *sql.Tx, itemID string) ([]DriveIt
 	return scanDriveItems(rows)
 }
 
-func driveHiddenTx(ctx context.Context, tx *sql.Tx, item DriveItem) (bool, error) {
-	if item.Trashed {
-		return true, nil
-	}
-	ancestors, err := driveAncestorsTx(ctx, tx, item.ID)
-	if err != nil {
-		return false, err
-	}
-	for _, ancestor := range ancestors {
-		if ancestor.Trashed {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func driveSubtreeTx(ctx context.Context, tx *sql.Tx, itemID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `WITH RECURSIVE sub(id,depth) AS (
 			SELECT $1::text,0
@@ -281,7 +262,7 @@ func driveNameHolderTx(ctx context.Context, tx *sql.Tx, spaceID string, parentID
 	item, err := scanDriveItem(tx.QueryRowContext(ctx, driveItemSelect+`
 		WHERE i.space_id=$1 AND COALESCE(i.parent_id,'')=$2
 		AND misty_drive_name_fold(i.name)=misty_drive_name_fold($3::text) AND i.id<>$4
-		AND i.trashed_at IS NULL AND i.deleted_at IS NULL LIMIT 1`, spaceID, parent, name, exceptID))
+		AND i.deleted_at IS NULL LIMIT 1`, spaceID, parent, name, exceptID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -350,58 +331,6 @@ func (db *Database) DriveChanges(ctx context.Context, userID, spaceID string, si
 		if len(page.Items) > limit {
 			page.Items, page.More = page.Items[:limit], true
 			page.NextSince = page.Items[limit-1].Seq
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return page, nil
-}
-
-type DriveTrashPage struct {
-	Items     []DriveItem `json:"items"`
-	NextAfter string      `json:"next_after"`
-}
-
-func (db *Database) DriveTrash(ctx context.Context, userID, spaceID, after string, limit int) (*DriveTrashPage, error) {
-	if limit < 1 || limit > 200 {
-		limit = 100
-	}
-	afterAt, afterID := int64(1<<62), "~"
-	if after != "" {
-		at, id, ok := strings.Cut(after, ":")
-		micros, err := strconv.ParseInt(at, 10, 64)
-		if !ok || err != nil || !driveStoredIDPattern.MatchString(id) {
-			return nil, ErrLibraryInvalid
-		}
-		afterAt, afterID = micros, id
-	}
-	page := &DriveTrashPage{Items: []DriveItem{}}
-	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if _, err := requireSpaceMemberTx(ctx, tx, spaceID, userID); err != nil {
-			return err
-		}
-		rows, err := tx.QueryContext(ctx, driveItemSelect+`
-			WHERE i.space_id=$1 AND i.trashed_at IS NOT NULL AND i.deleted_at IS NULL
-			AND (floor(extract(epoch FROM i.trashed_at)*1000000)::bigint,i.id) < ($2,$3)
-			AND NOT EXISTS (
-				WITH RECURSIVE up(parent_id,depth) AS (
-					SELECT i.parent_id,0
-					UNION ALL
-					SELECT p.parent_id,up.depth+1 FROM space_drive_items p JOIN up ON p.id=up.parent_id WHERE up.depth<$5)
-				SELECT 1 FROM up JOIN space_drive_items a ON a.id=up.parent_id WHERE a.trashed_at IS NOT NULL)
-			ORDER BY i.trashed_at DESC,i.id DESC LIMIT $4`, spaceID, afterAt, afterID, limit+1, maxDriveDepth)
-		if err != nil {
-			return err
-		}
-		if page.Items, err = scanDriveItems(rows); err != nil {
-			return err
-		}
-		if len(page.Items) > limit {
-			page.Items = page.Items[:limit]
-			last := page.Items[limit-1]
-			page.NextAfter = fmt.Sprintf("%d:%s", last.TrashedAt.UnixMicro(), last.ID)
 		}
 		return nil
 	})

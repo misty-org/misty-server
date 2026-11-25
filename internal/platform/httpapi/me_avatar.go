@@ -26,7 +26,7 @@ func newAvatarObjectKey(userID string) (string, error) {
 	return "avatars/" + userID + "-" + hex.EncodeToString(suffix), nil
 }
 
-func UserAvatar(database *db.Database, store LibraryObjectStore) http.HandlerFunc {
+func UserAvatar(database *db.Database, store LibraryObjectStore, realtime *RealtimeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, err := sessionUserID(r, database)
 		if err != nil {
@@ -80,6 +80,7 @@ func UserAvatar(database *db.Database, store LibraryObjectStore) http.HandlerFun
 				return
 			}
 			_ = database.AnnounceMemberAvatar(r.Context(), userID, version)
+			go realtime.PublishProfile(userID, map[string]any{"avatar_version": version})
 			writeJSON(w, http.StatusOK, map[string]any{"avatar_version": version})
 		case http.MethodDelete:
 			if err := database.RemoveUserAvatar(userID); err != nil {
@@ -87,6 +88,7 @@ func UserAvatar(database *db.Database, store LibraryObjectStore) http.HandlerFun
 				return
 			}
 			_ = database.AnnounceMemberAvatar(r.Context(), userID, 0)
+			go realtime.PublishProfile(userID, map[string]any{"avatar_version": 0})
 			writeJSON(w, http.StatusOK, map[string]any{"avatar_version": 0})
 		default:
 			w.Header().Set("Allow", "GET, PUT, DELETE")

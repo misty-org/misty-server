@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/misty-org/misty-server/internal/accounts"
+	"github.com/misty-org/misty-server/internal/avatars"
 )
 
 func (db *Database) accountStore() accounts.Store {
@@ -49,6 +50,10 @@ func (db *Database) ChangePassword(id, current, next, keepSessionHash string) er
 }
 func (db *Database) BumpUserAvatarVersion(id, objectKey string) (int64, error) {
 	return db.accountStore().BumpUserAvatarVersion(id, objectKey)
+}
+
+func (db *Database) SetUserAvatarDecoration(id string, decoration avatars.Decoration) (avatars.Decoration, error) {
+	return db.accountStore().SetUserAvatarDecoration(id, decoration)
 }
 
 func (db *Database) RemoveUserAvatar(id string) error {

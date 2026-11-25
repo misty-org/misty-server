@@ -36,7 +36,7 @@ func TestDriveTrashIsRefusedWhileInUse(t *testing.T) {
 
 	f.exec(`UPDATE space_drive_in_use SET expires_at=NOW()-interval '1 second' WHERE user_id=$1`, f.memberID)
 	trashed := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(box.ID)+"/trash", box.Version, nil), http.StatusOK)
-	if !trashed.Trashed {
+	if !f.inTrash(trashed) {
 		t.Fatalf("trash after the lease expired = %+v", trashed)
 	}
 	f.exec(`UPDATE space_drive_in_use SET expires_at=NOW()+interval '2 minutes' WHERE user_id=$1`, f.memberID)
@@ -164,22 +164,23 @@ func TestDriveInUseMarksAreListedForEveryMember(t *testing.T) {
 	}
 }
 
-func TestDriveTrashEmptiesItselfExceptHeldItems(t *testing.T) {
+func TestDriveTrashEmptiesItselfAfterThirtyDays(t *testing.T) {
 	f := newDriveFixture(t, "drive-retention")
-	plain := f.folder(f.owner, nil, "Plain")
-	held := f.folder(f.owner, nil, "Held")
-	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(plain.ID)+"/trash", plain.Version, map[string]any{"held": false}), http.StatusOK)
-	if item := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(held.ID)+"/trash", held.Version, map[string]any{"held": true}), http.StatusOK); !item.TrashHold {
-		t.Fatalf("held trash = %+v", item)
-	}
-	f.exec(`UPDATE space_drive_items SET trashed_at=NOW()-interval '31 days' WHERE space_id=$1`, f.spaceID)
+	old := f.folder(f.owner, nil, "Old")
+	fresh := f.folder(f.owner, nil, "Fresh")
+	driveJSON[driveTestItem](t, f.call(f.owner, http.MethodPost, f.itemPath(old.ID)+"/trash", old.Version, nil), http.StatusOK)
+	driveJSON[driveTestItem](t, f.call(f.member, http.MethodPost, f.itemPath(fresh.ID)+"/trash", fresh.Version, nil), http.StatusOK)
+	f.exec(`UPDATE space_drive_items SET trashed_at=NOW()-interval '31 days' WHERE id=$1`, old.ID)
 	if _, err := f.drive.PurgeExpiredTrash(f.ctx, 100); err != nil {
 		t.Fatal(err)
 	}
-	if item := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodGet, f.itemPath(plain.ID), 0, nil), http.StatusOK); !item.Deleted {
+	if item := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodGet, f.itemPath(old.ID), 0, nil), http.StatusOK); !item.Deleted {
 		t.Fatalf("expired trash = %+v", item)
 	}
-	if item := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodGet, f.itemPath(held.ID), 0, nil), http.StatusOK); item.Deleted || !item.Trashed {
-		t.Fatalf("held trash after the purge = %+v", item)
+	if item := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodGet, f.itemPath(fresh.ID), 0, nil), http.StatusOK); item.Deleted || !f.inTrash(item) {
+		t.Fatalf("fresh trash after the purge = %+v", item)
+	}
+	if item := driveJSON[driveTestItem](t, f.call(f.owner, http.MethodGet, f.itemPath(f.trashID()), 0, nil), http.StatusOK); item.Deleted {
+		t.Fatalf(".trash itself went: %+v", item)
 	}
 }

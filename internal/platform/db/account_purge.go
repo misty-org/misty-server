@@ -45,7 +45,6 @@ var accountPurgeKept = map[string]string{
 	"space_conversations.created_by_user_id":     "chats in those Spaces",
 	"space_notes.creator_user_id":                "notes in those Spaces",
 	"space_note_assets.uploader_user_id":         "files in those notes",
-	"space_apps.installed_by":                    "apps installed in those Spaces",
 	"space_nodes.uploader_user_id":               "files in those Spaces",
 	"space_item_aliases.created_by_user_id":      "links in those Spaces",
 	"space_library_uploads.user_id":              "uploads that became those files",

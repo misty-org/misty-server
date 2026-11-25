@@ -104,7 +104,7 @@ The API creates an account with limits on storage, shared Spaces and people per 
 
 ## Self-hosting
 
-A server for real use runs from `compose.yml`, not the CLI. You write three env files under `~/.misty/.env/server/` (`MISTY_ENV_DIR` names another folder):
+A server for real use runs from `compose.yml`, not the CLI. Its settings live in the root `~/.misty/misty.conf` names (`misty.root`, `~/.misty/rel/<version>` on a server), in that root's `.env/server/`, never in `~/.misty` itself. Compose can't read `misty.conf`, so `compose.yml` takes the folder from `MISTY_ENV_DIR` and stops when it is unset, for every `docker compose` command (export it in your shell's profile); the `misty` CLI sets it from `misty.conf`. You write three env files there:
 
 | File | Values |
 | --- | --- |
@@ -125,8 +125,11 @@ The API's `/health` reports the commit its image was built from. Published image
 ```sh
 git clone https://github.com/misty-org/misty-server.git
 cd misty-server
-mkdir -p -m 700 ~/.misty/.env/server
-# write misty.env, cloudflare.env and google.env under ~/.misty/.env/server/
+root=~/.misty/rel/1.0.0   # the misty-server version you run
+mkdir -p -m 700 "$root/.env/server"
+[ -e ~/.misty/misty.conf ] || printf '[metadata]\nmisty.manifest = v1\nmisty.root = %s\n' "$root" > ~/.misty/misty.conf
+export MISTY_ENV_DIR="$root/.env/server"
+# write misty.env, cloudflare.env and google.env in $MISTY_ENV_DIR
 docker compose up -d --build
 docker compose logs setup
 ```

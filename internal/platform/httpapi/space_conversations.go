@@ -21,7 +21,12 @@ func (s *SpacesService) Conversations() http.HandlerFunc {
 				writeSpaceError(w, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"conversations": items, "everyone_unread_count": everyoneUnread})
+			categories, err := s.database.SpaceChannelCategories(r.Context(), userID, spaceID)
+			if err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"conversations": items, "categories": categories, "everyone_unread_count": everyoneUnread})
 			return
 		}
 		var body struct {
@@ -29,17 +34,16 @@ func (s *SpacesService) Conversations() http.HandlerFunc {
 			Participants []db.SpaceActorRef              `json:"participants"`
 			Overwrites   []db.SpaceConversationOverwrite `json:"overwrites"`
 			Voice        bool                            `json:"voice"`
+			CategoryID   string                          `json:"category_id"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		var item *db.SpaceConversation
-		var err error
+		participants := body.Participants
 		if body.Voice {
-			item, err = s.database.CreateSpaceVoiceChannel(r.Context(), userID, spaceID, body.Title, body.Overwrites)
-		} else {
-			item, err = s.database.CreateSpaceConversationWithOverwrites(r.Context(), userID, spaceID, body.Title, body.Participants, body.Overwrites)
+			participants = nil
 		}
+		item, err := s.database.CreateSpaceChannelInCategory(r.Context(), userID, spaceID, body.Title, participants, body.Overwrites, body.Voice, body.CategoryID)
 		if err != nil {
 			writeSpaceError(w, err)
 			return

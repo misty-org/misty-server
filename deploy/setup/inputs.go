@@ -40,7 +40,7 @@ func readInputs(getenv func(string) string) (Inputs, error) {
 	var missing []string
 	for _, input := range requiredInputs {
 		if strings.TrimSpace(getenv(input.Name)) == "" {
-			missing = append(missing, fmt.Sprintf("%s in ~/.misty/.env/server/%s", input.Name, input.File))
+			missing = append(missing, fmt.Sprintf("%s in <misty.root>/.env/server/%s", input.Name, input.File))
 		}
 	}
 	if len(missing) > 0 {

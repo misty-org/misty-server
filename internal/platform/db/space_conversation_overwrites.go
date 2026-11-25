@@ -88,9 +88,9 @@ func fillConversationAccessTx(ctx context.Context, tx *sql.Tx, access *memberAcc
 
 func loadSpaceConversationTx(ctx context.Context, tx *sql.Tx, spaceID, conversationID string) (*SpaceConversation, error) {
 	out := &SpaceConversation{}
-	err := tx.QueryRowContext(ctx, `SELECT id,space_id,title,kind,voice,created_by_user_id,visible_to_space,created_at,updated_at
+	err := tx.QueryRowContext(ctx, `SELECT id,space_id,title,kind,voice,created_by_user_id,visible_to_space,category_id,position,created_at,updated_at
 		FROM space_conversations WHERE id=$1 AND space_id=$2`, conversationID, spaceID).
-		Scan(&out.ID, &out.SpaceID, &out.Title, &out.Kind, &out.Voice, &out.CreatedByUserID, &out.VisibleToSpace, &out.CreatedAt, &out.UpdatedAt)
+		Scan(&out.ID, &out.SpaceID, &out.Title, &out.Kind, &out.Voice, &out.CreatedByUserID, &out.VisibleToSpace, &out.CategoryID, &out.Position, &out.CreatedAt, &out.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound
 	}

@@ -4,12 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"github.com/misty-org/misty-server/internal/avatars"
 )
 
 type SharedSpace struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	AvatarVersion int64  `json:"avatar_version"`
+	ID               string             `json:"id"`
+	Name             string             `json:"name"`
+	AvatarVersion    int64              `json:"avatar_version"`
+	AvatarDecoration avatars.Decoration `json:"avatar_decoration"`
 }
 
 func requireOtherPersonTx(ctx context.Context, tx *sql.Tx, viewerID, otherID string) error {
@@ -57,7 +60,7 @@ func (db *Database) MutualFriends(ctx context.Context, viewerID, otherID string)
 		if err := requireOtherPersonTx(ctx, tx, viewerID, otherID); err != nil {
 			return err
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.avatar_version,u.banner_version,COALESCE(fa.accepted_at,fa.created_at)
+		rows, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.avatar_version,u.avatar_decoration,u.banner_version,COALESCE(fa.accepted_at,fa.created_at)
 			FROM friendships fa
 			JOIN users u ON u.id = CASE WHEN fa.user_low=$1 THEN fa.user_high ELSE fa.user_low END
 			WHERE (fa.user_low=$1 OR fa.user_high=$1) AND fa.state='accepted'
@@ -71,7 +74,7 @@ func (db *Database) MutualFriends(ctx context.Context, viewerID, otherID string)
 		defer rows.Close()
 		for rows.Next() {
 			var person Person
-			if err := rows.Scan(&person.UserID, &person.Username, &person.AvatarVersion, &person.BannerVersion, &person.Since); err != nil {
+			if err := rows.Scan(&person.UserID, &person.Username, &person.AvatarVersion, &person.AvatarDecoration, &person.BannerVersion, &person.Since); err != nil {
 				return err
 			}
 			out = append(out, person)
@@ -87,7 +90,7 @@ func (db *Database) SharedSpaces(ctx context.Context, viewerID, otherID string) 
 		if err := requireOtherPersonTx(ctx, tx, viewerID, otherID); err != nil {
 			return err
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT s.id,s.name,s.avatar_version FROM spaces s
+		rows, err := tx.QueryContext(ctx, `SELECT s.id,s.name,s.avatar_version,s.avatar_decoration FROM spaces s
 			JOIN space_members a ON a.space_id=s.id AND a.user_id=$1
 			JOIN space_members b ON b.space_id=s.id AND b.user_id=$2
 			WHERE s.lifecycle_state='active' AND s.kind='space' AND NOT s.is_default
@@ -98,7 +101,7 @@ func (db *Database) SharedSpaces(ctx context.Context, viewerID, otherID string) 
 		defer rows.Close()
 		for rows.Next() {
 			var space SharedSpace
-			if err := rows.Scan(&space.ID, &space.Name, &space.AvatarVersion); err != nil {
+			if err := rows.Scan(&space.ID, &space.Name, &space.AvatarVersion, &space.AvatarDecoration); err != nil {
 				return err
 			}
 			out = append(out, space)

@@ -11,7 +11,7 @@ import (
 
 const DriveIgnoreName = ".mistyignore"
 
-var ErrDriveProtected = errors.New("the drive's root .mistyignore stays in place")
+var ErrDriveProtected = errors.New("the drive's root .mistyignore and .trash stay in place")
 
 func isRootDriveIgnore(parentID *string, name string) bool {
 	return parentID == nil && strings.EqualFold(name, DriveIgnoreName)
@@ -45,7 +45,7 @@ func (db *Database) DriveRootIgnoreNeed(ctx context.Context, userID, spaceID str
 		var present bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM space_drive_items
 			WHERE space_id=$1 AND parent_id IS NULL AND misty_drive_name_fold(name)=misty_drive_name_fold($2::text)
-			AND trashed_at IS NULL AND deleted_at IS NULL)`, spaceID, DriveIgnoreName).Scan(&present); err != nil {
+			AND deleted_at IS NULL)`, spaceID, DriveIgnoreName).Scan(&present); err != nil {
 			return err
 		}
 		need.Missing = !present

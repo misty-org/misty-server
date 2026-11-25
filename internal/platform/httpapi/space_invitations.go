@@ -35,7 +35,8 @@ func (s *SpacesService) Invite() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Email string `json:"email"`
+			Email  string `json:"email"`
+			UserID string `json:"user_id"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
@@ -45,15 +46,24 @@ func (s *SpacesService) Invite() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		invite, err := s.database.InviteToSpaceWithToken(
-			r.Context(), userID, spaceID, body.Email, security.HashToken(token),
-		)
+		var invite *db.SpaceInvitation
+		if body.UserID != "" {
+			invite, err = s.database.InviteFriendToSpaceWithToken(
+				r.Context(), userID, spaceID, body.UserID, security.HashToken(token),
+			)
+		} else {
+			invite, err = s.database.InviteToSpaceWithToken(
+				r.Context(), userID, spaceID, body.Email, security.HashToken(token),
+			)
+		}
 		if err != nil {
 			writeSpaceError(w, err)
 			return
 		}
-		invite.Link = SpaceInvitationLink(token)
-		invite.Emailed = s.emailInvitation(r.Context(), invite)
+		if !invite.ByAccount {
+			invite.Link = SpaceInvitationLink(token)
+			invite.Emailed = s.emailInvitation(r.Context(), invite)
+		}
 		writeJSON(w, http.StatusCreated, invite)
 	}
 }
@@ -92,8 +102,10 @@ func (s *SpacesService) SpaceInvitationItem() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		invite.Link = SpaceInvitationLink(token)
-		invite.Emailed = s.emailInvitation(r.Context(), invite)
+		if !invite.ByAccount {
+			invite.Link = SpaceInvitationLink(token)
+			invite.Emailed = s.emailInvitation(r.Context(), invite)
+		}
 		writeJSON(w, http.StatusOK, invite)
 	}
 }

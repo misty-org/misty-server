@@ -18,7 +18,7 @@ func (db *Database) CheckDriveFileRoomSave(ctx context.Context, userID, spaceID,
 		if err != nil {
 			return err
 		}
-		if item.Kind != driveKindFile || item.Trashed {
+		if item.Kind != driveKindFile {
 			return ErrDriveNotFound
 		}
 		if size == 0 {
@@ -61,7 +61,7 @@ func (db *Database) CreateDriveFileRoomCopy(ctx context.Context, userID, spaceID
 		parentID := item.ParentID
 		if parentID != nil {
 			parent, err := liveDriveItemTx(ctx, tx, spaceID, *parentID, false)
-			if errors.Is(err, ErrDriveNotFound) || (err == nil && (parent.Trashed || parent.Kind != DriveKindFolder)) {
+			if errors.Is(err, ErrDriveNotFound) || (err == nil && parent.Kind != DriveKindFolder) {
 				parentID = nil
 			} else if err != nil {
 				return err

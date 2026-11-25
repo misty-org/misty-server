@@ -124,10 +124,10 @@ func (db *Database) createSpaceMessageWithReferences(ctx context.Context, userID
 				return err
 			}
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT username,avatar_version FROM users WHERE id=$1`, userID).Scan(&out.SenderName, &out.SenderAvatarVersion); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT username,avatar_version,avatar_decoration FROM users WHERE id=$1`, userID).Scan(&out.SenderName, &out.SenderAvatarVersion, &out.SenderAvatarDecoration); err != nil {
 			return err
 		}
-		out.Sender = SpaceMessageSender{Kind: "person", UserID: userID, DisplayName: out.SenderName, AvatarVersion: out.SenderAvatarVersion}
+		out.Sender = SpaceMessageSender{Kind: "person", UserID: userID, DisplayName: out.SenderName, AvatarVersion: out.SenderAvatarVersion, AvatarDecoration: out.SenderAvatarDecoration}
 		if _, err := recordSpaceEventTx(ctx, tx, spaceID, userID, "message.created", out.ID, out); err != nil {
 			return err
 		}
@@ -176,7 +176,7 @@ func pqStringArray(values []string) string {
 func scanSpaceMessage(scanner interface{ Scan(...any) error }, out *SpaceMessage) error {
 	var raw []byte
 	var files string
-	if err := scanner.Scan(&out.Seq, &out.ID, &out.SpaceID, &out.ConversationID, &out.SenderUserID, &out.SenderName, &out.SenderAvatarVersion, &raw, &files, &out.EditedAt, &out.CreatedAt, &out.ReplyToMessageID, &out.ThreadRootID); err != nil {
+	if err := scanner.Scan(&out.Seq, &out.ID, &out.SpaceID, &out.ConversationID, &out.SenderUserID, &out.SenderName, &out.SenderAvatarVersion, &out.SenderAvatarDecoration, &raw, &files, &out.EditedAt, &out.CreatedAt, &out.ReplyToMessageID, &out.ThreadRootID); err != nil {
 		return err
 	}
 	return decodeScannedSpaceMessage(out, raw, files)
@@ -184,7 +184,7 @@ func scanSpaceMessage(scanner interface{ Scan(...any) error }, out *SpaceMessage
 
 func decodeScannedSpaceMessage(out *SpaceMessage, raw []byte, files string) error {
 	out.SenderKind = "person"
-	out.Sender = SpaceMessageSender{Kind: out.SenderKind, UserID: out.SenderUserID, DisplayName: out.SenderName, AvatarVersion: out.SenderAvatarVersion}
+	out.Sender = SpaceMessageSender{Kind: out.SenderKind, UserID: out.SenderUserID, DisplayName: out.SenderName, AvatarVersion: out.SenderAvatarVersion, AvatarDecoration: out.SenderAvatarDecoration}
 	if err := json.Unmarshal(raw, &out.Content); err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func parsePGTextArray(raw string) []string {
 	return strings.Split(strings.TrimSuffix(strings.TrimPrefix(raw, "{"), "}"), ",")
 }
 
-const spaceMessageColumns = `m.seq,m.id,m.space_id,COALESCE(m.conversation_id,''),m.sender_user_id,COALESCE(u.username,'System'),COALESCE(u.avatar_version,0),m.content,m.file_node_ids::text,m.edited_at,m.created_at,COALESCE(m.reply_to_message_id,''),COALESCE(m.thread_root_id,'')`
+const spaceMessageColumns = `m.seq,m.id,m.space_id,COALESCE(m.conversation_id,''),m.sender_user_id,COALESCE(u.username,'System'),COALESCE(u.avatar_version,0),COALESCE(u.avatar_decoration,'{}'::jsonb),m.content,m.file_node_ids::text,m.edited_at,m.created_at,COALESCE(m.reply_to_message_id,''),COALESCE(m.thread_root_id,'')`
 
 func (db *Database) SpaceMessages(ctx context.Context, userID, spaceID string, before int64, limit int) ([]SpaceMessage, error) {
 	if limit < 1 || limit > 100 {

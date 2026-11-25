@@ -36,8 +36,8 @@ func (s *Server) mountPublicAuthRoutes(prefix string, deps *mountDeps) {
 func (s *Server) mountPublicAccountRoutes(prefix string, deps *mountDeps) {
 	s.Router.Get(prefix+"/me", api.GetMe(s.Database))
 	s.Router.Put(prefix+"/me/password", api.ChangePassword(s.Database))
-	s.Router.Post(prefix+"/me/account-proof", api.AccountProof(s.Database))
-	s.Router.Post(prefix+"/me/web-handoff", api.WebHandoff(s.Database))
+	s.Router.Post(prefix+"/me/account-proof", s.liveSession(api.AccountProof(s.Database)))
+	s.Router.Post(prefix+"/me/web-handoff", s.liveSession(api.WebHandoff(s.Database)))
 	s.Router.Get(prefix+"/me/invite-code", api.MyInviteCode(s.Database))
 	s.Router.Get(prefix+"/invites/{code}", api.InviteByCode(s.Database))
 	s.Router.Get(prefix+"/server/alerts", api.ServerAlerts(s.Database))

@@ -36,6 +36,7 @@ x-tools: &tools
 x-server-environment: &server-environment
   CLOUDFLARE_API_TOKEN: ""
   MISTY_ENVIRONMENT: production
+  TRUST_PROXY_HEADERS: "1"
   DB_HOST: postgres
   DB_PORT: "5432"
   DB_NAME: misty

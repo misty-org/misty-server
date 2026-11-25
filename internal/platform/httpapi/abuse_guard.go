@@ -193,7 +193,7 @@ func (g *AbuseGuard) refresh(ctx context.Context) error {
 
 func (g *AbuseGuard) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions {
+		if r.Method == http.MethodOptions || operatorRequest(r) {
 			next.ServeHTTP(w, r)
 			return
 		}

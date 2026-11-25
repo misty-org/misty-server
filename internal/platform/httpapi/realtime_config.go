@@ -11,7 +11,9 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/lib/pq"
+	"github.com/misty-org/misty-server/internal/accounts"
 	"github.com/misty-org/misty-server/internal/platform/db"
+	"github.com/misty-org/misty-server/internal/platform/security"
 )
 
 const (
@@ -22,6 +24,7 @@ const (
 
 type RealtimeClient struct {
 	UserID         string
+	SessionID      string
 	conn           *websocket.Conn
 	Send           chan []byte
 	Done           chan struct{}
@@ -159,12 +162,18 @@ func (s *RealtimeService) listen() {
 func (s *RealtimeService) broadcastControl(payload []byte) {
 	var control struct {
 		Type           string   `json:"type"`
+		Kind           string   `json:"kind"`
+		SessionID      string   `json:"session_id"`
 		SpaceID        string   `json:"space_id"`
 		UserIDs        []string `json:"user_ids"`
 		NoteID         string   `json:"note_id"`
 		KeepConnection bool     `json:"keep_connection"`
 	}
 	if json.Unmarshal(payload, &control) != nil {
+		return
+	}
+	if control.Kind == db.CollabSignalSessionEnded {
+		s.closeSession(control.SessionID)
 		return
 	}
 	affected := map[string]bool{}
@@ -204,6 +213,25 @@ func (s *RealtimeService) broadcastControl(payload []byte) {
 	}
 }
 
+func (s *RealtimeService) closeSession(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	s.Mu.RLock()
+	clients := make([]*RealtimeClient, 0)
+	for client := range s.clients {
+		if client.SessionID == sessionID {
+			clients = append(clients, client)
+		}
+	}
+	s.Mu.RUnlock()
+	for _, client := range clients {
+		_ = client.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Signed out"), time.Now().Add(time.Second))
+		_ = client.conn.Close()
+		s.Unregister(client)
+	}
+}
+
 func (s *RealtimeService) Ticket() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := authenticatedUser(w, r, s.database)
@@ -221,7 +249,11 @@ func (s *RealtimeService) Ticket() http.HandlerFunc {
 			writeSpaceError(w, err)
 			return
 		}
-		if err := s.database.CreateRealtimeTicket(r.Context(), userID, hash, body.After, time.Now().UTC().Add(60*time.Second)); err != nil {
+		sessionID := ""
+		if sid := accounts.SessionID(r); sid != "" {
+			sessionID = security.SessionPublicID(sid)
+		}
+		if err := s.database.CreateRealtimeTicket(r.Context(), userID, sessionID, hash, body.After, time.Now().UTC().Add(60*time.Second)); err != nil {
 			writeSpaceError(w, err)
 			return
 		}

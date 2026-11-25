@@ -38,7 +38,7 @@ const (
 	typeXMLHook    = 5
 	typeXMLText    = 6
 
-	maxScanStructs = 1 << 22
+	maxScanStructs = 1 << 19
 )
 
 type scanID struct {

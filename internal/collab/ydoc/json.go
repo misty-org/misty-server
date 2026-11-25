@@ -12,20 +12,27 @@ import (
 	"github.com/reearth/ygo/encoding"
 )
 
-func plainValue(value any) any {
+const maxNesting = 256
+
+func plainValue(value any) any { return plainValueAt(value, 0) }
+
+func plainValueAt(value any, depth int) any {
+	if depth > maxNesting {
+		return nil
+	}
 	switch v := value.(type) {
 	case float32:
 		return float64(v)
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		for key, entry := range v {
-			out[key] = plainValue(entry)
+			out[key] = plainValueAt(entry, depth+1)
 		}
 		return out
 	case []any:
 		out := make([]any, len(v))
 		for i, entry := range v {
-			out[i] = plainValue(entry)
+			out[i] = plainValueAt(entry, depth+1)
 		}
 		return out
 	}
@@ -55,21 +62,30 @@ func plainDeltas(delta []Delta) []Delta {
 	return delta
 }
 
-func jsonValue(value any) any {
+func jsonValue(value any) any { return jsonValueAt(value, 0) }
+
+func jsonValueAt(value any, depth int) any {
+	if depth > maxNesting {
+		return nil
+	}
 	switch v := value.(type) {
 	case *crdt.YXmlText:
 		return xmlTextString(v)
 	case *crdt.YXmlElement:
-		return xmlElementString(v)
+		var b strings.Builder
+		writeXMLElement(&b, v, depth)
+		return b.String()
 	case *crdt.YXmlFragment:
-		return xmlFragmentString(v)
+		var b strings.Builder
+		writeXMLChildren(&b, v, depth)
+		return b.String()
 	case *crdt.YText:
 		return v.ToString()
 	case *crdt.YMap:
 		out := map[string]any{}
 		for _, key := range v.Keys() {
 			if entry, ok := v.Get(key); ok {
-				out[key] = jsonValue(entry)
+				out[key] = jsonValueAt(entry, depth+1)
 			}
 		}
 		return out
@@ -77,7 +93,7 @@ func jsonValue(value any) any {
 		n := v.Len()
 		out := make([]any, 0, n)
 		for i := 0; i < n; i++ {
-			out = append(out, jsonValue(v.Get(i)))
+			out = append(out, jsonValueAt(v.Get(i), depth+1))
 		}
 		return out
 	case *crdt.Doc:
@@ -89,13 +105,13 @@ func jsonValue(value any) any {
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		for key, entry := range v {
-			out[key] = jsonValue(entry)
+			out[key] = jsonValueAt(entry, depth+1)
 		}
 		return out
 	case []any:
 		out := make([]any, len(v))
 		for i, entry := range v {
-			out[i] = jsonValue(entry)
+			out[i] = jsonValueAt(entry, depth+1)
 		}
 		return out
 	}
@@ -115,13 +131,13 @@ func marshalShared(value any) (json.RawMessage, error) {
 
 func xmlFragmentString(f *crdt.YXmlFragment) string {
 	var b strings.Builder
-	writeXMLChildren(&b, f)
+	writeXMLChildren(&b, f, 0)
 	return b.String()
 }
 
 func xmlElementString(e *crdt.YXmlElement) string {
 	var b strings.Builder
-	writeXMLElement(&b, e)
+	writeXMLElement(&b, e, 0)
 	return b.String()
 }
 
@@ -131,18 +147,21 @@ func xmlTextString(t *crdt.YXmlText) string {
 	return b.String()
 }
 
-func writeXMLChildren(b *strings.Builder, f *crdt.YXmlFragment) {
+func writeXMLChildren(b *strings.Builder, f *crdt.YXmlFragment, depth int) {
+	if depth > maxNesting {
+		return
+	}
 	for _, child := range f.Children() {
 		switch node := any(child).(type) {
 		case *crdt.YXmlElement:
-			writeXMLElement(b, node)
+			writeXMLElement(b, node, depth+1)
 		case *crdt.YXmlText:
 			writeXMLText(b, node)
 		}
 	}
 }
 
-func writeXMLElement(b *strings.Builder, e *crdt.YXmlElement) {
+func writeXMLElement(b *strings.Builder, e *crdt.YXmlElement, depth int) {
 	name := strings.ToLower(e.NodeName)
 	attrs := e.GetAttributeValues()
 	keys := make([]string, 0, len(attrs))
@@ -152,10 +171,10 @@ func writeXMLElement(b *strings.Builder, e *crdt.YXmlElement) {
 	sort.Strings(keys)
 	b.WriteString("<" + name)
 	for _, key := range keys {
-		b.WriteString(" " + key + `="` + jsString(attrs[key]) + `"`)
+		b.WriteString(" " + key + `="` + jsStringAt(attrs[key], depth+1) + `"`)
 	}
 	b.WriteString(">")
-	writeXMLChildren(b, &e.YXmlFragment)
+	writeXMLChildren(b, &e.YXmlFragment, depth)
 	b.WriteString("</" + name + ">")
 }
 
@@ -209,7 +228,12 @@ func forInPairs(value any) [][2]string {
 	return pairs
 }
 
-func jsString(value any) string {
+func jsString(value any) string { return jsStringAt(value, 0) }
+
+func jsStringAt(value any, depth int) string {
+	if depth > maxNesting {
+		return ""
+	}
 	switch v := value.(type) {
 	case nil:
 		return "null"
@@ -237,16 +261,20 @@ func jsString(value any) string {
 		parts := make([]string, len(v))
 		for i, entry := range v {
 			if entry != nil {
-				parts[i] = jsString(entry)
+				parts[i] = jsStringAt(entry, depth+1)
 			}
 		}
 		return strings.Join(parts, ",")
 	case *crdt.YXmlText:
 		return xmlTextString(v)
 	case *crdt.YXmlElement:
-		return xmlElementString(v)
+		var b strings.Builder
+		writeXMLElement(&b, v, depth+1)
+		return b.String()
 	case *crdt.YXmlFragment:
-		return xmlFragmentString(v)
+		var b strings.Builder
+		writeXMLChildren(&b, v, depth+1)
+		return b.String()
 	case *crdt.YText:
 		return v.ToString()
 	}

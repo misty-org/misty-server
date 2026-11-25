@@ -74,6 +74,9 @@ func ClientIPFromRequest(r *http.Request) string {
 	if !isTrustedProxyAddress(remote) {
 		return remote
 	}
+	if cloudflare := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); net.ParseIP(cloudflare) != nil {
+		return cloudflare
+	}
 	if forwarded := forwardedClientIP(r.Header.Get("X-Forwarded-For")); forwarded != "" {
 		return forwarded
 	}

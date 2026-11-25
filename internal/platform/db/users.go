@@ -46,7 +46,14 @@ func (db *Database) UpgradePasswordHash(id, hash, password string) {
 	db.accountStore().UpgradePasswordHash(id, hash, password)
 }
 func (db *Database) ChangePassword(id, current, next, keepSessionHash string) error {
-	return db.accountStore().ChangePassword(id, current, next, keepSessionHash)
+	if err := db.accountStore().ChangePassword(id, current, next, keepSessionHash); err != nil {
+		return err
+	}
+	return db.WithRLSContext(context.Background(), ServiceRLSSettings(), func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(context.Background(),
+			`DELETE FROM sessions WHERE user_id=$1 AND token_hash<>$2`, id, keepSessionHash)
+		return err
+	})
 }
 func (db *Database) BumpUserAvatarVersion(id, objectKey string) (int64, error) {
 	return db.accountStore().BumpUserAvatarVersion(id, objectKey)

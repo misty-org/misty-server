@@ -105,7 +105,7 @@ func (s *Server) mountSpacesRoutes(prefix string, spaces *api.SpacesService, rea
 	s.Router.MethodFunc(http.MethodDelete, prefix+"/spaces/{spaceID}/nodes/{nodeID}", spaces.Node())
 	s.Router.Post(prefix+"/spaces/{spaceID}/nodes/{nodeID}/resolve", spaces.ResolveTicket())
 	s.Router.Get(prefix+"/spaces/resolve/{ticket}", spaces.Resolve())
-	s.Router.Post(prefix+"/realtime/tickets", realtime.Ticket())
+	s.Router.Post(prefix+"/realtime/tickets", s.liveSession(realtime.Ticket()))
 	s.Router.Get(prefix+"/realtime", realtime.Connect())
 }
 

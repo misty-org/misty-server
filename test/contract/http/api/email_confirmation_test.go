@@ -55,7 +55,12 @@ func passwordSignIn(t *testing.T, handler http.Handler, address, password string
 
 func confirm(t *testing.T, handler http.Handler, token string) string {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/v1/auth/confirm-email", strings.NewReader(url.Values{"token": {token}}.Encode()))
+	return confirmWith(t, handler, token, strongPassword)
+}
+
+func confirmWith(t *testing.T, handler http.Handler, token, password string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/v1/auth/confirm-email", strings.NewReader(url.Values{"token": {token}, "password": {password}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -140,22 +145,24 @@ func TestAStrangersSignUpNeverHoldsAnEmail(t *testing.T) {
 
 	signUp(t, handler, stranger, address, "the strangers password")
 	first := sentToken(t, database, address)
-
-	if rec := signUp(t, handler, owner, address, strongPassword); rec.Code != http.StatusAccepted {
-		t.Fatalf("repeat sign-up = %d", rec.Code)
-	}
-	if sentToken(t, database, address) != first {
-		t.Fatal("a repeat within the wait sent another email")
+	if result := confirm(t, handler, first); result != "wrong_password" {
+		t.Fatalf("the owner confirming a stranger's sign-up = %q", result)
 	}
 
-	allowNextEmail(t, database, address)
 	if rec := signUp(t, handler, owner, address, strongPassword); rec.Code != http.StatusAccepted {
 		t.Fatalf("owner's sign-up = %d", rec.Code)
 	}
-	if result := confirm(t, handler, first); result != "expired" {
+	second := sentToken(t, database, address)
+	if second == first {
+		t.Fatal("the owner's sign-up sent no new link")
+	}
+	if result := confirmWith(t, handler, first, "the strangers password"); result != "expired" {
 		t.Fatalf("the replaced link = %q", result)
 	}
-	if result := confirm(t, handler, sentToken(t, database, address)); result != "confirmed" {
+	if result := confirmWith(t, handler, second, "the strangers password"); result != "wrong_password" {
+		t.Fatalf("the stranger confirming the owner's sign-up = %q", result)
+	}
+	if result := confirm(t, handler, second); result != "confirmed" {
 		t.Fatalf("confirm = %q", result)
 	}
 	if rec, _ := passwordSignIn(t, handler, address, "the strangers password"); rec.Code != http.StatusUnauthorized {
@@ -208,11 +215,11 @@ func TestConfirmingOnTheWebsiteSignsIn(t *testing.T) {
 	signUp(t, handler, username, address, strongPassword)
 	token := sentToken(t, database, address)
 
-	rec, body := call(t, handler, http.MethodPost, "/v1/auth/confirm-email/sign-in", "", `{"token":"`+token+`"}`)
+	rec, body := call(t, handler, http.MethodPost, "/v1/auth/confirm-email/sign-in", "", `{"token":"`+token+`","password":"`+strongPassword+`"}`)
 	if rec.Code != http.StatusOK || body["username"] != username || rec.Header().Get("Set-Cookie") == "" {
 		t.Fatalf("confirm = %d %v, cookie %q", rec.Code, body, rec.Header().Get("Set-Cookie"))
 	}
-	again, body := call(t, handler, http.MethodPost, "/v1/auth/confirm-email/sign-in", "", `{"token":"`+token+`"}`)
+	again, body := call(t, handler, http.MethodPost, "/v1/auth/confirm-email/sign-in", "", `{"token":"`+token+`","password":"`+strongPassword+`"}`)
 	if again.Code != http.StatusBadRequest || body["code"] != "expired" || again.Header().Get("Set-Cookie") != "" {
 		t.Fatalf("a used link = %d %v, cookie %q", again.Code, body, again.Header().Get("Set-Cookie"))
 	}
@@ -228,7 +235,7 @@ func TestConfirmingSignsNobodyIntoAnAccountTheEmailGainedMeanwhile(t *testing.T)
 		t.Fatal(err)
 	}
 
-	rec, body := call(t, handler, http.MethodPost, "/v1/auth/confirm-email/sign-in", "", `{"token":"`+token+`"}`)
+	rec, body := call(t, handler, http.MethodPost, "/v1/auth/confirm-email/sign-in", "", `{"token":"`+token+`","password":"`+strongPassword+`"}`)
 	if rec.Code != http.StatusConflict || body["code"] != "exists" || rec.Header().Get("Set-Cookie") != "" {
 		t.Fatalf("confirm = %d %v, cookie %q", rec.Code, body, rec.Header().Get("Set-Cookie"))
 	}

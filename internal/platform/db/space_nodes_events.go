@@ -56,23 +56,23 @@ func recordReadMarkerTx(ctx context.Context, tx *sql.Tx, spaceID, userID, conver
 	return err
 }
 
-func (db *Database) CreateRealtimeTicket(ctx context.Context, userID, tokenHash string, after int64, expires time.Time) error {
+func (db *Database) CreateRealtimeTicket(ctx context.Context, userID, sessionID, tokenHash string, after int64, expires time.Time) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO realtime_tickets(token_hash,user_id,after_cursor,expires_at) VALUES($1,$2,$3,$4)`, tokenHash, userID, after, expires)
+		_, err := tx.ExecContext(ctx, `INSERT INTO realtime_tickets(token_hash,user_id,session_id,after_cursor,expires_at) VALUES($1,$2,$3,$4,$5)`, tokenHash, userID, sessionID, after, expires)
 		return err
 	})
 }
 
-func (db *Database) ConsumeRealtimeTicket(ctx context.Context, tokenHash string) (string, int64, error) {
-	var userID string
+func (db *Database) ConsumeRealtimeTicket(ctx context.Context, tokenHash string) (string, string, int64, error) {
+	var userID, sessionID string
 	var after int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		return tx.QueryRowContext(ctx, `UPDATE realtime_tickets SET consumed_at=NOW() WHERE token_hash=$1 AND consumed_at IS NULL AND expires_at>NOW() RETURNING user_id,after_cursor`, tokenHash).Scan(&userID, &after)
+		return tx.QueryRowContext(ctx, `UPDATE realtime_tickets SET consumed_at=NOW() WHERE token_hash=$1 AND consumed_at IS NULL AND expires_at>NOW() RETURNING user_id,session_id,after_cursor`, tokenHash).Scan(&userID, &sessionID, &after)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", 0, ErrSpaceForbidden
+		return "", "", 0, ErrSpaceForbidden
 	}
-	return userID, after, err
+	return userID, sessionID, after, err
 }
 
 type SpaceReplay struct {

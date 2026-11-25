@@ -34,7 +34,7 @@ func (s *Server) mountSocialRoutes(prefix string, social *api.SocialService) {
 	s.Router.Get(prefix+"/dms/{dmID}/call-keys", social.DirectCallKeys())
 	s.Router.Put(prefix+"/me/call-keys/{keyID}", social.CallKey())
 	s.Router.Get(prefix+"/calls/config", social.CallConfig())
-	s.Router.Post(prefix+"/calls/{room}/token", social.CallToken())
+	s.Router.Post(prefix+"/calls/{room}/token", s.liveSession(social.CallToken()))
 	s.Router.Post(prefix+"/calls/livekit-events", s.LiveKitRooms.Webhook())
 	s.Router.Post(prefix+"/calls/{room}/moderate", s.LiveKitRooms.Moderate(s.Database))
 }

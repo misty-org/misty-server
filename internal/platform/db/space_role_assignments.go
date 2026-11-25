@@ -86,9 +86,11 @@ func (db *Database) SetSpaceMemberRoles(ctx context.Context, userID, spaceID, me
 			return err
 		}
 		positions := map[string]int{}
+		permissions := map[string][]string{}
 		for _, role := range roles {
 			if !role.IsDefault {
 				positions[role.ID] = role.Position
+				permissions[role.ID] = role.Permissions
 			}
 		}
 		for roleID := range desired {
@@ -100,7 +102,7 @@ func (db *Database) SetSpaceMemberRoles(ctx context.Context, userID, spaceID, me
 		if err != nil {
 			return err
 		}
-		changed, err := applyMemberRolesTx(ctx, tx, access, spaceID, memberID, target.roleIDs, desired, positions)
+		changed, err := applyMemberRolesTx(ctx, tx, access, spaceID, memberID, target.roleIDs, desired, positions, permissions)
 		if err != nil {
 			return err
 		}
@@ -125,7 +127,7 @@ func (db *Database) SetSpaceMemberRoles(ctx context.Context, userID, spaceID, me
 	return out, nil
 }
 
-func applyMemberRolesTx(ctx context.Context, tx *sql.Tx, access *memberAccess, spaceID, memberID string, held []string, desired map[string]bool, positions map[string]int) (bool, error) {
+func applyMemberRolesTx(ctx context.Context, tx *sql.Tx, access *memberAccess, spaceID, memberID string, held []string, desired map[string]bool, positions map[string]int, permissions map[string][]string) (bool, error) {
 	current := map[string]bool{}
 	for _, roleID := range held {
 		current[roleID] = true
@@ -135,6 +137,9 @@ func applyMemberRolesTx(ctx context.Context, tx *sql.Tx, access *memberAccess, s
 		if current[roleID] || !spaces.CanManageRole(access.owner, access.highest, positions[roleID]) {
 			continue
 		}
+		if !access.owner && !spaces.HoldsChanges(access.base, nil, permissions[roleID]) {
+			return false, ErrSpaceForbidden
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO space_member_roles(space_id,user_id,role_id) VALUES($1,$2,$3)`, spaceID, memberID, roleID); err != nil {
 			return false, err
 		}
@@ -143,6 +148,9 @@ func applyMemberRolesTx(ctx context.Context, tx *sql.Tx, access *memberAccess, s
 	for roleID := range current {
 		if desired[roleID] || !spaces.CanManageRole(access.owner, access.highest, positions[roleID]) {
 			continue
+		}
+		if !access.owner && !spaces.HoldsChanges(access.base, permissions[roleID], nil) {
+			return false, ErrSpaceForbidden
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM space_member_roles WHERE space_id=$1 AND user_id=$2 AND role_id=$3`, spaceID, memberID, roleID); err != nil {
 			return false, err

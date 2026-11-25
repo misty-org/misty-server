@@ -20,28 +20,33 @@ type xmlSpec struct{ node XMLNode }
 
 type fragmentSpec struct{ children []XMLNode }
 
-func capture(value any) any {
+func capture(value any) any { return captureAt(value, 0) }
+
+func captureAt(value any, depth int) any {
+	if depth > maxNesting {
+		return nil
+	}
 	switch v := value.(type) {
 	case *crdt.YMap:
 		spec := mapSpec{keys: v.Keys(), entries: map[string]any{}}
 		for _, key := range spec.keys {
 			if entry, ok := v.Get(key); ok {
-				spec.entries[key] = capture(entry)
+				spec.entries[key] = captureAt(entry, depth+1)
 			}
 		}
 		return spec
 	case *crdt.YArray:
 		spec := arraySpec{}
 		for i := 0; i < v.Len(); i++ {
-			spec.items = append(spec.items, capture(v.Get(i)))
+			spec.items = append(spec.items, captureAt(v.Get(i), depth+1))
 		}
 		return spec
 	case *crdt.YXmlElement:
-		return xmlSpec{node: XMLNode{Element: v.NodeName, Attributes: v.GetAttributeValues(), Children: xmlChildren(&v.YXmlFragment)}}
+		return xmlSpec{node: XMLNode{Element: v.NodeName, Attributes: v.GetAttributeValues(), Children: xmlChildrenAt(&v.YXmlFragment, depth+1)}}
 	case *crdt.YXmlText:
 		return xmlSpec{node: XMLNode{IsText: true, Text: v.ToDelta()}}
 	case *crdt.YXmlFragment:
-		return fragmentSpec{children: xmlChildren(v)}
+		return fragmentSpec{children: xmlChildrenAt(v, depth+1)}
 	case *crdt.YText:
 		return textSpec{delta: v.ToDelta()}
 	case *crdt.Doc:

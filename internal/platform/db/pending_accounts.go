@@ -19,6 +19,8 @@ const (
 
 var ErrPendingAccountInvalid = errors.New("this confirmation link is no longer valid")
 
+var ErrPendingAccountWrongPassword = errors.New("that isn't the password chosen at sign-up")
+
 type PendingAccount struct {
 	Username, Email, Password string
 }
@@ -44,9 +46,8 @@ func (db *Database) QueuePendingAccount(ctx context.Context, account PendingAcco
 		result, err := tx.ExecContext(ctx, `INSERT INTO pending_accounts(email,username,password_hash,token_hash,expires_at)
 			VALUES($1,$2,$3,$4,$5)
 			ON CONFLICT (email) DO UPDATE SET username=EXCLUDED.username,password_hash=EXCLUDED.password_hash,
-				token_hash=EXCLUDED.token_hash,expires_at=EXCLUDED.expires_at,sent_at=now()
-			WHERE pending_accounts.sent_at<now()-$6*interval '1 second'`,
-			address, username, string(hash), tokenHash, time.Now().Add(PendingAccountTTL), pendingAccountResend.Seconds())
+				token_hash=EXCLUDED.token_hash,expires_at=EXCLUDED.expires_at,sent_at=now()`,
+			address, username, string(hash), tokenHash, time.Now().Add(PendingAccountTTL))
 		if err != nil {
 			return err
 		}
@@ -91,7 +92,7 @@ func (db *Database) PendingAccountPassword(ctx context.Context, email string) (s
 	return hash, err
 }
 
-func (db *Database) ConfirmPendingAccount(ctx context.Context, tokenHash string) (*User, error) {
+func (db *Database) ConfirmPendingAccount(ctx context.Context, tokenHash, password string) (*User, error) {
 	var address, username, hash string
 	err := db.serviceTx(ctx, func(tx *sql.Tx) error {
 		return tx.QueryRowContext(ctx, `SELECT email,username,password_hash FROM pending_accounts
@@ -102,6 +103,9 @@ func (db *Database) ConfirmPendingAccount(ctx context.Context, tokenHash string)
 	}
 	if err != nil {
 		return nil, err
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
+		return nil, ErrPendingAccountWrongPassword
 	}
 	user, err := db.accountStore().CreateConfirmedUser(username, address, hash)
 	if err != nil && !errors.Is(err, ErrEmailTaken) {

@@ -73,8 +73,8 @@ func pendingSignIn(w http.ResponseWriter, r *http.Request, database *db.Database
 	return true
 }
 
-func confirmPending(r *http.Request, database *db.Database, token string) (*db.User, string) {
-	user, err := database.ConfirmPendingAccount(r.Context(), security.HashToken(strings.TrimSpace(token)))
+func confirmPending(r *http.Request, database *db.Database, token, password string) (*db.User, string) {
+	user, err := database.ConfirmPendingAccount(r.Context(), security.HashToken(strings.TrimSpace(token)), password)
 	if err == nil && openSignup() {
 		err = openSignupLimits(r.Context(), database, user.ID)
 	}
@@ -83,6 +83,8 @@ func confirmPending(r *http.Request, database *db.Database, token string) (*db.U
 		return user, "confirmed"
 	case errors.Is(err, db.ErrPendingAccountInvalid):
 		return nil, "expired"
+	case errors.Is(err, db.ErrPendingAccountWrongPassword):
+		return nil, "wrong_password"
 	case errors.Is(err, db.ErrEmailTaken):
 		return nil, "exists"
 	default:
@@ -96,7 +98,7 @@ func ConfirmEmail(database *db.Database) http.HandlerFunc {
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		_, result := confirmPending(r, database, r.PostFormValue("token"))
+		_, result := confirmPending(r, database, r.PostFormValue("token"), r.PostFormValue("password"))
 		http.Redirect(w, r, websiteURL()+"/confirm-email?result="+result, http.StatusSeeOther)
 	}
 }
@@ -104,12 +106,13 @@ func ConfirmEmail(database *db.Database) http.HandlerFunc {
 func ConfirmEmailSignIn(database *db.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Token string `json:"token"`
+			Token    string `json:"token"`
+			Password string `json:"password"`
 		}
 		if decodeJSON(w, r, &body) != nil {
 			return
 		}
-		user, result := confirmPending(r, database, body.Token)
+		user, result := confirmPending(r, database, body.Token, body.Password)
 		if user == nil {
 			status := http.StatusInternalServerError
 			switch result {
@@ -117,6 +120,8 @@ func ConfirmEmailSignIn(database *db.Database) http.HandlerFunc {
 				status = http.StatusBadRequest
 			case "exists":
 				status = http.StatusConflict
+			case "wrong_password":
+				status = http.StatusForbidden
 			}
 			writeJSON(w, status, map[string]string{"code": result})
 			return

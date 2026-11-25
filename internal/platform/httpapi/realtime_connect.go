@@ -27,7 +27,7 @@ func (s *RealtimeService) Connect() http.HandlerFunc {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "invalid_ticket"})
 			return
 		}
-		userID, after, err := s.database.ConsumeRealtimeTicket(r.Context(), security.HashToken(token))
+		userID, sessionID, after, err := s.database.ConsumeRealtimeTicket(r.Context(), security.HashToken(token))
 		if err != nil {
 			log.Printf("Realtime WebSocket ticket rejected: %v", err)
 			writeSpaceError(w, err)
@@ -38,7 +38,7 @@ func (s *RealtimeService) Connect() http.HandlerFunc {
 			log.Printf("Realtime WebSocket upgrade failed: %v", err)
 			return
 		}
-		client := &RealtimeClient{UserID: userID, conn: conn, Send: make(chan []byte, 256), Done: make(chan struct{})}
+		client := &RealtimeClient{UserID: userID, SessionID: sessionID, conn: conn, Send: make(chan []byte, 256), Done: make(chan struct{})}
 		if only := r.URL.Query().Get("only"); only == "drive." {
 			client.eventPrefix = only
 		}

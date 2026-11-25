@@ -46,6 +46,19 @@ type issuedKey struct {
 	emailed   bool
 }
 
+func operatorRequest(r *http.Request) bool {
+	if !strings.HasPrefix(r.URL.Path, "/operator/v1/") {
+		return false
+	}
+	token := OperatorToken()
+	got, ok := accounts.BearerTokenFromRequest(r)
+	if !ok || token == "" {
+		return false
+	}
+	want, sum := sha256.Sum256([]byte(token)), sha256.Sum256([]byte(got))
+	return subtle.ConstantTimeCompare(sum[:], want[:]) == 1
+}
+
 func RequireOperator(token string) func(http.Handler) http.Handler {
 	want := sha256.Sum256([]byte(token))
 	return func(next http.Handler) http.Handler {

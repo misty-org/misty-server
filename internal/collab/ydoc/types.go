@@ -164,14 +164,19 @@ func (x *XML) Insert(tx *Tx, index int, nodes []XMLNode) {
 	}
 }
 
-func xmlChildren(f *crdt.YXmlFragment) []XMLNode {
+func xmlChildren(f *crdt.YXmlFragment) []XMLNode { return xmlChildrenAt(f, 0) }
+
+func xmlChildrenAt(f *crdt.YXmlFragment, depth int) []XMLNode {
+	if depth > maxNesting {
+		return nil
+	}
 	children := f.Children()
 	out := make([]XMLNode, 0, len(children))
 	for _, child := range children {
 		switch node := any(child).(type) {
 		case *crdt.YXmlElement:
 			out = append(out, XMLNode{
-				Element: node.NodeName, Attributes: plainAttributes(node.GetAttributeValues()), Children: xmlChildren(&node.YXmlFragment),
+				Element: node.NodeName, Attributes: plainAttributes(node.GetAttributeValues()), Children: xmlChildrenAt(&node.YXmlFragment, depth+1),
 			})
 		case *crdt.YXmlText:
 			out = append(out, XMLNode{IsText: true, Text: plainDeltas(node.ToDelta())})

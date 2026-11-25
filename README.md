@@ -11,7 +11,6 @@ You need Go (the version in `go.mod`) and Docker.
 ```sh
 make build       # compile every package
 make test-unit   # every Go test; the database tests need PostgreSQL on 127.0.0.1:5435
-make generate    # after editing the console's templ views in internal/console
 ```
 
 `make help` lists the other targets.
@@ -61,18 +60,7 @@ Compose also reads three optional variables from where it runs (the shell or a `
 - `MISTY_API_IMAGE` and `MISTY_TOOLS_IMAGE` run published images instead of building from source. Each push to `main` publishes `ghcr.io/misty-org/misty-server-api:<commit SHA>` and `ghcr.io/misty-org/misty-server-tools:<commit SHA>` (the full 40-character SHA), and each `v*` git tag publishes the same images tagged with its name, such as `v1.2.3`. Tags never move and there is no `latest`. Set both to the same commit, then run `docker compose up -d` without `--build`.
 - `MISTY_TUNNEL_EXTRA_INGRESS` publishes more hostnames through the server's tunnel, for services you run beside it on the `edge` network: a comma-separated list of `host=service`, such as `billing.example.com=http://billing:8091`. Each host must be in the same zone as `MISTY_HOSTNAME`; setup routes it before the tunnel's catch-all and keeps its proxied DNS record. Empty by default. Removing an entry stops routing it but leaves its DNS record for you to delete.
 
-The [self-hosting guide](https://docs.mistysys.com/self-hosting) lists every value and covers optional email, backups, secret rotation and the console.
-
-### Operator console
-
-The stack runs an operator console on the server's own `127.0.0.1:7070`, never through the tunnel. Reach it over SSH and open the one-time sign-in link it printed when it started:
-
-```sh
-ssh -L 7070:127.0.0.1:7070 your-server
-docker compose logs console
-```
-
-It shows health and traffic, the services and their logs, customers (accounts with their storage against its limit, and their sessions), background jobs, configuration, database migrations and backups. Traffic needs `MISTY_METRICS_TOKEN`. With `MISTY_OPERATOR_TOKEN` set, the Customers page can also set limits, suspend, close and resume accounts and issue sign-in links, through the operator account API. Each change is recorded in the audit log on the Overview.
+The [self-hosting guide](https://docs.mistysys.com/self-hosting) lists every value and covers optional email, backups and secret rotation.
 
 ## More
 

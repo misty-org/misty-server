@@ -19,7 +19,7 @@ x-config: &config
     - ${MISTY_ENV_DIR:?set MISTY_ENV_DIR to <misty.root>/.env/server}/google.env
   logging: {driver: local, options: {max-size: "10m", max-file: "3"}}
 
-# setup, migrate, backups, alerts, console and cloudflared run one small image
+# setup, migrate, backups, alerts and cloudflared run one small image
 # (deploy/setup/Dockerfile). MISTY_TOOLS_IMAGE and MISTY_API_IMAGE name
 # published images to run instead, such as
 # ghcr.io/misty-org/misty-server-tools:<commit SHA>; unset, Compose builds both
@@ -30,7 +30,7 @@ x-tools: &tools
     context: .
     dockerfile: deploy/setup/Dockerfile
 
-# What the API and the console read besides the three files. The rest of their
+# What the API and collab read besides the three files. The rest of their
 # configuration (the API's share of the root secret, R2) is the secrets volume's
 # server.env, loaded when each starts; they derive their keys from it.
 x-server-environment: &server-environment
@@ -274,7 +274,7 @@ services:
   # Records an open alert in the database when the API fails its health
   # check, fails 5% of its requests, runs low on disk or misses a nightly
   # backup, each seen twice in a row, and removes it when it clears. The
-  # console and the server owner's app show open alerts; nothing is emailed.
+  # server owner's app shows open alerts; nothing is emailed.
   alerts:
     <<: [*tools, *config]
     command: ["watch"]
@@ -288,28 +288,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    networks: [edge, database]
-
-  # The operator console, on this computer only: http://127.0.0.1:7070.
-  # `docker compose logs console` prints its sign-in link.
-  console:
-    <<: [*tools, *config]
-    restart: unless-stopped
-    entrypoint:
-      - /bin/sh
-      - -ec
-      - |
-        set -a; . /run/misty/secrets/server.env; set +a
-        exec misty-console -addr 0.0.0.0:7070 -published 127.0.0.1:${MISTY_CONSOLE_PORT:-7070} -api http://api:8080
-    environment:
-      <<: *server-environment
-    volumes:
-      - secrets:/run/misty/secrets:ro
-    ports:
-      - "127.0.0.1:${MISTY_CONSOLE_PORT:-7070}:7070"
-    depends_on:
-      api:
-        condition: service_healthy
     networks: [edge, database]
 
 volumes:

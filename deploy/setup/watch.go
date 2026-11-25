@@ -80,7 +80,7 @@ func runWatch(ctx context.Context) error {
 			}},
 		},
 	}
-	log.Printf("watching %s on %s; open alerts show in the console and the owner's app", api, config.Getenv("MISTY_HOSTNAME"))
+	log.Printf("watching %s on %s; open alerts show in the owner's app", api, config.Getenv("MISTY_HOSTNAME"))
 	ticker := time.NewTicker(watchInterval)
 	defer ticker.Stop()
 	for {

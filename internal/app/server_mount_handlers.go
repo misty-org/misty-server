@@ -26,7 +26,9 @@ func (s *Server) MountHandlers() error {
 	if _, err := security.SessionSignerFromEnv(); err != nil {
 		return err
 	}
-	s.mountRequestMiddleware()
+	if err := s.mountRequestMiddleware(); err != nil {
+		return err
+	}
 
 	deps, err := s.buildMountDeps()
 	if err != nil {
@@ -40,7 +42,11 @@ func (s *Server) MountHandlers() error {
 	return nil
 }
 
-func (s *Server) mountRequestMiddleware() {
+func (s *Server) mountRequestMiddleware() error {
+	minimumAppVersion, err := minimumAppVersionMiddleware()
+	if err != nil {
+		return err
+	}
 	s.Router.Use(cors.Handler(cors.Options{
 		AllowOriginFunc:  func(_ *http.Request, origin string) bool { return IsAllowedCORSOrigin(origin) },
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -49,6 +55,7 @@ func (s *Server) mountRequestMiddleware() {
 		ExposedHeaders:   []string{"X-Misty-Signed-Download", "X-Request-ID", "Retry-After", "X-Misty-RateLimit-Scope"},
 		MaxAge:           300,
 	}))
+	s.Router.Use(minimumAppVersion)
 	s.Router.Use(api.CookieCSRFProtection(IsAllowedCORSOrigin))
 	s.Router.Use(RequestObservabilityMiddleware)
 	s.Router.Use(middleware.Recoverer)
@@ -62,6 +69,7 @@ func (s *Server) mountRequestMiddleware() {
 	s.Metrics = metrics.New()
 	s.registerDomainGauges(s.Metrics)
 	s.Router.Use(s.Metrics.Middleware)
+	return nil
 }
 
 func (s *Server) buildMountDeps() (*mountDeps, error) {

@@ -33,6 +33,7 @@ var allowedCORSRequestHeaders = []string{
 	"Idempotency-Key",
 	"X-Request-ID",
 	"X-Misty-Platform",
+	"X-Misty-App-Version",
 	"X-Misty-CSRF",
 	"X-Misty-Release-Channel",
 	"X-Misty-Library-Upload-Token",

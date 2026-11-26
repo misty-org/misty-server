@@ -34,13 +34,8 @@ func CallsOn(getenv func(string) string) bool {
 	return false
 }
 
-func CallsHostname(hostname string) string {
-	hostname = strings.ToLower(strings.TrimSpace(hostname))
-	first, rest, found := strings.Cut(hostname, ".")
-	if !found || !strings.Contains(rest, ".") {
-		return "calls." + hostname
-	}
-	return first + "-calls." + rest
+func LiveKitURL(hostname string) string {
+	return "wss://" + strings.ToLower(strings.TrimSpace(hostname)) + "/v1/calls"
 }
 
 func PublicAPIURL(hostname string) string {
@@ -88,7 +83,7 @@ func Defaults(getenv func(string) string) (map[string]string, error) {
 			values["R2_BUCKET"] = ResourceNames(hostname).LibraryBucket
 		}
 		if CallsOn(getenv) && unset("LIVEKIT_URL") {
-			values["LIVEKIT_URL"] = "wss://" + CallsHostname(hostname)
+			values["LIVEKIT_URL"] = LiveKitURL(hostname)
 		}
 	}
 	return values, nil

@@ -31,8 +31,20 @@ func Run() {
 		panic(err)
 	}
 	defer server.Realtime.Close()
+	rooms, err := NewCollabService(server.Database)
+	if err != nil {
+		panic(err)
+	}
+	defer rooms.Close()
+	liveKit, err := liveKitProxyFromEnv()
+	if err != nil {
+		panic(err)
+	}
 	workerContext, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
+	if err := rooms.Start(workerContext); err != nil {
+		panic(err)
+	}
 	startWorkers(
 		workerContext,
 		WorkerFunc(func(ctx context.Context) {
@@ -53,7 +65,8 @@ func Run() {
 	}
 
 	log.Printf("Misty server running on :%s", runtimeConfig.Port)
-	if err := runHTTPServer(NewHTTPServer(":"+runtimeConfig.Port, server.Router), stopWorkers); err != nil {
+	handler := edgeHandler(server.Router, rooms.Router, liveKit)
+	if err := runHTTPServer(NewHTTPServer(":"+runtimeConfig.Port, handler), stopWorkers, rooms.Stop); err != nil {
 		panic(err)
 	}
 	log.Println("Misty server stopped")

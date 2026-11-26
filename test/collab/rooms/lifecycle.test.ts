@@ -10,7 +10,7 @@ import { call, world } from "../harness/world.js";
 describe.each(VIAS)("room lifecycle over %s", (via) => {
   const s = suite(via, "Lifecycle");
 
-  test("a room with gc off shares nested values, saves them, and keeps them across a restart of misty-collab", async () => {
+  test("a room with gc off shares nested values, saves them, and keeps them across a restart of the rooms", async () => {
     const { ada, ben } = s.world.people;
     const own = await startCollab();
     const key = s.key("restart");

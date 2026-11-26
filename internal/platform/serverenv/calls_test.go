@@ -6,16 +6,9 @@ import (
 	"testing"
 )
 
-func TestCallsHostnameIsASiblingTheUniversalCertificateCovers(t *testing.T) {
-	cases := map[string]string{
-		"misty.example.com":       "misty-calls.example.com",
-		"Space.Misty.Example.org": "space-calls.misty.example.org",
-		"example.com":             "calls.example.com",
-	}
-	for hostname, want := range cases {
-		if got := CallsHostname(hostname); got != want {
-			t.Errorf("CallsHostname(%q) = %q, want %q", hostname, got, want)
-		}
+func TestCallsAreReachedThroughTheAPIsOwnHostname(t *testing.T) {
+	if got := LiveKitURL(" Misty.Example.com "); got != "wss://misty.example.com/v1/calls" {
+		t.Errorf("LiveKitURL = %q", got)
 	}
 }
 
@@ -44,7 +37,7 @@ func TestDefaultsTurnCallsOnOnlyWithMistyCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if on["LIVEKIT_URL"] != "wss://misty-calls.example.com" {
+	if on["LIVEKIT_URL"] != "wss://misty.example.com/v1/calls" {
 		t.Fatalf("LIVEKIT_URL = %q", on["LIVEKIT_URL"])
 	}
 	if on["LIVEKIT_API_SECRET"] != off["LIVEKIT_API_SECRET"] {

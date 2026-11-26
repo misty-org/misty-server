@@ -33,10 +33,10 @@ export default async function globalSetup(project: TestProject) {
     for (const cleanup of cleanups.reverse()) await cleanup().catch(() => undefined);
   };
   try {
-    const collab = path.join(folder, "misty-collab");
+    const collab = path.join(folder, "collab-server");
     const fixtureBinary = path.join(folder, "collab-fixture");
     const builds = Promise.all([
-      run("go", ["build", "-o", collab, "./cmd/misty-collab"]),
+      run("go", ["build", "-o", collab, "./test/collab/server"]),
       run("go", ["build", "-o", fixtureBinary, "./test/collab/fixture"]),
     ]);
     const postgres = await startPostgres();

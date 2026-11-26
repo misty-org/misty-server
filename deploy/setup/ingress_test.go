@@ -18,7 +18,6 @@ func TestExtraIngressRoutesAndPointsDNS(t *testing.T) {
 	}
 	tunnelID := h.store.State[tunnelState]
 	want := []string{
-		"cloud.misty.example=" + collabService,
 		"cloud.misty.example=" + apiService,
 		"billing.misty.example=http://billing:8091",
 		"status.misty.example=https://status:8443",

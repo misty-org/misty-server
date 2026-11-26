@@ -6,10 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -24,11 +21,6 @@ import (
 	"github.com/misty-org/misty-server/internal/platform/db"
 	api "github.com/misty-org/misty-server/internal/platform/httpapi"
 	"github.com/misty-org/misty-server/internal/platform/security"
-)
-
-const (
-	collabDefaultPort   = "8090"
-	collabShutdownGrace = 20 * time.Second
 )
 
 var (
@@ -176,58 +168,17 @@ func (service *CollabService) listen(ctx context.Context) error {
 	return nil
 }
 
-func RunCollab() {
-	database := &db.Database{}
-	if err := database.Start(); err != nil {
-		panic(err)
+func (service *CollabService) Start(ctx context.Context) error {
+	return service.listen(ctx)
+}
+
+func (service *CollabService) Stop(ctx context.Context) {
+	service.Rooms.Shutdown(ctx)
+}
+
+func (service *CollabService) Close() {
+	if service.listener != nil {
+		_ = service.listener.Close()
 	}
-	defer database.Stop()
-	service, err := NewCollabService(database)
-	if err != nil {
-		panic(err)
-	}
-	ctx, stop := context.WithCancel(context.Background())
-	defer stop()
-	if err := service.listen(ctx); err != nil {
-		panic(err)
-	}
-	defer service.listener.Close()
-	port := strings.TrimSpace(config.Getenv("PORT"))
-	if port == "" {
-		port = collabDefaultPort
-	}
-	server := &http.Server{
-		Addr:              ":" + port,
-		Handler:           service.Router,
-		ReadHeaderTimeout: httpReadHeaderTimeout,
-		IdleTimeout:       httpIdleTimeout,
-		MaxHeaderBytes:    httpMaxHeaderBytes,
-	}
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(signals)
-	serveErrors := make(chan error, 1)
-	go func() {
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serveErrors <- err
-			return
-		}
-		serveErrors <- nil
-	}()
-	log.Printf("Misty collab running on :%s", port)
-	select {
-	case err := <-serveErrors:
-		if err != nil {
-			panic(err)
-		}
-		return
-	case received := <-signals:
-		log.Printf("received %s, handing rooms back", received)
-	}
-	shutdown, cancel := context.WithTimeout(context.Background(), collabShutdownGrace)
-	defer cancel()
-	service.Rooms.Shutdown(shutdown)
-	_ = server.Shutdown(shutdown)
 	service.Store.Close()
-	log.Println("Misty collab stopped")
 }

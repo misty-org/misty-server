@@ -42,7 +42,7 @@ func IsTransferRequest(r *http.Request) bool {
 
 func WriteDeadlineMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if IsWebSocketRequest(r) {
+		if isLongLivedRequest(r) {
 			if controller := http.NewResponseController(w); controller != nil {
 				_ = controller.SetWriteDeadline(time.Time{})
 				_ = controller.SetReadDeadline(time.Time{})
@@ -73,7 +73,7 @@ func NewHTTPServer(address string, handler http.Handler) *http.Server {
 	}
 }
 
-func runHTTPServer(server *http.Server, stopWorkers context.CancelFunc) error {
+func runHTTPServer(server *http.Server, stopWorkers context.CancelFunc, beforeShutdown func(context.Context)) error {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(signals)
@@ -97,6 +97,9 @@ func runHTTPServer(server *http.Server, stopWorkers context.CancelFunc) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), httpShutdownGrace)
 	defer cancel()
+	if beforeShutdown != nil {
+		beforeShutdown(ctx)
+	}
 	shutdownErr := server.Shutdown(ctx)
 	stopWorkers()
 	if shutdownErr != nil {

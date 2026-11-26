@@ -86,10 +86,10 @@ func TestProvisionCreatesEverythingOnce(t *testing.T) {
 	}
 	for _, config := range fake.Configs {
 		ingress := config.(map[string]any)["ingress"].([]any)
-		if first := ingress[0].(map[string]any); first["hostname"] != "cloud.misty.example" || first["path"] != collabPath || first["service"] != collabService {
+		if len(ingress) != 2 {
 			t.Fatalf("ingress %v", ingress)
 		}
-		if second := ingress[1].(map[string]any); second["hostname"] != "cloud.misty.example" || second["service"] != apiService {
+		if first := ingress[0].(map[string]any); first["hostname"] != "cloud.misty.example" || first["path"] != nil || first["service"] != apiService {
 			t.Fatalf("ingress %v", ingress)
 		}
 	}

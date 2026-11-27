@@ -218,6 +218,21 @@ func (s *SocialService) Direct() http.HandlerFunc {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		if r.Method == http.MethodPatch {
+			var body struct {
+				Name string `json:"name"`
+			}
+			if decodeJSON(w, r, &body) != nil {
+				return
+			}
+			item, err := s.database.RenameGroupDirect(r.Context(), userID, dmID, body.Name)
+			if err != nil {
+				writeSpaceError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, item)
+			return
+		}
 		item, err := s.database.Direct(r.Context(), userID, dmID)
 		if err != nil {
 			writeSpaceError(w, err)

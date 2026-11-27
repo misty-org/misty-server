@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,8 +17,10 @@ const directSpaceName = "Direct message"
 type DirectConversation struct {
 	ID            string     `json:"id"`
 	Kind          string     `json:"kind"`
+	Name          string     `json:"name,omitempty"`
 	Members       []Person   `json:"members"`
 	UnreadCount   int        `json:"unread_count"`
+	AvatarVersion int64      `json:"avatar_version"`
 	LastMessageAt *time.Time `json:"last_message_at,omitempty"`
 	ReadOnly      bool       `json:"read_only"`
 	CreatedAt     time.Time  `json:"created_at"`
@@ -263,6 +266,35 @@ func (db *Database) AddDirectMembers(ctx context.Context, userID, spaceID string
 	return db.Direct(ctx, userID, resultID)
 }
 
+func (db *Database) RenameGroupDirect(ctx context.Context, userID, spaceID, name string) (*DirectConversation, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = directSpaceName
+	}
+	name, err := normalizeSpaceName(name)
+	if err != nil {
+		return nil, err
+	}
+	err = db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		pairKey, _, err := requireDirectMemberTx(ctx, tx, userID, spaceID)
+		if err != nil {
+			return err
+		}
+		if pairKey != "" {
+			return ErrSpaceInvalid
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE spaces SET name=$1,updated_at=NOW() WHERE id=$2`, name, spaceID); err != nil {
+			return err
+		}
+		_, err = recordSpaceEventTx(ctx, tx, spaceID, userID, "direct.updated", spaceID, map[string]any{})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return db.Direct(ctx, userID, spaceID)
+}
+
 func (db *Database) LeaveDirect(ctx context.Context, userID, spaceID string) error {
 	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
 		pairKey, role, err := requireDirectMemberTx(ctx, tx, userID, spaceID)
@@ -363,9 +395,10 @@ func directTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) (*DirectC
 	out := &DirectConversation{ID: spaceID, Members: []Person{}}
 	var pairKey string
 	var readSeq int64
-	err := tx.QueryRowContext(ctx, `SELECT COALESCE(s.direct_key,''),s.created_at,s.updated_at,m.read_message_seq
+	var name string
+	err := tx.QueryRowContext(ctx, `SELECT COALESCE(s.direct_key,''),s.name,s.avatar_version,s.created_at,s.updated_at,m.read_message_seq
 		FROM spaces s JOIN space_members m ON m.space_id=s.id AND m.user_id=$2
-		WHERE s.id=$1 AND s.kind='direct' AND s.lifecycle_state='active'`, spaceID, userID).Scan(&pairKey, &out.CreatedAt, &out.UpdatedAt, &readSeq)
+		WHERE s.id=$1 AND s.kind='direct' AND s.lifecycle_state='active'`, spaceID, userID).Scan(&pairKey, &name, &out.AvatarVersion, &out.CreatedAt, &out.UpdatedAt, &readSeq)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrSpaceNotFound
 	}
@@ -375,6 +408,8 @@ func directTx(ctx context.Context, tx *sql.Tx, userID, spaceID string) (*DirectC
 	out.Kind = "group"
 	if pairKey != "" {
 		out.Kind = "direct"
+	} else if name != directSpaceName {
+		out.Name = name
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT u.id,u.username,u.avatar_version,u.avatar_decoration,u.banner_version,m.joined_at FROM space_members m JOIN users u ON u.id=m.user_id
 		WHERE m.space_id=$1 ORDER BY m.joined_at,u.id`, spaceID)

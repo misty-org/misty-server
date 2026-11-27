@@ -28,6 +28,7 @@ func (s *Server) mountSocialRoutes(prefix string, social *api.SocialService) {
 	s.Router.Post(prefix+"/dms", social.Directs())
 	s.Router.Get(prefix+"/dms/{dmID}", social.Direct())
 	s.Router.Delete(prefix+"/dms/{dmID}", social.Direct())
+	s.Router.Patch(prefix+"/dms/{dmID}", social.Direct())
 	s.Router.Post(prefix+"/dms/{dmID}/members", social.DirectMembers())
 	s.Router.Delete(prefix+"/dms/{dmID}/members/me", social.LeaveDirect())
 	s.Router.Post(prefix+"/dms/{dmID}/call", social.DirectCall())

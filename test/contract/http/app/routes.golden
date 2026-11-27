@@ -107,6 +107,7 @@ GET /v1/spaces/{spaceID}/roles
 GET /v1/spaces/{spaceID}/threads
 GET /v1/statuses
 PATCH /operator/v1/accounts/{id}
+PATCH /v1/dms/{dmID}
 PATCH /v1/me/voice/transcripts/{transcriptID}
 PATCH /v1/spaces/{spaceID}
 PATCH /v1/spaces/{spaceID}/categories/{categoryID}

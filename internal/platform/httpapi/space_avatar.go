@@ -31,7 +31,7 @@ func (s *SpacesService) SpaceAvatar() http.HandlerFunc {
 			}
 			serveAvatarObject(w, r, s.avatarStore, db.SpaceAvatarObjectKey(spaceID), version)
 		case http.MethodPut:
-			if err := s.database.RequireSpacePermission(r.Context(), userID, spaceID, db.PermissionSpaceRename); err != nil {
+			if err := s.database.RequireSpacePictureAuthority(r.Context(), userID, spaceID); err != nil {
 				writeSpaceError(w, err)
 				return
 			}

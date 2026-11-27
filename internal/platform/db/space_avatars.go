@@ -28,10 +28,35 @@ func (db *Database) SpaceAvatarVersion(ctx context.Context, userID, spaceID stri
 	return version, err
 }
 
+func requireSpacePictureAuthorityTx(ctx context.Context, tx *sql.Tx, spaceID, userID string) error {
+	var kind, pairKey string
+	err := tx.QueryRowContext(ctx, `SELECT kind,COALESCE(direct_key,'') FROM spaces WHERE id=$1 AND lifecycle_state='active'`, spaceID).Scan(&kind, &pairKey)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrSpaceNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if kind != "direct" {
+		return requireSpaceAuthorityTx(ctx, tx, spaceID, userID, PermissionSpaceRename)
+	}
+	if pairKey != "" {
+		return ErrSpaceInvalid
+	}
+	_, err = requireSpaceMemberTx(ctx, tx, spaceID, userID)
+	return err
+}
+
+func (db *Database) RequireSpacePictureAuthority(ctx context.Context, userID, spaceID string) error {
+	return db.SpaceTx(ctx, func(tx *sql.Tx) error {
+		return requireSpacePictureAuthorityTx(ctx, tx, spaceID, userID)
+	})
+}
+
 func (db *Database) SetSpaceAvatar(ctx context.Context, userID, spaceID string, picture bool) (int64, error) {
 	var version int64
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, userID, PermissionSpaceRename); err != nil {
+		if err := requireSpacePictureAuthorityTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
 		query := `UPDATE spaces SET avatar_version=0,updated_at=NOW() WHERE id=$1 RETURNING avatar_version`
@@ -51,7 +76,7 @@ func (db *Database) SetSpaceAvatar(ctx context.Context, userID, spaceID string, 
 func (db *Database) SetSpaceAvatarDecoration(ctx context.Context, userID, spaceID string, decoration avatars.Decoration) (avatars.Decoration, error) {
 	var out avatars.Decoration
 	err := db.SpaceTx(ctx, func(tx *sql.Tx) error {
-		if err := requireSpaceAuthorityTx(ctx, tx, spaceID, userID, PermissionSpaceRename); err != nil {
+		if err := requireSpacePictureAuthorityTx(ctx, tx, spaceID, userID); err != nil {
 			return err
 		}
 		if err := tx.QueryRowContext(ctx,
